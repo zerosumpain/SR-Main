@@ -588,6 +588,113 @@
     }
   }
 
+  // --- popover placement ----------------------------------------------------
+  // Both panels are position:fixed — an absolute panel inside the table's
+  // overflow-x scroller is a panel with its bottom half clipped — so nothing
+  // keeps them on screen but this function. A row 900 deep in the list has its
+  // trigger near the bottom of the viewport: anchoring blindly below it put the
+  // panel under the fold, and scrolling to reach it closed it, which made the
+  // corrections unreachable for most of the table.
+
+  export const POP_WIDTH = 300;
+  /** Gap between the trigger and the panel. */
+  const POP_GAP = 4;
+  /** How close to a viewport edge a panel is allowed to sit. */
+  const POP_MARGIN = 8;
+  /** A panel never shrinks below this — it scrolls inside itself instead. */
+  const POP_MIN_HEIGHT = 140;
+  /** Assumed height on the first pass, before the panel exists to be measured. */
+  export const POP_EST_HEIGHT = 320;
+
+  /** The trigger's viewport rect — the four numbers placement actually reads. */
+  export interface AnchorRect {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  }
+
+  export interface ViewportSize {
+    width: number;
+    height: number;
+  }
+
+  export interface PopoverPlacement {
+    left: number;
+    top: number;
+    /** What the panel may grow to here; beyond it the panel scrolls. */
+    maxHeight: number;
+    /** True when there was no room below and the panel sits above its trigger. */
+    flipped: boolean;
+  }
+
+  function clampTo(value: number, lo: number, hi: number): number {
+    if (hi < lo) return lo;
+    return value < lo ? lo : value > hi ? hi : value;
+  }
+
+  /**
+   * Where a fixed panel goes so that all of it is on screen: clamped
+   * horizontally, flipped above its trigger when there is no room below, and
+   * given a max height that fits whichever side it landed on.
+   *
+   * `align: 'end'` hangs the panel off the trigger's right edge, which is what
+   * the row menu wants — its trigger is the last column.
+   */
+  export function placePopover(
+    anchor: AnchorRect,
+    viewport: ViewportSize,
+    options: { width?: number; height?: number; align?: 'start' | 'end' } = {},
+  ): PopoverPlacement {
+    const width = options.width ?? POP_WIDTH;
+    const height = Math.max(1, options.height ?? POP_EST_HEIGHT);
+
+    const wantedLeft = options.align === 'end' ? anchor.right - width : anchor.left;
+    const left = clampTo(wantedLeft, POP_MARGIN, viewport.width - width - POP_MARGIN);
+
+    const roomBelow = Math.max(0, viewport.height - anchor.bottom - POP_GAP - POP_MARGIN);
+    const roomAbove = Math.max(0, anchor.top - POP_GAP - POP_MARGIN);
+    // Below by default. Above only when the panel does not fit below AND above
+    // is genuinely roomier, so a panel never changes sides over a few pixels.
+    const flipped = height > roomBelow && roomAbove > roomBelow;
+    const maxHeight = Math.max(POP_MIN_HEIGHT, flipped ? roomAbove : roomBelow);
+    const used = Math.min(height, maxHeight);
+    const top = flipped
+      ? Math.max(POP_MARGIN, anchor.top - POP_GAP - used)
+      : clampTo(
+          anchor.bottom + POP_GAP,
+          POP_MARGIN,
+          Math.max(POP_MARGIN, viewport.height - POP_MARGIN - used),
+        );
+
+    return { left, top, maxHeight, flipped };
+  }
+
+  // --- how many rows actually render ----------------------------------------
+  // 1,136 rows is ~15,000 cells server-rendered and hydrated on every load, so
+  // the table renders a page at a time. FILTERING, SORTING AND THE TOTALS STILL
+  // RUN OVER THE WHOLE SET — the cap is a render budget, never a data budget,
+  // and the count below the table says so out loud.
+
+  export const ROWS_PER_PAGE = 100;
+
+  export interface RowWindow {
+    /** How many rows are actually rendered. */
+    shown: number;
+    /** How many rows match the filters — what the totals strip describes. */
+    matching: number;
+    /** How many matching rows are still held back. */
+    remaining: number;
+    /** How many the next "show more" would add. */
+    nextStep: number;
+  }
+
+  export function rowWindow(cap: number, matching: number, step = ROWS_PER_PAGE): RowWindow {
+    const shown = clampTo(Math.floor(cap), 0, Math.max(0, matching));
+    const remaining = Math.max(0, matching - shown);
+    return { shown, matching, remaining, nextStep: Math.min(Math.max(1, step), remaining) };
+  }
+
   /** Clear one column's filter, in place. Returns the same object. */
   export function clearColumnFilter(filters: ActivityFilters, key: ColumnKey): ActivityFilters {
     switch (key) {
@@ -689,81 +796,184 @@
   );
   let sort = $state<SortState | null>(parseSort(seed));
 
+  // Every one of these runs over the WHOLE loaded set. Only `visible` is
+  // capped, and only for rendering.
   const typeCounts = $derived(countTypes(tableRows));
   const filtered = $derived(tableRows.filter(buildFilterPredicate(filters)));
   const sorted = $derived([...filtered].sort(buildComparator(sort)));
   const chips = $derived(describeFilters(filters));
   const totals = $derived(totalsOf(filtered));
 
+  /** The render budget, raised by "show more". Never touches the maths above. */
+  let cap = $state(ROWS_PER_PAGE);
+  const page = $derived(rowWindow(cap, sorted.length));
+  const visible = $derived(sorted.slice(0, page.shown));
+
   function syncUrl() {
     const query = filtersToQuery(filters, sort);
     replaceState(query ? `?${query}` : basePath, {});
+    // A new filter or a new sort is a new list, so the page goes back to the
+    // top of it — every filter and sort handler comes through here.
+    cap = ROWS_PER_PAGE;
   }
 
   // --- popovers -------------------------------------------------------------
-  // Both panels are position:fixed and anchored off the trigger's rect. The
-  // table scrolls sideways, and an absolutely positioned popover inside an
-  // overflow-x container is a popover with its bottom half cut off.
-
-  const POP_WIDTH = 300;
+  // Both panels are position:fixed and anchored off the trigger's rect, so
+  // every scroll moves the trigger out from under them: the page scroll used to
+  // put a bottom-of-the-list panel under the fold, and the table's sideways
+  // scroll used to leave a header panel floating over an unrelated column.
+  // Scroll and resize therefore RE-PLACE the panel; they never close it.
+  //
+  // The element handles are plain `let`, not `$state`, on purpose: they are
+  // only ever read inside event handlers, and an `$effect` that measured the
+  // panel it also positions would loop until effect_update_depth_exceeded.
 
   let openColumn = $state<ColumnKey | null>(null);
   let openMenu = $state<string | null>(null);
-  let popPos = $state<{ left: number; top: number } | null>(null);
-  let menuPos = $state<{ left: number; top: number } | null>(null);
+  let popPos = $state<PopoverPlacement | null>(null);
+  let menuPos = $state<PopoverPlacement | null>(null);
+
+  /** The button the open panel hangs off — and the one focus goes back to. */
+  let anchorEl: HTMLElement | null = null;
+  /** The open panel itself, for measuring and for the tab trap. */
+  let panelEl: HTMLElement | null = null;
+
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])';
 
   const openColumnDef = $derived(COLUMNS.find((column) => column.key === openColumn) ?? null);
   const openRow = $derived(tableRows.find((row) => row.id === openMenu) ?? null);
 
-  function anchorOf(event: MouseEvent): { left: number; top: number } {
-    const target = event.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - POP_WIDTH - 8));
-    return { left, top: rect.bottom + 4 };
+  /**
+   * The panel's natural height. `offsetHeight` reads back the `max-height` the
+   * last placement set, so a clipped panel would measure as one that fitted.
+   */
+  function naturalHeight(node: HTMLElement): number {
+    return Math.max(node.offsetHeight, node.scrollHeight + 2);
+  }
+
+  function place(align: 'start' | 'end'): PopoverPlacement | null {
+    // A detached trigger measures as 0×0 at the origin, which would throw the
+    // panel into the top-left corner. Better to leave it where it is.
+    if (!anchorEl || !anchorEl.isConnected) return null;
+    return placePopover(
+      anchorEl.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+      { align, height: panelEl ? naturalHeight(panelEl) : POP_EST_HEIGHT },
+    );
+  }
+
+  /** Follow the trigger. Called from scroll and resize handlers, never an effect. */
+  function reposition() {
+    if (openColumn) {
+      const next = place('start');
+      if (next) popPos = next;
+    } else if (openMenu) {
+      const next = place('end');
+      if (next) menuPos = next;
+    }
+  }
+
+  /**
+   * Mount hook for a panel: re-place it now that its real height can be
+   * measured — this is what flips a bottom-of-the-table panel above its
+   * trigger — and move focus in, since it claims to be a dialog.
+   */
+  function panelMount(node: HTMLElement) {
+    panelEl = node;
+    reposition();
+    node.focus({ preventScroll: true });
+    return {
+      destroy() {
+        if (panelEl === node) panelEl = null;
+      },
+    };
+  }
+
+  function focusables(): HTMLElement[] {
+    if (!panelEl) return [];
+    return [...panelEl.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  }
+
+  function trapTab(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || !panelEl) return;
+    const items = focusables();
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panelEl)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /** Hand focus back to the trigger, but only when the closing panel holds it. */
+  function releaseFocus() {
+    const trigger = anchorEl;
+    if (!trigger) return;
+    const active = document.activeElement;
+    if (active === trigger) return;
+    if (active instanceof Node && panelEl && panelEl.contains(active)) trigger.focus();
+  }
+
+  function closePanels() {
+    if (!openColumn && !openMenu) return;
+    releaseFocus();
+    openColumn = null;
+    openMenu = null;
+  }
+
+  function openPanel(trigger: HTMLElement, align: 'start' | 'end') {
+    anchorEl = trigger;
+    // The old panel is on its way out; measuring it would place the new one.
+    panelEl = null;
+    if (align === 'start') popPos = place('start');
+    else menuPos = place('end');
   }
 
   function toggleColumn(key: ColumnKey, event: MouseEvent) {
-    openMenu = null;
     if (openColumn === key) {
-      openColumn = null;
+      closePanels();
       return;
     }
-    popPos = anchorOf(event);
+    openMenu = null;
+    openPanel(event.currentTarget as HTMLElement, 'start');
     openColumn = key;
   }
 
   function toggleMenu(id: string, event: MouseEvent) {
-    openColumn = null;
     if (openMenu === id) {
-      openMenu = null;
+      closePanels();
       return;
     }
-    menuPos = anchorOf(event);
+    openColumn = null;
+    openPanel(event.currentTarget as HTMLElement, 'end');
     openMenu = id;
     note = null;
-  }
-
-  function closeAll() {
-    openColumn = null;
-    openMenu = null;
   }
 
   function onWindowPointerDown(event: PointerEvent) {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    // A pointer user does not need focus handed back — the click they are
+    // making moves it — so this path closes without restoring.
     if (!target.closest('[data-col-pop]')) openColumn = null;
     if (!target.closest('[data-row-menu]')) openMenu = null;
   }
 
   function onWindowKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Escape') closeAll();
+    if (event.key === 'Escape') closePanels();
   }
 
   // --- filter editing -------------------------------------------------------
 
   function setSort(key: ColumnKey, dir: 'asc' | 'desc') {
     sort = { key, dir };
-    openColumn = null;
+    closePanels();
     syncUrl();
   }
 
@@ -890,12 +1100,19 @@
   }
 </script>
 
-<svelte:window onpointerdown={onWindowPointerDown} onkeydown={onWindowKeyDown} onscroll={closeAll} />
+<svelte:window
+  onpointerdown={onWindowPointerDown}
+  onkeydown={onWindowKeyDown}
+  onscroll={reposition}
+  onresize={reposition}
+/>
 
 <section class="nm-sec totals">
   <div class="stat">
+    <!-- Every number in this strip covers every MATCHING row, not the page of
+         them that is rendered below. -->
     <span class="stat-value">{totals.count}</span>
-    <span class="sr-label-tight">{chips.length > 0 ? 'Shown' : 'Activities'}</span>
+    <span class="sr-label-tight">{chips.length > 0 ? 'Matching' : 'Activities'}</span>
   </div>
   <div class="stat">
     <span class="stat-value">{formatDistance(totals.distanceM)}</span>
@@ -930,7 +1147,9 @@
   </div>
 {/if}
 
-<div class="scroller">
+<!-- The sideways scroll moves the trigger out from under a fixed panel, and
+     scroll does not bubble to window, so the scroller reports its own. -->
+<div class="scroller" onscroll={reposition}>
   <table class="activity-table">
     <thead>
       <tr>
@@ -968,7 +1187,7 @@
       </tr>
     </thead>
     <tbody>
-      {#each sorted as row (row.id)}
+      {#each visible as row (row.id)}
         <tr
           data-activity-id={row.id}
           class:excluded={row.excludedFromSegments}
@@ -1021,6 +1240,23 @@
   </table>
 </div>
 
+{#if page.remaining > 0}
+  <div class="more">
+    <!-- Always plural: this only renders when rows are held back, which cannot
+         happen with one match. -->
+    <p class="more-count">
+      Showing {page.shown} of {page.matching} matching activities. The totals above, the type counts
+      and every sort cover all {page.matching}.
+    </p>
+    <button type="button" class="btn" onclick={() => (cap += ROWS_PER_PAGE)}>
+      Show {page.nextStep} more
+    </button>
+    <button type="button" class="btn quiet" onclick={() => (cap = page.matching)}>
+      Show all {page.matching}
+    </button>
+  </div>
+{/if}
+
 {#if sorted.length === 0}
   <section class="nm-sec empty">
     <p class="empty-title">Nothing matches these filters.</p>
@@ -1029,177 +1265,197 @@
 {/if}
 
 <p class="foot-note">
-  {sorted.length} of {tableRows.length} loaded {tableRows.length === 1 ? 'activity' : 'activities'}.
-  Every heading sorts and filters. Blanks always sink to the bottom of a sort — an outing with no
-  heart rate still happened. Efficiency factor is a pace-sport measure, so rides and swims are
-  blank by design.
+  {page.shown} rendered of {sorted.length} matching, from {tableRows.length} loaded {tableRows.length ===
+  1
+    ? 'activity'
+    : 'activities'}. Every heading sorts and filters, over the whole loaded set rather than the
+  rows on screen. Blanks always sink to the bottom of a sort — an outing with no heart rate still
+  happened. Efficiency factor is a pace-sport measure, so rides and swims are blank by design.
 </p>
 
 {#if openColumnDef && popPos}
   {@const col = openColumnDef}
-  <div
-    class="pop"
-    data-col-pop
-    role="dialog"
-    aria-label="{col.label} — sort and filter"
-    style="left: {popPos.left}px; top: {popPos.top}px; width: {POP_WIDTH}px"
-  >
-    <div class="pop-hd">
-      <span class="sr-label-tight">{col.label}</span>
-      <button type="button" class="pop-x" aria-label="Close" onclick={() => (openColumn = null)}>×</button>
-    </div>
-    <p class="pop-hint">{col.hint}</p>
-
-    <div class="pop-sorts">
-      <button
-        type="button"
-        class="pop-btn"
-        class:on={sort?.key === col.key && sort.dir === 'asc'}
-        onclick={() => setSort(col.key, 'asc')}
-      >
-        ↑ {col.ascLabel}
-      </button>
-      <button
-        type="button"
-        class="pop-btn"
-        class:on={sort?.key === col.key && sort.dir === 'desc'}
-        onclick={() => setSort(col.key, 'desc')}
-      >
-        ↓ {col.descLabel}
-      </button>
-    </div>
-
-    {#if col.kind === 'date'}
-      <div class="pop-fields">
-        <label class="field">
-          <span class="sr-label-tight">From</span>
-          <input
-            type="date"
-            value={filters.from ?? ''}
-            oninput={(event) => setDay('from', event.currentTarget.value)}
-          />
-        </label>
-        <label class="field">
-          <span class="sr-label-tight">To</span>
-          <input
-            type="date"
-            value={filters.to ?? ''}
-            oninput={(event) => setDay('to', event.currentTarget.value)}
-          />
-        </label>
+  <!-- Keyed so that moving from one heading to the next REMOUNTS the panel:
+       the mount hook is what measures it, places it and takes focus. -->
+  {#key col.key}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="pop"
+      data-col-pop
+      role="dialog"
+      aria-modal="true"
+      aria-label="{col.label} — sort and filter"
+      tabindex="-1"
+      use:panelMount
+      onkeydown={trapTab}
+      style="left: {popPos.left}px; top: {popPos.top}px; width: {POP_WIDTH}px; max-height: {popPos.maxHeight}px"
+    >
+      <div class="pop-hd">
+        <span class="sr-label-tight">{col.label}</span>
+        <button type="button" class="pop-x" aria-label="Close" onclick={closePanels}>×</button>
       </div>
-    {:else if col.kind === 'type'}
-      <ul class="pop-types">
-        {#each typeCounts as type (type.activityType)}
-          <li>
-            <label class="check">
-              <input
-                type="checkbox"
-                checked={filters.types.includes(type.activityType)}
-                onchange={() => toggleType(type.activityType)}
-              />
-              <span class="check-label">{type.label}</span>
-              <span class="check-count">{type.count}</span>
-            </label>
-          </li>
-        {/each}
-      </ul>
-    {:else if col.kind === 'number'}
-      {@const key = col.key as NumericColumnKey}
-      <div class="pop-fields">
-        <label class="field">
-          <span class="sr-label-tight">Min ({col.unit})</span>
-          <input
-            type="number"
-            step="any"
-            value={filters.ranges[key].min ?? ''}
-            onchange={(event) => setBound(key, 'min', event.currentTarget.value)}
-          />
-        </label>
-        <label class="field">
-          <span class="sr-label-tight">Max ({col.unit})</span>
-          <input
-            type="number"
-            step="any"
-            value={filters.ranges[key].max ?? ''}
-            onchange={(event) => setBound(key, 'max', event.currentTarget.value)}
-          />
-        </label>
-      </div>
-    {:else}
-      {@const key = col.key === 'excellence' ? 'excellence' : 'name'}
-      <label class="field">
-        <span class="sr-label-tight">Contains</span>
-        <input
-          type="text"
-          value={filters[key]}
-          placeholder={key === 'excellence' ? 'e.g. fastest' : 'e.g. morning'}
-          oninput={(event) => setText(key, event.currentTarget.value)}
-        />
-      </label>
-    {/if}
+      <p class="pop-hint">{col.hint}</p>
 
-    <div class="pop-foot">
-      <button type="button" class="pop-btn" onclick={() => clearColumn(col.key)}>
-        Clear this column
-      </button>
-      {#if sort}
-        <button type="button" class="pop-btn quiet" onclick={clearSort}>Clear sort</button>
+      <div class="pop-sorts">
+        <button
+          type="button"
+          class="pop-btn"
+          class:on={sort?.key === col.key && sort.dir === 'asc'}
+          onclick={() => setSort(col.key, 'asc')}
+        >
+          ↑ {col.ascLabel}
+        </button>
+        <button
+          type="button"
+          class="pop-btn"
+          class:on={sort?.key === col.key && sort.dir === 'desc'}
+          onclick={() => setSort(col.key, 'desc')}
+        >
+          ↓ {col.descLabel}
+        </button>
+      </div>
+
+      {#if col.kind === 'date'}
+        <div class="pop-fields">
+          <label class="field">
+            <span class="sr-label-tight">From</span>
+            <input
+              type="date"
+              value={filters.from ?? ''}
+              oninput={(event) => setDay('from', event.currentTarget.value)}
+            />
+          </label>
+          <label class="field">
+            <span class="sr-label-tight">To</span>
+            <input
+              type="date"
+              value={filters.to ?? ''}
+              oninput={(event) => setDay('to', event.currentTarget.value)}
+            />
+          </label>
+        </div>
+      {:else if col.kind === 'type'}
+        <ul class="pop-types">
+          {#each typeCounts as type (type.activityType)}
+            <li>
+              <label class="check">
+                <input
+                  type="checkbox"
+                  checked={filters.types.includes(type.activityType)}
+                  onchange={() => toggleType(type.activityType)}
+                />
+                <span class="check-label">{type.label}</span>
+                <span class="check-count">{type.count}</span>
+              </label>
+            </li>
+          {/each}
+        </ul>
+      {:else if col.kind === 'number'}
+        {@const key = col.key as NumericColumnKey}
+        <div class="pop-fields">
+          <label class="field">
+            <span class="sr-label-tight">Min ({col.unit})</span>
+            <input
+              type="number"
+              step="any"
+              value={filters.ranges[key].min ?? ''}
+              onchange={(event) => setBound(key, 'min', event.currentTarget.value)}
+            />
+          </label>
+          <label class="field">
+            <span class="sr-label-tight">Max ({col.unit})</span>
+            <input
+              type="number"
+              step="any"
+              value={filters.ranges[key].max ?? ''}
+              onchange={(event) => setBound(key, 'max', event.currentTarget.value)}
+            />
+          </label>
+        </div>
+      {:else}
+        {@const key = col.key === 'excellence' ? 'excellence' : 'name'}
+        <label class="field">
+          <span class="sr-label-tight">Contains</span>
+          <input
+            type="text"
+            value={filters[key]}
+            placeholder={key === 'excellence' ? 'e.g. fastest' : 'e.g. morning'}
+            oninput={(event) => setText(key, event.currentTarget.value)}
+          />
+        </label>
       {/if}
+
+      <div class="pop-foot">
+        <button type="button" class="pop-btn" onclick={() => clearColumn(col.key)}>
+          Clear this column
+        </button>
+        {#if sort}
+          <button type="button" class="pop-btn quiet" onclick={clearSort}>Clear sort</button>
+        {/if}
+      </div>
     </div>
-  </div>
+  {/key}
 {/if}
 
 {#if openRow && menuPos}
   {@const target = openRow}
-  <div
-    class="pop menu"
-    data-row-menu
-    role="dialog"
-    aria-label="Corrections for {target.name}"
-    style="left: {menuPos.left}px; top: {menuPos.top}px; width: {POP_WIDTH}px"
-  >
-    <div class="pop-hd">
-      <span class="sr-label-tight">Correct this recording</span>
-      <button type="button" class="pop-x" aria-label="Close" onclick={() => (openMenu = null)}>×</button>
-    </div>
-
-    <button
-      type="button"
-      class="pop-btn wide"
-      disabled={savingId === target.id}
-      onclick={() => patchRow(target, { excludedFromSegments: !target.excludedFromSegments })}
+  <!-- Keyed on the row for the same reason the column panel is keyed on its
+       heading: a new panel has to be measured, placed and focused afresh. -->
+  {#key target.id}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="pop menu"
+      data-row-menu
+      role="dialog"
+      aria-modal="true"
+      aria-label="Corrections for {target.name}"
+      tabindex="-1"
+      use:panelMount
+      onkeydown={trapTab}
+      style="left: {menuPos.left}px; top: {menuPos.top}px; width: {POP_WIDTH}px; max-height: {menuPos.maxHeight}px"
     >
-      {target.excludedFromSegments
-        ? 'Put back into segment analysis'
-        : 'Exclude from segment analysis'}
-    </button>
+      <div class="pop-hd">
+        <span class="sr-label-tight">Correct this recording</span>
+        <button type="button" class="pop-x" aria-label="Close" onclick={closePanels}>×</button>
+      </div>
 
-    <label class="field">
-      <span class="sr-label-tight">Correct type — now {label(target.activityType)}</span>
-      <select
-        value={target.typeOverride ?? ''}
+      <button
+        type="button"
+        class="pop-btn wide"
         disabled={savingId === target.id}
-        onchange={(event) => patchRow(target, { typeOverride: event.currentTarget.value || null })}
+        onclick={() => patchRow(target, { excludedFromSegments: !target.excludedFromSegments })}
       >
-        <option value="">No correction — source says {label(target.sourceType)}</option>
-        {#each ACTIVITY_TYPES as type (type)}
-          <option value={type}>{label(type)}</option>
-        {/each}
-      </select>
-    </label>
+        {target.excludedFromSegments
+          ? 'Put back into segment analysis'
+          : 'Exclude from segment analysis'}
+      </button>
 
-    {#if savingId === target.id}
-      <p class="pop-note">Saving…</p>
-    {:else if note && note.id === target.id}
-      <p class="pop-note" class:err={note.kind === 'error'}>{note.text}</p>
-    {:else}
-      <p class="pop-hint">
-        Both corrections clear this outing's segment efforts and schedule a rebuild. Neither touches
-        what the phone sent, so the next sync cannot undo them.
-      </p>
-    {/if}
-  </div>
+      <label class="field">
+        <span class="sr-label-tight">Correct type — now {label(target.activityType)}</span>
+        <select
+          value={target.typeOverride ?? ''}
+          disabled={savingId === target.id}
+          onchange={(event) => patchRow(target, { typeOverride: event.currentTarget.value || null })}
+        >
+          <option value="">No correction — source says {label(target.sourceType)}</option>
+          {#each ACTIVITY_TYPES as type (type)}
+            <option value={type}>{label(type)}</option>
+          {/each}
+        </select>
+      </label>
+
+      {#if savingId === target.id}
+        <p class="pop-note">Saving…</p>
+      {:else if note && note.id === target.id}
+        <p class="pop-note" class:err={note.kind === 'error'}>{note.text}</p>
+      {:else}
+        <p class="pop-hint">
+          Both corrections clear this outing's segment efforts and schedule a rebuild. Neither touches
+          what the phone sent, so the next sync cannot undo them.
+        </p>
+      {/if}
+    </div>
+  {/key}
 {/if}
 
 <style>
@@ -1411,7 +1667,9 @@
   }
 
   /* Fixed, not absolute: the table scrolls sideways and an absolute panel
-     inside an overflow-x container is a panel with its bottom half clipped. */
+     inside an overflow-x container is a panel with its bottom half clipped.
+     `left`, `top` and `max-height` all come from placePopover, which is what
+     keeps the panel on screen; there is no static fallback to disagree with. */
   .pop {
     position: fixed;
     z-index: 40;
@@ -1422,8 +1680,12 @@
     background: var(--surface-card);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
-    max-height: 70vh;
     overflow-y: auto;
+  }
+  /* The panel takes focus on open, so it has to show it. */
+  .pop:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .pop-hd {
     display: flex;
@@ -1581,6 +1843,27 @@
   .btn:hover {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  .btn.quiet {
+    color: var(--text-muted);
+  }
+
+  .more {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--line-hair);
+  }
+  .more-count {
+    flex: 1 1 22rem;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.55;
+    color: var(--text-muted);
   }
 
   .foot-note {

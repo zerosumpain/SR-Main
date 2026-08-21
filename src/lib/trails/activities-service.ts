@@ -87,9 +87,21 @@ export const EFFECTIVE_TYPE = sql<string>`coalesce(nullif(trim(${activities.type
 export const OUTDOOR_TYPES = ['run', 'trail_run', 'ride', 'mtb', 'hike', 'walk'];
 
 export async function listActivities(
-  opts: { types?: string[]; sinceDays?: number; limit?: number } = {},
+  opts: {
+    types?: string[];
+    sinceDays?: number;
+    limit?: number;
+    /**
+     * Encoded track geometry, for callers that draw a thumbnail.
+     *
+     * Off by default because it is the single heaviest field on the row —
+     * roughly a kilobyte per activity, so over a thousand rows it is more than
+     * a megabyte of payload for a table that renders no map at all.
+     */
+    withPolyline?: boolean;
+  } = {},
 ): Promise<ActivityListResult> {
-  const { types, sinceDays, limit = 100 } = opts;
+  const { types, sinceDays, limit = 100, withPolyline = false } = opts;
 
   const filters = [];
   // Filter on the EFFECTIVE type. A ride the watch logged as a walk answers to
@@ -117,7 +129,7 @@ export async function listActivities(
       avgPaceSPerKm: activities.avgPaceSPerKm,
       activeEnergyKj: activities.activeEnergyKj,
       hasTrack: activities.hasTrack,
-      polyline: activityTracks.polyline,
+      polyline: withPolyline ? activityTracks.polyline : sql<string | null>`null`,
       typeOverride: activities.typeOverride,
       excludedFromSegments: activities.excludedFromSegments,
       // Three scalars out of the metadata jsonb, projected in SQL. Selecting

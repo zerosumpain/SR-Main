@@ -15,10 +15,15 @@ import {
   parseFilters,
   parseRange,
   parseSort,
+  placePopover,
+  rowWindow,
   sortValue,
   totalsOf,
   validDay,
+  POP_WIDTH,
+  ROWS_PER_PAGE,
   type ActivityFilters,
+  type AnchorRect,
   type FilterableRow,
 } from './ActivityTable.svelte';
 
@@ -397,6 +402,111 @@ describe('chips', () => {
     f.name = '   ';
     f.excellence = '  ';
     expect(describeFilters(f)).toEqual([]);
+  });
+});
+
+describe('placePopover', () => {
+  const SCREEN = { width: 1440, height: 900 };
+
+  /** A trigger rect, in viewport coordinates. */
+  function trigger(partial: Partial<AnchorRect> = {}): AnchorRect {
+    return { left: 400, right: 480, top: 200, bottom: 224, ...partial };
+  }
+
+  it('sits just below the trigger and left-aligned when there is room', () => {
+    const p = placePopover(trigger(), SCREEN, { height: 300 });
+    expect(p.flipped).toBe(false);
+    expect(p.left).toBe(400);
+    expect(p.top).toBeGreaterThanOrEqual(224);
+    expect(p.top).toBeLessThanOrEqual(232);
+    expect(p.top + 300).toBeLessThanOrEqual(SCREEN.height);
+  });
+
+  it('flips above the trigger for a row at the bottom of a long table', () => {
+    // The defect this exists for: row 900 of 1,136 has its "···" button near
+    // the bottom of the screen, so the panel used to open under the fold.
+    const p = placePopover(trigger({ top: 860, bottom: 884 }), SCREEN, { height: 300 });
+    expect(p.flipped).toBe(true);
+    expect(p.top).toBeGreaterThanOrEqual(0);
+    expect(p.top + 300).toBeLessThanOrEqual(860);
+  });
+
+  it('never lets the panel run off the bottom, even unflipped', () => {
+    for (const top of [0, 120, 400, 700, 860, 899]) {
+      const p = placePopover(trigger({ top, bottom: top + 24 }), SCREEN, { height: 400 });
+      const used = Math.min(400, p.maxHeight);
+      expect(p.top).toBeGreaterThanOrEqual(0);
+      expect(p.top + used).toBeLessThanOrEqual(SCREEN.height);
+    }
+  });
+
+  it('clamps a trigger near the right edge back onto the screen', () => {
+    const p = placePopover(trigger({ left: 1400, right: 1430 }), SCREEN, { height: 200 });
+    expect(p.left + POP_WIDTH).toBeLessThanOrEqual(SCREEN.width);
+    expect(p.left).toBeGreaterThanOrEqual(0);
+  });
+
+  it('clamps a trigger that the sideways scroll has pushed off the left edge', () => {
+    const p = placePopover(trigger({ left: -260, right: -180 }), SCREEN, { height: 200 });
+    expect(p.left).toBeGreaterThanOrEqual(0);
+    expect(p.left).toBeLessThan(20);
+  });
+
+  it('hangs an end-aligned panel off the trigger’s right edge', () => {
+    const p = placePopover(trigger({ left: 1000, right: 1040 }), SCREEN, {
+      height: 200,
+      align: 'end',
+    });
+    expect(p.left + POP_WIDTH).toBe(1040);
+  });
+
+  it('caps the height to the room it has rather than overflowing', () => {
+    const tall = placePopover(trigger({ top: 700, bottom: 724 }), SCREEN, { height: 2000 });
+    expect(tall.maxHeight).toBeLessThanOrEqual(SCREEN.height);
+    expect(tall.maxHeight).toBeGreaterThan(0);
+  });
+
+  it('keeps a panel on a tiny screen visible rather than shrinking it to nothing', () => {
+    const tiny = { width: 320, height: 320 };
+    const p = placePopover(trigger({ left: 200, right: 260, top: 250, bottom: 274 }), tiny, {
+      height: 400,
+    });
+    expect(p.top).toBeGreaterThanOrEqual(0);
+    expect(p.left).toBeGreaterThanOrEqual(0);
+    expect(p.maxHeight).toBeGreaterThanOrEqual(100);
+  });
+
+  it('is pure — the same rect places the same way twice', () => {
+    const rect = trigger({ top: 500, bottom: 524 });
+    expect(placePopover(rect, SCREEN, { height: 260 })).toEqual(
+      placePopover(rect, SCREEN, { height: 260 }),
+    );
+  });
+});
+
+describe('rowWindow', () => {
+  it('renders a page of the matching rows and says how many are left', () => {
+    const w = rowWindow(ROWS_PER_PAGE, 1_136);
+    expect(w.shown).toBe(ROWS_PER_PAGE);
+    expect(w.matching).toBe(1_136);
+    expect(w.remaining).toBe(1_136 - ROWS_PER_PAGE);
+    expect(w.nextStep).toBe(ROWS_PER_PAGE);
+  });
+
+  it('never claims to show more rows than match', () => {
+    const w = rowWindow(ROWS_PER_PAGE, 12);
+    expect(w.shown).toBe(12);
+    expect(w.remaining).toBe(0);
+    expect(w.nextStep).toBe(0);
+  });
+
+  it('shortens the last step to what is actually left', () => {
+    expect(rowWindow(100, 130, 100).nextStep).toBe(30);
+  });
+
+  it('handles an empty match set and a nonsense cap', () => {
+    expect(rowWindow(100, 0)).toEqual({ shown: 0, matching: 0, remaining: 0, nextStep: 0 });
+    expect(rowWindow(-5, 40).shown).toBe(0);
   });
 });
 

@@ -51,7 +51,9 @@ async function safe<T>(label: string, p: Promise<T>): Promise<T | null> {
 /** The five most recent outings, each with the single best thing about it. */
 async function recentOutings() {
   const [list, corpus] = await Promise.all([
-    listActivities({ limit: 5 }),
+    // Five rows, each with a thumbnail — the one place the polyline earns its
+    // kilobyte.
+    listActivities({ limit: 5, withPolyline: true }),
     getHighlightCorpus(),
   ]);
   return list.rows.map((row) => ({
@@ -171,7 +173,7 @@ export const load: PageServerLoad = async (event) => {
   const [segments, outings, coach] = await Promise.all([
     safe('segment-highlights', getSegmentHighlights()),
     safe('recent-outings', recentOutings()),
-    safe('coach', getDailyPlan({ dashboard: dashboard ?? undefined })),
+    safe('coach', getDailyPlan({ dashboard: dashboard ?? undefined, monotony, polarised })),
   ]);
   const correlations = shared.provenance.correlationsAreIllustrative
     ? []

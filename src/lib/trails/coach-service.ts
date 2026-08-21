@@ -8,10 +8,13 @@
 // ORS_API_KEY at all, so the degraded path IS the local development path and
 // gets exercised on every page load, which is exactly how it should be.
 
-import { sql } from 'drizzle-orm';
+import { desc, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { activities } from '$lib/db/schema';
+import { activities, activitySegmentEfforts, activitySegments } from '$lib/db/schema';
 import { encodePolyline } from '$lib/health/polyline';
+import type { MetricResult } from '$lib/health/analytics/types';
+import type { MonotonyResult } from '$lib/health/analytics/monotony';
+import type { PolarisedResult } from '$lib/health/analytics/polarised';
 import { getMonotony } from '$lib/health/services/monotony-service';
 import { getPolarised } from '$lib/health/services/polarised-service';
 import {
@@ -37,7 +40,7 @@ import {
   type PlannerSport,
 } from './ors';
 import { scoreRoute, type Coord } from './scoring';
-import { getSegment, listSegments, type SegmentListRow } from './segments-service';
+import { listSegments, type SegmentListRow } from './segments-service';
 import { haversineM } from './track';
 
 // ---------------------------------------------------------------------------
@@ -214,6 +217,68 @@ function toCandidate(row: SegmentListRow, recentEf?: Array<number | null>) {
 }
 
 // ---------------------------------------------------------------------------
+// Shortlist detail
+
+interface ShortlistDetail {
+  /** Efficiency factor of the five most recent efforts, NEWEST first. */
+  recentEf: Array<number | null>;
+  /** First and last point of the segment, in its own direction. */
+  first: [number, number] | null;
+  last: [number, number] | null;
+}
+
+/**
+ * Everything the shortlist needs, in two queries.
+ *
+ * The endpoints come out of the jsonb with `-> 0` and `-> -1` rather than by
+ * selecting `coordinates` and indexing in JavaScript: a segment's geometry is
+ * hundreds of points and the route only ever wants two of them.
+ */
+async function shortlistDetail(ids: number[]): Promise<Map<number, ShortlistDetail>> {
+  const out = new Map<number, ShortlistDetail>();
+  if (!ids.length) return out;
+
+  const [ends, efforts] = await Promise.all([
+    db
+      .select({
+        id: activitySegments.id,
+        first: sql<unknown>`${activitySegments.coordinates} -> 0`,
+        last: sql<unknown>`${activitySegments.coordinates} -> -1`,
+      })
+      .from(activitySegments)
+      .where(inArray(activitySegments.id, ids)),
+    db
+      .select({
+        segmentId: activitySegmentEfforts.segmentId,
+        efficiencyFactor: activitySegmentEfforts.efficiencyFactor,
+      })
+      .from(activitySegmentEfforts)
+      .where(inArray(activitySegmentEfforts.segmentId, ids))
+      .orderBy(desc(activitySegmentEfforts.startedAt)),
+  ]);
+
+  const point = (v: unknown): [number, number] | null => {
+    if (!Array.isArray(v) || v.length < 2) return null;
+    const [lng, lat] = v;
+    return typeof lng === 'number' && typeof lat === 'number' ? [lng, lat] : null;
+  };
+
+  for (const id of ids) out.set(id, { recentEf: [], first: null, last: null });
+  for (const row of ends) {
+    const entry = out.get(row.id);
+    if (entry) {
+      entry.first = point(row.first);
+      entry.last = point(row.last);
+    }
+  }
+  for (const e of efforts) {
+    const entry = out.get(e.segmentId);
+    if (entry && entry.recentEf.length < 5) entry.recentEf.push(e.efficiencyFactor);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Route
 
 type Waypoint = [number, number];
@@ -323,10 +388,23 @@ async function drawRoute(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       degraded.push(`route through ${take} target${take === 1 ? '' : 's'}: ${message}`);
-      if (err instanceof OrsError && err.status === 429) {
+      // Any 4xx means asking again with one fewer waypoint will get the same
+      // answer: 429 is the minute ceiling, 403 is the DAILY quota, 400 is a
+      // request ORS will not route. Only 429 used to break out, so once the
+      // free tier's daily quota was spent every render burned three doomed
+      // round trips instead of one.
+      const fourxx =
+        err instanceof OrsError && typeof err.status === 'number' && err.status >= 400 && err.status < 500;
+      if (fourxx) {
+        const status = (err as OrsError).status;
         return {
           route: null,
-          note: 'openrouteservice is rate-limited right now, so the route could not be drawn — the session and the targets stand on their own.',
+          note:
+            status === 429
+              ? 'openrouteservice is rate-limited right now, so the route could not be drawn — the session and the targets stand on their own.'
+              : status === 403
+                ? 'The openrouteservice daily quota is spent, so the route could not be drawn — the session and the targets stand on their own.'
+                : 'openrouteservice refused the request, so the route could not be drawn — the session and the targets stand on their own.',
         };
       }
     }
@@ -369,10 +447,53 @@ function emptyPlan(degraded: string[]): DailyPlan {
  * `getTrailsDashboard()` reads ninety days of heart-rate series and is far and
  * away the most expensive thing on this path.
  */
+/**
+ * How long the whole plan gets before the route is abandoned.
+ *
+ * openrouteservice is a third party on the far side of the internet, and this
+ * runs INSIDE the owner's /health render — an ORS call that hangs would hang
+ * the hub with it. The card degrades to "no route" rather than making the page
+ * wait, which is the same thing it already does when there is no key.
+ */
+const ROUTE_DEADLINE_MS = 6000;
+
+/**
+ * How long a plan stands before it is worked out again.
+ *
+ * It is a DAILY plan, and drawing its route costs a third-party HTTP call
+ * against a 2,000-a-day free tier. Without this every render of the hub — every
+ * refresh, every client-side navigation back to /health, every invalidateAll —
+ * re-planned it from scratch.
+ */
+const PLAN_TTL_MS = 15 * 60 * 1000;
+let planCache: { key: string; at: number; value: DailyPlan } | null = null;
+
+/** Drop the memo — for the tests, and for anything that changes the corpus. */
+export function invalidateDailyPlan(): void {
+  planCache = null;
+}
+
 export async function getDailyPlan(
-  opts: { dashboard?: TrailsDashboard; signal?: AbortSignal } = {},
+  opts: {
+    /** Reuse the caller's copy rather than loading the physio suite twice. */
+    dashboard?: TrailsDashboard;
+    monotony?: MetricResult<MonotonyResult> | null;
+    polarised?: MetricResult<PolarisedResult> | null;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<DailyPlan> {
   const degraded: string[] = [];
+
+  // Keyed on the LOCAL day, read from the server's own clock in Europe/London
+  // rather than through a UTC date — a plan made at 00:30 BST belongs to the day
+  // it was made on.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  if (planCache && planCache.key === today && Date.now() - planCache.at < PLAN_TTL_MS) {
+    return planCache.value;
+  }
+
+  const deadline = AbortSignal.timeout(ROUTE_DEADLINE_MS);
+  const signal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
 
   try {
     const [base, dashboard, monotony, polarised, counts] = await Promise.all([
@@ -380,8 +501,15 @@ export async function getDailyPlan(
       opts.dashboard
         ? Promise.resolve(opts.dashboard)
         : soft('physio dashboard', () => getTrailsDashboard(), degraded),
-      soft('monotony', () => getMonotony(), degraded),
-      soft('intensity mix', () => getPolarised(), degraded),
+      // The owner /health load has already computed both of these. Handing
+       // them over saves two round trips against a five-connection pool that
+       // the whole site shares.
+      opts.monotony !== undefined
+        ? Promise.resolve(opts.monotony)
+        : soft('monotony', () => getMonotony(), degraded),
+      opts.polarised !== undefined
+        ? Promise.resolve(opts.polarised)
+        : soft('intensity mix', () => getPolarised(), degraded),
       soft('sport history', () => sportCounts(), degraded),
     ]);
 
@@ -438,16 +566,21 @@ export async function getDailyPlan(
     });
 
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const details = await Promise.all(
-      shortlist.map((t) => soft(`segment ${t.id}`, () => getSegment(t.id), degraded)),
+    // Two queries for the whole shortlist, not `getSegment()` per candidate.
+    // That was six calls of two round trips each, and every one of them dragged
+    // the segment's ENTIRE coordinate array off the database to read two points
+    // out of it.
+    const details = await soft(
+      'shortlist detail',
+      () => shortlistDetail(shortlist.map((t) => t.id)),
+      degraded,
     );
 
-    const enriched = shortlist.flatMap((t, i) => {
+    const enriched = shortlist.flatMap((t) => {
       const row = byId.get(t.id);
       if (!row) return [];
-      const detail = details[i];
       // Efforts come back newest-first; the trend wants the last five oldest-first.
-      const recentEf = detail?.efforts.slice(0, 5).reverse().map((e) => e.efficiencyFactor);
+      const recentEf = details?.get(t.id)?.recentEf.slice().reverse();
       return [toCandidate(row, recentEf)];
     });
 
@@ -470,11 +603,10 @@ export async function getDailyPlan(
     } else {
       const geoms: TargetGeometry[] = [];
       for (const t of targets) {
-        const detail = details[shortlist.findIndex((s) => s.id === t.id)] ?? null;
-        const coords = detail?.coordinates ?? [];
-        if (coords.length < 2) continue;
-        const first = coords[0];
-        const last = coords[coords.length - 1];
+        const ends = details?.get(t.id) ?? null;
+        const first = ends?.first;
+        const last = ends?.last;
+        if (!first || !last) continue;
         geoms.push({
           id: t.id,
           name: t.name,
@@ -493,14 +625,14 @@ export async function getDailyPlan(
           session.targetDistanceM,
           geoms,
           degraded,
-          opts.signal,
+          signal,
         );
         route = drawn.route;
         routeNote = drawn.note;
       }
     }
 
-    return {
+    const plan: DailyPlan = {
       generatedAt: new Date().toISOString(),
       session,
       targets,
@@ -508,6 +640,8 @@ export async function getDailyPlan(
       routeNote,
       degraded,
     };
+    planCache = { key: today, at: Date.now(), value: plan };
+    return plan;
   } catch (err) {
     // The card is on the page every morning; it does not get to take the page
     // down with it.

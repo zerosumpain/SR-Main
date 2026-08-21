@@ -48,12 +48,25 @@ async function fingerprint(): Promise<string> {
       lastSynced: sql<number>`coalesce(max(${activities.syncedAt}), 0)::int`,
       excluded: sql<number>`count(*) filter (where ${activities.excludedFromSegments})::int`,
       overridden: sql<number>`count(*) filter (where ${activities.typeOverride} is not null)::int`,
+      lastStart: sql<number>`coalesce(max(${activities.startDate}), 0)::int`,
+      totalDuration: sql<number>`coalesce(sum(${activities.durationS}), 0)::bigint`,
     })
     .from(activities);
   const [efforts] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(activitySegmentEfforts);
-  return [row?.activities, row?.lastSynced, row?.excluded, row?.overridden, efforts?.n].join(':');
+  // `syncedAt` alone is not enough: the ingest upsert did not bump it, so a
+  // re-ingested activity changed its numbers without changing the key. The last
+  // start date and the summed duration move whenever the corpus really does.
+  return [
+    row?.activities,
+    row?.lastSynced,
+    row?.lastStart,
+    row?.totalDuration,
+    row?.excluded,
+    row?.overridden,
+    efforts?.n,
+  ].join(':');
 }
 
 /** The three metadata keys the ranker needs, projected in SQL. */
@@ -162,9 +175,10 @@ export async function getHighlightCorpus(): Promise<HighlightCorpus> {
   return value;
 }
 
-/** Drop the memo — called after an exclusion or a type correction. */
+/** Drop the memos — called after an exclusion or a type correction. */
 export function invalidateHighlights(): void {
   cache = null;
+  chainCache = null;
 }
 
 /** The one highlight a table row shows. */
@@ -201,7 +215,15 @@ export interface SegmentChain {
  * load of efforts, so a "best back-to-back" badge on an outing and this panel
  * can never disagree.
  */
+let chainCache: { key: string; value: SegmentChain[] } | null = null;
+
 export async function getSegmentChains(limit = 12): Promise<SegmentChain[]> {
+  // Memoised on the same fingerprint as the highlight corpus. Without this the
+  // segments explorer reloaded all 1,136 activities and all 6,317 efforts on
+  // every render, to answer a question that changes only when one of them does.
+  const key = `${await fingerprint()}:${limit}`;
+  if (chainCache && chainCache.key === key) return chainCache.value;
+
   const [efforts, facts] = await Promise.all([loadEffortFacts(), loadActivityFacts()]);
   const excluded = new Set(facts.filter((a) => a.excludedFromSegments).map((a) => a.id));
   const live = efforts.filter((e) => !excluded.has(e.activityId));
@@ -228,7 +250,9 @@ export async function getSegmentChains(limit = 12): Promise<SegmentChain[]> {
 
   // Most-travelled first — the pair you chain every week is the one worth a
   // target time; a pair you did twice is a coincidence with a number on it.
-  return out
+  const value = out
     .sort((a, b) => b.occurrences - a.occurrences || a.bestElapsedS - b.bestElapsedS)
     .slice(0, limit);
+  chainCache = { key, value };
+  return value;
 }

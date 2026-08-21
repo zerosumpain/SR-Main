@@ -102,7 +102,19 @@
     </section>
   {/if}
 
-  {#if !hasRows}
+  {#if data.error}
+    <!-- A query that failed is not a phone that was never set up: the
+         onboarding copy below would tell the owner to configure something that
+         has been running for a year. -->
+    <section class="nm-sec empty-state">
+      <p class="empty-title">The list did not load.</p>
+      <p class="empty-body">
+        The database did not answer, so this table is empty for a reason that has nothing to do
+        with what the phone has sent. Reload the page; if it keeps failing, the server log carries
+        the query error.
+      </p>
+    </section>
+  {:else if !hasRows}
     <section class="nm-sec empty-state">
       <p class="empty-title">Nothing here yet.</p>
       <p class="empty-body">

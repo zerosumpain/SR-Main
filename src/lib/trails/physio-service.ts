@@ -199,7 +199,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
       (samples ? trimpFromSamples(samples, profile) : null) ??
       (row.avgHeartrate ? trimpFromAvg(duration, row.avgHeartrate, profile) : null);
     const ef = efficiencyFactor(row.distanceM, duration, row.avgHeartrate);
-    const curve = hrrCurve((row.metadata as Record<string, unknown> | null)?.heartRateRecovery);
+    const curve = hrrCurve(row.heartRateRecovery);
 
     workouts.push({
       id: row.id,
@@ -461,7 +461,15 @@ interface ActivityWithHr {
   activeDurationS: number | null;
   distanceM: number | null;
   avgHeartrate: number | null;
-  metadata: unknown;
+  /**
+   * ONE key out of the metadata jsonb, not the column.
+   *
+   * `activities.metadata` carries the phone's per-minute stepCount, basalEnergy
+   * and heartRate arrays — about 11 KB of JSON per row — and this query covers
+   * 90 days of workouts on every owner /health render. The only thing read from
+   * it is the heart-rate-recovery curve.
+   */
+  heartRateRecovery: unknown;
   hrSamples: HrSample[] | null;
 }
 
@@ -477,7 +485,7 @@ async function fetchActivitiesWithHr(days: number): Promise<ActivityWithHr[]> {
       activeDurationS: activities.activeDurationS,
       distanceM: activities.distanceM,
       avgHeartrate: activities.avgHeartrate,
-      metadata: activities.metadata,
+      heartRateRecovery: sql<unknown>`${activities.metadata} -> 'heartRateRecovery'`,
     })
     .from(activities)
     .where(gte(activities.startDate, epochDaysAgo(days)))

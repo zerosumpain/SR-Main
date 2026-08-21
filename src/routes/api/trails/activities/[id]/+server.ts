@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { activities, activitySegmentEfforts } from '$lib/db/schema';
 import { ACTIVITY_TYPES, isKnownActivityType } from '$lib/trails/activity-meta';
+import { invalidateDailyPlan } from '$lib/trails/coach-service';
 import { invalidateHighlights } from '$lib/trails/highlights-service';
 import { scheduleSegmentRebuild } from '$lib/trails/segments-service';
 import type { RequestHandler } from './$types';
@@ -87,6 +88,10 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   // list must not show a stale "2nd fastest" on a row the owner just excluded.
   const effortsRemoved = await dropEfforts(id);
   invalidateHighlights();
+  // The plan is memoised for the day, and both corrections change what it would
+  // propose: an exclusion removes efforts a target was ranked on, and a type
+  // correction moves the outing into a different sport's history.
+  invalidateDailyPlan();
 
   // Fire and forget, like ingest does: a rebuild takes seconds and the caller is
   // a click, not a cron. It coalesces concurrent requests into the current run
