@@ -33,7 +33,13 @@ export interface SegmentForm {
   spark: number[];
   /** All-time best duration over the efforts given. */
   pbDurationS: number | null;
-  /** Days between the PB and the most recent effort. */
+  /**
+   * Days from the PB to NOW — not to the most recent effort.
+   *
+   * The coach reads this as staleness ("an old record is catchable"), and
+   * measuring it to the last effort made a three-year-old PB on a segment
+   * nobody has run since read as brand new.
+   */
   daysSincePb: number | null;
   /**
    * How far the best of the recent window sits behind the all-time PB, as a
@@ -43,8 +49,17 @@ export interface SegmentForm {
   gapPct: number | null;
 }
 
-/** Below this the window medians are just two numbers. */
-export const MIN_EFFORTS_FOR_FORM = 4;
+/**
+ * Below this the window medians are just two numbers.
+ *
+ * Six, not four: the recent window is three, so at four the "earlier" median is
+ * a single effort — and one effort spent waiting at a gate would then set the
+ * direction for the whole segment, which is the exact failure the medians are
+ * here to prevent.
+ */
+export const MIN_EFFORTS_FOR_FORM = 6;
+/** The earlier window needs this many before its median means anything. */
+const MIN_EARLIER = 3;
 /** How many recent efforts make "now". */
 const RECENT_WINDOW = 3;
 /** How many efforts before that make "then". */
@@ -70,7 +85,12 @@ export const UNKNOWN_FORM: SegmentForm = {
   gapPct: null,
 };
 
-export function segmentForm(efforts: FormEffort[]): SegmentForm {
+export function segmentForm(
+  efforts: FormEffort[],
+  opts: { now?: number } = {},
+): SegmentForm {
+  // Injected so the value is testable; unix SECONDS, matching `startedAt`.
+  const asOf = opts.now ?? Math.floor(Date.now() / 1000);
   const usable = efforts.filter((e) => Number.isFinite(e.durationS) && e.durationS > 0);
   if (!usable.length) return UNKNOWN_FORM;
 
@@ -78,8 +98,7 @@ export function segmentForm(efforts: FormEffort[]): SegmentForm {
   const durations = chronological.map((e) => e.durationS);
   const pbDurationS = Math.min(...durations);
   const pbEffort = chronological.find((e) => e.durationS === pbDurationS)!;
-  const latest = chronological[chronological.length - 1];
-  const daysSincePb = Math.max(0, Math.round((latest.startedAt - pbEffort.startedAt) / 86_400));
+  const daysSincePb = Math.max(0, Math.round((asOf - pbEffort.startedAt) / 86_400));
 
   const recent = chronological.slice(-RECENT_WINDOW);
   const recentBest = Math.min(...recent.map((e) => e.durationS));
@@ -97,7 +116,7 @@ export function segmentForm(efforts: FormEffort[]): SegmentForm {
   );
   const now = median(recent.map((e) => e.durationS));
   const then = median(earlier.map((e) => e.durationS));
-  if (now == null || then == null || then <= 0) {
+  if (earlier.length < MIN_EARLIER || now == null || then == null || then <= 0) {
     return { ...UNKNOWN_FORM, spark, pbDurationS, daysSincePb, gapPct, sample: recent.length };
   }
 

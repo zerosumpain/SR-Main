@@ -59,10 +59,19 @@ describe('segmentForm', () => {
     expect(form.gapPct).toBeCloseTo((291 - 280) / 280, 5);
   });
 
-  it('counts the days from the PB to the latest effort, not to now', () => {
-    const form = segmentForm(efforts([300, 280, 290, 295, 292, 291]));
-    // PB is index 1, latest is index 5 — four weeks.
-    expect(form.daysSincePb).toBe(28);
+  it('counts the days from the PB to NOW, not to the latest effort', () => {
+    const rows = efforts([300, 280, 290, 295, 292, 291]);
+    const latest = rows[rows.length - 1].startedAt;
+    // PB is index 1 — four weeks before the last effort.
+    const pbAt = rows[1].startedAt;
+
+    // A segment nobody has touched for a year: the PB is a year old, not 28 days.
+    const ayear = segmentForm(rows, { now: latest + 365 * DAY });
+    expect(ayear.daysSincePb).toBe(Math.round((latest + 365 * DAY - pbAt) / DAY));
+    expect(ayear.daysSincePb).toBeGreaterThan(365);
+
+    // Measured right after the last effort it is the old 28.
+    expect(segmentForm(rows, { now: latest }).daysSincePb).toBe(28);
   });
 
   it('drops zero and non-finite durations rather than ranking them', () => {

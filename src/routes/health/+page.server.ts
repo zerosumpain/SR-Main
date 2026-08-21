@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
-import { pickPublic } from '$lib/health/public-payload';
+import { disclosureLeaks, pickPublic } from '$lib/health/public-payload';
 import { getHealthSeries30d } from '$lib/health/series-30d-service';
 import { getFeaturedActivities } from '$lib/health/featured-activities-service';
 import { getReadiness } from '$lib/health/readiness-service';
@@ -74,6 +74,14 @@ async function recentOutings() {
 export const load: PageServerLoad = async (event) => {
   const owner = await isOwnerRequest(event);
 
+  // /health is ONE public URL serving two different documents, so the owner's
+  // must never be cacheable by anything in front of it. cloudflared sits
+  // between this app and the internet; a shared cache that stored the signed-in
+  // response and replayed it to the next anonymous visitor would hand over the
+  // whole hub. `Vary: Cookie` is the belt and `private, no-store` is the braces.
+  event.setHeaders({ Vary: 'Cookie' });
+  if (owner) event.setHeaders({ 'Cache-Control': 'private, no-store' });
+
   // getHealthSeries30d and getFeaturedActivities used to sit UNWRAPPED in this
   // Promise.all, so a database hiccup in either 500'd the whole page while the
   // ten analytics beside them degraded to a hidden section. They fail soft now
@@ -137,7 +145,22 @@ export const load: PageServerLoad = async (event) => {
     // correlates the service substitutes four hard-coded example findings
     // complete with r values and sample sizes, and a public page must not
     // present an invented result as a measurement.
-    return { mode: 'public' as const, ...pickPublic(shared) };
+    const publicPayload = pickPublic(shared);
+
+    // The second belt, and it is buckled: the allow-list decides which KEYS go
+    // out, this walks the VALUES that came back. It is a few hundred numbers,
+    // so it costs microseconds, and it never blocks the page — an anonymous
+    // visitor seeing an empty dashboard because a walker got clever is a worse
+    // outcome than a logged line. If this ever fires, it is a real leak and the
+    // log is where it will be noticed.
+    const leaks = disclosureLeaks(publicPayload);
+    if (leaks.length) {
+      console.error(
+        `[health] ANONYMOUS PAYLOAD DISCLOSURE — ${leaks.length} field(s): ${leaks.join(', ')}`,
+      );
+    }
+
+    return { mode: 'public' as const, ...publicPayload };
   }
 
   // The dashboard is fetched FIRST and handed to the coach, which would

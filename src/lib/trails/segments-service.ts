@@ -319,7 +319,9 @@ async function effortsForSegments(segmentIds: number[]): Promise<Map<number, Seg
       efficiencyFactor: activitySegmentEfforts.efficiencyFactor,
       beatsPerKm: activitySegmentEfforts.beatsPerKm,
       activityName: activities.name,
-      activityType: activities.activityType,
+      // The correction, so the leaderboard's pace-vs-speed switch and the type
+      // beside each effort agree with every other surface.
+      activityType: sql<string>`coalesce(nullif(trim(${activities.typeOverride}), ''), ${activities.activityType})`,
       startDateLocal: activities.startDateLocal,
       // One key out of the metadata jsonb. Selecting the column itself would
       // drag the phone's per-minute stepCount and heartRate arrays — roughly

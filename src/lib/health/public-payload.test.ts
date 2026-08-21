@@ -121,3 +121,24 @@ describe('disclosureLeaks', () => {
     expect(disclosureLeaks({ series })).toEqual([]);
   });
 });
+
+describe('disclosureLeaks — the spellings nobody thought of', () => {
+  it('catches a route under a key the exact-name list would have missed', () => {
+    expect(disclosureLeaks({ map: { summary_polyline: 'a}~fFabc' } })).toContain(
+      'map.summary_polyline: summary_polyline',
+    );
+    expect(disclosureLeaks({ startLat: 52.6289 }).length).toBeGreaterThan(0);
+    expect(disclosureLeaks({ geometry: [[1.29, 52.62]] }).length).toBeGreaterThan(0);
+  });
+
+  it('catches an encoded polyline sitting under an innocent key', () => {
+    const encoded = 'ilqvHnb_@k@Uu@]w@a@_A_@}@]{@Wu@Om@Ge@Ai@?g@Bg@Fe@Jc@';
+    expect(disclosureLeaks({ note: encoded })).toContain('note: encoded polyline');
+  });
+
+  it('does not cry wolf over ordinary prose or a whole-number pair', () => {
+    expect(disclosureLeaks({ strap: 'Recovery is holding and sleep is short.' })).toEqual([]);
+    expect(disclosureLeaks({ window: [7, 30] })).toEqual([]);
+    expect(disclosureLeaks({ headline: { primary: 'STEADY', ghost: 'steady' } })).toEqual([]);
+  });
+});

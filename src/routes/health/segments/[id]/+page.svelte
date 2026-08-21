@@ -120,7 +120,7 @@
     },
     {
       label: 'PB set',
-      value: segment.form.daysSincePb == null ? '—' : `${segment.form.daysSincePb}d before last`,
+      value: segment.form.daysSincePb == null ? '—' : `${segment.form.daysSincePb}d ago`,
     },
   ]);
 </script>

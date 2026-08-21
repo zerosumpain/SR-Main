@@ -450,25 +450,28 @@ export function computeHighlights(
 
       // Hardest — distance and climb combined the way the planner grades routes,
       // so "hard" means the same thing on a finished outing as on a proposed one.
+      // Only outings whose CLIMB IS KNOWN compete here. gradeDifficulty scores a
+      // missing ascent as flat (`climbUnknown`), so ranking those against
+      // climb-adjusted ones quietly says the hilly ones were easier — and every
+      // ride before the barometer data starts would sink to the bottom.
+      const gradeable = group.filter((a) => a.distanceM != null && a.elevationGainM != null);
       const hardest = rankBy(
-        group,
+        gradeable,
         (a) => a.id,
         (a) =>
-          a.distanceM == null
-            ? null
-            : gradeDifficulty({
-                distanceM: a.distanceM,
-                ascentM: a.elevationGainM ?? null,
-                sport: type,
-              }).equivalentKm,
+          gradeDifficulty({
+            distanceM: a.distanceM as number,
+            ascentM: a.elevationGainM as number,
+            sport: type,
+          }).equivalentKm,
         'desc',
       );
-      for (const a of group) {
+      for (const a of gradeable) {
         const r = hardest.get(a.id);
-        if (!r || r.rank > TOP_N_RECORD || a.distanceM == null) continue;
+        if (!r || r.rank > TOP_N_RECORD || r.outOf < MIN_ACTIVITIES_FOR_RECORD) continue;
         const grade = gradeDifficulty({
-          distanceM: a.distanceM,
-          ascentM: a.elevationGainM ?? null,
+          distanceM: a.distanceM as number,
+          ascentM: a.elevationGainM as number,
           sport: type,
         });
         push(out, a.id, {
@@ -601,7 +604,7 @@ export function computeHighlights(
           rank: null,
           outOf: group.length,
           label: `First ${noun}`,
-          detail: `Where the ${nounPlural} started — ${group.length} since`,
+          detail: `Where the ${nounPlural} started — ${group.length - 1} since`,
           weight: 35,
         });
         return;
@@ -635,25 +638,42 @@ export function computeHighlights(
     // universal floor: it needs nothing but the group and it always has an
     // answer.
     if (group.length >= 8) {
-      const metric = (a: ActivityFacts) => a.distanceM ?? a.durationS;
-      const sorted = [...group].sort((x, y) => metric(x) - metric(y));
-      sorted.forEach((a, i) => {
-        const beaten = i; // strictly-below count in this ordering
-        const pct = Math.round((beaten / (group.length - 1)) * 100);
-        if (pct < 50) return; // "shorter than most" is not a highlight
-        push(out, a.id, {
-          kind: 'percentile',
-          scope: 'activity',
-          rank: null,
-          outOf: group.length,
-          label: pct >= 90 ? 'Big one' : 'Above your average',
-          detail:
-            a.distanceM != null
+      // ONE metric for the whole group, chosen once. Reading
+      // `distanceM ?? durationS` per row would rank metres against seconds
+      // whenever some outings of a type carry a distance and some do not — a
+      // 40-minute indoor session would outrank a 5 km run by a factor of 500.
+      const byDistance = group.filter((a) => a.distanceM != null).length >= group.length / 2;
+      const metric = (a: ActivityFacts): number | null =>
+        byDistance ? a.distanceM : a.durationS;
+      const values = group
+        .map(metric)
+        .filter((v): v is number => v != null && Number.isFinite(v))
+        .sort((x, y) => x - y);
+      if (values.length >= 8) {
+        for (const a of group) {
+          const mine = metric(a);
+          if (mine == null || !Number.isFinite(mine)) continue;
+          // STRICTLY below, over the whole set — so the longest is "longer than
+          // 92% of your walks" rather than the arithmetically impossible 100%,
+          // and two identical outings get the same answer instead of one
+          // scoring and the other not.
+          const below = values.filter((v) => v < mine).length;
+          const pct = Math.round((below / values.length) * 100);
+          // "Shorter than most" is not a highlight.
+          if (pct < 50) continue;
+          push(out, a.id, {
+            kind: 'percentile',
+            scope: 'activity',
+            rank: null,
+            outOf: values.length,
+            label: pct >= 85 ? 'Big one' : 'Above your average',
+            detail: byDistance
               ? `Longer than ${pct}% of your ${nounPlural}`
               : `Longer out than ${pct}% of your ${nounPlural}`,
-          weight: 24 + pct / 5,
-        });
-      });
+            weight: 24 + pct / 5,
+          });
+        }
+      }
     }
   }
 
@@ -781,8 +801,8 @@ function addWindowBests(chronological: ActivityFacts[], type: string, out: Map<s
         scope: 'activity',
         rank: 1,
         outOf: others.length + 1,
-        label: m.best(noun, others.length + 1),
-        detail: `${m.say(a)} — best of your last ${others.length + 1} ${nounPlural}`,
+        label: m.best(noun, window.length),
+        detail: `${m.say(a)} — best of your last ${window.length} ${nounPlural}`,
         weight: WINDOW_WEIGHT,
       });
     }
@@ -839,7 +859,9 @@ function addDayBests(activities: ActivityFacts[], out: Map<string, Highlight[]>)
   }
   for (const [, group] of days) {
     if (group.length < 2) continue;
-    const ranked = rankBy(group, (a) => a.id, (a) => a.distanceM ?? a.durationS, 'desc');
+    // Duration again: a day can hold a ride and a swim, and only one of those
+    // has a distance in metres worth comparing.
+    const ranked = rankBy(group, (a) => a.id, (a) => a.durationS, 'desc');
     for (const a of group) {
       const r = ranked.get(a.id);
       const top = r?.rank === 1;
@@ -1053,7 +1075,10 @@ function addStreaks(activities: ActivityFacts[], out: Map<string, Highlight[]>) 
     const best = days
       .get(day)!
       .slice()
-      .sort((a, b) => (b.distanceM ?? b.durationS) - (a.distanceM ?? a.durationS))[0];
+      // Duration, not `distanceM ?? durationS`: this compares across TYPES, and
+      // mixing metres with seconds would make any outing without a distance the
+      // biggest thing that ever happened.
+      .sort((a, b) => b.durationS - a.durationS)[0];
     push(out, best.id, {
       kind: 'streak',
       scope: 'rhythm',

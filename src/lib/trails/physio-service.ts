@@ -40,7 +40,7 @@ import { getACWR } from '$lib/health/services/acwr-service';
 import { computeVO2MaxResult, type VO2Result } from '$lib/health/analytics/vo2max-percentile';
 import { beatsPerKm } from './segments/metrics';
 import { isPaceSport } from './format';
-import type { ActivityDetail } from './activities-service';
+import { EFFECTIVE_TYPE, type ActivityDetail } from './activities-service';
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -261,7 +261,7 @@ export async function getTrailsStrip(): Promise<TrailsStrip> {
       db
         .select({
           id: activities.id,
-          activityType: activities.activityType,
+          activityType: EFFECTIVE_TYPE,
           startDate: activities.startDate,
           startDateLocal: activities.startDateLocal,
           durationS: activities.durationS,
@@ -351,7 +351,12 @@ async function typicalForSport(detail: ActivityDetail) {
     .from(activities)
     .where(
       and(
-        eq(activities.activityType, detail.activityType),
+        // `detail.activityType` is the EFFECTIVE type (the owner's correction
+        // where there is one), so the column it is matched against has to be
+        // too. Comparing it with the raw column silently picked the wrong peer
+        // set for every corrected outing — and for a ride corrected to a hike,
+        // the peers were other rides.
+        eq(EFFECTIVE_TYPE, detail.activityType),
         sql`${activities.id} <> ${detail.id}`,
       ),
     )
@@ -465,7 +470,7 @@ async function fetchActivitiesWithHr(days: number): Promise<ActivityWithHr[]> {
     .select({
       id: activities.id,
       name: activities.name,
-      activityType: activities.activityType,
+      activityType: EFFECTIVE_TYPE,
       startDate: activities.startDate,
       startDateLocal: activities.startDateLocal,
       durationS: activities.durationS,

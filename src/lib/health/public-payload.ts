@@ -60,17 +60,25 @@ export function pickPublic<T extends Record<string, unknown>>(
  */
 const DISCLOSURE_EXEMPT_ROOTS = new Set(['featuredActivities']);
 
-/** Keys that carry a route, wherever they appear. */
-const GEOMETRY_KEYS = /^(polyline|coordinates|coords|bounds|latlng|lat|lng|lon|longitude|latitude)$/i;
+/**
+ * Keys that carry a route. Matched as a SUBSTRING, not an exact name: this repo
+ * writes `polyline`, `summary_polyline`, `coordinates`, `startLat`, `bounds`
+ * and `latlng` in different places, and an exact-name list is a list of the
+ * spellings someone happened to think of.
+ */
+const GEOMETRY_KEYS = /(polyline|coordinate|coords|bounds|latlng|\blat\b|\blng\b|\blon\b|longitude|latitude|geometry|waypoint)/i;
 
 /** Keys that name a specific outing or a specific piece of ground. */
-const IDENTITY_KEYS = /^(segmentName|segmentId|activityId|startDateLocal|timezone|track)$/i;
+const IDENTITY_KEYS = /(segmentname|segmentid|activityid|startdatelocal|timezone|\btrack\b)/i;
 
 /** A `YYYY-MM-DD hh:mm` local stamp — the clock John was out at. */
 const LOCAL_TIMESTAMP = /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/;
 
 /** A what3words-style segment name: three lowercase words joined by dots. */
 const SEGMENT_NAME = /^[a-z]+\.[a-z]+\.[a-z]+$/;
+
+/** A run of encoded-polyline characters with no whitespace and no vowels. */
+const ENCODED_POLYLINE = /^[\x3F-\x7E]{30,}$/;
 
 /**
  * Walk a payload and name everything in it that could disclose a place, a
@@ -89,6 +97,10 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
     if (typeof node === 'string') {
       if (LOCAL_TIMESTAMP.test(node)) found.push(`${at}: local timestamp`);
       else if (SEGMENT_NAME.test(node)) found.push(`${at}: segment name`);
+      // An encoded polyline under a key nobody thought to name. Google's
+      // algorithm emits printable ASCII 63–126 in dense runs; ordinary prose
+      // does not go 30 characters without a space or a vowel.
+      else if (ENCODED_POLYLINE.test(node)) found.push(`${at}: encoded polyline`);
       return;
     }
     if (typeof node !== 'object') return;
@@ -102,8 +114,11 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
         typeof node[1] === 'number' &&
         Math.abs(node[0] as number) <= 180 &&
         Math.abs(node[1] as number) <= 90 &&
-        !Number.isInteger(node[0]) &&
-        !Number.isInteger(node[1])
+        // At least one fractional part. A whole-number pair is far more likely
+        // to be a count or an index than a position — [7, 30] is a week and a
+        // month, not somewhere in Sudan — but a real fix on a whole degree is
+        // vanishingly rare and would still trip the key check above.
+        (!Number.isInteger(node[0]) || !Number.isInteger(node[1]))
       ) {
         found.push(`${at}: coordinate pair`);
         return;
@@ -115,7 +130,14 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
     for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
       const childPath = at ? `${at}.${key}` : key;
       if (!at && DISCLOSURE_EXEMPT_ROOTS.has(key)) continue;
-      if (child != null && (GEOMETRY_KEYS.test(key) || IDENTITY_KEYS.test(key))) {
+      // `startLat` has no word boundary before "lat", so the key is split at
+      // camel-case and underscore transitions before it is matched. Without
+      // this the walker misses exactly the spellings a real payload uses.
+      const normalised = key
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/[_-]/g, ' ')
+        .toLowerCase();
+      if (child != null && (GEOMETRY_KEYS.test(normalised) || IDENTITY_KEYS.test(normalised))) {
         found.push(`${childPath}: ${key}`);
         continue;
       }

@@ -81,7 +81,7 @@ export interface ActivityDetail extends ActivityListRow {
  * semantics as effectiveType() in activity-meta, or a whitespace-only override
  * would mean one thing in Postgres and another in JavaScript.
  */
-const EFFECTIVE_TYPE = sql<string>`coalesce(nullif(trim(${activities.typeOverride}), ''), ${activities.activityType})`;
+export const EFFECTIVE_TYPE = sql<string>`coalesce(nullif(trim(${activities.typeOverride}), ''), ${activities.activityType})`;
 
 /** Types that carry a GPS trace — the default view of the activity list. */
 export const OUTDOOR_TYPES = ['run', 'trail_run', 'ride', 'mtb', 'hike', 'walk'];

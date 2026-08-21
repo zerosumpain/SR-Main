@@ -7,6 +7,7 @@
 import { desc, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { activities } from '$lib/db/schema';
+import { EFFECTIVE_TYPE } from './activities-service';
 import { getReadiness } from '$lib/health/readiness-service';
 import { getTrainingLoad } from '$lib/health/training-load-service';
 import {
@@ -97,7 +98,9 @@ export async function suggestTarget(sport: string): Promise<{
       })
       .from(activities)
       .where(
-        sql`${activities.activityType} = ${sport} and ${activities.startDate} >= ${since} and ${activities.distanceM} is not null`,
+        // The owner's correction, not the raw column: a ride mis-logged as a
+        // walk must not set the median distance for walks.
+        sql`${EFFECTIVE_TYPE} = ${sport} and ${activities.startDate} >= ${since} and ${activities.distanceM} is not null`,
       );
     sampleCount = row?.n ?? 0;
     if (row?.median && row.median > 500 && sampleCount >= MIN_SAMPLE) median = row.median;
@@ -170,12 +173,12 @@ export async function proposeSession(): Promise<SessionProposal> {
     const since = Math.floor(Date.now() / 1000) - 56 * 86400;
     const rows = await db
       .select({
-        activityType: activities.activityType,
+        activityType: EFFECTIVE_TYPE,
         n: sql<number>`count(*)::int`,
       })
       .from(activities)
       .where(gte(activities.startDate, since))
-      .groupBy(activities.activityType)
+      .groupBy(EFFECTIVE_TYPE)
       .orderBy(desc(sql`count(*)`));
 
     const favourite = rows.find((r) => r.activityType && r.activityType in ORS_PROFILES);
