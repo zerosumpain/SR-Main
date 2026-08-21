@@ -2,7 +2,10 @@
   import { replaceState } from '$app/navigation';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
+  import FormSpark from '$lib/components/trails/FormSpark.svelte';
   import type { SegmentTerrain } from '$lib/trails/segments/naming';
+  import type { FormDirection } from '$lib/trails/segments/form';
+  import { formatDuration } from '$lib/trails/format';
   import {
     activityLabel,
     formatDistance,
@@ -27,8 +30,16 @@
     { key: 'flat', label: 'Flat' },
   ];
 
+  const FORMS: Array<{ key: FormDirection; label: string }> = [
+    { key: 'improving', label: 'Improving' },
+    { key: 'holding', label: 'Holding' },
+    { key: 'slipping', label: 'Slipping' },
+  ];
+
   const SORTS = [
     { key: 'efforts', label: 'Most efforts' },
+    { key: 'improving', label: 'Improving fastest' },
+    { key: 'gettable', label: 'Closest to a PB' },
     { key: 'climb', label: 'Biggest climb' },
     { key: 'steepest', label: 'Steepest' },
     { key: 'longest', label: 'Longest' },
@@ -41,6 +52,7 @@
 
   const isTerrain = (v: string | null): v is SegmentTerrain =>
     TERRAINS.some((t) => t.key === v);
+  const isForm = (v: string | null): v is FormDirection => FORMS.some((f) => f.key === v);
   const isSort = (v: string | null): v is SortKey => SORTS.some((s) => s.key === v);
 
   // Validated like terrain and sort below: a stale link's unknown type must
@@ -55,6 +67,9 @@
   // links keep working; it is written back as its own param, because offroad
   // and terrain are independent filters and must not fight over one key.
   let offroadOnly = $state(data.initial.offroad === '1' || data.initial.terrain === 'offroad');
+  let activeForm = $state<FormDirection | null>(
+    isForm(data.initial.form) ? data.initial.form : null,
+  );
   let sortKey = $state<SortKey>(isSort(data.initial.sort) ? data.initial.sort : 'efforts');
 
   /** Keep the address bar honest so a filtered view survives a copy-paste. */
@@ -63,6 +78,7 @@
     if (activeType) params.set('type', activeType);
     if (activeTerrain) params.set('terrain', activeTerrain);
     if (offroadOnly) params.set('offroad', '1');
+    if (activeForm) params.set('form', activeForm);
     if (sortKey !== 'efforts') params.set('sort', sortKey);
     const qs = params.toString();
     replaceState(qs ? `?${qs}` : '/health/segments', {});
@@ -73,7 +89,8 @@
       (s) =>
         (!activeType || s.activityType === activeType) &&
         (!activeTerrain || s.terrain === activeTerrain) &&
-        (!offroadOnly || s.offroad),
+        (!offroadOnly || s.offroad) &&
+        (!activeForm || s.form.direction === activeForm),
     ),
   );
 
@@ -114,6 +131,14 @@
         );
       case 'cost':
         return nullsLast(comparableValue(a, a.bests.beatsPerKm), comparableValue(b, b.bests.beatsPerKm), 1);
+      case 'improving':
+        // Most negative delta first — the number is a TIME, so falling is faster.
+        return nullsLast(a.form.deltaPct, b.form.deltaPct, 1);
+      case 'gettable':
+        // Smallest gap between the recent best and the all-time PB. A segment
+        // sitting 2% off its PB is a target; one sitting 40% off is a different
+        // day in different weather.
+        return nullsLast(a.form.gapPct, b.form.gapPct, 1);
       case 'recent':
         return nullsLast(a.lastEffortAt, b.lastEffortAt, -1);
       default:
@@ -123,11 +148,14 @@
 
   const sorted = $derived([...filtered].sort(bySortKey));
 
-  const filtering = $derived(activeType != null || activeTerrain != null || offroadOnly);
+  const filtering = $derived(
+    activeType != null || activeTerrain != null || offroadOnly || activeForm != null,
+  );
 
   function clearFilters() {
     activeType = null;
     activeTerrain = null;
+    activeForm = null;
     offroadOnly = false;
     syncUrl();
   }
@@ -326,6 +354,23 @@
         </button>
       </div>
 
+      <div class="chip-row" role="group" aria-label="Form">
+        {#each FORMS as f (f.key)}
+          <button
+            type="button"
+            class="chip"
+            class:on={activeForm === f.key}
+            title="The last three efforts' median time against the three before them"
+            onclick={() => {
+              activeForm = activeForm === f.key ? null : f.key;
+              syncUrl();
+            }}
+          >
+            {f.label}
+          </button>
+        {/each}
+      </div>
+
       <label class="sort">
         <span class="sr-label-tight">Sort</span>
         <select
@@ -381,6 +426,39 @@
       <button type="button" class="rebuild" onclick={clearFilters}>Clear filters</button>
     </section>
   {:else}
+    {#if data.chains.length}
+      <section class="nm-sec chains">
+        <div class="nm-sec-hd">
+          <span class="sr-label-tight">Chains</span>
+          <span class="nm-sec-meta">
+            segments taken one straight after the other · best combined time
+          </span>
+        </div>
+        <ol class="chain-list">
+          {#each data.chains as chain (chain.key)}
+            <li class="chain-row">
+              <span class="chain-names">
+                <a href="/health/segments/{chain.firstSegmentId}">{chain.firstName}</a>
+                <span class="chain-arrow" aria-hidden="true">→</span>
+                {#if chain.secondSegmentId > 0}
+                  <a href="/health/segments/{chain.secondSegmentId}">{chain.secondName}</a>
+                {:else}
+                  <span>{chain.secondName}</span>
+                {/if}
+              </span>
+              <span class="chain-time">{formatDuration(chain.bestElapsedS)}</span>
+              <span class="chain-n">{chain.occurrences}×</span>
+            </li>
+          {/each}
+        </ol>
+        <p class="foot-note">
+          Timed from the start of the first to the end of the second, so the transition between
+          them counts — that is the part you actually get better at. A gap of more than two
+          minutes is not a chain.
+        </p>
+      </section>
+    {/if}
+
     <ol class="segment-list">
       {#each sorted as segment (segment.id)}
         <li>
@@ -417,6 +495,9 @@
                 </span>
               </span>
             </div>
+            <span class="row-form">
+              <FormSpark form={segment.form} />
+            </span>
             <span class="row-efforts">
               <span class="efforts-n">{segment.effortCount}</span>
               <span class="efforts-l">efforts</span>
@@ -599,7 +680,7 @@
   }
   .segment-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 1rem;
     padding: 0.75rem 0.25rem;
@@ -655,6 +736,11 @@
     font-size: var(--fs-label);
     color: var(--text-secondary);
     white-space: nowrap;
+  }
+
+  .row-form {
+    min-width: 0;
+    justify-self: end;
   }
 
   .row-efforts {
@@ -724,12 +810,60 @@
     max-width: 62ch;
   }
 
+  .chains {
+    margin-bottom: 1.5rem;
+  }
+  .chain-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-hair);
+  }
+  .chain-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.55rem 0.25rem;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .chain-names {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+  }
+  .chain-names a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .chain-names a:hover {
+    text-decoration: underline;
+  }
+  .chain-arrow {
+    color: var(--text-ghost);
+  }
+  .chain-time {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+  .chain-n {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+  }
+
   @media (max-width: 900px) {
     .row-bests {
       display: none;
     }
     .segment-row {
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
     }
   }
 
@@ -744,6 +878,10 @@
     }
     .segment-row {
       grid-template-columns: auto minmax(0, 1fr);
+    }
+    .row-form {
+      grid-column: 2;
+      justify-self: start;
     }
     .row-efforts {
       grid-column: 2;

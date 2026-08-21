@@ -22,6 +22,8 @@ import { resampleTrack } from './segments/resample';
 import { discoverSegments, type DiscoveredSegment, type MatchOptions } from './segments/matcher';
 import { makeCorridor, corridorMatch, type LngLat } from './segments/corridor';
 import { effortMetrics, rankEfforts } from './segments/metrics';
+import { segmentForm, UNKNOWN_FORM, type FormEffort, type SegmentForm } from './segments/form';
+import { celsiusFrom } from './activity-meta';
 import {
   segmentDescriptor,
   segmentName,
@@ -63,6 +65,13 @@ export interface SegmentListRow {
   gradientPct: number;
   offroad: boolean;
   bests: SegmentBests;
+  /**
+   * Which way this ground is going — the recent window's median time against
+   * the window before it, plus the gap from the recent best to the all-time PB.
+   * A leaderboard says what your best ever was; this says whether you are still
+   * getting there.
+   */
+  form: SegmentForm;
 }
 
 export interface SegmentEffortRow {
@@ -82,12 +91,36 @@ export interface SegmentEffortRow {
   elevationGainM: number | null;
   efficiencyFactor: number | null;
   beatsPerKm: number | null;
+  /**
+   * Ambient temperature the watch recorded for the PARENT ACTIVITY, in °C.
+   * Not the effort's own — a workout carries one reading — but on a 500 m to
+   * 5 km stretch inside one outing that is the same weather.
+   */
+  temperatureC: number | null;
 }
 
 export interface SegmentDetail extends SegmentListRow {
   coordinates: SegmentGeometry;
   bounds: { n: number; s: number; e: number; w: number } | null;
   efforts: SegmentEffortRow[];
+  /**
+   * What the weather was doing. Segments carry no weather of their own — there
+   * is no weather table in this schema and open-meteo is fetched live, keyed to
+   * now, so it cannot answer "what was it like on that run". The ONE honest
+   * source is the ambient temperature the watch recorded on the parent activity,
+   * unit-normalised out of its metadata jsonb.
+   */
+  conditions: SegmentConditions;
+}
+
+export interface SegmentConditions {
+  /** Mean °C across the efforts that carried a reading. */
+  meanC: number | null;
+  /** Mean °C of the three quickest efforts, and of the three slowest. */
+  quickestC: number | null;
+  slowestC: number | null;
+  /** How many efforts had a temperature at all. */
+  sample: number;
 }
 
 /** A segment as it appears on the page of one activity that ran it. */
@@ -125,7 +158,11 @@ const EMPTY_BESTS: SegmentBests = {
   beatsPerKm: null,
 };
 
-function toListRow(row: SegmentListSource, bests: SegmentBests = EMPTY_BESTS): SegmentListRow {
+function toListRow(
+  row: SegmentListSource,
+  bests: SegmentBests = EMPTY_BESTS,
+  form: SegmentForm = UNKNOWN_FORM,
+): SegmentListRow {
   return {
     id: row.id,
     name: row.name,
@@ -147,6 +184,7 @@ function toListRow(row: SegmentListSource, bests: SegmentBests = EMPTY_BESTS): S
     gradientPct: Math.round(netGradientPct(row) * 10) / 10,
     offroad: isOffroadType(row.activityType),
     bests,
+    form,
   };
 }
 
@@ -186,7 +224,7 @@ export async function listSegments(
   //
   // The bests come from one grouped pass over the efforts — the explorer sorts
   // and crowns records from these without touching the per-effort table again.
-  const [rows, typeCounts, bestRows] = await Promise.all([
+  const [rows, typeCounts, bestRows, formRows] = await Promise.all([
     db
       .select({
         id: activitySegments.id,
@@ -223,13 +261,39 @@ export async function listSegments(
       })
       .from(activitySegmentEfforts)
       .groupBy(activitySegmentEfforts.segmentId),
+    // Three columns per effort, for the Form window. There are no window
+    // functions anywhere in this subsystem — every rank and trend in it is
+    // computed in JavaScript over rows already in memory — and at ~6,300 efforts
+    // this is a far smaller read than the geometry the projection above avoids.
+    db
+      .select({
+        segmentId: activitySegmentEfforts.segmentId,
+        durationS: activitySegmentEfforts.durationS,
+        startedAt: activitySegmentEfforts.startedAt,
+        efficiencyFactor: activitySegmentEfforts.efficiencyFactor,
+      })
+      .from(activitySegmentEfforts)
+      .orderBy(asc(activitySegmentEfforts.startedAt)),
   ]);
   const bestsById = new Map<number, SegmentBests>(
     bestRows.map(({ segmentId, ...bests }) => [segmentId, bests]),
   );
 
+  const effortsById = new Map<number, FormEffort[]>();
+  for (const e of formRows) {
+    const bucket = effortsById.get(e.segmentId);
+    if (bucket) bucket.push(e);
+    else effortsById.set(e.segmentId, [e]);
+  }
+
   return {
-    rows: rows.map((row) => toListRow(row, bestsById.get(row.id) ?? EMPTY_BESTS)),
+    rows: rows.map((row) =>
+      toListRow(
+        row,
+        bestsById.get(row.id) ?? EMPTY_BESTS,
+        segmentForm(effortsById.get(row.id) ?? []),
+      ),
+    ),
     types: typeCounts,
   };
 }
@@ -257,6 +321,10 @@ async function effortsForSegments(segmentIds: number[]): Promise<Map<number, Seg
       activityName: activities.name,
       activityType: activities.activityType,
       startDateLocal: activities.startDateLocal,
+      // One key out of the metadata jsonb. Selecting the column itself would
+      // drag the phone's per-minute stepCount and heartRate arrays — roughly
+      // 11 KB of JSON per row — into a leaderboard.
+      temperature: sql<unknown>`${activities.metadata} -> 'temperature'`,
     })
     .from(activitySegmentEfforts)
     .innerJoin(activities, eq(activities.id, activitySegmentEfforts.activityId))
@@ -264,10 +332,11 @@ async function effortsForSegments(segmentIds: number[]): Promise<Map<number, Seg
     .orderBy(desc(activitySegmentEfforts.startedAt));
 
   for (const row of rows) {
-    const { segmentId, ...effort } = row;
+    const { segmentId, temperature, ...effort } = row;
     const bucket = out.get(segmentId);
-    if (bucket) bucket.push(effort);
-    else out.set(segmentId, [effort]);
+    const withTemp: SegmentEffortRow = { ...effort, temperatureC: celsiusFrom(temperature) };
+    if (bucket) bucket.push(withTemp);
+    else out.set(segmentId, [withTemp]);
   }
   return out;
 }
@@ -282,10 +351,37 @@ export async function getSegment(id: number): Promise<SegmentDetail | null> {
 
   const efforts = (await effortsForSegments([id])).get(id) ?? [];
   return {
-    ...toListRow(segment, bestsFromEfforts(efforts)),
+    ...toListRow(segment, bestsFromEfforts(efforts), segmentForm(efforts)),
     coordinates: (segment.coordinates as SegmentGeometry) ?? [],
     bounds: (segment.bounds as SegmentDetail['bounds']) ?? null,
     efforts,
+    conditions: conditionsFrom(efforts),
+  };
+}
+
+/**
+ * Temperature against pace on one piece of ground.
+ *
+ * Three efforts a side, not one: a single quickest effort on a cold day says
+ * nothing, and the point of the panel is whether the ground is reliably harder
+ * when it is warm. Efforts with no reading are left out of both sides rather
+ * than counted as mild.
+ */
+function conditionsFrom(efforts: SegmentEffortRow[]): SegmentConditions {
+  const withTemp = efforts.filter((e) => e.temperatureC != null);
+  if (!withTemp.length) return { meanC: null, quickestC: null, slowestC: null, sample: 0 };
+
+  const mean = (xs: number[]) =>
+    xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null;
+
+  const byTime = [...withTemp].sort((a, b) => a.durationS - b.durationS);
+  const side = Math.min(3, Math.floor(byTime.length / 2)) || 1;
+
+  return {
+    meanC: mean(withTemp.map((e) => e.temperatureC as number)),
+    quickestC: mean(byTime.slice(0, side).map((e) => e.temperatureC as number)),
+    slowestC: mean(byTime.slice(-side).map((e) => e.temperatureC as number)),
+    sample: withTemp.length,
   };
 }
 
@@ -607,15 +703,27 @@ interface PreparedSegment {
 export async function rebuildSegments(options: MatchOptions = {}): Promise<RebuildReport> {
   const startedMs = Date.now();
 
+  // Two owner controls decide what is even eligible here, and both have to be
+  // honoured at THIS query or the feature ships visibly broken:
+  //
+  //  * excludedFromSegments — a drive logged as a ride, a lost fix. Excluding it
+  //    has to remove its efforts, not just hide the row, because a bad recording
+  //    left in the corpus keeps pushing real efforts down the leaderboard.
+  //  * typeOverride — discoverSegments PARTITIONS by activity type and
+  //    persistSegments reconciles on `candidate.activityType !== segment.activityType`.
+  //    Correcting a walk to a ride re-partitions the whole corpus; reading the
+  //    raw column here would leave the correction visible in the table and
+  //    nowhere else.
   const tracked = await db
     .select({
       id: activities.id,
-      activityType: activities.activityType,
+      activityType: sql<string>`coalesce(nullif(trim(${activities.typeOverride}), ''), ${activities.activityType})`,
       startDate: activities.startDate,
       coordinates: activityTracks.coordinates,
     })
     .from(activities)
     .innerJoin(activityTracks, eq(activityTracks.activityId, activities.id))
+    .where(eq(activities.excludedFromSegments, false))
     .orderBy(asc(activities.startDate));
 
   const sources = tracked

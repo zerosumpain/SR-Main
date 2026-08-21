@@ -1,5 +1,4 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
   import DateLineChart from '$lib/components/trails/DateLineChart.svelte';
   import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
   import ZoneBar from '$lib/components/trails/ZoneBar.svelte';
@@ -16,10 +15,23 @@
     isPaceSport,
   } from '$lib/trails/format';
 
-  let { data } = $props();
+  import type { TrailsDashboard } from '$lib/trails/physio-service';
+  import type { SegmentHighlights } from '$lib/trails/segments-service';
 
-  const d = $derived(data.dashboard);
-  const segs = $derived(data.segments);
+  // Was /trails/dashboard's +page.svelte, where `data` came typed from ./$types.
+  // As a component the props have to say so themselves — without the annotation
+  // every callback parameter lands as implicit any and svelte-check fails the
+  // gate.
+  let {
+    dashboard,
+    segments,
+  }: {
+    dashboard: TrailsDashboard | null;
+    segments: SegmentHighlights | null;
+  } = $props();
+
+  const d = $derived(dashboard);
+  const segs = $derived(segments);
 
   // --- Methodology drawer -------------------------------------------------
   let drawerOpen = $state(false);
@@ -217,37 +229,13 @@
   };
 </script>
 
-<svelte:head>
-  <title>Dashboard — Trails</title>
-  <meta name="robots" content="noindex" />
-</svelte:head>
-
-<PageHeader title="Strange Ramblings" />
-
-<main class="wrap">
-  <header class="page-hdr">
-    <div>
-      <div class="kicker">Health · Trails</div>
-      <h1>Dashboard</h1>
-      <p class="sub">
-        Physiological progression from the workouts Apple Health sends, with Whoop recovery
-        alongside. Every number links to how it is computed and the research behind it.
-      </p>
-    </div>
-    <nav class="hdr-nav">
-      <a href="/health/activities">All trails</a>
-      <a href="/health/segments">Segments</a>
-      <a href="/health/plan">Plan</a>
-      <a href="/health/routes">Routes</a>
-      <a href="/health">Health</a>
-    </nav>
-  </header>
-
-  {#if data.error}
-    <div class="nm-sec nm-sec-error">
-      <span class="sr-label-tight error">{data.error}</span>
-    </div>
-  {:else if d}
+<!--
+  The physiology half of the /health hub — what used to be its own page at
+  /trails/dashboard. Page chrome (head, PageHeader, the error branch) belongs to
+  the hub now; this is only the sections.
+-->
+<div class="wrap">
+  {#if d}
     {#if tiles.length > 0}
       <section class="nm-sec">
         <div class="nm-sec-hd">
@@ -499,7 +487,7 @@
       </button>
     </section>
   {/if}
-</main>
+</div>
 
 <MethodologyDrawer
   open={drawerOpen}

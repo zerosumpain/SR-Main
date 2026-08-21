@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getActivity } from '$lib/trails/activities-service';
 import { getActivityPhysio } from '$lib/trails/physio-service';
+import { getHighlightCorpus, type Highlight } from '$lib/trails/highlights-service';
 import { getActivitySegments } from '$lib/trails/segments-service';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -23,5 +24,15 @@ export const load: PageServerLoad = async ({ params }) => {
   } catch (err) {
     console.warn('[trails] segment lookup failed:', (err as Error)?.message);
   }
-  return { activity, physio, segments };
+  // The list page ships one highlight per row; a detail page gets the whole
+  // ordered set, because this is the one place there is room to read it. Same
+  // fail-soft shape: no badges beats no page.
+  let highlights: Highlight[] = [];
+  try {
+    const corpus = await getHighlightCorpus();
+    highlights = corpus.byActivity.get(activity.id) ?? [];
+  } catch (err) {
+    console.warn('[trails] highlights failed:', (err as Error)?.message);
+  }
+  return { activity, physio, segments, highlights };
 };

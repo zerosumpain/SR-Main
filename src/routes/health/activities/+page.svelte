@@ -1,19 +1,9 @@
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
   import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
+  import ActivityTable from '$lib/components/health/ActivityTable.svelte';
   import type { ACWRZone } from '$lib/health/analytics/acwr';
-  import {
-    formatDistance,
-    formatDuration,
-    formatPace,
-    formatSpeed,
-    formatElevation,
-    formatHeartrate,
-    formatLocalDate,
-    activityLabel,
-    isPaceSport,
-  } from '$lib/trails/format';
+  import { formatDistance, formatDuration } from '$lib/trails/format';
 
   let { data } = $props();
 
@@ -44,24 +34,7 @@
     danger: 'bad',
   };
 
-  const RANGES = [
-    { label: 'All', days: null },
-    { label: '30d', days: 30 },
-    { label: '90d', days: 90 },
-    { label: '1y', days: 365 },
-  ];
-
-  function href(next: { type?: string; days?: number | null }): string {
-    const type = next.type ?? data.filter.type;
-    const days = next.days === undefined ? data.filter.days : next.days;
-    const params = new URLSearchParams();
-    if (type && type !== 'all') params.set('type', type);
-    if (days) params.set('days', String(days));
-    const q = params.toString();
-    return q ? `/health/activities?${q}` : '/health/activities';
-  }
-
-  const hasTypes = $derived(data.types.length > 0);
+  const hasRows = $derived((data.rows?.length ?? 0) > 0);
 </script>
 
 <svelte:head>
@@ -78,6 +51,8 @@
       <h1>Trails</h1>
       <p class="sub">
         Every outdoor workout Apple Health has sent, with its GPS trace, heart rate and splits.
+        Every heading below sorts and filters, and every row carries the single best thing about
+        that outing.
       </p>
     </div>
     <nav class="hdr-nav">
@@ -86,7 +61,6 @@
       <a href="/health/plan">Plan</a>
       <a href="/health/routes">Routes</a>
       <a href="/health/record">Record</a>
-      <a href="/health">Health</a>
     </nav>
   </header>
 
@@ -96,24 +70,14 @@
     </div>
   {/if}
 
-  <section class="nm-sec totals">
-    <div class="stat">
-      <span class="stat-value">{data.totals.count}</span>
-      <span class="sr-label-tight">Activities</span>
+  {#if data.truncated}
+    <div class="nm-sec nm-sec-error">
+      <span class="sr-label-tight error">
+        Showing the most recent {data.limit} activities only — older outings are not in this table,
+        and neither are they in its totals.
+      </span>
     </div>
-    <div class="stat">
-      <span class="stat-value">{formatDistance(data.totals.distanceM)}</span>
-      <span class="sr-label-tight">Distance</span>
-    </div>
-    <div class="stat">
-      <span class="stat-value">{formatDuration(data.totals.durationS)}</span>
-      <span class="sr-label-tight">Moving</span>
-    </div>
-    <div class="stat">
-      <span class="stat-value">{formatElevation(data.totals.elevationGainM)}</span>
-      <span class="sr-label-tight">Climbed</span>
-    </div>
-  </section>
+  {/if}
 
   {#if data.strip && weekBars.some((b) => b.value > 0)}
     <section class="nm-sec strip">
@@ -138,34 +102,7 @@
     </section>
   {/if}
 
-  {#if hasTypes}
-    <nav class="filters" aria-label="Filter activities">
-      <div class="filter-row">
-        <span class="sr-label-tight">Sport</span>
-        <a class="chip" class:on={data.filter.type === 'all'} href={href({ type: 'all' })}>All</a>
-        {#each data.types as t (t.activityType)}
-          <a
-            class="chip"
-            class:on={data.filter.type === t.activityType}
-            href={href({ type: t.activityType })}
-          >
-            {activityLabel(t.activityType)}
-            <span class="chip-count">{t.count}</span>
-          </a>
-        {/each}
-      </div>
-      <div class="filter-row">
-        <span class="sr-label-tight">Since</span>
-        {#each RANGES as r (r.label)}
-          <a class="chip" class:on={data.filter.days === r.days} href={href({ days: r.days })}>
-            {r.label}
-          </a>
-        {/each}
-      </div>
-    </nav>
-  {/if}
-
-  {#if data.rows.length === 0}
+  {#if !hasRows}
     <section class="nm-sec empty-state">
       <p class="empty-title">Nothing here yet.</p>
       <p class="empty-body">
@@ -178,41 +115,23 @@
       </p>
     </section>
   {:else}
-    <ol class="activity-list">
-      {#each data.rows as row (row.id)}
-        {@const pace = isPaceSport(row.activityType)}
-        <li>
-          <a class="activity-row" href="/health/activities/{encodeURIComponent(row.id)}" data-activity-row>
-            <TrackThumb polyline={row.polyline} />
-
-            <div class="row-main">
-              <span class="row-name">{row.name}</span>
-              <span class="row-meta">
-                <span class="type-tag">{activityLabel(row.activityType)}</span>
-                {formatLocalDate(row.startDateLocal, row.startDate)}
-              </span>
-            </div>
-
-            <dl class="row-stats">
-              <div><dt>Dist</dt><dd>{formatDistance(row.distanceM)}</dd></div>
-              <div><dt>Time</dt><dd>{formatDuration(row.activeDurationS ?? row.durationS)}</dd></div>
-              <div>
-                <dt>{pace ? 'Pace' : 'Speed'}</dt>
-                <dd>{pace ? formatPace(row.avgPaceSPerKm) : formatSpeed(row.avgPaceSPerKm)}</dd>
-              </div>
-              <div><dt>Climb</dt><dd>{formatElevation(row.elevationGainM)}</dd></div>
-              <div><dt>HR</dt><dd>{formatHeartrate(row.avgHeartrate)}</dd></div>
-            </dl>
-          </a>
-        </li>
-      {/each}
-    </ol>
+    {#if data.highlightsFailed}
+      <p class="degraded">
+        The excellence engine did not answer, so the Excellence column is empty. Everything else on
+        this page is unaffected.
+      </p>
+    {/if}
+    <ActivityTable
+      rows={data.rows}
+      highlights={data.highlights}
+      initialQuery={data.initialQuery}
+    />
   {/if}
 </main>
 
 <style>
   .wrap {
-    max-width: 1100px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 2rem 1.5rem 4rem;
   }
@@ -265,25 +184,6 @@
   }
   .hdr-nav a:hover {
     text-decoration: underline;
-  }
-
-  .totals {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-    gap: 1rem;
-  }
-
-  .stat {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-
-  .stat-value {
-    font-family: var(--font-mono);
-    font-size: var(--fs-num-md);
-    color: var(--text-primary);
-    line-height: 1.1;
   }
 
   .strip {
@@ -360,128 +260,12 @@
     }
   }
 
-  .filters {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
-  .filter-row :global(.sr-label-tight) {
-    margin-right: 0.35rem;
-  }
-
-  .chip {
+  .degraded {
+    margin: 0 0 1rem;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    padding: 0.3rem 0.6rem;
-    border: 1px solid var(--line-strong);
-    background: transparent;
-    color: var(--text-secondary);
-    text-decoration: none;
-  }
-  .chip:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .chip.on {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--bg);
-  }
-  .chip-count {
-    opacity: 0.65;
-    margin-left: 0.3rem;
-  }
-
-  .activity-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    border-top: 1px solid var(--line-strong);
-  }
-
-  .activity-row {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 0.25rem;
-    border-bottom: 1px solid var(--line-hair);
-    text-decoration: none;
-    color: inherit;
-  }
-  .activity-row:hover {
-    background: var(--surface-sunken);
-  }
-
-  .row-main {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-
-  .row-name {
-    font-family: var(--font-body);
-    font-size: var(--fs-body);
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .row-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-muted);
-  }
-
-  .type-tag {
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    color: var(--accent-ink);
-  }
-
-  .row-stats {
-    display: flex;
-    gap: 1.1rem;
-    margin: 0;
-    flex-shrink: 0;
-  }
-
-  .row-stats div {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    min-width: 4.2rem;
-  }
-
-  .row-stats dt {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    color: var(--text-ghost);
-  }
-
-  .row-stats dd {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    color: var(--text-primary);
+    line-height: 1.5;
+    color: var(--warn);
   }
 
   .empty-state {
@@ -505,18 +289,5 @@
     font-size: var(--fs-label);
     background: var(--surface-sunken);
     padding: 0.05rem 0.3rem;
-  }
-
-  /* Below the stats-row breakpoint the numbers wrap under the name rather than
-     squeezing the title to nothing. */
-  @media (max-width: 780px) {
-    .activity-row {
-      flex-wrap: wrap;
-    }
-    .row-stats {
-      width: 100%;
-      flex-wrap: wrap;
-      gap: 0.75rem 1rem;
-    }
   }
 </style>

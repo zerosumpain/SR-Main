@@ -1,4 +1,6 @@
 import type { PageServerLoad } from './$types';
+import { isOwnerRequest } from '$lib/server/owner';
+import { pickPublic } from '$lib/health/public-payload';
 import { getHealthSeries30d } from '$lib/health/series-30d-service';
 import { getFeaturedActivities } from '$lib/health/featured-activities-service';
 import { getReadiness } from '$lib/health/readiness-service';
@@ -11,20 +13,71 @@ import { getCircadianAlignment } from '$lib/health/services/circadian-service';
 import { getVO2Max } from '$lib/health/services/vo2max-service';
 import { getPolarised } from '$lib/health/services/polarised-service';
 import { getStats } from '$lib/health/stats-service';
+import { getTrailsDashboard } from '$lib/trails/physio-service';
+import { getSegmentHighlights } from '$lib/trails/segments-service';
+import { listActivities } from '$lib/trails/activities-service';
+import { getHighlightCorpus } from '$lib/trails/highlights-service';
+import { getDailyPlan } from '$lib/trails/coach-service';
 
-// Each analytic is loaded server-side (anon users can't hit the auth-gated
-// /api/health/* endpoints). A single failing service must never blank the page,
-// so every call is wrapped to resolve to null on error and the section fails soft.
+// /health is the ONE hub for the body and the ground it covers — the public
+// landing and, signed in, the consolidated dashboard that used to live at
+// /trails/dashboard.
+//
+// The split is enforced HERE, in the payload, not in the template. An anonymous
+// visitor is never sent the owner data and then shown a different view of it:
+// a GPS trace starts at the front door, and `{#if owner}` still ships the bytes
+// to the browser. The two branches below have no overlap beyond the body
+// metrics that have always been public.
+//
+// /health is matched EXACTLY in hooks.server.ts, so /health/activities and the
+// rest of the hub's children go through the normal owner gate. `isOwnerRequest`
+// is only what decides which of the two payloads THIS page builds — the same
+// pattern the landing page and /decks use, and the only one that works on
+// homeserv, where Google refuses private-network redirect URIs so no session
+// can exist at all.
+
+// Every analytic fails soft: anon users cannot hit the auth-gated /api/health/*
+// endpoints, so all of this is computed server-side, and one bad service must
+// never blank the page.
 async function safe<T>(label: string, p: Promise<T>): Promise<T | null> {
   try {
     return await p;
   } catch (err) {
-    console.warn(`[health] analytic "${label}" failed:`, (err as Error)?.message);
+    console.warn(`[health] "${label}" failed:`, (err as Error)?.message);
     return null;
   }
 }
 
-export const load: PageServerLoad = async () => {
+/** The five most recent outings, each with the single best thing about it. */
+async function recentOutings() {
+  const [list, corpus] = await Promise.all([
+    listActivities({ limit: 5 }),
+    getHighlightCorpus(),
+  ]);
+  return list.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    activityType: row.activityType,
+    startDate: row.startDate,
+    startDateLocal: row.startDateLocal,
+    distanceM: row.distanceM,
+    durationS: row.durationS,
+    elevationGainM: row.elevationGainM,
+    avgHeartrate: row.avgHeartrate,
+    temperatureC: row.temperatureC,
+    segmentCount: row.segmentCount,
+    polyline: row.polyline,
+    highlight: corpus.byActivity.get(row.id)?.[0] ?? null,
+  }));
+}
+
+export const load: PageServerLoad = async (event) => {
+  const owner = await isOwnerRequest(event);
+
+  // getHealthSeries30d and getFeaturedActivities used to sit UNWRAPPED in this
+  // Promise.all, so a database hiccup in either 500'd the whole page while the
+  // ten analytics beside them degraded to a hidden section. They fail soft now
+  // too; the page renders its own empty state.
   const [
     data,
     featuredActivities,
@@ -39,8 +92,8 @@ export const load: PageServerLoad = async () => {
     polarised,
     stats,
   ] = await Promise.all([
-    getHealthSeries30d(),
-    getFeaturedActivities(),
+    safe('series-30d', getHealthSeries30d()),
+    safe('featured-activities', getFeaturedActivities()),
     safe('readiness', getReadiness()),
     safe('training-load', getTrainingLoad()),
     safe('monotony', getMonotony()),
@@ -53,21 +106,66 @@ export const load: PageServerLoad = async () => {
     safe('stats', getStats()),
   ]);
 
+  const shared = {
+    series: data?.series ?? [],
+    today: data?.today ?? null,
+    yesterday: data?.yesterday ?? null,
+    headline: data?.headline ?? null,
+    strap: data?.strap ?? '',
+    rhrBaseline: data?.rhrBaseline ?? 0,
+    rings: data?.rings ?? null,
+    todayDeltas: data?.todayDeltas ?? null,
+    syncedAgoSeconds: data?.syncedAgoSeconds ?? 0,
+    narrative: data?.narrative ?? null,
+    annotations: data?.annotations ?? [],
+    provenance: data?.provenance ?? { seriesIsMock: false, correlationsAreIllustrative: false },
+    readiness,
+    trainingLoad,
+    vo2max,
+    sleepRegularity,
+    stats,
+    featuredActivities: featuredActivities ?? [],
+  };
+
+  if (!owner) {
+    // Everything an anonymous visitor gets — and nothing else, because it is
+    // built by PICKING from PUBLIC_FIELDS rather than by spreading. A field
+    // added to `shared` later is therefore absent from the anonymous payload by
+    // default, instead of present by accident.
+    //
+    // The correlations are deliberately not on that list: when nothing
+    // correlates the service substitutes four hard-coded example findings
+    // complete with r values and sample sizes, and a public page must not
+    // present an invented result as a measurement.
+    return { mode: 'public' as const, ...pickPublic(shared) };
+  }
+
+  const [dashboard, segments, outings, coach, correlations] = await Promise.all([
+    safe('trails-dashboard', getTrailsDashboard()),
+    safe('segment-highlights', getSegmentHighlights()),
+    safe('recent-outings', recentOutings()),
+    safe('coach', getDailyPlan()),
+    Promise.resolve(
+      shared.provenance.correlationsAreIllustrative ? [] : (data?.correlations ?? []),
+    ),
+  ]);
+
   return {
-    ...data,
-    featuredActivities,
-    analytics: {
-      readiness,
-      trainingLoad,
-      monotony,
-      recoveryDebt,
-      autonomic,
-      sleepRegularity,
-      circadian,
-      vo2max,
-      polarised,
-      stats,
-    },
-    loadedAt: new Date().toISOString(),
+    mode: 'owner' as const,
+    ...shared,
+    // Whoop workouts back the Breakdown cards. Owner-only: each one carries a
+    // sport and a clock, which is a routine, which is the thing the public
+    // landing does not get.
+    workouts: data?.workouts ?? [],
+    correlations,
+    monotony,
+    recoveryDebt,
+    autonomic,
+    circadian,
+    polarised,
+    dashboard,
+    segments,
+    outings: outings ?? [],
+    coach,
   };
 };

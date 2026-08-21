@@ -67,6 +67,26 @@ export type HealthSeriesData = {
     sleepDelta: number;
   };
   syncedAgoSeconds: number;
+  /**
+   * Where the numbers above came from.
+   *
+   * Two of them are not always measurements, and until now nothing in the
+   * returned type said so — which matters most on /health, a PUBLIC page:
+   *
+   *  * `seriesIsMock` — with no real day in the window the WHOLE 30-day series
+   *    (and the workouts, and the rings) is replaced by a deterministic fake so
+   *    the page still renders during cold start. Plausible, and indistinguishable
+   *    from real without this flag.
+   *  * `correlationsAreIllustrative` — when nothing correlates, four hard-coded
+   *    example findings stand in, complete with r values and sample sizes.
+   *
+   * Callers must not present either as a measurement. The hub hides the
+   * illustrative correlations outright and labels a mock series.
+   */
+  provenance: {
+    seriesIsMock: boolean;
+    correlationsAreIllustrative: boolean;
+  };
 };
 
 const DAYS = 30;
@@ -556,7 +576,8 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   if (!hasRealData && workouts.length === 0) workouts = buildMockWorkouts();
 
   let correlations = await getCorrelations();
-  if (correlations.length === 0) correlations = STATIC_CORRELATIONS;
+  const correlationsAreIllustrative = correlations.length === 0;
+  if (correlationsAreIllustrative) correlations = STATIC_CORRELATIONS;
 
   // Activity rings (today only). Apple Activity metrics (active_energy /
   // apple_exercise_time / apple_stand_hour) aren't being ingested yet, so
@@ -666,5 +687,6 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     rhrBaseline,
     todayDeltas,
     syncedAgoSeconds,
+    provenance: { seriesIsMock: !hasRealData, correlationsAreIllustrative },
   };
 }

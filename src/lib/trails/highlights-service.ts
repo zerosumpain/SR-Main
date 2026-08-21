@@ -18,6 +18,7 @@ import { db } from '$lib/db';
 import { activities, activitySegmentEfforts, activitySegments } from '$lib/db/schema';
 import { celsiusFrom, effectiveType, localParts } from './activity-meta';
 import {
+  collectChains,
   computeHighlights,
   type ActivityFacts,
   type EffortFacts,
@@ -172,4 +173,62 @@ export function leadHighlight(
   activityId: string,
 ): Highlight | null {
   return corpus.byActivity.get(activityId)?.[0] ?? null;
+}
+
+// ——— chains ————————————————————————————————————————————————————————
+
+export interface SegmentChain {
+  key: string;
+  firstSegmentId: number;
+  firstName: string;
+  secondSegmentId: number;
+  secondName: string;
+  /** How many times the pair has been taken one straight after the other. */
+  occurrences: number;
+  /** Best combined time, start of the first to the end of the second. */
+  bestElapsedS: number;
+  /** The activity that set it, and when. */
+  bestActivityId: string;
+  lastAt: number;
+}
+
+/**
+ * The ordered segment pairs taken back-to-back most often.
+ *
+ * Two stretches run one after the other are a third thing: the chain, and the
+ * transition between them is the part you actually get better at. Built from the
+ * same pure `collectChains` the excellence engine uses, over the same single
+ * load of efforts, so a "best back-to-back" badge on an outing and this panel
+ * can never disagree.
+ */
+export async function getSegmentChains(limit = 12): Promise<SegmentChain[]> {
+  const [efforts, facts] = await Promise.all([loadEffortFacts(), loadActivityFacts()]);
+  const excluded = new Set(facts.filter((a) => a.excludedFromSegments).map((a) => a.id));
+  const live = efforts.filter((e) => !excluded.has(e.activityId));
+
+  const startedById = new Map(facts.map((a) => [a.id, a.startDate]));
+  const segmentIdByName = new Map(efforts.map((e) => [e.segmentName, e.segmentId]));
+
+  const out: SegmentChain[] = [];
+  for (const [key, occurrences] of collectChains(live)) {
+    if (occurrences.length < 2) continue;
+    const best = occurrences.reduce((a, b) => (b.elapsedS < a.elapsedS ? b : a));
+    out.push({
+      key,
+      firstSegmentId: best.firstSegmentId,
+      firstName: best.firstName,
+      secondSegmentId: segmentIdByName.get(best.secondName) ?? -1,
+      secondName: best.secondName,
+      occurrences: occurrences.length,
+      bestElapsedS: best.elapsedS,
+      bestActivityId: best.activityId,
+      lastAt: Math.max(...occurrences.map((o) => startedById.get(o.activityId) ?? 0)),
+    });
+  }
+
+  // Most-travelled first — the pair you chain every week is the one worth a
+  // target time; a pair you did twice is a coincidence with a number on it.
+  return out
+    .sort((a, b) => b.occurrences - a.occurrences || a.bestElapsedS - b.bestElapsedS)
+    .slice(0, limit);
 }

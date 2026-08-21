@@ -3,6 +3,9 @@
   import TrackMap from '$lib/components/trails/TrackMap.svelte';
   import DateLineChart from '$lib/components/trails/DateLineChart.svelte';
   import SegmentLeaderboard from '$lib/components/trails/SegmentLeaderboard.svelte';
+  import FormSpark from '$lib/components/trails/FormSpark.svelte';
+  import { formLabel } from '$lib/trails/segments/form';
+  import { formatTemperature } from '$lib/trails/activity-meta';
   import {
     formatDistance,
     formatDuration,
@@ -40,6 +43,39 @@
       .sort((a, b) => a.date.localeCompare(b.date)),
   );
 
+  /**
+   * The PB as it stood on each effort's day — a step line that only ever falls.
+   *
+   * The efficiency chart above answers "am I fitter"; this answers "when did I
+   * last actually take time off this". A flat stretch of years is the honest
+   * shape when nothing has beaten the record.
+   */
+  const pbProgression = $derived.by(() => {
+    const chronological = [...segment.efforts].sort((a, b) => a.startedAt - b.startedAt);
+    let best = Number.POSITIVE_INFINITY;
+    const out: Array<{ date: string; value: number }> = [];
+    for (const e of chronological) {
+      if (!(e.durationS > 0)) continue;
+      best = Math.min(best, e.durationS);
+      // Two efforts on one day would make a duplicate {#each} key inside the
+      // chart, which throws each_key_duplicate and blanks the page — the last
+      // reading of a day wins.
+      const date = e.startDateLocal.slice(0, 10);
+      const prev = out[out.length - 1];
+      if (prev?.date === date) prev.value = best;
+      else out.push({ date, value: best });
+    }
+    return out;
+  });
+
+  /** Temperature against pace on this piece of ground. */
+  const conditions = $derived(segment.conditions);
+  const conditionsDelta = $derived(
+    conditions.quickestC != null && conditions.slowestC != null
+      ? Math.round((conditions.quickestC - conditions.slowestC) * 10) / 10
+      : null,
+  );
+
   /** Other ground's best EF next to this segment's best, in percent. */
   function efficiencyDeltaPct(otherEf: number | null): number | null {
     const ref = segment.bests.efficiencyFactor;
@@ -72,6 +108,19 @@
     {
       label: 'Lowest cost',
       value: best?.cheapest?.beatsPerKm ? `${Math.round(best.cheapest.beatsPerKm)} b/km` : '—',
+    },
+    {
+      label: 'Off the PB',
+      value:
+        segment.form.gapPct == null
+          ? '—'
+          : segment.form.gapPct === 0
+            ? 'PB is recent'
+            : `${(segment.form.gapPct * 100).toFixed(1)}%`,
+    },
+    {
+      label: 'PB set',
+      value: segment.form.daysSincePb == null ? '—' : `${segment.form.daysSincePb}d before last`,
     },
   ]);
 </script>
@@ -113,6 +162,61 @@
     <h2 class="sec-title">Every effort</h2>
     <SegmentLeaderboard efforts={segment.efforts} paceSport={pace} />
   </section>
+
+  <section class="nm-sec">
+    <h2 class="sec-title">Form</h2>
+    <div class="form-row">
+      <FormSpark form={segment.form} width={140} height={34} />
+      <p class="sec-note form-note">{formLabel(segment.form)}</p>
+    </div>
+    <p class="sec-note">
+      The median time of the last three efforts against the three before them. Medians, not means:
+      one effort spent waiting at a gate is a forty-percent outlier on a short segment, and a mean
+      would call that a collapse in form.
+    </p>
+  </section>
+
+  {#if pbProgression.length > 2}
+    <section class="nm-sec">
+      <h2 class="sec-title">Personal best over time</h2>
+      <p class="sec-note">
+        The record as it stood on the day. It only ever falls — a long flat stretch means nothing
+        has beaten it since.
+      </p>
+      <DateLineChart
+        points={pbProgression}
+        label="Best time"
+        unitSuffix=" s"
+        dp={0}
+        colour="var(--accent-ink)"
+      />
+    </section>
+  {/if}
+
+  {#if conditions.sample >= 4}
+    <section class="nm-sec">
+      <h2 class="sec-title">Conditions</h2>
+      <dl class="stats cellgrid conditions">
+        <div><dt>Typical</dt><dd>{formatTemperature(conditions.meanC)}</dd></div>
+        <div><dt>On the quickest</dt><dd>{formatTemperature(conditions.quickestC)}</dd></div>
+        <div><dt>On the slowest</dt><dd>{formatTemperature(conditions.slowestC)}</dd></div>
+        <div>
+          <dt>Difference</dt>
+          <dd>
+            {conditionsDelta == null
+              ? '—'
+              : `${conditionsDelta > 0 ? '+' : ''}${conditionsDelta.toFixed(1)}°C`}
+          </dd>
+        </div>
+      </dl>
+      <p class="sec-note">
+        Ambient temperature the watch recorded on the parent outing, across {conditions.sample}
+        efforts that carried a reading. There is no weather history in this system — this is the
+        only honest answer to what it was like that day, and three efforts a side rather than one,
+        because a single quick effort on a cold morning proves nothing.
+      </p>
+    </section>
+  {/if}
 
   {#if efficiencyTrend.length > 2}
     <section class="nm-sec">
@@ -369,6 +473,26 @@
     }
     .page-hdr h1 {
       font-size: 1.5rem;
+    }
+  }
+
+  .form-row {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+  .form-note {
+    margin: 0;
+  }
+  .conditions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 0.75rem;
+  }
+  @media (max-width: 640px) {
+    .conditions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>
