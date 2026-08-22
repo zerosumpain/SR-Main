@@ -222,6 +222,20 @@ describe('isSurfacePublic — non-route labels', () => {
       false,
     );
   });
+
+  it('will not name an AI build that carries no visibility row', () => {
+    // A build is private until it is toggled public, so the showcase must not
+    // advertise /projects/<build-slug> — the page 404s for the reader.
+    expect(isSurfacePublic('/projects/graphing-calculator', VIS)).toBe(false);
+    expect(isSurfacePublic('/projects/graphing-calculator', { 'graphing-calculator': true })).toBe(
+      true,
+    );
+  });
+
+  it('still shows a hand-built page that carries no visibility row', () => {
+    expect(isSurfacePublic('/projects/engine-room', VIS)).toBe(true);
+    expect(isSurfacePublic('/projects/archetype/llm', VIS)).toBe(true);
+  });
 });
 
 describe('publicItems', () => {
