@@ -29,6 +29,8 @@
       excerpt: string | null;
       href: string;
       relevance?: string | null;
+      /** The note this entity was first extracted from. */
+      firstSeen?: boolean;
     }>;
     /** Entity name, highlighted inside each excerpt. */
     term?: string;
@@ -67,6 +69,9 @@
       <li>
         <a class="head" href={item.href}>
           <span class="title">{item.title}</span>
+          {#if item.firstSeen}
+            <span class="origin" title="Where this entity was first extracted">origin</span>
+          {/if}
           <span class="src" title="Source: {item.source}">{item.source}</span>
           <time
             title={item.observedAt
@@ -168,6 +173,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The origin row is the one piece of provenance that does not follow from the
+     date order — an entity can be first seen in the note with the oldest
+     observation OR, where the origin never produced a note link, in one that
+     sorts nowhere near the bottom. */
+  .origin {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    border: 1px solid var(--accent-tint-35);
+    border-radius: var(--radius-sharp);
+    padding: 0 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .src,
