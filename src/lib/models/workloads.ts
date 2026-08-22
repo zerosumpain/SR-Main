@@ -34,6 +34,7 @@ import {
   DEFAULT_DOCTOR_MODEL_ID,
   DEFAULT_VISION_MODEL_ID,
   DEFAULT_IMAGE_MODEL_ID,
+  DEFAULT_IMAGE_TOOL_MODEL_ID,
   DEFAULT_EMBEDDING_MODEL_ID,
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_ART_DIRECTOR_MODEL_ID,
@@ -92,6 +93,18 @@ export interface WorkloadDef {
   blurb: string;
   /** `app_settings` key (site scope) or Hermes dotted config key (hermes scope). */
   key: string;
+  /**
+   * A legacy environment variable that still answers for this role when nothing
+   * is pinned, read BELOW the pin and ABOVE the code fallback.
+   *
+   * Declared on the registry rather than buried in the resolver so the picker
+   * and the resolver agree. They did not: `resolveImageToolModel` honoured
+   * `JKAI_IMAGE_MODEL` while `describeSiteWorkloads` did not, so with the
+   * variable set the page reported the constant while the tool called something
+   * else — a page naming a model that is not the one spending the money, which
+   * is the exact gap this workload was added to close.
+   */
+  envKey?: string;
   /**
    * Hermes scope only: the dotted key holding the PROVIDER beside `key`.
    *
@@ -221,6 +234,22 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it.',
   },
   {
+    id: 'image-tool',
+    scope: 'site',
+    label: 'Image tool (FLUX)',
+    blurb: "The canvas/chat `generate_image` tool — OpenRouter's /images/generations endpoint.",
+    key: 'jkai.image.tool_model',
+    envKey: 'JKAI_IMAGE_MODEL',
+    fallbackModelId: DEFAULT_IMAGE_TOOL_MODEL_ID,
+    requires: null,
+    // OpenRouter's /models feed does not carry the dedicated image-generation
+    // namespace, so there is no list to pick from — the slug is typed in, the
+    // same situation as embeddings.
+    catalogue: 'none',
+    reason:
+      'A DIFFERENT API from the `image` role above: /images/generations, which the chat-completions image models do not serve. It was the last LLM spender on the site set only by an environment variable (JKAI_IMAGE_MODEL), i.e. unreadable and unchangeable from any screen.',
+  },
+  {
     id: 'embeddings',
     scope: 'site',
     label: 'Embeddings',
@@ -337,6 +366,8 @@ export type WorkloadSource =
   | 'pinned'
   /** No setting; the code fallback in this registry applies. */
   | 'code'
+  /** No setting, but a legacy environment variable (`envKey`) answers. */
+  | 'env'
   /** No setting and no code fallback — it follows the site default. */
   | 'default'
   /** Read from Hermes' config.yaml. */

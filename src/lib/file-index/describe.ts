@@ -19,6 +19,7 @@ import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { resolveVisionModel, resolveAudioModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/jkai/activity-context';
 import type { ModelContext } from '$lib/server/models/types';
 
 
@@ -75,6 +76,9 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
 
   const attempt = async (ctx: ModelContext): Promise<string | null> => {
     const { client, model } = await getLLMClient(ctx);
+    // No withActivity here: both callers of `attempt` already wrap it as
+    // 'vision', and AsyncLocalStorage nests — an inner tag would win and bill
+    // image captions to whatever it named.
     const response = await client.chat.completions.create({
       model,
       max_tokens: 1024,
@@ -97,7 +101,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
   // that arrives here can always actually see the picture.
   const visionCtx = await resolveVisionModel();
   try {
-    return await attempt(visionCtx);
+    return await withActivity('vision', () => attempt(visionCtx));
   } catch (err) {
     console.warn(
       `[file-index] ${visionCtx.modelId} caption failed (${(err as Error).message}); trying site default`,
@@ -114,7 +118,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
         );
         return null;
       }
-      return await attempt(fallback);
+      return await withActivity('vision', () => attempt(fallback));
     } catch (err2) {
       console.warn(`[file-index] image caption fully failed: ${(err2 as Error).message}`);
       return null;
@@ -220,7 +224,7 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
 
   const visionCtx = await resolveVisionModel();
   try {
-    return await attempt(visionCtx);
+    return await withActivity('vision', () => attempt(visionCtx));
   } catch (err) {
     console.warn(
       `[file-index] ${visionCtx.modelId} PDF OCR failed (${(err as Error).message}); trying site default`,
@@ -237,7 +241,7 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
         );
         return null;
       }
-      return await attempt(fallback);
+      return await withActivity('vision', () => attempt(fallback));
     } catch (err2) {
       console.warn(`[file-index] PDF OCR fully failed: ${(err2 as Error).message}`);
       return null;
@@ -259,20 +263,22 @@ export async function transcribeAudioBestEffort(buf: Buffer, mimeType: string): 
     // The `audio` workload rather than a module constant, so this is settable
     // from the model picker; its save guard requires audio input.
     const { client, model } = await getLLMClient(await resolveAudioModel());
-    const response = await client.chat.completions.create({
-      model,
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: AUDIO_PROMPT },
-            // OpenRouter multimodal audio content part.
-            { type: 'input_audio', input_audio: { data: buf.toString('base64'), format } },
-          ],
-        },
-      ],
-    } as never);
+    const response = await withActivity('audio', () =>
+      client.chat.completions.create({
+        model,
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: AUDIO_PROMPT },
+              // OpenRouter multimodal audio content part.
+              { type: 'input_audio', input_audio: { data: buf.toString('base64'), format } },
+            ],
+          },
+        ],
+      } as never),
+    );
     const text = (response as { choices: Array<{ message?: { content?: string } }> })
       .choices[0]?.message?.content?.trim();
     return text ? text : null;

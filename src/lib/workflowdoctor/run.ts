@@ -17,6 +17,7 @@
 // so a shadow night is never mistaken for a night that chose not to fix.
 
 import { getSetting } from '$lib/server/models/settings';
+import { withActivity } from '$lib/jkai/activity-context';
 import { upsertRecord } from '$lib/datastore';
 import { isUserActive } from '$lib/selfimprove/run';
 import { releaseAdvisoryLock, tryAdvisoryLock } from '$lib/workflows/leader-lock';
@@ -141,12 +142,14 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       const { client, model } = await getLLMClient(modelCtx);
       // max_tokens >= 3000 so a reasoning model doesn't burn the allowance
       // before it emits the object (feedback_glm_reasoning_tokens).
-      const resp = await client.chat.completions.create({
-        model,
-        messages,
-        max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
-        temperature: opts?.temperature ?? 0.2,
-      });
+      const resp = await withActivity('doctor', () =>
+        client.chat.completions.create({
+          model,
+          messages,
+          max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
+          temperature: opts?.temperature ?? 0.2,
+        }),
+      );
 
       budget.llmCalls++;
       const usage = resp.usage;

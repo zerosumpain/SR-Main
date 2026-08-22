@@ -983,6 +983,17 @@ export const agentActions = pgTable('agent_actions', {
   durationMs: integer('duration_ms'),
   tokensInput: integer('tokens_input'),
   tokensOutput: integer('tokens_output'),
+  /** Input tokens served from the provider's prompt cache. Billed at a fraction
+   *  of the normal input rate, so the ratio of this to `tokens_input` is the
+   *  cheapest cost lever there is — and it was captured per workflow node and
+   *  then thrown away at the ledger boundary, which is why /admin/ops/costs
+   *  could not say whether caching was working. */
+  cacheReadTokens: integer('cache_read_tokens'),
+  /** Output tokens spent thinking before the first visible character. Billed as
+   *  output. Tracked separately because a reasoning model that answers in ten
+   *  words can still bill three thousand tokens, and that is invisible in a
+   *  completion-token total. */
+  reasoningTokens: integer('reasoning_tokens'),
   costUsd: doublePrecision('cost_usd'),
   provider: text('provider'),
   model: text('model'),
@@ -994,6 +1005,10 @@ export const agentActions = pgTable('agent_actions', {
   // while a research run is live, and the table grows with every LLM call the
   // whole site makes. Unindexed that is a sequential scan per poll.
   sessionIdx: index('agent_actions_session_idx').on(t.sessionId),
+  // Every panel on /admin/ops/costs filters this table by a date window, and
+  // the table grows with every LLM call the whole site makes. Without this the
+  // costs page is a fistful of sequential scans on each load.
+  createdAtIdx: index('agent_actions_created_at_idx').on(t.createdAt),
 }));
 
 export type AgentAction = typeof agentActions.$inferSelect;

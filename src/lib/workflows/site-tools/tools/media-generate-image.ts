@@ -7,9 +7,28 @@ import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { checkImageQuota } from '$lib/jkai/media/rate-limits';
+import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import type { JkaiAttachment } from '$lib/db/schema';
 
-const DEFAULT_MODEL = process.env.JKAI_IMAGE_MODEL ?? 'black-forest-labs/flux-1.1-pro';
+/** Resolved per call from the `image-tool` workload rather than read once at
+ *  module load, so a model change from /admin/ops/costs takes effect without a
+ *  restart. `resolveImageToolModel` still honours JKAI_IMAGE_MODEL underneath an
+ *  explicit pin, so nothing moves for a deployment that sets it. */
+async function imageModel(): Promise<string> {
+  try {
+    const { resolveImageToolModel } = await import('$lib/server/models/workload-settings');
+    return (await resolveImageToolModel()).modelId;
+  } catch (err) {
+    // Same shape as resolveVisionModel's routing lookup: a settings read that
+    // fails must not stop the tool drawing. Falling back to the constant draws
+    // the picture; throwing loses the user's request over a database blip.
+    console.warn(
+      `[generate_image] could not resolve the image-tool model (${(err as Error).message}); using the fallback`,
+    );
+    const { DEFAULT_IMAGE_TOOL_MODEL_ID } = await import('$lib/constants/default-models');
+    return process.env.JKAI_IMAGE_MODEL ?? DEFAULT_IMAGE_TOOL_MODEL_ID;
+  }
+}
 
 export interface GenerateImageArgs {
   prompt: string;
@@ -54,6 +73,7 @@ export async function handleGenerateImage(
   }
 
   const attachments: JkaiAttachment[] = [];
+  const model = await imageModel();
 
   for (let i = 0; i < count; i++) {
     const resp = await fetch('https://openrouter.ai/api/v1/images/generations', {
@@ -65,7 +85,7 @@ export async function handleGenerateImage(
         'X-Title': 'JKAI',
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model,
         prompt: `${args.prompt}\n\naspect_ratio: ${aspect}`,
         n: 1,
       }),
@@ -75,6 +95,26 @@ export async function handleGenerateImage(
       return { success: attachments.length > 0, error: `OpenRouter ${resp.status}: ${errText}`, attachments };
     }
     const data = await resp.json();
+
+    // This endpoint is reached with a bare `fetch`, not the wrapped SDK client,
+    // so nothing else in the codebase sees the spend: image generation was
+    // billing to OpenRouter and appearing in no ledger at all. Record it here.
+    // Images are priced per image, not per token, so the token columns stay
+    // null and the cost is whatever OpenRouter reports — null rather than a
+    // fabricated zero when it reports nothing.
+    recordDurableLLMCall({
+      provider: 'openrouter',
+      model,
+      tokensInput: null,
+      tokensOutput: null,
+      costUsd:
+        typeof data?.usage?.cost === 'number' && Number.isFinite(data.usage.cost)
+          ? data.usage.cost
+          : null,
+      source: 'gateway',
+      activity: 'image-tool',
+      sessionId: ctx.conversationId,
+    });
 
     // OpenRouter image gen returns { data: [{ url, b64_json }] }
     const item = data.data?.[0];
@@ -106,7 +146,7 @@ export async function handleGenerateImage(
       sizeBytes,
       diskPath,
       duration: null,
-      metadata: { prompt: args.prompt, model: DEFAULT_MODEL, aspectRatio: aspect },
+      metadata: { prompt: args.prompt, model, aspectRatio: aspect },
     }).returning();
     attachments.push(row);
   }

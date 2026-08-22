@@ -15,6 +15,7 @@ import {
   type ChainFinding,
 } from '$lib/jkai/chain-analysis';
 import { parseJsonLoose } from '$lib/selfimprove/types';
+import { withActivity } from '$lib/jkai/activity-context';
 
 // Read one turn's tool-call chain and say where the calls went. Owner-gated by
 // hooks, like the rest of /api/jkai.
@@ -94,14 +95,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
     const { getLLMClient } = await import('$lib/jkai/llm-client');
     const { resolveSelfimproveModel } = await import('$lib/server/models/workload-settings');
     const { client, model } = await getLLMClient(await resolveSelfimproveModel());
-    const resp = await client.chat.completions.create({
-      model,
-      messages,
-      // Generous, because reasoning tokens are deducted from this budget and a
-      // truncated JSON body coerces to zero findings rather than to an error.
-      max_tokens: 4000,
-      temperature: 0.2,
-    });
+    const resp = await withActivity('selfimprove', () =>
+      client.chat.completions.create({
+        model,
+        messages,
+        // Generous, because reasoning tokens are deducted from this budget and a
+        // truncated JSON body coerces to zero findings rather than to an error.
+        max_tokens: 4000,
+        temperature: 0.2,
+      }),
+    );
     const raw = parseJsonLoose(resp.choices?.[0]?.message?.content ?? '');
     const registered = new Set(shapes.map((s) => s.name));
     return json({ analysis, findings: coerceFindings(raw, analysis, registered), model });

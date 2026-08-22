@@ -7,6 +7,7 @@
 // tools use.
 
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
+import { withActivity } from '$lib/jkai/activity-context';
 import {
   composeHeuristic,
   pickStatementLayout,
@@ -230,15 +231,17 @@ export async function composeSlide(
     let text = '';
     try {
       const artDirector = await artDirectorModel();
-      const completion = await resilientChatCompletion(artDirector, {
-        messages,
-        temperature: 0.4,
-        // GLM burns reasoning tokens from max_tokens and 5.2 reasons hard — an
-        // undersized ceiling comes back as EMPTY content after ~30s of thinking
-        // (see feedback_glm_reasoning_tokens). Keep this very generous.
-        max_tokens: 8000,
-        response_format: { type: 'json_object' },
-      }, { fallbackModel: artDirector });
+      const completion = await withActivity('art-director', () =>
+        resilientChatCompletion(artDirector, {
+          messages,
+          temperature: 0.4,
+          // GLM burns reasoning tokens from max_tokens and 5.2 reasons hard — an
+          // undersized ceiling comes back as EMPTY content after ~30s of thinking
+          // (see feedback_glm_reasoning_tokens). Keep this very generous.
+          max_tokens: 8000,
+          response_format: { type: 'json_object' },
+        }, { fallbackModel: artDirector }),
+      );
       text = completion.choices[0]?.message?.content ?? '';
     } catch (err) {
       console.warn('[decks composer] LLM unavailable:', err instanceof Error ? err.message : err);
@@ -298,13 +301,15 @@ export async function reviseSlide(
     let text = '';
     try {
       const artDirector = await artDirectorModel();
-      const completion = await resilientChatCompletion(artDirector, {
-        messages,
-        temperature: 0.3,
-        // Same generous ceiling as composeSlide — GLM reasoning burns from it.
-        max_tokens: 8000,
-        response_format: { type: 'json_object' },
-      }, { fallbackModel: artDirector });
+      const completion = await withActivity('art-director', () =>
+        resilientChatCompletion(artDirector, {
+          messages,
+          temperature: 0.3,
+          // Same generous ceiling as composeSlide — GLM reasoning burns from it.
+          max_tokens: 8000,
+          response_format: { type: 'json_object' },
+        }, { fallbackModel: artDirector }),
+      );
       text = completion.choices[0]?.message?.content ?? '';
     } catch (err) {
       console.warn('[decks composer] revise LLM unavailable:', err instanceof Error ? err.message : err);

@@ -115,8 +115,35 @@ export async function resolveVisionModel(): Promise<ModelContext> {
   return coerceModelContext({ modelId: def.fallbackModelId! });
 }
 
-/** Image GENERATION for the studio and the canvas image tool. */
+/** Image GENERATION for the studio explainer images (chat-completions). */
 export const resolveImageModel = () => resolveById('image');
+
+/**
+ * The `generate_image` tool's FLUX model (/images/generations).
+ *
+ * Precedence: an explicit pin, then the legacy `JKAI_IMAGE_MODEL` env var, then
+ * the constant. The env var is honoured HERE rather than in the constants module
+ * because that module is client-importable — and it sits below the pin so that
+ * setting the model from the page beats a stale variable in a `.env` nobody has
+ * looked at since it was written.
+ */
+export async function resolveImageToolModel(): Promise<ModelContext> {
+  const def = SITE_WORKLOADS.find((w) => w.id === 'image-tool')!;
+  const pinned = await getSetting<{ modelId?: string } | null>(def.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  const fromEnv = envModelFor(def);
+  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
+  return coerceModelContext({ modelId: def.fallbackModelId! });
+}
+
+/** A role's legacy env-var model, when it declares one and it is set. Server
+ *  only — `$lib/models/workloads` is client-importable and must not read
+ *  `process.env`, so the registry declares the NAME and this reads the value. */
+function envModelFor(def: WorkloadDef): string | null {
+  if (!def.envKey) return null;
+  const v = process.env[def.envKey];
+  return v && v.trim() ? v.trim() : null;
+}
 
 /** RAG / file embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const resolveEmbeddingModel = () => resolveById('embeddings');
@@ -129,6 +156,7 @@ export const resolveArtDirectorModel = () => resolveById('art-director');
 
 function sourceFor(def: WorkloadDef, set: string | null): WorkloadSource {
   if (set) return 'pinned';
+  if (envModelFor(def)) return 'env';
   return def.fallbackModelId ? 'code' : 'default';
 }
 
@@ -143,8 +171,11 @@ export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
 
   return SITE_WORKLOADS.map((def, i) => {
     const setModelId = stored[i];
+    // Same order as `resolveImageToolModel`: pin, then the legacy env var, then
+    // the code fallback. Reading them in different orders is how the page ends
+    // up naming a model nothing is running.
     const effectiveModelId =
-      setModelId ?? def.fallbackModelId ?? siteDefault.modelId;
+      setModelId ?? envModelFor(def) ?? def.fallbackModelId ?? siteDefault.modelId;
     return {
       id: def.id,
       scope: def.scope,
