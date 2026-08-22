@@ -17,8 +17,51 @@
 // each match restores the connective tissue while keeping the view small, and
 // `matched` comes back separately so the client can still show which nodes were
 // the actual hits.
-import type { AdjacencyIndex, GraphNode } from './model';
+import type { AdjacencyIndex, GraphEdge, GraphNode } from './model';
 import { hopNeighbourhood } from './model';
+
+/**
+ * Which clock the time window is measured against.
+ *
+ * Two, not one, because "show me what's new" and "show me what's changed" are
+ * different questions and the graph can answer both:
+ *
+ *  - `added` — when the row entered the graph. Consistent across nodes and
+ *    edges: both are `created_at`, both ingest clocks.
+ *  - `updated` — when the row last changed.
+ *
+ * The honest caveat, because it will bite whoever reads this next:
+ * `intel_relationships` has NO `updated_at` column — only `created_at` and
+ * `last_seen_at`. So under `updated` an edge is measured on the later of those
+ * two, and `last_seen_at` is an OBSERVATION clock (the mail's own date), not an
+ * ingest one. A three-week-old email swept last night updates its edge last
+ * night but stamps it three weeks ago, so it will not appear in a
+ * "changed today" window. Nodes do not have this problem — `intel_entities`
+ * has a real `updated_at`. See reference_intel_ingest_clock_vs_observation_clock:
+ * whenever two clocks disagree, say which one you are using.
+ */
+export type GraphClock = 'added' | 'updated';
+
+/** The timestamp a node is judged on under `clock`, epoch ms. 0 = unknown. */
+export function nodeTimeUnder(node: GraphNode, clock: GraphClock): number {
+  return clock === 'updated' ? Math.max(node.updatedAt || 0, node.createdAt || 0) : node.createdAt || 0;
+}
+
+/** The timestamp an edge is judged on under `clock`, epoch ms. 0 = unknown. */
+export function edgeTimeUnder(edge: GraphEdge, clock: GraphClock): number {
+  return clock === 'updated' ? Math.max(edge.lastSeenAt || 0, edge.createdAt || 0) : edge.createdAt || 0;
+}
+
+/**
+ * Is `t` inside the window? An unknown timestamp (0) is OUT whenever a window
+ * is set — a row with no date cannot honestly be claimed as recent.
+ */
+export function inWindow(t: number, since?: number | null, until?: number | null): boolean {
+  if (!t) return false;
+  if (since != null && t < since) return false;
+  if (until != null && t > until) return false;
+  return true;
+}
 
 export interface GraphFilter {
   typeId?: string | null;
@@ -40,12 +83,26 @@ export interface GraphFilter {
   sources?: string[];
   /** Restrict to these entity ids (before keyword expansion). */
   entityIds?: string[];
+  /** Window start, epoch ms. Null/undefined = open-ended. */
+  since?: number | null;
+  /** Window end, epoch ms. Null/undefined = open-ended. */
+  until?: number | null;
+  /** Which clock `since`/`until` are measured on. Default `updated`. */
+  clock?: GraphClock;
 }
 
 export interface FilterResult {
   keep: Set<string>;
   /** Nodes that literally matched `q`; empty when no keyword was given. */
   matched: string[];
+  /**
+   * Edges inside the time window, when one is set. Reported so the renderers
+   * can pick the recent connections out of the ones that merely came along as
+   * endpoints — the same reason `matched` is reported separately from `keep`.
+   */
+  recentEdges: string[];
+  /** Nodes whose OWN clock is inside the window, as opposed to endpoints. */
+  recentNodes: string[];
 }
 
 /** Case-insensitive substring test over everything worth searching on a node. */
@@ -113,6 +170,46 @@ export function applyGraphFilter(
       }),
     );
   }
+  // 2b. The time window.
+  //
+  // Applied to nodes AND edges, and the union is what survives — not the nodes
+  // alone. A brand-new edge between two entities you have known for months is
+  // the single most interesting thing a recency filter can surface, and
+  // filtering on node timestamps alone throws exactly that away: neither
+  // endpoint is recent, so the connection between them disappears at the moment
+  // it appears. So an edge in the window pulls its endpoints in with it.
+  //
+  // `recentNodes` and `recentEdges` come back separately so the renderers can
+  // draw what is genuinely new solid and the endpoints that came along dimmed —
+  // the same treatment `matched` gets for a keyword.
+  const windowed = filter.since != null || filter.until != null;
+  const recentNodes: string[] = [];
+  const recentEdges: string[] = [];
+  if (windowed) {
+    const clock = filter.clock ?? 'updated';
+    for (const id of keep) {
+      const node = index.byId.get(id);
+      if (node && inWindow(nodeTimeUnder(node, clock), filter.since, filter.until)) {
+        recentNodes.push(id);
+      }
+    }
+
+    const withEndpoints = new Set(recentNodes);
+    for (const edges of index.edgesBetween.values()) {
+      for (const edge of edges) {
+        // Both endpoints must have survived the attribute filters above, or a
+        // time window would leak back nodes a source or category filter had
+        // deliberately excluded.
+        if (!keep.has(edge.source) || !keep.has(edge.target)) continue;
+        if (!inWindow(edgeTimeUnder(edge, clock), filter.since, filter.until)) continue;
+        recentEdges.push(edge.id);
+        withEndpoints.add(edge.source);
+        withEndpoints.add(edge.target);
+      }
+    }
+    keep = withEndpoints;
+  }
+
   if (minDegree > 0) {
     keep = new Set([...keep].filter((id) => (index.degree.get(id) ?? 0) >= minDegree));
   }
@@ -139,7 +236,15 @@ export function applyGraphFilter(
     keep = expanded;
   }
 
-  return { keep, matched };
+  return {
+    keep,
+    matched,
+    // Trimmed to what actually survived: `minDegree` and the keyword step run
+    // after the window, and reporting a node as recent after it has been
+    // filtered out would make the counts disagree with the picture.
+    recentNodes: recentNodes.filter((id) => keep.has(id)),
+    recentEdges,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {

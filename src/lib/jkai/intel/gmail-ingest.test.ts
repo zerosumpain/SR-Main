@@ -10,6 +10,8 @@ import {
   structuralEdges,
   threadParticipants,
   threadToNoteText,
+  htmlToPlainText,
+  messageBodyText,
   threadTimestamp,
   threadContentHash,
   queryForMode,
@@ -598,5 +600,111 @@ describe('threadContentHash', () => {
       }),
     ]);
     expect(threadContentHash(quoted)).toBe(threadContentHash(plain));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTML-only mail
+//
+// The live mailbox had 914 email notes stuck `pending` and not one processed
+// note older than the day ingest started. The cause was here: `bodyText` holds
+// only the `text/plain` parts, and an HTML-only email — which is most
+// newsletters, notifications and marketing mail — therefore contributed no
+// body at all. The note came out as its Subject/Participants/Messages header
+// and nothing else.
+// ---------------------------------------------------------------------------
+
+describe('htmlToPlainText', () => {
+  it('returns nothing for empty input', () => {
+    expect(htmlToPlainText('')).toBe('');
+    expect(htmlToPlainText(null)).toBe('');
+    expect(htmlToPlainText(undefined)).toBe('');
+  });
+
+  it('drops tags and keeps the text', () => {
+    expect(htmlToPlainText('<p>Hello <b>Alice</b>.</p>')).toBe('Hello Alice.');
+  });
+
+  it('drops the CONTENTS of style and script, not just the tags', () => {
+    // The whole reason for sanitize-html over a tag-stripping regex: marketing
+    // mail is mostly a stylesheet, and a regex leaves kilobytes of CSS behind
+    // that would clear the length floor and be billed to the model.
+    const html = '<style>.x{color:red;font-family:Helvetica}</style><p>Real text here.</p>';
+    const out = htmlToPlainText(html);
+    expect(out).toBe('Real text here.');
+    expect(out).not.toContain('color');
+  });
+
+  it('turns block boundaries into newlines so quote detection still works', () => {
+    const out = htmlToPlainText('<div>First line</div><div>Second line</div>');
+    expect(out).toBe('First line\nSecond line');
+  });
+
+  it('decodes entities and collapses runs of whitespace', () => {
+    expect(htmlToPlainText('<p>A &amp; B&nbsp;&nbsp;&nbsp;C</p>')).toBe('A & B C');
+  });
+});
+
+describe('messageBodyText', () => {
+  it('prefers the plain-text part when both are present', () => {
+    // Plain text must win, or every already-ingested thread changes hash and
+    // the whole mailbox is re-extracted for nothing.
+    const out = messageBodyText(msg({ bodyText: 'Plain wins.', bodyHtml: '<p>HTML loses.</p>' }));
+    expect(out).toBe('Plain wins.');
+  });
+
+  it('falls back to the HTML part when there is no plain text', () => {
+    const out = messageBodyText(msg({ bodyText: '', bodyHtml: '<p>Only HTML here.</p>' }));
+    expect(out).toBe('Only HTML here.');
+  });
+
+  it('still strips quoted replies out of an HTML-derived body', () => {
+    const out = messageBodyText(
+      msg({ bodyText: '', bodyHtml: '<div>New text.</div><div>&gt; old quoted line</div>' }),
+    );
+    expect(out).toBe('New text.');
+  });
+
+  it('returns nothing when the message has neither part', () => {
+    expect(messageBodyText(msg({ bodyText: '', bodyHtml: '' }))).toBe('');
+    expect(messageBodyText(undefined)).toBe('');
+  });
+});
+
+describe('threadToNoteText with HTML-only mail', () => {
+  it('reads the body of an HTML-only message instead of dropping it', () => {
+    const text = threadToNoteText(
+      thread([msg({ bodyText: '', bodyHtml: '<p>The quarterly numbers are attached.</p>' })]),
+    );
+    expect(text).toContain('The quarterly numbers are attached.');
+    expect(text).toContain('[1]');
+  });
+
+  it('no longer produces a header-only note for an HTML-only thread', () => {
+    // The exact production symptom: 38 notes that were nothing but headers,
+    // every one of them an HTML-only marketing email.
+    const html = `<html><head><style>.a{color:#fff}</style></head><body>
+      <h1>Slay, swing, &amp; explore</h1>
+      <p>This week's deals on top games and new releases are live now.</p>
+      </body></html>`;
+    const text = threadToNoteText(thread([msg({ bodyText: '', bodyHtml: html })]));
+    expect(text).toContain("This week's deals on top games and new releases are live now.");
+    expect(text).not.toContain('color');
+  });
+});
+
+describe('threadContentHash with HTML-only mail', () => {
+  it('is unchanged for a thread that has a plain-text part', () => {
+    // Threads already ingested must keep their hash, or the fix re-extracts
+    // the entire mailbox.
+    const a = threadContentHash(thread([msg({ bodyText: 'Body.', bodyHtml: '<p>Body.</p>' })]));
+    const b = threadContentHash(thread([msg({ bodyText: 'Body.' })]));
+    expect(a).toBe(b);
+  });
+
+  it('changes once an HTML-only thread has a readable body', () => {
+    const before = threadContentHash(thread([msg({ bodyText: '', bodyHtml: '' })]));
+    const after = threadContentHash(thread([msg({ bodyText: '', bodyHtml: '<p>Real content.</p>' })]));
+    expect(after).not.toBe(before);
   });
 });

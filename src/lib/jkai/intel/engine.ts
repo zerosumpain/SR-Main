@@ -174,6 +174,17 @@ export async function runIntelSweep(
           links: sweep.edges,
           deferred: sweep.deferred,
           failed: sweep.failed,
+          // The three the run log used to leave out, and the omission is how a
+          // 54%-wasted budget looked like a healthy "ok" every night for weeks.
+          //
+          // `extracted` alone cannot tell you whether a low number means a
+          // quiet mailbox or a budget being burned on threads that can never
+          // succeed. `budgetLeft > 0` says the sweep ran out of work;
+          // `budgetLeft === 0` with a low `extracted` says it ran out of budget
+          // and the difference went somewhere — which is the question.
+          unchanged: sweep.unchanged,
+          skipped: sweep.skipped,
+          budgetLeft: sweep.budgetLeft,
         };
       }, batch),
     );

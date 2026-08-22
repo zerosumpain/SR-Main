@@ -58,6 +58,14 @@ export interface NetNode {
    * optional; `nodeRelevance` in graph-visual falls back to recency.
    */
   relevance?: number;
+  /**
+   * Inside the recency window on its own clock.
+   *
+   * Distinct from `recency`, which is a continuous 0..1 staleness weight used
+   * for fading. This is a membership answer to the question the slicer asked,
+   * and false for everything when no window is set.
+   */
+  recent?: boolean;
 }
 
 export interface NetCategory {
@@ -82,6 +90,8 @@ export interface NetEdge {
   recency: number;
   /** The note source that asserted this edge, if known. Not an endpoint. */
   sourceKind: string | null;
+  /** Inside the recency window. False for everything when no window is set. */
+  recent?: boolean;
 }
 
 export interface NetworkPayload {
@@ -105,6 +115,22 @@ export interface NetworkPayload {
   filtering?: boolean;
   /** 'evidence' when the nodes are notes and the entities they mention. */
   mode?: 'evidence';
+  /** Which clock the recency window was measured on, echoed back. */
+  clock?: 'added' | 'updated';
+  /** The window that produced this payload, epoch ms; nulls are open-ended. */
+  window?: { since: number | null; until: number | null };
+  /**
+   * Graph activity per UTC day, over the WHOLE graph rather than the filtered
+   * selection — so the slicer's chart does not redraw itself as the window it
+   * is driving moves across it.
+   */
+  activity?: {
+    from: number;
+    to: number;
+    days: Array<{ t: number; nodes: number; edges: number }>;
+    olderNodes: number;
+    olderEdges: number;
+  };
   stats: {
     totalNodes: number;
     totalEdges: number;
@@ -118,6 +144,9 @@ export interface NetworkPayload {
     selectedNodes?: number;
     selectedEdges?: number;
     selectedCommunities?: number;
+    /** What the recency window itself admitted, before endpoint expansion. */
+    recentNodes?: number;
+    recentEdges?: number;
     /** Evidence view only — how much of each side is in play. */
     evidenceNodes?: number;
     entityNodes?: number;

@@ -31,6 +31,7 @@
 // $lib/workflows/gmail/service — there is exactly one Gmail client in this
 // codebase and this is not a second one.
 import { createHash } from 'node:crypto';
+import sanitizeHtml from 'sanitize-html';
 import { desc, eq, sql } from 'drizzle-orm';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { pgTextArray } from '$lib/db/sql-array';
@@ -66,6 +67,19 @@ export interface ThreadMessageInput {
     date?: string;
   };
   bodyText?: string;
+  /**
+   * The `text/html` half of the message, when there is one.
+   *
+   * `fetchMessage` has always returned this and every reader here ignored it,
+   * which meant an HTML-ONLY email — no `text/plain` alternative — contributed
+   * no body at all. That is not an edge case: newsletters, notifications and
+   * most marketing mail are HTML-only, and on the live mailbox they were
+   * landing as notes containing nothing but the Subject/Participants/Messages
+   * header. Those either fell under `MIN_EXTRACT_CHARS` and were dropped
+   * silently, or squeaked past it and were handed to the model as a subject
+   * line. See `messageBodyText`.
+   */
+  bodyHtml?: string;
   /** Gmail epoch-ms as a string. Preferred over the `Date` header, which lies. */
   internalDate?: string;
   /** Populated by the Gmail service's MIME walk; empty for a metadata fetch. */
@@ -330,6 +344,92 @@ export function stripQuotedReply(body: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * Readable text out of an HTML mail body.
+ *
+ * `sanitize-html` rather than a regex or a new dependency: it is already a
+ * production dependency here (see $lib/security/sanitize-chat), and crucially
+ * its default `nonTextTags` drops the CONTENTS of `<style>`, `<script>` and
+ * `<noscript>`. Marketing mail is mostly a stylesheet — strip tags with a regex
+ * and the "body" you get is several kilobytes of CSS, which is worse than the
+ * empty string it replaces because it would sail past the length floor and be
+ * billed to the model.
+ *
+ * Block boundaries become newlines BEFORE the tags are dropped, so
+ * `stripQuotedReply` downstream can still see line structure and find the quote
+ * boundary — flattening everything to one line would defeat it.
+ */
+export function htmlToPlainText(html: string | null | undefined): string {
+  const source = (html ?? '').trim();
+  if (!source) return '';
+
+  const spaced = source
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|li|h[1-6]|blockquote|table|section|article)>/gi, '\n')
+    .replace(/<(?:hr)\s*\/?>/gi, '\n');
+
+  // `sanitize-html` returns SAFE HTML, not text: with every tag disallowed the
+  // markup is gone but the text is still entity-ESCAPED, so a stripped body
+  // arrives as `A &amp; B` and a quoted line as `&gt; old text`. Decoding is
+  // therefore not a nicety — without it the model is handed entity soup and
+  // `stripQuotedReply` cannot recognise a quote marker it never sees as `>`.
+  return decodeEntities(sanitizeHtml(spaced, { allowedTags: [], allowedAttributes: {} }))
+    .replace(/\r\n?/g, '\n')
+    // sanitize-html decodes `&nbsp;` to a literal U+00A0 before this sees it,
+    // and a non-breaking space is neither ' ' nor '\t' — so without this the
+    // collapse below leaves the runs of them that HTML mail is padded with.
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\u200b-\u200d\ufeff]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * The handful of HTML entities that actually appear in mail bodies.
+ *
+ * `&amp;` is decoded LAST and deliberately: doing it first turns `&amp;gt;`
+ * into `&gt;` and then into `>`, inventing a quote marker that was never in the
+ * message — which `stripQuotedReply` would then cut the body at.
+ */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => safeCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => safeCodePoint(Number(dec)))
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, '&');
+}
+
+/** A numeric entity from a mail body is not to be trusted into String.fromCodePoint. */
+function safeCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return '';
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * A message's usable body: the plain-text part if it has one, otherwise the
+ * HTML part rendered down to text.
+ *
+ * Plain text WINS where both exist — it is what the sender's client wrote for
+ * exactly this purpose, and round-tripping the HTML alternative instead would
+ * change the content hash of every already-ingested thread and force a full
+ * re-extraction of the mailbox for no gain.
+ */
+export function messageBodyText(msg: ThreadMessageInput | null | undefined): string {
+  const plain = stripQuotedReply(msg?.bodyText);
+  if (plain) return plain;
+  return stripQuotedReply(htmlToPlainText(msg?.bodyHtml));
+}
+
 // ---------------------------------------------------------------------------
 // Thread → note text
 // ---------------------------------------------------------------------------
@@ -401,7 +501,7 @@ export function threadToNoteText(thread: ThreadInput): string {
   const blocks: string[] = [];
   let n = 0;
   for (const msg of messages) {
-    const body = stripQuotedReply(msg.bodyText);
+    const body = messageBodyText(msg);
     if (!body) continue;
     n++;
 
@@ -701,7 +801,13 @@ export function threadContentHash(thread: ThreadInput): string {
         msg.id ?? '',
         msg.internalDate ?? '',
         msg.headers?.subject ?? '',
-        stripQuotedReply(msg.bodyText).slice(0, 4000),
+        // The RESOLVED body, so the hash matches what actually gets extracted.
+        // Hashing `bodyText` alone left every HTML-only thread hashing to its
+        // headers; hashing the HTML source unconditionally would instead change
+        // the hash of every thread that has a plain-text part and force the
+        // whole mailbox to be re-extracted. This changes the hash only for the
+        // threads whose text genuinely changed — the HTML-only ones.
+        messageBodyText(msg).slice(0, 4000),
       ].join(' '),
     );
   }
@@ -910,6 +1016,14 @@ async function persistStructuralOnly(
     account: string;
     participants: ParsedAddress[];
     important?: boolean;
+    /**
+     * Why the body was not read. `deferred` means the budget ran out and a
+     * later run will pick it up; `bodyless` means the thread has no readable
+     * body at all and no later run ever will. Both leave a `pending` note, and
+     * without this they are indistinguishable — which is how 914 pending notes
+     * came to mean two completely different things.
+     */
+    reason?: 'deferred' | 'bodyless';
   },
   opts: { recency: number; observedAt?: Date },
 ): Promise<{ entityCount: number; relationshipCount: number }> {
@@ -929,6 +1043,7 @@ async function persistStructuralOnly(
     sourceTag: 'file',
     // No contentHash — see the note above.
     structuralOnly: true,
+    ...(ctx.reason ? { structuralReason: ctx.reason } : {}),
     // Only written when true — same reasoning as the full-extraction path.
     ...(ctx.important ? { important: true } : {}),
   };
@@ -1085,7 +1200,11 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       : DEFAULT_EXTRACT_BUDGET
     : Number.POSITIVE_INFINITY;
 
-  const { extractIntoIntel } = await import('./auto-extract');
+  // `MIN_EXTRACT_CHARS` comes through the same dynamic import the extractor
+  // does. A static import would pull auto-extract — and its db/$env graph —
+  // into the pure unit tests above, which is exactly what this indirection has
+  // always existed to prevent.
+  const { extractIntoIntel, MIN_EXTRACT_CHARS } = await import('./auto-extract');
   const { persistExtraction } = await import('./graph');
 
   const threadIds = rolling
@@ -1152,7 +1271,40 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         recency: Number(recency.toFixed(3)),
       };
 
-      if (!noteText) {
+      // Nothing readable in this thread, and no attachment that could change
+      // that — so no run, now or ever, can extract from it.
+      //
+      // The length floor is applied HERE rather than being left to
+      // `extractIntoIntel`, which applies the same one. Left to it, the budget
+      // had already been decremented by the time the thread was rejected, no
+      // note was written, and therefore no contentHash was stored — so the
+      // thread was never 'unchanged' and cost another unit of a 150-call budget
+      // EVERY night, permanently. On the live mailbox that was ~81 of 150 units
+      // a night (54%), which is why the July backlog never drained.
+      //
+      // Structural edges still land: participants and correspondence come off
+      // the headers, cost nothing, and are the half worth having. Previously a
+      // body-less thread returned before this and contributed nothing at all.
+      const hasAttachments = (thread.messages ?? []).some((m) => (m.attachments ?? []).length > 0);
+      if (!noteText || (noteText.length < MIN_EXTRACT_CHARS && !hasAttachments)) {
+        if (structural.entities.length) {
+          const stats = await persistStructuralOnly(
+            structural,
+            {
+              threadId,
+              subject,
+              account: acct.email,
+              participants: structural.participants,
+              important: threadIsImportant(thread),
+              reason: 'bodyless',
+            },
+            { recency, observedAt },
+          );
+          item.edges = stats.relationshipCount;
+          result.edges += stats.relationshipCount;
+          result.entities += stats.entityCount;
+        }
+        item.status = 'skipped';
         result.skipped++;
         result.items.push(item);
         continue;
