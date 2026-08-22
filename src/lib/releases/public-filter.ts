@@ -23,6 +23,7 @@
  * Pure by design so it can be unit-tested without a database — the caller
  * supplies the project-visibility map (see $lib/projects/visibility).
  */
+import { defaultsPublic } from '$lib/projects/visibility';
 
 import type { ReleaseItemKind } from './types';
 
@@ -189,7 +190,11 @@ export function isSurfacePublic(surface: string, visibility: Record<string, bool
     // compound-interest-calculator). An exact miss must not read as "public" —
     // fail CLOSED here and require a positive match, the opposite of
     // isProjectPublic's site-wide default.
-    if (visibility[key] === false) return false;
+    //
+    // With no row at all, defer to the key's own default: a hand-built page is
+    // public, an AI build's slug is not. Naming a build the site 404s would
+    // advertise a page nobody can open.
+    if (!(visibility[key] ?? defaultsPublic(key))) return false;
     return !Object.keys(visibility).some(
       (k) => visibility[k] === false && (k.startsWith(key) || key.startsWith(k)),
     );
@@ -251,7 +256,7 @@ function isPrivateSurface(surface: string, visibility: Record<string, boolean>):
   if (PRIVATE_SURFACE_RE.test(s) || INFRA_RE.test(s) || ENV_VAR_RE.test(s)) return true;
   const key = projectKeyOf(s);
   if (key === null) return false;
-  if (visibility[key] === false) return true;
+  if (!(visibility[key] ?? defaultsPublic(key))) return true;
   return Object.keys(visibility).some(
     (k) => visibility[k] === false && (k.startsWith(key) || key.startsWith(k)),
   );
