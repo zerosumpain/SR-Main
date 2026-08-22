@@ -76,21 +76,22 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
 
   const attempt = async (ctx: ModelContext): Promise<string | null> => {
     const { client, model } = await getLLMClient(ctx);
-    const response = await withActivity('audio', () =>
-      client.chat.completions.create({
-        model,
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: IMAGE_PROMPT },
-              { type: 'image_url', image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-      }),
-    );
+    // No withActivity here: both callers of `attempt` already wrap it as
+    // 'vision', and AsyncLocalStorage nests — an inner tag would win and bill
+    // image captions to whatever it named.
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: IMAGE_PROMPT },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    });
     const text = response.choices[0]?.message?.content?.trim();
     return text ? text : null;
   };
@@ -262,20 +263,22 @@ export async function transcribeAudioBestEffort(buf: Buffer, mimeType: string): 
     // The `audio` workload rather than a module constant, so this is settable
     // from the model picker; its save guard requires audio input.
     const { client, model } = await getLLMClient(await resolveAudioModel());
-    const response = await client.chat.completions.create({
-      model,
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: AUDIO_PROMPT },
-            // OpenRouter multimodal audio content part.
-            { type: 'input_audio', input_audio: { data: buf.toString('base64'), format } },
-          ],
-        },
-      ],
-    } as never);
+    const response = await withActivity('audio', () =>
+      client.chat.completions.create({
+        model,
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: AUDIO_PROMPT },
+              // OpenRouter multimodal audio content part.
+              { type: 'input_audio', input_audio: { data: buf.toString('base64'), format } },
+            ],
+          },
+        ],
+      } as never),
+    );
     const text = (response as { choices: Array<{ message?: { content?: string } }> })
       .choices[0]?.message?.content?.trim();
     return text ? text : null;

@@ -27,6 +27,61 @@ export interface SpendGroup {
   unpricedCalls: number;
 }
 
+/**
+ * What a model must be able to do to serve an activity — the same vocabulary as
+ * `WorkloadDef['requires']`, redeclared here so this module stays free of any
+ * import that would drag a registry (and its future dependencies) into a pure
+ * arithmetic file.
+ */
+export type ActivityRequirement =
+  | 'tools'
+  | 'embeddings'
+  | 'image-input'
+  | 'audio-input'
+  | 'image-output'
+  | null;
+
+/** OpenRouter encodes modality as `inputs->outputs`, e.g. `text+image->text`. */
+function inputsOf(modality: string | null | undefined): string {
+  if (!modality) return '';
+  const i = modality.indexOf('->');
+  return i === -1 ? modality : modality.slice(0, i);
+}
+function outputsOf(modality: string | null | undefined): string {
+  if (!modality) return '';
+  const i = modality.indexOf('->');
+  return i === -1 ? '' : modality.slice(i + 2);
+}
+
+/**
+ * Whether `m` could serve a role with this requirement.
+ *
+ * Where the catalogue cannot answer (no modality recorded), this returns FALSE
+ * rather than null-means-yes — the opposite of `workloadBlockReason`, and
+ * deliberately so. That guard is deciding whether to refuse an operator's
+ * explicit choice, where the benefit of the doubt belongs to the human. This is
+ * deciding whether to volunteer a suggestion, where an unverifiable candidate
+ * should simply not be offered.
+ */
+export function canServe(m: CatalogueModel, requires: ActivityRequirement): boolean {
+  switch (requires) {
+    case 'tools':
+      return m.toolsSupported;
+    case 'image-input':
+      return inputsOf(m.modality).includes('image');
+    case 'audio-input':
+      return inputsOf(m.modality).includes('audio');
+    case 'image-output':
+      return outputsOf(m.modality).includes('image');
+    case 'embeddings':
+      // OpenRouter's feed carries no embedding models at all, so there is
+      // nothing here that could be verified as one.
+      return false;
+    case null:
+      return true;
+  }
+}
+
 /** A catalogue row, trimmed to what the analysis needs. */
 export interface CatalogueModel {
   id: string;
@@ -166,7 +221,8 @@ export function findSwaps(
   groups: SpendGroup[],
   catalogue: CatalogueModel[],
   labels: Map<string, string>,
-  needsTools: (activity: string) => boolean,
+  /** What the activity's model must be able to do. */
+  requirementFor: (activity: string) => ActivityRequirement,
   opts: SwapOptions = {},
 ): SwapSuggestion[] {
   const o = { ...DEFAULTS, ...opts };
@@ -183,8 +239,12 @@ export function findSwaps(
     // find on a flat-rate plan.
     if (!current || current.agenticIndex == null) continue;
 
+    const requires = requirementFor(g.activity);
+    // A role with no declared requirement still must not be dropped from a
+    // tool-capable model onto one that cannot pass schemas — the calls it is
+    // already making prove it needs them.
+    const mustHaveTools = requires === 'tools' || current.toolsSupported;
     const floor = current.agenticIndex * o.qualityFloorRatio;
-    const mustHaveTools = needsTools(g.activity) || current.toolsSupported;
 
     let best: { m: CatalogueModel; cost: number } | null = null;
     for (const c of catalogue) {
@@ -192,6 +252,10 @@ export function findSwaps(
       if (!o.allowFreeTier && isFreeTier(c.id)) continue;
       if (c.agenticIndex == null || c.agenticIndex < floor) continue;
       if (mustHaveTools && !c.toolsSupported) continue;
+      // Without this the table recommends a cheap text-only model for the
+      // vision role, and the page's own save guard then 400s it — advice the
+      // page will refuse to carry out.
+      if (!canServe(c, requires)) continue;
       if (
         o.requireContextParity &&
         current.contextLength != null &&
@@ -267,7 +331,18 @@ export interface WasteSignal {
  */
 export function findWaste(
   groups: SpendGroup[],
-  opts: { windowDays: number; cacheReadTokens?: number; totalInputTokens?: number } = { windowDays: 30 },
+  opts: {
+    windowDays: number;
+    cacheReadTokens?: number;
+    totalInputTokens?: number;
+    /**
+     * Input tokens on the rows that carry a cache figure at all. Rows written
+     * before the column existed hold null, and a null is not a cache miss —
+     * dividing by every input token would report a measurement gap as a
+     * performance problem.
+     */
+    measuredInputTokens?: number;
+  } = { windowDays: 30 },
 ): WasteSignal[] {
   const out: WasteSignal[] = [];
   const total = groups.reduce((s, g) => s + g.costUsd, 0);
@@ -302,15 +377,33 @@ export function findWaste(
   }
 
   // 3. Cache reads — the one lever that costs nothing to pull.
-  if (opts.totalInputTokens && opts.totalInputTokens > 0) {
-    const hit = (opts.cacheReadTokens ?? 0) / opts.totalInputTokens;
+  //
+  // Measured against the rows that record a cache figure, never against the
+  // whole window: an unmeasured window and a cold cache produce the same
+  // ratio, and only one of them is a problem worth chasing.
+  const totalIn = opts.totalInputTokens ?? 0;
+  const measuredIn = opts.measuredInputTokens ?? 0;
+  if (totalIn > 0 && measuredIn <= 0) {
+    out.push({
+      id: 'cache-unmeasured',
+      severity: 'info',
+      title: 'Cache hit rate is not measured over this window',
+      detail:
+        'No call in this window recorded a cache figure — the ledger only started keeping one on 22 Aug 2026, and earlier rows hold null rather than a zero that would read as a miss. ' +
+        'Pick a shorter window, or come back once a full window has been recorded.',
+      valueUsd: null,
+    });
+  } else if (measuredIn > 0) {
+    const hit = (opts.cacheReadTokens ?? 0) / measuredIn;
+    const coverage = measuredIn / Math.max(totalIn, 1);
     if (hit < 0.05) {
       out.push({
         id: 'cache',
         severity: 'info',
-        title: `Prompt caching is doing almost nothing (${(hit * 100).toFixed(1)}% of input tokens)`,
+        title: `Prompt caching is doing almost nothing (${(hit * 100).toFixed(1)}% of measured input tokens)`,
         detail:
-          'Cached input tokens bill at a fraction of the normal rate. A low hit rate usually means the prefix is churning — a timestamp, a shuffled tool list, a per-request id near the top of the system prompt.',
+          'Cached input tokens bill at a fraction of the normal rate. A low hit rate usually means the prefix is churning — a timestamp, a shuffled tool list, a per-request id near the top of the system prompt. ' +
+          `Measured over ${(coverage * 100).toFixed(0)}% of this window's input tokens; the rest predates the cache column.`,
         valueUsd: null,
       });
     }

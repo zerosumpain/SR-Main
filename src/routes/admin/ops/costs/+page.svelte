@@ -16,8 +16,14 @@
   // ── Formatting ────────────────────────────────────────────────────────────
   /** Sub-cent figures are the norm here, so a 2dp currency format would round
    *  most of the page to $0.00 and imply nothing was spent. */
-  const usd = (v: number | null | undefined, dp = 4) =>
-    v == null ? '—' : `$${v.toFixed(v >= 100 ? 2 : dp)}`;
+  const usd = (v: number | null | undefined, dp = 4) => {
+    if (v == null) return '—';
+    // A real embedding call bills ~$0.000001. At 4dp that prints $0.0000, which
+    // is indistinguishable from "this role spent nothing" — and the whole point
+    // of the row is that it spent something the ledger used to miss entirely.
+    if (v > 0 && v < 0.0001) return '<$0.0001';
+    return `$${v.toFixed(v >= 100 ? 2 : dp)}`;
+  };
   const num = (v: number | null | undefined) => (v ?? 0).toLocaleString();
   const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v * 100)}%`);
   const tokens = (v: number) =>
@@ -31,6 +37,21 @@
   const dayPeak = $derived(Math.max(0.0000001, ...data.perDay.map((d) => d.cost)));
   const activityPeak = $derived(Math.max(0.0000001, ...data.byActivity.map((a) => a.costUsd)));
   const modelPeak = $derived(Math.max(0.0000001, ...data.byModel.map((m) => m.cost)));
+  const hermesModelPeak = $derived(
+    Math.max(0.0000001, ...(data.hermesSpend?.byModel ?? []).map((m) => m.costUsd)),
+  );
+
+  /**
+   * The engine counts cache reads BESIDE input tokens, not inside them — 163 of
+   * 269 sessions in a 30-day sample had more cache reads than input tokens, so
+   * `cacheRead / input` read 433% before this. The site ledger is the other way
+   * round: OpenRouter's `prompt_tokens` already includes `cached_tokens`, so the
+   * two cards genuinely need different arithmetic to mean the same thing —
+   * "what share of the prompt came from cache".
+   */
+  const hermesPromptTokens = $derived(
+    (data.hermesSpend?.overview.inputTokens ?? 0) + (data.hermesSpend?.overview.cacheReadTokens ?? 0),
+  );
 
   /** Every LLM role on the site, spending or not, with its spend attached.
    *  A role with no spend is not noise — it is either genuinely idle or not
@@ -142,7 +163,9 @@
     return win.cost > 0 ? named / win.cost : null;
   });
 
-  const cacheHit = $derived(win.tokensIn > 0 ? win.cacheRead / win.tokensIn : null);
+  /** Null when no call in the window carries a cache figure — the card then says
+   *  "cache not measured" rather than "0% cached", which are different facts. */
+  const cacheHit = $derived(win.cacheMeasuredIn > 0 ? win.cacheRead / win.cacheMeasuredIn : null);
 
   let expanded = $state<string | null>(null);
   const toggle = (k: string) => (expanded = expanded === k ? null : k);
@@ -174,8 +197,14 @@
   <div class="stat-grid">
     <div class="stat-card">
       <div class="stat-card-label">{data.days === 1 ? 'Today' : `Last ${data.days} days`}</div>
-      <div class="stat-card-value">{usd(win.cost)}</div>
-      <div class="stat-card-meta">{num(win.calls)} calls</div>
+      <div class="stat-card-value">{usd(data.reconciliation.combinedWindowUsd ?? win.cost)}</div>
+      <div class="stat-card-meta">
+        {#if data.reconciliation.combinedWindowUsd != null}
+          site {usd(win.cost)} + engine {usd(data.hermesSpend!.overview.costUsd)}, overlap removed
+        {:else}
+          {num(win.calls)} calls · site only
+        {/if}
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-card-label">Run rate</div>
@@ -185,14 +214,19 @@
     <div class="stat-card">
       <div class="stat-card-label">Attributed</div>
       <div class="stat-card-value">{pct(attributed)}</div>
-      <div class="stat-card-meta">of spend names the role that made it</div>
+      <div class="stat-card-meta">
+        of spend names the role that made it
+        <!-- A window that mostly predates tagging reads near 0%, which looks
+             like a bug rather than a start date. Say which it is. -->
+        {#if data.taggingSince}<br />tagging began {when(data.taggingSince)}{/if}
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-card-label">Tokens</div>
       <div class="stat-card-value">{tokens(win.tokensIn + win.tokensOut)}</div>
       <div class="stat-card-meta">
         {tokens(win.tokensIn)} in · {tokens(win.tokensOut)} out
-        {#if cacheHit != null} · {pct(cacheHit)} cached{/if}
+        {#if cacheHit != null} · {pct(cacheHit)} cached{:else if win.tokensIn > 0} · cache not measured{/if}
         {#if win.reasoning > 0} · {tokens(win.reasoning)} reasoning{/if}
       </div>
     </div>
@@ -224,7 +258,7 @@
             <tr><th>Window</th><th>Billed by OpenRouter</th><th>Recorded here</th><th>Unaccounted</th><th>Coverage</th></tr>
           </thead>
           <tbody>
-            {#each [['Today', data.reconciliation.day], ['This week', data.reconciliation.week], ['This month', data.reconciliation.month]] as const as [label, r] (label)}
+            {#each [["OpenRouter's day (site ledger)", data.reconciliation.day], ["OpenRouter's week (site ledger)", data.reconciliation.week], ["OpenRouter's month (site ledger)", data.reconciliation.month], [`Last ${data.days} days — site + engine`, data.reconciliation.window]] as const as [label, r] (label)}
               <tr>
                 <td>{label}</td>
                 <td class="num">{usd(r.billedUsd)}</td>
@@ -255,6 +289,19 @@
 
       <ul class="notes">
         <li>
+          The first three rows are the <strong>site ledger alone</strong>, against OpenRouter's own
+          day / week / month counters. OpenRouter does not say whether those are rolling or
+          period-to-date, and the ledger side is rolling — so early in a calendar period coverage may
+          read high. It does not read falsely low, which would be the dangerous direction for a
+          completeness check. The last adds the Hermes engine's separate store and removes the
+          overlap between them — /jkai web-chat turns are Hermes sessions that the chat endpoint also
+          back-fills into the site ledger, {usd(data.reconciliation.jkaiChatOverlapUsd)} of this window.
+          {#if data.reconciliation.window.billedUsd == null}
+            OpenRouter publishes day, week and month and nothing else, so a {data.days}-day window has
+            no counterpart to check against — pick 1d, 7d or 30d for the combined check.
+          {/if}
+        </li>
+        <li>
           <strong>Over 100% is possible and is not a bug.</strong> Codex calls are priced and recorded
           here but billed to a ChatGPT subscription, not to OpenRouter, so a Codex-heavy window
           legitimately records more than OpenRouter charged.
@@ -281,6 +328,90 @@
           </li>
         {/if}
       </ul>
+    {/if}
+  </section>
+
+  <!-- ── The engine's own ledger ─────────────────────────────────────────── -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Hermes engine</span>
+      <span class="nm-sec-meta">the engine's own store · last {data.days} days</span>
+    </div>
+    <p class="sec-lede">
+      The engine is a separate runtime that never goes through the site's LLM gateway, so none of this
+      appears in the table above — but it bills to the same OpenRouter key. Read as a second source,
+      not merged, because the two stores have different coverage and different clocks.
+    </p>
+
+    {#if !data.hermesSpend}
+      <p class="empty-note">{data.hermesSpendError ?? 'The engine store did not answer.'}</p>
+    {:else}
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-card-label">Engine spend</div>
+          <div class="stat-card-value">{usd(data.hermesSpend.overview.costUsd)}</div>
+          <div class="stat-card-meta">{num(data.hermesSpend.overview.sessions)} sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Tokens</div>
+          <div class="stat-card-value">{tokens(data.hermesSpend.overview.inputTokens + data.hermesSpend.overview.outputTokens)}</div>
+          <div class="stat-card-meta">
+            {tokens(data.hermesSpend.overview.inputTokens)} new in · {tokens(
+              data.hermesSpend.overview.outputTokens,
+            )} out
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Cached</div>
+          <div class="stat-card-value">
+            {hermesPromptTokens > 0
+              ? pct(data.hermesSpend.overview.cacheReadTokens / hermesPromptTokens)
+              : '—'}
+          </div>
+          <div class="stat-card-meta">
+            {tokens(data.hermesSpend.overview.cacheReadTokens)} of {tokens(hermesPromptTokens)} prompt tokens
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Reasoning</div>
+          <div class="stat-card-value">{tokens(data.hermesSpend.overview.reasoningTokens)}</div>
+          <div class="stat-card-meta">output tokens before the answer</div>
+        </div>
+      </div>
+
+      {#if data.hermesSpend.byModel.length}
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead><tr><th>Model</th><th class="num">Spend</th><th class="num">Sessions</th><th class="num">In</th><th class="num">Out</th></tr></thead>
+            <tbody>
+              {#each data.hermesSpend.byModel as m (m.model)}
+                <tr>
+                  <td><code>{m.model}</code></td>
+                  <td class="num">
+                    <span class="bar-cell">
+                      <span class="bar" aria-hidden="true">
+                        <span class="bar-fill" style={`width:${Math.round((m.costUsd / hermesModelPeak) * 100)}%`}></span>
+                      </span>
+                      {usd(m.costUsd)}
+                    </span>
+                  </td>
+                  <td class="num">{num(m.sessions)}</td>
+                  <td class="num mono small">{tokens(m.inputTokens)}</td>
+                  <td class="num mono small">{tokens(m.outputTokens)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+
+      {#if data.hermesSpend.byPlatform.length}
+        <div class="chips">
+          {#each data.hermesSpend.byPlatform as p (p.source)}
+            <span class="chip mono">{p.source} · {usd(p.costUsd)} · {num(p.sessions)} sessions</span>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </section>
 
@@ -379,7 +510,7 @@
                   {#if spendByKey.get(r.key)?.models.length}
                     <p class="mono small">
                       Models seen this window:
-                      {#each spendByKey.get(r.key)!.models as m, i (m.model)}{i ? ' · ' : ' '}{m.model ?? '?'} ({usd(m.costUsd)}){/each}
+                      {#each spendByKey.get(r.key)!.models as m, i (`${m.provider}/${m.model}`)}{i ? ' · ' : ' '}{m.model ?? '?'} ({usd(m.costUsd)}){/each}
                     </p>
                   {/if}
                 </td>
@@ -421,7 +552,7 @@
             <tr><th>Activity</th><th>Now</th><th>Instead</th><th class="num">Saving</th><th>Why</th></tr>
           </thead>
           <tbody>
-            {#each data.swaps as s (s.activity + s.candidateModelId)}
+            {#each data.swaps as s (`${s.activity}|${s.currentModelId}|${s.candidateModelId}`)}
               <tr>
                 <td>{activityLabel(s.activity, activityIndex)}</td>
                 <td><code>{s.currentModelId}</code></td>
@@ -708,6 +839,15 @@
     color: var(--text-secondary);
   }
   code.sess { max-width: 26rem; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.85rem; }
+  .chip {
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.04em;
+    padding: 0.22rem 0.5rem;
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+  }
 
   .empty-note { font-size: var(--fs-body-sm); color: var(--text-muted); margin: 0; }
   .empty-note.small { font-size: var(--fs-label-xs); margin-top: 0.6rem; }

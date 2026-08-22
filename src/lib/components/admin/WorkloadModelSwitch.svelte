@@ -20,7 +20,7 @@
   import type { WorkloadState } from '$lib/models/workloads';
   import { emitsImages } from '$lib/models/workloads';
   import type { CatalogueModel } from '$lib/costs/analysis';
-  import { pricePerMTokens } from '$lib/costs/analysis';
+  import { pricePerMTokens, canServe } from '$lib/costs/analysis';
 
   let {
     workload,
@@ -66,8 +66,11 @@
     }
     const w = workload!;
     if (w.catalogue === 'image-out') return rank(catalogue.filter((c) => emitsImages(c.modality)));
-    if (w.requires === 'tools') return rank(catalogue.filter((c) => c.toolsSupported));
-    return rank(catalogue);
+    // Every requirement, not just `tools`. Vision and audio used to fall
+    // through to the unfiltered catalogue, so the dropdown offered text-only
+    // models for them and the save 400'd — the opposite of what the comment
+    // above promises.
+    return rank(catalogue.filter((c) => canServe(c, w.requires)));
   });
 
   function rank(rows: CatalogueModel[]): CatalogueModel[] {
@@ -162,11 +165,19 @@
         <input
           class="nm-input"
           type="text"
-          placeholder="vendor/model-slug"
+          placeholder={workload?.id === 'image-tool' ? 'an /images/generations model' : 'vendor/model-slug'}
           bind:value={typed}
           disabled={saving}
           aria-label="Model slug"
         />
+        <span class="sw-note">
+          {#if workload?.id === 'image-tool'}
+            Must serve OpenRouter's /images/generations endpoint — a chat model typed here fails at
+            draw time, not at save time.
+          {:else}
+            Not in OpenRouter's catalogue, so the slug cannot be checked before it is used.
+          {/if}
+        </span>
       {/if}
 
       <button class="nm-save-btn" onclick={submit} disabled={saving || !(choice || typed.trim())}>

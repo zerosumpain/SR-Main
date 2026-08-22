@@ -94,6 +94,18 @@ export interface WorkloadDef {
   /** `app_settings` key (site scope) or Hermes dotted config key (hermes scope). */
   key: string;
   /**
+   * A legacy environment variable that still answers for this role when nothing
+   * is pinned, read BELOW the pin and ABOVE the code fallback.
+   *
+   * Declared on the registry rather than buried in the resolver so the picker
+   * and the resolver agree. They did not: `resolveImageToolModel` honoured
+   * `JKAI_IMAGE_MODEL` while `describeSiteWorkloads` did not, so with the
+   * variable set the page reported the constant while the tool called something
+   * else — a page naming a model that is not the one spending the money, which
+   * is the exact gap this workload was added to close.
+   */
+  envKey?: string;
+  /**
    * Hermes scope only: the dotted key holding the PROVIDER beside `key`.
    *
    * Hermes reaches Codex through its own native `openai-codex` transport (the
@@ -227,6 +239,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     label: 'Image tool (FLUX)',
     blurb: "The canvas/chat `generate_image` tool — OpenRouter's /images/generations endpoint.",
     key: 'jkai.image.tool_model',
+    envKey: 'JKAI_IMAGE_MODEL',
     fallbackModelId: DEFAULT_IMAGE_TOOL_MODEL_ID,
     requires: null,
     // OpenRouter's /models feed does not carry the dedicated image-generation
@@ -353,6 +366,8 @@ export type WorkloadSource =
   | 'pinned'
   /** No setting; the code fallback in this registry applies. */
   | 'code'
+  /** No setting, but a legacy environment variable (`envKey`) answers. */
+  | 'env'
   /** No setting and no code fallback — it follows the site default. */
   | 'default'
   /** Read from Hermes' config.yaml. */

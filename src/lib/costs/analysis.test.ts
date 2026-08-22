@@ -17,6 +17,7 @@ const model = (over: Partial<CatalogueModel> & { id: string }): CatalogueModel =
   toolsSupported: true,
   agenticIndex: 50,
   contextLength: 128_000,
+  modality: 'text->text',
   ...over,
 });
 
@@ -34,7 +35,8 @@ const group = (over: Partial<SpendGroup> = {}): SpendGroup => ({
 });
 
 const labels = new Map([['extraction', 'Entity extraction']]);
-const noTools = () => false;
+/** An activity with no declared capability requirement. */
+const noReq = () => null;
 
 describe('pricePerMTokens', () => {
   it('weights the two price columns by the ACTUAL mix, not a nominal 3:1', () => {
@@ -64,7 +66,7 @@ describe('findSwaps', () => {
       model({ id: 'b/cheap-good', promptPrice: 0.0000002, completionPrice: 0.0000004, agenticIndex: 52 }),
       model({ id: 'c/cheapest-worse', promptPrice: 0.00000001, completionPrice: 0.00000002, agenticIndex: 30 }),
     ];
-    const [s, ...rest] = findSwaps([group()], catalogue, labels, noTools);
+    const [s, ...rest] = findSwaps([group()], catalogue, labels, noReq);
     expect(rest).toHaveLength(0);
     expect(s.candidateModelId).toBe('b/cheap-good');
     // 900k in @ 1e-6 + 100k out @ 2e-6 = 1.1 → candidate is a fifth of that.
@@ -78,7 +80,7 @@ describe('findSwaps', () => {
       current,
       model({ id: 'z/unrated', promptPrice: 0, completionPrice: 0, agenticIndex: null }),
     ];
-    expect(findSwaps([group()], catalogue, labels, noTools)).toEqual([]);
+    expect(findSwaps([group()], catalogue, labels, noReq)).toEqual([]);
   });
 
   it('will not drop a tool-capable role onto a model without tools', () => {
@@ -86,7 +88,42 @@ describe('findSwaps', () => {
       current,
       model({ id: 'b/no-tools', promptPrice: 1e-9, completionPrice: 1e-9, agenticIndex: 90, toolsSupported: false }),
     ];
-    expect(findSwaps([group()], catalogue, labels, () => true)).toEqual([]);
+    expect(findSwaps([group()], catalogue, labels, () => 'tools')).toEqual([]);
+  });
+
+  it('will not offer a text-only model to a role that must read images', () => {
+    const visionNow = model({
+      id: 'a/current',
+      promptPrice: 0.000001,
+      completionPrice: 0.000002,
+      agenticIndex: 50,
+      modality: 'text+image->text',
+    });
+    const catalogue = [
+      visionNow,
+      model({ id: 'b/text-only', promptPrice: 1e-9, completionPrice: 1e-9, agenticIndex: 80, modality: 'text->text' }),
+    ];
+    // The save guard would refuse this pick; recommending it would be advice
+    // the page itself will not carry out.
+    expect(findSwaps([group({ activity: 'vision' })], catalogue, labels, () => 'image-input')).toEqual([]);
+
+    const withSight = [
+      visionNow,
+      model({ id: 'b/sighted', promptPrice: 1e-9, completionPrice: 1e-9, agenticIndex: 80, modality: 'text+image->text' }),
+    ];
+    expect(
+      findSwaps([group({ activity: 'vision' })], withSight, labels, () => 'image-input')[0].candidateModelId,
+    ).toBe('b/sighted');
+  });
+
+  it('will not offer a model whose modality the catalogue never recorded', () => {
+    // Unknown is not "probably fine" when the question is whether to volunteer
+    // a suggestion — the opposite call from workloadBlockReason, on purpose.
+    const catalogue = [
+      model({ id: 'a/current', promptPrice: 1e-6, completionPrice: 2e-6, agenticIndex: 50, modality: 'text+image->text' }),
+      model({ id: 'b/unknown', promptPrice: 1e-9, completionPrice: 1e-9, agenticIndex: 80, modality: null }),
+    ];
+    expect(findSwaps([group({ activity: 'vision' })], catalogue, labels, () => 'image-input')).toEqual([]);
   });
 
   it('will not shrink the context window by default', () => {
@@ -94,8 +131,8 @@ describe('findSwaps', () => {
       current,
       model({ id: 'b/short', promptPrice: 1e-9, completionPrice: 1e-9, agenticIndex: 90, contextLength: 8_000 }),
     ];
-    expect(findSwaps([group()], catalogue, labels, noTools)).toEqual([]);
-    const relaxed = findSwaps([group()], catalogue, labels, noTools, { requireContextParity: false });
+    expect(findSwaps([group()], catalogue, labels, noReq)).toEqual([]);
+    const relaxed = findSwaps([group()], catalogue, labels, noReq, { requireContextParity: false });
     expect(relaxed[0].candidateModelId).toBe('b/short');
   });
 
@@ -104,8 +141,8 @@ describe('findSwaps', () => {
       current,
       model({ id: 'c/worse-cheaper', promptPrice: 1e-9, completionPrice: 1e-9, agenticIndex: 45 }),
     ];
-    expect(findSwaps([group()], catalogue, labels, noTools)).toEqual([]);
-    const traded = findSwaps([group()], catalogue, labels, noTools, { qualityFloorRatio: 0.85 });
+    expect(findSwaps([group()], catalogue, labels, noReq)).toEqual([]);
+    const traded = findSwaps([group()], catalogue, labels, noReq, { qualityFloorRatio: 0.85 });
     expect(traded[0].candidateModelId).toBe('c/worse-cheaper');
     expect(traded[0].candidateQuality).toBe(45);
   });
@@ -117,16 +154,16 @@ describe('findSwaps', () => {
       current,
       model({ id: 'b/half', promptPrice: 5e-7, completionPrice: 1e-6, agenticIndex: 55 }),
     ];
-    const [s] = findSwaps([group({ costUsd: 6.1 })], catalogue, labels, noTools);
+    const [s] = findSwaps([group({ costUsd: 6.1 })], catalogue, labels, noReq);
     expect(s.currentCostUsd).toBeCloseTo(1.1, 6);
     expect(s.savingUsd).toBeCloseTo(0.55, 6);
   });
 
   it('skips activities below the spend floor and savings below the share floor', () => {
     const catalogue = [current, model({ id: 'b/tiny-win', promptPrice: 9.5e-7, completionPrice: 1.9e-6, agenticIndex: 55 })];
-    expect(findSwaps([group({ costUsd: 0.001, tokensIn: 900, tokensOut: 100 })], catalogue, labels, noTools)).toEqual([]);
+    expect(findSwaps([group({ costUsd: 0.001, tokensIn: 900, tokensOut: 100 })], catalogue, labels, noReq)).toEqual([]);
     // A 5% saving on a big spender is still below the 10% default share floor.
-    expect(findSwaps([group()], catalogue, labels, noTools)).toEqual([]);
+    expect(findSwaps([group()], catalogue, labels, noReq)).toEqual([]);
   });
 
   it("never proposes an OpenRouter :free variant, however much it would save", () => {
@@ -136,20 +173,20 @@ describe('findSwaps', () => {
     ];
     // A free variant wins every price comparison and then rate-limits the site
     // to a standstill by mid-morning — a saving that cannot be taken.
-    expect(findSwaps([group()], catalogue, labels, noTools)).toEqual([]);
-    const opted = findSwaps([group()], catalogue, labels, noTools, { allowFreeTier: true });
+    expect(findSwaps([group()], catalogue, labels, noReq)).toEqual([]);
+    const opted = findSwaps([group()], catalogue, labels, noReq, { allowFreeTier: true });
     expect(opted[0].candidateModelId).toBe('z/brilliant:free');
   });
 
   it('keys the suggestion on the activity it was given, not on the model', () => {
     const catalogue = [current, model({ id: 'b/half', promptPrice: 5e-7, completionPrice: 1e-6, agenticIndex: 55 })];
-    const [s] = findSwaps([group({ activity: 'source:gateway' })], catalogue, new Map([['source:gateway', 'Untagged site calls']]), noTools);
+    const [s] = findSwaps([group({ activity: 'source:gateway' })], catalogue, new Map([['source:gateway', 'Untagged site calls']]), noReq);
     expect(s.activity).toBe('source:gateway');
     expect(s.label).toBe('Untagged site calls');
   });
 
   it('ignores a model that is not in the catalogue at all (Codex, subscription-billed)', () => {
-    const rows = findSwaps([group({ model: 'codex/gpt-5.6-terra' })], [current], labels, noTools);
+    const rows = findSwaps([group({ model: 'codex/gpt-5.6-terra' })], [current], labels, noReq);
     expect(rows).toEqual([]);
   });
 
@@ -168,7 +205,7 @@ describe('findSwaps', () => {
       ],
       catalogue,
       new Map(),
-      noTools,
+      noReq,
     );
     expect(rows.map((r) => r.activity)).toEqual(['big', 'small']);
   });
@@ -211,10 +248,47 @@ describe('findWaste', () => {
   });
 
   it('flags a cold prompt cache', () => {
-    const cold = findWaste([group()], { windowDays: 30, cacheReadTokens: 100, totalInputTokens: 1_000_000 });
+    const cold = findWaste([group()], {
+      windowDays: 30,
+      cacheReadTokens: 100,
+      totalInputTokens: 1_000_000,
+      measuredInputTokens: 1_000_000,
+    });
     expect(cold.find((w) => w.id === 'cache')).toBeDefined();
-    const warm = findWaste([group()], { windowDays: 30, cacheReadTokens: 600_000, totalInputTokens: 1_000_000 });
+    const warm = findWaste([group()], {
+      windowDays: 30,
+      cacheReadTokens: 600_000,
+      totalInputTokens: 1_000_000,
+      measuredInputTokens: 1_000_000,
+    });
     expect(warm.find((w) => w.id === 'cache')).toBeUndefined();
+  });
+
+  it('says the cache is unmeasured rather than cold when no row carries a figure', () => {
+    // The state the ledger was actually in the day the column was added: a
+    // month of spend, none of it recording cache reads. "0.0% cached" would
+    // send you hunting a prefix-churn bug that does not exist.
+    const w = findWaste([group()], {
+      windowDays: 30,
+      cacheReadTokens: 0,
+      totalInputTokens: 1_000_000,
+      measuredInputTokens: 0,
+    });
+    expect(w.find((x) => x.id === 'cache')).toBeUndefined();
+    expect(w.find((x) => x.id === 'cache-unmeasured')).toBeDefined();
+  });
+
+  it('judges the hit rate on the measured rows only', () => {
+    // 9/10 of the window predates the column. The measured tenth is 60% cached,
+    // which is healthy — dividing by the whole window would call it 6% and warn.
+    const w = findWaste([group()], {
+      windowDays: 30,
+      cacheReadTokens: 60_000,
+      totalInputTokens: 1_000_000,
+      measuredInputTokens: 100_000,
+    });
+    expect(w.find((x) => x.id === 'cache')).toBeUndefined();
+    expect(w.find((x) => x.id === 'cache-unmeasured')).toBeUndefined();
   });
 });
 
