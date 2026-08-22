@@ -1,41 +1,27 @@
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { isNotNull } from 'drizzle-orm';
+import { STATIC_PROJECT_KEYS, isProjectSlug } from './visibility';
 
-// The hardcoded "Field Study" cards on /projects, keyed by their URL segment
-// (the part after /projects/). AI-built projects are keyed by their publishedSlug.
-//
-// IMPORTANT: every key rendered by a `visToggle(...)` card in
-// src/routes/projects/+page.svelte MUST appear here, or its public/private
-// toggle silently fails (POST /api/projects/visibility → 400 Unknown project
-// key → the page reverts optimistically). src/lib/projects/registry-cards.test.ts
-// guards this parity so a new card can't ship un-toggleable.
-export const STATIC_PROJECT_KEYS = [
-  'engine-room',
-  'scs-earnings',
-  'broads-pilot',
-  'terminal-descent',
-  'data-standard-designer',
-  'data-spine',
-  'dfe-data-strategy',
-  'dfe-data-estate',
-  'policy-engine',
-  'whitehall',
-  'brass-and-rails',
-  'archetype',
-  'data-convergence',
-  'bathroom',
-] as const;
+// The static card keys live in ./visibility, next to the default they decide,
+// and are re-exported here because that is where every caller already imports
+// them from.
+export { STATIC_PROJECT_KEYS };
 
 // Keys that may legitimately be toggled: the static cards plus any currently
 // published AI build. Used to validate the visibility API so arbitrary rows
 // can't be written.
+//
+// A git-target build's `publishedSlug` is a PR URL or branch ref, not an
+// address (see isProjectSlug) — those are filtered out, so a toggle can no
+// longer write a `project_visibility` row keyed on a GitHub URL. The 15 such
+// rows prod accumulated are exactly what that used to produce.
 export async function getAllowedProjectKeys(): Promise<Set<string>> {
   const builds = await db
     .select({ slug: jkaiBuilds.publishedSlug })
     .from(jkaiBuilds)
     .where(isNotNull(jkaiBuilds.publishedSlug));
   const keys = new Set<string>(STATIC_PROJECT_KEYS);
-  for (const b of builds) if (b.slug) keys.add(b.slug);
+  for (const b of builds) if (isProjectSlug(b.slug)) keys.add(b.slug);
   return keys;
 }

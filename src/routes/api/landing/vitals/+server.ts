@@ -4,7 +4,8 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { db } from '$lib/db';
 import { jkaiBuilds, workflows, workflowRuns, projectVisibility } from '$lib/db/schema';
-import { and, desc, eq, like, not, isNotNull, sql } from 'drizzle-orm';
+import { desc, eq, like, isNotNull, sql } from 'drizzle-orm';
+import { isProjectSlug, defaultsPublic } from '$lib/projects/visibility';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 
 /**
@@ -127,10 +128,12 @@ async function compute(): Promise<VitalsPayload> {
       .orderBy(desc(jkaiBuilds.createdAt))
       .limit(1),
     // "Shipped" = published to a real /projects/<slug> page that is PUBLIC.
-    // Exclude Forge/git-target builds (they store a PR/branch URL in
-    // publishedSlug, not a slug) and any project toggled private in
-    // project_visibility (absence of a row means public — see
-    // $lib/projects/visibility). Never name a private project to an anon visitor.
+    // Forge/git-target builds park a PR URL or branch ref in publishedSlug
+    // rather than a slug; both are dropped by isProjectSlug below. (A SQL
+    // `not like 'http%'` used to do it, and matched neither
+    // `master...agent/ab2-…` nor anything else that is not a URL.) Visibility
+    // then applies: a build is private unless an explicit row publishes it —
+    // never name a private project to an anon visitor.
     db
       .select({
         title: jkaiBuilds.title,
@@ -139,7 +142,7 @@ async function compute(): Promise<VitalsPayload> {
       })
       .from(jkaiBuilds)
       .leftJoin(projectVisibility, eq(projectVisibility.projectKey, jkaiBuilds.publishedSlug))
-      .where(and(isNotNull(jkaiBuilds.publishedSlug), not(like(jkaiBuilds.publishedSlug, 'http%'))))
+      .where(isNotNull(jkaiBuilds.publishedSlug))
       .orderBy(desc(jkaiBuilds.createdAt)),
     db
       .select({ n: sql<number>`count(*)::int` })
@@ -155,10 +158,14 @@ async function compute(): Promise<VitalsPayload> {
 
   // shippedCount counts every real-slug publish (a bare number is not
   // sensitive); but only a PUBLIC project's title/link may be surfaced — naming
-  // a private project to an anon visitor is the actual leak. Public unless an
-  // explicit visibility row marks the slug private.
-  const publicPublished = publishedRows.filter((r) => r.isPublic !== false);
-  const builder = deriveBuilder(latestArr[0], publicPublished[0], publishedRows.length);
+  // a private project to an anon visitor is the actual leak. No visibility row
+  // means public for a static page and private for a build, so ask
+  // defaultsPublic rather than assuming either way.
+  const slugPublishes = publishedRows.filter((r) => isProjectSlug(r.publishedSlug));
+  const publicPublished = slugPublishes.filter(
+    (r) => r.isPublic ?? defaultsPublic(r.publishedSlug!),
+  );
+  const builder = deriveBuilder(latestArr[0], publicPublished[0], slugPublishes.length);
   const lastRunTs = canvasRunArr[0]?.ts ?? null;
 
   return {
