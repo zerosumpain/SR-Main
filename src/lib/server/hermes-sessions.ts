@@ -244,9 +244,41 @@ export interface Telemetry {
   activity: TelemetryDay[];
   topTools: TelemetryTool[];
   topSessions: TelemetryTopSession[];
+  /**
+   * Fingerprint of the OpenRouter key the ENGINE bills to.
+   *
+   * The site and the engine do not necessarily share a key: on homeserv they
+   * do, on the VPS they do not. Whoever reconciles this spend against an
+   * OpenRouter bill has to know which — otherwise the VPS compares a combined
+   * ledger against a key that only ever billed half of it, and reports 300%
+   * coverage as if that meant something.
+   */
+  keyFingerprint: string | null;
 }
 
 const COST = 'COALESCE(actual_cost_usd, estimated_cost_usd, 0)';
+
+/**
+ * Which OpenRouter key the engine spends on, as a comparable fingerprint.
+ *
+ * Read from Hermes' own `.env` rather than the site's, because that is the file
+ * the engine actually authenticates with. Returns null rather than throwing:
+ * an unreadable file means "cannot say", and the page renders that as a caveat
+ * instead of a claim.
+ */
+async function engineKeyFingerprint(): Promise<string | null> {
+  try {
+    const { readFile } = await import('node:fs/promises');
+    const text = await readFile(`${HERMES_HOME}/.env`, 'utf8');
+    const line = text.split('\n').find((l) => /^\s*OPENROUTER_API_KEY\s*=/.test(l));
+    if (!line) return null;
+    const raw = line.slice(line.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '');
+    const { keyFingerprint } = await import('./models/openrouter-usage');
+    return keyFingerprint(raw);
+  } catch {
+    return null;
+  }
+}
 
 // ── Tool-call forensic audit (which tools, how often, when, errors) ──────────
 export interface ToolAuditCount { tool: string; calls: number; }
@@ -373,6 +405,7 @@ export async function getTelemetry(daysIn = 30): Promise<Telemetry> {
     activity,
     topTools,
     topSessions,
+    keyFingerprint: await engineKeyFingerprint(),
   };
 }
 

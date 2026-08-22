@@ -40,6 +40,21 @@ export interface OpenRouterKeyUsage {
   limitUsd: number | null;
   /** Epoch ms the figure was fetched. */
   fetchedAt: number;
+  /**
+   * Locally computed `sk-or-v1-xxx…yyy` for the key these figures belong to.
+   *
+   * NOT `label` — that is OpenRouter's own masking and only ever describes the
+   * key this process holds. This one is computed the same way on both hosts, so
+   * it can be compared against the engine's key to answer the question the
+   * coverage table depends on: is the engine's spend even billed to this key?
+   */
+  fingerprint: string | null;
+}
+
+/** Enough of a key to compare two of them, and never enough to use one. */
+export function keyFingerprint(key: string | null | undefined): string | null {
+  if (!key || key.length < 12) return null;
+  return `${key.slice(0, 12)}…${key.slice(-4)}`;
 }
 
 /** Same cadence as ./openrouter-credits.ts — the number only moves as fast as
@@ -94,6 +109,7 @@ async function fetchKeyUsage(): Promise<OpenRouterKeyUsage | null> {
       lifetime: num(d.usage),
       limitUsd: typeof d.limit === 'number' ? d.limit : null,
       fetchedAt: Date.now(),
+      fingerprint: keyFingerprint(apiKey),
     };
   } catch (err) {
     console.warn('[openrouter-usage] fetch failed:', err instanceof Error ? err.message : err);
