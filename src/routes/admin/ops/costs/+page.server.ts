@@ -462,14 +462,43 @@ export const load: PageServerLoad = async ({ url }) => {
   const combinedWindowUsd =
     hermesSpend ? n(w?.cost) - jkaiChatInWindow + hermesSpend.overview.costUsd : null;
 
+  /**
+   * Does the engine's spend even land on the key we are reconciling against?
+   *
+   * On homeserv it does — the site and Hermes read the same `sk-or-v1-…`. On
+   * the VPS they do not: production authenticates with its own key while the
+   * engine keeps billing homeserv's. Adding the engine's $12.78 to the site
+   * ledger and dividing by production's key produced ~300% "coverage", which
+   * reads as a Codex artefact rather than the category error it is.
+   *
+   * Three-valued on purpose. `null` means the engine did not say — an older
+   * homeserv build, or an unreadable Hermes `.env` — and an unknown must render
+   * as a caveat, never as either claim.
+   */
+  const engineKey = hermesSpend?.keyFingerprint ?? null;
+  const siteKey = keyUsage?.fingerprint ?? null;
+  const enginesShareKey: boolean | null =
+    engineKey && siteKey ? engineKey === siteKey : null;
+
   const reconciliation = {
     day: reconcile(keyUsage?.daily ?? null, n(today?.cost)),
     week: reconcile(keyUsage?.weekly ?? null, n(week?.cost)),
     month: reconcile(keyUsage?.monthly ?? null, n(month?.cost)),
-    /** The selected window, counting the engine too. Null when it is unreachable. */
-    window: reconcile(windowBilled(keyUsage, days), combinedWindowUsd ?? n(w?.cost)),
+    /**
+     * The selected window, counting the engine too — but ONLY where that is a
+     * like-for-like comparison. Where the engine bills a different key, the
+     * combined figure is still shown (it is the honest total spend); it just
+     * is not divided by a bill that never covered it.
+     */
+    window:
+      enginesShareKey === true
+        ? reconcile(windowBilled(keyUsage, days), combinedWindowUsd ?? n(w?.cost))
+        : reconcile(null, combinedWindowUsd ?? n(w?.cost)),
     combinedWindowUsd,
     jkaiChatOverlapUsd: jkaiChatInWindow,
+    enginesShareKey,
+    engineKeyLabel: engineKey,
+    siteKeyLabel: siteKey,
   };
 
   return {

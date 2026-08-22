@@ -237,13 +237,24 @@
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Coverage</span>
       <span class="nm-sec-meta">
-        {data.provider.key ? `OpenRouter key ${data.provider.key.label ?? ''}` : 'OpenRouter unreachable'}
+        <!-- The locally computed fingerprint, not OpenRouter's own `label`: the
+             note below compares this key against the engine's, and two keys
+             shown under two different maskings read as three keys. -->
+        {data.provider.key
+          ? `OpenRouter key ${data.reconciliation.siteKeyLabel ?? data.provider.key.label ?? ''}`
+          : 'OpenRouter unreachable'}
       </span>
     </div>
     <p class="sec-lede">
       The ledger is the site's own account of its spend, and an account kept by the thing being
       measured cannot report what it missed. These rows compare it against what OpenRouter actually
-      billed this key — the same key the Hermes engine uses, so the comparison covers both.
+      billed this key.
+      {#if data.reconciliation.enginesShareKey === true}
+        The Hermes engine spends on the same key, so the comparison covers both.
+      {:else if data.reconciliation.enginesShareKey === false}
+        The Hermes engine spends on a <strong>different</strong> key, so these rows cover the site
+        only — see the note beneath the table.
+      {/if}
     </p>
 
     {#if !data.provider.key}
@@ -258,7 +269,7 @@
             <tr><th>Window</th><th>Billed by OpenRouter</th><th>Recorded here</th><th>Unaccounted</th><th>Coverage</th></tr>
           </thead>
           <tbody>
-            {#each [["OpenRouter's day (site ledger)", data.reconciliation.day], ["OpenRouter's week (site ledger)", data.reconciliation.week], ["OpenRouter's month (site ledger)", data.reconciliation.month], [`Last ${data.days} days — site + engine`, data.reconciliation.window]] as const as [label, r] (label)}
+            {#each [["OpenRouter's day (site ledger)", data.reconciliation.day], ["OpenRouter's week (site ledger)", data.reconciliation.week], ["OpenRouter's month (site ledger)", data.reconciliation.month], [data.reconciliation.enginesShareKey === true ? `Last ${data.days} days — site + engine` : `Last ${data.days} days — site + engine (recorded only)`, data.reconciliation.window]] as const as [label, r] (label)}
               <tr>
                 <td>{label}</td>
                 <td class="num">{usd(r.billedUsd)}</td>
@@ -296,11 +307,34 @@
           completeness check. The last adds the Hermes engine's separate store and removes the
           overlap between them — /jkai web-chat turns are Hermes sessions that the chat endpoint also
           back-fills into the site ledger, {usd(data.reconciliation.jkaiChatOverlapUsd)} of this window.
-          {#if data.reconciliation.window.billedUsd == null}
+          {#if data.reconciliation.enginesShareKey === true && data.reconciliation.window.billedUsd == null}
             OpenRouter publishes day, week and month and nothing else, so a {data.days}-day window has
             no counterpart to check against — pick 1d, 7d or 30d for the combined check.
           {/if}
         </li>
+        <!--
+          The engine does not necessarily bill the key above. On homeserv it does;
+          on the VPS it does not. Saying so is the whole point of the row — a
+          combined ledger over a key that billed half of it reads ~300% and looks
+          like a Codex artefact rather than a category error.
+        -->
+        {#if data.reconciliation.enginesShareKey === false}
+          <li>
+            <strong>The engine bills a different key.</strong> This host authenticates with
+            <code>{data.reconciliation.siteKeyLabel}</code>; the Hermes engine spends on
+            <code>{data.reconciliation.engineKeyLabel}</code>. Its
+            {usd(data.hermesSpend?.overview.costUsd ?? null)} is real and is counted in the combined
+            total, but it is <strong>not</strong> divided by the bill above, because that bill never
+            covered it. Both keys draw on the same account, so the lifetime figure below does cover
+            everything.
+          </li>
+        {:else if data.reconciliation.enginesShareKey === null && data.hermesSpend}
+          <li>
+            Whether the engine bills this same key could not be established — an older engine build,
+            or an unreadable config. The combined row is therefore <strong>not</strong> reconciled
+            against the bill; the recorded total still stands.
+          </li>
+        {/if}
         <li>
           <strong>Over 100% is possible and is not a bug.</strong> Codex calls are priced and recorded
           here but billed to a ChatGPT subscription, not to OpenRouter, so a Codex-heavy window
@@ -315,8 +349,9 @@
               This key has spent {usd(data.provider.key.lifetime, 2)} of that.
             {/if}
             {#if data.provider.otherKeysUsd != null && data.provider.otherKeysUsd > 0.01}
-              The remaining <strong>{usd(data.provider.otherKeysUsd, 2)}</strong> was spent on other or
-              retired keys — no instrumentation in this codebase can see it.
+              The remaining <strong>{usd(data.provider.otherKeysUsd, 2)}</strong> was spent on other
+              keys on this account — retired ones, and the live key the other host authenticates
+              with. Neither is readable from here.
             {/if}
           </li>
         {/if}
@@ -339,8 +374,15 @@
     </div>
     <p class="sec-lede">
       The engine is a separate runtime that never goes through the site's LLM gateway, so none of this
-      appears in the table above — but it bills to the same OpenRouter key. Read as a second source,
-      not merged, because the two stores have different coverage and different clocks.
+      appears in the table above.
+      {#if data.reconciliation.enginesShareKey === true}
+        It bills to the same OpenRouter key.
+      {:else if data.reconciliation.enginesShareKey === false}
+        It bills to a different OpenRouter key (<code>{data.reconciliation.engineKeyLabel}</code>) on
+        the same account.
+      {/if}
+      Read as a second source, not merged, because the two stores have different coverage and
+      different clocks.
     </p>
 
     {#if !data.hermesSpend}
