@@ -11,6 +11,7 @@ import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { salvageSummaries, type SalvagedSummary } from './summary-salvage';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/jkai/activity-context';
 import { decayWeight } from './staleness';
 import { canonicalName } from './resolve/match';
 import type {
@@ -441,22 +442,24 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
     let summaries: SalvagedSummary[] = [];
     let diag = '';
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const response = await client.chat.completions.create({
-        model,
-        temperature: 0.3,
-        max_tokens: summaryTokenBudget(payload.length),
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-              'For each entity, write a concise 2-3 sentence summary from the evidence given. Focus on role, key relationships, and current concerns. ' +
-              'Return ONLY a JSON object of the form {"summaries":[{"id":"<entity id>","summary":"..."}]} covering every entity you were given. ' +
-              'If the evidence says nothing useful about an entity, omit it rather than inventing detail.',
-          },
-          { role: 'user', content: JSON.stringify({ entities: payload }) },
-        ],
-      });
+      const response = await withActivity('extraction', () =>
+        client.chat.completions.create({
+          model,
+          temperature: 0.3,
+          max_tokens: summaryTokenBudget(payload.length),
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content:
+                'For each entity, write a concise 2-3 sentence summary from the evidence given. Focus on role, key relationships, and current concerns. ' +
+                'Return ONLY a JSON object of the form {"summaries":[{"id":"<entity id>","summary":"..."}]} covering every entity you were given. ' +
+                'If the evidence says nothing useful about an entity, omit it rather than inventing detail.',
+            },
+            { role: 'user', content: JSON.stringify({ entities: payload }) },
+          ],
+        }),
+      );
 
       const choice = response.choices[0];
       const raw = choice?.message?.content ?? '';

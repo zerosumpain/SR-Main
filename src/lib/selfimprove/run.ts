@@ -10,6 +10,7 @@
 import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
 import { and, eq, gte } from 'drizzle-orm';
+import { withActivity } from '$lib/jkai/activity-context';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
@@ -108,12 +109,14 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       const { client, model } = await getLLMClient(await resolveSelfimproveModel());
       // max_tokens >= 3000 so GLM reasoning tokens don't truncate the answer
       // (feedback_glm_reasoning_tokens). No response_format — we parse loosely.
-      const resp = await client.chat.completions.create({
-        model,
-        messages,
-        max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
-        temperature: opts?.temperature ?? 0.3,
-      });
+      const resp = await withActivity('selfimprove', () =>
+        client.chat.completions.create({
+          model,
+          messages,
+          max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
+          temperature: opts?.temperature ?? 0.3,
+        }),
+      );
 
       budget.llmCalls++;
       const usage = resp.usage;

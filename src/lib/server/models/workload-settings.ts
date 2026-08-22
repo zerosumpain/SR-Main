@@ -115,8 +115,26 @@ export async function resolveVisionModel(): Promise<ModelContext> {
   return coerceModelContext({ modelId: def.fallbackModelId! });
 }
 
-/** Image GENERATION for the studio and the canvas image tool. */
+/** Image GENERATION for the studio explainer images (chat-completions). */
 export const resolveImageModel = () => resolveById('image');
+
+/**
+ * The `generate_image` tool's FLUX model (/images/generations).
+ *
+ * Precedence: an explicit pin, then the legacy `JKAI_IMAGE_MODEL` env var, then
+ * the constant. The env var is honoured HERE rather than in the constants module
+ * because that module is client-importable — and it sits below the pin so that
+ * setting the model from the page beats a stale variable in a `.env` nobody has
+ * looked at since it was written.
+ */
+export async function resolveImageToolModel(): Promise<ModelContext> {
+  const def = SITE_WORKLOADS.find((w) => w.id === 'image-tool')!;
+  const pinned = await getSetting<{ modelId?: string } | null>(def.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  const fromEnv = process.env.JKAI_IMAGE_MODEL;
+  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
+  return coerceModelContext({ modelId: def.fallbackModelId! });
+}
 
 /** RAG / file embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const resolveEmbeddingModel = () => resolveById('embeddings');

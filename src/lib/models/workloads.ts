@@ -34,6 +34,7 @@ import {
   DEFAULT_DOCTOR_MODEL_ID,
   DEFAULT_VISION_MODEL_ID,
   DEFAULT_IMAGE_MODEL_ID,
+  DEFAULT_IMAGE_TOOL_MODEL_ID,
   DEFAULT_EMBEDDING_MODEL_ID,
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_ART_DIRECTOR_MODEL_ID,
@@ -219,6 +220,21 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'tools',
     reason:
       'A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it.',
+  },
+  {
+    id: 'image-tool',
+    scope: 'site',
+    label: 'Image tool (FLUX)',
+    blurb: "The canvas/chat `generate_image` tool — OpenRouter's /images/generations endpoint.",
+    key: 'jkai.image.tool_model',
+    fallbackModelId: DEFAULT_IMAGE_TOOL_MODEL_ID,
+    requires: null,
+    // OpenRouter's /models feed does not carry the dedicated image-generation
+    // namespace, so there is no list to pick from — the slug is typed in, the
+    // same situation as embeddings.
+    catalogue: 'none',
+    reason:
+      'A DIFFERENT API from the `image` role above: /images/generations, which the chat-completions image models do not serve. It was the last LLM spender on the site set only by an environment variable (JKAI_IMAGE_MODEL), i.e. unreadable and unchangeable from any screen.',
   },
   {
     id: 'embeddings',

@@ -78,6 +78,22 @@ export const DEFAULT_VISION_MODEL_ID = 'google/gemini-2.5-flash';
 /** Image GENERATION. Must emit an image; no text model can serve this at all. */
 export const DEFAULT_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image';
 
+/**
+ * The canvas/chat `generate_image` tool, which calls OpenRouter's
+ * /images/generations endpoint rather than chat-completions — a different API
+ * that the models above do not serve, and vice versa.
+ *
+ * Lived in `process.env.JKAI_IMAGE_MODEL` alone until 2026-08-22, which made it
+ * the one model on the site that no screen could show you and no screen could
+ * change. It is now the `image-tool` workload.
+ *
+ * A LITERAL, not a `process.env` read: this module is imported by
+ * `$lib/models/workloads`, which is deliberately client-importable so the picker
+ * renders the same list the server enforces. The env var is still honoured, one
+ * layer up in `resolveImageToolModel` where the server actually is.
+ */
+export const DEFAULT_IMAGE_TOOL_MODEL_ID = 'black-forest-labs/flux-1.1-pro';
+
 /** Embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const DEFAULT_EMBEDDING_MODEL_ID = 'openai/text-embedding-3-large';
 

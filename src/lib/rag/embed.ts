@@ -7,6 +7,7 @@
 
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveEmbeddingModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/jkai/activity-context';
 import { DEFAULT_EMBEDDING_MODEL_ID } from '$lib/constants/default-models';
 import { normalize } from './retrieve';
 
@@ -35,7 +36,9 @@ const BATCH_SIZE = 48;
 async function embedOnce(model: string, inputs: string[]): Promise<number[][]> {
   const { client } = await getLLMClient({ provider: 'openrouter', modelId: model });
   const truncated = inputs.map((t) => t.slice(0, MAX_INPUT_CHARS));
-  const response = await client.embeddings.create({ model, input: truncated });
+  const response = await withActivity('embeddings', () =>
+    client.embeddings.create({ model, input: truncated }),
+  );
   // OpenAI returns data in a stable order but includes an explicit index; sort
   // defensively so vectors line up with inputs regardless of provider ordering.
   const out = [...response.data]

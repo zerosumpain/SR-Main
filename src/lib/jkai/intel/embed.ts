@@ -1,4 +1,5 @@
 import { getLLMClient } from '$lib/jkai/llm-client';
+import { withActivity } from '$lib/jkai/activity-context';
 import { db } from '$lib/db';
 import { intelNotes, intelEntities } from '$lib/db/schema';
 import { and, eq, isNull, sql } from 'drizzle-orm';
@@ -10,10 +11,12 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
   const truncated = text.slice(0, 32000);
 
-  const response = await client.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: truncated,
-  });
+  const response = await withActivity('embeddings', () =>
+    client.embeddings.create({
+      model: EMBEDDING_MODEL,
+      input: truncated,
+    }),
+  );
 
   return response.data[0].embedding;
 }
@@ -22,10 +25,12 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   if (!texts.length) return [];
   const { client } = await getLLMClient({ provider: 'openrouter', modelId: EMBEDDING_MODEL });
-  const response = await client.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: texts.map((t) => t.slice(0, 32000)),
-  });
+  const response = await withActivity('embeddings', () =>
+    client.embeddings.create({
+      model: EMBEDDING_MODEL,
+      input: texts.map((t) => t.slice(0, 32000)),
+    }),
+  );
   // The API may return results out of order; `index` is authoritative.
   const out: number[][] = new Array(texts.length);
   for (const item of response.data) out[item.index] = item.embedding;

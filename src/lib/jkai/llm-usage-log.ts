@@ -18,9 +18,22 @@ export interface DurableLLMCall {
   model: string;
   tokensInput: number | null;
   tokensOutput: number | null;
+  /** Input tokens the provider served from its prompt cache. */
+  cacheReadTokens?: number | null;
+  /** Output tokens spent reasoning before the visible answer. */
+  reasoningTokens?: number | null;
   costUsd: number | null;
   /** Where the call came from: 'workflow' | 'jkai-chat' | 'gateway' | ... */
   source?: string;
+  /**
+   * Which LLM ROLE spent it — a workload id from `$lib/models/workloads`, or
+   * null when the call was not made inside one (a chat turn, a canvas LLM node).
+   *
+   * Kept separate from `source`, which says which *mechanism* carried the call.
+   * A vision OCR pass and an entity extraction both arrive as `source:'gateway'`
+   * and are entirely different bills.
+   */
+  activity?: string | null;
   /** Optional correlation id (e.g. a workflow runId or conversation id). */
   sessionId?: string | null;
 }
@@ -34,9 +47,18 @@ export function recordDurableLLMCall(call: DurableLLMCall): void {
       model: call.model,
       tokensInput: call.tokensInput ?? null,
       tokensOutput: call.tokensOutput ?? null,
+      cacheReadTokens: call.cacheReadTokens ?? null,
+      reasoningTokens: call.reasoningTokens ?? null,
       costUsd: call.costUsd ?? null,
       sessionId: call.sessionId ?? null,
-      input: call.source ? { source: call.source } : null,
+      // Both facets live in `input` rather than in new columns: this table is
+      // shared with the external-agent action log, which writes arbitrary
+      // payloads here already, and a jsonb key needs no migration on a table
+      // that is hot on every LLM call.
+      input:
+        call.source || call.activity
+          ? { ...(call.source ? { source: call.source } : {}), ...(call.activity ? { activity: call.activity } : {}) }
+          : null,
       status: 'completed',
     })
     .catch((err: unknown) => {

@@ -19,6 +19,7 @@ import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { resolveVisionModel, resolveAudioModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/jkai/activity-context';
 import type { ModelContext } from '$lib/server/models/types';
 
 
@@ -75,19 +76,21 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
 
   const attempt = async (ctx: ModelContext): Promise<string | null> => {
     const { client, model } = await getLLMClient(ctx);
-    const response = await client.chat.completions.create({
-      model,
-      max_tokens: 1024,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: IMAGE_PROMPT },
-            { type: 'image_url', image_url: { url: dataUrl } },
-          ],
-        },
-      ],
-    });
+    const response = await withActivity('audio', () =>
+      client.chat.completions.create({
+        model,
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: IMAGE_PROMPT },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      }),
+    );
     const text = response.choices[0]?.message?.content?.trim();
     return text ? text : null;
   };
@@ -97,7 +100,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
   // that arrives here can always actually see the picture.
   const visionCtx = await resolveVisionModel();
   try {
-    return await attempt(visionCtx);
+    return await withActivity('vision', () => attempt(visionCtx));
   } catch (err) {
     console.warn(
       `[file-index] ${visionCtx.modelId} caption failed (${(err as Error).message}); trying site default`,
@@ -114,7 +117,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
         );
         return null;
       }
-      return await attempt(fallback);
+      return await withActivity('vision', () => attempt(fallback));
     } catch (err2) {
       console.warn(`[file-index] image caption fully failed: ${(err2 as Error).message}`);
       return null;
@@ -220,7 +223,7 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
 
   const visionCtx = await resolveVisionModel();
   try {
-    return await attempt(visionCtx);
+    return await withActivity('vision', () => attempt(visionCtx));
   } catch (err) {
     console.warn(
       `[file-index] ${visionCtx.modelId} PDF OCR failed (${(err as Error).message}); trying site default`,
@@ -237,7 +240,7 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
         );
         return null;
       }
-      return await attempt(fallback);
+      return await withActivity('vision', () => attempt(fallback));
     } catch (err2) {
       console.warn(`[file-index] PDF OCR fully failed: ${(err2 as Error).message}`);
       return null;

@@ -5,6 +5,7 @@ import { openrouterModels } from '$lib/db/schema';
 import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workflows/execution-context';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { currentActivityId } from '$lib/jkai/activity-context';
 import { currentResearchSessionId } from '$lib/deepdive/meter';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
 import type { ModelProvider } from '$lib/server/models/types';
@@ -89,8 +90,14 @@ function captureUsage(
       model,
       tokensInput: promptTokens,
       tokensOutput: completionTokens,
+      cacheReadTokens,
+      reasoningTokens,
       costUsd,
       source: store ? 'workflow' : researchId ? 'research' : 'gateway',
+      // The workload this call is serving, when it is serving one. Without it
+      // every non-workflow, non-research call is indistinguishable in the
+      // ledger — see $lib/jkai/activity-context.
+      activity: currentActivityId(),
       sessionId: store?.runId ?? researchId,
     });
   }
@@ -209,14 +216,92 @@ async function withProviderCap<T extends { model?: string; max_tokens?: number |
   return { ...params, max_tokens: cap };
 }
 
+/**
+ * Wrap `embeddings.create` so embedding spend reaches the ledger too.
+ *
+ * This was the largest silent hole in the cost picture. Embeddings are not
+ * cheap in aggregate — RAG ingest, Drive file embeddings and the knowledge index
+ * embed every chunk of every document, in batches of 48 — and none of it was
+ * recorded, because the wrapper below only ever touched `chat.completions`.
+ *
+ * Two things differ from a chat call and both are handled honestly rather than
+ * papered over:
+ *  - there are no completion tokens, so `tokensOutput` records 0, not null: the
+ *    call really did produce no output tokens, which is not the same as "we
+ *    don't know";
+ *  - OpenRouter's /models feed carries no embedding models at all, so
+ *    `priceFor` returns null for every one of them. The provider's own
+ *    `usage.cost` is therefore usually the ONLY price signal, and where it is
+ *    absent the row lands with a null cost — visible on the page as an unpriced
+ *    call rather than as a fabricated zero.
+ */
+function installEmbeddingCapture(client: OpenAI, provider: ModelProvider): void {
+  type CreateFn = typeof client.embeddings.create;
+  const embeddings = client.embeddings as unknown as { create?: CreateFn } | undefined;
+  // A real SDK client always has this; a test double or a narrower shim may not.
+  // Usage capture must never be the reason a client stops working — that is the
+  // same rule the ledger insert follows, one layer down.
+  if (typeof embeddings?.create !== 'function') return;
+  const original = embeddings.create.bind(embeddings);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  embeddings.create = (async function (this: unknown, ...args: unknown[]): Promise<unknown> {
+    const params = (args[0] ?? {}) as { model?: string };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (original as any)(...args);
+    const model = params.model ?? '';
+    if (!model) return result;
+
+    const usage = (result as { usage?: { prompt_tokens?: number; total_tokens?: number; cost?: number } })
+      ?.usage;
+    const promptTokens = usage?.prompt_tokens ?? usage?.total_tokens ?? null;
+    if (promptTokens === null) return result;
+
+    const pricing = priceFor(provider, model);
+    const reportedCost =
+      typeof usage?.cost === 'number' && Number.isFinite(usage.cost) ? usage.cost : null;
+    const costUsd = reportedCost ?? (pricing ? computeCost(pricing, promptTokens, 0) : null);
+
+    recordLLMCall({
+      provider,
+      model,
+      tokensInput: promptTokens,
+      tokensOutput: 0,
+      cacheReadTokens: null,
+      reasoningTokens: null,
+      costUsd,
+      priceSnapshot: pricing
+        ? { inputPerMillion: pricing.inputPerMillion, outputPerMillion: pricing.outputPerMillion }
+        : null,
+    });
+
+    const store = executionContext.getStore();
+    const researchId = currentResearchSessionId();
+    recordDurableLLMCall({
+      provider,
+      model,
+      tokensInput: promptTokens,
+      tokensOutput: 0,
+      costUsd,
+      source: store ? 'workflow' : researchId ? 'research' : 'gateway',
+      activity: currentActivityId(),
+      sessionId: store?.runId ?? researchId,
+    });
+    return result;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }) as any;
+}
+
 /** Wrap a client's `chat.completions.create` so every call — streaming and
  *  non-streaming — captures usage into the workflow rollup AND the durable cost
  *  ledger, every reasoning-model call gets enough headroom to actually answer,
  *  and no call asks for more output than its model's provider will allow.
  *  For streams we ensure the provider emits a final usage chunk
  *  (stream_options.include_usage) and observe it transparently as the stream is
- *  consumed. Embeddings are not intercepted (only chat.completions). */
+ *  consumed. `embeddings.create` is wrapped too — see installEmbeddingCapture. */
 export function installUsageCapture(client: OpenAI, provider: ModelProvider): OpenAI {
+  installEmbeddingCapture(client, provider);
+
   type CreateFn = typeof client.chat.completions.create;
   const completions = client.chat.completions as unknown as { create: CreateFn };
   const original = completions.create.bind(completions);
