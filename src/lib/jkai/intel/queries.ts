@@ -10,6 +10,7 @@ import {
   intelDossiers,
 } from '$lib/db/schema';
 import { desc, eq, sql, isNull, asc, and } from 'drizzle-orm';
+import { linksToItem, observedAtSql, sourceHref } from './provenance';
 
 export async function listNotes(opts: { limit?: number; offset?: number; source?: string; format?: string } = {}) {
   const { limit = 50, offset = 0, source, format } = opts;
@@ -117,6 +118,12 @@ export async function listEntities(opts: { limit?: number; offset?: number; type
   return entities;
 }
 
+/** `sourceHref` plus whether it reached the item or fell back to the note. */
+function hrefFields(noteId: string, metadata: unknown) {
+  const href = sourceHref(noteId, metadata);
+  return { href, direct: linksToItem(href) };
+}
+
 export async function getEntityDetail(id: string) {
   const [entity] = await db
     .select({
@@ -132,6 +139,7 @@ export async function getEntityDetail(id: string) {
       confirmed: intelEntities.confirmed,
       createdAt: intelEntities.createdAt,
       updatedAt: intelEntities.updatedAt,
+      firstSeenIn: intelEntities.firstSeenIn,
     })
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
@@ -172,18 +180,80 @@ export async function getEntityDetail(id: string) {
 
   const entityNameMap = new Map(relatedEntities.map((e) => [e.id, { name: e.name, icon: e.typeIcon }]));
 
-  const notes = await db
+  // Provenance, in the same shape the hover card serves so both surfaces answer
+  // "where did this come from" identically — see `provenance.ts`.
+  const linked = await db
     .select({
-      noteId: intelNoteEntities.noteId,
+      id: intelNoteEntities.noteId,
       relevance: intelNoteEntities.relevance,
       excerpt: intelNoteEntities.excerpt,
-      noteTitle: intelNotes.title,
-      noteCreatedAt: intelNotes.createdAt,
+      title: intelNotes.title,
+      source: intelNotes.source,
+      metadata: intelNotes.metadata,
+      createdAt: intelNotes.createdAt,
+      observedAt: observedAtSql(intelNotes.observedAt, intelNotes.id).as('observed_at'),
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
     .where(eq(intelNoteEntities.entityId, id))
-    .orderBy(desc(intelNotes.createdAt));
+    .orderBy(sql`COALESCE(${observedAtSql(intelNotes.observedAt, intelNotes.id)}, ${intelNotes.createdAt}) DESC`);
+
+  // The note the entity was first extracted from is not always among the linked
+  // ones: an entity lifted from a deep dive or a chat thread often has no
+  // `intel_note_entities` row at all — 561 of 4,737 on 2026-08-05 — and its page
+  // showed no provenance whatsoever even though `first_seen_in` recorded it the
+  // whole time. Fetched separately so that entity still has a way back.
+  const firstSeenId = entity.firstSeenIn;
+  const [firstSeenNote] =
+    firstSeenId && !linked.some((n) => n.id === firstSeenId)
+      ? await db
+          .select({
+            id: intelNotes.id,
+            title: intelNotes.title,
+            source: intelNotes.source,
+            metadata: intelNotes.metadata,
+            createdAt: intelNotes.createdAt,
+            observedAt: observedAtSql(intelNotes.observedAt, intelNotes.id).as('observed_at'),
+          })
+          .from(intelNotes)
+          .where(eq(intelNotes.id, firstSeenId))
+          .limit(1)
+      : [];
+
+  const notes = [
+    ...linked.map((n) => ({
+      id: n.id,
+      title: n.title ?? 'Untitled',
+      source: n.source,
+      createdAt: n.createdAt,
+      observedAt: n.observedAt ?? null,
+      relevance: n.relevance,
+      excerpt: n.excerpt,
+      ...hrefFields(n.id, n.metadata),
+      firstSeen: n.id === firstSeenId,
+    })),
+    ...(firstSeenNote
+      ? [
+          {
+            id: firstSeenNote.id,
+            title: firstSeenNote.title ?? 'Untitled',
+            source: firstSeenNote.source,
+            createdAt: firstSeenNote.createdAt,
+            observedAt: firstSeenNote.observedAt ?? null,
+            relevance: null as string | null,
+            excerpt: null as string | null,
+            ...hrefFields(firstSeenNote.id, firstSeenNote.metadata),
+            firstSeen: true,
+          },
+        ]
+      : []),
+  ];
+
+  // Split rather than flagged-in-place: the origin and what has happened since
+  // are two different questions, and a "first seen" badge buried at position
+  // nine of a date-ordered list answers neither.
+  const firstSource = notes.find((n) => n.firstSeen) ?? null;
+  const laterSources = notes.filter((n) => !n.firstSeen);
 
   const timelineEvents = await db
     .select()
@@ -200,6 +270,8 @@ export async function getEntityDetail(id: string) {
       return { ...r, direction, otherEntityId: otherId, otherEntityName: other?.name ?? 'Unknown', otherEntityIcon: other?.icon ?? '🔷' };
     }),
     notes,
+    firstSource,
+    laterSources,
     timelineEvents,
   };
 }

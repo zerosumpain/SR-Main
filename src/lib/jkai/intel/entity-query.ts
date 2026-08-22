@@ -253,6 +253,24 @@ export function escapeLike(value: string): string {
 
 // ── SQL (dynamic `$lib/db` import — see the file header) ─────────────────────
 
+/**
+ * One clickable source behind an entity. `href` links to the item itself where
+ * the note's metadata identifies one (a Gmail permalink, a deep dive) and to
+ * the extracted note otherwise — `direct` says which you are getting, because
+ * "the email" and "what we extracted from the email" are different promises.
+ */
+export interface SourceRef {
+  noteId: string;
+  title: string;
+  /** `intel_notes.source` — email, file, chat, research, web. */
+  source: string;
+  href: string;
+  direct: boolean;
+  /** Observation time where anything recorded one, ingest time otherwise. */
+  at: Date;
+  observed: boolean;
+}
+
 export interface EntityRow {
   id: string;
   name: string;
@@ -272,6 +290,12 @@ export interface EntityRow {
   updatedAt: Date;
   noteCount: number;
   relationshipCount: number;
+  /** Where this entity was first extracted. Null on rows predating the column. */
+  firstSource: SourceRef | null;
+  /** The most recently observed source asserting it — null when it has none. */
+  latestSource: SourceRef | null;
+  /** Sources other than the origin: how much has landed since. */
+  laterSourceCount: number;
 }
 
 export interface EntityPage {

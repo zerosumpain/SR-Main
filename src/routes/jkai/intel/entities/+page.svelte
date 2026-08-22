@@ -304,6 +304,7 @@
             <th>
               <button type="button" onclick={() => applySort('name')}>Name {sortIndicator('name')}</button>
             </th>
+            <th class="src">Source</th>
             <th class="num">
               <button type="button" onclick={() => applySort('connections')}>Links {sortIndicator('connections')}</button>
             </th>
@@ -336,6 +337,44 @@
                   </span>
                 </a>
                 <span class="type">{entity.typeName}</span>
+              </td>
+              <!-- Where the row came from, and whether anything has landed since.
+                   The origin link goes to the item itself — the Gmail thread, the
+                   deep dive — wherever the note's metadata identifies one, and to
+                   the extracted note otherwise; the title says which. -->
+              <td class="src">
+                <!-- The cap lives on this div, not the cell: with `table-layout:
+                     auto` a `max-width` on a `<td>` is a suggestion, and one
+                     nowrap file path long enough would widen the column and push
+                     Links and Updated off the right edge. -->
+                <div class="srcwrap">
+                {#if entity.firstSource}
+                  <a
+                    class="srclink"
+                    href={entity.firstSource.href}
+                    title="Origin: {entity.firstSource.title} ({entity.firstSource.direct
+                      ? 'the source itself'
+                      : 'extracted note'})"
+                  >
+                    <span class="kind">{entity.firstSource.source}</span>
+                    <span class="stitle">{entity.firstSource.title}</span>
+                  </a>
+                {:else}
+                  <span class="none" title="No origin recorded — predates first-seen tracking">—</span>
+                {/if}
+                {#if entity.laterSourceCount > 0 && entity.latestSource}
+                  <a
+                    class="since"
+                    href={entity.latestSource.href}
+                    title="Newest of {entity.laterSourceCount} later source{entity.laterSourceCount ===
+                    1
+                      ? ''
+                      : 's'}: {entity.latestSource.title}"
+                  >
+                    +{entity.laterSourceCount} since
+                  </a>
+                {/if}
+                </div>
               </td>
               <td class="num">{entity.relationshipCount}</td>
               <td class="num">{entity.corroboration}</td>
@@ -553,8 +592,12 @@
   th.num button {
     text-align: right;
   }
+  /* The sortable headers get their typography from the <button> inside them;
+     the three static ones have to restate it or they render as browser-default
+     bold table headings next to seven mono labels. */
   th.state,
-  th.pick {
+  th.pick,
+  th.src {
     padding: 8px 10px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -587,6 +630,52 @@
   .when {
     color: var(--text-ghost);
     font-size: var(--fs-label-xs);
+  }
+
+  /* Wide enough for a source kind plus a readable stub of the title, and capped
+     so a long subject line cannot push Links and Updated off-screen. */
+  .srcwrap {
+    max-width: 220px;
+    min-width: 0;
+  }
+  .srclink {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    text-decoration: none;
+    color: var(--accent-ink);
+    min-width: 0;
+  }
+  .srclink:hover .stitle {
+    text-decoration: underline;
+  }
+  .kind {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .stitle {
+    font-size: var(--fs-label);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .since {
+    display: inline-block;
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    text-decoration: none;
+  }
+  .since:hover {
+    color: var(--accent);
+  }
+  .none {
+    color: var(--text-ghost);
   }
 
   a.row {
