@@ -85,8 +85,17 @@ export type AutoExtractOutcome =
 
 /** Cap the text sent to the model. Enough for a report; not a whole book. */
 const MAX_EXTRACT_CHARS = 24_000;
-/** Below this there is nothing worth an LLM call. */
-const MIN_EXTRACT_CHARS = 200;
+/**
+ * Below this there is nothing worth an LLM call.
+ *
+ * Exported so a caller that RATIONS its calls can apply the same floor before
+ * it spends from its budget. The Gmail sweep decremented `extractBudget` and
+ * then discovered the thread was too short in here — no note written, no model
+ * called, no hash stored, so the same thread was retried and cost another unit
+ * every night in perpetuity. Two clocks for one decision is always a bug; this
+ * is the one clock.
+ */
+export const MIN_EXTRACT_CHARS = 200;
 
 export function isAutoExtractEnabled(): boolean {
   // Off in the builder sidecar — that process imports this transitively but

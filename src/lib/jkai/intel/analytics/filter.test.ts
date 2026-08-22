@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { buildIndex, type GraphSnapshot } from './model';
-import { applyGraphFilter, nodeMatches, parseCsv } from './filter';
+import {
+  applyGraphFilter,
+  nodeMatches,
+  parseCsv,
+  nodeTimeUnder,
+  edgeTimeUnder,
+  inWindow,
+} from './filter';
 
 // A small graph with two separated regions, so "did the expansion leak?" is
 // answerable rather than a matter of opinion:
@@ -241,5 +248,143 @@ describe('source filter', () => {
       categories: ['work'],
     });
     expect([...keep]).toEqual(['ada']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The time window
+//
+// Shape of the fixture, and every part of it is load-bearing:
+//
+//   old1 ——(new edge)—— old2        fresh ——(old edge)—— touched      stale
+//
+// old1/old2 are months old and so is everything about them EXCEPT the edge
+// joining them, which appeared yesterday. That is the case a node-only recency
+// filter gets wrong: neither endpoint is recent, so the one genuinely new fact
+// in the graph vanishes at the moment it appears.
+// ---------------------------------------------------------------------------
+
+const DAY = 86_400_000;
+const NOW = Date.UTC(2026, 7, 22);
+
+function timedFixture() {
+  const snapshot: GraphSnapshot = {
+    nodes: [
+      node('old1', { createdAt: NOW - 90 * DAY, updatedAt: NOW - 90 * DAY, categories: ['work'] }),
+      node('old2', { createdAt: NOW - 90 * DAY, updatedAt: NOW - 90 * DAY, categories: ['home'] }),
+      node('fresh', { createdAt: NOW - DAY, updatedAt: NOW - DAY, categories: ['work'] }),
+      // Known for months, changed the day before yesterday — the whole reason
+      // there are two clocks rather than one.
+      node('touched', { createdAt: NOW - 90 * DAY, updatedAt: NOW - 2 * DAY, categories: ['work'] }),
+      // No timestamps at all. Must never be claimed as recent.
+      node('stale', { createdAt: 0, updatedAt: 0, categories: ['work'] }),
+    ],
+    edges: [
+      { ...edge('old1', 'old2'), id: 'e-new', createdAt: NOW - DAY, lastSeenAt: NOW - DAY },
+      { ...edge('fresh', 'touched'), id: 'e-old', createdAt: NOW - 90 * DAY, lastSeenAt: NOW - 90 * DAY },
+      { ...edge('old1', 'stale'), id: 'e-ancient', createdAt: NOW - 90 * DAY, lastSeenAt: NOW - 90 * DAY },
+    ],
+  };
+  const index = buildIndex(snapshot);
+  const community = new Map<string, number>(snapshot.nodes.map((n) => [n.id, 0]));
+  return { index, community };
+}
+
+describe('nodeTimeUnder / edgeTimeUnder', () => {
+  it('reads created_at under the added clock', () => {
+    const n = node('x', { createdAt: 100, updatedAt: 900 });
+    expect(nodeTimeUnder(n, 'added')).toBe(100);
+  });
+
+  it('reads the later of updated_at and created_at under the updated clock', () => {
+    expect(nodeTimeUnder(node('x', { createdAt: 100, updatedAt: 900 }), 'updated')).toBe(900);
+    // A row written but never updated must not read as older than it is.
+    expect(nodeTimeUnder(node('x', { createdAt: 100, updatedAt: 0 }), 'updated')).toBe(100);
+  });
+
+  it('falls back to created_at for an edge with no observation date', () => {
+    const e = { ...edge('a', 'b'), createdAt: 500, lastSeenAt: 0 };
+    expect(edgeTimeUnder(e, 'updated')).toBe(500);
+    expect(edgeTimeUnder(e, 'added')).toBe(500);
+  });
+});
+
+describe('inWindow', () => {
+  it('treats an unknown timestamp as outside any window', () => {
+    expect(inWindow(0, NOW - DAY, null)).toBe(false);
+  });
+
+  it('honours an open-ended bound on either side', () => {
+    expect(inWindow(NOW, NOW - DAY, null)).toBe(true);
+    expect(inWindow(NOW, null, NOW + DAY)).toBe(true);
+    expect(inWindow(NOW, NOW + DAY, null)).toBe(false);
+    expect(inWindow(NOW, null, NOW - DAY)).toBe(false);
+  });
+});
+
+describe('applyGraphFilter — time window', () => {
+  it('reports nothing as recent when no window is set', () => {
+    const { index, community } = timedFixture();
+    const res = applyGraphFilter(index, community, {});
+    expect(res.recentNodes).toEqual([]);
+    expect(res.recentEdges).toEqual([]);
+    expect(res.keep.size).toBe(5);
+  });
+
+  it('keeps only nodes added inside the window, under the added clock', () => {
+    const { index, community } = timedFixture();
+    const res = applyGraphFilter(index, community, { since: NOW - 7 * DAY, clock: 'added' });
+    // `touched` was added months ago — recently changed is not recently added.
+    expect(res.recentNodes).toEqual(['fresh']);
+  });
+
+  it('counts a recently changed node under the updated clock', () => {
+    const { index, community } = timedFixture();
+    const res = applyGraphFilter(index, community, { since: NOW - 7 * DAY, clock: 'updated' });
+    expect([...res.recentNodes].sort()).toEqual(['fresh', 'touched']);
+  });
+
+  it('pulls both endpoints of a new edge in, even though neither is recent', () => {
+    const { index, community } = timedFixture();
+    const res = applyGraphFilter(index, community, { since: NOW - 7 * DAY, clock: 'updated' });
+    expect(res.recentEdges).toEqual(['e-new']);
+    expect(res.keep.has('old1')).toBe(true);
+    expect(res.keep.has('old2')).toBe(true);
+    // …but they are not themselves reported as recent. They came along.
+    expect(res.recentNodes).not.toContain('old1');
+    expect(res.recentNodes).not.toContain('old2');
+  });
+
+  it('drops everything outside the window', () => {
+    const { index, community } = timedFixture();
+    const res = applyGraphFilter(index, community, { since: NOW - 7 * DAY, clock: 'updated' });
+    expect([...res.keep].sort()).toEqual(['fresh', 'old1', 'old2', 'touched']);
+    // Undated, unconnected to anything recent.
+    expect(res.keep.has('stale')).toBe(false);
+  });
+
+  it('honours an upper bound', () => {
+    const { index, community } = timedFixture();
+    const res = applyGraphFilter(index, community, {
+      since: NOW - 5 * DAY,
+      until: NOW - 36 * 3600_000, // yesterday is out; the day before is in
+      clock: 'updated',
+    });
+    expect(res.recentNodes).toEqual(['touched']);
+    expect(res.recentEdges).toEqual([]);
+  });
+
+  it('does not let a recent edge leak back a node an attribute filter excluded', () => {
+    const { index, community } = timedFixture();
+    // old2 is 'home'; narrowing to 'work' must remove it, and e-new must not
+    // reinstate it through the endpoint expansion.
+    const res = applyGraphFilter(index, community, {
+      since: NOW - 7 * DAY,
+      clock: 'updated',
+      categories: ['work'],
+    });
+    expect(res.keep.has('old2')).toBe(false);
+    expect(res.recentEdges).toEqual([]);
+    expect(res.keep.has('old1')).toBe(false);
   });
 });
