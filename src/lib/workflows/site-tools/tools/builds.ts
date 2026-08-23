@@ -169,7 +169,7 @@ register({
 register({
   name: 'build_list',
   description:
-    'List recent JKAI builds with status (pending/running/completed/failed). ' +
+    'List recent JKAI builds with status (pending/running/completed/failed) and `outcome` — `completed` alone does NOT mean it worked: read `outcome` for delivered | budget_cap | stopped_by_user | registered. ' +
     'Compact by default — returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. ' +
     'Pass verbose:true to return the full rows including heavy columns (prompt, config, serve_config, model fields).',
   parameters: {
@@ -192,6 +192,7 @@ register({
         id: jkaiBuilds.id,
         title: jkaiBuilds.title,
         status: jkaiBuilds.status,
+        outcome: jkaiBuilds.outcome,
         publishedSlug: jkaiBuilds.publishedSlug,
         createdAt: jkaiBuilds.createdAt,
       })
@@ -743,7 +744,7 @@ register({
       }
       const [updated] = await db
         .update(jkaiBuilds)
-        .set({ title, prompt, status: 'completed', updatedAt: new Date() })
+        .set({ title, prompt, status: 'completed', outcome: 'registered', updatedAt: new Date() })
         .where(eq(jkaiBuilds.id, updateId))
         .returning();
       build = updated;
@@ -753,6 +754,10 @@ register({
         title,
         prompt,
         status: 'completed',
+        // Hermes wrote the files itself in chat; the builder never ran. Filed
+        // as `completed` so it can be published, which made 15 of the first 83
+        // rows read as builder successes with zero iterations and zero tokens.
+        outcome: 'registered',
         origin: 'hermes',
         planStatus: 'approved',
         iterationsCompleted: 1,

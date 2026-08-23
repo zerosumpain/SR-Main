@@ -14,7 +14,8 @@ The workspace is at /home/jkai/workspace/BUILD_ID/dev with full read/write acces
 HOST ENVIRONMENT — these are ALREADY INSTALLED on the host. Do NOT reinstall them:
 - Python 3.12 (\`python3\`), pip, common stdlib + venv
 - Node 22 (\`node\`), npm, npx
-- Playwright + Chromium (\`npx playwright\` works out of the box; do NOT \`npm install playwright\` again — it's installed globally)
+- Playwright, with the BUNDLED CHROMIUM AND NOTHING ELSE (\`npx playwright\` works out of the box; do NOT \`npm install playwright\` again — it's installed globally).
+  Launch it as \`chromium.launch()\` with NO \`channel\` option. There is no Google Chrome on this host (\`channel: 'chrome'\` fails on /opt/google/chrome/chrome), and no webkit and no firefox — those binaries were never downloaded, and \`npx playwright install\` will not finish inside an iteration. Build bc8bf49f lost most of an iteration reaching for \`channel: 'chrome'\` and then webkit; if chromium cannot do it, use node:test or pytest instead.
 - Git, curl, wget, jq, ripgrep (\`rg\`)
 - bash + standard GNU coreutils
 - /usr/bin/pi (the agent CLI) — present but you don't invoke it directly

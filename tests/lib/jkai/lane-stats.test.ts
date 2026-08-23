@@ -6,6 +6,7 @@ function b(over: Partial<LaneInput> = {}): LaneInput {
 		origin: 'manual',
 		gitTargetConfig: null,
 		status: 'completed',
+		outcome: null,
 		iterationCount: 1,
 		publishedSlug: null,
 		...over,
@@ -95,5 +96,47 @@ describe('laneStats', () => {
 		expect(app.completed).toBe(1);
 		expect(app.failed).toBe(0);
 		expect(app.successRate).toBe(50);
+		expect(app.stopped).toBe(1);
+	});
+
+	it('does not count a budget cap-out or a hand-kill as a delivery', () => {
+		// The production shape: of 53 rows reading `completed`, only 27 had
+		// delivered. Six hit their budget and five were stopped by hand, and
+		// every one of them counted as a success.
+		const rows = [
+			b({ outcome: 'delivered', iterationCount: 2 }),
+			b({ outcome: 'budget_cap', iterationCount: 11 }),
+			b({ outcome: 'stopped_by_user', iterationCount: 6 }),
+			b({ status: 'failed', iterationCount: 3 }),
+		];
+		const app = laneStats(rows).find((s) => s.lane === 'app')!;
+		expect(app.ran).toBe(4);
+		// `completed` still counts all three, which is the number the old page
+		// showed: 75%.
+		expect(app.completed).toBe(3);
+		expect(app.delivered).toBe(1);
+		expect(app.capped).toBe(1);
+		expect(app.stopped).toBe(1);
+		expect(app.successRate).toBe(25);
+		// The cap-out's 11 iterations must not drag the median for delivery.
+		expect(app.medianIterations).toBe(2);
+	});
+
+	it('reads a null outcome as delivered so old rows are not demoted', () => {
+		const rows = [b({ outcome: null, iterationCount: 3 })];
+		const app = laneStats(rows).find((s) => s.lane === 'app')!;
+		expect(app.delivered).toBe(1);
+		expect(app.successRate).toBe(100);
+	});
+
+	it('counts registrations without letting them touch a rate', () => {
+		const rows = [
+			b({ origin: 'hermes', outcome: 'registered', iterationCount: 0 }),
+			b({ outcome: 'delivered', iterationCount: 2 }),
+		];
+		const app = laneStats(rows).find((s) => s.lane === 'app')!;
+		expect(app.registered).toBe(1);
+		expect(app.ran).toBe(1);
+		expect(app.successRate).toBe(100);
 	});
 });
