@@ -421,8 +421,37 @@ export type BuildPromptMode = 'app' | 'repo' | 'studio';
  * quietly omits a section is worse than none — it answers "why did it do that"
  * with the wrong text.
  */
-export const DESIGN_SYSTEM_PROMPT_BLOCK =
-  `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+const DESIGN_SYSTEM_HEAD =
+  `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n`;
+
+const DESIGN_SYSTEM_TAIL =
+  `4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+
+/**
+ * Step 3 is the only line that differs by mode, and it has to.
+ *
+ * An app build is a standalone project with no stylesheet of its own, so it
+ * genuinely must pull the tokens in. A repo build is a clone of THIS site,
+ * where \`src/app.css\` and \`$lib/styles/nm-tokens.css\` are already imported by
+ * the root layout — every page has the tokens before it asks. The mount is
+ * still useful there as documentation, but importing it is actively harmful:
+ * \`syncDesignAssets\` writes it into \`dev/\`, which for a git-target build IS
+ * the clone, and \`.git/info/exclude\` hides it. So a relative import resolves
+ * for the agent's own gate and dangles everywhere else.
+ *
+ * Change request #414 did exactly that — \`@import '../../../../design-system/
+ * tokens.css'\` in a new /projects page. Its gate passed, and CI failed on
+ * \`Can't resolve\`, because the two were not looking at the same tree. The
+ * agent was following instructions; the instructions were written for the
+ * other lane.
+ */
+export function designSystemPromptBlock(mode: BuildPromptMode = 'app'): string {
+  const step3 =
+    mode === 'repo'
+      ? `3. Do NOT import or copy anything from \`./design-system/\` — read it for guidance only. This is a clone of the site itself, so the tokens are ALREADY global: \`src/app.css\` and \`$lib/styles/nm-tokens.css\` are imported by the root layout and every page inherits them. Just use \`var(--…)\`. The mount is git-excluded and does not exist in CI, so an \`@import\` of it passes your gate and fails the build.\n`
+      : `3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n`;
+  return DESIGN_SYSTEM_HEAD + step3 + DESIGN_SYSTEM_TAIL;
+}
 
 // Canonical shape of a studio chapter-plan entry. src/lib/db/schema.ts keeps
 // its own inline copy of this shape on the `chapterPlan` jsonb column

@@ -1,7 +1,7 @@
 import {
   buildSystemPrompt,
   buildIterationContext,
-  DESIGN_SYSTEM_PROMPT_BLOCK,
+  designSystemPromptBlock,
   type BuildPromptMode,
   type ChapterPlanEntry,
 } from './prompt';
@@ -164,7 +164,7 @@ export async function executeIteration(
   let systemPrompt = buildSystemPrompt(build.id, assignedPort, promptMode);
   const enforceDesign = (build as JkaiBuild & { enforceDesignSystem?: boolean }).enforceDesignSystem !== false;
   if (enforceDesign && !isStudio) {
-    systemPrompt += DESIGN_SYSTEM_PROMPT_BLOCK;
+    systemPrompt += designSystemPromptBlock(promptMode);
   }
   if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
 
