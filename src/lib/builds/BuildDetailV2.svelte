@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
+  import { bucketLabel, bucketOf, outcomeNote } from './build-status';
   import { invalidateAll } from '$app/navigation';
   import Activity from './Activity.svelte';
   import FilesTimeline from './FilesTimeline.svelte';
@@ -66,6 +67,13 @@
   let elapsedTimer: ReturnType<typeof setInterval> | null = null;
   const isTerminalStatus = $derived(
     build.status === 'completed' || build.status === 'failed' || build.status === 'paused',
+  );
+  const detailBucket = $derived(
+    bucketOf({
+      status: build.status,
+      planStatus: (build as { planStatus?: string | null }).planStatus ?? null,
+      outcome: (build as { outcome?: string | null }).outcome ?? null,
+    }),
   );
   const startMs = $derived(
     build.startedAt ? new Date(build.startedAt).getTime() : new Date(build.createdAt).getTime(),
@@ -281,7 +289,12 @@
       <a class="row-link" href="/jkai/builds">← all builds</a>
       <div class="kicker">
         JKAI build ·
-        <span class="status-pill" data-status={build.status}>{build.status}</span>
+        <!-- The bucket, not the raw status: `completed` is claimed by a
+             delivery, a budget cap-out, a hand-kill and a Hermes
+             registration, and this pill painted all four the same green. -->
+        <span class="status-pill" data-status={detailBucket} title={outcomeNote(detailBucket) ?? ''}
+          >{bucketLabel(detailBucket)}</span
+        >
         ·
         <span class="elapsed" class:running={!isTerminalStatus} title="Elapsed since the build started">
           {formatElapsed(elapsedMs)}{!isTerminalStatus ? '' : ' (final)'}
@@ -501,13 +514,21 @@
   .status-pill[data-status='running'] {
     color: var(--accent);
   }
-  .status-pill[data-status='completed'] {
+  .status-pill[data-status='delivered'] {
     color: var(--status-success);
+  }
+  .status-pill[data-status='capped'],
+  .status-pill[data-status='stopped'],
+  .status-pill[data-status='registered'] {
+    color: var(--text-muted);
+  }
+  .status-pill[data-status='unknown'] {
+    color: var(--status-error);
   }
   .status-pill[data-status='failed'] {
     color: var(--status-error);
   }
-  .status-pill[data-status='awaiting_plan_approval'] {
+  .status-pill[data-status='awaiting'] {
     color: var(--accent);
   }
   .elapsed {

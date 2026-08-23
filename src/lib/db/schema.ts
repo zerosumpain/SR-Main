@@ -1061,6 +1061,16 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   title: text('title'),
   prompt: text('prompt').notNull(),
   status: text('status').notNull().default('pending'),
+  // Why the build stopped, as distinct from `status`. `completed` is claimed
+  // by three endings that are not the same thing: the builder delivered, it
+  // ran out of budget, or someone stopped it — plus Hermes registrations that
+  // file `completed` before a file exists. Counting them together reported 61%
+  // success where 43% was delivered. A separate nullable column rather than new
+  // statuses, because ten consumers read `status === 'completed'` to mean
+  // "terminal" and a new status would render a capped build as still running.
+  // 'delivered' | 'budget_cap' | 'stopped_by_user' | 'registered' — see
+  // $lib/builds/build-status.ts. Null on rows written before this existed.
+  outcome: text('outcome'),
   budgetConfig: jsonb('budget_config').notNull().default(sql`'{}'::jsonb`),
   tokensUsed: integer('tokens_used').notNull().default(0),
   // The split, kept rather than collapsed. recordBuildUsage receives prompt

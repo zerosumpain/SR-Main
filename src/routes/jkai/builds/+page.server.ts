@@ -29,6 +29,8 @@ export const load: PageServerLoad = async () => {
       origin: b.origin,
       gitTargetConfig: b.gitTargetConfig,
       status: b.status,
+      outcome: b.outcome,
+      planStatus: b.planStatus,
       iterationCount: byBuild.get(b.id) ?? 0,
       publishedSlug: b.publishedSlug,
     })),

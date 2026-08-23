@@ -267,6 +267,9 @@ class Orchestrator {
       .update(jkaiBuilds)
       .set({
         status: current?.failure ? 'failed' : 'completed',
+        // Recorded whichever way the status lands. Someone stopping a build is
+        // a fact about the build, not a second opinion on the failure.
+        outcome: 'stopped_by_user',
         queuedAction: null,
         queuedAt: null,
         updatedAt: new Date(),
@@ -970,9 +973,12 @@ class Orchestrator {
         if (budget.shouldComplete) {
           await db
             .update(jkaiBuilds)
-            .set({ status: 'completed', updatedAt: new Date() })
+            // Not a delivery. Six of the first 83 builds ended here and were
+            // counted as successes because `completed` was the only word for
+            // it; the log line said so too.
+            .set({ status: 'completed', outcome: 'budget_cap', updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
-          await emitLog(buildId, 'system', `Build completed: ${budget.reason}`);
+          await emitLog(buildId, 'system', `Build stopped on budget: ${budget.reason}`);
           this.activeBuildId = null;
           await this.dequeueNext();
           return;
@@ -1736,7 +1742,12 @@ class Orchestrator {
           }
           await db
             .update(jkaiBuilds)
-            .set({ status: 'completed', publishedSlug: prUrl, updatedAt: new Date() })
+            .set({
+              status: 'completed',
+              outcome: 'delivered',
+              publishedSlug: prUrl,
+              updatedAt: new Date(),
+            })
             .where(eq(jkaiBuilds.id, buildId));
 
           // Resolve any codegraph serve that is still open.
@@ -1798,7 +1809,7 @@ class Orchestrator {
         // fresh plan.
         await db
           .update(jkaiBuilds)
-          .set({ status: 'completed', updatedAt: new Date() })
+          .set({ status: 'completed', outcome: 'delivered', updatedAt: new Date() })
           .where(eq(jkaiBuilds.id, buildId));
         const previewUrl = (build.serveConfig as { port?: number } | null)?.port
           ? `/api/jkai/proxy/${buildId}/`
@@ -1827,7 +1838,7 @@ class Orchestrator {
         if (!shouldContinue) {
           await db
             .update(jkaiBuilds)
-            .set({ status: 'completed', updatedAt: new Date() })
+            .set({ status: 'completed', outcome: 'delivered', updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
           // Route through the SvelteKit proxy (/api/jkai/proxy/<id>/...) — the
           // sandbox container doesn't publish its agent-picked ports to the
