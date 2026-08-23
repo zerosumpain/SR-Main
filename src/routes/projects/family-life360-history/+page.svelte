@@ -197,8 +197,6 @@
 </div>
 
 <style>
-  @import '../../../../design-system/tokens.css';
-
   .wrap { max-width: 1100px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
   .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--line-title); }
   .kicker, .meta, dt, .timeline-date { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); color: var(--text-muted); }
