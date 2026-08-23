@@ -137,3 +137,29 @@ describe('hermesWillAnswerChat', () => {
     await expect(hermesWillAnswerChat(explodes, false, URL_)).resolves.toBe(false);
   });
 });
+
+describe('cache is keyed by base URL', () => {
+  const A = 'http://a.example:18790';
+  const B = 'http://b.example:18790';
+
+  it('does not answer for a URL it never probed', async () => {
+    const f = mockFetch((url) =>
+      String(url).startsWith(A)
+        ? new Response('ok', { status: 200 })
+        : Promise.reject(new Error('dark')),
+    );
+
+    await expect(isHermesReachable(A)).resolves.toBe(true);
+    // Without per-URL keying this returned A's `true` — a gateway reported
+    // reachable on the strength of a probe against a different host.
+    await expect(isHermesReachable(B)).resolves.toBe(false);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('single-flights per URL, not globally', async () => {
+    const f = mockFetch(() => new Response('ok', { status: 200 }));
+    await Promise.all([isHermesReachable(A), isHermesReachable(A), isHermesReachable(B)]);
+    // One probe for A (shared), one for B — not one total, and not three.
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+});
