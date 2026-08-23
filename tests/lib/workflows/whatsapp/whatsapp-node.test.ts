@@ -51,29 +51,22 @@ describe('whatsappExecutor', () => {
     expect(result.output.messageId).toBe('msg-abc');
   });
 
-  it('returns error when WhatsApp is not connected', async () => {
+  it('THROWS when WhatsApp is not connected — the run must not report success', async () => {
     mockGetState.mockReturnValue({ status: 'disconnected' });
     mockSendMessage.mockResolvedValue({ sent: false, error: 'WhatsApp not connected' });
 
-    const result = await whatsappExecutor.execute(
-      {},
-      { to: '+447359228511', message: 'test' },
-      mockContext,
-    );
-
-    expect(result.output.sent).toBe(false);
-    expect(result.output.error).toBe('WhatsApp not connected');
+    // Previously this returned `sent: false` and the engine recorded the node
+    // AND the run as `completed` — a delivery node reporting success while
+    // delivering nothing.
+    await expect(
+      whatsappExecutor.execute({}, { to: '+447359228511', message: 'test' }, mockContext),
+    ).rejects.toThrow(/WhatsApp not connected/);
   });
 
-  it('returns error when no recipient configured', async () => {
-    const result = await whatsappExecutor.execute(
-      {},
-      { to: '', message: 'test' },
-      mockContext,
-    );
-
-    expect(result.output.sent).toBe(false);
-    expect(result.output.error).toContain('No recipient');
+  it('THROWS when no recipient is configured', async () => {
+    await expect(
+      whatsappExecutor.execute({}, { to: '', message: 'test' }, mockContext),
+    ).rejects.toThrow(/no recipient/i);
   });
 });
 
