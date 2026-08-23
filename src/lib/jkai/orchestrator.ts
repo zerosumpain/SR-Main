@@ -92,42 +92,7 @@ const STUDIO_KIT_CHECK_FILES = ['explainer-kit/tokens.css', 'explainer-kit/three
 
 export { onBuildLog } from './log-emitter';
 
-/**
- * Detect whether an iteration's evaluation signals the project is complete.
- * Looks for strong completion signals in the evaluation text.
- */
-function detectCompletion(evaluation: string | null): boolean {
-  if (!evaluation) return false;
-  const lower = evaluation.toLowerCase();
-
-  // Look for completion percentages anchored to progress/completion context
-  // Must be near words like "complete", "done", "progress", "goal" to avoid false positives
-  // like "95% of tests passing" or "95% of CSS work done"
-  const pctMatch = lower.match(/(?:progress|complete|done|goal|finished|overall)[^.]{0,30}(\d+)\s*%|(\d+)\s*%[^.]{0,30}(?:complete|done|finished|overall)/);
-  const pctValue = pctMatch ? parseInt(pctMatch[1] || pctMatch[2]) : 0;
-  if (pctValue >= 95) return true;
-
-  // Strong completion phrases
-  const completionPhrases = [
-    'project is complete',
-    'project complete',
-    'all features implemented',
-    'all features have been implemented',
-    'fully complete',
-    'fully implemented',
-    'nothing remains',
-    'no remaining work',
-    'all goals achieved',
-    'all objectives met',
-    'everything is working',
-    'all requirements met',
-    'all requirements have been met',
-    'project is finished',
-    'build is complete',
-  ];
-
-  return completionPhrases.some((phrase) => lower.includes(phrase));
-}
+import { detectCompletion } from './completion-signal';
 
 // --- Orchestrator Singleton ---
 
@@ -1105,9 +1070,26 @@ class Orchestrator {
 
       const startTime = Date.now();
 
-      const retryNudge = isEmptyOutputRetry
-        ? 'Your previous turn produced no tool calls and no structured evaluation. Re-read the plan and make at least one concrete action this turn.'
-        : undefined;
+      // What the last turn got wrong, handed to this one. `prevIteration` is
+      // completed-only, so anything the loop continues past — a lint
+      // rejection, an empty turn — is otherwise erased from the next prompt
+      // entirely and the agent repeats itself. This suffix is the only
+      // channel that reaches it.
+      const nudges: string[] = [];
+      if (isEmptyOutputRetry) {
+        nudges.push(
+          'Your previous turn produced no tool calls and no structured evaluation. Re-read the plan and make at least one concrete action this turn.',
+        );
+      }
+      const lastFailure = lastIteration?.status === 'failed'
+        ? (lastIteration.failure as (FailureEnvelope & { findingsSummary?: string }) | null)
+        : null;
+      if (lastFailure?.kind === 'design_lint' && lastFailure.findingsSummary) {
+        nudges.push(
+          `Your previous turn (#${lastIteration!.number}) was rejected by the design-system linter and NOT promoted. Fix these before anything else — they are the reason that work was discarded:\n${lastFailure.findingsSummary}`,
+        );
+      }
+      const retryNudge = nudges.length ? nudges.join('\n\n') : undefined;
 
       const deadlineRef = { current: Date.now() + 30 * 60 * 1000 };
       this.currentDeadline = deadlineRef;
@@ -1357,8 +1339,16 @@ class Orchestrator {
                 status: 'failed',
                 failure: {
                   kind: 'design_lint',
-                  message: `${findings.length} design-system violations`,
+                  // The summary, not just the count. `prevIteration` is
+                  // completed-only, so a lint-rejected iteration is invisible
+                  // to the next prompt; carrying the findings here is what
+                  // lets runIteration hand them forward as a nudge. Without
+                  // it the agent is told it failed and never what on —
+                  // build 37a4109c was rejected six times over the same class
+                  // name with findings climbing 4 → 6.
+                  message: `${findings.length} design-system violations\n${summary}`,
                   findingsCount: findings.length,
+                  findingsSummary: summary,
                   attempts: 1,
                 } as unknown as Record<string, unknown>,
               })

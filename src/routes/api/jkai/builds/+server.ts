@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
@@ -36,14 +37,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: `prompt too long (max ${MAX_PROMPT_LEN} chars)` }, { status: 400 });
   }
 
-  const DEFAULT_BUDGET = {
-    maxIterations: 25,
-    maxTotalMinutes: 120,
-    // Total tokens, not output tokens — one ordinary iteration costs ~1M of
-    // them, so 1M here stalled a build after its first. See change-request.ts.
-    maxTokensPerHour: 3_000_000,
-    activeMinutesPerHour: 45,
-  };
+  const DEFAULT_BUDGET = { ...DEFAULT_BUILD_BUDGET };
 
   let ctx: ModelContext;
   if (modelProvider && modelId) {

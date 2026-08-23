@@ -211,7 +211,14 @@ export async function runTests(buildId: string, workdir: string): Promise<TestRu
   }
 
   // Run tests
-  const result = await execInSandbox(`bash ${workdir}/tests/run.sh 2>&1`, 120000);
+  // `cd` first: run.sh is the agent's own script and is written expecting to
+  // start at the workspace root. Invoking it as `bash <abs>/tests/run.sh` left
+  // CWD wherever the node process happened to be, so relative paths inside it
+  // resolved against the wrong root and the gate failed for a reason the agent
+  // could neither see nor fix — ~50 red gates across 8 builds. The
+  // auto-generated runners below embed an absolute `cd`, so this is idempotent
+  // for them and corrective for hand-written ones.
+  const result = await execInSandbox(`cd ${workdir} && bash tests/run.sh 2>&1`, 120000);
   const output = sanitize((result.stdout + '\n' + result.stderr).trim());
 
   // Parse results

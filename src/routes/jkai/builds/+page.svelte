@@ -54,5 +54,5 @@
 </script>
 
 {#key renderKey}
-  <BuildsListV2 builds={builds as any} />
+  <BuildsListV2 builds={builds as any} lanes={data?.lanes ?? []} />
 {/key}

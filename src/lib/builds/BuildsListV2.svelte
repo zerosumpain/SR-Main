@@ -1,6 +1,7 @@
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
   import PromoteModal from './PromoteModal.svelte';
+  import type { LaneStat } from './lane-stats';
 
   type Build = {
     id: string;
@@ -20,7 +21,7 @@
     createdAt: string | Date;
   };
 
-  let { builds: initialBuilds }: { builds: Build[] } = $props();
+  let { builds: initialBuilds, lanes = [] }: { builds: Build[]; lanes?: LaneStat[] } = $props();
   let builds = $state<Build[]>(initialBuilds);
   let busyId = $state<string | null>(null);
   let selected = $state<Set<string>>(new Set());
@@ -281,6 +282,35 @@
       </div>
     </div>
   </section>
+
+  {#if lanes.some((l) => l.total > 0)}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">By lane</span>
+        <span class="nm-sec-meta">rates over builds that actually ran an iteration</span>
+      </div>
+      <div class="lanes">
+        <div class="lane lane-hd">
+          <span>lane</span>
+          <span>ran</span>
+          <span>success</span>
+          <span>median iters</span>
+          <span>published</span>
+          <span>never ran</span>
+        </div>
+        {#each lanes as l (l.lane)}
+          <div class="lane">
+            <span class="lane-name">{l.lane}</span>
+            <span class="lane-n">{l.ran}<span class="lane-of">/{l.total}</span></span>
+            <span class="lane-n">{l.successRate === null ? '—' : `${l.successRate}%`}</span>
+            <span class="lane-n lane-key">{l.medianIterations === null ? '—' : l.medianIterations}</span>
+            <span class="lane-n">{l.published}</span>
+            <span class="lane-n lane-quiet">{l.neverRan || '—'}</span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <section class="nm-sec">
     <div class="nm-sec-hd">
@@ -660,6 +690,52 @@
   @media (max-width: 640px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
   }
+
+  /* ——— Lane split ———
+     Repo / app / studio is the strongest predictor of iteration cost in the
+     build history — roughly 10x between the extremes, at near-identical
+     success rates. Column widths are fixed rather than minmax(0,1fr): a
+     zero-min track collapses to nothing here. */
+  .lanes {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--card-border);
+    border: 1px solid var(--card-border);
+    overflow-x: auto;
+  }
+  .lane {
+    display: grid;
+    grid-template-columns: 7rem repeat(5, minmax(5.5rem, 1fr));
+    gap: 0.75rem;
+    align-items: baseline;
+    background: var(--card-bg);
+    padding: 0.6rem 0.85rem;
+    min-width: 34rem;
+  }
+  .lane-hd span {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+  .lane-name {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .lane-n {
+    font-family: var(--font-mono);
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .lane-key { color: var(--accent); }
+  .lane-of { color: var(--text-ghost); font-size: 0.8125rem; }
+  .lane-quiet { color: var(--text-muted); }
 
   /* ——— Filter chips ——— */
   .filters {

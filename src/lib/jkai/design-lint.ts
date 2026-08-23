@@ -14,7 +14,25 @@ const HEX_RE = /#[0-9a-fA-F]{3,8}\b/;
 // (potentially with !important / fallbacks) — raw hex here is the token
 // declaration itself, which is the only legal place for raw hex.
 const CUSTOM_PROP_DECL_RE = /^\s*--[a-zA-Z0-9_-]+\s*:/;
-const TAILWIND_CLASS_RE = /\bclass\s*=\s*"[^"]*\b(?:bg-|text-|p-\d|m-\d|w-\d|h-\d|flex\b|grid\b)[^"]*"/;
+// Every `class="..."` / `class='...'` value on the line.
+const CLASS_ATTR_RE = /\bclass\s*=\s*("([^"]*)"|'([^']*)')/g;
+// A Tailwind utility, anchored at the START of a class token, after any
+// variant prefixes (`sm:`, `hover:`, `dark:md:`) and an optional `!`.
+// Anchoring is the whole point: the substring form of this rule matched
+// `text-` inside `nm-text-input` — a class the design-system prompt mandates
+// by name — so an agent following instructions produced a finding it could
+// not fix, and three of those abort the build as design_lint_loop.
+const TAILWIND_TOKEN_RE = /^(?:[a-z][a-z0-9-]*:)*!?(?:bg-|text-|p-\d|m-\d|w-\d|h-\d|flex$|grid$)/;
+
+function hasTailwindClass(line: string): boolean {
+	CLASS_ATTR_RE.lastIndex = 0;
+	let m: RegExpExecArray | null;
+	while ((m = CLASS_ATTR_RE.exec(line)) !== null) {
+		const value = m[2] ?? m[3] ?? '';
+		if (value.split(/\s+/).some((token) => token && TAILWIND_TOKEN_RE.test(token))) return true;
+	}
+	return false;
+}
 const FONT_FAMILY_RE = /font-family\s*:\s*([^;}\n]+)/i;
 const FONT_VAR_OR_KEYWORD_RE = /^(?:var\s*\(|inherit|initial|unset|revert)/i;
 
@@ -73,7 +91,7 @@ export function lintDesignSystem(files: Record<string, string>): LintResult {
           message: `Raw hex colour outside tokens.css and not in a CSS custom property declaration: ${line.trim().slice(0, 120)}`,
         });
       }
-      if (TAILWIND_CLASS_RE.test(line)) {
+      if (hasTailwindClass(line)) {
         findings.push({
           path,
           line: i + 1,
