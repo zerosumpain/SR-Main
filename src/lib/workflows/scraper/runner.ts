@@ -183,6 +183,9 @@ async function proxyScrapeToHomeserv(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
+    // A real scrape takes minutes; the node ceiling is 20min, so stay under it
+    // rather than letting a dark homeserv hold the slot open indefinitely.
+    signal: AbortSignal.timeout(10 * 60_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');

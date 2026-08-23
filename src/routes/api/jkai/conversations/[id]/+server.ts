@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
 import { getChatInputCapabilities } from '$lib/server/models/capabilities';
+import { hermesWillAnswerChat } from '$lib/resilience/hermes-reach';
 import { isHermesChatEnabled } from '$lib/server/models/settings';
 import { env } from '$env/dynamic/private';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
@@ -64,7 +65,13 @@ export const GET: RequestHandler = async ({ params }) => {
 	// a text-only model's images through its vision auxiliary, so the composer
 	// must not grey them out. Falls back to the model's own limits when the
 	// legacy in-process lane is serving chat.
-	const hermes = await isHermesChatEnabled(env.JKAI_HERMES_CANVAS_CHAT === '1').catch(() => false);
+	// Reachability matters as much as the setting: if homeserv is dark the loop
+	// answers, and the loop has different attachment support.
+	const hermes = await hermesWillAnswerChat(
+		isHermesChatEnabled,
+		env.JKAI_HERMES_CANVAS_CHAT === '1',
+		env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790',
+	);
 	const modelCaps = getChatInputCapabilities(pinnedModel, { hermes });
 
 	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;

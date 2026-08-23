@@ -61,11 +61,10 @@ function buildWaiterMessage(label: string, body: string, conversationId: string 
 async function sendWa(text: string): Promise<void> {
   try {
     const wa = getWhatsAppService();
-    const state = wa.getState();
-    if (state.status !== 'connected') {
-      console.warn('[wa-escalation] WhatsApp not connected — skipping ping');
-      return;
-    }
+    // No `state.status` gate. In delegated mode that value is set ONCE by a probe
+    // at boot and never re-probed, so any VPS restart during an outage — a CI
+    // deploy counts — pinned this channel off permanently, even after homeserv
+    // came back. Attempt the send and report what actually happened.
     const result = await wa.sendMessage(OWNER_PHONE, text);
     if (!result.sent) console.error(`[wa-escalation] send failed: ${result.error}`);
   } catch (err) {

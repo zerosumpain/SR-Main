@@ -55,7 +55,9 @@ export function canManageHermes(): boolean {
   return IS_HOMESERV || (!!homeservBase() && !!env.HERMES_BRIDGE_SECRET);
 }
 
-const GET_TIMEOUT = 8000;
+// 2.5s, matching the reach probe. These back /admin/ops/{engine,sessions,cron};
+// at 8s each an outage made those pages feel hung rather than empty.
+const GET_TIMEOUT = 2500;
 
 async function proxyGet<T>(path: string): Promise<T> {
   const base = homeservBase();
