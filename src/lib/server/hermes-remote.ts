@@ -23,6 +23,12 @@ import type {
 import type { HermesStatus, ActionResult, ServiceAction } from './hermes-control';
 import type { CronJob, CronOp, CronOpResult } from './hermes-cron';
 import type { HermesWorkloadRow } from './hermes-models';
+import type {
+  WhatsAppBridgeStatus,
+  PairState,
+  WhatsAppAction,
+  WhatsAppActionResult,
+} from './hermes-whatsapp';
 
 export const IS_HOMESERV = os.hostname() === 'homeserv';
 
@@ -183,4 +189,45 @@ export async function rSetHermesModel(
     return setHermesWorkload(def, modelId);
   }
   return proxyPost<ActionResult>('/models', { workloadId, modelId }, 4 * 60_000);
+}
+
+// ── WhatsApp bridge ──
+// The Baileys session, the bridge process and the systemd unit all live on
+// homeserv, so the VPS can only reach them through the same proxy every other
+// Hermes control uses. Pairing in particular MUST land here: a QR rendered on
+// the VPS would be pairing a bridge that host does not run.
+export async function rWhatsAppStatus(): Promise<WhatsAppBridgeStatus> {
+  if (IS_HOMESERV) {
+    const { getWhatsAppStatus } = await import('./hermes-whatsapp');
+    return getWhatsAppStatus();
+  }
+  return proxyGet<WhatsAppBridgeStatus>('/whatsapp');
+}
+
+export async function rWhatsAppPairState(): Promise<PairState> {
+  if (IS_HOMESERV) {
+    const { getPairState } = await import('./hermes-whatsapp');
+    return getPairState();
+  }
+  return proxyGet<PairState>('/whatsapp/pair');
+}
+
+/** Start / cancel a pairing run. Short timeouts: both return immediately and
+ *  the page polls for the QR rather than holding a request open for a scan. */
+export async function rWhatsAppPair(op: 'start' | 'cancel'): Promise<PairState> {
+  if (IS_HOMESERV) {
+    const { startPairing, cancelPairing } = await import('./hermes-whatsapp');
+    return op === 'start' ? startPairing() : cancelPairing();
+  }
+  return proxyPost<PairState>('/whatsapp/pair', { op }, 30_000);
+}
+
+/** Restart the bridge or unlink the session. Generous timeout — both stop and
+ *  restart the gateway, then wait for the bridge to answer. */
+export async function rWhatsAppAction(action: WhatsAppAction): Promise<WhatsAppActionResult> {
+  if (IS_HOMESERV) {
+    const { runWhatsAppAction } = await import('./hermes-whatsapp');
+    return runWhatsAppAction(action);
+  }
+  return proxyPost<WhatsAppActionResult>('/whatsapp', { action }, 5 * 60_000);
 }

@@ -20,6 +20,8 @@
 /api/admin/hermes/status
 /api/admin/hermes/telemetry
 /api/admin/hermes/toolaudit
+/api/admin/hermes/whatsapp
+/api/admin/hermes/whatsapp/pair
 /api/admin/security
 /api/agent/actions
 /api/agent/activity
