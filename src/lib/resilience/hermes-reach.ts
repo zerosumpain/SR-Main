@@ -25,8 +25,12 @@ const CACHE_TTL_MS = 30_000;
 
 type Cached = { reachable: boolean; at: number };
 
-let cached: Cached | null = null;
-let inFlight: Promise<boolean> | null = null;
+// Keyed by base URL, not global. One process only ever talks to one Hermes
+// today, so a single slot would work — but a shared slot silently answers for
+// a URL it never probed, and that is a bug that only appears the day a second
+// gateway exists, in the code least likely to be re-read.
+const cached = new Map<string, Cached>();
+const inFlight = new Map<string, Promise<boolean>>();
 
 /** Test seam — `Date.now()` is not injectable and these are time-dependent. */
 let now = () => Date.now();
@@ -54,23 +58,25 @@ async function probe(baseUrl: string): Promise<boolean> {
 export async function isHermesReachable(baseUrl: string): Promise<boolean> {
   if (!baseUrl) return false;
 
-  const c = cached;
+  const c = cached.get(baseUrl);
   if (c && now() - c.at < CACHE_TTL_MS) return c.reachable;
 
   // Single-flight: the second caller in a burst awaits the first probe rather
   // than opening its own.
-  if (inFlight) return inFlight;
+  const pending = inFlight.get(baseUrl);
+  if (pending) return pending;
 
-  inFlight = probe(baseUrl)
+  const p = probe(baseUrl)
     .then((reachable) => {
-      cached = { reachable, at: now() };
+      cached.set(baseUrl, { reachable, at: now() });
       return reachable;
     })
     .finally(() => {
-      inFlight = null;
+      inFlight.delete(baseUrl);
     });
 
-  return inFlight;
+  inFlight.set(baseUrl, p);
+  return p;
 }
 
 /**
@@ -100,12 +106,12 @@ export async function hermesWillAnswerChat(
  * next request re-probes instead of honouring a verdict from before the change.
  */
 export function invalidateHermesReach(): void {
-  cached = null;
+  cached.clear();
 }
 
 /** Test-only: control the clock and reset module state between cases. */
 export function __setClockForTests(fn: () => number): void {
   now = fn;
-  cached = null;
-  inFlight = null;
+  cached.clear();
+  inFlight.clear();
 }
