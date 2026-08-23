@@ -5,7 +5,7 @@ import os from 'os';
 import { db } from '$lib/db';
 import { scraperRunLog } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { ensureSandboxRunning, execInSandbox, writeFileInSandbox } from '$lib/jkai/sandbox';
+import { ensureContainerRunning, execInContainer, writeFileInContainer } from '$lib/jkai/sandbox';
 import { normalizeProfileName } from './profiles';
 import { loadCredentialForRunner } from './credentials';
 import type { ScrapeJob, ScrapeResult } from './types';
@@ -60,13 +60,13 @@ export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
     return await proxyScrapeToHomeserv(proxyUrl, opts);
   }
 
-  await ensureSandboxRunning();
+  await ensureContainerRunning();
 
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const runDir = `/home/jkai/scraper-runtime/runs/${runId}`;
-  await execInSandbox(`mkdir -p ${runDir} /home/jkai/scraper-runtime`);
+  await execInContainer(`mkdir -p ${runDir} /home/jkai/scraper-runtime`);
 
-  await writeFileInSandbox(RUNNER_SANDBOX_PATH, readRunnerSource());
+  await writeFileInContainer(RUNNER_SANDBOX_PATH, readRunnerSource());
 
   const { credentialId, onProgress, workflowRunId, ...job } = opts;
   const jobNormalized: Record<string, unknown> = {
@@ -80,7 +80,7 @@ export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
   }
 
   const jobPath = `${runDir}/job.json`;
-  await writeFileInSandbox(jobPath, JSON.stringify(jobNormalized));
+  await writeFileInContainer(jobPath, JSON.stringify(jobNormalized));
 
   const [logRow] = await db.insert(scraperRunLog).values({
     url: opts.url,
@@ -89,7 +89,7 @@ export async function runScrape(opts: RunScrapeOptions): Promise<ScrapeResult> {
   }).returning();
 
   const cmd = `cat ${jobPath} | python3 ${RUNNER_SANDBOX_PATH}`;
-  const proc = await execInSandbox(cmd, 10 * 60 * 1000);
+  const proc = await execInContainer(cmd, 10 * 60 * 1000);
 
   if (onProgress && proc.stderr) {
     for (const line of proc.stderr.split('\n')) {

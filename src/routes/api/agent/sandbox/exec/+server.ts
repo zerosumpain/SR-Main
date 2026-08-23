@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { validateAgentKey, unauthorized } from '$lib/agent/auth';
-import { execInSandbox, getSandboxStatus } from '$lib/jkai/sandbox';
+import { execInContainer, getContainerStatus } from '$lib/jkai/sandbox';
 
 export const POST: RequestHandler = async ({ request }) => {
   if (!validateAgentKey(request)) return unauthorized();
@@ -13,7 +13,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   // Check sandbox is running
-  const status = await getSandboxStatus();
+  const status = await getContainerStatus();
   if (!status.running) {
     return Response.json({ error: 'Sandbox is not running. Start it from /jkai/admin.' }, { status: 503 });
   }
@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request }) => {
     command = code;
   }
 
-  const result = await execInSandbox(command, 120000);
+  const result = await execInContainer(command, 120000);
 
   return Response.json({
     stdout: result.stdout,

@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { ensureSandboxRunning, execInSandbox, writeFileInSandbox } from '$lib/jkai/sandbox';
+import { ensureContainerRunning, execInContainer, writeFileInContainer } from '$lib/jkai/sandbox';
 import { loadKeys } from '$lib/deepdive/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 
@@ -47,7 +47,7 @@ export const codeExecuteExecutor: NodeExecutor = {
       };
     }
 
-    await ensureSandboxRunning();
+    await ensureContainerRunning();
 
     const sandboxEnv = await collectSandboxEnv();
     const inputJson = JSON.stringify(input);
@@ -94,8 +94,8 @@ export const codeExecuteExecutor: NodeExecutor = {
 
     const workDir = `/home/jkai/workspace/workflow-runs/${context.runId}`;
     const fullPath = `${workDir}/${filename}`;
-    await execInSandbox(`mkdir -p ${workDir}`);
-    await writeFileInSandbox(fullPath, wrappedCode);
+    await execInContainer(`mkdir -p ${workDir}`);
+    await writeFileInContainer(fullPath, wrappedCode);
 
     let execCmd: string;
     if (language === 'python') {
@@ -106,7 +106,7 @@ export const codeExecuteExecutor: NodeExecutor = {
       execCmd = `cd ${workDir} && node ${filename}`;
     }
 
-    const result = await execInSandbox(execCmd);
+    const result = await execInContainer(execCmd);
 
     if (result.stderr) {
       logs.push(result.stderr);
