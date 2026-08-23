@@ -18,7 +18,7 @@ import { eq } from 'drizzle-orm';
 import { connect } from 'node:net';
 import {
   buildSystemPrompt,
-  DESIGN_SYSTEM_PROMPT_BLOCK,
+  designSystemPromptBlock,
   type BuildPromptMode,
 } from '$lib/jkai/prompt';
 import { getToolsetManifest } from '$lib/workflows/site-tools/registry';
@@ -131,7 +131,7 @@ export const GET: RequestHandler = async ({ params }) => {
   const enforceDesign = build.enforceDesignSystem !== false;
   const systemPrompt =
     buildSystemPrompt(build.id, port, mode) +
-    (enforceDesign && mode !== 'studio' ? DESIGN_SYSTEM_PROMPT_BLOCK : '');
+    (enforceDesign && mode !== 'studio' ? designSystemPromptBlock(mode) : '');
 
   const builder = await probeBuilderSocket();
 

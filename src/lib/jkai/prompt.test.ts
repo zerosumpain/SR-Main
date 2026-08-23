@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSystemPrompt, buildIterationContext } from './prompt';
+import { buildSystemPrompt, buildIterationContext, designSystemPromptBlock } from './prompt';
 
 // Repo mode exists because a change-request build used to be handed the
 // standalone-app prompt: it was told to write a serve.json and get a preview
@@ -46,6 +46,44 @@ describe('buildSystemPrompt', () => {
     expect(p).toMatch(/300 seconds/);
     expect(p).toMatch(/orchestrator runs the full gate for you/i);
     expect(p).toMatch(/narrowly/i);
+  });
+});
+
+// Change request #414 wrote `@import '../../../../design-system/tokens.css'`
+// into a new /projects page, passed its own gate and failed CI on
+// `Can't resolve`. It was following step 3, which told it to import the mount
+// — correct for a standalone app, wrong for a clone of this repo, where the
+// mount is git-excluded and the tokens are already global.
+describe('designSystemPromptBlock', () => {
+  it('tells an app build to import the mounted tokens', () => {
+    const b = designSystemPromptBlock('app');
+    expect(b).toMatch(/Import `\.\/design-system\/tokens\.css`/);
+  });
+
+  it('defaults to app mode for existing callers', () => {
+    expect(designSystemPromptBlock()).toBe(designSystemPromptBlock('app'));
+  });
+
+  it('never tells a repo build to import the mount', () => {
+    const b = designSystemPromptBlock('repo');
+    expect(b).not.toMatch(/Import `\.\/design-system\/tokens\.css`/);
+    expect(b).toMatch(/Do NOT import or copy anything from/);
+    expect(b).toMatch(/does not exist in CI/);
+  });
+
+  it('points a repo build at the stylesheets the root layout already loads', () => {
+    const b = designSystemPromptBlock('repo');
+    expect(b).toMatch(/src\/app\.css/);
+    expect(b).toMatch(/nm-tokens\.css/);
+  });
+
+  it('keeps the rules that do not depend on mode in both', () => {
+    for (const mode of ['app', 'repo'] as const) {
+      const b = designSystemPromptBlock(mode);
+      expect(b).toMatch(/Read `\.\/design-system\/README\.md`/);
+      expect(b).toMatch(/Never hard-code hex colours or font names/);
+      expect(b).toMatch(/\.nm-sec/);
+    }
   });
 });
 
