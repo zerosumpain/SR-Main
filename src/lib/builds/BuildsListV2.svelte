@@ -1,5 +1,6 @@
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import { publishedLink } from './published-link';
   import PromoteModal from './PromoteModal.svelte';
   import type { LaneStat } from './lane-stats';
   import { bucketOf, bucketLabel, outcomeNote } from './build-status';
@@ -209,8 +210,10 @@
 
   async function copyPreviewLink(b: Build) {
     openMenuId = null;
-    if (!b.publishedSlug) return;
-    const url = `${window.location.origin}/projects/${b.publishedSlug}/`;
+    const link = publishedLink(b.publishedSlug);
+    if (!link) return;
+    // An absolute PR url is already whole; only a /projects slug needs the origin.
+    const url = link.external ? link.href : `${window.location.origin}${link.href}`;
     try {
       await navigator.clipboard.writeText(url);
       showToast('ok', 'Link copied');

@@ -5,6 +5,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { desc, eq, and, asc } from 'drizzle-orm';
 import { resolvePublishSlug } from '$lib/jkai/publish-slug';
+import { publishedLink } from '$lib/builds/published-link';
 
 /**
  * Normalise the `files` argument of `register_hermes_build`.
@@ -417,9 +418,13 @@ register({
         // rather than making the caller notice the contradiction.
         failureKind: (build.failure as { kind?: string } | null)?.kind ?? null,
         iterations,
-        publishedUrl: build.publishedSlug
-          ? `https://strangeramblings.com/projects/${build.publishedSlug}/`
-          : null,
+        publishedUrl: (() => {
+          // Either a /projects page on this site or the PR a git-target build
+          // opened — never `strangeramblings.com/projects/https://github.com/...`.
+          const l = publishedLink(build.publishedSlug);
+          if (!l) return null;
+          return l.external ? l.href : `https://strangeramblings.com${l.href}`;
+        })(),
       },
     };
   },

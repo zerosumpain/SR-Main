@@ -6,6 +6,7 @@ import { enqueueFollowUp, cancelFollowUp, getQueueStatus } from '$lib/workflows/
 import { db } from '$lib/db';
 import { researchSessions, jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { publishedLink } from '$lib/builds/published-link';
 
 register({
   name: 'followup_schedule',
@@ -119,7 +120,7 @@ function buildCheckFn(taskType: string, taskId: string): (() => Promise<{ done: 
         const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, taskId)).limit(1);
         if (!build) return { done: true, summary: 'Build not found.' };
         if (build.status === 'completed' || build.status === 'failed' || build.status === 'cancelled') {
-          const publishedUrl = build.publishedSlug ? `/projects/${build.publishedSlug}/` : null;
+          const publishedUrl = publishedLink(build.publishedSlug)?.href ?? null;
           return {
             done: true,
             result: { title: build.title, status: build.status, url: publishedUrl },

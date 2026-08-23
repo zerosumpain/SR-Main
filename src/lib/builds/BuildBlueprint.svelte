@@ -11,6 +11,7 @@
    * The tweakable equivalents live in the Controls tab.
    */
   import ShikiCodeBlock from '$lib/canvas/nodes/ShikiCodeBlock.svelte';
+  import { publishedLink } from './published-link';
 
   interface Config {
     mode: 'app' | 'repo' | 'studio';
@@ -134,9 +135,11 @@
     out.push({
       key: 'publish',
       label: 'Publish',
-      detail: build.publishedSlug
-        ? `live at /projects/${build.publishedSlug}/`
-        : build.serveConfig
+      detail: publishedLink(build.publishedSlug)
+        ? `live at ${publishedLink(build.publishedSlug)!.href}`
+        : build.publishedSlug
+          ? `pushed as ${build.publishedSlug}`
+          : build.serveConfig
           ? 'preview serving; not published'
           : 'no preview yet',
       state: build.publishedSlug ? 'done' : 'pending',

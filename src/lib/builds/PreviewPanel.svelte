@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { publishedLink } from './published-link';
+
   let {
     buildId,
     serveConfig,
@@ -12,7 +14,8 @@
   let cacheBust = $state(Date.now());
   let fullscreen = $state(false);
   const proxyUrl = $derived(`/api/jkai/proxy/${buildId}/?v=${cacheBust}`);
-  const liveUrl = $derived(publishedSlug ? `/projects/${publishedSlug}/` : null);
+  // publishedSlug is a slug OR a PR url OR a bare compare ref — see published-link.ts
+  const live = $derived(publishedLink(publishedSlug));
 
   function reload() {
     cacheBust = Date.now();
@@ -28,8 +31,8 @@
       {/if}
       <button class="row-link" onclick={reload} type="button">↻ reload</button>
       <a class="row-link" href={proxyUrl} target="_blank" rel="noreferrer">↗ open</a>
-      {#if liveUrl}
-        <a class="row-link" href={liveUrl} target="_blank" rel="noreferrer">↗ live</a>
+      {#if live}
+        <a class="row-link" href={live.href} target="_blank" rel="noreferrer">↗ {live.label.toLowerCase()}</a>
       {/if}
       <button class="row-link" onclick={() => (fullscreen = !fullscreen)} type="button">
         {fullscreen ? 'exit fullscreen' : 'fullscreen'}
