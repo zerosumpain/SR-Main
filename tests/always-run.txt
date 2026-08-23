@@ -10,6 +10,7 @@ src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts
+src/lib/jkai/sandbox.contained-lane.test.ts
 src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
 src/lib/projects/registry-cards.test.ts

@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { join } from 'path';
-import { ensureSandboxRunning, execInSandbox, writeFileInSandbox } from '$lib/jkai/sandbox';
+import { ensureContainerRunning, execInContainer, writeFileInContainer } from '$lib/jkai/sandbox';
 import { normalizeProfileName } from './profiles';
 
 function assertRunningOnHomeserv(): void {
@@ -52,7 +52,7 @@ function runnerSource(relPath: string): string {
 
 export async function startInteractiveSession(profile: string, url: string): Promise<InteractiveStartResult> {
   assertRunningOnHomeserv();
-  await ensureSandboxRunning();
+  await ensureContainerRunning();
 
   // Find a free slot (port + display).
   const usedPorts = new Set(Array.from(sessions.values()).map(s => s.wsPort));
@@ -72,15 +72,15 @@ export async function startInteractiveSession(profile: string, url: string): Pro
   const vncPort = 5900 + displayNum;   // convention: 5900 + display
 
   // Write runners into the sandbox (idempotent; also ensures fresh content).
-  await execInSandbox('mkdir -p /home/jkai/scraper-runtime');
-  await writeFileInSandbox(INTERACTIVE_PY_PATH, runnerSource('interactive.py'));
-  await writeFileInSandbox(INTERACTIVE_SH_PATH, runnerSource('interactive-session.sh'));
-  await execInSandbox(`chmod +x ${INTERACTIVE_SH_PATH}`);
+  await execInContainer('mkdir -p /home/jkai/scraper-runtime');
+  await writeFileInContainer(INTERACTIVE_PY_PATH, runnerSource('interactive.py'));
+  await writeFileInContainer(INTERACTIVE_SH_PATH, runnerSource('interactive-session.sh'));
+  await execInContainer(`chmod +x ${INTERACTIVE_SH_PATH}`);
 
   const normalizedProfile = normalizeProfileName(profile);
 
   // Launch detached — returns immediately, process persists until SIGTERM.
-  // We can't use plain execInSandbox here because it blocks. Use `docker exec -d`.
+  // We can't use plain execInContainer here because it blocks. Use `docker exec -d`.
   const safeUrl = url.replace(/'/g, "'\\''");
   const cmd = `docker exec -d jkai-sandbox bash ${INTERACTIVE_SH_PATH} '${normalizedProfile}' ${displayNum} ${vncPort} ${wsPort} '${safeUrl}'`;
   // We're calling docker from the host (the backend), not from inside the sandbox.
@@ -132,10 +132,10 @@ export async function stopInteractiveSession(id: string): Promise<void> {
   // Kill the session by SIGTERMing the python PID file. The bash wrapper's cleanup
   // will propagate to websockify, x11vnc, and Xvfb.
   const pidFile = `/tmp/scraper-sessions/${s.profile}-${s.displayNum}/python.pid`;
-  await execInSandbox(`[ -f ${pidFile} ] && kill -TERM $(cat ${pidFile}) 2>/dev/null || true`);
+  await execInContainer(`[ -f ${pidFile} ] && kill -TERM $(cat ${pidFile}) 2>/dev/null || true`);
   // Give it ~2s to flush profile data, then force-kill anything lingering.
   await new Promise(r => setTimeout(r, 2000));
-  await execInSandbox(`pkill -TERM -f "interactive-session.sh ${s.profile} ${s.displayNum}" 2>/dev/null || true`);
+  await execInContainer(`pkill -TERM -f "interactive-session.sh ${s.profile} ${s.displayNum}" 2>/dev/null || true`);
 }
 
 export function listInteractiveSessions(): Array<{

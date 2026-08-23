@@ -14,7 +14,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join } from 'path';
 import { spawn, type ChildProcess } from 'child_process';
-import { execInSandbox, writeFileInSandbox, ensureSandboxRunning } from '$lib/jkai/sandbox';
+import { execInContainer, writeFileInContainer, ensureContainerRunning } from '$lib/jkai/sandbox';
 
 const AGENT_PY_PATH = '/home/jkai/scraper-runtime/site-mapper-agent.py';
 
@@ -60,9 +60,9 @@ export interface AgentHarness {
  *  finally block — the returned harness keeps an in-process handle that
  *  times out idle sessions after 10 min of no commands. */
 export async function startAgent(profile: string): Promise<AgentHarness> {
-  await ensureSandboxRunning();
-  await execInSandbox('mkdir -p /home/jkai/scraper-runtime');
-  await writeFileInSandbox(AGENT_PY_PATH, runnerSource('site-mapper-agent.py'));
+  await ensureContainerRunning();
+  await execInContainer('mkdir -p /home/jkai/scraper-runtime');
+  await writeFileInContainer(AGENT_PY_PATH, runnerSource('site-mapper-agent.py'));
 
   const proc: ChildProcess = spawn('docker', [
     'exec', '-i', 'jkai-sandbox', 'python3', AGENT_PY_PATH,

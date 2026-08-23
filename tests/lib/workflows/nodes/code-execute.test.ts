@@ -4,12 +4,12 @@ import type { ExecutionContext } from '$lib/workflows/types';
 
 // Mock the sandbox module
 vi.mock('$lib/jkai/sandbox', () => ({
-  ensureSandboxRunning: vi.fn(),
-  execInSandbox: vi.fn(),
-  writeFileInSandbox: vi.fn(),
+  ensureContainerRunning: vi.fn(),
+  execInContainer: vi.fn(),
+  writeFileInContainer: vi.fn(),
 }));
 
-import { execInSandbox, ensureSandboxRunning, writeFileInSandbox } from '$lib/jkai/sandbox';
+import { execInContainer, ensureContainerRunning, writeFileInContainer } from '$lib/jkai/sandbox';
 
 const mockContext: ExecutionContext = {
   runId: 'test-run',
@@ -27,9 +27,9 @@ const mockContext: ExecutionContext = {
 
 describe('codeExecuteExecutor', () => {
   it('executes javascript code in sandbox', async () => {
-    vi.mocked(ensureSandboxRunning).mockResolvedValue(undefined);
-    vi.mocked(writeFileInSandbox).mockResolvedValue(undefined as any);
-    vi.mocked(execInSandbox).mockResolvedValue({
+    vi.mocked(ensureContainerRunning).mockResolvedValue(undefined);
+    vi.mocked(writeFileInContainer).mockResolvedValue(undefined as any);
+    vi.mocked(execInContainer).mockResolvedValue({
       stdout: '{"doubled":10}',
       stderr: '',
       exitCode: 0,
@@ -42,13 +42,13 @@ describe('codeExecuteExecutor', () => {
     );
 
     expect(result.output).toEqual({ doubled: 10 });
-    expect(ensureSandboxRunning).toHaveBeenCalled();
+    expect(ensureContainerRunning).toHaveBeenCalled();
   });
 
   it('executes python code in sandbox', async () => {
-    vi.mocked(ensureSandboxRunning).mockResolvedValue(undefined);
-    vi.mocked(writeFileInSandbox).mockResolvedValue(undefined as any);
-    vi.mocked(execInSandbox).mockResolvedValue({
+    vi.mocked(ensureContainerRunning).mockResolvedValue(undefined);
+    vi.mocked(writeFileInContainer).mockResolvedValue(undefined as any);
+    vi.mocked(execInContainer).mockResolvedValue({
       stdout: '{"result":"ok"}',
       stderr: '',
       exitCode: 0,
@@ -64,9 +64,9 @@ describe('codeExecuteExecutor', () => {
   });
 
   it('captures stderr in logs', async () => {
-    vi.mocked(ensureSandboxRunning).mockResolvedValue(undefined);
-    vi.mocked(writeFileInSandbox).mockResolvedValue(undefined as any);
-    vi.mocked(execInSandbox).mockResolvedValue({
+    vi.mocked(ensureContainerRunning).mockResolvedValue(undefined);
+    vi.mocked(writeFileInContainer).mockResolvedValue(undefined as any);
+    vi.mocked(execInContainer).mockResolvedValue({
       stdout: '{}',
       stderr: 'some warning',
       exitCode: 0,
@@ -82,9 +82,9 @@ describe('codeExecuteExecutor', () => {
   });
 
   it('returns error on non-zero exit code', async () => {
-    vi.mocked(ensureSandboxRunning).mockResolvedValue(undefined);
-    vi.mocked(writeFileInSandbox).mockResolvedValue(undefined as any);
-    vi.mocked(execInSandbox).mockResolvedValue({
+    vi.mocked(ensureContainerRunning).mockResolvedValue(undefined);
+    vi.mocked(writeFileInContainer).mockResolvedValue(undefined as any);
+    vi.mocked(execInContainer).mockResolvedValue({
       stdout: '',
       stderr: 'syntax error',
       exitCode: 1,
@@ -105,9 +105,9 @@ describe('codeExecuteExecutor', () => {
   });
 
   it('skips execution entirely on dryRun and returns a simulated result', async () => {
-    vi.mocked(ensureSandboxRunning).mockClear();
-    vi.mocked(execInSandbox).mockClear();
-    vi.mocked(writeFileInSandbox).mockClear();
+    vi.mocked(ensureContainerRunning).mockClear();
+    vi.mocked(execInContainer).mockClear();
+    vi.mocked(writeFileInContainer).mockClear();
 
     const result = await codeExecuteExecutor.execute(
       { value: 5 },
@@ -118,9 +118,9 @@ describe('codeExecuteExecutor', () => {
     expect(result.output).toMatchObject({ simulated: true });
     expect(result.logs?.[0]).toContain('skipped-for-dry-run');
     // Critically: no sandbox interaction at all.
-    expect(ensureSandboxRunning).not.toHaveBeenCalled();
-    expect(execInSandbox).not.toHaveBeenCalled();
-    expect(writeFileInSandbox).not.toHaveBeenCalled();
+    expect(ensureContainerRunning).not.toHaveBeenCalled();
+    expect(execInContainer).not.toHaveBeenCalled();
+    expect(writeFileInContainer).not.toHaveBeenCalled();
   });
 });
 

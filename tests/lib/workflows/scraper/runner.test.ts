@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 
-const { execInSandbox, writeFileInSandbox, ensureSandboxRunning } = vi.hoisted(() => ({
-  execInSandbox: vi.fn(),
-  writeFileInSandbox: vi.fn(),
-  ensureSandboxRunning: vi.fn(),
+const { execInContainer, writeFileInContainer, ensureContainerRunning } = vi.hoisted(() => ({
+  execInContainer: vi.fn(),
+  writeFileInContainer: vi.fn(),
+  ensureContainerRunning: vi.fn(),
 }));
 
 vi.mock('$lib/jkai/sandbox', () => ({
-  execInSandbox: (...a: any[]) => execInSandbox(...a),
-  writeFileInSandbox: (...a: any[]) => writeFileInSandbox(...a),
-  ensureSandboxRunning: () => ensureSandboxRunning(),
+  execInContainer: (...a: any[]) => execInContainer(...a),
+  writeFileInContainer: (...a: any[]) => writeFileInContainer(...a),
+  ensureContainerRunning: () => ensureContainerRunning(),
 }));
 
 const { loadCredentialForRunner } = vi.hoisted(() => ({
@@ -46,17 +46,17 @@ describe('runScrape', () => {
   });
 
   beforeEach(() => {
-    execInSandbox.mockReset();
-    writeFileInSandbox.mockReset();
-    ensureSandboxRunning.mockReset();
+    execInContainer.mockReset();
+    writeFileInContainer.mockReset();
+    ensureContainerRunning.mockReset();
     loadCredentialForRunner.mockReset();
     insertRunLog.mockResolvedValue([{ id: 42 }]);
     // mkdir -p call returns a result too
-    execInSandbox.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+    execInContainer.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
   });
 
   it('writes the job + runner then parses JSON stdout', async () => {
-    execInSandbox
+    execInContainer
       .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 }) // mkdir
       .mockResolvedValueOnce({
         stdout: JSON.stringify({ success: true, pages: [{ url: 'https://x', fields: { h: 'Hi' } }] }),
@@ -71,15 +71,15 @@ describe('runScrape', () => {
       extract: [{ field: 'h', selector: 'h1' }],
     });
 
-    expect(ensureSandboxRunning).toHaveBeenCalled();
-    expect(writeFileInSandbox).toHaveBeenCalledTimes(2); // scrape.py + job.json
+    expect(ensureContainerRunning).toHaveBeenCalled();
+    expect(writeFileInContainer).toHaveBeenCalledTimes(2); // scrape.py + job.json
     expect(res.success).toBe(true);
     expect(res.pages[0].fields.h).toBe('Hi');
     expect(res.runLogId).toBe(42);
   });
 
   it('marks run log as failure when runner exits non-zero', async () => {
-    execInSandbox
+    execInContainer
       .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 }) // mkdir
       .mockResolvedValueOnce({ stdout: '', stderr: 'boom', exitCode: 1 });
     const res = await runScrape({
@@ -97,7 +97,7 @@ describe('runScrape', () => {
       id: 1, domain: 'x.com', loginUrl: 'https://x.com/login',
       loginStrategy: 'form', credential: { username: 'u', password: 'p' },
     });
-    execInSandbox
+    execInContainer
       .mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 }) // mkdir
       .mockResolvedValueOnce({
         stdout: JSON.stringify({ success: true, pages: [] }), stderr: '', exitCode: 0,
@@ -106,7 +106,7 @@ describe('runScrape', () => {
       url: 'https://x.com/jobs', profile: 'x',
       waitFor: { type: 'networkidle' }, extract: [], credentialId: 1,
     });
-    const written = writeFileInSandbox.mock.calls.find((c) => c[0].endsWith('job.json'));
+    const written = writeFileInContainer.mock.calls.find((c) => c[0].endsWith('job.json'));
     expect(written).toBeDefined();
     expect(written![1]).toContain('"_credential"');
     expect(written![1]).toContain('"username":"u"');
