@@ -33,8 +33,16 @@ register({
     'THIS IS THE SLOWEST PATH — a build, a review and a deploy, typically 30-60 minutes. Try these first, in order: ' +
     '(1) if the ask is a NEW TOOL or capability rather than a change to the site, use `author_ephemeral_tool` to write and run it, then `promote_ephemeral_tool` to keep it — that is live in minutes, with no build and no deploy; ' +
     '(2) if the capability already exists as a canvas node, `node_call` runs it directly — call `workflow_list_node_types` to check; ' +
-    '(3) if a stored tool is merely broken, `update_tool` repairs it in place. ' +
-    "Come here when the ask genuinely needs code in the repo — a page, a route, a component, a schema change, a new node type — or when a tool needs credentials or imports a sandboxed handler cannot reach. Do NOT use it for a one-off report, analysis or static page — that is `publish_page`, which is instant and needs no build. The build never merges its own work: additive changes can auto-merge after the gate passes, and anything touching auth, the database schema, deploy scripts or CI is flagged for human review.",
+    '(3) if a stored tool is merely broken, `update_tool` repairs it in place; ' +
+    // The ladder used to stop at (3) and list only cheaper alternatives, so it
+    // read as one-directional — "always try to avoid me" — with no clause
+    // pointing at the one lane that is a peer rather than a shortcut. Read
+    // alongside `build_create`, which named no limits of its own, that
+    // asymmetry sent site work to the sandbox: the Life360 history dashboard
+    // asked for on 2026-08-23 became a `python3 server.py` in a preview
+    // workspace. Both directions are stated now.
+    '(4) if the ask is a SELF-CONTAINED app that does not need to live in the site — a dashboard, a game, a simulator, a one-off tool, anything whose deliverable is a preview URL rather than a page on strangeramblings.com — `build_create` is the faster lane and this one is overkill. ' +
+    "Come here when the ask genuinely needs code in the repo — a page, a route, a component, a schema change, a new node type — or when a tool needs credentials or imports a sandboxed handler cannot reach. That includes anything phrased as 'on the site' or 'on strangeramblings.com': an app build cannot produce it, cannot escalate to this tool once running, and will spend its whole budget proving that. Do NOT use it for a one-off report, analysis or static page — that is `publish_page`, which is instant and needs no build. The build never merges its own work: additive changes can auto-merge after the gate passes, and anything touching auth, the database schema, deploy scripts or CI is flagged for human review.",
   toolset: 'builds',
   category: 'builds',
   parameters: {
