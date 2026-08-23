@@ -14,6 +14,11 @@ export class HomeAssistantService {
     this.token = token;
   }
 
+  /** The singleton starts as an empty local placeholder until it is booted. */
+  isConfigured(): boolean {
+    return this.token.trim().length > 0;
+  }
+
   private get headers(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.token}`,
