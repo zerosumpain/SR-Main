@@ -32,6 +32,35 @@ export function prConfigured(): boolean {
   return githubToken().length > 0;
 }
 
+/** Pull the PR number out of a `published_slug`, which holds a PR url on a
+ *  git-target build and a branch ref or a project slug otherwise. Returns null
+ *  for anything that is not a pull-request url on this repo. */
+export function prNumberFromUrl(value: string | null | undefined): number | null {
+  if (typeof value !== 'string') return null;
+  const m = /^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/i.exec(value.trim());
+  if (!m || m[1].toLowerCase() !== REPO_SLUG.toLowerCase()) return null;
+  return Number(m[2]);
+}
+
+/** Every repo-relative path a PR touches. Paginated: GitHub caps this at 100
+ *  per page and a change request can exceed that, and a truncated list would
+ *  silently fail to find a page the PR really did add. */
+export async function listPrFiles(prNumber: number): Promise<string[]> {
+  const paths: string[] = [];
+  for (let page = 1; page <= 30; page++) {
+    const res = await fetch(
+      `${API}/repos/${REPO_SLUG}/pulls/${prNumber}/files?per_page=100&page=${page}`,
+      { headers: headers() },
+    );
+    if (!res.ok) throw new Error(`GitHub ${res.status} ${res.statusText}`);
+    const batch = (await res.json()) as Array<{ filename?: string }>;
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const f of batch) if (typeof f.filename === 'string') paths.push(f.filename);
+    if (batch.length < 100) break;
+  }
+  return paths;
+}
+
 function headers(): Record<string, string> {
   return {
     Authorization: `Bearer ${githubToken()}`,

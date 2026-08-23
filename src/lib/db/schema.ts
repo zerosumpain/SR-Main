@@ -1085,6 +1085,26 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   activeMinutesUsed: doublePrecision('active_minutes_used').notNull().default(0),
   serveConfig: jsonb('serve_config'),
   publishedSlug: text('published_slug'),
+  /**
+   * The `/projects` address this build CREATED IN THE REPO, as opposed to
+   * `publishedSlug`, which is wherever its sandbox app was copied to — or, on
+   * a git-target build, the PR url.
+   *
+   * Two columns because a change request has both and they are not the same
+   * thing. It opens a PR (recorded in `publishedSlug`) that may also add
+   * `src/routes/projects/<slug>/+page.svelte`, and that page is a real route
+   * the moment the PR merges. Until this column existed nothing connected the
+   * two: `isProjectSlug` filtered the build off the index because its
+   * `publishedSlug` was a URL, and `getAllowedProjectKeys` would not permit a
+   * visibility toggle on the new address either. A page could ship, deploy and
+   * be reachable with no way to give it a card.
+   *
+   * Null on every app build and on any change request that added no page.
+   * Setting it does NOT publish: like an AI build's slug, an address with no
+   * `project_visibility` row is PRIVATE (see $lib/projects/visibility), so the
+   * card appears for the owner and the toggle is what makes it public.
+   */
+  projectSlug: text('project_slug'),
   // How the build presents itself on /projects once promoted. All three are
   // null for a build published before this existed, and the card falls back to
   // `title` and `prompt` exactly as it always did — which is the reason to

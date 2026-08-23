@@ -2,6 +2,7 @@
   import { onMount, onDestroy, untrack } from 'svelte';
   import { bucketLabel, bucketOf, outcomeNote } from './build-status';
   import { publishedLink } from './published-link';
+  import PromoteModal from './PromoteModal.svelte';
   import { invalidateAll } from '$app/navigation';
   import Activity from './Activity.svelte';
   import FilesTimeline from './FilesTimeline.svelte';
@@ -103,6 +104,17 @@
   // Always-prominent banner is shown when we have any signal the app is up:
   // the persisted serveConfig (page load / 10s poll) OR a live stage event.
   const published = $derived(publishedLink(build.publishedSlug));
+  // A change request's page lives in the repo, so its address never reaches
+  // `publishedSlug` — that column holds the PR. Offer the card control when
+  // the build published off-site (a PR) or already has a card to edit.
+  const canCard = $derived(!!build.projectSlug || published?.external === true);
+  const cardLink = $derived(build.projectSlug ? `/projects/${build.projectSlug}/` : null);
+  let carding = $state(false);
+
+  function afterCard(result: { slug: string; url: string }) {
+    build = { ...build, projectSlug: result.slug };
+    carding = false;
+  }
   const previewLink = $derived(
     published
       ? published.href
@@ -358,6 +370,14 @@
     {:else if build.publishedSlug}
       <span class="dim">{build.publishedSlug}</span>
     {/if}
+    {#if canCard}
+      {#if cardLink}
+        <a class="row-link" href={cardLink} target="_blank" rel="noreferrer">↗ Project page</a>
+      {/if}
+      <button class="nm-btn-ghost" onclick={() => (carding = true)} type="button">
+        {build.projectSlug ? 'Edit card' : 'Add to /projects'}
+      </button>
+    {/if}
   </div>
 
   <!-- Duplicate App URL section removed — the sticky preview banner above
@@ -412,6 +432,10 @@
     <BuildSidebar build={build} onAfter={refresh} />
   </div>
 </div>
+
+{#if carding}
+  <PromoteModal build={build} kind="repo" onClose={() => (carding = false)} ondone={afterCard} />
+{/if}
 
 <style>
   .wrap {

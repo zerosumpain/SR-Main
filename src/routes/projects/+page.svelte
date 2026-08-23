@@ -45,11 +45,24 @@
     });
   }
 
-  async function removeProject(buildId: string, slug: string) {
-    if (!confirm(`Remove published project "${slug}"? This deletes the public files but keeps the build.`)) return;
+  // Two kinds of card, two meanings of "remove". An app build was COPIED to
+  // /projects, so removing it deletes those files. A change request's page
+  // lives in the repo and is deployed — there is nothing to delete, and only
+  // the card is withdrawn. Deleting the route is a code change, not a button.
+  async function removeProject(buildId: string, slug: string, source: 'repo' | 'build') {
+    const question =
+      source === 'repo'
+        ? `Remove the card for "${slug}"? The page stays in the repo and stays deployed — this only takes it off this index.`
+        : `Remove published project "${slug}"? This deletes the public files but keeps the build.`;
+    if (!confirm(question)) return;
     removing = buildId;
     try {
-      const res = await fetch(`/api/jkai/builds/${buildId}/unpublish`, { method: 'POST' });
+      const res = await fetch(
+        source === 'repo'
+          ? `/api/jkai/builds/${buildId}/project-card`
+          : `/api/jkai/builds/${buildId}/unpublish`,
+        { method: source === 'repo' ? 'DELETE' : 'POST' },
+      );
       if (res.ok) {
         projects = projects.filter((p) => p.id !== buildId);
       }
@@ -667,7 +680,7 @@
       {#each projects as project (project.id)}
         {@const card = resolveProjectCard(project)}
         <div class="project-card group">
-          <a href="/projects/{project.publishedSlug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
+          <a href="/projects/{project.slug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
 
           <div class="flex items-start justify-between mb-3">
             <p
@@ -704,14 +717,14 @@
 
             {#if data.authenticated}
               <div class="flex items-center gap-2">
-                {@render visToggle(project.publishedSlug!, `/projects/${project.publishedSlug}/`, project.title ?? 'Project')}
+                {@render visToggle(project.slug!, `/projects/${project.slug}/`, project.title ?? 'Project')}
                 <button
-                  onclick={() => removeProject(project.id, project.publishedSlug!)}
+                  onclick={() => removeProject(project.id, project.slug!, project.source)}
                   disabled={removing === project.id}
                   class="remove-btn px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
                   style="border-color: var(--error); color: var(--error); opacity: {removing === project.id ? 0.5 : 1};"
                 >
-                  {removing === project.id ? 'Removing...' : 'Remove'}
+                  {removing === project.id ? 'Removing...' : project.source === 'repo' ? 'Remove card' : 'Remove'}
                 </button>
               </div>
             {/if}
