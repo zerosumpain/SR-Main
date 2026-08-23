@@ -16,6 +16,7 @@
    *  - Save card (PATCH) writes copy only. Instant, and cannot break a live page.
    */
   import { slugifyTitle } from '$lib/jkai/publish-slug';
+  import { publishedLink } from './published-link';
   import { resolveProjectCard } from '$lib/jkai/project-card';
 
   interface PromotableBuild {
@@ -137,8 +138,8 @@
 
     <p class="pm-blurb">
       {#if isPublished}
-        Live at <a href="/projects/{build.publishedSlug}/" target="_blank" rel="noopener"
-          >/projects/{build.publishedSlug}/</a
+        Live at <a href={publishedLink(build.publishedSlug)?.href ?? '#'} target="_blank" rel="noopener"
+          >{publishedLink(build.publishedSlug)?.href ?? build.publishedSlug}</a
         >. Editing the card changes only the copy on the projects index — the page itself is
         untouched.
       {:else}

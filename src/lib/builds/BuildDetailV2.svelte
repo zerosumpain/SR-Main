@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
   import { bucketLabel, bucketOf, outcomeNote } from './build-status';
+  import { publishedLink } from './published-link';
   import { invalidateAll } from '$app/navigation';
   import Activity from './Activity.svelte';
   import FilesTimeline from './FilesTimeline.svelte';
@@ -101,9 +102,10 @@
   let livePreviewUrl = $state<string | null>(null);
   // Always-prominent banner is shown when we have any signal the app is up:
   // the persisted serveConfig (page load / 10s poll) OR a live stage event.
+  const published = $derived(publishedLink(build.publishedSlug));
   const previewLink = $derived(
-    build.publishedSlug
-      ? `/projects/${build.publishedSlug}/`
+    published
+      ? published.href
       : (build.serveConfig || livePreviewUrl)
         ? `/api/jkai/proxy/${build.id}/`
         : null,
@@ -345,11 +347,16 @@
         {publishing ? 'Publishing…' : 'Publish'}
       </button>
     {/if}
-    {#if build.publishedSlug}
-      <a class="row-link" href={`/projects/${build.publishedSlug}/`} target="_blank" rel="noreferrer">↗ Live</a>
-      <button class="row-link danger" disabled={unpublishing} onclick={unpublishBuild} type="button">
-        {unpublishing ? 'Unpublishing…' : 'Unpublish'}
-      </button>
+    {#if published}
+      <a class="row-link" href={published.href} target="_blank" rel="noreferrer">↗ {published.label}</a>
+      <!-- A PR lives on GitHub; there is nothing on this site to take down. -->
+      {#if !published.external}
+        <button class="row-link danger" disabled={unpublishing} onclick={unpublishBuild} type="button">
+          {unpublishing ? 'Unpublishing…' : 'Unpublish'}
+        </button>
+      {/if}
+    {:else if build.publishedSlug}
+      <span class="dim">{build.publishedSlug}</span>
     {/if}
   </div>
 

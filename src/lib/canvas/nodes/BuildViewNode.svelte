@@ -15,6 +15,7 @@
    * in can listen for it.)
    */
   import { onDestroy } from 'svelte';
+  import { publishedLink } from '$lib/builds/published-link';
   import BuildViewModal from '../BuildViewModal.svelte';
 
   type ViewConfig = {
@@ -93,7 +94,8 @@
 
   const previewLink = $derived.by(() => {
     if (!buildId) return null;
-    if (snapshot?.publishedSlug) return `/projects/${snapshot.publishedSlug}/`;
+    const published = publishedLink(snapshot?.publishedSlug);
+    if (published) return published.href;
     if (snapshot?.serveConfig) return `/api/jkai/proxy/${buildId}/`;
     return null;
   });
