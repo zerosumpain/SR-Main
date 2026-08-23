@@ -193,6 +193,7 @@
 /projects/engine-room/turn/routing
 /projects/engine-room/turn/stream
 /projects/engine-room/turn/trace
+/projects/family-life360-history
 /projects/jkai
 /projects/jkai/[slug]/[...path]
 /projects/policy-engine
