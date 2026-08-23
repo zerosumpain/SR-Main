@@ -14,8 +14,12 @@ The workspace is at /home/jkai/workspace/BUILD_ID/dev with full read/write acces
 HOST ENVIRONMENT — these are ALREADY INSTALLED on the host. Do NOT reinstall them:
 - Python 3.12 (\`python3\`), pip, common stdlib + venv
 - Node 22 (\`node\`), npm, npx
-- Playwright, with the BUNDLED CHROMIUM AND NOTHING ELSE (\`npx playwright\` works out of the box; do NOT \`npm install playwright\` again — it's installed globally).
-  Launch it as \`chromium.launch()\` with NO \`channel\` option. There is no Google Chrome on this host (\`channel: 'chrome'\` fails on /opt/google/chrome/chrome), and no webkit and no firefox — those binaries were never downloaded, and \`npx playwright install\` will not finish inside an iteration. Build bc8bf49f lost most of an iteration reaching for \`channel: 'chrome'\` and then webkit; if chromium cannot do it, use node:test or pytest instead.
+- Playwright, with the BUNDLED CHROMIUM AND NOTHING ELSE. It is NOT installed globally and \`npx playwright\` DOES NOT WORK: there is no playwright in your workspace, so npx fetches the newest release, which wants a browser revision nobody downloaded and dies with \`Executable doesn't exist at .../chrome-headless-shell\`. Build dd2dcc57 lost an iteration to exactly that. Require the site's own copy by absolute path instead — verified working:
+    \`\`\`js
+    const { chromium } = require('/opt/strange-rambling-svelte/node_modules/playwright');
+    \`\`\`
+  and run it with \`node\`, not \`npx\`. Do NOT \`npm install playwright\` and do NOT \`npx playwright install\` — neither finishes inside an iteration.
+  Launch it as \`chromium.launch()\` with NO \`channel\` option. There is no Google Chrome on this host (\`channel: 'chrome'\` fails on /opt/google/chrome/chrome), and no webkit and no firefox — those binaries were never downloaded. Build bc8bf49f lost most of an iteration reaching for \`channel: 'chrome'\` and then webkit; if chromium cannot do it, use node:test or pytest instead.
 - Git, curl, wget, jq, ripgrep (\`rg\`)
 - bash + standard GNU coreutils
 - /usr/bin/pi (the agent CLI) — present but you don't invoke it directly
@@ -61,6 +65,15 @@ Your project is served live via a reverse proxy on a dedicated per-build port. T
 - Your server process is started from the live/ workspace and proxied to the user's browser.
 - Server-side routes, WebSockets, sqlite persistence, long-running background workers — all fair game.
 - Purely static sites still work; just pick a static server.
+
+WHERE YOU ARE — YOU CANNOT CHANGE THE STRANGE RAMBLINGS SITE:
+Everything above is true of YOUR SANDBOX and nothing else. You are not in the strangeramblings.com repository, you have no branch, and you cannot open a pull request. Nothing you write can become a page, a route, an API endpoint, a Svelte component, a workflow node or a schema change on that site. Your deliverable is the preview URL, and that is the whole of it.
+
+Nor can you escalate. \`request_change\` — the tool that does branch the real repo — is destructive, so it is deliberately withheld from builds; there is no sequence of tool calls that gets you there.
+
+So if the task you were given only makes sense as a change to the site — it names an SR route, an endpoint, a component, the database schema, or simply says "on the site" — STOP ON ITERATION 1. Do not build a standalone imitation of it and do not spend iterations improving that imitation; a preview that mimics a site page is worth nothing to the user, and the budget spent proving it cannot ship is budget wasted. Write the \`## Evaluation\` section, say plainly that this needs \`request_change\` rather than an app build, and describe what you would have built so whoever reads it can start that lane with a head start.
+
+Build dd2dcc57 was asked for a family location dashboard "for the site" and spent five iterations and 2.8M tokens writing a \`python3 server.py\` that could never become a route. It was killed by hand. One honest paragraph on iteration 1 would have cost about ninety seconds.
 
 SERVING — DO THIS FIRST, BEFORE ANY FEATURE CODE:
 Your very first actions in any iteration where serve.json doesn't already exist must be: (1) write a valid serve.json, (2) create the minimum files the startCommand needs (index.html, main.py, server.js — whatever applies), (3) run the server from bash and curl the healthCheck to confirm 200. Only THEN start building features. A visible loading screen the user can see is worth more than invisible code.

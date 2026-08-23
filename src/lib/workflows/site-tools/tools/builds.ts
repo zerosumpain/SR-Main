@@ -123,7 +123,25 @@ function describeShape(v: unknown): string {
 register({
   name: 'build_create',
   description:
-    'Start a new JKAI autonomous build. Provide a prompt describing what to build. ' +
+    'Start a new JKAI autonomous build: a SELF-CONTAINED app built in a sandbox — a dashboard, ' +
+    'a game, a simulator, a data explorer, a one-off tool. It gets a workspace, a server on a ' +
+    'private port and a preview URL, and that preview is the whole deliverable. ' +
+    // The boundary is stated as a deliverable rather than a caveat because the
+    // old description ("Start a new JKAI autonomous build. Provide a prompt
+    // describing what to build") named no limits at all, while `request_change`
+    // opens by warning you off itself. Asked on 2026-08-23 for a Life360
+    // history dashboard "for the site", chat read one tool advertising its cost
+    // and one advertising nothing, and picked this one: the build spent five
+    // iterations and 2.8M tokens writing a standalone `python3 server.py` that
+    // could never become a route, and was killed by hand. Nothing misjudged the
+    // lane — this text never said there was one.
+    'IT CANNOT CHANGE THE STRANGE RAMBLINGS SITE. No repo access, no branch, no pull request. ' +
+    'Nothing it writes can become a page, route, API endpoint, component, workflow node or ' +
+    'schema change on strangeramblings.com, and it cannot escalate itself once started — ' +
+    '`request_change` is destructive and therefore not on the build tool bridge. ' +
+    'So if the ask names an SR route, endpoint, component or schema, or just says "on the site" ' +
+    'or "on strangeramblings.com", this is the WRONG tool and no amount of iterating fixes it: ' +
+    'use `request_change`, which branches the real repo, runs the gate and opens a PR. ' +
     'Optionally attach primary workflows the build should foreground in its planning context.',
   parameters: {
     type: 'object',
