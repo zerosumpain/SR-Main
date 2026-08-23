@@ -654,6 +654,20 @@ async function probeOpenRouter(): Promise<ConnectorReport> {
 // WhatsApp — the delivery channel for the briefing and every alert, including
 // the alert that would tell you this is down.
 // ---------------------------------------------------------------------------
+const WHATSAPP_FIX_PAGE = '/admin/connections/whatsapp';
+/** `Reconnect` only when there is something to reconnect — a primary button on
+ *  a healthy row trains you to ignore the primary button. */
+function whatsappActions(broken: boolean): ConnectorReport['actions'] {
+  return [
+    {
+      kind: 'link',
+      target: WHATSAPP_FIX_PAGE,
+      label: broken ? 'Reconnect' : 'Bridge panel',
+      primary: broken,
+    },
+  ];
+}
+
 async function probeWhatsApp(): Promise<ConnectorReport> {
   return guard('whatsapp', 'WhatsApp', 'Messaging', 'service', async () => {
     const bridge = process.env.WHATSAPP_HERMES_BRIDGE_URL;
@@ -667,14 +681,43 @@ async function probeWhatsApp(): Promise<ConnectorReport> {
     const base = bridge.replace(/\/+$/, '').replace(/\/send$/, '');
     const res = await fetchWithTimeout(`${base}/health`).catch(() => null);
     if (!res || !res.ok) {
+      // An unreachable bridge has two very different causes and only one of
+      // them is fixed by restarting. "Restart jkai-hermes" was the standing
+      // advice here and it is useless against a logged-out session — Hermes
+      // refuses to start the bridge at all when there are no credentials. Ask
+      // the host that owns the session which of the two this is.
+      const deeper = await import('$lib/server/hermes-remote')
+        .then((m) => m.rWhatsAppStatus())
+        .catch(() => null);
+      if (deeper && !deeper.paired) {
+        return {
+          status: 'broken' as ConnectorStatus,
+          detail: deeper.diagnosis,
+          live: true,
+          impact: 'Alerts, the morning briefing and every WhatsApp reply are undeliverable.',
+          fixHint: 'Scan a QR to re-link the account — a restart will not fix this',
+          actions: whatsappActions(true),
+          fixUrl: WHATSAPP_FIX_PAGE,
+        };
+      }
       return {
         status: 'broken' as ConnectorStatus,
-        detail: `Hermes bridge ${base} unreachable${res ? ` (${res.status})` : ''} — alerts and the briefing cannot be delivered`,
+        detail: deeper?.diagnosis
+          ?? `Hermes bridge ${base} unreachable${res ? ` (${res.status})` : ''} — alerts and the briefing cannot be delivered`,
         live: true,
-        fixHint: 'Restart jkai-hermes on homeserv',
+        impact: 'Alerts, the morning briefing and every WhatsApp reply are undeliverable.',
+        fixHint: 'Restart the bridge from the WhatsApp panel',
+        actions: whatsappActions(true),
+        fixUrl: WHATSAPP_FIX_PAGE,
       };
     }
-    return { status: 'ok' as ConnectorStatus, detail: `bridge ${base} reachable`, live: true };
+    return {
+      status: 'ok' as ConnectorStatus,
+      detail: `bridge ${base} reachable`,
+      live: true,
+      actions: whatsappActions(false),
+      fixUrl: WHATSAPP_FIX_PAGE,
+    };
   });
 }
 
