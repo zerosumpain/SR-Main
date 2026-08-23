@@ -308,4 +308,17 @@ describe('reconcile', () => {
     expect(r.gapUsd).toBeNull();
     expect(r.coverage).toBeNull();
   });
+
+  it('reports no gap at all when the ledger recorded more than the bill', () => {
+    // Production printed "$-0.1246" in a column headed "Unaccounted". The
+    // overshoot is not lost — coverage says 105% and the Codex note explains it.
+    const r = reconcile(2.5585, 2.6831);
+    expect(r.gapUsd).toBeNull();
+    expect(r.coverage).toBeGreaterThan(1);
+  });
+
+  it('does not print a negative zero when the two figures agree exactly', () => {
+    // billed === recorded to the cent, off by float noise: "$-0.0000".
+    expect(reconcile(0.6243, 0.62430000001).gapUsd).toBeNull();
+  });
 });

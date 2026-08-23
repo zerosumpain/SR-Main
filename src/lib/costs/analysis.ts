@@ -431,7 +431,15 @@ export interface Reconciliation {
   billedUsd: number | null;
   /** What the ledger recorded over the same window, USD. */
   recordedUsd: number;
-  /** billed − recorded. Positive means spend nobody attributed. */
+  /**
+   * billed − recorded, in USD, but ONLY when it is spend nobody attributed.
+   *
+   * Null once the ledger records at least as much as the bill. The column that
+   * shows this is headed "Unaccounted", and a negative unaccounted figure is
+   * not a small number — it is a category error, printed on the one page whose
+   * job is to not print those. The overshoot is not lost information: it is
+   * exactly what `coverage` above 1 says, with the Codex explanation beside it.
+   */
   gapUsd: number | null;
   /** recorded / billed, 0–1. Null when billed is unknown or zero. */
   coverage: number | null;
@@ -449,7 +457,9 @@ export function reconcile(billedUsd: number | null, recordedUsd: number): Reconc
   return {
     billedUsd,
     recordedUsd,
-    gapUsd: billedUsd == null ? null : billedUsd - recordedUsd,
+    // A hair over the bill is float noise on two figures that agree — production
+    // printed `$-0.0000` for a day where billed and recorded matched exactly.
+    gapUsd: billedUsd == null || billedUsd - recordedUsd < 0.00005 ? null : billedUsd - recordedUsd,
     coverage: billedUsd == null || billedUsd <= 0 ? null : recordedUsd / billedUsd,
   };
 }
