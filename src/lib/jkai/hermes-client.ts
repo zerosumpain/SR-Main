@@ -229,6 +229,10 @@ export class HermesClient {
           ? { attachments: req.attachments }
           : {}),
       }),
+      // Backstop only. The dark-host case is caught in 2.5s by
+      // `$lib/resilience/hermes-reach`; this bounds a socket that accepted and
+      // then went quiet. Generous because attachments ride in this body.
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!resp.ok) {

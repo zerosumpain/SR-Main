@@ -25,11 +25,9 @@ export async function pushHighAlerts(noteId: string): Promise<number> {
 	if (alerts.length === 0) return 0;
 
 	const wa = getWhatsAppService();
-	const state = wa.getState();
-	if (state.status !== 'connected') {
-		console.warn('[intel] WhatsApp not connected, skipping alert push');
-		return 0;
-	}
+	// No `state.status` gate — see wa-escalation.ts. In delegated mode that value
+	// is a boot-time probe that is never refreshed, so it latched this channel off
+	// after any restart during an outage. Attempt the send; the result is truth.
 
 	let delivered = 0;
 

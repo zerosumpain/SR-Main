@@ -35,6 +35,8 @@ export class HomeAssistantService {
         method: options.method || 'GET',
         headers: this.headers,
         body: options.body ? JSON.stringify(options.body) : undefined,
+        // Home Assistant is on the home LAN; unreachable must not hang the run.
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!res.ok) {

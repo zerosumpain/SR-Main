@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$lib/workflows/orchestrator';
 import { generalChat } from '$lib/workflows/chat/general-chat';
+import { isHermesReachable, hermesWillAnswerChat } from '$lib/resilience/hermes-reach';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
@@ -98,7 +99,16 @@ const HERMES_MCP_URL = env.JKAI_HERMES_MCP_URL ?? 'http://127.0.0.1:5173/api/mcp
 export const POST: RequestHandler = async (event) => {
   // A settings-read failure must not take chat down — fall back to the env
   // default, which is what this line did before the toggle existed.
-  const useHermes = await isHermesChatEnabled(HERMES_ENV_DEFAULT).catch(() => HERMES_ENV_DEFAULT);
+  // Wanting Hermes is not the same as having it. Hermes runs on homeserv and the
+  // VPS reaches it over Tailscale; when that box is dark the send does not fail
+  // fast, it hangs. `hermesWillAnswerChat` requires selected AND reachable
+  // (2.5s probe, cached 30s), so we fall through to the in-process loop rather
+  // than making the user discover the outage.
+  const useHermes = await hermesWillAnswerChat(
+    isHermesChatEnabled,
+    HERMES_ENV_DEFAULT,
+    HERMES_URL,
+  );
   if (useHermes) {
     return handleWithHermes(event);
   }
@@ -331,7 +341,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     }
   }
 
-  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
+  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId, engine: 'hermes' });
   const { abortController } = job;
 
   if (queuedBehindJobId) {
@@ -1385,7 +1395,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     }
   }
 
-  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
+  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId, engine: 'loop' });
   const { abortController } = job;
 
   // Durable copy of this turn's tool chain, for /jkai/trace/<id>. The Hermes
@@ -1810,7 +1820,7 @@ async function forwardClarifyToHermes(
   jobId: string,
   job: NonNullable<ReturnType<typeof getJob>>,
   answers: Record<string, string>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; unreachable?: boolean }> {
   if (!HERMES_SECRET) return { ok: false, error: 'HERMES_BRIDGE_SECRET not configured' };
 
   const workflowId = job.scope.workflowId ?? undefined;
@@ -1837,6 +1847,19 @@ async function forwardClarifyToHermes(
   // answer that happens to start with `/` would silently do nothing, so shift
   // it behind a zero-width space.
   if (text.startsWith('/')) text = `​${text}`;
+
+  // A paused turn lives inside Hermes, so this answer CANNOT fail over to the
+  // in-process loop — there is no loop-side turn to resume, and pretending
+  // otherwise would swallow the user's reply. The honest outcome is to say so
+  // immediately rather than hang for undici's connect timeout first.
+  if (!(await isHermesReachable(HERMES_URL))) {
+    return {
+      ok: false,
+      unreachable: true,
+      error:
+        'the chat engine on homeserv is unreachable, so this answer cannot be delivered — the question it belongs to ended with it',
+    };
+  }
 
   try {
     const client = new HermesClient({
@@ -1928,10 +1951,20 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
     // message in the session (gateway/run.py:6938-6962), so forward the answers
     // as an ordinary silent message. Mirrors the approval card, whose buttons
     // send `/approve` back through the normal inbound path.
-    const hermesLive = await isHermesChatEnabled(HERMES_ENV_DEFAULT).catch(() => HERMES_ENV_DEFAULT);
-    if (hermesLive && typed.type === 'clarify_ack') {
+    // Route by what THIS job used, not by what the setting currently says. Since
+    // chat fails over to the loop when homeserv is dark, the two disagree during
+    // an outage — and a loop job's clarify answer must reach its own waiter
+    // below, not be posted at an unreachable gateway.
+    if (job.scope.engine === 'hermes' && typed.type === 'clarify_ack') {
       const forwarded = await forwardClarifyToHermes(jobId, job, typed.answers);
-      if (!forwarded.ok) return json({ error: forwarded.error }, { status: 502 });
+      // 503 when homeserv is simply gone: a retry may work once it is back, and
+      // that is a different thing from Hermes rejecting the answer (502).
+      if (!forwarded.ok) {
+        return json(
+          { error: forwarded.error, unreachable: forwarded.unreachable === true },
+          { status: forwarded.unreachable ? 503 : 502 },
+        );
+      }
       publishJobEvent(jobId, typed as JobEvent);
       return json({ ok: true });
     }

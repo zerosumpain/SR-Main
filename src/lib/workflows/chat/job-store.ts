@@ -243,6 +243,14 @@ export interface JobScope {
   workflowId?: string | null;
   conversationId?: string | null;
   chatNodeId?: string | null;
+  /**
+   * Which engine is actually running this turn. Set at creation, never inferred
+   * later — the `jkai.chat.hermes_enabled` setting says what the NEXT turn will
+   * use, not what THIS job used, and the two diverge the moment chat fails over
+   * to the in-process loop because homeserv went dark. A `clarify_ack` routed by
+   * the setting instead of this field gets posted to the wrong engine.
+   */
+  engine?: 'hermes' | 'loop';
 }
 
 export interface OrchestratorJob {
@@ -489,6 +497,8 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
       workflowId: scope.workflowId ?? null,
       conversationId: scope.conversationId ?? null,
       chatNodeId: scope.chatNodeId ?? null,
+      // Default 'loop': a caller that does not say is the in-process lane.
+      engine: scope.engine ?? 'loop',
     },
     lastEventAt: now,
     lastHeartbeatAt: now,
