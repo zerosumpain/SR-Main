@@ -44,6 +44,30 @@ describe('buildToolAllowlist', () => {
     expect(out.every((n) => n.length > 0)).toBe(true);
   });
 
+  // The value lands in a shell command line, and `custom_tools` names are
+  // LLM-authored and unvalidated at the insert. Allow-list the charset.
+  it('drops names carrying shell metacharacters', () => {
+    const hostile = [
+      "x'; rm -rf /; echo '",
+      'x`whoami`',
+      'x$(id)',
+      'x;ls',
+      'x|ls',
+      'x&ls',
+      'x>out',
+      'x"y',
+    ];
+    const out = buildToolAllowlist(['good_tool', ...hostile]).split(',');
+    expect(out).toContain('good_tool');
+    for (const h of hostile) expect(out).not.toContain(h);
+    expect(out.every((n) => /^[A-Za-z0-9_.-]+$/.test(n))).toBe(true);
+  });
+
+  it('keeps the legitimate punctuation real tool names use', () => {
+    const out = buildToolAllowlist(['ha.find', 'gmail-search', 'datastore_query']).split(',');
+    expect(out).toEqual(expect.arrayContaining(['ha.find', 'gmail-search', 'datastore_query']));
+  });
+
   it('does not repeat a bridged tool that shadows a built-in', () => {
     const out = buildToolAllowlist(['bash', 'read']).split(',');
     expect(out.filter((n) => n === 'bash')).toHaveLength(1);

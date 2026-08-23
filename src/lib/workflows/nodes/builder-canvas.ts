@@ -9,6 +9,7 @@
  */
 
 import type { NodeDefinition, NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { jkaiBuilds, workflows } from '$lib/db/schema';
@@ -111,7 +112,9 @@ export const builderChatExecutor: NodeExecutor = {
 
     const priceSnapshot = await snapshotPrice(ctx);
 
-    const budgetConfig: Record<string, number> = {};
+    // Start from the shared floor so an unconfigured canvas node still gets
+    // the caps — notably the idle brake. Every explicit value below wins.
+    const budgetConfig: Record<string, number> = { ...DEFAULT_BUILD_BUDGET };
     const maxIterations = pickNumber(config.maxIterations);
     if (maxIterations !== undefined) budgetConfig.maxIterations = maxIterations;
     const maxTotalMinutes = pickNumber(config.maxTotalMinutes);

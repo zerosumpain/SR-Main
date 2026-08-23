@@ -11,6 +11,7 @@
  * repo); the const here is the only git target the Forge ever uses.
  */
 import { db } from '$lib/db';
+import { DEFAULT_BUILD_BUDGET } from './budget';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
@@ -27,14 +28,6 @@ export const FORGE_GIT_TARGET = {
   prTitlePrefix: 'Forge: ',
 } as const;
 
-const DEFAULT_BUDGET = {
-  maxIterations: 25,
-  maxTotalMinutes: 120,
-  // Total tokens, not output tokens — one ordinary iteration costs ~1M of
-  // them, so 1M here stalled a build after its first. See change-request.ts.
-  maxTokensPerHour: 3_000_000,
-  activeMinutesPerHour: 45,
-};
 
 /**
  * Create + start a Forge git-target jkai build. Inserts the `jkai_builds` row
@@ -75,7 +68,7 @@ export async function createForgeBuild({
       enforceDesignSystem: false,
       // No plan-approval gate — go straight to iterating.
       planStatus: 'approved',
-      budgetConfig: DEFAULT_BUDGET,
+      budgetConfig: { ...DEFAULT_BUILD_BUDGET },
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
       priceSnapshot,

@@ -1,4 +1,5 @@
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
+import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
@@ -151,7 +152,7 @@ register({
     const insertValues: Record<string, unknown> = {
       title: (args.title as string) || null,
       prompt: args.prompt as string,
-      budgetConfig: {},
+      budgetConfig: { ...DEFAULT_BUILD_BUDGET },
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
     };

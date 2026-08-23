@@ -7,7 +7,9 @@
   let { data } = $props();
 
   let prompt = $state('');
-  let activeMinutesPerHour = $state(15);
+  // Matches DEFAULT_BUILD_BUDGET. At 15 the form silently imposed a ~45-minute
+  // cooldown after the first iteration of every hand-started build.
+  let activeMinutesPerHour = $state(45);
   let maxTokensPerHour = $state<number | null>(null);
   let maxIterations = $state<number | null>(null);
   let maxTotalMinutes = $state<number | null>(null);

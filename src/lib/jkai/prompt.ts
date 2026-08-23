@@ -42,6 +42,12 @@ WHEN YOU WRAP (every iteration), finish with exactly this structure:
 
 ## Evaluation
 Honest assessment: what works in the live preview right now, what's still stubbed, what's unfinished. Estimate completion %.
+End this section with a status line on its own, exactly one of:
+  STATUS: COMPLETE   — the brief is delivered; nothing of substance is left to build.
+  STATUS: CONTINUE   — there is more real work to do.
+This line is how the orchestrator decides whether to run another iteration. Say COMPLETE only when
+you would be content for the user to see this as the finished thing; a high completion % with
+"STATUS: CONTINUE" is a normal, expected combination.
 
 ## Next Steps
 Ordered list of concrete follow-ups for the next iteration. Be specific — the next iteration reads this to decide what to build.
@@ -90,8 +96,9 @@ UI STANDARDS:
 TESTING (LAYER IT IN, DON'T FRONT-LOAD IT):
 - Do NOT write tests in the scaffolding iteration. Preview first, tests once the skeleton is stable.
 - Once the preview is alive and you're adding real functionality, maintain a tests/ directory. Python → pytest. Node → node:test.
-- Create tests/run.sh containing the command to execute tests (e.g. "cd .. && python3 -m pytest tests/ -v" or "cd .. && node --test tests/").
-- The orchestrator runs your tests after every iteration. Failing tests block promotion to live — so only write tests you know pass right now.
+- Create tests/run.sh containing the command to execute tests (e.g. "python3 -m pytest tests/ -v" or "node --test tests/").
+- run.sh is executed with the working directory ALREADY set to your workspace root — the directory that holds tests/. Do not cd in it; write paths relative to that root.
+- The orchestrator runs your tests after every iteration and reports the result back to you. Your work is promoted to live/ either way, so a red test costs you the next iteration rather than the preview — but write only tests you know pass right now.
 
 ERROR RECOVERY:
 - If a tool call fails, diagnose before retrying. Don't re-run the same command hoping for different output — change something.
@@ -304,7 +311,7 @@ The low-poly scene is the EXCEPTION, not the default. It is right for a quantity
 For something physical or spatial that no artefact can draw, generate an illustration:
     node __STUDIO_IMAGE_CMD__ --prompt "<what to draw>" --out assets/<name>.png
 It writes the file into your tree and prints the <figure> markup. Never let a generated image carry a number — a model will draw a convincing axis with invented values on it. Quantities belong in the instruments, which are exact and which the reader can operate.
-7. Do NOT use Tailwind. A post-iteration linter rejects any class attribute containing bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, flex or grid as a whole word. Note that a class named "chapter-grid" matches — pick another name.
+7. Do NOT use Tailwind. A post-iteration linter rejects any class TOKEN that starts with bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, or is exactly flex or grid (variant prefixes like sm: and hover: count). Your own kebab-case names are fine even when they contain those fragments — "chapter-grid" and "nm-text-input" both pass.
 
 THE CHAPTER CONTRACT — every chapter page must have all four:
 1. A root element with \`data-chapter="<n>"\`, numbered from 1, and NO \`data-chapter-status="placeholder"\` — remove that attribute the moment the chapter is genuinely written.
@@ -356,6 +363,7 @@ EVIDENCE:
 TESTING:
 - No tests in the skeleton iteration.
 - Once chapters are landing, keep a tests/ directory and a tests/run.sh with the command to run them. Python → pytest, Node → node:test. Only write tests you have seen pass.
+- run.sh is executed with the working directory ALREADY set to your workspace root — the directory that holds tests/. Do not cd in it; write paths relative to that root.
 
 ERROR RECOVERY: if a tool call fails, diagnose before retrying. Never re-run the same command hoping for different output. Stuck after two attempts, change approach.
 
@@ -567,7 +575,13 @@ export function buildIterationContext(
     } Close with ## Evaluation and ## Next Steps.`;
   } else {
     contextMessage += `\n\n## Assigned Serving Port\nYour server must bind to port ${assignedPort}. Reflect this in serve.json.`;
-    contextMessage += `\n\nBegin iteration ${iterationNumber}. Work until the iteration's scope is fully delivered, then close with ## Evaluation and ## Next Steps.`;
+    // "Work until the scope is fully delivered" used to close every app
+    // iteration, contradicting the HARD STOPS above it — which say wrap as
+    // soon as one route returns 200 — and naming a per-iteration scope that
+    // was never stated for most builds. The stops were added the day after
+    // this line and reversed the policy without removing it; the repo and
+    // studio branches were written later and got it right.
+    contextMessage += `\n\nBegin iteration ${iterationNumber}. Ship one thin increment, honour the HARD STOPS above, then close with ## Evaluation and ## Next Steps.`;
   }
 
   messages.push({ role: 'user', content: contextMessage });
