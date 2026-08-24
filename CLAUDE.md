@@ -24,13 +24,19 @@ Rules worth knowing before touching this:
   is the single decider; persisted state often carries a bare model string with
   no provider at all. Never hardcode `provider: 'openrouter'` when writing a
   model setting — pass the id through `coerceModelContext`.
-- **Codex does tool-calling** — the bridge publishes caller schemas as a
-  per-request MCP server and returns `tool_calls` (it never executes them).
-  **Embeddings are the one real gap**; those stay on OpenRouter. Check
+- **Codex does tool-calling** — the bridge passes caller schemas straight to the
+  Responses API's `tools` param and returns `tool_calls` (it never executes
+  them). **Embeddings are the one real gap**; those stay on OpenRouter. Check
   `getProviderFeatures()` rather than assuming either way.
-- **Codex is slower per tool call** (~10 s first call, ~3 s follow-ups, vs
-  ~1–2 s on OpenRouter) because each turn starts a fresh Codex process. It is a
-  legitimate site default; just know a long builder chain will crawl.
+- **The bridge talks the raw Responses API, not `@openai/codex-sdk`** (changed
+  2026-08-24). The SDK drove the `codex` CLI's app-server, which injected its own
+  agent scaffolding into every call: measured **12,040 prompt tokens and ~6.9s**
+  for "reply ok", against **26 tokens and 1.4s** on the raw API. It also could
+  not stream — one block per turn — which is why chat felt slower after the
+  Hermes exit (Hermes used this same raw transport). Rollback without a deploy:
+  set `CODEX_BRIDGE_TRANSPORT=sdk` and restart the service.
+- **Codex still costs a round trip per tool call**, but ~1.4s, not ~10s. A long
+  builder chain is no longer the crawl it was.
 - **Codex is text-only *through this gateway*.** Anything that builds its own
   content parts must check `getModelCapabilities()` first — the site default may
   now be a Codex model. **But `/jkai` chat does not go through this gateway**;
@@ -40,9 +46,12 @@ Rules worth knowing before touching this:
   `native`. So chat asks `getChatInputCapabilities(ctx, { hermes })` instead.
   Applying the model gate there dropped every image John attached, twice.
 - **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
-- The bridge lives in `packages/jkai-codex-bridge` (see its README) and is
-  deployed by `scripts/deploy-codex-bridge.sh`, **not** by `ci-deploy.sh`, which
-  never syncs `packages/`. It needs `codex login --device-auth` once per host.
+- The bridge lives in `packages/jkai-codex-bridge` (see its README). A merge to
+  master deploys it via `scripts/ci-stage-sidecars.sh` in the release job;
+  `scripts/deploy-codex-bridge.sh` is the by-hand escape hatch. Plain
+  `ci-deploy.sh` never syncs `packages/`. It needs `codex login --device-auth`
+  once per host — and the bridge now refreshes that token itself
+  (`src/codex-auth.ts`), since the CLI is no longer in the path to do it.
 
 ### Merging a PR — never use `gh pr merge --auto`
 
