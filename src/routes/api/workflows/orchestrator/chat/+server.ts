@@ -1395,8 +1395,26 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     }
   }
 
+  // Queue behind a turn that is still answering, rather than running alongside it.
+  //
+  // The Hermes branch has done this since the cutover, gated on the gateway's
+  // `busy_input_mode`. This branch did not — so a second message sent while the
+  // first was still working started a CONCURRENT turn against the same
+  // conversation. Both then streamed into the same thread and both appended to
+  // history, which is how an answer arrives interleaved with the one before it.
+  //
+  // There is no gateway to ask here, so the loop always queues: it is its own
+  // executor, and two of its turns on one conversation are never wanted.
+  const queuedBehindJobId = conversationId ? getRunningJobIdForConversation(conversationId) : null;
+
   const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId, engine: 'loop' });
   const { abortController } = job;
+
+  if (queuedBehindJobId) {
+    markJobQueued(jobId, queuedBehindJobId);
+    // Tell the user why nothing is happening yet — silence here reads as a hang.
+    publishJobEvent(jobId, { type: 'status', text: 'Queued — finishing the previous message first' });
+  }
 
   // Durable copy of this turn's tool chain, for /jkai/trace/<id>. The Hermes
   // branch has recorded one since the cutover; this branch did not, so
@@ -1408,6 +1426,15 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
 
   // Run the orchestrator in the background
   (async () => {
+    if (queuedBehindJobId) {
+      // Awaited here rather than before the response so the client still gets its
+      // jobId straight away and can render a queued turn.
+      console.log(`[orchestrator] Job ${jobId} queued behind ${queuedBehindJobId}`);
+      await whenJobSettles(queuedBehindJobId);
+      clearJobQueued(jobId);
+      // The user may have cancelled while we waited; do not start a dead turn.
+      if (abortController.signal.aborted) return;
+    }
     console.log(`[orchestrator] Job ${jobId} started — kind=${contextKind} workflowId=${workflowId ?? 'none'} conversationId=${conversationId ?? 'none'} message: "${message.slice(0, 100)}"`);
 
     function onProgress(text: string) {
