@@ -174,12 +174,16 @@ echo "==> Restarting $SERVICE (builder is unaffected)..."
 sudo systemctl restart "$SERVICE"
 
 # ---- Sidecars -------------------------------------------------------------
-# Systemd sidecars (currently the Codex bridge) build and restart here rather
-# than being hand-deployed from a laptop. This never fails the release: a stale
-# sidecar is a smaller problem than a web deploy that did not happen, so the
-# script warns and exits 0 on its own.
-echo "==> Deploying sidecars..."
-./scripts/ci-deploy-sidecars.sh
+# APPLY only. The bundles were built and staged in the prebuild job, because THIS
+# job deliberately has no node_modules (see the checkout step in ci.yml) — the
+# first version of this tried to `npm run build:...` here and silently staged
+# nothing. Applying after the web restart also keeps the ordering honest: a gate
+# failure leaves the sidecars untouched.
+#
+# Never fails the release: a stale sidecar is a smaller problem than a web deploy
+# that did not happen, so the script warns and exits 0 on its own.
+echo "==> Applying staged sidecars..."
+./scripts/ci-apply-sidecars.sh
 
 echo "==> Verifying against the PUBLIC url (not localhost — Caddy/cloudflared and"
 echo "    the static cache come up on different timelines than the node process)..."

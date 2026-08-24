@@ -12,12 +12,12 @@ import { join } from 'path';
  */
 
 const ROOT = process.cwd();
-const SCRIPT = join(ROOT, 'scripts/ci-deploy-sidecars.sh');
+const SCRIPT = join(ROOT, 'scripts/ci-stage-sidecars.sh');
 
 function manifest(): Array<{ name: string; script: string; unit: string }> {
   const src = readFileSync(SCRIPT, 'utf8');
   const block = src.match(/SIDECARS=\(([\s\S]*?)\n\)/);
-  expect(block, 'SIDECARS array not found in ci-deploy-sidecars.sh').not.toBeNull();
+  expect(block, 'SIDECARS array not found in ci-stage-sidecars.sh').not.toBeNull();
   // Require the exact three-field shape. A loose /"([^"]+)"/ also matches the
   // whitespace BETWEEN two entries, inventing a bogus row — which only shows up
   // once there is more than one sidecar, i.e. exactly when this matters.
@@ -55,15 +55,39 @@ describe('ci-deploy-sidecars manifest', () => {
     expect(entries.map((e) => e.name)).not.toContain('jkai-builder');
   });
 
-  it('is wired into the release, or it never runs', () => {
+  it('the BUILD half runs in prebuild, not release', () => {
+    // This is the bug that shipped: the build ran from ci-release.sh, whose job
+    // deliberately has no `npm ci`. Every sidecar warned, the script exited 0,
+    // and the deploy reported success having changed nothing.
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+    const prebuild = ci.slice(ci.indexOf('name: Prebuild (VPS)'), ci.indexOf('name: Release (VPS)'));
+    expect(prebuild).toContain('ci-stage-sidecars.sh');
+
     const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
-    expect(release).toContain('ci-deploy-sidecars.sh');
+    expect(release).not.toContain('ci-stage-sidecars.sh');
   });
 
-  it('exits 0 even on failure, so a sidecar cannot fail the web release', () => {
-    const src = readFileSync(SCRIPT, 'utf8');
-    expect(src).toMatch(/exit 0\s*$/);
+  it('the APPLY half runs in the release, or nothing ever restarts', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    expect(release).toContain('ci-apply-sidecars.sh');
   });
+
+  it('the stage script never restarts a service — that is the apply half\'s job', () => {
+    const stage = readFileSync(SCRIPT, 'utf8');
+    expect(stage).not.toMatch(/systemctl (restart|start)\b/);
+  });
+
+  it('the apply script never builds — its job has no node_modules', () => {
+    const apply = readFileSync(join(ROOT, 'scripts/ci-apply-sidecars.sh'), 'utf8');
+    expect(apply).not.toMatch(/npm run/);
+  });
+
+  it.each(['scripts/ci-stage-sidecars.sh', 'scripts/ci-apply-sidecars.sh'])(
+    '%s exits 0 even on failure, so a sidecar cannot fail the web release',
+    (rel) => {
+      expect(readFileSync(join(ROOT, rel), 'utf8')).toMatch(/exit 0\s*$/);
+    },
+  );
 });
 
 describe('the manifest parser itself', () => {
