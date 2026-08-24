@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Deploy the jkai-codex-bridge sidecar on the VPS. Independent from
-# scripts/ci-deploy.sh, which never touches packages/ — the bridge is its own
-# process with its own lifecycle, and restarting it must not require a web
-# deploy (nor the reverse).
+# Deploy the jkai-codex-bridge sidecar on the VPS BY HAND.
+#
+# You should not normally need this. As of 2026-08-24 a merge to master deploys
+# the bridge automatically: `scripts/ci-deploy-sidecars.sh` runs in the release
+# job and builds, syncs and restarts it. This script remains as the escape hatch
+# for deploying without a merge, or when CI itself is the thing that is broken.
+#
+# The bridge is its own process with its own lifecycle, so restarting it does not
+# require a web deploy (nor the reverse) — that part has not changed.
 #
 # Mirrors scripts/deploy-builder.sh. The one thing it CANNOT do for you is log
 # in: `codex login` is an interactive OAuth flow and the token lives in the
