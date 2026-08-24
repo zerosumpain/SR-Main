@@ -39,6 +39,7 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'apis', pattern: /\bapis?\b|data\s+sources?|live\s+data|current\s+(?:figures?|stats?|numbers?|data|values?)|latest\s+(?:figures?|stats?|numbers?|data)|external\s+data|fetch\s+(?:live|current)\s+data|\bpaypal\b|\btruelayer\b|\bopen\s+banking\b|\btransactions?\b|\breceipts?\b|\binvoices?\b|\brefunds?\b|\bsubscriptions?\b|\bdirect\s+debits?\b|\bstatements?\b|\bbilling\b|\bpayments?\b|\bpaid\s+(?:for|to|by|via|through)\b|\bcharged?\s+(?:me|to|for)\b/i },
   { toolset: 'knowledge', pattern: /@?knowledge|search\s+(?:everything|all\s+(?:my|the)\s+(?:stores?|sources?|knowledge))|across\s+(?:my\s+)?(?:files,?\s*research|everything)|unified\s+(?:search|recall)/i },
   { toolset: 'discovery', pattern: /\bwhat (?:tools?|can you)\b|\bis there a tool\b|\bskill\b|\bplaybook\b|\bhow do i\b.*\bhere\b/i },
+  { toolset: 'browser', pattern: /\bbrowser\b|\bconsole (?:log|error)s?\b|\bopen the (?:page|site)\b|\brender(?:s|ed|ing)?\b.*\bpage\b|\bclick\b|\bscreenshot\b|\bjavascript error/i },
   { toolset: 'agents', pattern: /\bdelegate\b|\bagent\s+team\b|\bspecialists?\b|ask\s+the\s+(?:researcher|analyst|writer|reviewer)|team\s+memory/i },
   { toolset: 'monitors', pattern: /\bmonitors?\b|watch\s+(?:for|this|that|the)|tell\s+me\s+when|alert\s+me\s+(?:when|if)|keep\s+an\s+eye\s+on/i },
   // The entity graph. Distinct from `knowledge` above: that one loads
