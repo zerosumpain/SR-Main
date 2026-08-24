@@ -88,7 +88,16 @@ export function getChatInputCapabilities(
   opts: { hermes: boolean },
 ): ModelCapabilities {
   if (opts.hermes) return ALL;
-  return getModelCapabilities(ctx);
+  // The in-process lane no longer inherits the model's raw limits. Images, PDFs
+  // and audio are pre-analysed into text when the model cannot read them
+  // natively (see $lib/jkai/media/preanalyse), so the composer must not grey
+  // them out — that was the one thing that broke the moment chat stopped going
+  // through Hermes.
+  //
+  // Video is NOT included: there is no extraction path for it, so it stays
+  // gated on what the model itself accepts.
+  const native = getModelCapabilities(ctx);
+  return { ...native, image: true, pdf: true, audio: true, documentText: true };
 }
 
 /**

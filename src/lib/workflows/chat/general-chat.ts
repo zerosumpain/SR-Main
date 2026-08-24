@@ -32,6 +32,7 @@ import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
+import { getModelCapabilities } from '$lib/server/models/capabilities';
 
 const MAX_HISTORY = 30;
 const DEFAULT_TOOL_ROUNDS = 10;
@@ -668,17 +669,25 @@ export async function generalChat(
     { role: 'system', content: systemContent },
   ];
 
+  // What this conversation's model can actually read. Anything it cannot is
+  // pre-analysed into text rather than sent as a part the provider will reject
+  // or quietly drop — this is the job Hermes used to do out of sight, and the
+  // reason attachments kept working on a text-only chat model.
+  const mediaCaps = getModelCapabilities(options.modelContext);
+
   const recentHistory = conversationHistory.slice(-MAX_HISTORY);
   for (const h of recentHistory) {
     if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
-      const parts = await buildMultimodalContent(h.content, h.attachments);
+      const parts = await buildMultimodalContent(h.content, h.attachments, { caps: mediaCaps });
       messages.push({ role: 'user', content: parts as any });
     } else {
       messages.push({ role: h.role, content: h.content } as any);
     }
   }
 
-  const userParts = await buildMultimodalContent(userMessage, input.attachments ?? []);
+  const userParts = await buildMultimodalContent(userMessage, input.attachments ?? [], {
+    caps: mediaCaps,
+  });
   const maxTurnBytes = Number(process.env.JKAI_MAX_TURN_BYTES ?? 104857600);
   if (encodedSizeBytes(userParts) > maxTurnBytes) {
     throw new Error(`Encoded turn payload exceeds JKAI_MAX_TURN_BYTES (${maxTurnBytes})`);
