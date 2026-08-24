@@ -34,6 +34,7 @@ import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { renderSkillIndex } from '$lib/jkai/skills/registry';
+import { compressHistory, renderCompressionSection } from './compress';
 
 const MAX_HISTORY = 30;
 const DEFAULT_TOOL_ROUNDS = 10;
@@ -668,10 +669,18 @@ export async function generalChat(
     ? `\n\n--- Skills ---\nCurated playbooks for specific jobs. If one covers what you are about to do, read it with skill_view(id) BEFORE starting — it carries the specifics, constraints and traps that general knowledge does not. Prefer loading one over guessing; do not load one that is merely adjacent.\n\n${skillsIndex}\n`
     : '';
 
+  // Older turns are summarised rather than dropped. `slice(-MAX_HISTORY)` was
+  // silent amnesia: message 31 back simply vanished, with nothing in the prompt
+  // saying so, which is how a long thread came to contradict what it agreed to
+  // an hour earlier. Computed here because the prompt section below needs it.
+  const compressed = await compressHistory(conversationHistory, options.conversationId, MAX_HISTORY);
+  // Carries what the summarised turns said, or says plainly that they are gone.
+  const compressionSection = renderCompressionSection(compressed);
+
   const personaSection = options.personaPrompt?.trim()
     ? `You are acting as a specialist agent. Adopt this role for the whole turn:\n${options.personaPrompt.trim()}\n\n---\n\n`
     : '';
-  const systemContent = `${personaSection}${basePrompt}${siteSection}${skillsSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
+  const systemContent = `${personaSection}${basePrompt}${siteSection}${skillsSection}${compressionSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -684,7 +693,7 @@ export async function generalChat(
   // reason attachments kept working on a text-only chat model.
   const mediaCaps = getModelCapabilities(options.modelContext);
 
-  const recentHistory = conversationHistory.slice(-MAX_HISTORY);
+  const recentHistory = compressed.messages;
   for (const h of recentHistory) {
     if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
       const parts = await buildMultimodalContent(h.content, h.attachments, { caps: mediaCaps });
