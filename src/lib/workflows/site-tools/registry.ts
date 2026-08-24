@@ -37,6 +37,7 @@ import './tools/knowledge';
 import './tools/intel-graph';
 import './tools/codegraph';
 import './tools/agents';
+import './tools/discovery';
 import './tools/monitors';
 import './tools/gmail';
 import './tools/apple-calendar';
@@ -120,6 +121,7 @@ export function getToolsetManifest(): Array<{
     datastore: 'Permanent sitewide datastore — full CRUD over collections of JSON records with filters/aggregates and row-level permissions (structured/queryable data that persists across chats and workflows)',
     apis: 'API catalogue + integration register — search catalogued external data sources, call them for live data (SSRF-guarded), authenticate with owner-registered secret handles you can use but never read (api_secrets_list), and RECORD a working call as a reusable named integration (api_integration_save/test) that also appears in the no-code canvas node',
     knowledge: 'Unified knowledge recall — one search across /drive files, deep-dive research facts, personal memory, and datastore records (the @knowledge mention)',
+    discovery: 'Find capability you were not handed — search every registered tool by keyword (tool_search), read one tool\'s exact schema (tool_describe), and list or read the curated skill playbooks (skills_list, skill_view)',
     agents: 'Persistent agent team — list/define named specialist agents and delegate a focused sub-task to one (each has its own persona, allowed tools, and shared team memory)',
     monitors: 'Natural-language monitors — create a "watch X, tell me when Y" scheduled workflow and list active monitors (manage/pause on /jkai/monitors)',
     'codegraph': 'Build-history GRAPH for this repo — what changing a file has taught us before. Seed a query with file:PATH, fingerprint:<error class>, gate:NAME or topic:"text", then pipe | hops 1 | lessons | episodes. Returns the rules that apply to those files and what happened the last time they changed, each with a verdict (verified/landed/repaired). Use for "how do I change X here", "why is it done this way", "has this broken before" — where intel-graph answers about the WORLD, this answers about the CODE.',

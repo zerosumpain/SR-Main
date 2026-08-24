@@ -33,6 +33,7 @@ import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
+import { renderSkillIndex } from '$lib/jkai/skills/registry';
 
 const MAX_HISTORY = 30;
 const DEFAULT_TOOL_ROUNDS = 10;
@@ -659,10 +660,18 @@ export async function generalChat(
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
+  // The skills index. One line per skill with its FULL description — Hermes cut
+  // these to 60 characters, which is why whichever skill happened to fit a
+  // keyword inside that budget won the routing regardless of merit.
+  const skillsIndex = renderSkillIndex();
+  const skillsSection = skillsIndex
+    ? `\n\n--- Skills ---\nCurated playbooks for specific jobs. If one covers what you are about to do, read it with skill_view(id) BEFORE starting — it carries the specifics, constraints and traps that general knowledge does not. Prefer loading one over guessing; do not load one that is merely adjacent.\n\n${skillsIndex}\n`
+    : '';
+
   const personaSection = options.personaPrompt?.trim()
     ? `You are acting as a specialist agent. Adopt this role for the whole turn:\n${options.personaPrompt.trim()}\n\n---\n\n`
     : '';
-  const systemContent = `${personaSection}${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
+  const systemContent = `${personaSection}${basePrompt}${siteSection}${skillsSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -700,8 +709,14 @@ export async function generalChat(
   messages.push({ role: 'user', content: userContent as any });
 
   // --- Tiered tool assembly ---
-  // Always include meta-tools
-  const activeTools: Array<any> = [...META_TOOL_DEFINITIONS];
+  // Always include meta-tools, and the discovery toolset alongside them: tools
+  // for FINDING tools are useless if you must already know to activate them.
+  // Seeded from the registry rather than hand-copied into META_TOOL_DEFINITIONS
+  // so the schemas cannot drift from the `register()` calls that define them.
+  const activeTools: Array<any> = [
+    ...META_TOOL_DEFINITIONS,
+    ...getToolsetDefinitions('discovery'),
+  ];
   const activatedToolsets = new Set<string>();
 
   // Always-on background-task toolsets: follow-up queue, heartbeat actions,
