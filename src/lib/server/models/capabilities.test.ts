@@ -46,12 +46,25 @@ describe('getChatInputCapabilities', () => {
     expect(getChatInputCapabilities(TEXT_ONLY_OPENROUTER, { hermes: true }).image).toBe(true);
   });
 
-  it('falls back to the model when the legacy in-process lane is serving chat', () => {
-    // That lane builds the content parts itself, so the model's own limits are
-    // the real ones.
-    expect(getChatInputCapabilities(CODEX, { hermes: false }).image).toBe(false);
-    expect(getChatInputCapabilities(TEXT_ONLY_OPENROUTER, { hermes: false }).image).toBe(false);
-    expect(getChatInputCapabilities(MULTIMODAL, { hermes: false }).image).toBe(true);
+  it('allows image, pdf and audio on the in-process lane regardless of the model', () => {
+    // The in-process lane used to inherit the model's raw limits, which is why
+    // attachments died the moment chat stopped going through Hermes. It now
+    // pre-analyses anything the model cannot read into text (see
+    // $lib/jkai/media/preanalyse), so the composer must not grey them out.
+    for (const ctx of [CODEX, TEXT_ONLY_OPENROUTER, MULTIMODAL]) {
+      const caps = getChatInputCapabilities(ctx, { hermes: false });
+      expect(caps.image).toBe(true);
+      expect(caps.pdf).toBe(true);
+      expect(caps.audio).toBe(true);
+      expect(caps.documentText).toBe(true);
+    }
+  });
+
+  it('still gates VIDEO on the model, because nothing can extract text from it', () => {
+    expect(getChatInputCapabilities(TEXT_ONLY_OPENROUTER, { hermes: false }).video).toBe(false);
+    expect(getChatInputCapabilities(MULTIMODAL, { hermes: false }).video).toBe(
+      getModelCapabilities(MULTIMODAL).video,
+    );
   });
 });
 
