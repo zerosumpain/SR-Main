@@ -29,6 +29,7 @@ tests/lib/node-builder/codegen/index-patch.test.ts
 tests/lib/node-builder/codegen/panel.test.ts
 tests/lib/node-builder/codegen/registry-patch.test.ts
 tests/lib/node-builder/codegen/write-files.test.ts
+tests/lib/workflows/delegation-rule.test.ts
 tests/lib/workflows/orchestrator/dynamic-nodes.test.ts
 tests/lib/workflows/registry-parity.test.ts
 tests/lib/workflows/site-tools/node-builder.test.ts

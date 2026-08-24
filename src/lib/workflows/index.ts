@@ -108,7 +108,7 @@ import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { initHomeAssistantService } from './homeassistant/service';
-import { runsService } from './service-role';
+import { runsService, ownsWhatsAppSession } from './service-role';
 import {
   DYNAMIC_NODES_DIR,
   loadDynamicNodeDefinitions,
@@ -240,7 +240,13 @@ const dynamicDefs = loadDynamicNodeDefinitions(DYNAMIC_NODES_DIR);
 // plugin handles DMs + home channel). That was already how things worked in
 // practice; only outbound was duplicated, which is what kept failing.
 async function bootWhatsApp() {
-  const delegated = !!process.env.WHATSAPP_HERMES_BRIDGE_URL;
+  // Delegation is ONE rule, and it lives in service-role. Reading the env var
+  // directly here is what broke the cutover: the WhatsApp worker owns the
+  // session, so `WhatsAppService` correctly refused to delegate and paired —
+  // but this line still said "delegated", so the OrchestratorBridge was never
+  // wired and inbound messages went nowhere. Outbound worked, which made it
+  // look fine.
+  const delegated = !!process.env.WHATSAPP_HERMES_BRIDGE_URL && !ownsWhatsAppSession();
 
   try {
     const [config] = await db

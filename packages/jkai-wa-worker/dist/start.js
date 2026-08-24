@@ -75754,7 +75754,7 @@ __export(workflows_exports, {
 });
 import { eq as eq121 } from "drizzle-orm";
 async function bootWhatsApp() {
-  const delegated = !!process.env.WHATSAPP_HERMES_BRIDGE_URL;
+  const delegated = !!process.env.WHATSAPP_HERMES_BRIDGE_URL && !ownsWhatsAppSession();
   try {
     const [config] = await db.select().from(whatsappConfig).where(eq121(whatsappConfig.id, "default")).limit(1);
     if (!delegated && !config?.enabled) {
