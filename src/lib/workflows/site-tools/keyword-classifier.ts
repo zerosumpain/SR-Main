@@ -40,6 +40,7 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'knowledge', pattern: /@?knowledge|search\s+(?:everything|all\s+(?:my|the)\s+(?:stores?|sources?|knowledge))|across\s+(?:my\s+)?(?:files,?\s*research|everything)|unified\s+(?:search|recall)/i },
   { toolset: 'discovery', pattern: /\bwhat (?:tools?|can you)\b|\bis there a tool\b|\bskill\b|\bplaybook\b|\bhow do i\b.*\bhere\b/i },
   { toolset: 'browser', pattern: /\bbrowser\b|\bconsole (?:log|error)s?\b|\bopen the (?:page|site)\b|\brender(?:s|ed|ing)?\b.*\bpage\b|\bclick\b|\bscreenshot\b|\bjavascript error/i },
+  { toolset: 'recall', pattern: /\bwhat did (?:we|you|i) (?:say|decide|discuss)\b|\blast time\b|\bearlier (?:conversation|chat)\b|\bremember that\b|\bdo you remember\b|\bpreviously\b/i },
   { toolset: 'agents', pattern: /\bdelegate\b|\bagent\s+team\b|\bspecialists?\b|ask\s+the\s+(?:researcher|analyst|writer|reviewer)|team\s+memory/i },
   { toolset: 'monitors', pattern: /\bmonitors?\b|watch\s+(?:for|this|that|the)|tell\s+me\s+when|alert\s+me\s+(?:when|if)|keep\s+an\s+eye\s+on/i },
   // The entity graph. Distinct from `knowledge` above: that one loads
