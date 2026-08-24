@@ -19,7 +19,13 @@ describe('scraper crypto', () => {
   it('rejects tampered ciphertext', () => {
     const enc = encryptCredential({ a: 1 });
     const parts = enc.split(':');
-    const tampered = [parts[0], parts[1], parts[2].slice(0, -2) + '00'].join(':');
+    // Substitute the last byte for one it definitely is not. Pinning it to a
+    // literal '00' looked like tampering and was a no-op whenever the payload
+    // already ended in '00' — the untampered string decrypts fine, nothing
+    // throws, and the test fails. Roughly 1 run in 256; seen in CI 2026-08-24.
+    const tail = parts[2].slice(-2);
+    const tampered = [parts[0], parts[1], parts[2].slice(0, -2) + (tail === '00' ? 'ff' : '00')].join(':');
+    expect(tampered).not.toBe(enc);
     expect(() => decryptCredential(tampered)).toThrow();
   });
 });
