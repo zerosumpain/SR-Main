@@ -173,6 +173,14 @@ echo "    build -> $(readlink "$VPS_DIR/build")"
 echo "==> Restarting $SERVICE (builder is unaffected)..."
 sudo systemctl restart "$SERVICE"
 
+# ---- Sidecars -------------------------------------------------------------
+# Systemd sidecars (currently the Codex bridge) build and restart here rather
+# than being hand-deployed from a laptop. This never fails the release: a stale
+# sidecar is a smaller problem than a web deploy that did not happen, so the
+# script warns and exits 0 on its own.
+echo "==> Deploying sidecars..."
+./scripts/ci-deploy-sidecars.sh
+
 echo "==> Verifying against the PUBLIC url (not localhost — Caddy/cloudflared and"
 echo "    the static cache come up on different timelines than the node process)..."
 if timeout 90 bash -c "until curl -fsS -o /dev/null '$PUBLIC_URL'; do sleep 3; done"; then
