@@ -108,6 +108,7 @@ import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { initHomeAssistantService } from './homeassistant/service';
+import { runsService } from './service-role';
 import {
   DYNAMIC_NODES_DIR,
   loadDynamicNodeDefinitions,
@@ -289,9 +290,12 @@ async function bootWhatsApp() {
 // the workflow scheduler, the engine reaper, etc. The builder sets
 // JKAI_BUILDER_PROCESS=1 in its systemd unit; the SvelteKit web app does
 // not, so it picks these up.
-const RUN_PLATFORM_SERVICES = process.env.JKAI_BUILDER_PROCESS !== '1';
-
-if (RUN_PLATFORM_SERVICES) bootWhatsApp();
+// Which of these this process owns is now a ROLE rather than a boolean — see
+// $lib/workflows/service-role. The old flag could only answer "am I the
+// builder?", so a process wanting the WhatsApp socket and nothing else would
+// also have started the scheduler, and two schedulers on one database fires
+// every cron twice.
+if (runsService('whatsapp')) bootWhatsApp();
 
 // Boot Home Assistant service if configured
 async function bootHomeAssistant() {
@@ -334,9 +338,9 @@ async function bootHomeAssistant() {
   }
 }
 
-if (RUN_PLATFORM_SERVICES) bootHomeAssistant();
+if (runsService('homeassistant')) bootHomeAssistant();
 
-if (RUN_PLATFORM_SERVICES) {
+if (runsService('background')) {
   syncPrompts().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[prompts] Sync failed:', msg);
@@ -361,7 +365,7 @@ if (RUN_PLATFORM_SERVICES) {
   }
 })();
 
-if (RUN_PLATFORM_SERVICES) {
+if (runsService('scheduler')) {
   startScheduler().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[scheduler] Boot failed:', msg);

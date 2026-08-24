@@ -10,6 +10,7 @@ import { mkdirSync, readdirSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
+import { ownsWhatsAppSession } from '../service-role';
 import type {
 	WhatsAppServiceStatus,
 	WhatsAppServiceState,
@@ -35,8 +36,15 @@ export class WhatsAppService {
 	// own Baileys client (which would fight Hermes for the paired session and
 	// loop on failed QR-pair attempts). Instead, every outbound send POSTs to
 	// the Hermes bridge's existing HTTP API. Inbound stays Hermes-only.
+	//
+	// A WhatsApp worker deployed beside the web app reads the SAME
+	// EnvironmentFile, so reading this variable alone would make it see a
+	// bridge URL and forward its sends — to itself. The process that OWNS the
+	// session is never delegated, whatever the environment says.
 	private bridgeUrl: string | null =
-		typeof process !== 'undefined' && process.env.WHATSAPP_HERMES_BRIDGE_URL
+		typeof process !== 'undefined' &&
+		process.env.WHATSAPP_HERMES_BRIDGE_URL &&
+		!ownsWhatsAppSession()
 			? process.env.WHATSAPP_HERMES_BRIDGE_URL.replace(/\/+$/, '')
 			: null;
 	private get delegated(): boolean { return this.bridgeUrl !== null; }
