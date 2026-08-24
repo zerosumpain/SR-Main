@@ -76059,7 +76059,8 @@ var init_workflows2 = __esm({
 // packages/jkai-wa-worker/bin/start.ts
 import http from "node:http";
 process.env.JKAI_SERVICE_ROLE = "whatsapp";
-var PORT = Number(process.env.WA_WORKER_PORT ?? 3100);
+var DEFAULT_PORT = 3110;
+var PORT = Number(process.env.WA_WORKER_PORT ?? DEFAULT_PORT);
 var HOST = process.env.WA_WORKER_HOST ?? "127.0.0.1";
 async function main() {
   const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
@@ -76132,6 +76133,19 @@ async function main() {
     } catch (err) {
       return json2(res, 500, { error: err instanceof Error ? err.message : "worker error" });
     }
+  });
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        `[wa-worker] port ${PORT} on ${HOST} is already in use, so the worker cannot start.
+[wa-worker] Find the holder with:  sudo ss -lntp | grep :${PORT}
+[wa-worker] Then set WA_WORKER_PORT to a free port in the app's .env (NOT the systemd
+[wa-worker] unit \u2014 deploys reinstall units from the repo and would revert it).`
+      );
+    } else {
+      console.error(`[wa-worker] server error: ${err.message}`);
+    }
+    process.exit(1);
   });
   server.listen(PORT, HOST, () => {
     console.log(`[wa-worker] listening on ${HOST}:${PORT} (role=${process.env.JKAI_SERVICE_ROLE})`);

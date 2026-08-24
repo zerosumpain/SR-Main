@@ -23,7 +23,13 @@ import http from 'node:http';
 // init rather than after it.
 process.env.JKAI_SERVICE_ROLE = 'whatsapp';
 
-const PORT = Number(process.env.WA_WORKER_PORT ?? 3100);
+// 3110, not 3100: on the VPS 3100 is held by a long-running `bun` process, and
+// the first deploy of this worker crash-looped on EADDRINUSE because of it.
+// Override with WA_WORKER_PORT — set it in the .env rather than the unit file,
+// because ci-apply-sidecars.sh reinstalls units from the repo on every deploy
+// and would revert a unit edit.
+const DEFAULT_PORT = 3110;
+const PORT = Number(process.env.WA_WORKER_PORT ?? DEFAULT_PORT);
 const HOST = process.env.WA_WORKER_HOST ?? '127.0.0.1';
 
 type Service = {
@@ -108,6 +114,24 @@ async function main(): Promise<void> {
     } catch (err) {
       return json(res, 500, { error: err instanceof Error ? err.message : 'worker error' });
     }
+  });
+
+  // Say what is wrong and what to do about it. Without this, a taken port
+  // surfaces as an unhandled 'error' event — a raw Node stack trace, repeated
+  // every five seconds by systemd's Restart=on-failure, with nothing naming the
+  // actual problem. That is how the first deploy of this worker presented.
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `[wa-worker] port ${PORT} on ${HOST} is already in use, so the worker cannot start.\n` +
+          `[wa-worker] Find the holder with:  sudo ss -lntp | grep :${PORT}\n` +
+          `[wa-worker] Then set WA_WORKER_PORT to a free port in the app's .env (NOT the systemd\n` +
+          `[wa-worker] unit — deploys reinstall units from the repo and would revert it).`,
+      );
+    } else {
+      console.error(`[wa-worker] server error: ${err.message}`);
+    }
+    process.exit(1);
   });
 
   server.listen(PORT, HOST, () => {
