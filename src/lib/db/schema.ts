@@ -2076,7 +2076,16 @@ export const intelNotes = pgTable('intel_notes', {
   observedAt: timestamp('observed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // Same reasoning as `intel_entities_embedding_hnsw_idx` — this is the second
+  // vector query `buildKnowledgeContext` runs on every chat turn. Smaller table
+  // (1,821 embedded notes) so it costs ~21ms today, but it is the same Seq Scan
+  // and it grows the same way.
+  byEmbedding: index('intel_notes_embedding_hnsw_idx').using(
+    'hnsw',
+    sql`${t.embedding} vector_cosine_ops`,
+  ),
+}));
 
 export type IntelNote = typeof intelNotes.$inferSelect;
 export type NewIntelNote = typeof intelNotes.$inferInsert;
@@ -2133,6 +2142,37 @@ export const intelEntities = pgTable(
     byWatched: index('intel_entities_watched_idx').on(t.watched),
     byUpdated: index('intel_entities_updated_idx').on(t.updatedAt),
     byCanonical: index('intel_entities_canonical_idx').on(t.canonicalName),
+    // Cosine-distance ANN index for the `<=>` lookup `buildKnowledgeContext`
+    // runs on EVERY chat turn. Without it that query is a Seq Scan over every
+    // embedded entity: measured 2026-08-24 on production at 187ms / 13,313
+    // rows / 14,170 buffers read, and it grows with the graph. It sits on the
+    // critical path before the first LLM call, so it is latency the user feels.
+    // Measured on a production-scale copy: 61.5ms → 0.65ms.
+    //
+    // Three things to know before touching this:
+    //
+    // 1. Written as raw SQL rather than `t.embedding.op('vector_cosine_ops')`
+    //    because `vector` here is a `customType`, which has no `.op()`. The
+    //    opclass must match the operator the query uses (`<=>` = cosine); an
+    //    l2_ops index would be built happily and then never chosen.
+    //
+    // 2. **drizzle-kit 0.31 cannot round-trip an hnsw index**, so `push` DROPS
+    //    AND RECREATES both of these every time it runs — verified by OID, and
+    //    it is specific to hnsw (the plain btree indexes beside it are stable).
+    //    That costs ~5.4s per index at 13k rows and the release step allows
+    //    180s, so it is tolerated, not fixed. It is NOT fixable by leaving the
+    //    index out of this file and creating it by hand either: `push`
+    //    reconciles, so an index it cannot see is an index it deletes.
+    //
+    // 3. HNSW is APPROXIMATE. The query post-filters on `merged_into_id IS
+    //    NULL` (407 of 13,720 rows, 3%) against a default `ef_search` of 40 for
+    //    a LIMIT of 8, so it will not run short in practice — but it is a
+    //    ranked shortlist for a prompt section, already cut at distance < 0.6,
+    //    and exact top-8 was never the requirement.
+    byEmbedding: index('intel_entities_embedding_hnsw_idx').using(
+      'hnsw',
+      sql`${t.embedding} vector_cosine_ops`,
+    ),
   }),
 );
 
