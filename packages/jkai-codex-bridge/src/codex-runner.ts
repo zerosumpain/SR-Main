@@ -12,6 +12,8 @@ import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { toCapturedSearch, type CapturedSearch } from './web-search';
+import type { ChatMessage } from './messages';
+import { runStreamedViaResponses } from './responses-transport';
 
 export { toCapturedSearch, toAnnotations, type CapturedSearch } from './web-search';
 
@@ -87,6 +89,31 @@ export interface RunRequest {
   toolServerUrl?: string;
   /** Let the model consult the live web. Only the `/v1/grounded` route sets it. */
   webSearch?: boolean;
+  /**
+   * The caller's ORIGINAL messages and tools, for the Responses transport.
+   *
+   * The SDK path cannot use these — it takes one prompt string — so `prompt`
+   * stays the primary field and these ride alongside. Keeping both means the
+   * transport can be switched per process without the HTTP layer caring which
+   * one is live.
+   */
+  messages?: ChatMessage[];
+  tools?: unknown;
+}
+
+/**
+ * Which transport reaches Codex.
+ *
+ * `responses` talks the Responses API directly (see responses-transport.ts):
+ * ~12,000 fewer prompt tokens per call, ~3s off the floor, and real incremental
+ * streaming. `sdk` is the original `@openai/codex-sdk` path, kept as a
+ * one-env-var rollback rather than deleted, because this is the only route the
+ * site has to the ChatGPT subscription and a bad day should not need a deploy
+ * to undo.
+ */
+export type Transport = 'responses' | 'sdk';
+export function activeTransport(): Transport {
+  return process.env.CODEX_BRIDGE_TRANSPORT === 'sdk' ? 'sdk' : 'responses';
 }
 
 /** A tool the model decided to call, captured from the event stream. */
@@ -94,6 +121,16 @@ export interface CapturedToolCall {
   name: string;
   /** Raw arguments as Codex parsed them; serialised for the OpenAI shape. */
   arguments: unknown;
+  /**
+   * The provider's own `call_id`, when it issued one.
+   *
+   * The MCP path had none, so ids were synthesised from the index and the tool
+   * name — which collide the moment the same tool is called at the same index
+   * on two rounds of one conversation, and a jkai chat turn runs 7-9 rounds.
+   * Two `function_call` items sharing a `call_id` cannot be paired with their
+   * outputs. The Responses transport has a real id; prefer it.
+   */
+  id?: string;
 }
 
 /**
@@ -157,6 +194,15 @@ function threadOptions(req: RunRequest): ThreadOptions {
 /** One-shot turn. With `toolServerUrl` set it may return tool calls instead of
  *  text, exactly as an OpenAI completion does. */
 export async function runOnce(req: RunRequest): Promise<RunResult> {
+  // On the Responses transport EVERY shape drains the one generator, tools or
+  // not. Routing only `runStreamed` was not enough and the canary caught it:
+  // a non-streaming request still went to the SDK, so it kept paying the
+  // 12,000-token CLI preamble while the streaming path beside it was clean.
+  // `toolServerUrl` is undefined on this transport (no MCP hop), so the old
+  // guard below could never have sent it here.
+  if (activeTransport() === 'responses' && req.messages?.length) {
+    return runCapturingToolCalls(req);
+  }
   if (req.toolServerUrl) return runCapturingToolCalls(req);
 
   const thread = client().startThread(threadOptions(req));
@@ -252,6 +298,25 @@ export interface StreamChunk {
  * silent block.
  */
 export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk> {
+  // The Responses transport needs the conversation, not the flattened prompt.
+  // Falling back to the SDK when `messages` is absent keeps any caller that
+  // only ever set `prompt` working, rather than sending an empty turn.
+  if (activeTransport() === 'responses' && req.messages?.length) {
+    yield* runStreamedViaResponses({
+      model: req.model,
+      messages: req.messages,
+      tools: req.tools,
+      outputSchema: req.outputSchema,
+      reasoningEffort: req.reasoningEffort as string | undefined,
+      webSearch: req.webSearch,
+      signal: req.signal,
+    });
+    return;
+  }
+  yield* runStreamedViaSdk(req);
+}
+
+async function* runStreamedViaSdk(req: RunRequest): AsyncGenerator<StreamChunk> {
   // Tool-bearing turns end on OUR abort, so the caller's signal is chained
   // rather than passed straight through.
   const ac = new AbortController();
