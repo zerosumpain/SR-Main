@@ -1744,7 +1744,33 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           ? await db.select().from(jkaiAttachments).where(eq(jkaiAttachments.messageId, assistantMsgId))
           : [];
 
-        job.result = { success: true, workflow: null, message: responseText, attachments: assistantAttachments };
+        // Link the trace to the message it explains. The trace row is written
+        // before this insert (so the link never 404s), which is necessarily
+        // before the row it points at exists. `/jkai/trace/<id>` and the analyse
+        // endpoint both fall back to a lookup by `messageId`, so leaving it null
+        // makes that fallback dead on every loop-served turn.
+        if (assistantMsgId && traceId) {
+          try {
+            await db.update(jkaiToolTraces)
+              .set({ messageId: assistantMsgId })
+              .where(eq(jkaiToolTraces.id, traceId));
+          } catch (err) {
+            // A diagnostic link is never worth losing the user's reply over.
+            console.warn('[general-chat] failed to link trace to message:', err instanceof Error ? err.message : err);
+          }
+        }
+
+        job.result = {
+          success: true,
+          workflow: null,
+          message: responseText,
+          attachments: assistantAttachments,
+          // The `analyse` link on a finished turn reads `result.traceId` LIVE and
+          // `metadata.traceId` on reload. This branch set only the second, so the
+          // button was missing while you watched the turn finish and then
+          // appeared if you reloaded — which is exactly how it was reported.
+          ...(traceId ? { traceId } : {}),
+        };
       }
 
       job.status = 'done';
