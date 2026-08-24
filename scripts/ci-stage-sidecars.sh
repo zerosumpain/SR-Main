@@ -32,6 +32,7 @@ STAGE_ROOT="$VPS_DIR/sidecar-releases"
 # name | npm run <script> | unit filename (inside the package dir)
 SIDECARS=(
   "jkai-codex-bridge|build:codex-bridge|jkai-codex-bridge.service"
+  "jkai-wa-worker|build:wa-worker|jkai-wa-worker.service"
 )
 
 warn() { echo "::warning::$*"; echo "!!  $*" >&2; }

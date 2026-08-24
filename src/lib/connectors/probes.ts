@@ -676,6 +676,9 @@ async function probeWhatsApp(): Promise<ConnectorReport> {
         status: 'unconfigured' as ConnectorStatus,
         detail: 'WHATSAPP_HERMES_BRIDGE_URL not set — sends run through the in-process client',
         live: false,
+        // Pairing lives here now. Before the session moved off Hermes there was
+        // nowhere on the site to scan a QR, which is fine until the day you need to.
+        fixUrl: '/admin/connections/whatsapp',
       };
     }
     const base = bridge.replace(/\/+$/, '').replace(/\/send$/, '');
