@@ -35,6 +35,7 @@ import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { renderSkillIndex } from '$lib/jkai/skills/registry';
 import { compressHistory, renderCompressionSection } from './compress';
+import { carriedToolsets } from './carried-toolsets';
 
 const MAX_HISTORY = 30;
 const DEFAULT_TOOL_ROUNDS = 10;
@@ -57,14 +58,50 @@ function detectExtendedAutonomy(userMessage: string): boolean {
 }
 
 /**
- * Fire-and-forget "opening acknowledgement" call. Reasoning models like
- * GLM-5.x routinely sit silent for 10–20s before emitting either text or a
- * tool_call on the orchestrator's first round, so the user sees nothing but
- * a "Working…" spinner until tools start running. This kicks off a tiny
- * parallel call with no tools, no reasoning-heavy context, and a 60-token
- * cap to push a one-sentence "what I'm about to do" into the chat stream
- * within a couple of seconds. Persists as source=status_update so it
- * survives reload (same shape as the round-5 mid-task update).
+ * How long the turn must stay silent before the opening acknowledgement is
+ * worth an LLM call of its own.
+ *
+ * This used to fire at t=0, in parallel with prompt assembly. That was written
+ * for the Hermes era, when the first round sat silent for 10–20s. It no longer
+ * pays: the ack is aborted the moment the orchestrator emits its own first
+ * content token, and the orchestrator now usually wins — measured 2026-08-24 on
+ * production, ONE `status_update` row landed against 2,674 assistant rows.
+ *
+ * The waste was not only the discarded call. The Codex bridge caps itself at
+ * `CODEX_BRIDGE_CONCURRENCY` (3) for the whole site, and firing the ack before
+ * prompt assembly meant it claimed one of those slots ~1s AHEAD of the call
+ * that actually answers the user. Two concurrent chats put four requests
+ * against three slots and a real answer queued behind an ack destined for the
+ * bin.
+ *
+ * 8s is chosen against two measured numbers: loop turn latency p90 is 7.8s, so
+ * a turn still silent at 8s is genuinely a slow one; and the free narration
+ * ticker's first tick is at 20s, so the ack still has time to land ahead of it
+ * and replace a generic "Still thinking…" with something specific.
+ */
+const ACK_SILENCE_MS = 8_000;
+
+/**
+ * The turn has gone quiet for at least this long before the mid-task status
+ * update is worth its own call. The round-5 note used to fire unconditionally,
+ * and it is the most expensive small thing in the loop: it re-sends the entire
+ * conversation plus every tool result so far (16k–33k input tokens, measured)
+ * to produce two sentences. On a turn that reached round 5 quickly the user has
+ * been watching tool cards stream the whole time and needs no such note.
+ */
+const STATUS_UPDATE_MIN_ELAPSED_MS = 45_000;
+
+/**
+ * Fire-and-forget "opening acknowledgement" call. Reasoning models routinely
+ * sit silent before emitting either text or a tool_call on the orchestrator's
+ * first round, so the user sees nothing but a "Working…" spinner until tools
+ * start running. This makes a tiny call with no tools and no reasoning-heavy
+ * context to push a one-sentence "what I'm about to do" into the chat stream.
+ * Persists as source=status_update so it survives reload (same shape as the
+ * mid-task update).
+ *
+ * Scheduled by `scheduleOpeningAck`, never called directly — see ACK_SILENCE_MS
+ * for why it must not fire at the top of the turn.
  */
 async function emitOpeningAck(opts: {
   userMessage: string;
@@ -121,6 +158,42 @@ async function emitOpeningAck(opts: {
     if ((err as any)?.name === 'AbortError') return;
     console.warn('[general-chat] opening ack failed:', err instanceof Error ? err.message : err);
   }
+}
+
+/**
+ * Arm the opening acknowledgement, to fire only if the turn is still silent
+ * after ACK_SILENCE_MS.
+ *
+ * `cancel()` is what the turn calls the moment it produces ANY visible sign of
+ * life. Two things count, not one: a content token (the answer has started, so
+ * an ack would talk over it) and a tool call (the tool card IS the feedback,
+ * and it says more than "Looking up the bin schedule" ever could). Cancelling
+ * on the tool call is the difference between an ack that rescues dead air and
+ * one that duplicates a card the user can already see.
+ *
+ * Safe to cancel repeatedly, and safe to cancel after the ack has already gone
+ * out — `emitOpeningAck` re-checks the signal before it writes anything.
+ */
+function scheduleOpeningAck(opts: {
+  userMessage: string;
+  modelContext: ModelContext;
+  conversationId: string | null | undefined;
+  priceSnapshot: PriceSnapshot | null;
+}): { cancel: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    void emitOpeningAck({ ...opts, signal: controller.signal });
+  }, ACK_SILENCE_MS);
+  // Node keeps the process alive for a pending timer; this one must never be
+  // the reason a worker lingers.
+  timer.unref?.();
+  return {
+    cancel: () => {
+      clearTimeout(timer);
+      controller.abort();
+    },
+  };
 }
 
 interface ToolProgress {
@@ -567,30 +640,50 @@ async function buildPastedUrlsSection(
   return `\n\n--- Pasted URLs ---\nThe user pasted the following links in their message. Their readable contents have been fetched for you below — do not re-fetch unless you need a different page.\n\n${sections.join('\n\n')}`;
 }
 
+/**
+ * Run one chat turn.
+ *
+ * A thin wrapper whose only job is the opening ack's lifetime. The turn has
+ * many exits — a thrown LLM error, a cancelled job, an early return from a
+ * clarify gate — and every one of them has to disarm the timer, or a turn that
+ * died at round 2 still spends an ack call eight seconds later and posts it
+ * into a thread that has moved on. A `finally` is the only place that holds for
+ * all of them.
+ */
 export async function generalChat(
   input: { text: string; attachments?: JkaiAttachment[] },
   conversationHistory: HistoryMessage[],
   options: ChatOptions,
 ): Promise<{ response: string }> {
+  // Skipped for sub-agents — their output isn't meant for the user chat.
+  const ack =
+    options.conversationId && (options.subagentDepth ?? 0) === 0
+      ? scheduleOpeningAck({
+          userMessage: input.text,
+          modelContext: options.modelContext,
+          conversationId: options.conversationId,
+          priceSnapshot: options.priceSnapshot,
+        })
+      : null;
+  try {
+    return await runGeneralChat(input, conversationHistory, options, () => ack?.cancel());
+  } finally {
+    ack?.cancel();
+  }
+}
+
+async function runGeneralChat(
+  input: { text: string; attachments?: JkaiAttachment[] },
+  conversationHistory: HistoryMessage[],
+  options: ChatOptions,
+  /** Disarms the opening ack. Called on the first visible sign of life. */
+  cancelAck: () => void,
+): Promise<{ response: string }> {
   const { onProgress, onToolProgress } = options;
   const userMessage = input.text;
 
-  // Kick off the opening acknowledgement in parallel — it runs while the
-  // heavy orchestrator system prompt is being assembled and the first LLM
-  // round (which on reasoning models like GLM-5.x can sit silent for 10–20s)
-  // is in flight. Aborted as soon as the orchestrator emits its own first
-  // content token so we never double-up "Working…" callouts and the orchestrator's real reply.
-  // Skipped for sub-agents (their output isn't meant for the user chat).
-  const ackController = new AbortController();
-  if (options.conversationId && (options.subagentDepth ?? 0) === 0) {
-    void emitOpeningAck({
-      userMessage,
-      modelContext: options.modelContext,
-      conversationId: options.conversationId,
-      priceSnapshot: options.priceSnapshot,
-      signal: ackController.signal,
-    });
-  }
+  // The opening ack is armed by the `generalChat` wrapper above and disarmed
+  // through `cancelAck` — see ACK_SILENCE_MS for why it no longer runs at t=0.
 
   // Check if user wants to capture knowledge
   maybeIngestAsNote(userMessage);
@@ -630,7 +723,14 @@ export async function generalChat(
 
   // Run the keyword classifier once, up front. Drives both the conditional
   // scraper playbook below and the toolset auto-activation further down.
-  const inferred = inferToolsets(userMessage);
+  const matched = inferToolsets(userMessage);
+  // …plus whatever the last few turns established, so "go on then" keeps the
+  // tools the conversation was already using. See `carriedToolsets`.
+  const carried = carriedToolsets(conversationHistory, matched);
+  const inferred = [...matched, ...carried];
+  if (carried.length) {
+    onProgress?.(`[toolsets] carried forward from earlier turns: ${carried.join(', ')}\n`);
+  }
 
   // Stealth-scrape playbook — only injected when the user's message looks
   // scraper-related. Kept out of the always-on prompt so the typical /jkai
@@ -812,6 +912,11 @@ export async function generalChat(
 
   let responseText = '';
 
+  /** Wall clock for the whole turn — the mid-task status update is gated on it.
+   *  Distinct from the per-round `turnStartedAt` inside the loop, which resets
+   *  every round and so can never say how long the USER has been waiting. */
+  const turnBeganAt = Date.now();
+
   // Derive the tool-call budget for this turn. The caller can override
   // explicitly; otherwise we look at the user message for extended-autonomy
   // phrases. Canvas-bound chats start higher because plan/clarify gates are
@@ -859,7 +964,13 @@ export async function generalChat(
     // against MAX_TOOL_ROUNDS. Persisted as a proper assistant message with
     // source=status_update so it shows up in the chat stream (not just the
     // working panel) and survives page reloads.
-    if (round === 5) {
+    //
+    // Gated on elapsed wall clock, not on the round number alone. This is the
+    // most expensive small thing in the loop — it re-sends the whole
+    // conversation plus every tool result so far to write two sentences — and
+    // a turn that reached round 5 inside STATUS_UPDATE_MIN_ELAPSED_MS has been
+    // streaming tool cards the entire time. There is nothing to reassure.
+    if (round === 5 && Date.now() - turnBeganAt >= STATUS_UPDATE_MIN_ELAPSED_MS) {
       try {
         const statusResp = await client.chat.completions.create({
           model,
@@ -1003,15 +1114,19 @@ export async function generalChat(
             clearNarration();
             if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Streaming reply…');
             // Orchestrator is now producing its own assistant content — drop
-            // the parallel opening ack so we don't render two "Working…"
-            // callouts back-to-back when the orchestrator turns out to be
-            // fast enough to beat the ack call.
-            ackController.abort();
+            // the opening ack so we don't render two "Working…" callouts
+            // back-to-back when the orchestrator beats the eight-second timer.
+            cancelAck();
           }
           fullContent += delta.content;
           options.onStreamEvent?.({ type: 'token', delta: delta.content });
         }
         if (Array.isArray(delta.tool_calls)) {
+          // A tool call is a visible sign of life too: the tool card renders in
+          // the chat and says more than the ack's one sentence ever could.
+          // Cancelling here is what stops the ack duplicating a card the user
+          // is already looking at.
+          cancelAck();
           for (const tc of delta.tool_calls as any[]) {
             const idx = tc.index ?? 0;
             let acc = fullToolCalls.find((t) => t.index === idx);
