@@ -471,6 +471,11 @@ jobs:
       - name: Stage the jkai-builder sidecar
         run: ./scripts/ci-stage-builder.sh || echo "::warning::staging the jkai-builder sidecar failed — it will keep running the previous bundle"
 
+      # Here rather than in `release` because that job has no npm ci, so it
+      # cannot build anything. `ci-apply-sidecars.sh` does the restart half.
+      - name: Stage the systemd sidecars
+        run: ./scripts/ci-stage-sidecars.sh || echo "::warning::staging the systemd sidecars failed — they will keep running the previous bundle"
+
 
   release:
     name: Release (VPS)
