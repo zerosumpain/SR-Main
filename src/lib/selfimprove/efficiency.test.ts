@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { formatEfficiency, snapshotOf, trialImproved, trialIsDecidable } from './efficiency';
+import {
+  formatEfficiency,
+  isFresherThan,
+  snapshotOf,
+  trialImproved,
+  trialIsDecidable,
+} from './efficiency';
 import { TRIAL } from './types';
 import type { CallEfficiency } from '$lib/server/hermes-sessions';
 
@@ -24,6 +30,7 @@ function eff(patch: Partial<CallEfficiency['chat']> = {}): CallEfficiency {
     patterns: [],
     discoveryCalls: 12,
     generatedAt: '2026-07-29T03:30:00.000Z',
+    newestTurnAt: '2026-07-29T03:00:00.000Z',
   };
 }
 
@@ -63,6 +70,59 @@ describe('trial verdict — a neutral result reverts', () => {
 
   it('never claims improvement against a zero baseline', () => {
     expect(trialImproved(0, 0)).toBe(false);
+  });
+});
+
+describe('staleness guard — never grade a trial on evidence older than itself', () => {
+  // The real incident, 2026-08-24. Hermes stopped; its session store froze at
+  // 06:34 but kept answering queries. Tool-policy v16's trial opened at 02:36
+  // that morning and would decide on 09-07, by which time `windowDays` =
+  // ceil(ageDays) opens the window well before the trial start. The 9 turns it
+  // would have read were all dated 08-23 — the day BEFORE the trial — and they
+  // average 2.0 against a 2.82 baseline, clearing the 5% bar comfortably.
+  // v16 gets KEPT, with a verdict reading "-29% over 9 turns", on data that
+  // cannot possibly reflect it.
+  const TRIAL_STARTED = '2026-08-24T02:36:29.000Z';
+  const STORE_FROZE = '2026-08-24T06:34:00.000Z';
+  const EVIDENCE_PREDATING_TRIAL = '2026-08-23T21:10:00.000Z';
+
+  it('refuses when the newest data predates the trial', () => {
+    expect(isFresherThan(EVIDENCE_PREDATING_TRIAL, TRIAL_STARTED)).toBe(false);
+  });
+
+  it('accepts a store that received something after the trial opened', () => {
+    // The frozen store is technically fresher than the trial start — this is
+    // why "is the store newer than the trial" is the right question and
+    // "is the store recent" is not. Once real turns resume, this passes.
+    expect(isFresherThan(STORE_FROZE, TRIAL_STARTED)).toBe(true);
+  });
+
+  it('treats a missing timestamp as stale, not as fresh', () => {
+    // An older homeserv, or a remote that predates the field, sends undefined.
+    // Failing open here would restore the exact bug over the proxy boundary.
+    expect(isFresherThan(null, TRIAL_STARTED)).toBe(false);
+    expect(isFresherThan(undefined, TRIAL_STARTED)).toBe(false);
+    expect(isFresherThan('', TRIAL_STARTED)).toBe(false);
+  });
+
+  it('treats an unparseable timestamp as stale', () => {
+    expect(isFresherThan('not a date', TRIAL_STARTED)).toBe(false);
+    expect(isFresherThan(STORE_FROZE, 'not a date')).toBe(false);
+  });
+
+  it('does not count data written at the exact trial start', () => {
+    // Equal is not after. A row stamped at the same instant cannot have been
+    // influenced by the change.
+    expect(isFresherThan(TRIAL_STARTED, TRIAL_STARTED)).toBe(false);
+  });
+
+  it('is not satisfiable by a turn count — the turns existed, they were just old', () => {
+    // Guarding on `turnsObserved === 0` was the tempting fix and would have
+    // sailed straight past the incident: there were 9 turns.
+    const stale = eff({ turns: 9, meanCalls: 2.0 });
+    expect(stale.chat.turns).toBeGreaterThan(0);
+    expect(trialImproved(2.82, stale.chat.meanCalls)).toBe(true); // would have been KEPT
+    expect(isFresherThan(EVIDENCE_PREDATING_TRIAL, TRIAL_STARTED)).toBe(false); // now blocked
   });
 });
 

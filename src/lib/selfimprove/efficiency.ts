@@ -85,6 +85,21 @@ export type TrialDecision =
   | { kind: 'kept'; version: number; before: number; after: number }
   | { kind: 'reverted'; version: number; revertedTo: number; before: number; after: number };
 
+/**
+ * Did the measurement source receive anything after `startedAt`?
+ *
+ * Exported for the test: this predicate is the whole staleness guard, and the
+ * failure it prevents is silent by nature. Unparseable or missing timestamps
+ * answer false — a source that cannot prove it is fresh is treated as stale.
+ */
+export function isFresherThan(newestTurnAt: string | null | undefined, startedAt: string): boolean {
+  if (!newestTurnAt) return false;
+  const newest = Date.parse(newestTurnAt);
+  const started = Date.parse(startedAt);
+  if (Number.isNaN(newest) || Number.isNaN(started)) return false;
+  return newest > started;
+}
+
 /** Is this trial old enough / big enough to judge? */
 export function trialIsDecidable(
   turnsObserved: number,
@@ -126,6 +141,30 @@ export async function assessActiveTrial(): Promise<{ decision: TrialDecision; ac
 
   const since = await measureEfficiency(windowDays);
   if (!since) {
+    return { decision: { kind: 'none' }, actions };
+  }
+
+  // Refuse to grade a trial against evidence older than the trial.
+  //
+  // `windowDays` is ceil(ageDays), so the window always opens at or before the
+  // trial started — which is correct while data is still arriving, and lethal
+  // once it stops. Hermes' session store froze on 2026-08-24; every query over
+  // it still returned rows, so v16 was on course to be KEPT on 9 turns dated
+  // the day BEFORE its trial opened, with a verdict reading "-29% over 9
+  // turns". A plausible verdict is worse than an absurd one — nobody checks it.
+  //
+  // Guarding on `turnsObserved === 0` would not have caught this: there were
+  // turns, they were simply the wrong ones. Freshness of the SOURCE is the
+  // thing to assert. Null means the store is empty or too old to report it;
+  // both are stale.
+  if (!isFresherThan(since.newestTurnAt, policy.trial.startedAt)) {
+    actions.push({
+      kind: 'measurement_stale',
+      detail:
+        `Trial on v${policy.version} not assessed: measurement source last received data ` +
+        `${since.newestTurnAt ?? 'never'}, which is not after the trial started ` +
+        `${policy.trial.startedAt}. Grading would use turns older than the change.`,
+    });
     return { decision: { kind: 'none' }, actions };
   }
 

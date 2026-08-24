@@ -76,24 +76,9 @@ async function proxyGet<T>(path: string): Promise<T> {
   }
 }
 
-async function proxyPost<T>(path: string, body: unknown, timeoutMs: number): Promise<T> {
-  const base = homeservBase();
-  if (!base) throw new Error('homeserv base URL not configured');
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${base}/api/admin/hermes${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.HERMES_BRIDGE_SECRET}` },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error(`hermes proxy POST ${path} → HTTP ${res.status}`);
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(t);
-  }
-}
+// `proxyPost` lived here. Every caller now refuses before it would have been
+// reached (see "Writes" below), so it is gone rather than left as a loaded gun
+// for the next surface that wants to POST at a retired gateway.
 
 // ── Reads ──
 export async function rTelemetry(days: number): Promise<Telemetry> {
@@ -161,36 +146,43 @@ export async function rHermesModels(): Promise<HermesWorkloadRow[]> {
 }
 
 // ── Writes ──
-export async function rServiceAction(action: ServiceAction): Promise<ActionResult> {
-  if (IS_HOMESERV) {
-    const { runServiceAction } = await import('./hermes-control');
-    return runServiceAction(action);
-  }
-  return proxyPost<ActionResult>('/service', { action }, 6 * 60_000);
+//
+// Hermes is retired (2026-08-24): `jkai.chat.hermes_enabled` is false, the three
+// units are stopped, and WhatsApp runs from packages/jkai-wa-worker on the VPS.
+// Every write below still worked, and that is the danger — `jkai-hermes.service`
+// is *linked* and merely failed, so "restart" would START it, its .env still had
+// WHATSAPP_ENABLED=true, and its Baileys session is a second registered device.
+// One click on a panel nobody has retired would put two linked devices on the
+// account, both receiving every inbound message and both answering it.
+//
+// So the writes refuse, here, at the one place they all funnel through — rather
+// than by deleting the admin forms, which would have to be done four times and
+// re-done for any surface added later. Reads are untouched: the panels keep
+// rendering, the security page keeps reading homeserv's posture, and nothing
+// 500s. Delete the callers and this whole file at S8.
+//
+// Rollback (`hermes_enabled = true`) does NOT need these: that is one settings
+// row read per request, and it starts no process.
+const RETIRED =
+  'Hermes is retired. This control is disabled because starting the gateway ' +
+  'would register a second WhatsApp device and duplicate every reply. ' +
+  'Chat runs on the in-process loop; WhatsApp runs on the VPS worker.';
+
+function refuseWrite(what: string): never {
+  throw new Error(`${what} unavailable — ${RETIRED}`);
 }
-export async function rCronOp(op: CronOp): Promise<CronOpResult> {
-  if (IS_HOMESERV) {
-    const { runCronOp } = await import('./hermes-cron');
-    return runCronOp(op);
-  }
-  return proxyPost<CronOpResult>('/cron', op, 35_000);
+
+export async function rServiceAction(_action: ServiceAction): Promise<ActionResult> {
+  refuseWrite('Hermes service control');
 }
-/** Point a Hermes role at a model. Generous timeout: the write is followed by a
- *  gateway restart, without which the change would not be live. */
+export async function rCronOp(_op: CronOp): Promise<CronOpResult> {
+  refuseWrite('Hermes cron control');
+}
 export async function rSetHermesModel(
-  workloadId: string,
-  modelId: string,
+  _workloadId: string,
+  _modelId: string,
 ): Promise<ActionResult> {
-  if (IS_HOMESERV) {
-    const [{ setHermesWorkload }, { getWorkload }] = await Promise.all([
-      import('./hermes-models'),
-      import('$lib/models/workloads'),
-    ]);
-    const def = getWorkload(workloadId);
-    if (!def || def.scope !== 'hermes') throw new Error(`not a Hermes workload: ${workloadId}`);
-    return setHermesWorkload(def, modelId);
-  }
-  return proxyPost<ActionResult>('/models', { workloadId, modelId }, 4 * 60_000);
+  refuseWrite('Hermes workload model assignment');
 }
 
 // ── WhatsApp bridge ──
@@ -214,22 +206,13 @@ export async function rWhatsAppPairState(): Promise<PairState> {
   return proxyGet<PairState>('/whatsapp/pair');
 }
 
-/** Start / cancel a pairing run. Short timeouts: both return immediately and
- *  the page polls for the QR rather than holding a request open for a scan. */
-export async function rWhatsAppPair(op: 'start' | 'cancel'): Promise<PairState> {
-  if (IS_HOMESERV) {
-    const { startPairing, cancelPairing } = await import('./hermes-whatsapp');
-    return op === 'start' ? startPairing() : cancelPairing();
-  }
-  return proxyPost<PairState>('/whatsapp/pair', { op }, 30_000);
+/** Pairing against the Hermes bridge would pair the WRONG device — the live
+ *  session belongs to packages/jkai-wa-worker. Re-pair at
+ *  /admin/connections/whatsapp, which talks to the worker. */
+export async function rWhatsAppPair(_op: 'start' | 'cancel'): Promise<PairState> {
+  refuseWrite('Hermes WhatsApp pairing');
 }
 
-/** Restart the bridge or unlink the session. Generous timeout — both stop and
- *  restart the gateway, then wait for the bridge to answer. */
-export async function rWhatsAppAction(action: WhatsAppAction): Promise<WhatsAppActionResult> {
-  if (IS_HOMESERV) {
-    const { runWhatsAppAction } = await import('./hermes-whatsapp');
-    return runWhatsAppAction(action);
-  }
-  return proxyPost<WhatsAppActionResult>('/whatsapp', { action }, 5 * 60_000);
+export async function rWhatsAppAction(_action: WhatsAppAction): Promise<WhatsAppActionResult> {
+  refuseWrite('Hermes WhatsApp bridge control');
 }

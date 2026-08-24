@@ -187,7 +187,14 @@ export type ActionKind =
   /** A trialled policy beat its baseline and was kept. */
   | 'policy_kept'
   /** A trialled policy failed to beat its baseline and was rolled back. */
-  | 'policy_reverted';
+  | 'policy_reverted'
+  /**
+   * A trial could not be judged because its measurement source had stopped
+   * receiving data before the trial began. Recorded rather than skipped
+   * silently: "nothing happened tonight" and "the evidence was too old to use"
+   * look identical in the ledger otherwise, and the second one needs fixing.
+   */
+  | 'measurement_stale';
 
 /**
  * The plain-English record of one improvement, captured WHERE THE FACTS ARE

@@ -439,13 +439,39 @@ async function runSingleToolCall(
         }
       : (conversationId ? { conversationId, emit: () => {} } : undefined);
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
-    if (jobId && isDestructive(fnName)) {
-      const prompt = describeDestructiveAction(fnName, fnArgs);
-      const approved = await requireConfirmation(jobId, prompt, fnArgs, { destructive: true });
-      if (!approved) {
-        toolResult = { success: false, error: 'User declined the action.' };
+    if (isDestructive(fnName)) {
+      if (!jobId) {
+        // No job means no SSE stream, so there is nobody who *could* be shown a
+        // confirmation card. This used to fall through to the plain `else` and
+        // execute — `jobId && isDestructive(...)` reads as one guard but is two,
+        // and the absent half is the dangerous one. Every caller that passes no
+        // parentJobId got the ungated path: the WhatsApp bridge
+        // (workflows/whatsapp/orchestrator-bridge.ts), the follow-up queue, and
+        // agent delegation. Under Hermes the same turns went through the MCP
+        // dispatcher, which already denies by default when nobody is attached
+        // (jkai/tool-step-bus.ts) — that is the behaviour being restored here,
+        // including its MCP_CONFIRM_UNATTENDED escape hatch so the two paths
+        // cannot drift apart again.
+        const policy = (process.env.MCP_CONFIRM_UNATTENDED ?? 'deny').toLowerCase();
+        if (policy === 'allow') {
+          toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
+        } else {
+          toolResult = {
+            success: false,
+            error:
+              `${fnName} changes something outside this conversation and needs confirmation, ` +
+              'but no user is attached to this session to give it. Ask again in /jkai, ' +
+              'where the confirmation can be shown.',
+          };
+        }
       } else {
-        toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
+        const prompt = describeDestructiveAction(fnName, fnArgs);
+        const approved = await requireConfirmation(jobId, prompt, fnArgs, { destructive: true });
+        if (!approved) {
+          toolResult = { success: false, error: 'User declined the action.' };
+        } else {
+          toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
+        }
       }
     } else {
       toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);

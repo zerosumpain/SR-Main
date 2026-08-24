@@ -505,6 +505,19 @@ export interface CallEfficiency {
   /** Meta-tool discovery overhead (list/schema round-trips) across all turns. */
   discoveryCalls: number;
   generatedAt: string;
+  /**
+   * Newest message in the underlying store, ignoring the window — i.e. how
+   * fresh the DATA is, not when the measurement ran. `generatedAt` is always
+   * "now" and so says nothing about whether anything is still being written.
+   *
+   * Hermes stopped on 2026-08-24 and this store froze with it, but every query
+   * over it kept returning rows and every consumer kept reading them as
+   * current. A trial graded on those rows would be graded on evidence older
+   * than itself. Null when the store is empty or the remote predates this
+   * field — both mean "cannot vouch for freshness", which callers must treat
+   * as stale rather than as fresh.
+   */
+  newestTurnAt: string | null;
 }
 
 export interface TurnRow {
@@ -591,7 +604,16 @@ export async function getCallEfficiency(daysIn = 30): Promise<CallEfficiency> {
      SELECT COUNT(*) AS turns FROM (SELECT DISTINCT session_id, turn FROM m WHERE turn > 0);`,
   );
 
-  return aggregateTurnEfficiency(rows, Number(totals?.turns ?? 0), days);
+  // Deliberately NOT filtered by `since`: the question is "when did this store
+  // last receive anything", which a windowed max cannot answer — inside a dead
+  // window it returns null, and inside a live one it just repeats the window.
+  const [fresh] = await querySqlite<{ newest: number | null }>(
+    `SELECT MAX(timestamp) AS newest FROM messages;`,
+  );
+  const newestEpoch = Number(fresh?.newest ?? 0);
+  const newestTurnAt = newestEpoch > 0 ? new Date(newestEpoch * 1000).toISOString() : null;
+
+  return aggregateTurnEfficiency(rows, Number(totals?.turns ?? 0), days, newestTurnAt);
 }
 
 /**
@@ -603,6 +625,7 @@ export function aggregateTurnEfficiency(
   rows: TurnRow[],
   totalTurns: number,
   days: number,
+  newestTurnAt: string | null = null,
 ): CallEfficiency {
   const turns = new Map<string, Array<{ name: string; args: string }>>();
   for (const r of rows) {
@@ -711,5 +734,6 @@ export function aggregateTurnEfficiency(
     patterns: [...patterns.values()].sort((a, b) => b.repeatCalls - a.repeatCalls).slice(0, 15),
     discoveryCalls,
     generatedAt: new Date().toISOString(),
+    newestTurnAt,
   };
 }
