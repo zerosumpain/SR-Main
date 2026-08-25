@@ -2070,6 +2070,14 @@
     //
     //    The manual picker waits for the whole turn: nothing is racing it there,
     //    and the disabled composer is the only feedback the user gets.
+    //    None of this applies to the in-process loop. It reads the model off
+    //    the conversation row on every turn, so the PATCH above IS the switch —
+    //    pushing a `/model` command at it would post a visible user bubble
+    //    (handleWithLoop did not honour `silent`) and bill a whole turn to tell
+    //    it something it already knows. The open-time effect below is gated the
+    //    same way, on the same flag.
+    if (!hermesEnabled) return;
+
     if (force) {
       await tellHermesModel(provider, modelId);
       return;
@@ -3263,6 +3271,11 @@
         <!-- Chip row: model, prompt, workflow, attach, voice — then a live
              per-turn cost estimate pushed to the right. -->
         <div class="chip-row">
+          <!-- The skill chip stays gated on the engine: the in-process loop has
+               no pinned-skill concept — `handleWithLoop` never reads
+               `pinnedSkill` — so offering the control would be offering a
+               setting that does nothing. It discovers skills through the index
+               and `skill_view` instead. -->
           {#if hermesEnabled && conversationId}
             <div class="model-switcher skill-switcher">
               <button
@@ -3297,6 +3310,15 @@
                 </div>
               {/if}
             </div>
+          {/if}
+          <!-- The model switcher is NOT gated on the engine. The loop honours
+               the per-conversation pin — it coerces `conv.modelProvider` /
+               `conv.modelId` on every turn — so the choice worked the whole
+               time; only the control to make it was hidden, which is why every
+               thread since the cutover has been on the default. Un-gated only
+               after the `/model` push above was gated, or each switch would
+               have posted a visible bubble and billed a turn. -->
+          {#if conversationId}
             <div class="model-switcher">
               {#if messages.length === 0}
                 <button

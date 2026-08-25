@@ -1287,10 +1287,16 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
 
 async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds } = body as {
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds, silent } = body as {
     message: string;
     workflowId?: string;
     mode?: string;
+    /** Do not persist a user bubble for this turn — it is machinery, not
+     *  conversation. The Hermes branch has always honoured it; this one never
+     *  read it, so a `/model` push would have shown up in the thread as if the
+     *  user had typed it. The client no longer sends one at this engine, and
+     *  this is the second lock on that door. */
+    silent?: boolean;
     currentNodes?: any;
     currentEdges?: any;
     conversationId?: string;
@@ -1568,11 +1574,15 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         const userMetadata = chatNodeId ? { chatNodeId } : undefined;
         let insertedUserMsg: { id: string } | null = null;
         if (conversationId) {
-          const [m] = await db.insert(orchestratorChats).values({ conversationId, workflowId: workflowId ?? null, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
-          insertedUserMsg = m;
+          if (!silent) {
+            const [m] = await db.insert(orchestratorChats).values({ conversationId, workflowId: workflowId ?? null, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
+            insertedUserMsg = m;
+          }
         } else if (workflowId) {
-          const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
-          insertedUserMsg = m;
+          if (!silent) {
+            const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
+            insertedUserMsg = m;
+          }
         }
 
         if (insertedUserMsg && attachmentRows.length > 0) {
