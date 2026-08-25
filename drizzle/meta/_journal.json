@@ -15,6 +15,13 @@
       "when": 1786838400000,
       "tag": "0001_route_export_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788019200000,
+      "tag": "0002_context_memory",
+      "breakpoints": true
     }
   ]
 }
