@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes, intelRelationships, intelNotes, intelNoteEntities } from '$lib/db/schema';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { generateEmbedding } from './embed';
 
 interface KnowledgeContext {
@@ -129,10 +129,20 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
   const relevantNotes = (noteRows as any[]).filter((r) => r.distance < 0.5);
 
   const entityIds = relevantEntities.map((e: any) => e.id);
-  const entities = [];
 
-  for (const row of relevantEntities) {
-    const rels = entityIds.length > 0
+  // Two queries, not 1 + N + M.
+  //
+  // This ran one relationships query per relevant entity, then a separate
+  // single-row name lookup per relationship, every one of them awaited inside
+  // nested `for` loops. Production holds 16,505 relationships at 2.46 per
+  // entity, so a typical turn made roughly thirty sequential database round
+  // trips — plus an external embedding call above — before the first token of
+  // the reply could even be requested. The work is the same; the waiting was
+  // the cost.
+  const REL_PER_ENTITY = 10;
+
+  const allRels =
+    entityIds.length > 0
       ? await db
           .select({
             type: intelRelationships.type,
@@ -141,23 +151,54 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
             targetId: intelRelationships.targetEntityId,
           })
           .from(intelRelationships)
-          .where(sql`${intelRelationships.sourceEntityId} = ${row.id} OR ${intelRelationships.targetEntityId} = ${row.id}`)
-          .limit(10)
+          .where(
+            or(
+              inArray(intelRelationships.sourceEntityId, entityIds),
+              inArray(intelRelationships.targetEntityId, entityIds),
+            ),
+          )
+          // Generous headroom over the per-entity cap applied below. A hub
+          // entity with hundreds of edges must not drag the whole batch.
+          .limit(entityIds.length * REL_PER_ENTITY * 3 + 50)
       : [];
 
-    const relDescriptions: string[] = [];
-    for (const rel of rels) {
-      const otherId = rel.sourceId === row.id ? rel.targetId : rel.sourceId;
-      const [other] = await db
-        .select({ name: intelEntities.name })
-        .from(intelEntities)
-        .where(eq(intelEntities.id, otherId))
-        .limit(1);
+  // Bucket by entity, capped per entity — the same shape the old per-entity
+  // `.limit(10)` produced.
+  const relsByEntity = new Map<string, typeof allRels>();
+  for (const id of entityIds) relsByEntity.set(id, []);
+  for (const rel of allRels) {
+    // A self-relationship touches one bucket once, not twice.
+    const sides = rel.sourceId === rel.targetId ? [rel.sourceId] : [rel.sourceId, rel.targetId];
+    for (const side of sides) {
+      const bucket = relsByEntity.get(side);
+      if (bucket && bucket.length < REL_PER_ENTITY) bucket.push(rel);
+    }
+  }
 
-      if (other) {
-        const direction = rel.sourceId === row.id ? '→' : '←';
-        relDescriptions.push(`${direction} ${rel.type.replace(/_/g, ' ')}: ${other.name}`);
-      }
+  // Every name the descriptions will need, in one lookup.
+  const otherIds = [
+    ...new Set(allRels.flatMap((r) => [r.sourceId, r.targetId]).filter((id): id is string => !!id)),
+  ];
+  const nameRows =
+    otherIds.length > 0
+      ? await db
+          .select({ id: intelEntities.id, name: intelEntities.name })
+          .from(intelEntities)
+          .where(inArray(intelEntities.id, otherIds))
+      : [];
+  const nameById = new Map(nameRows.map((r) => [r.id, r.name]));
+
+  const entities = [];
+  for (const row of relevantEntities) {
+    const relDescriptions: string[] = [];
+    for (const rel of relsByEntity.get(row.id) ?? []) {
+      const otherId = rel.sourceId === row.id ? rel.targetId : rel.sourceId;
+      const otherName = otherId ? nameById.get(otherId) : undefined;
+      // An edge whose other end has been merged away or deleted described
+      // nothing before either — it just cost a query to discover that.
+      if (!otherName) continue;
+      const direction = rel.sourceId === row.id ? '→' : '←';
+      relDescriptions.push(`${direction} ${rel.type.replace(/_/g, ' ')}: ${otherName}`);
     }
 
     entities.push({

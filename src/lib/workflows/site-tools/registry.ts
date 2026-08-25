@@ -91,6 +91,26 @@ export function getToolsetDefinitions(toolset: string) {
   }));
 }
 
+/**
+ * OpenAI-format definitions for specific tools, by name.
+ *
+ * For pushing an individual capability into the always-on set without dragging
+ * its whole toolset along: `research_web_search` lives in `research`, which
+ * also carries nine session-management tools nobody wants on every turn.
+ *
+ * Silently skips a name that is not registered — the caller is a prompt-assembly
+ * path and must not fail a turn because a tool was renamed.
+ */
+export function getToolDefinitionsByName(names: readonly string[]) {
+  return names
+    .map((n) => tools.find((t) => t.name === n))
+    .filter((t): t is NonNullable<typeof t> => !!t)
+    .map((t) => ({
+      type: 'function' as const,
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }));
+}
+
 /** Compact manifest of all toolsets — category, tool names, and one-line descriptions */
 export function getToolsetManifest(): Array<{
   toolset: string;

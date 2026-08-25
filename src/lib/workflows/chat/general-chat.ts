@@ -10,12 +10,12 @@ import {
   workflowNodes,
   workflowEdges,
 } from '$lib/db/schema';
-import { eq, isNull, desc } from 'drizzle-orm';
+import { eq, isNull, desc, sql } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
 import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
-import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
+import { META_TOOL_DEFINITIONS, getToolsetDefinitions, getToolDefinitionsByName, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
@@ -304,7 +304,11 @@ function maybeIngestAsNote(userMessage: string): void {
 interface RunToolContext {
   activeTools: Array<any>;
   activatedToolsets: Set<string>;
-  haEntities: any[];
+  /** How many HA entities exist. Enough to decide whether the toolset is
+   *  offerable; the registry itself is only fetched if it is activated. */
+  haEntityCount: number;
+  /** Fetches the full entity registry, once, on first use. */
+  loadHaEntities: () => Promise<any[]>;
   onToolProgress?: (step: ToolProgress) => void;
   onProgress?: (text: string) => void;
   onStreamEvent?: (event: JobEvent) => void;
@@ -319,7 +323,7 @@ async function runSingleToolCall(
   toolCall: any,
   ctx: RunToolContext,
 ): Promise<{ toolMessage: { role: 'tool'; tool_call_id: string; content: string } }> {
-  const { activeTools, activatedToolsets, haEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
+  const { activeTools, activatedToolsets, haEntityCount, loadHaEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
   const fnName: string = toolCall.function.name;
   let fnArgs: Record<string, unknown>;
   try {
@@ -346,12 +350,16 @@ async function runSingleToolCall(
     if (activatedToolsets.has(toolset)) {
       toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
     } else if (toolset === 'home') {
-      if (haEntities.length > 0) {
+      if (haEntityCount > 0) {
         const defs = getToolsetDefinitions('home');
         activeTools.push(...defs);
         activatedToolsets.add('home');
         const { buildHASystemPromptSection } = await import('$lib/workflows/homeassistant/llm-tools');
-        const entitySummary = buildHASystemPromptSection(haEntities);
+        // Only now is the registry worth reading. It is 91KB across 415
+        // entities in production and was previously loaded on every turn,
+        // sequentially, ahead of the first token — to answer a question the
+        // row count already answers.
+        const entitySummary = buildHASystemPromptSection(await loadHaEntities());
         toolResult = {
           success: true,
           data: {
@@ -742,20 +750,53 @@ async function runGeneralChat(
   // Check if user wants to capture knowledge
   maybeIngestAsNote(userMessage);
 
-  // Load HA entity context (needed to know if HA is available)
-  let haEntities: any[] = [];
+  // Is Home Assistant available, and how many entities does it know about?
+  //
+  // This used to `select()` the whole `home_assistant_config` row before the
+  // prompt was even assembled — 91,135 characters of `entityRegistry` across
+  // 415 entities in production, fetched sequentially on EVERY turn, to satisfy
+  // two `haEntities.length` checks. A count answers both, and the rows are only
+  // read if the model actually activates the toolset.
+  let haEntityCount = 0;
   try {
-    const [haConfig] = await db
-      .select()
+    const [row] = await db
+      .select({
+        n: sql<number>`CASE
+          WHEN ${homeAssistantConfig.token} IS NULL THEN 0
+          WHEN jsonb_typeof(${homeAssistantConfig.entityRegistry}) <> 'array' THEN 0
+          ELSE jsonb_array_length(${homeAssistantConfig.entityRegistry})
+        END`,
+      })
       .from(homeAssistantConfig)
       .where(eq(homeAssistantConfig.id, 'default'))
       .limit(1);
-    if (haConfig?.token && Array.isArray(haConfig.entityRegistry)) {
-      haEntities = haConfig.entityRegistry as any[];
-    }
+    haEntityCount = Number(row?.n ?? 0);
   } catch (err) {
-    console.warn('[general-chat] Failed to load HA config:', err instanceof Error ? err.message : err);
+    console.warn('[general-chat] Failed to count HA entities:', err instanceof Error ? err.message : err);
   }
+
+  // Memoised: a turn can activate the `home` toolset only once, but a retry or
+  // a sub-agent could ask twice and the payload is large enough to be worth not
+  // fetching twice.
+  let haEntitiesCache: any[] | null = null;
+  const loadHaEntities = async (): Promise<any[]> => {
+    if (haEntitiesCache) return haEntitiesCache;
+    try {
+      const [haConfig] = await db
+        .select({ token: homeAssistantConfig.token, entityRegistry: homeAssistantConfig.entityRegistry })
+        .from(homeAssistantConfig)
+        .where(eq(homeAssistantConfig.id, 'default'))
+        .limit(1);
+      haEntitiesCache =
+        haConfig?.token && Array.isArray(haConfig.entityRegistry)
+          ? (haConfig.entityRegistry as any[])
+          : [];
+    } catch (err) {
+      console.warn('[general-chat] Failed to load HA registry:', err instanceof Error ? err.message : err);
+      haEntitiesCache = [];
+    }
+    return haEntitiesCache;
+  };
 
   // Build system prompt — fetched in parallel to cut cold-start latency.
   // siteSection is synchronous, so no Promise.all entry for it.
@@ -796,8 +837,8 @@ async function runGeneralChat(
   // API-first data answering — always on and deliberately compact. For any
   // factual / numeric / current / external question the model should reach a
   // real data source (api_search → api_call) before answering from memory.
-  // The tools it names (api_search, api_call, datastore_query) are
-  // ESSENTIAL_TOOL_NAMES, so they stay reachable regardless of which toolsets
+  // The tools it names (api_search, api_call, datastore_query) are pushed into
+  // the always-on set above, so they stay reachable regardless of which toolsets
   // the classifier activated — hence unconditional rather than inferred-gated.
   const apiFirstSection = `\n\n--- API-first data answering ---\nFor questions about current, factual, numeric, or external data, prefer a live source over model memory: (1) call \`api_search\` first to find a catalogued API for the ask; (2) fetch with \`api_call\` and cite the API you used inline, where its figure lands; (3) fall back to your own knowledge only when no API fits — and say so; (4) if you hit a useful API that isn't catalogued yet, \`api_register\` it. Recurring structured data worth querying again belongs in the datastore — \`datastore_save\` to record it, \`datastore_query\` to read it back — not \`save_memory\`, which is for distilled personal facts.`;
 
@@ -834,7 +875,27 @@ async function runGeneralChat(
   const personaSection = options.personaPrompt?.trim()
     ? `You are acting as a specialist agent. Adopt this role for the whole turn:\n${options.personaPrompt.trim()}\n\n---\n\n`
     : '';
-  const systemContent = `${personaSection}${basePrompt}${siteSection}${skillsSection}${compressionSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
+  // Order is a cache decision, not a stylistic one.
+  //
+  // Prompt caching matches on a PREFIX, so the first byte that changes between
+  // turns invalidates everything after it — including the ~5KB of tool schemas
+  // and the whole history that follow the system message. `graphSection` is
+  // rebuilt per message by `buildKnowledgeContext(userMessage)`, and it sat in
+  // the middle: everything behind it was uncacheable by construction.
+  //
+  // Measured on production over 36 hours: 224 codex calls at 54.1% cached, with
+  // the first decile — 69 calls — at 0% while averaging 8,998 input tokens. The
+  // first turn measured after the telemetry landed cached 25.4%. Cold vs warm
+  // is worth 1,690-3,047ms against 981-1,724ms on the same 15.7KB body, and a
+  // turn pays it once per round, nine times on that turn.
+  //
+  // So: everything that is the same on the next turn goes first, everything
+  // derived from THIS message goes last. `memorySection` stays in the stable
+  // block and still sits below the instructions, which `07-memory.md` promises
+  // the model it does.
+  const stablePrefix = `${personaSection}${basePrompt}${siteSection}${skillsSection}${apiFirstSection}${memorySection}${canvasSection}`;
+  const perTurnSuffix = `${compressionSection}${scraperSection}${pastedUrlsSection}${graphSection}${clarifySection}${planSection}`;
+  const systemContent = `${stablePrefix}${perTurnSuffix}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -892,6 +953,35 @@ async function runGeneralChat(
     activatedToolsets.add(ts);
   }
 
+  // Tools the always-on prompt ORDERS the model to use, pushed by name.
+  //
+  // Two separate gaps, one fix. The API-first section below instructs every
+  // turn to reach `api_search` → `api_call` before answering from memory, and
+  // says structured data belongs in `datastore_query` — while a comment above
+  // it claimed those were reachable because they are in ESSENTIAL_TOOL_NAMES.
+  // They are not: that set lives in `$lib/mcp/essentials` and is read by the
+  // tool-policy publisher, which this file has never imported. The model was
+  // being told to call tools it had not been handed.
+  //
+  // Separately, open-web lookup was gone from a default turn. Hermes had web
+  // search on every one — 99 `web_search` and 72 `web_extract` calls in 45 days
+  // — and the classifier only loads `research`/`web` on "research", "deep dive"
+  // or a literal URL. Sampled real queries ("Carmel College term dates", "Apple
+  // Developer Program fee") trip neither pattern, so the turn either paid an
+  // `activate_toolset` round first or answered from training data.
+  //
+  // BY NAME, not by toolset: `research` carries nine session-management tools
+  // that have no business on an ordinary turn. Cost is ~400-600 tokens of
+  // schema against a ~4.3s round, and it now sits inside the cacheable prefix.
+  const ALWAYS_ON_TOOL_NAMES = [
+    'api_search',
+    'api_call',
+    'datastore_query',
+    'research_web_search',
+    'fetch_url',
+  ] as const;
+  activeTools.push(...getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES));
+
   // Include agent_spawn as a meta-tool available in all chats — but ONLY
   // when this IS a top-level orchestrator call (not itself a sub-agent).
   if ((options.subagentDepth ?? 0) === 0 && options.jobId) {
@@ -902,7 +992,7 @@ async function runGeneralChat(
 
   // Auto-activate the toolsets the classifier matched earlier in this turn.
   for (const ts of inferred) {
-    if (ts === 'home' && haEntities.length === 0) continue;
+    if (ts === 'home' && haEntityCount === 0) continue;
     activeTools.push(...getToolsetDefinitions(ts));
     activatedToolsets.add(ts);
   }
@@ -961,7 +1051,24 @@ async function runGeneralChat(
   // canvas-bound calls stay on the base model — those are tactical, not
   // strategic. Returns null when the operator has disabled the split.
   const isOrchestrator = (options.subagentDepth ?? 0) === 0 && !!options.jobId && !options.workflowId;
-  const thinkingCtx: ModelContext | null = isOrchestrator ? await resolveThinkingModel() : null;
+  // Resolved lazily, once, and only if a round actually asks for it.
+  //
+  // `jkai.builder.thinking_model` is unset in production, so this resolves to
+  // `resolveDefaultModel()` — the model the turn is already running on. Round 0
+  // then "escalated" to itself, having paid a settings read ahead of the first
+  // token to do it.
+  //
+  // NOTE for whoever configures a thinking model: the condition below includes
+  // `round === 0`, so every turn would escalate on its first round, not only
+  // the long ones the threshold is for. Left as it is rather than quietly
+  // narrowed — it is dormant today, and changing when a tier fires is a
+  // decision, not a cleanup.
+  let thinkingCtxPromise: Promise<ModelContext | null> | null = null;
+  const getThinkingCtx = (): Promise<ModelContext | null> => {
+    if (!isOrchestrator) return Promise.resolve(null);
+    thinkingCtxPromise ??= resolveThinkingModel();
+    return thinkingCtxPromise;
+  };
   const THINKING_PROMPT_CHAR_THRESHOLD = 160_000; // ~40k tokens (4 chars/token)
 
   let responseText = '';
@@ -1004,13 +1111,19 @@ async function runGeneralChat(
     );
     const lastMsg = messages[messages.length - 1];
     const lastUserText = lastMsg?.role === 'user' && typeof lastMsg.content === 'string' ? lastMsg.content : '';
-    const useThinking = !!thinkingCtx && (
+    const wantsThinking =
       round === 0
       || lastUserText.startsWith('Adjust the plan:')
       || lastUserText.startsWith('My answers:')
-      || promptChars > THINKING_PROMPT_CHAR_THRESHOLD
-    );
-    const turnCtx = useThinking && thinkingCtx ? thinkingCtx : baseCtx;
+      || promptChars > THINKING_PROMPT_CHAR_THRESHOLD;
+    const thinkingCtx = wantsThinking ? await getThinkingCtx() : null;
+    // Only an escalation if it lands somewhere else. Same model, same client —
+    // switching to an identical context bought nothing and read as a tier change
+    // in the logs.
+    const escalates =
+      !!thinkingCtx &&
+      (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId);
+    const turnCtx = escalates && thinkingCtx ? thinkingCtx : baseCtx;
     const { client, model } = await getLLMClient(turnCtx);
 
     // Halfway through available rounds: get a plain-English status update so
@@ -1378,7 +1491,8 @@ async function runGeneralChat(
       msg.tool_calls.map((toolCall: any) => runSingleToolCall(toolCall, {
         activeTools,
         activatedToolsets,
-        haEntities,
+        haEntityCount,
+        loadHaEntities,
         onToolProgress,
         onProgress,
         onStreamEvent: options.onStreamEvent,
