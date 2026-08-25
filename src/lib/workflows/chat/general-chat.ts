@@ -1,5 +1,6 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
+import { withChatContext } from '$lib/jkai/chat-context';
 import { db } from '$lib/db';
 import {
   homeAssistantConfig,
@@ -692,7 +693,25 @@ export async function generalChat(
         })
       : null;
   try {
-    return await runGeneralChat(input, conversationHistory, options, () => ack?.cancel());
+    // Tag every LLM call this turn makes with the turn it belongs to.
+    //
+    // Without this the ledger recorded chat with a null `session_id` — 3,671 of
+    // 3,675 openrouter rows and 355 of 370 codex rows over three days — so
+    // rounds-per-turn, cost-per-turn and TTFT could not be computed at all, and
+    // two review lanes produced contradictory round counts from the same table.
+    // The wrap goes here rather than at the route because sub-agents, the
+    // follow-up queue and the WhatsApp bridge all enter through this function
+    // and their calls are just as unattributable.
+    //
+    // `source: 'jkai-chat'` (set in usage-capture) is what separates these rows
+    // on /admin/ops/costs — deliberately NOT a synthetic `chat` workload, since
+    // chat's model comes from the `jkai.chat.default_model` setting and not from
+    // the workload registry the model picker writes to. A workload id there
+    // would imply a switch that does not exist.
+    return await withChatContext(
+      { jobId: options.jobId ?? undefined, conversationId: options.conversationId ?? undefined },
+      () => runGeneralChat(input, conversationHistory, options, () => ack?.cancel()),
+    );
   } finally {
     ack?.cancel();
   }

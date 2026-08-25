@@ -6,6 +6,7 @@ import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workfl
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { currentActivityId } from '$lib/jkai/activity-context';
+import { currentChatContext } from '$lib/jkai/chat-context';
 import { currentResearchSessionId } from '$lib/deepdive/meter';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
 import type { ModelProvider } from '$lib/server/models/types';
@@ -33,10 +34,18 @@ export interface CompletionUsage {
  *  (b) the durable agent_actions cost ledger (so /admin/ops/costs reflects the
  *  call regardless of where it originated). Robust to missing fields: if usage
  *  is absent, tokens/cost record as null — never a fabricated zero. */
+/** When the call started and, for a stream, when its first content token
+ *  arrived. Both epoch ms. Absent for callers that cannot measure. */
+export interface CallTiming {
+  startedAt: number;
+  firstTokenAt?: number | null;
+}
+
 function captureUsage(
   provider: ModelProvider,
   model: string,
   usage: CompletionUsage | null | undefined,
+  timing?: CallTiming,
 ): void {
   const promptTokens = usage?.prompt_tokens ?? null;
   const completionTokens = usage?.completion_tokens ?? null;
@@ -85,6 +94,11 @@ function captureUsage(
     // night, not which investigation spent it. Deep research carries its own
     // ambient id for exactly this.
     const researchId = currentResearchSessionId();
+    // A chat turn is neither a workflow run nor a research session, so before
+    // this it recorded with a null session id and could not be counted at all.
+    // See $lib/jkai/chat-context for why the job id is the right key.
+    const chat = currentChatContext();
+    const endedAt = Date.now();
     recordDurableLLMCall({
       provider,
       model,
@@ -93,12 +107,18 @@ function captureUsage(
       cacheReadTokens,
       reasoningTokens,
       costUsd,
-      source: store ? 'workflow' : researchId ? 'research' : 'gateway',
+      source: store ? 'workflow' : researchId ? 'research' : chat ? 'jkai-chat' : 'gateway',
       // The workload this call is serving, when it is serving one. Without it
       // every non-workflow, non-research call is indistinguishable in the
       // ledger — see $lib/jkai/activity-context.
       activity: currentActivityId(),
-      sessionId: store?.runId ?? researchId,
+      sessionId: store?.runId ?? researchId ?? chat?.jobId ?? chat?.conversationId ?? null,
+      conversationId: chat?.conversationId ?? null,
+      durationMs: timing ? Math.max(0, endedAt - timing.startedAt) : null,
+      ttftMs:
+        timing && typeof timing.firstTokenAt === 'number'
+          ? Math.max(0, timing.firstTokenAt - timing.startedAt)
+          : null,
     });
   }
 }
@@ -111,13 +131,28 @@ function wrapStreamForUsage(
   stream: AsyncIterable<{ usage?: CompletionUsage }>,
   provider: ModelProvider,
   model: string,
+  startedAt: number,
 ): AsyncIterable<{ usage?: CompletionUsage }> {
   let lastUsage: CompletionUsage | undefined;
   let recorded = false;
+  // First chunk carrying actual content — not the first chunk full stop. A
+  // stream opens with role/annotation frames that arrive before the model has
+  // written anything, and counting those would report a TTFT the reader never
+  // experienced.
+  let firstTokenAt: number | null = null;
+  const noteChunk = (chunk: unknown) => {
+    if (firstTokenAt !== null) return;
+    const delta = (chunk as { choices?: Array<{ delta?: { content?: unknown; reasoning?: unknown } }> })
+      ?.choices?.[0]?.delta;
+    const hasText =
+      (typeof delta?.content === 'string' && delta.content.length > 0) ||
+      (typeof delta?.reasoning === 'string' && delta.reasoning.length > 0);
+    if (hasText) firstTokenAt = Date.now();
+  };
   const flush = () => {
     if (recorded) return;
     recorded = true;
-    captureUsage(provider, model, lastUsage);
+    captureUsage(provider, model, lastUsage, { startedAt, firstTokenAt });
   };
 
   return new Proxy(stream, {
@@ -130,6 +165,7 @@ function wrapStreamForUsage(
               try {
                 const r = await inner.next();
                 if (r.value?.usage) lastUsage = r.value.usage;
+                if (!r.done) noteChunk(r.value);
                 if (r.done) flush();
                 return r;
               } catch (err) {
@@ -247,6 +283,8 @@ function installEmbeddingCapture(client: OpenAI, provider: ModelProvider): void 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   embeddings.create = (async function (this: unknown, ...args: unknown[]): Promise<unknown> {
     const params = (args[0] ?? {}) as { model?: string };
+    // Embeddings are never streamed, so start-to-return IS the whole call.
+    const startedAt = Date.now();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (original as any)(...args);
     const model = params.model ?? '';
@@ -277,15 +315,23 @@ function installEmbeddingCapture(client: OpenAI, provider: ModelProvider): void 
 
     const store = executionContext.getStore();
     const researchId = currentResearchSessionId();
+    // A chat turn is neither a workflow run nor a research session, so before
+    // this it recorded with a null session id and could not be counted at all.
+    // See $lib/jkai/chat-context for why the job id is the right key.
+    const chat = currentChatContext();
+    const endedAt = Date.now();
     recordDurableLLMCall({
       provider,
       model,
       tokensInput: promptTokens,
       tokensOutput: 0,
       costUsd,
-      source: store ? 'workflow' : researchId ? 'research' : 'gateway',
+      source: store ? 'workflow' : researchId ? 'research' : chat ? 'jkai-chat' : 'gateway',
       activity: currentActivityId(),
-      sessionId: store?.runId ?? researchId,
+      sessionId: store?.runId ?? researchId ?? chat?.jobId ?? chat?.conversationId ?? null,
+      conversationId: chat?.conversationId ?? null,
+      durationMs: Math.max(0, endedAt - startedAt),
+      ttftMs: null,
     });
     return result;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -325,6 +371,9 @@ export function installUsageCapture(client: OpenAI, provider: ModelProvider): Op
     );
     args[0] = params;
     const model = params.model ?? '';
+    // Stamped after param massaging so it measures the provider round trip, not
+    // our own preparation. Both branches below use it.
+    const startedAt = Date.now();
 
     if (params.stream) {
       // Ask the provider for a trailing usage-only chunk if the caller didn't.
@@ -335,14 +384,21 @@ export function installUsageCapture(client: OpenAI, provider: ModelProvider): Op
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const stream = await (original as any)(...args);
       if (!model) return stream;
-      return wrapStreamForUsage(stream as AsyncIterable<{ usage?: CompletionUsage }>, provider, model);
+      return wrapStreamForUsage(
+        stream as AsyncIterable<{ usage?: CompletionUsage }>,
+        provider,
+        model,
+        startedAt,
+      );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (original as any)(...args);
     if (model) {
       const usage = (result as { usage?: CompletionUsage })?.usage;
-      captureUsage(provider, model, usage);
+      // Non-streamed: there is no first token to observe, the whole reply
+      // arrives at once, so TTFT is left null rather than equated to duration.
+      captureUsage(provider, model, usage, { startedAt });
     }
     return result;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -34,8 +34,47 @@ export interface DurableLLMCall {
    * and are entirely different bills.
    */
   activity?: string | null;
-  /** Optional correlation id (e.g. a workflow runId or conversation id). */
+  /** Optional correlation id (e.g. a workflow runId or chat jobId). */
   sessionId?: string | null;
+  /**
+   * Wall-clock for the whole call, request to last byte.
+   *
+   * The column has existed since the table did and nothing has ever written it
+   * — measured 2026-08-25, null on 4,058 of 4,058 rows over three days. Which
+   * meant every statement about reply latency came from log scraping rather
+   * than the ledger that already holds the tokens and the cost.
+   */
+  durationMs?: number | null;
+  /**
+   * Time to the first content token on a streamed call, or null when the call
+   * was not streamed.
+   *
+   * Separate from `durationMs` because they move independently and for
+   * different reasons: TTFT is prompt size and cache state, total duration is
+   * how much the model then wrote. Collapsing them hides which one regressed.
+   */
+  ttftMs?: number | null;
+  /** The thread a chat call belongs to. Tool-free turns write no trace row, so
+   *  without this their `session_id` joins to nothing. */
+  conversationId?: string | null;
+}
+
+/**
+ * Facets that live in `input` rather than in columns.
+ *
+ * Same reasoning as the original two: this table is shared with the
+ * external-agent action log, which already writes arbitrary payloads here, and
+ * a jsonb key needs no migration on a table that is hot on every LLM call.
+ * `durationMs` is the exception — it gets the real column, because one already
+ * existed and had simply never been written.
+ */
+function buildInput(call: DurableLLMCall): Record<string, unknown> | null {
+  const input: Record<string, unknown> = {};
+  if (call.source) input.source = call.source;
+  if (call.activity) input.activity = call.activity;
+  if (call.conversationId) input.conversationId = call.conversationId;
+  if (typeof call.ttftMs === 'number') input.ttftMs = call.ttftMs;
+  return Object.keys(input).length > 0 ? input : null;
 }
 
 export function recordDurableLLMCall(call: DurableLLMCall): void {
@@ -51,14 +90,12 @@ export function recordDurableLLMCall(call: DurableLLMCall): void {
       reasoningTokens: call.reasoningTokens ?? null,
       costUsd: call.costUsd ?? null,
       sessionId: call.sessionId ?? null,
+      durationMs: call.durationMs ?? null,
       // Both facets live in `input` rather than in new columns: this table is
       // shared with the external-agent action log, which writes arbitrary
       // payloads here already, and a jsonb key needs no migration on a table
       // that is hot on every LLM call.
-      input:
-        call.source || call.activity
-          ? { ...(call.source ? { source: call.source } : {}), ...(call.activity ? { activity: call.activity } : {}) }
-          : null,
+      input: buildInput(call),
       status: 'completed',
     })
     .catch((err: unknown) => {
