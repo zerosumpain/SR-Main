@@ -13,6 +13,7 @@ import {
   readSkillBody,
   searchSkills,
 } from '$lib/jkai/skills/registry';
+import { optionalString } from '../tool-args';
 
 register({
   name: 'skills_list',
@@ -66,11 +67,19 @@ register({
   category: 'Discovery',
   toolset: 'discovery',
   handler: async (raw: Record<string, unknown>) => {
-    const args = (raw ?? {}) as { name?: string; reference?: string };
+    const args = (raw ?? {}) as Record<string, unknown>;
     try {
-      const resolved = resolveSkill(args?.name ?? '');
+      const resolved = resolveSkill(optionalString(args, 'name') ?? '');
       if ('error' in resolved) return { success: false, error: resolved.error };
-      const body = readSkillBody(resolved.skill, args?.reference);
+      // `file_path` is what the skills themselves ask for — 13 call sites
+      // across 7 skills, 7 of them in jkai-general, the default routing skill.
+      // The parameter is `reference`, and an unrecognised key meant
+      // `readSkillBody` fell through to SKILL.md and returned `success: true`
+      // with the MAIN body. So the model asked for a reference, was handed the
+      // wrong document, and had no way to tell — and the unreachable documents
+      // are the ones carrying the traps. Coerce, never reject.
+      const reference = optionalString(args, 'reference') ?? optionalString(args, 'file_path');
+      const body = readSkillBody(resolved.skill, reference);
       if ('error' in body) return { success: false, error: body.error };
       return {
         success: true,
