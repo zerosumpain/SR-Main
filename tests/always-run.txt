@@ -40,3 +40,4 @@ tests/routes/chat-trace-link.test.ts
 tests/scripts/ci-sidecars.test.ts
 tests/scripts/gate-level.test.ts
 tests/scripts/select-tests.test.ts
+tests/skills/tool-names-exist.test.ts
