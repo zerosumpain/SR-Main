@@ -4,10 +4,10 @@
 // `improvement_runs` record, and sends a short (<=600 char) WhatsApp summary to
 // the owner via the existing `whatsapp_send` site tool.
 
+import { ownerPhone } from '$lib/config/owner';
 import { upsertRecord } from '$lib/datastore';
 import {
   COLLECTIONS,
-  OWNER_PHONE,
   SYSTEM_ACTOR,
   asData,
   errMsg,
@@ -112,8 +112,10 @@ export async function finalizeAndNotify(runId: string, data: ImprovementRunData)
   await upsertRecord(COLLECTIONS.improvementRuns, { key: runId, data: asData(data) }, SYSTEM_ACTOR);
 
   try {
+    const to = ownerPhone();
+    if (!to) throw new Error('WORKFLOW_NOTIFY_PHONE is not set');
     const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    await executeTool('whatsapp_send', { to: OWNER_PHONE, message: buildWhatsappSummary(data) });
+    await executeTool('whatsapp_send', { to, message: buildWhatsappSummary(data) });
   } catch (err) {
     console.error('[selfimprove] whatsapp summary failed:', errMsg(err));
   }

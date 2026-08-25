@@ -1,6 +1,7 @@
 // Query-Adaptive Model Routing — shared constants + types. Mirrors the
 // briefing/self-improve harness (cron/tz, kill switch, datastore collections,
 // OWNER_PHONE). See docs/superpowers/specs/2026-07-20-query-adaptive-model-routing-design.md
+import { ownerPhone } from '$lib/config/owner';
 import type { ModelContext } from '$lib/server/models/types';
 
 /** The profiles the router chooses a model for.
@@ -41,7 +42,7 @@ export const RUNS_COLLECTION = 'model-routing-runs'; // one record per nightly/m
 export const EVENTS_COLLECTION = 'model-routing-events'; // one record per conversation routing decision
 
 export const SYSTEM_ACTOR = 'system';
-export const OWNER_PHONE = '+447359228511';
+export const OWNER_PHONE = ownerPhone() ?? '';
 
 export const CRON_EXPR = '0 4 * * *'; // 04:00 daily — after self-improve (03:30), before the morning briefing (06:30)
 export const CRON_TZ = 'Europe/London';

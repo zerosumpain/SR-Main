@@ -1,9 +1,9 @@
+import { ownerPhone } from '$lib/config/owner';
 import { db } from '$lib/db';
 import { intelAlerts } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getWhatsAppService } from '$lib/workflows/whatsapp/service';
 
-const WHATSAPP_NUMBER = '+447359228511';
 const SITE_URL = 'https://strangeramblings.com';
 
 /**
@@ -24,6 +24,11 @@ export async function pushHighAlerts(noteId: string): Promise<number> {
 
 	if (alerts.length === 0) return 0;
 
+	// Nothing to send to means nothing to send. Bail before marking anything
+	// delivered — `ownerPhone()` has already logged why.
+	const to = ownerPhone();
+	if (!to) return 0;
+
 	const wa = getWhatsAppService();
 	// No `state.status` gate — see wa-escalation.ts. In delegated mode that value
 	// is a boot-time probe that is never refreshed, so it latched this channel off
@@ -43,7 +48,7 @@ export async function pushHighAlerts(noteId: string): Promise<number> {
 		const message = `${emoji} Intel Alert: ${alert.title}\n\n${alert.content}\n\nView: ${SITE_URL}/jkai/intel/alerts`;
 
 		try {
-			const result = await wa.sendMessage(WHATSAPP_NUMBER, message);
+			const result = await wa.sendMessage(to, message);
 			if (result.sent) {
 				await db
 					.update(intelAlerts)

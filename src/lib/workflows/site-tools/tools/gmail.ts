@@ -12,9 +12,22 @@ async function resolveAccount(args: Record<string, unknown>): Promise<GmailAccou
   const rawId = args.accountId;
   const rawEmail = args.email;
 
-  if (rawId !== undefined && rawId !== null && rawId !== '') {
-    const id = Number(rawId);
-    if (!Number.isFinite(id) || id <= 0) return { error: 'Invalid accountId' };
+  // `accountId: 0` and `email: ""` are how the model says "I haven't got one,
+  // use the default" — it fills every declared property rather than omitting
+  // the optional ones. The old guard skipped undefined/null/'' but not 0, so a
+  // zero fell through to `id <= 0` and returned `Invalid accountId`. That was
+  // 100% of the recorded tool failures on the in-process loop, and it cost a
+  // retry round each time on a search the default account would have answered.
+  //
+  // So a usable id is a positive integer and nothing else; every other value
+  // means "not specified" and falls through to the same default an omitted
+  // argument gets. Coerce, never reject — and note this is shared by the
+  // destructive gmail tools too, where "unspecified" already meant the default
+  // account, so no send changes which mailbox it leaves from.
+  const id = typeof rawId === 'number' || typeof rawId === 'string' ? Number(rawId) : NaN;
+  const hasId = Number.isFinite(id) && id > 0;
+
+  if (hasId) {
     const [acct] = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, id)).limit(1);
     if (!acct) return { error: `Gmail account ${id} not found` };
     return acct;

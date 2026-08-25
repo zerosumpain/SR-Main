@@ -1,6 +1,7 @@
 // src/lib/workflows/site-tools/tools/followup.ts
 // LLM-callable tool for scheduling ad-hoc follow-ups and checking queue status.
 
+import { ownerPhone } from '$lib/config/owner';
 import { register } from '../registry-internal';
 import { enqueueFollowUp, cancelFollowUp, getQueueStatus } from '$lib/workflows/chat/followup-queue';
 import { db } from '$lib/db';
@@ -46,7 +47,7 @@ register({
       checkFn,
       completionPrompt,
       notifyWhatsApp,
-      whatsAppNumber: notifyWhatsApp ? '+447359228511' : undefined,
+      whatsAppNumber: notifyWhatsApp ? (ownerPhone() ?? undefined) : undefined,
       delayMs: delaySeconds * 1000,
     });
 

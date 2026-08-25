@@ -11,9 +11,6 @@ import { TOOL_POLICY_COLLECTION, TOOL_POLICY_PERMISSIONS } from '$lib/toolpolicy
 /** Actor every self-improvement datastore write runs as. */
 export const SYSTEM_ACTOR = 'system';
 
-/** Owner WhatsApp number for the nightly summary (CLAUDE.md). */
-export const OWNER_PHONE = '+447359228511';
-
 /** System collection slugs (pinned in the plan — do not rename). */
 export const COLLECTIONS = {
   apiCatalog: 'api_catalog',

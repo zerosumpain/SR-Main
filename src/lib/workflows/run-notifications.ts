@@ -19,14 +19,16 @@
  * doesn't pull in the WhatsApp stack unless a run actually needs to notify.
  */
 
+import { ownerPhone } from '$lib/config/owner';
 import { db } from '$lib/db';
 import { workflows, type WorkflowNotifications } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { markdownToWhatsApp } from './whatsapp/format';
 
-/** The owner's WhatsApp number — matches `chat/wa-escalation.ts`. An env
- *  override is honoured for test/other-owner setups but defaults to John's. */
-const OWNER_PHONE = process.env.WORKFLOW_NOTIFY_PHONE?.trim() || '+447359228511';
+/** The owner's WhatsApp number — matches `chat/wa-escalation.ts`. Empty when
+ *  WORKFLOW_NOTIFY_PHONE is unset; callers already treat that as "nobody to
+ *  notify". No literal fallback: that is how the number stayed in the repo. */
+const OWNER_PHONE = ownerPhone() ?? '';
 const SITE_URL = 'https://strangeramblings.com';
 const CANVAS_NAME_PREFIX = 'canvas:';
 

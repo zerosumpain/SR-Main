@@ -15,7 +15,7 @@ import { loadConversationHistory } from '$lib/workflows/chat/conversation-histor
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel, isHermesChatEnabled } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
-import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
+import { getChatInputCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
@@ -1362,10 +1362,23 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
       if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
     }
-    const caps = getModelCapabilities(ctx);
+    // Ask what this LANE can accept, not what the model can read. The composer
+    // is served `getChatInputCapabilities` (see /api/jkai/conversations/[id]),
+    // so gating here on the raw model truth meant the UI offered an upload it
+    // then rejected with a 400 — on `codex/*`, which is TEXT_ONLY and the
+    // pinned default, that is every image and every PDF. #427 built the
+    // pre-analysis lane precisely so those work, and it lives downstream of
+    // this guard in `generalChat`; the Hermes branch above has no equivalent
+    // gate for the same reason (see the comment at the top of that branch).
+    //
+    // Video still fails here, correctly — it has no extraction path.
+    const caps = getChatInputCapabilities(ctx, { hermes: false });
     for (const a of attachmentRows) {
       if (!canAcceptKind(caps, a.kind)) {
-        return json({ error: `model ${ctx.modelId} cannot accept ${a.kind}` }, { status: 400 });
+        return json(
+          { error: `${a.kind} attachments are not supported on this chat engine` },
+          { status: 400 },
+        );
       }
     }
   }

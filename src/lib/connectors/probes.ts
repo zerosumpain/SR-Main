@@ -683,40 +683,54 @@ async function probeWhatsApp(): Promise<ConnectorReport> {
     }
     const base = bridge.replace(/\/+$/, '').replace(/\/send$/, '');
     const res = await fetchWithTimeout(`${base}/health`).catch(() => null);
+
+    // Ask the process that owns the session, and nothing else.
+    //
+    // This used to fall back to `rWhatsAppStatus()` on homeserv and render
+    // Hermes' diagnosis — "Session is paired, but the Hermes gateway is failed"
+    // — with the hint "Restart the bridge from the WhatsApp panel". The session
+    // has not lived in Hermes since 2026-08-24; it belongs to
+    // packages/jkai-wa-worker on the VPS. So on the one page you open during an
+    // outage, this pointed at a gateway with no bearing on the fault, and the
+    // restart it recommended has never fixed a logged-out session anyway.
+    const IMPACT = 'Alerts, the morning briefing and every WhatsApp reply are undeliverable.';
     if (!res || !res.ok) {
-      // An unreachable bridge has two very different causes and only one of
-      // them is fixed by restarting. "Restart jkai-hermes" was the standing
-      // advice here and it is useless against a logged-out session — Hermes
-      // refuses to start the bridge at all when there are no credentials. Ask
-      // the host that owns the session which of the two this is.
-      const deeper = await import('$lib/server/hermes-remote')
-        .then((m) => m.rWhatsAppStatus())
-        .catch(() => null);
-      if (deeper && !deeper.paired) {
-        return {
-          status: 'broken' as ConnectorStatus,
-          detail: deeper.diagnosis,
-          live: true,
-          impact: 'Alerts, the morning briefing and every WhatsApp reply are undeliverable.',
-          fixHint: 'Scan a QR to re-link the account — a restart will not fix this',
-          actions: whatsappActions(true),
-          fixUrl: WHATSAPP_FIX_PAGE,
-        };
-      }
       return {
         status: 'broken' as ConnectorStatus,
-        detail: deeper?.diagnosis
-          ?? `Hermes bridge ${base} unreachable${res ? ` (${res.status})` : ''} — alerts and the briefing cannot be delivered`,
+        detail: `WhatsApp worker ${base} unreachable${res ? ` (${res.status})` : ''} — nothing owns the session`,
         live: true,
-        impact: 'Alerts, the morning briefing and every WhatsApp reply are undeliverable.',
-        fixHint: 'Restart the bridge from the WhatsApp panel',
+        impact: IMPACT,
+        fixHint: 'The worker process is down — check jkai-wa-worker on the VPS',
         actions: whatsappActions(true),
+        fixUrl: WHATSAPP_FIX_PAGE,
+      };
+    }
+
+    // A reachable worker still answers 200 while logged out, so `res.ok` alone
+    // was reporting a dead session as healthy. The state is in the body.
+    const health = (await res.json().catch(() => null)) as
+      | { status?: string; connectedNumber?: string | null }
+      | null;
+    const waStatus = health?.status ?? 'unknown';
+    if (waStatus !== 'connected') {
+      const needsScan = waStatus === 'qr_pending' || waStatus === 'disconnected';
+      return {
+        status: (waStatus === 'connecting' ? 'degraded' : 'broken') as ConnectorStatus,
+        detail: `WhatsApp worker is reachable but the session is ${waStatus}`,
+        live: true,
+        impact: IMPACT,
+        fixHint: needsScan
+          ? 'Scan a QR to re-link the account — a restart will not fix this'
+          : 'The worker is still connecting; give it a moment before re-pairing',
+        actions: whatsappActions(needsScan),
         fixUrl: WHATSAPP_FIX_PAGE,
       };
     }
     return {
       status: 'ok' as ConnectorStatus,
-      detail: `bridge ${base} reachable`,
+      // Deliberately not naming `connectedNumber` — the account number does not
+      // belong in a rendered string, even an admin-only one.
+      detail: `worker ${base} connected`,
       live: true,
       actions: whatsappActions(false),
       fixUrl: WHATSAPP_FIX_PAGE,

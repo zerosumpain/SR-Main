@@ -3,6 +3,7 @@
 
 export { register } from './registry-internal';
 export type { ToolDefinition, ToolResult } from './registry-internal';
+import { ownerPhone } from '$lib/config/owner';
 import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from './registry-internal';
 import type { ToolResult } from './registry-internal';
 
@@ -191,7 +192,13 @@ export async function executeTool(
 /** Compact system prompt section — lists toolsets, not individual tools */
 export function buildSystemPromptSection(): string {
   const toolsets = getAvailableToolsets();
-  return `\n\n--- Capabilities ---\nYou have toolsets available: ${toolsets.join(', ')}.\nUse activate_toolset(name) to load tools for a domain. Use jkai_help() to see what's available in each toolset.\nWhen tools are pre-loaded for you, use them directly — no activation needed.\n\nJohn's WhatsApp number: +447359228511`;
+  // The owner's WhatsApp number used to be appended here as a literal, which
+  // put it in the repo, in every commit, and in the prompt sent to a model on
+  // every single turn. It is read from the environment now, and only mentioned
+  // at all when something is configured to receive it.
+  const phone = ownerPhone();
+  const contact = phone ? `\n\nJohn's WhatsApp number: ${phone}` : '';
+  return `\n\n--- Capabilities ---\nYou have toolsets available: ${toolsets.join(', ')}.\nUse activate_toolset(name) to load tools for a domain. Use jkai_help() to see what's available in each toolset.\nWhen tools are pre-loaded for you, use them directly — no activation needed.${contact}`;
 }
 
 // Re-export toolset helpers for use by meta-tools and general-chat

@@ -16,6 +16,7 @@
  * notification hiccup must not fail a run.
  */
 
+import { ownerPhone } from '$lib/config/owner';
 import { db } from '$lib/db';
 import { workflows } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -23,8 +24,10 @@ import { resolveNaming } from '$lib/workflows/run-notifications';
 import { generateApprovalCode, APPROVAL_TOKEN_TTL_MS } from './approval-tokens';
 
 /** The owner's WhatsApp number — matches `chat/wa-escalation.ts` /
- *  `run-notifications.ts`. Env override honoured for test/other-owner setups. */
-export const OWNER_PHONE = process.env.WORKFLOW_NOTIFY_PHONE?.trim() || '+447359228511';
+ *  `run-notifications.ts`. Empty string when unset, which every caller already
+ *  treats as "nobody to notify"; the literal fallback that used to live here is
+ *  how the number stayed in the repo. */
+export const OWNER_PHONE = ownerPhone() ?? '';
 
 /** The key under which the one-time code lives in an interaction's configSnapshot. */
 export const WA_APPROVAL_SNAPSHOT_KEY = 'waApproval';

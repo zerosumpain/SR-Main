@@ -1,8 +1,9 @@
+import { ownerPhone } from '$lib/config/owner';
 import { getJob, getStreamSubscriberCount, registerEventHook, type JobEvent } from './job-store';
 import { isUserPresent } from './presence';
 import { getWhatsAppService } from '$lib/workflows/whatsapp/service';
 
-const OWNER_PHONE = '+447359228511';
+const OWNER_PHONE = ownerPhone() ?? '';
 const SITE_URL = 'https://strangeramblings.com';
 const GRACE_MS = 15_000;
 // A *finished* reply (done/error) only earns a WhatsApp ping if it actually
