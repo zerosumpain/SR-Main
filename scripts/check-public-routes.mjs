@@ -57,97 +57,79 @@ function publicPathsFromAuth() {
   return [...code.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
-// Hook-level bypasses: paths hooks.server.ts lets through BEFORE the Auth.js
-// gate, each self-authenticating in its own handler (service tokens, bridge
-// tokens, HMAC). Curated deliberately rather than scraped, because the file
-// also contains path checks that are the OPPOSITE of a bypass — notably
-// `startsWith('/api/')`, which is the rule that ENFORCES auth on every API
-// route. Scraping picked that up and declared all 300+ /api routes public,
-// which is both wrong and useless.
-const HOOK_BYPASSES = [
-  '/dav', // Basic-Auth against webdav_credentials
-  '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
-  '/api/jkai/prompts/hermes', // homeserv-only + SCRAPER_SERVICE_TOKEN (prompt workbench proxy)
-  '/api/mcp', // bridge token (tools/list + tools/call)
-  '/api/policy-engine', // POLICY_INGEST_SECRET
-  '/api/claude-changelog', // POST only, ingest secret
-  '/api/releases', // POST only, RELEASE_LOG_SECRET (summarise also accepts an owner session)
-  '/api/data-standard-designer',
-  '/api/dfe-data-strategy',
-  '/api/whatsapp/inbound', // POST only, WHATSAPP_INBOUND_SECRET
-  '/api/health/workflow-engine', // watchdog probe
-  '/api/deepdive/index-sources',
-  '/api/deepdive/reindex-facts',
-  '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
-  '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
-  '/api/jkai/intel/clusters/recalculate', // as above; its own path so the secret cannot reach rename/narrate
-  '/api/trails/segments', // POST ONLY — loopback + MAINTENANCE_SECRET, re-checked in the handler.
-  // GET on the same path is NOT bypassed: it answers with segment geometry, and a
-  // GPS trace starts at the front door. Only the idempotent rebuild is reachable.
-  '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
-  // Starting a studio build. POST only, STUDIO_SERVICE_TOKEN as a Bearer,
-  // constant-time compared, refused entirely when the var is unset or under 32
-  // chars — see $lib/server/studio-auth. Re-checked in the handler, which also
-  // applies its own 3/hour ceiling because the hook's RATE_LIMITS pass is
-  // skipped for a tokened call. Deliberately NOT loopback-gated: cloudflared
-  // makes every VPS request look like 127.0.0.1, so loopback proves nothing
-  // here. The action is reversible and cannot publish.
-  '/api/jkai/studio', // POST only, STUDIO_SERVICE_TOKEN
-  // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
-  // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
-  // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.
-  '/api/jkai/tools/manifest', // JKAI_BRIDGE_TOKEN
-  '/api/jkai/tools/invoke', // JKAI_BRIDGE_TOKEN
-  // Same bridge token, same reason: scripts/studio-image.mjs runs inside a
-  // build with no session and draws one chapter illustration. POST only, and
-  // the handler caps the subject length before it spends anything.
-  '/api/jkai/studio/image', // JKAI_BRIDGE_TOKEN
-  // Read-only search over research the owner has already gathered, POST only,
-  // same per-build bridge token. Publishes no new data.
-  '/api/jkai/studio/research', // JKAI_BRIDGE_TOKEN
-  // The homeserv scanner posts extracted graph units here; the transcripts are
-  // 858 MB and exist only on homeserv, so extraction cannot happen on the VPS.
-  // POST only, Bearer CLAUDE_CHANGELOG_SECRET, and it FAILS CLOSED when that is
-  // unset in production — which it was, from June until 2026-08-17, leaving an
-  // unauthenticated write into claude_sessions open to the internet.
-  '/api/claude-changelog/ingest', // CLAUDE_CHANGELOG_SECRET
-  '/api/jkai/codegraph/ingest', // CLAUDE_CHANGELOG_SECRET
-  // Read-only retrieval, POST only. Reached from a build by bash via
-  // scripts/codegraph-query.mjs, and by the owner from chat and the UI.
-  '/api/jkai/codegraph/query', // CLAUDE_CHANGELOG_SECRET or owner session
-];
-
-// Page-level bypasses that are EXACT paths, not trees.
+// Hook-level bypass catalogue.
 //
-// These are the only two public PAGE routes. /health used to be a prefix, which
-// meant every file created under src/routes/health/ was anonymously reachable
-// the instant it existed — and this script could not see it, because the check
-// was an array compared inside a callback rather than a `pathname === '...'`
-// literal, so the surface went unmonitored and the gate stayed green. The
-// health hub now owns the GPS data (activities, segments, planner, recorder),
-// so /health is matched exactly and its children fall through to the owner
-// gate. Listing it HERE rather than in HOOK_BYPASSES is the point: an exact
-// match is not a tree, so /health enters the snapshot on its own and nothing
-// underneath it does.
-const HOOK_EXACT_BYPASSES = [
-  '/health', // the public health landing; every /health/* child is owner-only
-];
+// These four arrays USED to live here. They now live in
+// src/lib/server/gate-bypasses.ts and are extracted from it, because
+// /admin/estate became a second reader and a second copy is exactly how this
+// list starts lying — see the note at the top of that file. Same technique as
+// publicPathsFromAuth above: strip prose first, then take the literals.
+function arrayLiteralsFrom(src, name) {
+  // Terminator is `];` anywhere, NOT `\n];`. HOOK_PAGE_PREFIX_BYPASSES is a
+  // one-liner, so anchoring to a newline ran the lazy match past its own end
+  // and into the NEXT array — swallowing HOOK_NON_BYPASSES and handing this
+  // script `/api` as a public prefix, i.e. declaring all 300+ API routes
+  // anonymous. Caught by the disjointness assertion below, which exists
+  // because of it.
+  const block = src.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([\\s\\S]*?)\\]\\s*;`));
+  if (!block) return [];
+  const code = block[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  return [...code.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
 
-// Prefix bypasses at the page level. /tools is a genuine tree (static/tools/*).
-const HOOK_PAGE_PREFIX_BYPASSES = ['/tools'];
+const GATE_BYPASSES_SRC = read(join(REPO, 'src', 'lib', 'server', 'gate-bypasses.ts'));
+const HOOK_BYPASSES = arrayLiteralsFrom(GATE_BYPASSES_SRC, 'HOOK_BYPASSES');
+const HOOK_EXACT_BYPASSES = arrayLiteralsFrom(GATE_BYPASSES_SRC, 'HOOK_EXACT_BYPASSES');
+const HOOK_PAGE_PREFIX_BYPASSES = arrayLiteralsFrom(GATE_BYPASSES_SRC, 'HOOK_PAGE_PREFIX_BYPASSES');
+const HOOK_NON_BYPASSES = arrayLiteralsFrom(GATE_BYPASSES_SRC, 'HOOK_NON_BYPASSES');
 
-// Path literals in hooks.server.ts that are NOT bypasses, so drift detection
-// below doesn't flag them every run.
-const HOOK_NON_BYPASSES = [
-  '/api', // the catch-all that REQUIRES auth for APIs
-  '/projects', // share-token (?t=) handling; /projects is public via PUBLIC_PATHS
-  // A 308 to the /health hub, emitted before the auth gate so a stale bookmark
-  // lands somewhere instead of on /login with a dead callbackUrl. It grants no
-  // access — the target is owner-gated like any other /health child — and no
-  // route files live under src/routes/trails any more, so nothing enters the
-  // inventory through it.
-  '/trails',
-];
+// The extraction above is a regex over another file, so it can silently return
+// [] after a refactor — and an empty bypass list makes the surface look SMALLER,
+// which is a green gate for the worst possible reason. Assert the shape.
+{
+  const expected = {
+    HOOK_BYPASSES: { list: HOOK_BYPASSES, min: 25, canary: '/api/mcp' },
+    HOOK_EXACT_BYPASSES: { list: HOOK_EXACT_BYPASSES, min: 1, canary: '/health' },
+    HOOK_PAGE_PREFIX_BYPASSES: { list: HOOK_PAGE_PREFIX_BYPASSES, min: 1, canary: '/tools' },
+    HOOK_NON_BYPASSES: { list: HOOK_NON_BYPASSES, min: 3, canary: '/api' },
+  };
+  for (const [name, { list, min, canary }] of Object.entries(expected)) {
+    if (list.length < min || !list.includes(canary)) {
+      console.error(
+        `check-public-routes: could not read ${name} from src/lib/server/gate-bypasses.ts ` +
+          `(got ${list.length} entries, canary ${canary} ${list.includes(canary) ? 'present' : 'MISSING'}).\n` +
+          'Fix the extraction in this script rather than regenerating the snapshot, or the ' +
+          'check silently covers nothing.',
+      );
+      process.exit(2);
+    }
+  }
+
+  // Under-matching makes the surface look smaller; OVER-matching makes it look
+  // bigger AND drags non-bypasses into the public prefix list. The four lists
+  // describe disjoint categories, so an overlap can only mean the extraction
+  // ate past an array boundary.
+  const pairs = [
+    ['HOOK_BYPASSES', HOOK_BYPASSES],
+    ['HOOK_EXACT_BYPASSES', HOOK_EXACT_BYPASSES],
+    ['HOOK_PAGE_PREFIX_BYPASSES', HOOK_PAGE_PREFIX_BYPASSES],
+    ['HOOK_NON_BYPASSES', HOOK_NON_BYPASSES],
+  ];
+  for (const [aName, a] of pairs) {
+    for (const [bName, b] of pairs) {
+      if (aName >= bName) continue;
+      const overlap = a.filter((x) => b.includes(x));
+      if (overlap.length) {
+        console.error(
+          `check-public-routes: ${aName} and ${bName} both contain ${overlap.join(', ')}.\n` +
+            'These categories are disjoint, so the extraction has run past an array\n' +
+            'boundary in src/lib/server/gate-bypasses.ts. Fix the regex in this script.',
+        );
+        process.exit(2);
+      }
+    }
+  }
+}
 
 /**
  * Fail if hooks.server.ts grows a path literal we haven't classified. A new

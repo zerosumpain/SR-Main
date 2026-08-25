@@ -93,6 +93,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     ],
   },
   {
+    id: 'estate',
+    label: 'Estate',
+    href: '/admin/estate',
+    match: (p) => p.startsWith('/admin/estate'),
+    items: [],
+  },
+  {
     id: 'access',
     label: 'Access',
     href: '/admin/access',

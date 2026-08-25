@@ -6,6 +6,7 @@
 # this list from the source and fails if it has drifted, so a new filesystem-
 # coupled test cannot be added without landing here too.
 #
+src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
