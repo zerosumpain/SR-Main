@@ -21,6 +21,7 @@ import { rateLimit } from '$lib/server/rate-limit';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
+import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { redirect, type Handle } from '@sveltejs/kit';
@@ -361,15 +362,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (import.meta.env.DEV || env.AUTH_BYPASS === '1') {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    const isPrivate =
-      clientAddr === '127.0.0.1' ||
-      clientAddr === '::1' ||
-      clientAddr.startsWith('10.') ||
-      clientAddr.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(clientAddr) ||
-      // Tailscale CGNAT range (100.64.0.0/10) — covers homeserv's Tailscale clients.
-      /^100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(clientAddr);
-    if (isPrivate) {
+    // `isPrivateAddress` rather than a list of prefixes written out here. The
+    // hand-written version compared against `'127.0.0.1'` and missed
+    // `::ffff:127.0.0.1`, which is what a dual-stack listener actually reports
+    // — so on `vite dev --host` the bypass never fired and every request from
+    // the box itself 401'd. See $lib/server/client-address.
+    if (isPrivateAddress(clientAddr)) {
       return resolve(event);
     }
   }
@@ -563,7 +561,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (pathname === '/api/health/workflow-engine') {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    if (clientAddr === '127.0.0.1' || clientAddr === '::1') {
+    if (isLoopbackAddress(clientAddr)) {
       return resolve(event);
     }
   }
@@ -588,8 +586,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    const isLoopback = clientAddr === '127.0.0.1' || clientAddr === '::1';
-    if (isLoopback && hasMaintenanceSecret(event.request)) {
+    if (isLoopbackAddress(clientAddr) && hasMaintenanceSecret(event.request)) {
       return resolve(event);
     }
   }
