@@ -484,6 +484,14 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
+      # Verification belongs on the build machine: check-built-extract.mjs
+      # imports the BUILT server chunks, which import from node_modules. Run in
+      # the release job it failed with "Cannot find package 'marked'", because
+      # that job has no node_modules by design. It also stamps
+      # build/.deploy-sha, so this must precede the upload.
+      - name: Verify and stamp the build
+        run: ./scripts/ci-prebuild.sh
+
       # Every bundle is built HERE, because this is now the only job with
       # node_modules. The staging scripts on the VPS consume these instead of
       # building their own.
@@ -513,6 +521,9 @@ jobs:
             packages/jkai-wa-worker/dist/start.js
           retention-days: 1
           if-no-files-found: error
+          # build/.deploy-sha is a dotfile and upload-artifact drops hidden
+          # files unless told otherwise — silently, with only a warning.
+          include-hidden-files: true
 
 
   release:
@@ -566,11 +577,11 @@ jobs:
         with:
           name: release-${{ github.sha }}
 
-      # Was the tail of the old prebuild job, and has to run here now: it stamps
-      # provenance into build/.deploy-sha and moves the build into
-      # releases/<sha>, both of which touch the VPS filesystem.
+      # Placing the build on the VPS is all this does — verification and
+      # stamping happened in prebuild, on the machine with node_modules. It
+      # asserts the artifact's stamp matches this checkout before staging.
       - name: Stage the release
-        run: ./scripts/ci-prebuild.sh
+        run: ./scripts/ci-stage-release.sh
 
       # No setup-node and, deliberately, no `npm ci`. Nothing this job runs
       # needs node_modules: the release-log ingest imports only node: builtins
