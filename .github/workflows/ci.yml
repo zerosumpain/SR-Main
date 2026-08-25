@@ -423,9 +423,19 @@ jobs:
   # keeps PR code off the production box — `npm ci` runs arbitrary lifecycle
   # scripts and the gate never inspected them anyway.
   prebuild:
-    name: Prebuild (VPS)
+    name: Prebuild (porkserv)
     if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
-    runs-on: [self-hosted, srmain]
+    # porkserv, not the VPS. This job used to run `npm ci` and a 6GB-heap build
+    # on the box that serves strangeramblings.com, so every deploy was a memory
+    # and disk spike on production — which is how a full VPS disk took CI down
+    # with "runner lost communication". porkserv has 64GB and ~300GB spare and
+    # serves nothing.
+    #
+    # SR-MAIN IS A PUBLIC REPO. This runner may only ever run jobs carrying the
+    # master guard above. A job that also ran on `pull_request` would let any
+    # stranger open a PR and execute arbitrary code on that box, so `gate` must
+    # never be pointed at it — and gate is free on GitHub-hosted anyway.
+    runs-on: [self-hosted, builder]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -440,12 +450,30 @@ jobs:
       # `$env/static/public` values are INLINED INTO THE BUNDLE at build time,
       # and the runner's checkout has no .env — so without this the production
       # build ships an empty PUBLIC_VAPID_PUBLIC_KEY and web push silently
-      # breaks. Copy only the PUBLIC_ lines: everything private is read at
-      # runtime from the service's EnvironmentFile, so there is no reason to
-      # duplicate secrets into the runner workspace.
+      # breaks.
+      #
+      # This used to be grepped out of /opt/strange-rambling-svelte/.env, which
+      # only worked while the job ran on the VPS. Repository variables replace
+      # it. Nothing private moves: PUBLIC_SITE_URL is the site's own address and
+      # the VAPID *public* key already ships inside a bundle anyone can
+      # download. Everything private is still read at runtime from the
+      # service's EnvironmentFile.
       - name: Provide build-time public env
+        env:
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+          PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.PUBLIC_VAPID_PUBLIC_KEY }}
         run: |
-          grep -E '^PUBLIC_' /opt/strange-rambling-svelte/.env > .env
+          # Fail loudly rather than ship a release whose push notifications are
+          # quietly dead. A silent empty key is the exact fault guarded here,
+          # and an unset repository variable expands to an empty string.
+          if [ -z "$PUBLIC_VAPID_PUBLIC_KEY" ]; then
+            echo "::error::repository variable PUBLIC_VAPID_PUBLIC_KEY is unset — refusing to build a release with web push broken"
+            exit 1
+          fi
+          {
+            echo "PUBLIC_SITE_URL=${PUBLIC_SITE_URL:-https://strangeramblings.com}"
+            echo "PUBLIC_VAPID_PUBLIC_KEY=$PUBLIC_VAPID_PUBLIC_KEY"
+          } > .env
           echo "public vars provided: $(grep -c '^PUBLIC_' .env)"
 
       # The REAL adapter. SR_GATE_STUB_ADAPTER is a gate-only flag and must
@@ -456,25 +484,35 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
-      - name: Stage the release
-        run: ./scripts/ci-prebuild.sh
-
-      # The sidecar owns the build-orchestrator loop and CI has never shipped
-      # it, so a fix merged in the morning could still be absent at teatime —
-      # which is exactly how a build died of a fault that had been fixed five
-      # hours earlier. Staging is safe at any moment; jkai-builder-maintain.sh
-      # applies it once no build is in flight, because a restart kills the
-      # agent process of any build that is.
+      # Every bundle is built HERE, because this is now the only job with
+      # node_modules. The staging scripts on the VPS consume these instead of
+      # building their own.
       #
-      # `|| true`: a stale sidecar is a far smaller problem than a web release
-      # that did not happen, and this job's real output is the release directory.
-      - name: Stage the jkai-builder sidecar
-        run: ./scripts/ci-stage-builder.sh || echo "::warning::staging the jkai-builder sidecar failed — it will keep running the previous bundle"
+      # A sidecar that fails to build must not block the web release: the
+      # staging scripts warn and keep the previous bundle live, which is the
+      # tolerance they have always had. Failing the whole job here would be
+      # stricter than the behaviour this replaces.
+      - name: Build the sidecar bundles
+        run: |
+          npm run build:builder      || echo "::warning::build:builder failed — the previous jkai-builder bundle stays live"
+          npm run build:codex-bridge || echo "::warning::build:codex-bridge failed — the previous bundle stays live"
+          npm run build:wa-worker    || echo "::warning::build:wa-worker failed — the previous bundle stays live"
 
-      # Here rather than in `release` because that job has no npm ci, so it
-      # cannot build anything. `ci-apply-sidecars.sh` does the restart half.
-      - name: Stage the systemd sidecars
-        run: ./scripts/ci-stage-sidecars.sh || echo "::warning::staging the systemd sidecars failed — they will keep running the previous bundle"
+      # One artifact carries everything the VPS needs. Deliberately routed
+      # through GitHub rather than rsynced porkserv -> VPS: it keeps the number
+      # of write paths into production at exactly one, the release job, and
+      # needs no inbound credential on the VPS for a second machine.
+      - name: Upload the release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            build/
+            packages/jkai-builder/dist/start.js
+            packages/jkai-codex-bridge/dist/start.js
+            packages/jkai-wa-worker/dist/start.js
+          retention-days: 1
+          if-no-files-found: error
 
 
   release:
@@ -520,13 +558,39 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Where the build lands now that it happens on porkserv. Extracts to the
+      # workspace root, restoring build/ and the sidecar bundles exactly where
+      # the staging scripts already expect to find them.
+      - name: Download the release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+
+      # Was the tail of the old prebuild job, and has to run here now: it stamps
+      # provenance into build/.deploy-sha and moves the build into
+      # releases/<sha>, both of which touch the VPS filesystem.
+      - name: Stage the release
+        run: ./scripts/ci-prebuild.sh
+
       # No setup-node and, deliberately, no `npm ci`. Nothing this job runs
       # needs node_modules: the release-log ingest imports only node: builtins
-      # and its own siblings, and the build it ships was packaged by prebuild.
-      # Skipping the install is most of why the ship is seconds rather than
-      # minutes.
+      # and its own siblings, drizzle-kit is installed into VPS_DIR by the
+      # script itself, and the build it ships was packaged by prebuild. Note
+      # this workspace no longer inherits node_modules from prebuild either,
+      # since prebuild runs on a different machine.
       - name: Release
         run: ./scripts/ci-release.sh
+
+      # Sidecar staging now follows the web release instead of preceding it.
+      # These scripts no longer build anything — they place the bundles that
+      # arrived in the artifact and install the units. A failure here still must
+      # not fail the ship: a stale sidecar is a far smaller problem than a web
+      # release that did not happen.
+      - name: Stage the jkai-builder sidecar
+        run: ./scripts/ci-stage-builder.sh || echo "::warning::staging the jkai-builder sidecar failed — it will keep running the previous bundle"
+
+      - name: Stage the systemd sidecars
+        run: ./scripts/ci-stage-sidecars.sh || echo "::warning::staging the systemd sidecars failed — they will keep running the previous bundle"
 
   risk-tier:
     name: Risk tier
