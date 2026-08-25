@@ -135,7 +135,7 @@ const API_PATH_RE = /\/api\//i;
  */
 const PII_RE = new RegExp(
   [
-    // +44 7359 228511, +447359228511, (0)7359-228511 …
+    // +44 7700 900123, +447700900123, (0)7700-900123 …
     '\\+\\d[\\d\\s()-]{7,}\\d',
     // UK mobile/landline in national form
     '\\b0?7\\d{3}[\\s-]?\\d{6}\\b',

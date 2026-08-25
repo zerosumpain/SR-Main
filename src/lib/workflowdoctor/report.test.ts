@@ -17,7 +17,7 @@ vi.mock('$lib/datastore', () => ({
 }));
 
 // A fake number, so no test fixture and no failure output can carry the real one.
-vi.mock('$lib/workflows/whatsapp/approval-notify', () => ({ OWNER_PHONE: '+10000000000' }));
+vi.mock('$lib/workflows/whatsapp/approval-notify', () => ({ getOwnerPhone: () => '+10000000000' }));
 
 vi.mock('$lib/workflows/site-tools/registry', () => ({
   executeTool: vi.fn(async () => {

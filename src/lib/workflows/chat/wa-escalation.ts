@@ -1,8 +1,8 @@
+import { ownerPhone } from '$lib/config/owner';
 import { getJob, getStreamSubscriberCount, registerEventHook, type JobEvent } from './job-store';
 import { isUserPresent } from './presence';
 import { getWhatsAppService } from '$lib/workflows/whatsapp/service';
 
-const OWNER_PHONE = '+447359228511';
 const SITE_URL = 'https://strangeramblings.com';
 const GRACE_MS = 15_000;
 // A *finished* reply (done/error) only earns a WhatsApp ping if it actually
@@ -65,7 +65,7 @@ async function sendWa(text: string): Promise<void> {
     // at boot and never re-probed, so any VPS restart during an outage — a CI
     // deploy counts — pinned this channel off permanently, even after homeserv
     // came back. Attempt the send and report what actually happened.
-    const result = await wa.sendMessage(OWNER_PHONE, text);
+    const result = await wa.sendMessage(ownerPhone() ?? '', text);
     if (!result.sent) console.error(`[wa-escalation] send failed: ${result.error}`);
   } catch (err) {
     console.error('[wa-escalation] send threw:', err);

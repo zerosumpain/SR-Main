@@ -18,13 +18,19 @@ import { sql } from 'drizzle-orm';
 import { resolveInteraction } from '$lib/workflows/engine-resume';
 import { resolveNaming } from '$lib/workflows/run-notifications';
 import { parseApprovalReply, isApprovalTokenExpired } from './approval-tokens';
-import { OWNER_PHONE, WA_APPROVAL_SNAPSHOT_KEY, type WaApprovalSnapshot } from './approval-notify';
+import { getOwnerPhone, WA_APPROVAL_SNAPSHOT_KEY, type WaApprovalSnapshot } from './approval-notify';
 
-const OWNER_DIGITS = OWNER_PHONE.replace(/\D+/g, '');
-
-/** Whether an inbound sender is the owner (digit-normalised comparison). */
+/**
+ * Whether an inbound sender is the owner (digit-normalised comparison).
+ *
+ * Read per call. As a module-level const this froze at import, before the
+ * environment was populated — and an empty owner matches nobody, so inbound
+ * approvals would simply stop working with nothing to show for it.
+ */
 function isOwner(from: string): boolean {
-  return from.replace(/\D+/g, '') === OWNER_DIGITS;
+  const ownerDigits = getOwnerPhone().replace(/\D+/g, '');
+  if (!ownerDigits) return false;
+  return from.replace(/\D+/g, '') === ownerDigits;
 }
 
 interface ApprovalLookupRow {

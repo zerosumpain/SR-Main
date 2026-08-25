@@ -19,7 +19,7 @@ import { workflows, workflowNodes, workflowEdges, workflowRuns } from '$lib/db/s
 import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows/types';
-import { OWNER_PHONE } from './approval-notify';
+import { getOwnerPhone } from './approval-notify';
 
 export type WaMatchMode = 'prefix' | 'exact' | 'contains';
 
@@ -30,11 +30,18 @@ export type WaMatchMode = 'prefix' | 'exact' | 'contains';
  */
 export const WA_RESERVED_KEYWORDS: ReadonlySet<string> = new Set(['approve', 'deny', 'yes', 'no']);
 
-const OWNER_DIGITS = OWNER_PHONE.replace(/\D+/g, '');
-
-/** Whether an inbound sender is the owner (digit-normalised comparison). */
+/**
+ * Whether an inbound sender is the owner (digit-normalised comparison).
+ *
+ * Read per call, not at module load: `$env/dynamic/private` is empty until
+ * SvelteKit populates it, so a const here could freeze in '' on a host where
+ * WORKFLOW_NOTIFY_PHONE is perfectly well set — and an empty owner matches
+ * nobody, which silently stops every inbound WhatsApp dispatch.
+ */
 export function isOwnerSender(from: string): boolean {
-  return from.replace(/\D+/g, '') === OWNER_DIGITS;
+  const ownerDigits = getOwnerPhone().replace(/\D+/g, '');
+  if (!ownerDigits) return false;
+  return from.replace(/\D+/g, '') === ownerDigits;
 }
 
 /** Whether a configured keyword is reserved (belongs to the approval flow). */

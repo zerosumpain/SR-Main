@@ -39,7 +39,7 @@ export const whatsappDef: NodeDefinition = {
       key: 'to',
       label: 'Recipient Phone Number',
       type: 'template-textarea',
-      placeholder: '+447359228511 or {{input.phone}}',
+      placeholder: '+447700900123 or {{input.phone}}',
       description: 'Phone number in E.164 format (include country code). Supports {{input.field}} templates.',
     },
     {
@@ -102,7 +102,7 @@ export const whatsappDef: NodeDefinition = {
   ],
   llmDescription: `Send a WhatsApp message to a phone number. Use when a workflow needs to notify someone via WhatsApp.
 
-The \`to\` field must be an E.164 phone number (e.g. "+447359228511"). \`to\`, \`message\`, \`caption\`, \`mediaPath\` and \`mediaUrl\` all support \`{{input.field}}\` templates.
+The \`to\` field must be an E.164 phone number (e.g. "+447700900123"). \`to\`, \`message\`, \`caption\`, \`mediaPath\` and \`mediaUrl\` all support \`{{input.field}}\` templates.
 
 Behaviour:
 - \`formatMarkdown\` (default true) converts Markdown to WhatsApp formatting (**bold** → *bold*, ## headings → bold lines, [text](url) → "text (url)", "- " bullets → "•").
@@ -114,9 +114,9 @@ Downstream nodes read \`input.sent\`, \`input.messageId\`, \`input.messageIds\` 
 
 Requires an active WhatsApp connection (Hermes bridge).`,
   llmExamples: [
-    { to: '+447359228511', message: 'Daily report: {{input.summary}}' },
+    { to: '+447700900123', message: 'Daily report: {{input.summary}}' },
     { to: '{{input.phone}}', message: '## Headlines\n{{input.digest}}', formatMarkdown: true },
-    { to: '+447359228511', message: 'Daily news for {{today}}', suppressDuplicateWindowMins: 1440 },
-    { to: '+447359228511', mediaUrl: '{{input.chartUrl}}', caption: 'This week: {{input.title}}' },
+    { to: '+447700900123', message: 'Daily news for {{today}}', suppressDuplicateWindowMins: 1440 },
+    { to: '+447700900123', mediaUrl: '{{input.chartUrl}}', caption: 'This week: {{input.title}}' },
   ],
 };

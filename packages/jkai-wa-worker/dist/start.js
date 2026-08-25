@@ -2418,7 +2418,16 @@ var init_schema = __esm({
       observedAt: timestamp("observed_at", { withTimezone: true }),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-    });
+    }, (t) => ({
+      // Same reasoning as `intel_entities_embedding_hnsw_idx` — this is the second
+      // vector query `buildKnowledgeContext` runs on every chat turn. Smaller table
+      // (1,821 embedded notes) so it costs ~21ms today, but it is the same Seq Scan
+      // and it grows the same way.
+      byEmbedding: index("intel_notes_embedding_hnsw_idx").using(
+        "hnsw",
+        sql`${t.embedding} vector_cosine_ops`
+      )
+    }));
     intelEntities = pgTable(
       "intel_entities",
       {
@@ -2467,7 +2476,38 @@ var init_schema = __esm({
         byMerged: index("intel_entities_merged_idx").on(t.mergedIntoId),
         byWatched: index("intel_entities_watched_idx").on(t.watched),
         byUpdated: index("intel_entities_updated_idx").on(t.updatedAt),
-        byCanonical: index("intel_entities_canonical_idx").on(t.canonicalName)
+        byCanonical: index("intel_entities_canonical_idx").on(t.canonicalName),
+        // Cosine-distance ANN index for the `<=>` lookup `buildKnowledgeContext`
+        // runs on EVERY chat turn. Without it that query is a Seq Scan over every
+        // embedded entity: measured 2026-08-24 on production at 187ms / 13,313
+        // rows / 14,170 buffers read, and it grows with the graph. It sits on the
+        // critical path before the first LLM call, so it is latency the user feels.
+        // Measured on a production-scale copy: 61.5ms → 0.65ms.
+        //
+        // Three things to know before touching this:
+        //
+        // 1. Written as raw SQL rather than `t.embedding.op('vector_cosine_ops')`
+        //    because `vector` here is a `customType`, which has no `.op()`. The
+        //    opclass must match the operator the query uses (`<=>` = cosine); an
+        //    l2_ops index would be built happily and then never chosen.
+        //
+        // 2. **drizzle-kit 0.31 cannot round-trip an hnsw index**, so `push` DROPS
+        //    AND RECREATES both of these every time it runs — verified by OID, and
+        //    it is specific to hnsw (the plain btree indexes beside it are stable).
+        //    That costs ~5.4s per index at 13k rows and the release step allows
+        //    180s, so it is tolerated, not fixed. It is NOT fixable by leaving the
+        //    index out of this file and creating it by hand either: `push`
+        //    reconciles, so an index it cannot see is an index it deletes.
+        //
+        // 3. HNSW is APPROXIMATE. The query post-filters on `merged_into_id IS
+        //    NULL` (407 of 13,720 rows, 3%) against a default `ef_search` of 40 for
+        //    a LIMIT of 8, so it will not run short in practice — but it is a
+        //    ranked shortlist for a prompt section, already cut at distance < 0.6,
+        //    and exact top-8 was never the requirement.
+        byEmbedding: index("intel_entities_embedding_hnsw_idx").using(
+          "hnsw",
+          sql`${t.embedding} vector_cosine_ops`
+        )
       })
     );
     intelRelationships = pgTable(
@@ -5678,6 +5718,27 @@ var init_dedupe = __esm({
   }
 });
 
+// src/lib/config/owner.ts
+function ownerPhone() {
+  const raw = env.WORKFLOW_NOTIFY_PHONE?.trim();
+  if (raw) return raw;
+  if (!warned) {
+    warned = true;
+    console.error(
+      "[config] WORKFLOW_NOTIFY_PHONE is not set \u2014 owner WhatsApp notifications (briefing, alerts, connector monitor, intel) have nowhere to go."
+    );
+  }
+  return null;
+}
+var warned;
+var init_owner = __esm({
+  "src/lib/config/owner.ts"() {
+    "use strict";
+    init_env_shim();
+    warned = false;
+  }
+});
+
 // src/lib/workflows/whatsapp/format.ts
 function markdownToWhatsApp(md) {
   if (!md) return "";
@@ -5794,7 +5855,7 @@ async function sendWhatsApp(text4) {
   try {
     const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
     const wa = getWhatsAppService2();
-    const result = await wa.sendMessage(OWNER_PHONE, text4);
+    const result = await wa.sendMessage(ownerPhone() ?? "", text4);
     if (!result.sent) {
       console.warn(`[run-notifications] WhatsApp send failed: ${result.error ?? "unknown error"}`);
     }
@@ -5845,14 +5906,14 @@ ${url}`;
     console.error("[run-notifications] notifyRunOutcome threw:", err instanceof Error ? err.message : err);
   }
 }
-var OWNER_PHONE, SITE_URL, CANVAS_NAME_PREFIX, MAX_ERROR_CHARS, MAX_DIGEST_CHARS;
+var SITE_URL, CANVAS_NAME_PREFIX, MAX_ERROR_CHARS, MAX_DIGEST_CHARS;
 var init_run_notifications = __esm({
   "src/lib/workflows/run-notifications.ts"() {
     "use strict";
+    init_owner();
     init_db();
     init_schema();
     init_format();
-    OWNER_PHONE = process.env.WORKFLOW_NOTIFY_PHONE?.trim() || "+447359228511";
     SITE_URL = "https://strangeramblings.com";
     CANVAS_NAME_PREFIX = "canvas:";
     MAX_ERROR_CHARS = 300;
@@ -7354,7 +7415,7 @@ var init_patterns = __esm({
         nodes: [
           { id: "fetch", type: "http-request", config: `method: "GET", url: "https://api.example.com/status"` },
           { id: "isDown", type: "conditional", config: `expression: "input.body.status !== 'ok'"` },
-          { id: "alert", type: "whatsapp", config: `to: "+447359228511", message: "Service is DOWN: {{input.body.status}}"` }
+          { id: "alert", type: "whatsapp", config: `to: "+447700900123", message: "Service is DOWN: {{input.body.status}}"` }
         ],
         edges: ["trigger \u2192 fetch", "fetch \u2192 isDown", 'isDown \u2192 alert (sourceHandle: "true")'],
         note: 'Only the "true" handle of the conditional is wired \u2014 when the service is healthy the workflow ends. http-request auto-parses JSON bodies, so reference input.body.* paths. conditional config key is `expression` (a single boolean JS expression).'
@@ -7409,7 +7470,7 @@ var init_patterns = __esm({
           { id: "dedupe", type: "dedupe", config: `itemsPath: "results", idPath: "url", storeKey: "seen_news_urls"` },
           { id: "guard", type: "conditional", config: `expression: "input.newCount > 0"` },
           { id: "brief", type: "llm-call", config: `userPrompt: "Today is {{today}}. Write a short WhatsApp news briefing from these fresh stories \u2014 one line each, most important first:\\n\\n{{input.items}}"  (leave model unset \u2192 admin default)` },
-          { id: "send", type: "whatsapp", config: `to: "+447359228511", message: "{{input.text}}"` }
+          { id: "send", type: "whatsapp", config: `to: "+447700900123", message: "{{input.text}}"` }
         ],
         edges: [
           "trigger \u2192 search",
@@ -14539,6 +14600,7 @@ var PROFILES, SETTINGS_ENABLED_KEY, SETTINGS_ASSIGNMENTS_KEY, SETTINGS_CONFIG_KE
 var init_types4 = __esm({
   "src/lib/routing/types.ts"() {
     "use strict";
+    init_owner();
     PROFILES = ["general", "tool", "rag", "agentic", "vision"];
     SETTINGS_ENABLED_KEY = "jkai.routing.enabled";
     SETTINGS_ASSIGNMENTS_KEY = "jkai.routing.assignments";
@@ -16622,6 +16684,8 @@ async function pushHighAlerts(noteId) {
     )
   );
   if (alerts.length === 0) return 0;
+  const to = ownerPhone();
+  if (!to) return 0;
   const wa = getWhatsAppService();
   let delivered = 0;
   for (const alert of alerts) {
@@ -16638,7 +16702,7 @@ ${alert.content}
 
 View: ${SITE_URL2}/jkai/intel/alerts`;
     try {
-      const result = await wa.sendMessage(WHATSAPP_NUMBER, message);
+      const result = await wa.sendMessage(to, message);
       if (result.sent) {
         await db.update(intelAlerts).set({ delivered: true }).where(eq32(intelAlerts.id, alert.id));
         delivered++;
@@ -16651,14 +16715,14 @@ View: ${SITE_URL2}/jkai/intel/alerts`;
   }
   return delivered;
 }
-var WHATSAPP_NUMBER, SITE_URL2;
+var SITE_URL2;
 var init_notify = __esm({
   "src/lib/jkai/intel/notify.ts"() {
     "use strict";
+    init_owner();
     init_db();
     init_schema();
     init_service();
-    WHATSAPP_NUMBER = "+447359228511";
     SITE_URL2 = "https://strangeramblings.com";
   }
 });
@@ -25350,7 +25414,7 @@ var init_whatsapp = __esm({
       parameters: {
         type: "object",
         properties: {
-          to: { type: "string", description: 'Phone number with country code (e.g. "+447359228511")' },
+          to: { type: "string", description: 'Phone number with country code (e.g. "+447700900123")' },
           message: { type: "string", description: "Message text to send" }
         },
         required: ["to", "message"]
@@ -29644,7 +29708,7 @@ var init_whatsapp_def = __esm({
           key: "to",
           label: "Recipient Phone Number",
           type: "template-textarea",
-          placeholder: "+447359228511 or {{input.phone}}",
+          placeholder: "+447700900123 or {{input.phone}}",
           description: "Phone number in E.164 format (include country code). Supports {{input.field}} templates."
         },
         {
@@ -29707,7 +29771,7 @@ var init_whatsapp_def = __esm({
       ],
       llmDescription: `Send a WhatsApp message to a phone number. Use when a workflow needs to notify someone via WhatsApp.
 
-The \`to\` field must be an E.164 phone number (e.g. "+447359228511"). \`to\`, \`message\`, \`caption\`, \`mediaPath\` and \`mediaUrl\` all support \`{{input.field}}\` templates.
+The \`to\` field must be an E.164 phone number (e.g. "+447700900123"). \`to\`, \`message\`, \`caption\`, \`mediaPath\` and \`mediaUrl\` all support \`{{input.field}}\` templates.
 
 Behaviour:
 - \`formatMarkdown\` (default true) converts Markdown to WhatsApp formatting (**bold** \u2192 *bold*, ## headings \u2192 bold lines, [text](url) \u2192 "text (url)", "- " bullets \u2192 "\u2022").
@@ -29719,10 +29783,10 @@ Downstream nodes read \`input.sent\`, \`input.messageId\`, \`input.messageIds\` 
 
 Requires an active WhatsApp connection (Hermes bridge).`,
       llmExamples: [
-        { to: "+447359228511", message: "Daily report: {{input.summary}}" },
+        { to: "+447700900123", message: "Daily report: {{input.summary}}" },
         { to: "{{input.phone}}", message: "## Headlines\n{{input.digest}}", formatMarkdown: true },
-        { to: "+447359228511", message: "Daily news for {{today}}", suppressDuplicateWindowMins: 1440 },
-        { to: "+447359228511", mediaUrl: "{{input.chartUrl}}", caption: "This week: {{input.title}}" }
+        { to: "+447700900123", message: "Daily news for {{today}}", suppressDuplicateWindowMins: 1440 },
+        { to: "+447700900123", mediaUrl: "{{input.chartUrl}}", caption: "This week: {{input.title}}" }
       ]
     };
   }
@@ -39712,6 +39776,34 @@ async function buildKnowledgeContext(userMessage) {
     return "";
   }
 }
+async function vectorLookups(vectorStr) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql37`SET LOCAL random_page_cost = ${sql37.raw(String(SSD_RANDOM_PAGE_COST))}`);
+    const entityRows = await tx.execute(sql37`
+      SELECT e.id, e.name, et.name as type_name, et.icon, e.summary,
+             e.properties,
+             e.embedding <=> ${vectorStr}::vector as distance
+      FROM intel_entities e
+      JOIN intel_entity_types et ON e.type_id = et.id
+      WHERE e.embedding IS NOT NULL
+        AND e.merged_into_id IS NULL
+      ORDER BY distance ASC
+      LIMIT 8
+    `);
+    const noteRows = await tx.execute(sql37`
+      SELECT n.id, n.title,
+             substring(n.processed_content from 1 for 400) as excerpt,
+             n.created_at,
+             n.embedding <=> ${vectorStr}::vector as distance
+      FROM intel_notes n
+      WHERE n.embedding IS NOT NULL
+        AND n.status = 'processed'
+      ORDER BY distance ASC
+      LIMIT 5
+    `);
+    return [entityRows.rows, noteRows.rows];
+  });
+}
 async function findRelevantContext(query) {
   let embedding;
   try {
@@ -39720,30 +39812,9 @@ async function findRelevantContext(query) {
     return { entities: [], noteExcerpts: [], clusters: await describeClusters() };
   }
   const vectorStr = `[${embedding.join(",")}]`;
-  const entityRows = await db.execute(sql37`
-    SELECT e.id, e.name, et.name as type_name, et.icon, e.summary,
-           e.properties,
-           e.embedding <=> ${vectorStr}::vector as distance
-    FROM intel_entities e
-    JOIN intel_entity_types et ON e.type_id = et.id
-    WHERE e.embedding IS NOT NULL
-      AND e.merged_into_id IS NULL
-    ORDER BY distance ASC
-    LIMIT 8
-  `);
-  const relevantEntities = entityRows.rows.filter((r) => r.distance < 0.6);
-  const noteRows = await db.execute(sql37`
-    SELECT n.id, n.title,
-           substring(n.processed_content from 1 for 400) as excerpt,
-           n.created_at,
-           n.embedding <=> ${vectorStr}::vector as distance
-    FROM intel_notes n
-    WHERE n.embedding IS NOT NULL
-      AND n.status = 'processed'
-    ORDER BY distance ASC
-    LIMIT 5
-  `);
-  const relevantNotes = noteRows.rows.filter((r) => r.distance < 0.5);
+  const [entityRows, noteRows] = await vectorLookups(vectorStr);
+  const relevantEntities = entityRows.filter((r) => r.distance < 0.6);
+  const relevantNotes = noteRows.filter((r) => r.distance < 0.5);
   const entityIds = relevantEntities.map((e) => e.id);
   const entities2 = [];
   for (const row of relevantEntities) {
@@ -39844,13 +39915,14 @@ ${entity.icon} **${entity.name}** (${entity.type})`);
   }
   return parts.join("\n");
 }
-var MAX_CLUSTERS;
+var SSD_RANDOM_PAGE_COST, MAX_CLUSTERS;
 var init_context = __esm({
   "src/lib/jkai/intel/context.ts"() {
     "use strict";
     init_db();
     init_schema();
     init_embed();
+    SSD_RANDOM_PAGE_COST = 1.1;
     MAX_CLUSTERS = 12;
   }
 });
@@ -40875,6 +40947,31 @@ Write plain prose in past tense. No preamble, no headings, no markdown. Be speci
   }
 });
 
+// src/lib/workflows/chat/carried-toolsets.ts
+function carriedToolsets(history, currentMatches) {
+  const already = new Set(currentMatches);
+  const recentUserTurns = history.filter((m) => m.role === "user" && typeof m.content === "string").slice(-CARRY_LOOKBACK_TURNS).reverse();
+  const carried = [];
+  for (const turn of recentUserTurns) {
+    for (const ts of inferToolsets(turn.content)) {
+      if (already.has(ts)) continue;
+      already.add(ts);
+      carried.push(ts);
+      if (carried.length >= MAX_CARRIED_TOOLSETS) return carried;
+    }
+  }
+  return carried;
+}
+var CARRY_LOOKBACK_TURNS, MAX_CARRIED_TOOLSETS;
+var init_carried_toolsets = __esm({
+  "src/lib/workflows/chat/carried-toolsets.ts"() {
+    "use strict";
+    init_keyword_classifier();
+    CARRY_LOOKBACK_TURNS = 3;
+    MAX_CARRIED_TOOLSETS = 3;
+  }
+});
+
 // src/lib/workflows/homeassistant/llm-tools.ts
 var llm_tools_exports = {};
 __export(llm_tools_exports, {
@@ -40911,7 +41008,19 @@ function buildHASystemPromptSection(entities2) {
   return `
 
 --- Home Assistant Smart Home ---
-You can control the smart home using ha_* functions. Available areas and devices:
+This is an INDEX OF NAMES ONLY. It carries no readings, no states and no values \u2014
+a device appearing here says nothing about whether it is on, off, available or
+what it currently reads.
+
+To answer anything about a current value or state you MUST call ha_query_state
+(or ha_find to locate an entity first). Never infer a reading from this list, and
+never report a device as working or unavailable because of how it appears here.
+
+If a queried entity comes back \`unavailable\`, say so plainly and check whether
+another entity covers the same thing \u2014 several devices often report the same
+measurement and only some are alive.
+
+Available areas and devices:
 
 ${summary}
 
@@ -41352,6 +41461,20 @@ async function emitOpeningAck(opts) {
     console.warn("[general-chat] opening ack failed:", err instanceof Error ? err.message : err);
   }
 }
+function scheduleOpeningAck(opts) {
+  const controller = new AbortController();
+  const timer2 = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    void emitOpeningAck({ ...opts, signal: controller.signal });
+  }, ACK_SILENCE_MS);
+  timer2.unref?.();
+  return {
+    cancel: () => {
+      clearTimeout(timer2);
+      controller.abort();
+    }
+  };
+}
 async function buildMemorySection() {
   let rows;
   try {
@@ -41516,13 +41639,25 @@ async function runSingleToolCall(toolCall, ctx) {
     } : conversationId ? { conversationId, emit: () => {
     } } : void 0;
     if (jobId) setJobPhase(jobId, "tool_running", runningSummary || fnName);
-    if (jobId && isDestructive2(fnName)) {
-      const prompt = describeDestructiveAction2(fnName, fnArgs);
-      const approved = await requireConfirmation2(jobId, prompt, fnArgs, { destructive: true });
-      if (!approved) {
-        toolResult = { success: false, error: "User declined the action." };
+    if (isDestructive2(fnName)) {
+      if (!jobId) {
+        const policy = (process.env.MCP_CONFIRM_UNATTENDED ?? "deny").toLowerCase();
+        if (policy === "allow") {
+          toolResult = await executeTool(fnName, fnArgs, toolCtx);
+        } else {
+          toolResult = {
+            success: false,
+            error: `${fnName} changes something outside this conversation and needs confirmation, but no user is attached to this session to give it. Ask again in /jkai, where the confirmation can be shown.`
+          };
+        }
       } else {
-        toolResult = await executeTool(fnName, fnArgs, toolCtx);
+        const prompt = describeDestructiveAction2(fnName, fnArgs);
+        const approved = await requireConfirmation2(jobId, prompt, fnArgs, { destructive: true });
+        if (!approved) {
+          toolResult = { success: false, error: "User declined the action." };
+        } else {
+          toolResult = await executeTool(fnName, fnArgs, toolCtx);
+        }
       }
     } else {
       toolResult = await executeTool(fnName, fnArgs, toolCtx);
@@ -41674,18 +41809,21 @@ The user pasted the following links in their message. Their readable contents ha
 ${sections.join("\n\n")}`;
 }
 async function generalChat(input, conversationHistory, options) {
+  const ack = options.conversationId && (options.subagentDepth ?? 0) === 0 ? scheduleOpeningAck({
+    userMessage: input.text,
+    modelContext: options.modelContext,
+    conversationId: options.conversationId,
+    priceSnapshot: options.priceSnapshot
+  }) : null;
+  try {
+    return await runGeneralChat(input, conversationHistory, options, () => ack?.cancel());
+  } finally {
+    ack?.cancel();
+  }
+}
+async function runGeneralChat(input, conversationHistory, options, cancelAck) {
   const { onProgress, onToolProgress } = options;
   const userMessage = input.text;
-  const ackController = new AbortController();
-  if (options.conversationId && (options.subagentDepth ?? 0) === 0) {
-    void emitOpeningAck({
-      userMessage,
-      modelContext: options.modelContext,
-      conversationId: options.conversationId,
-      priceSnapshot: options.priceSnapshot,
-      signal: ackController.signal
-    });
-  }
   maybeIngestAsNote(userMessage);
   let haEntities = [];
   try {
@@ -41705,7 +41843,13 @@ async function generalChat(input, conversationHistory, options) {
     buildCanvasContextSection(options.workflowId),
     buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent)
   ]);
-  const inferred = inferToolsets(userMessage);
+  const matched = inferToolsets(userMessage);
+  const carried = carriedToolsets(conversationHistory, matched);
+  const inferred = [...matched, ...carried];
+  if (carried.length) {
+    onProgress?.(`[toolsets] carried forward from earlier turns: ${carried.join(", ")}
+`);
+  }
   const scraperSection = inferred.includes("scraper") ? `
 
 --- Web scraping ---
@@ -41844,6 +41988,7 @@ ${options.personaPrompt.trim()}
   const thinkingCtx = isOrchestrator ? await resolveThinkingModel() : null;
   const THINKING_PROMPT_CHAR_THRESHOLD = 16e4;
   let responseText = "";
+  const turnBeganAt = Date.now();
   const isCanvasChat = !!options.workflowId;
   const baseDefault = isCanvasChat ? EXTENDED_TOOL_ROUNDS : DEFAULT_TOOL_ROUNDS;
   let maxRounds = options.maxRounds ? Math.max(1, Math.min(ABSOLUTE_TOOL_ROUNDS, options.maxRounds)) : detectExtendedAutonomy(userMessage) ? Math.max(EXTENDED_TOOL_ROUNDS, baseDefault) : baseDefault;
@@ -41862,7 +42007,7 @@ ${options.personaPrompt.trim()}
     const useThinking = !!thinkingCtx && (round === 0 || lastUserText.startsWith("Adjust the plan:") || lastUserText.startsWith("My answers:") || promptChars > THINKING_PROMPT_CHAR_THRESHOLD);
     const turnCtx = useThinking && thinkingCtx ? thinkingCtx : baseCtx;
     const { client, model } = await getLLMClient(turnCtx);
-    if (round === 5) {
+    if (round === 5 && Date.now() - turnBeganAt >= STATUS_UPDATE_MIN_ELAPSED_MS) {
       try {
         const statusResp = await client.chat.completions.create({
           model,
@@ -41963,12 +42108,13 @@ ${options.personaPrompt.trim()}
             firstTokenSeen = true;
             clearNarration();
             if (options.jobId) setJobPhase(options.jobId, "thinking", "Streaming reply\u2026");
-            ackController.abort();
+            cancelAck();
           }
           fullContent += delta.content;
           options.onStreamEvent?.({ type: "token", delta: delta.content });
         }
         if (Array.isArray(delta.tool_calls)) {
+          cancelAck();
           for (const tc of delta.tool_calls) {
             const idx = tc.index ?? 0;
             let acc = fullToolCalls.find((t) => t.index === idx);
@@ -42119,7 +42265,7 @@ ${answerLines}` });
   }
   return { response: responseText };
 }
-var MAX_HISTORY, DEFAULT_TOOL_ROUNDS, EXTENDED_TOOL_ROUNDS, ABSOLUTE_TOOL_ROUNDS, EXTENDED_AUTONOMY_PHRASES, MEMORY_BUDGET;
+var MAX_HISTORY, DEFAULT_TOOL_ROUNDS, EXTENDED_TOOL_ROUNDS, ABSOLUTE_TOOL_ROUNDS, EXTENDED_AUTONOMY_PHRASES, ACK_SILENCE_MS, STATUS_UPDATE_MIN_ELAPSED_MS, MEMORY_BUDGET;
 var init_general_chat = __esm({
   "src/lib/workflows/chat/general-chat.ts"() {
     "use strict";
@@ -42146,6 +42292,7 @@ var init_general_chat = __esm({
     init_capabilities();
     init_registry2();
     init_compress();
+    init_carried_toolsets();
     MAX_HISTORY = 30;
     DEFAULT_TOOL_ROUNDS = 10;
     EXTENDED_TOOL_ROUNDS = 30;
@@ -42159,6 +42306,8 @@ var init_general_chat = __esm({
       /\bextended autonomy\b/i,
       /\b(?:autonomously|on your own) (?:until|for longer)\b/i
     ];
+    ACK_SILENCE_MS = 8e3;
+    STATUS_UPDATE_MIN_ELAPSED_MS = 45e3;
     MEMORY_BUDGET = 4e3;
   }
 });
@@ -42406,6 +42555,7 @@ ${truncated}`
 var init_followup = __esm({
   "src/lib/workflows/site-tools/tools/followup.ts"() {
     "use strict";
+    init_owner();
     init_registry_internal();
     init_followup_queue();
     init_db();
@@ -42446,7 +42596,7 @@ var init_followup = __esm({
           checkFn,
           completionPrompt,
           notifyWhatsApp,
-          whatsAppNumber: notifyWhatsApp ? "+447359228511" : void 0,
+          whatsAppNumber: notifyWhatsApp ? ownerPhone() ?? void 0 : void 0,
           delayMs: delaySeconds * 1e3
         });
         return {
@@ -43316,11 +43466,21 @@ function escape(term) {
 function matchesTerm(haystack, term) {
   return new RegExp(`(^|[^a-z0-9])${escape(term)}`).test(haystack);
 }
+function expandTerm(term) {
+  const t = term.toLowerCase();
+  const syn = TERM_SYNONYMS[t];
+  return syn ? [t, ...syn] : [t];
+}
+function applyPhrases(query) {
+  let q = query.toLowerCase();
+  for (const [re, to] of PHRASE_SYNONYMS) q = q.replace(re, to);
+  return q;
+}
 function matchesQuery(haystack, query) {
-  const terms = query.toLowerCase().split(/[^a-z0-9_.]+/).filter(Boolean);
+  const terms = applyPhrases(query).split(/[^a-z0-9_.]+/).filter(Boolean);
   if (!terms.length) return true;
   const hay = haystack.toLowerCase();
-  return terms.every((t) => matchesTerm(hay, t));
+  return terms.every((t) => expandTerm(t).some((v) => matchesTerm(hay, v)));
 }
 function scoreEntity(entity, query) {
   const terms = query.toLowerCase().split(/[^a-z0-9_.]+/).filter(Boolean);
@@ -43395,12 +43555,62 @@ function resolveEntityId(args) {
   }
   return "";
 }
-var DEFAULT_LIMIT2, MAX_LIMIT3;
+var DEFAULT_LIMIT2, MAX_LIMIT3, TERM_SYNONYMS, PHRASE_SYNONYMS;
 var init_entity_search = __esm({
   "src/lib/workflows/homeassistant/entity-search.ts"() {
     "use strict";
     DEFAULT_LIMIT2 = 50;
     MAX_LIMIT3 = 200;
+    TERM_SYNONYMS = {
+      // Brand vs model
+      alexa: ["echo", "dot"],
+      echo: ["alexa"],
+      dot: ["echo", "alexa"],
+      ring: ["doorbell"],
+      doorbell: ["ring"],
+      hue: ["light"],
+      tado: ["thermostat", "heating"],
+      // Rooms, as actually spoken
+      lounge: ["living", "livingroom"],
+      living: ["lounge"],
+      loo: ["bathroom", "toilet"],
+      toilet: ["bathroom", "loo"],
+      bathroom: ["loo", "toilet"],
+      bedroom: ["bed"],
+      hallway: ["hall"],
+      hall: ["hallway"],
+      kitchen: ["kitchen"],
+      garden: ["outdoor", "outside"],
+      outdoor: ["outside", "garden"],
+      outside: ["outdoor", "garden"],
+      upstairs: ["upstairs"],
+      downstairs: ["downstairs"],
+      // Everyday shortenings
+      temp: ["temperature"],
+      temperature: ["temp"],
+      telly: ["tv", "television"],
+      tv: ["telly", "television"],
+      television: ["tv", "telly"],
+      lamp: ["light"],
+      lights: ["light"],
+      light: ["lamp"],
+      heating: ["thermostat", "radiator", "tado"],
+      thermostat: ["heating", "tado"],
+      hoover: ["vacuum"],
+      vacuum: ["hoover"],
+      telephone: ["phone"],
+      phone: ["mobile"]
+    };
+    PHRASE_SYNONYMS = [
+      [/\bliving\s+room\b/g, "lounge"],
+      [/\bsitting\s+room\b/g, "lounge"],
+      [/\bdining\s+room\b/g, "dining"],
+      [/\butility\s+room\b/g, "utility"],
+      [/\bfront\s+door\b/g, "front door"],
+      [/\bback\s+garden\b/g, "garden"],
+      [/\bair\s+con(?:ditioning)?\b/g, "climate"],
+      [/\bcentral\s+heating\b/g, "heating"]
+    ];
   }
 });
 
@@ -47664,6 +47874,9 @@ var init_approval_tokens = __esm({
 
 // src/lib/workflows/whatsapp/approval-notify.ts
 import { eq as eq84 } from "drizzle-orm";
+function getOwnerPhone() {
+  return ownerPhone() ?? "";
+}
 function summarisePrompt(prompt) {
   const clean = prompt.replace(/\s+/g, " ").trim() || "Approve to continue?";
   return clean.length > MAX_PROMPT_CHARS ? `${clean.slice(0, MAX_PROMPT_CHARS - 1)}\u2026` : clean;
@@ -47672,7 +47885,7 @@ async function sendWhatsApp2(text4) {
   try {
     const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
     const wa = getWhatsAppService2();
-    const result = await wa.sendMessage(OWNER_PHONE2, text4);
+    const result = await wa.sendMessage(getOwnerPhone(), text4);
     if (!result.sent) {
       console.warn(`[approval-notify] WhatsApp send failed: ${result.error ?? "unknown error"}`);
     }
@@ -47705,15 +47918,15 @@ async function sendApprovalPendingMessage(plan, prompt) {
   const text4 = `\u23F8 ${plan.display} awaiting approval: ${summarisePrompt(prompt)}. Reply APPROVE ${plan.code} or DENY ${plan.code}`;
   await sendWhatsApp2(text4);
 }
-var OWNER_PHONE2, WA_APPROVAL_SNAPSHOT_KEY, MAX_PROMPT_CHARS;
+var WA_APPROVAL_SNAPSHOT_KEY, MAX_PROMPT_CHARS;
 var init_approval_notify = __esm({
   "src/lib/workflows/whatsapp/approval-notify.ts"() {
     "use strict";
+    init_owner();
     init_db();
     init_schema();
     init_run_notifications();
     init_approval_tokens();
-    OWNER_PHONE2 = process.env.WORKFLOW_NOTIFY_PHONE?.trim() || "+447359228511";
     WA_APPROVAL_SNAPSHOT_KEY = "waApproval";
     MAX_PROMPT_CHARS = 180;
   }
@@ -47758,7 +47971,7 @@ var init_route_export = __esm({
         let whatsapp = null;
         if (args.sendWhatsapp !== false) {
           const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
-          const result = await getWhatsAppService2().sendMessage(OWNER_PHONE2, routeMessage(activity2, distanceMiles, exported.downloadUrl));
+          const result = await getWhatsAppService2().sendMessage(getOwnerPhone(), routeMessage(activity2, distanceMiles, exported.downloadUrl));
           if (!result.sent) return { success: false, error: "route saved but WhatsApp delivery failed", data: { ...exported, whatsapp: result } };
           whatsapp = result;
         }
@@ -51765,9 +51978,9 @@ import { desc as desc27, eq as eq89 } from "drizzle-orm";
 async function resolveAccount(args) {
   const rawId = args.accountId;
   const rawEmail = args.email;
-  if (rawId !== void 0 && rawId !== null && rawId !== "") {
-    const id = Number(rawId);
-    if (!Number.isFinite(id) || id <= 0) return { error: "Invalid accountId" };
+  const id = typeof rawId === "number" || typeof rawId === "string" ? Number(rawId) : NaN;
+  const hasId = Number.isFinite(id) && id > 0;
+  if (hasId) {
     const [acct2] = await db.select().from(gmailAccounts).where(eq89(gmailAccounts.id, id)).limit(1);
     if (!acct2) return { error: `Gmail account ${id} not found` };
     return acct2;
@@ -62221,19 +62434,22 @@ async function executeTool(name, args, ctx) {
 }
 function buildSystemPromptSection() {
   const toolsets = getAvailableToolsets();
+  const phone = ownerPhone();
+  const contact = phone ? `
+
+John's WhatsApp number: ${phone}` : "";
   return `
 
 --- Capabilities ---
 You have toolsets available: ${toolsets.join(", ")}.
 Use activate_toolset(name) to load tools for a domain. Use jkai_help() to see what's available in each toolset.
-When tools are pre-loaded for you, use them directly \u2014 no activation needed.
-
-John's WhatsApp number: +447359228511`;
+When tools are pre-loaded for you, use them directly \u2014 no activation needed.${contact}`;
 }
 var init_registry7 = __esm({
   "src/lib/workflows/site-tools/registry.ts"() {
     "use strict";
     init_registry_internal();
+    init_owner();
     init_registry_internal();
     init_health();
     init_blog();
@@ -74914,7 +75130,9 @@ __export(approval_inbound_exports, {
 });
 import { sql as sql47 } from "drizzle-orm";
 function isOwner(from) {
-  return from.replace(/\D+/g, "") === OWNER_DIGITS;
+  const ownerDigits = getOwnerPhone().replace(/\D+/g, "");
+  if (!ownerDigits) return false;
+  return from.replace(/\D+/g, "") === ownerDigits;
 }
 async function findPendingApprovalByCode(code) {
   const res = await db.execute(sql47`
@@ -74982,7 +75200,6 @@ async function handleApprovalReply(from, text4) {
     };
   }
 }
-var OWNER_DIGITS;
 var init_approval_inbound = __esm({
   "src/lib/workflows/whatsapp/approval-inbound.ts"() {
     "use strict";
@@ -74991,7 +75208,6 @@ var init_approval_inbound = __esm({
     init_run_notifications();
     init_approval_tokens();
     init_approval_notify();
-    OWNER_DIGITS = OWNER_PHONE2.replace(/\D+/g, "");
   }
 });
 
@@ -75007,7 +75223,9 @@ __export(workflow_dispatch_exports, {
 });
 import { eq as eq116 } from "drizzle-orm";
 function isOwnerSender(from) {
-  return from.replace(/\D+/g, "") === OWNER_DIGITS2;
+  const ownerDigits = getOwnerPhone().replace(/\D+/g, "");
+  if (!ownerDigits) return false;
+  return from.replace(/\D+/g, "") === ownerDigits;
 }
 function isReservedKeyword(keyword) {
   return WA_RESERVED_KEYWORDS.has(keyword.trim().toLowerCase());
@@ -75147,7 +75365,7 @@ async function dispatchWhatsAppWorkflow(from, text4) {
     return { dispatched: false };
   }
 }
-var WA_RESERVED_KEYWORDS, OWNER_DIGITS2;
+var WA_RESERVED_KEYWORDS;
 var init_workflow_dispatch = __esm({
   "src/lib/workflows/whatsapp/workflow-dispatch.ts"() {
     "use strict";
@@ -75156,7 +75374,6 @@ var init_workflow_dispatch = __esm({
     init_workflows2();
     init_approval_notify();
     WA_RESERVED_KEYWORDS = /* @__PURE__ */ new Set(["approve", "deny", "yes", "no"]);
-    OWNER_DIGITS2 = OWNER_PHONE2.replace(/\D+/g, "");
   }
 });
 

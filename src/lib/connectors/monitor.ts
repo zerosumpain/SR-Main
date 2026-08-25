@@ -6,6 +6,7 @@
 //
 // Mirrors the briefing/self-improve engine shape: prod-only cron, kill switch
 // re-checked in the callback, never throws into croner.
+import { ownerPhone } from '$lib/config/owner';
 import { Cron } from 'croner';
 import os from 'os';
 import { getSetting } from '$lib/server/models/settings';
@@ -15,7 +16,6 @@ import { brokenOf, sortReports, type ConnectorReport } from './types';
 export const CRON_EXPR = '45 6 * * *'; // 06:45 — before the 07:00 briefing
 export const CRON_TZ = 'Europe/London';
 export const SETTINGS_ENABLED_KEY = 'connectors.monitor.enabled';
-const OWNER_PHONE = '+447359228511';
 const DASHBOARD = 'https://strangeramblings.com/admin/connections';
 
 let cronJob: Cron | null = null;
@@ -48,8 +48,10 @@ export async function runConnectorCheck(): Promise<{ reports: ConnectorReport[];
   if (!message) return { reports, alerted: false };
 
   try {
+    const to = ownerPhone();
+    if (!to) throw new Error('WORKFLOW_NOTIFY_PHONE is not set');
     const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    await executeTool('whatsapp_send', { to: OWNER_PHONE, message });
+    await executeTool('whatsapp_send', { to, message });
     return { reports, alerted: true };
   } catch (err) {
     // If WhatsApp itself is the broken connector this is expected — the

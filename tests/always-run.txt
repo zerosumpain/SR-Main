@@ -21,6 +21,7 @@ src/routes/projects/broads-pilot/lib/yarmouth.test.ts
 tests/extract/docx.test.ts
 tests/extract/pdf.test.ts
 tests/extract/scanned-pdf.test.ts
+tests/lib/config/owner.test.ts
 tests/lib/jkai/media/storage.test.ts
 tests/lib/node-builder/codegen/definition.test.ts
 tests/lib/node-builder/codegen/docs.test.ts

@@ -134,7 +134,7 @@ export const goldenExemplars: GoldenExemplar[] = [
     nodes: [
       { id: 'fetch', type: 'http-request', config: `method: "GET", url: "https://api.example.com/status"` },
       { id: 'isDown', type: 'conditional', config: `expression: "input.body.status !== 'ok'"` },
-      { id: 'alert', type: 'whatsapp', config: `to: "+447359228511", message: "Service is DOWN: {{input.body.status}}"` },
+      { id: 'alert', type: 'whatsapp', config: `to: "+447700900123", message: "Service is DOWN: {{input.body.status}}"` },
     ],
     edges: ['trigger → fetch', 'fetch → isDown', 'isDown → alert (sourceHandle: "true")'],
     note: 'Only the "true" handle of the conditional is wired — when the service is healthy the workflow ends. http-request auto-parses JSON bodies, so reference input.body.* paths. conditional config key is `expression` (a single boolean JS expression).',
@@ -189,7 +189,7 @@ export const goldenExemplars: GoldenExemplar[] = [
       { id: 'dedupe', type: 'dedupe', config: `itemsPath: "results", idPath: "url", storeKey: "seen_news_urls"` },
       { id: 'guard', type: 'conditional', config: `expression: "input.newCount > 0"` },
       { id: 'brief', type: 'llm-call', config: `userPrompt: "Today is {{today}}. Write a short WhatsApp news briefing from these fresh stories — one line each, most important first:\\n\\n{{input.items}}"  (leave model unset → admin default)` },
-      { id: 'send', type: 'whatsapp', config: `to: "+447359228511", message: "{{input.text}}"` },
+      { id: 'send', type: 'whatsapp', config: `to: "+447700900123", message: "{{input.text}}"` },
     ],
     edges: [
       'trigger → search',
