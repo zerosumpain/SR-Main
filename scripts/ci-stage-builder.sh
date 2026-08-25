@@ -27,7 +27,7 @@ STAGE_DIR="$STAGE_ROOT/$SHA"
 # the release artifact. This script deliberately builds nothing: the release job
 # has no node_modules, because it no longer shares a workspace with the build.
 BUNDLE="packages/jkai-builder/dist/start.js"
-[ -f "$BUNDLE" ] || { echo "$BUNDLE missing — the release artifact did not carry it (did 'npm run build:builder' fail in prebuild?)" >&2; exit 1; }
+[ -f "$BUNDLE" ] || { echo "$BUNDLE missing — the release artifact did not carry it (did the prebuild step for 'build:builder' fail?)" >&2; exit 1; }
 
 # Same discipline as ci-prebuild.sh: a staged directory either exists complete
 # or does not exist, so the watchdog can never pick up a half-written bundle.

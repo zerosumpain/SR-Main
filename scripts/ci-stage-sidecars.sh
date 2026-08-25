@@ -49,7 +49,7 @@ for entry in "${SIDECARS[@]}"; do
   # the release artifact. Nothing is built here: this job has no node_modules.
   BUNDLE="$PKG/dist/start.js"
   if [ ! -f "$BUNDLE" ]; then
-    warn "$NAME: $BUNDLE missing from the release artifact — did 'npm run $SCRIPT' fail in prebuild? The previous bundle stays live"
+    warn "$NAME: $BUNDLE missing from the release artifact — did the prebuild step for '$SCRIPT' fail? The previous bundle stays live"
     continue
   fi
   if [ ! -f "$PKG/$UNIT" ]; then
