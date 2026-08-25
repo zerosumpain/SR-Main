@@ -38,6 +38,7 @@ tests/lib/workflows/orchestrator/dynamic-nodes.test.ts
 tests/lib/workflows/registry-parity.test.ts
 tests/lib/workflows/site-tools/node-builder.test.ts
 tests/routes/chat-trace-link.test.ts
+tests/routes/model-picker-gating.test.ts
 tests/scripts/ci-sidecars.test.ts
 tests/scripts/gate-level.test.ts
 tests/scripts/select-tests.test.ts
