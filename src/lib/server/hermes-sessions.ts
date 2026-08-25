@@ -199,6 +199,30 @@ export function clampDays(d: number | string | null | undefined, fallback = 30):
   return Math.min(Math.max(Math.round(n), 1), 365);
 }
 
+/**
+ * When this store last received anything, ignoring any window.
+ *
+ * Every reader below reports on a *window* — the last 30 days, say — and a
+ * windowed query cannot tell you the store is dead: inside a dead window it
+ * returns nothing, and inside a live one it just repeats the window. So the
+ * pages rendered a normal-looking newest-first list that had stopped moving on
+ * 2026-08-24 at 06:34, when Hermes did, with nothing anywhere saying so.
+ *
+ * Null when the store is empty or unreadable — both of which mean "cannot
+ * vouch for this", which a caller must treat as stale rather than as fresh.
+ */
+export async function getStoreFreshness(): Promise<string | null> {
+  try {
+    const [row] = await querySqlite<{ newest: number | null }>(
+      `SELECT MAX(timestamp) AS newest FROM messages;`,
+    );
+    const epoch = Number(row?.newest ?? 0);
+    return epoch > 0 ? new Date(epoch * 1000).toISOString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface TelemetryModel {
   model: string;
   sessions: number;
@@ -229,6 +253,9 @@ export interface TelemetryTopSession {
 }
 export interface Telemetry {
   days: number;
+  /** Newest row in the underlying store — see `getStoreFreshness`. Null means
+   *  it could not be established, which reads as stale. */
+  storeNewestAt: string | null;
   overview: {
     sessions: number;
     messages: number;
@@ -286,6 +313,8 @@ export interface ToolAuditDay { day: string; calls: number; }
 export interface ToolAuditHour { hour: number; calls: number; }
 export interface ToolAudit {
   days: number;
+  /** Newest row in the underlying store — see `getStoreFreshness`. */
+  storeNewestAt: string | null;
   totalCalls: number;
   uniqueTools: number;
   tools: ToolAuditCount[];        // full ranking as the engine records it (tool_name)
@@ -342,6 +371,7 @@ export async function getToolAudit(daysIn = 30): Promise<ToolAudit> {
   const normTools = tools.map((t) => ({ tool: t.tool, calls: num(t.calls) }));
   return {
     days,
+    storeNewestAt: await getStoreFreshness(),
     totalCalls: normTools.reduce((s, t) => s + t.calls, 0),
     uniqueTools: normTools.length,
     tools: normTools,
@@ -390,6 +420,7 @@ export async function getTelemetry(daysIn = 30): Promise<Telemetry> {
   const num = (v: unknown) => Number(v ?? 0) || 0;
   return {
     days,
+    storeNewestAt: await getStoreFreshness(),
     overview: {
       sessions: num(ov?.sessions),
       messages: num(ov?.messages),

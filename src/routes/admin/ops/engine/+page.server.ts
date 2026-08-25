@@ -22,6 +22,10 @@ export const load: PageServerLoad = async ({ url }) => {
     services: status?.services ?? { gateway: 'unknown' as const, dashboard: 'unknown' as const },
     version: status?.version ?? null,
     curator: status?.curator ?? null,
+    // `version` and `curator` come from the `hermes` CLI reading a store that
+    // stopped receiving anything when the engine did. Carried through so the
+    // page can date them rather than render them as present tense.
+    storeNewestAt: status?.storeNewestAt ?? null,
     telemetry,
     telemetryDays: days,
     // The live value, not the env var: the toggle below overrides it.

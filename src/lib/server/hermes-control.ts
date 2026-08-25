@@ -35,9 +35,21 @@ export interface ActionResult {
 }
 export interface HermesStatus {
   health: HealthPayload;
+  /** LIVE and true: `systemctl --user is-active` on homeserv. Not stamped,
+   *  because it is not read from the frozen store — it is the one field on this
+   *  object that still answers a question about right now. */
   services: { gateway: ServiceState; dashboard: ServiceState };
   version: string | null;
   curator: string | null;
+  /**
+   * When Hermes' own store last received anything.
+   *
+   * `version` and `curator` come from the `hermes` CLI reading that store, so
+   * they are as old as it is — the page rendered "v0.20.0 / runs: 14 / 72
+   * curator-managed skills" in the present tense long after the engine stopped.
+   * Null when it cannot be established, which reads as stale.
+   */
+  storeNewestAt: string | null;
 }
 
 export const SERVICE_ACTIONS = [
@@ -139,14 +151,15 @@ export async function runShell(
 }
 
 export async function getStatus(): Promise<HermesStatus> {
-  const [health, gateway, dashboard, version, curator] = await Promise.all([
+  const [health, gateway, dashboard, version, curator, storeNewestAt] = await Promise.all([
     probeHealth(),
     serviceState(GATEWAY_UNIT),
     serviceState(DASHBOARD_UNIT),
     hermesVersion(),
     curatorStatus(),
+    import('./hermes-sessions').then((m) => m.getStoreFreshness()).catch(() => null),
   ]);
-  return { health, services: { gateway, dashboard }, version, curator };
+  return { health, services: { gateway, dashboard }, version, curator, storeNewestAt };
 }
 
 /** Execute a named service action (restart/update) and return its result.
