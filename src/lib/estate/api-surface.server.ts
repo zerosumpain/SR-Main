@@ -136,7 +136,25 @@ function findRoutesDir(): string | null {
   return null;
 }
 
+// Walking the tree and regexing ~600 route files costs ~100ms of SYNCHRONOUS
+// work, which blocks the event loop for every other request the app is serving.
+// Paying that once per page view is already the wrong trade, so memoise it.
+//
+// A short TTL rather than a permanent cache: in production the route tree
+// cannot change without a deploy, which restarts the process and empties this
+// anyway — but in dev a new route should appear without a restart, and a stale
+// inventory is exactly the kind of quiet lie this page exists to prevent.
+const CACHE_TTL_MS = 60_000;
+let cached: { at: number; value: ApiSurface | ApiSurfaceUnavailable } | null = null;
+
 export function readApiSurface(): ApiSurface | ApiSurfaceUnavailable {
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
+  const value = scanApiSurface();
+  cached = { at: Date.now(), value };
+  return value;
+}
+
+function scanApiSurface(): ApiSurface | ApiSurfaceUnavailable {
   const routesDir = findRoutesDir();
   if (!routesDir) {
     return {
