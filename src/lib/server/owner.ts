@@ -6,21 +6,15 @@
 
 import { env } from '$env/dynamic/private';
 import { isOwnerEmail } from './access';
+// Was a private copy of the same range list the hook carried, which is how it
+// inherited the same bug: neither spelled `::ffff:127.0.0.1`, the form a
+// dual-stack listener actually reports. "Mirrors the hook exactly" is only
+// true while both mirror ONE definition.
+import { isPrivateAddress } from './client-address';
 
 export interface OwnerCheckEvent {
   locals: App.Locals;
   getClientAddress?: () => string;
-}
-
-function isPrivateAddress(addr: string): boolean {
-  return (
-    addr === '127.0.0.1' ||
-    addr === '::1' ||
-    addr.startsWith('10.') ||
-    addr.startsWith('192.168.') ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(addr) ||
-    /^100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(addr)
-  );
 }
 
 export async function isOwnerRequest(event: OwnerCheckEvent): Promise<boolean> {
