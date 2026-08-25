@@ -3,10 +3,15 @@ import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'url';
+import { routeManifest } from './vite-plugins/route-manifest.mjs';
 
 export default defineConfig({
 	plugins: [
 		tailwindcss(),
+		// Bakes the route inventory into the build for /admin/estate. Must run
+		// at build time: `src/` is not deployed, so a runtime scan reads a stale
+		// leftover tree on the VPS. See vite-plugins/route-manifest.mjs.
+		routeManifest(),
 		sveltekit(),
 		SvelteKitPWA({
 			registerType: 'autoUpdate',

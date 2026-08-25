@@ -115,3 +115,48 @@ describe('gate bypass catalogue', () => {
     expect([...seen].filter((p) => !known.has(p))).toEqual([]);
   });
 });
+
+describe('site surface', () => {
+  it('reads a full inventory from the build-time manifest', async () => {
+    // The point of this test: the first version scanned src/routes at RUNTIME
+    // and silently returned a month-old tree in production, because the `src/`
+    // on the VPS is a leftover the deploy does not update. The manifest is now
+    // baked in at build time, and this asserts it actually arrives — an empty
+    // or truncated inventory here means the vite plugin is not wired.
+    const { readApiSurface } = await import('./api-surface.server');
+    const surface = readApiSurface();
+    expect(surface.available).toBe(true);
+    if (!surface.available) return;
+
+    // Comfortably below today's 598 — this guards against "the plugin returned
+    // nothing", not against the route count changing.
+    expect(surface.routes.length).toBeGreaterThan(400);
+    expect(surface.counts.api).toBeGreaterThan(300);
+    expect(surface.counts.page).toBeGreaterThan(100);
+
+    const paths = surface.routes.map((r) => r.path);
+    // The page must appear in its own inventory. It did not, when the root
+    // route rendered as "/+page.svelte".
+    expect(paths).toContain('/admin/estate');
+    expect(paths).toContain('/');
+    expect(paths.filter((p) => p.includes('+page'))).toEqual([]);
+  });
+
+  it('classifies the gate correctly at both extremes', async () => {
+    const { readApiSurface } = await import('./api-surface.server');
+    const surface = readApiSurface();
+    if (!surface.available) throw new Error('surface unavailable');
+    const by = (p: string) => surface.routes.find((r) => r.path === p && r.kind === 'api');
+
+    // Genuinely world-readable.
+    expect(by('/api/biome/state')?.gate).toBe('open');
+    // Past the gate, but the handler enforces a bridge token.
+    expect(by('/api/jkai/tools/invoke')?.gate).toBe('self-gated');
+    expect(by('/api/jkai/tools/invoke')?.guard).toContain('JKAI_BRIDGE_TOKEN');
+    // The sibling with no auth of its own must stay owner-gated — the comment in
+    // gate-bypasses.ts calls this out by name.
+    expect(by('/api/jkai/tools/promote')?.gate).toBe('owner');
+    // This page's own probe endpoint is owner-only.
+    expect(by('/api/admin/estate/probe')?.gate).toBe('owner');
+  });
+});

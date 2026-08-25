@@ -179,9 +179,11 @@
 
     {#if surface.available}
       <p class="note">
-        Surface read from <span class="mono">{surface.root}</span> at request time, and classified
-        by the same <span class="mono">isPublicPath</span> the gate calls plus the bypass list the
-        CI public-surface lockfile reads. If this disagrees with the gate, CI has already failed.
+        Surface {surface.source}, and classified by the same
+        <span class="mono">isPublicPath</span> the gate calls plus the bypass list the CI
+        public-surface lockfile reads. It travels inside the build that serves it, so it cannot
+        drift from the running code — a runtime scan of <span class="mono">src/</span> would read
+        a stale tree on the VPS, where that directory is a leftover the deploy does not update.
       </p>
     {:else}
       <p class="finding error">Site surface unavailable — {surface.reason}</p>
