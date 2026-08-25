@@ -3,7 +3,7 @@ import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getHandler } from './registry';
-import { recordPulse } from './audit';
+import { recordPulse, prunePulses } from './audit';
 import { seedDefaultActions } from './seed';
 import { runTargetedAction } from './handlers/targeted';
 import type { HeartbeatAction } from '$lib/db/schema';
@@ -61,8 +61,19 @@ export function stopHeartbeatEngine(): void {
   console.log('[heartbeat] engine stopped');
 }
 
+/** Ticks between prune attempts. The engine runs every 30s, so this is hourly
+ *  — often enough to keep up, rare enough to be invisible. */
+const PRUNE_EVERY_TICKS = 120;
+let tickCount = 0;
+
 async function runTick(): Promise<void> {
   const now = new Date();
+
+  // Housekeeping, unawaited: the pulse table had no retention and reached
+  // 308,639 rows before anyone looked. Nothing reads a six-week-old pulse.
+  if (tickCount++ % PRUNE_EVERY_TICKS === 0) {
+    void prunePulses();
+  }
   const rows = await db
     .select()
     .from(heartbeatActions)
