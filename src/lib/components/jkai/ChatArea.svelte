@@ -1873,6 +1873,74 @@
   // allowlist the value, so an off-list name can't load an arbitrary skill.
   let pinnedSkill = $state<string | null>(null);
   let skillMenuOpen = $state(false);
+
+  // ── Composer chip menus ───────────────────────────────────────────────────
+  // Both chip dropdowns are `position: fixed` and positioned from JS, which
+  // looks like overkill until you open one on a phone.
+  //
+  // Below 800px `.chip-row` becomes `flex-wrap: nowrap; overflow-x: auto` so
+  // the chips scroll sideways instead of wrapping. That makes it a SCROLL
+  // CONTAINER, and a scroll container clips on BOTH axes — CSS computes
+  // `overflow-y` to `auto` the moment `overflow-x` is not `visible`, so there
+  // is no "scroll horizontally, overflow vertically" to ask for. An absolutely
+  // positioned menu sits entirely above (or below) the row's content box and
+  // was clipped away to nothing: the element was in the DOM, had a real
+  // bounding box, and painted zero pixels. On desktop the row wraps instead of
+  // scrolling, so the same markup worked — which is why this only ever showed
+  // up on a phone.
+  //
+  // `position: fixed` escapes the clip because its containing block is the
+  // viewport. That holds only while no ancestor establishes a containing block
+  // of its own — a `transform`, `filter`, `perspective`, `contain` or
+  // `will-change` on any parent would silently bring the clipping back. There
+  // are none today (checked across the composer, pane and shell); if a slide
+  // animation ever lands on `.pane`, this is the code that breaks.
+  interface MenuPos {
+    left: number;
+    /** Distance from the viewport bottom to the trigger's top edge, so the menu
+     *  grows upward from the chip without anyone needing to know its height. */
+    bottom: number;
+  }
+  /** Matches `.model-menu { min-width: 12rem }`. Only used to keep the menu
+   *  inside the viewport, so an approximation is fine. */
+  const MENU_WIDTH = 192;
+  const MENU_GAP = 6;
+
+  function anchorMenu(trigger: EventTarget | null): MenuPos {
+    const rect = (trigger as HTMLElement).getBoundingClientRect();
+    return {
+      // Prefer left-aligned with the chip; slide it back inside the viewport
+      // rather than off the right edge when the chip is scrolled far over.
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8)),
+      bottom: window.innerHeight - rect.top + MENU_GAP,
+    };
+  }
+
+  let skillMenuPos = $state<MenuPos>({ left: 0, bottom: 0 });
+  let thinkingMenuPos = $state<MenuPos>({ left: 0, bottom: 0 });
+
+  /**
+   * A fixed menu does not travel with its trigger, so a rotate — or a phone
+   * keyboard opening — leaves it pointing at nothing. Close instead.
+   *
+   * Resize ONLY, deliberately. The obvious instinct is to close on scroll too,
+   * and it is wrong twice over: the backdrop covers the viewport while a menu
+   * is open, so the user cannot scroll the chip row underneath it anyway, and
+   * the scrolls that DO still fire are programmatic — the transcript following
+   * its tail as a reply streams in. Closing the menu because a background
+   * message arrived is exactly the "it won't stay open" complaint this whole
+   * change exists to fix. The composer is pinned to the bottom regardless of
+   * where the transcript is scrolled, so the anchor stays valid.
+   */
+  $effect(() => {
+    if (!skillMenuOpen && !thinkingMenuOpen) return;
+    const close = () => {
+      skillMenuOpen = false;
+      thinkingMenuOpen = false;
+    };
+    window.addEventListener('resize', close);
+    return () => window.removeEventListener('resize', close);
+  });
   const SKILL_OPTIONS: { value: string | null; label: string }[] = [
     { value: null, label: 'Auto' },
     { value: 'jkai-blog', label: 'Blog' },
@@ -3339,7 +3407,10 @@
               <button
                 type="button"
                 class="model-btn"
-                onclick={() => (skillMenuOpen = !skillMenuOpen)}
+                onclick={(e) => {
+                  if (!skillMenuOpen) skillMenuPos = anchorMenu(e.currentTarget);
+                  skillMenuOpen = !skillMenuOpen;
+                }}
                 disabled={loading}
                 title="Pin a domain skill for this chat (or Auto-route)"
               >
@@ -3351,7 +3422,12 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <div class="model-backdrop" onclick={() => (skillMenuOpen = false)}></div>
-                <div class="model-menu" role="listbox" aria-label="Pin a skill">
+                <div
+                  class="model-menu"
+                  role="listbox"
+                  aria-label="Pin a skill"
+                  style="left: {skillMenuPos.left}px; bottom: {skillMenuPos.bottom}px"
+                >
                   {#each SKILL_OPTIONS as opt (opt.label)}
                     <button
                       type="button"
@@ -3418,7 +3494,10 @@
                 <button
                   type="button"
                   class="model-btn"
-                  onclick={() => (thinkingMenuOpen = !thinkingMenuOpen)}
+                  onclick={(e) => {
+                    if (!thinkingMenuOpen) thinkingMenuPos = anchorMenu(e.currentTarget);
+                    thinkingMenuOpen = !thinkingMenuOpen;
+                  }}
                   disabled={loading}
                   title="How hard this model thinks. Changeable at any time, and remembered as the level your next thread opens on."
                 >
@@ -3430,7 +3509,12 @@
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <div class="model-backdrop" onclick={() => (thinkingMenuOpen = false)}></div>
-                  <div class="model-menu drop-up" role="listbox" aria-label="Thinking level">
+                  <div
+                    class="model-menu"
+                    role="listbox"
+                    aria-label="Thinking level"
+                    style="left: {thinkingMenuPos.left}px; bottom: {thinkingMenuPos.bottom}px"
+                  >
                     <button
                       type="button"
                       role="option"
@@ -3998,27 +4082,23 @@
   .route-fb-btn:hover { border-color: var(--accent); }
   .route-fb--done { color: var(--success); }
   .model-backdrop { position: fixed; inset: 0; z-index: 25; }
+  /* Fixed, not absolute, and both offsets come from `anchorMenu()` — see the
+     long note beside it in the script. Short version: below 800px `.chip-row`
+     is a scroll container, a scroll container clips on both axes, and an
+     absolutely positioned menu was clipped to nothing on every phone. Opening
+     UPWARD (the `bottom` offset) is deliberate too: the composer sits on the
+     bottom edge of the viewport, so a downward menu renders one and a half of
+     its five options. */
   .model-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 0.35rem;
+    position: fixed;
     min-width: 12rem;
+    /* A tall menu on a short phone must scroll rather than run off the top. */
+    max-height: min(60vh, 20rem);
+    overflow-y: auto;
     background: var(--surface-elevated);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
-    overflow: hidden;
     z-index: 26;
-  }
-  /* The composer sits on the bottom edge of the viewport, so a menu opened from
-     its chip row drops off the screen — five options render as one and a half.
-     Opt-in rather than a change to .model-menu itself: the same class is used
-     from rows that are not against an edge. */
-  .model-menu.drop-up {
-    top: auto;
-    bottom: 100%;
-    margin-top: 0;
-    margin-bottom: 0.35rem;
   }
   .model-opt {
     display: flex;
