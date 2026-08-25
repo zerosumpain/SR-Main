@@ -45,11 +45,57 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+/**
+ * Running totals for one turn, accumulated across every round it makes.
+ *
+ * A turn is not one LLM call. The first measured turn on production made
+ * **nine** — the loop calls the model, runs a tool, calls it again, and so on
+ * until it has an answer. So the ledger line under a reply has to sum the
+ * rounds, not report the last one, or it understates the turn by most of it.
+ *
+ * Accumulated in process rather than read back from `agent_actions`, even
+ * though PR 3 now writes a row per round keyed on the same job id: those
+ * inserts are deliberately fire-and-forget, so a read immediately after the
+ * turn would race them and silently under-count.
+ */
+export interface ChatUsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  reasoningTokens: number;
+  /** How many times the model was called. The lever, and now visible. */
+  rounds: number;
+  /** Provider and model of the last round — what actually answered. */
+  provider: string | null;
+  model: string | null;
+  /**
+   * Cost the provider itself reported, summed. Null when no round reported one.
+   * Preferred over our own arithmetic where present: a per-token table cannot
+   * see anything billed per request, such as a web-search fee.
+   */
+  reportedCostUsd: number | null;
+}
+
+export function emptyChatUsage(): ChatUsageTotals {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    reasoningTokens: 0,
+    rounds: 0,
+    provider: null,
+    model: null,
+    reportedCostUsd: null,
+  };
+}
+
 export interface ChatCallContext {
   /** The chat job id. Equals `jkai_tool_traces.id` for turns that made a tool call. */
   jobId?: string;
   /** The thread. Carried separately because tool-free turns write no trace row. */
   conversationId?: string;
+  /** Mutable running total, when the caller wants one back. */
+  usage?: ChatUsageTotals;
 }
 
 const chatCtx = new AsyncLocalStorage<ChatCallContext>();
@@ -68,6 +114,37 @@ export function withChatContext<T>(ctx: ChatCallContext, fn: () => Promise<T>): 
 /** The chat turn this code is executing inside, or null when there is none. */
 export function currentChatContext(): ChatCallContext | null {
   return chatCtx.getStore() ?? null;
+}
+
+/**
+ * Fold one completed round into the turn's running total.
+ *
+ * No-op outside a turn, and no-op when the caller did not ask for totals — the
+ * WhatsApp bridge and the follow-up queue want attribution without a stamp.
+ */
+export function noteChatRound(round: {
+  provider: string;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  reasoningTokens: number | null;
+  reportedCostUsd: number | null;
+}): void {
+  const totals = chatCtx.getStore()?.usage;
+  if (!totals) return;
+  totals.rounds += 1;
+  totals.inputTokens += Math.max(0, round.inputTokens ?? 0);
+  totals.outputTokens += Math.max(0, round.outputTokens ?? 0);
+  totals.cacheReadTokens += Math.max(0, round.cacheReadTokens ?? 0);
+  totals.reasoningTokens += Math.max(0, round.reasoningTokens ?? 0);
+  // Last writer wins: the final round is the one that produced the visible
+  // answer, and that is the model the stamp should name.
+  totals.provider = round.provider;
+  totals.model = round.model;
+  if (typeof round.reportedCostUsd === 'number') {
+    totals.reportedCostUsd = (totals.reportedCostUsd ?? 0) + round.reportedCostUsd;
+  }
 }
 
 /**

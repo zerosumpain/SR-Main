@@ -240,7 +240,19 @@
     if (total > 0) chunks.push({ text: `${compactTokens(total)} tok` });
     const latency = formatLatency(stamp.latencyMs);
     if (latency) chunks.push({ text: latency });
-    chunks.push({ text: formatGbp(stamp.costUsd), accent: true });
+    // How many times the model was called for this one reply. Absent on
+    // Hermes-era rows, which had no notion of it. Worth the space: the first
+    // measured turn on the loop took NINE rounds, and rounds — not tool speed —
+    // are what a reply costs.
+    if (typeof stamp.rounds === 'number' && stamp.rounds > 1) {
+      chunks.push({ text: `${stamp.rounds}×` });
+    }
+    // A Codex turn spends subscription quota, not cash, so `priceFor` returns
+    // null and the cost is a true zero. Rendering "£0.00" would read as "this
+    // was free" rather than "this is not billed in cash" — so say nothing, and
+    // keep the £ for turns that actually have one.
+    const billed = stamp.costUsd > 0 || stamp.provider !== 'codex';
+    if (billed) chunks.push({ text: formatGbp(stamp.costUsd), accent: true });
     return chunks;
   });
 
