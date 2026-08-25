@@ -23,11 +23,19 @@ import { eq } from 'drizzle-orm';
 import { resolveNaming } from '$lib/workflows/run-notifications';
 import { generateApprovalCode, APPROVAL_TOKEN_TTL_MS } from './approval-tokens';
 
-/** The owner's WhatsApp number — matches `chat/wa-escalation.ts` /
- *  `run-notifications.ts`. Empty string when unset, which every caller already
- *  treats as "nobody to notify"; the literal fallback that used to live here is
- *  how the number stayed in the repo. */
-export const OWNER_PHONE = ownerPhone() ?? '';
+/**
+ * The owner's WhatsApp number — matches `chat/wa-escalation.ts` /
+ * `run-notifications.ts`. Empty string when unset, which every caller already
+ * treats as "nobody to notify".
+ *
+ * A FUNCTION, not a const, and that matters: `$env/dynamic/private` is empty
+ * until SvelteKit populates it, so a module-level read resolves at import time
+ * and can freeze in `''` even on a host where the variable is set. The old
+ * literal fallback hid that — without one it is a silent outage.
+ */
+export function getOwnerPhone(): string {
+  return ownerPhone() ?? '';
+}
 
 /** The key under which the one-time code lives in an interaction's configSnapshot. */
 export const WA_APPROVAL_SNAPSHOT_KEY = 'waApproval';
@@ -61,7 +69,7 @@ async function sendWhatsApp(text: string): Promise<void> {
   try {
     const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
     const wa = getWhatsAppService();
-    const result = await wa.sendMessage(OWNER_PHONE, text);
+    const result = await wa.sendMessage(getOwnerPhone(), text);
     if (!result.sent) {
       console.warn(`[approval-notify] WhatsApp send failed: ${result.error ?? 'unknown error'}`);
     }

@@ -25,10 +25,6 @@ import { workflows, type WorkflowNotifications } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { markdownToWhatsApp } from './whatsapp/format';
 
-/** The owner's WhatsApp number — matches `chat/wa-escalation.ts`. Empty when
- *  WORKFLOW_NOTIFY_PHONE is unset; callers already treat that as "nobody to
- *  notify". No literal fallback: that is how the number stayed in the repo. */
-const OWNER_PHONE = ownerPhone() ?? '';
 const SITE_URL = 'https://strangeramblings.com';
 const CANVAS_NAME_PREFIX = 'canvas:';
 
@@ -102,7 +98,7 @@ async function sendWhatsApp(text: string): Promise<void> {
   try {
     const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
     const wa = getWhatsAppService();
-    const result = await wa.sendMessage(OWNER_PHONE, text);
+    const result = await wa.sendMessage(ownerPhone() ?? '', text);
     if (!result.sent) {
       console.warn(`[run-notifications] WhatsApp send failed: ${result.error ?? 'unknown error'}`);
     }

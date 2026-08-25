@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// The owner's number comes from WORKFLOW_NOTIFY_PHONE now, not a literal in the
+// source, so the suite has to supply it like production does. It is read per
+// call rather than at import, which is what lets this mock work at all — and is
+// the point: `$env/dynamic/private` is empty until SvelteKit fills it, so a
+// module-level read could freeze in '' on a host where the variable is set.
+vi.mock('$env/dynamic/private', () => ({
+  env: { WORKFLOW_NOTIFY_PHONE: '+447359228511' },
+}));
+
 // db.execute drives findPendingApprovalByCode; set `executeRows` per test.
 let executeRows: Record<string, unknown>[] = [];
 vi.mock('$lib/db', () => ({
@@ -19,7 +28,7 @@ vi.mock('$lib/workflows/engine-resume', () => ({
 
 import { handleApprovalReply } from './approval-inbound';
 
-const OWNER = '447359228511'; // matches default OWNER_PHONE +447359228511
+const OWNER = '447359228511'; // matches the mocked WORKFLOW_NOTIFY_PHONE above
 const NOT_OWNER = '447000000000';
 
 function futureIso(msFromNow = 3_600_000): string {

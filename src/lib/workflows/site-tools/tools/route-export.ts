@@ -1,6 +1,6 @@
 import { register } from '../registry-internal';
 import { createRouteExport } from '$lib/route-exports';
-import { OWNER_PHONE } from '$lib/workflows/whatsapp/approval-notify';
+import { getOwnerPhone } from '$lib/workflows/whatsapp/approval-notify';
 
 function routeMessage(activity: string, distanceMiles: number, downloadUrl: string): string {
   return `${activity === 'mountain-biking' ? 'Mountain-bike' : 'Running'} route ready — ${distanceMiles} mi. Download GPX: ${downloadUrl}`;
@@ -37,7 +37,7 @@ register({
     let whatsapp: unknown = null;
     if (args.sendWhatsapp !== false) {
       const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
-      const result = await getWhatsAppService().sendMessage(OWNER_PHONE, routeMessage(activity, distanceMiles, exported.downloadUrl));
+      const result = await getWhatsAppService().sendMessage(getOwnerPhone(), routeMessage(activity, distanceMiles, exported.downloadUrl));
       if (!result.sent) return { success: false, error: 'route saved but WhatsApp delivery failed', data: { ...exported, whatsapp: result } };
       whatsapp = result;
     }

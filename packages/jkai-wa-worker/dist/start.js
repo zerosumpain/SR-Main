@@ -5719,7 +5719,7 @@ var init_dedupe = __esm({
 });
 
 // src/lib/config/owner.ts
-function ownerPhone2() {
+function ownerPhone() {
   const raw = env.WORKFLOW_NOTIFY_PHONE?.trim();
   if (raw) return raw;
   if (!warned) {
@@ -5855,7 +5855,7 @@ async function sendWhatsApp(text4) {
   try {
     const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
     const wa = getWhatsAppService2();
-    const result = await wa.sendMessage(OWNER_PHONE, text4);
+    const result = await wa.sendMessage(ownerPhone() ?? "", text4);
     if (!result.sent) {
       console.warn(`[run-notifications] WhatsApp send failed: ${result.error ?? "unknown error"}`);
     }
@@ -5906,7 +5906,7 @@ ${url}`;
     console.error("[run-notifications] notifyRunOutcome threw:", err instanceof Error ? err.message : err);
   }
 }
-var OWNER_PHONE, SITE_URL, CANVAS_NAME_PREFIX, MAX_ERROR_CHARS, MAX_DIGEST_CHARS;
+var SITE_URL, CANVAS_NAME_PREFIX, MAX_ERROR_CHARS, MAX_DIGEST_CHARS;
 var init_run_notifications = __esm({
   "src/lib/workflows/run-notifications.ts"() {
     "use strict";
@@ -5914,7 +5914,6 @@ var init_run_notifications = __esm({
     init_db();
     init_schema();
     init_format();
-    OWNER_PHONE = ownerPhone2() ?? "";
     SITE_URL = "https://strangeramblings.com";
     CANVAS_NAME_PREFIX = "canvas:";
     MAX_ERROR_CHARS = 300;
@@ -14597,7 +14596,7 @@ function asData(value) {
 function toCtx(modelId) {
   return { provider: "openrouter", modelId };
 }
-var PROFILES, SETTINGS_ENABLED_KEY, SETTINGS_ASSIGNMENTS_KEY, SETTINGS_CONFIG_KEY, SETTINGS_OVERRIDES_KEY, RUNS_COLLECTION, EVENTS_COLLECTION, SYSTEM_ACTOR, OWNER_PHONE2, ROUTING_PERMS, DEFAULT_CONFIG;
+var PROFILES, SETTINGS_ENABLED_KEY, SETTINGS_ASSIGNMENTS_KEY, SETTINGS_CONFIG_KEY, SETTINGS_OVERRIDES_KEY, RUNS_COLLECTION, EVENTS_COLLECTION, SYSTEM_ACTOR, ROUTING_PERMS, DEFAULT_CONFIG;
 var init_types4 = __esm({
   "src/lib/routing/types.ts"() {
     "use strict";
@@ -14610,7 +14609,6 @@ var init_types4 = __esm({
     RUNS_COLLECTION = "model-routing-runs";
     EVENTS_COLLECTION = "model-routing-events";
     SYSTEM_ACTOR = "system";
-    OWNER_PHONE2 = ownerPhone2() ?? "";
     ROUTING_PERMS = {
       read: ["owner", "jkai", "system"],
       write: ["system", "owner"],
@@ -16686,7 +16684,7 @@ async function pushHighAlerts(noteId) {
     )
   );
   if (alerts.length === 0) return 0;
-  const to = ownerPhone2();
+  const to = ownerPhone();
   if (!to) return 0;
   const wa = getWhatsAppService();
   let delivered = 0;
@@ -42598,7 +42596,7 @@ var init_followup = __esm({
           checkFn,
           completionPrompt,
           notifyWhatsApp,
-          whatsAppNumber: notifyWhatsApp ? ownerPhone2() ?? void 0 : void 0,
+          whatsAppNumber: notifyWhatsApp ? ownerPhone() ?? void 0 : void 0,
           delayMs: delaySeconds * 1e3
         });
         return {
@@ -47876,6 +47874,9 @@ var init_approval_tokens = __esm({
 
 // src/lib/workflows/whatsapp/approval-notify.ts
 import { eq as eq84 } from "drizzle-orm";
+function getOwnerPhone() {
+  return ownerPhone() ?? "";
+}
 function summarisePrompt(prompt) {
   const clean = prompt.replace(/\s+/g, " ").trim() || "Approve to continue?";
   return clean.length > MAX_PROMPT_CHARS ? `${clean.slice(0, MAX_PROMPT_CHARS - 1)}\u2026` : clean;
@@ -47884,7 +47885,7 @@ async function sendWhatsApp2(text4) {
   try {
     const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
     const wa = getWhatsAppService2();
-    const result = await wa.sendMessage(OWNER_PHONE3, text4);
+    const result = await wa.sendMessage(getOwnerPhone(), text4);
     if (!result.sent) {
       console.warn(`[approval-notify] WhatsApp send failed: ${result.error ?? "unknown error"}`);
     }
@@ -47917,15 +47918,15 @@ async function sendApprovalPendingMessage(plan, prompt) {
   const text4 = `\u23F8 ${plan.display} awaiting approval: ${summarisePrompt(prompt)}. Reply APPROVE ${plan.code} or DENY ${plan.code}`;
   await sendWhatsApp2(text4);
 }
-var OWNER_PHONE3, WA_APPROVAL_SNAPSHOT_KEY, MAX_PROMPT_CHARS;
+var WA_APPROVAL_SNAPSHOT_KEY, MAX_PROMPT_CHARS;
 var init_approval_notify = __esm({
   "src/lib/workflows/whatsapp/approval-notify.ts"() {
     "use strict";
+    init_owner();
     init_db();
     init_schema();
     init_run_notifications();
     init_approval_tokens();
-    OWNER_PHONE3 = ownerPhone() ?? "";
     WA_APPROVAL_SNAPSHOT_KEY = "waApproval";
     MAX_PROMPT_CHARS = 180;
   }
@@ -47970,7 +47971,7 @@ var init_route_export = __esm({
         let whatsapp = null;
         if (args.sendWhatsapp !== false) {
           const { getWhatsAppService: getWhatsAppService2 } = await Promise.resolve().then(() => (init_service(), service_exports));
-          const result = await getWhatsAppService2().sendMessage(OWNER_PHONE3, routeMessage(activity2, distanceMiles, exported.downloadUrl));
+          const result = await getWhatsAppService2().sendMessage(getOwnerPhone(), routeMessage(activity2, distanceMiles, exported.downloadUrl));
           if (!result.sent) return { success: false, error: "route saved but WhatsApp delivery failed", data: { ...exported, whatsapp: result } };
           whatsapp = result;
         }
@@ -62433,7 +62434,7 @@ async function executeTool(name, args, ctx) {
 }
 function buildSystemPromptSection() {
   const toolsets = getAvailableToolsets();
-  const phone = ownerPhone2();
+  const phone = ownerPhone();
   const contact = phone ? `
 
 John's WhatsApp number: ${phone}` : "";
@@ -75129,7 +75130,9 @@ __export(approval_inbound_exports, {
 });
 import { sql as sql47 } from "drizzle-orm";
 function isOwner(from) {
-  return from.replace(/\D+/g, "") === OWNER_DIGITS;
+  const ownerDigits = getOwnerPhone().replace(/\D+/g, "");
+  if (!ownerDigits) return false;
+  return from.replace(/\D+/g, "") === ownerDigits;
 }
 async function findPendingApprovalByCode(code) {
   const res = await db.execute(sql47`
@@ -75197,7 +75200,6 @@ async function handleApprovalReply(from, text4) {
     };
   }
 }
-var OWNER_DIGITS;
 var init_approval_inbound = __esm({
   "src/lib/workflows/whatsapp/approval-inbound.ts"() {
     "use strict";
@@ -75206,7 +75208,6 @@ var init_approval_inbound = __esm({
     init_run_notifications();
     init_approval_tokens();
     init_approval_notify();
-    OWNER_DIGITS = OWNER_PHONE3.replace(/\D+/g, "");
   }
 });
 
@@ -75222,7 +75223,9 @@ __export(workflow_dispatch_exports, {
 });
 import { eq as eq116 } from "drizzle-orm";
 function isOwnerSender(from) {
-  return from.replace(/\D+/g, "") === OWNER_DIGITS2;
+  const ownerDigits = getOwnerPhone().replace(/\D+/g, "");
+  if (!ownerDigits) return false;
+  return from.replace(/\D+/g, "") === ownerDigits;
 }
 function isReservedKeyword(keyword) {
   return WA_RESERVED_KEYWORDS.has(keyword.trim().toLowerCase());
@@ -75362,7 +75365,7 @@ async function dispatchWhatsAppWorkflow(from, text4) {
     return { dispatched: false };
   }
 }
-var WA_RESERVED_KEYWORDS, OWNER_DIGITS2;
+var WA_RESERVED_KEYWORDS;
 var init_workflow_dispatch = __esm({
   "src/lib/workflows/whatsapp/workflow-dispatch.ts"() {
     "use strict";
@@ -75371,7 +75374,6 @@ var init_workflow_dispatch = __esm({
     init_workflows2();
     init_approval_notify();
     WA_RESERVED_KEYWORDS = /* @__PURE__ */ new Set(["approve", "deny", "yes", "no"]);
-    OWNER_DIGITS2 = OWNER_PHONE3.replace(/\D+/g, "");
   }
 });
 
