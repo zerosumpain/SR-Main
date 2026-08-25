@@ -1,5 +1,7 @@
 import type { ModelContext, ModelProvider } from './types';
-import { mapLegacyModelId } from '$lib/constants/default-models';
+import { mapLegacyModelId, coerceModelContext } from '$lib/constants/default-models';
+import { supportsThinking } from '$lib/models/thinking';
+import { eq } from 'drizzle-orm';
 import { isCodexModelId } from './codex-catalogue';
 
 export interface ModelCapabilities {
@@ -173,6 +175,37 @@ export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
   warmCatalogueCaps();
   const id = mapLegacyModelId(ctx.modelId);
   return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;
+}
+
+/**
+ * Whether this model will do anything with a thinking level — the gate on the
+ * composer's thinking chip.
+ *
+ * Async and un-cached, unlike the modality capabilities above, because it is
+ * asked once per thread open rather than inside a render: a primary-key lookup
+ * against `openrouter_models` is cheaper than another warmed map to invalidate,
+ * and it cannot go stale between the nightly refresh and a restart.
+ *
+ * Codex never touches the catalogue — it has no row there, and every Codex
+ * model reasons (see codex-catalogue).
+ */
+export async function modelSupportsThinking(ctx: ModelContext): Promise<boolean> {
+  const resolved = coerceModelContext(ctx);
+  if (resolved.provider === 'codex') return true;
+  try {
+    const { db } = await import('$lib/db');
+    const { openrouterModels } = await import('$lib/db/schema');
+    const [row] = await db
+      .select({ raw: openrouterModels.raw })
+      .from(openrouterModels)
+      .where(eq(openrouterModels.id, mapLegacyModelId(resolved.modelId)))
+      .limit(1);
+    return supportsThinking(resolved.provider, row?.raw ?? null);
+  } catch {
+    // No catalogue, no claim. Hiding the chip is the safe failure: the thread
+    // keeps whatever level it already had, and it comes back on the next load.
+    return false;
+  }
 }
 
 /**

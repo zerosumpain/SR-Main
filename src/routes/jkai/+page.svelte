@@ -64,9 +64,12 @@
    */
   interface PaneData {
     messages: any[];
-    conversation: { modelProvider?: string; modelId?: string } | null;
+    conversation: { modelProvider?: string; modelId?: string; thinkingLevel?: string | null } | null;
     modelCaps: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     contextLength: number | null;
+    /** Whether the pinned model takes a reasoning instruction — gates the
+     *  composer's thinking chip. */
+    supportsThinking: boolean;
     activeBuild: { id: string; status: string } | null;
   }
   let panes = $state<Record<string, PaneData>>({});
@@ -293,7 +296,7 @@
       if (!res.ok) {
         // Render it anyway: an empty thread with a working composer beats a
         // permanently blank column, and the history returns on the next open.
-        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, activeBuild: null };
+        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null };
         return;
       }
       const body = await res.json();
@@ -302,10 +305,11 @@
         conversation: body.conversation || null,
         modelCaps: body.modelCapabilities || null,
         contextLength: body.modelContextLength ?? null,
+        supportsThinking: body.modelSupportsThinking === true,
         activeBuild: body.activeBuild || null,
       };
     } catch {
-      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, activeBuild: null };
+      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null };
     } finally {
       loadingPanes.delete(id);
     }
@@ -343,6 +347,7 @@
           conversation: conv,
           modelCaps: null,
           contextLength: null,
+          supportsThinking: conv.modelSupportsThinking === true,
           activeBuild: null,
         };
         openTab(conv.id);
@@ -447,7 +452,7 @@
     setTabActivity(id, id === openTabs.activeId ? 'idle' : 'reply');
   }
 
-  function handleModelChange(id: string, ctx: ModelContext) {
+  function handleModelChange(id: string, ctx: ModelContext, supportsThinking?: boolean) {
     const pane = panes[id];
     if (!pane) return;
     pane.conversation = {
@@ -455,6 +460,9 @@
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
     };
+    // Undefined means the switch reported nothing (an older response shape) —
+    // leave the chip as it was rather than guessing it away.
+    if (supportsThinking !== undefined) pane.supportsThinking = supportsThinking;
   }
 </script>
 
@@ -532,6 +540,7 @@
             initialDraft={tab.id === activeId ? data.pendingQuestion : ''}
             conversation={pane.conversation}
             modelContextLength={pane.contextLength}
+            modelSupportsThinking={pane.supportsThinking}
             modelCapabilities={pane.modelCaps}
             defaultChatModelId={data.defaultChatModel.modelId}
             altOpenRouterModel={data.chatAltOpenRouterModel}
@@ -544,7 +553,8 @@
             onToggleThreadRail={() => (sidebarOpen = !sidebarOpen)}
             onToggleGraphRail={() => (graphRailOpen = !graphRailOpen)}
             {graphRailOpen}
-            onmodelchange={(ctx: ModelContext) => handleModelChange(tab.id, ctx)}
+            onmodelchange={(ctx: ModelContext, supportsThinking?: boolean) =>
+              handleModelChange(tab.id, ctx, supportsThinking)}
           />
         </div>
       {/if}

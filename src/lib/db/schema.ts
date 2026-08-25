@@ -1686,6 +1686,16 @@ export const conversations = pgTable('jkai_conversations', {
   // already contributed stays, and is removed separately (see the rail's
   // "forget what this thread added").
   intelEnabled: boolean('intel_enabled').notNull().default(true),
+  // How hard the model is told to think on this thread's turns — one of
+  // THINKING_LEVELS in $lib/models/thinking, which also maps it onto each
+  // provider's request field. NULL means "whatever the provider does by
+  // default", which is what every thread did before the control existed.
+  //
+  // Unlike model_id this is NOT locked after the first message: the model is
+  // frozen because price_snapshot and the cost ledger are pinned to it, and a
+  // thinking level changes neither. Mid-thread is exactly when you want it —
+  // the answer that came back thin is the reason to turn it up.
+  thinkingLevel: text('thinking_level'),
 });
 
 export type Conversation = typeof conversations.$inferSelect;

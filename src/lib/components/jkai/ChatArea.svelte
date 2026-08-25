@@ -32,6 +32,11 @@
   import OpenRouterModelPicker from '$lib/components/jkai/OpenRouterModelPicker.svelte';
   import { hermesModelCommand } from '$lib/jkai/hermes-model-command';
   import { coerceModelContext } from '$lib/constants/default-models';
+  import {
+    isThinkingLevel,
+    thinkingLevelsFor,
+    type ThinkingLevel,
+  } from '$lib/models/thinking';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { subscribeFollowups } from '$lib/jkai/followup-stream';
@@ -70,6 +75,7 @@
     autoSend = false,
     conversation = null,
     modelContextLength = null,
+    modelSupportsThinking = false,
     defaultChatModelId,
     altOpenRouterModel = null,
     messageCount = 0,
@@ -102,14 +108,21 @@
       title?: string | null;
       costUsd?: string | number | null;
       priceSnapshot?: { promptPrice: number; completionPrice: number } | null;
+      thinkingLevel?: string | null;
     } | null;
     /** Context window of the pinned model, for the header's `N CTX %` chunk.
      *  Null when the OpenRouter catalogue has no row for it. */
     modelContextLength?: number | null;
+    /** Whether the pinned model takes a reasoning instruction. False hides the
+     *  thinking chip entirely rather than offering a control that does nothing. */
+    modelSupportsThinking?: boolean;
     defaultChatModelId: string;
     altOpenRouterModel?: ModelContext | null;
     messageCount?: number;
-    onmodelchange?: (ctx: ModelContext) => void;
+    /** `supportsThinking` reports whether the NEW model takes a reasoning
+     *  instruction, so the parent can re-gate the thinking chip without a
+     *  reload. */
+    onmodelchange?: (ctx: ModelContext, supportsThinking?: boolean) => void;
     modelCapabilities?: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     useIntelContext?: boolean;
     activeBuild?: { id: string; status: string } | null;
@@ -1948,6 +1961,47 @@
   const modelIsDefault = $derived(currentModel.modelId === siteDefaultModelId);
   const modelTriggerLabel = $derived(shortModelLabel(currentModel.modelId));
 
+  // ── Thinking level ────────────────────────────────────────────────────────
+  // How hard the model is told to think on this thread. Unlike the model it is
+  // NOT locked after the first message — the answer that came back thin is the
+  // moment you want to turn it up — and every change is also remembered as the
+  // level the NEXT new thread opens on, so "the default" is simply the last
+  // thing chosen rather than a second setting to keep in step.
+  //
+  // Local state seeded once from the loaded row, not a $derived: the PATCH is
+  // fire-and-forget and the parent never re-fetches the pane, so the chip has
+  // to own what it shows. One pane per thread, mounted with the thread.
+  // `untrack` because capturing the initial value is exactly the intent here,
+  // and the compiler cannot tell that from a mistake — it warns
+  // `state_referenced_locally` on a bare prop read in this position, and that
+  // warning is worth keeping meaningful elsewhere in this file.
+  let thinkingLevel = $state<ThinkingLevel | null>(
+    untrack(() => (isThinkingLevel(conversation?.thinkingLevel) ? conversation.thinkingLevel : null)),
+  );
+  let thinkingMenuOpen = $state(false);
+  const thinkingOptions = $derived(thinkingLevelsFor(coerceModelContext(currentModel).provider));
+  const thinkingLabel = $derived(thinkingLevel ?? 'auto');
+
+  async function setThinkingLevel(level: ThinkingLevel | null) {
+    thinkingMenuOpen = false;
+    if (!conversationId || level === thinkingLevel) return;
+    const previous = thinkingLevel;
+    // Optimistic: the chip is a preference, and making the user wait on a round
+    // trip to see their own click is worse than reverting on the rare failure.
+    thinkingLevel = level;
+    try {
+      const res = await fetch(`/api/jkai/conversations/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thinkingLevel: level }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      thinkingLevel = previous;
+      showToast('Could not change the thinking level.');
+    }
+  }
+
   // ── Query-adaptive routing ────────────────────────────────────────────────
   // On the first message of a fresh conversation the server classifies the query
   // and returns the model chosen for that profile; we apply it via switchModel
@@ -2040,7 +2094,9 @@
 
     // 1) Persist for cost accuracy + lock the conversation's model. The PATCH
     //    409s if a message already exists — the source of truth for "can we
-    //    still switch".
+    //    still switch". It also answers whether the NEW model takes a thinking
+    //    level, which the parent needs to re-gate the chip.
+    let supportsThinking: boolean | undefined;
     try {
       const res = await fetch(`/api/jkai/conversations/${conversationId}`, {
         method: 'PATCH',
@@ -2051,11 +2107,13 @@
         showToast(res.status === 409 ? 'Model locks after the first message.' : 'Could not switch model.');
         return;
       }
+      const row = await res.json().catch(() => null);
+      supportsThinking = row?.modelSupportsThinking === true;
     } catch {
       showToast('Could not switch model.');
       return;
     }
-    onmodelchange?.({ provider, modelId });
+    onmodelchange?.({ provider, modelId }, supportsThinking);
 
     // 2) Tell Hermes for this chat session via the gateway /model command.
     //
@@ -3350,6 +3408,56 @@
                 </span>
               {/if}
             </div>
+            <!-- Thinking level. Rendered for the whole life of the thread, not
+                 just before the first message the way the model picker is: the
+                 model is frozen because the cost ledger is pinned to it, and a
+                 thinking level is pinned to nothing. Hidden outright when the
+                 model takes no reasoning instruction. -->
+            {#if modelSupportsThinking}
+              <div class="model-switcher">
+                <button
+                  type="button"
+                  class="model-btn"
+                  onclick={() => (thinkingMenuOpen = !thinkingMenuOpen)}
+                  disabled={loading}
+                  title="How hard this model thinks. Changeable at any time, and remembered as the level your next thread opens on."
+                >
+                  <span class="skill-glyph" aria-hidden="true">◐</span>
+                  <span class="model-name">{thinkingLabel}</span>
+                  <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                {#if thinkingMenuOpen}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <div class="model-backdrop" onclick={() => (thinkingMenuOpen = false)}></div>
+                  <div class="model-menu drop-up" role="listbox" aria-label="Thinking level">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={thinkingLevel === null}
+                      class="model-opt"
+                      class:active={thinkingLevel === null}
+                      onclick={() => setThinkingLevel(null)}
+                    >
+                      <span class="model-opt-name">auto</span>
+                      <span class="model-opt-provider">provider default</span>
+                    </button>
+                    {#each thinkingOptions as lv (lv)}
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={thinkingLevel === lv}
+                        class="model-opt"
+                        class:active={thinkingLevel === lv}
+                        onclick={() => setThinkingLevel(lv)}
+                      >
+                        <span class="model-opt-name">{lv}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           {/if}
           <button type="button" class="composer-chip" onclick={insertSlash} title="Insert a saved prompt">
             <span class="chip-glyph" aria-hidden="true">/</span><span class="chip-word">prompt</span>
@@ -3901,6 +4009,16 @@
     border-radius: var(--radius-round);
     overflow: hidden;
     z-index: 26;
+  }
+  /* The composer sits on the bottom edge of the viewport, so a menu opened from
+     its chip row drops off the screen — five options render as one and a half.
+     Opt-in rather than a change to .model-menu itself: the same class is used
+     from rows that are not against an edge. */
+  .model-menu.drop-up {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 0.35rem;
   }
   .model-opt {
     display: flex;

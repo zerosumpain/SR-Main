@@ -24,8 +24,12 @@
  * enforces without an owner session.
  */
 
-export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
-export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+// The ladder itself lives in $lib/models/thinking, which also owns the mapping
+// onto each provider's request field. Re-exported rather than redeclared so a
+// build's thinking level and a chat's cannot drift into two different lists.
+import { THINKING_LEVELS, type ThinkingLevel } from '$lib/models/thinking';
+export { THINKING_LEVELS };
+export type { ThinkingLevel };
 
 export const RESEARCH_MODE_OPTIONS = [
   {
