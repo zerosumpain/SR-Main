@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
-import { eq, asc, or } from 'drizzle-orm';
+import { eq, asc, desc, or } from 'drizzle-orm';
 import { getChatHistory } from '$lib/workflows/orchestrator';
 import type { JkaiAttachment } from '$lib/db/schema';
 
@@ -11,7 +11,24 @@ export interface HistoryMessage {
   createdAt: Date;
 }
 
-const MAX_HISTORY = 30;
+/**
+ * How many messages to fetch. Not the same as how many are sent verbatim.
+ *
+ * There was no LIMIT here at all: every message in the conversation was
+ * selected and then `.slice(-30)` threw all but the last 30 away in
+ * JS. Two consequences, and the second is the bad one.
+ *
+ * The query walked the whole thread — harmless at 73 messages, and there is no
+ * index on `conversation_id` to walk it with (see the btree declared in
+ * `schema.ts`).
+ *
+ * And because the loader returned 30 while the caller asked `compressHistory`
+ * to keep 30 recent, compression could never fire: message 31 and everything
+ * behind it was discarded by that slice with no summary and nothing in the
+ * reply to say it had gone. Fetching wider is what gives the compressor
+ * something to compress.
+ */
+const HISTORY_FETCH_LIMIT = 200;
 
 async function loadAttachmentsFor(messageIds: string[]): Promise<Map<string, JkaiAttachment[]>> {
   const byMsg = new Map<string, JkaiAttachment[]>();
@@ -34,7 +51,10 @@ export async function loadConversationHistory(
   workflowId?: string | null,
 ): Promise<HistoryMessage[]> {
   if (conversationId) {
-    const convMessages = await db
+    // Newest-first with a LIMIT so the database returns the window, then
+    // reversed here — `ORDER BY ... DESC LIMIT n` can use the index, whereas
+    // ascending-then-slice has to produce the whole thread first.
+    const newestFirst = await db
       .select({
         id: orchestratorChats.id,
         role: orchestratorChats.role,
@@ -43,10 +63,14 @@ export async function loadConversationHistory(
       })
       .from(orchestratorChats)
       .where(eq(orchestratorChats.conversationId, conversationId))
-      .orderBy(asc(orchestratorChats.createdAt));
+      .orderBy(desc(orchestratorChats.createdAt))
+      .limit(HISTORY_FETCH_LIMIT);
 
-    // All messages (including migrated WhatsApp) are now in orchestrator_chats
-    const trimmed = convMessages.slice(-MAX_HISTORY);
+    // All messages (including migrated WhatsApp) are now in orchestrator_chats.
+    // Returned oldest-first, and NOT trimmed to the verbatim window — `compressHistory`
+    // owns that decision now, and trimming here is what silently ate the older
+    // messages before it ever saw them.
+    const trimmed = newestFirst.reverse();
     const ids = trimmed.map((m) => m.id);
     const byMsg = await loadAttachmentsFor(ids);
     return trimmed.map((m) => ({
@@ -59,7 +83,9 @@ export async function loadConversationHistory(
 
   if (workflowId) {
     const history = await getChatHistory(workflowId);
-    const trimmed = history.slice(-MAX_HISTORY);
+    // Same window as the conversation branch, for the same reason: whatever
+    // trims here is invisible to `compressHistory`.
+    const trimmed = history.slice(-HISTORY_FETCH_LIMIT);
     const ids = trimmed.map((h) => h.id);
     const byMsg = await loadAttachmentsFor(ids);
     return trimmed.map((h) => ({

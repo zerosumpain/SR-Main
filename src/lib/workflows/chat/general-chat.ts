@@ -35,7 +35,7 @@ import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { renderSkillIndex } from '$lib/jkai/skills/registry';
-import { compressHistory, renderCompressionSection } from './compress';
+import { compressHistory, refreshCompression, renderCompressionSection } from './compress';
 import { carriedToolsets } from './carried-toolsets';
 
 const MAX_HISTORY = 30;
@@ -1510,6 +1510,17 @@ async function runGeneralChat(
 
   if (!responseText) {
     responseText = `Sorry, the model did not produce a final response after ${maxRounds} tool rounds.`;
+  }
+
+  // Bring the summary up to date, AFTER the reply.
+  //
+  // Summarising is an LLM call. Doing it where `compressHistory` is read would
+  // put a whole model round in front of the first token, on exactly the long
+  // threads that are already the slowest. So this turn answers with what the
+  // cache had — saying plainly when that is behind — and the next turn has the
+  // summary. Not awaited, and it swallows its own failures.
+  if (options.conversationId && compressed.needsRefresh) {
+    void refreshCompression(conversationHistory, options.conversationId, MAX_HISTORY);
   }
 
   return { response: responseText };

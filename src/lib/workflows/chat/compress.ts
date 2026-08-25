@@ -39,6 +39,15 @@ export interface CompressionRecord {
   updatedAt: string;
 }
 
+/**
+ * How far back the loader reaches.
+ *
+ * `KEEP_RECENT` is what stays VERBATIM; this is what is available to summarise.
+ * They were effectively the same number, which is why compression never ran —
+ * see the note on `compressHistory`.
+ */
+export const HISTORY_WINDOW = 200;
+
 export interface CompressedHistory {
   /** Messages to send verbatim. */
   messages: HistoryMessage[];
@@ -48,6 +57,10 @@ export interface CompressedHistory {
   compressedCount: number;
   /** True when older messages were dropped WITHOUT a usable summary. */
   degraded: boolean;
+  /** True when the cached summary is missing or behind, so the caller should
+   *  call `refreshCompression` once the reply has been sent. Kept off the
+   *  critical path deliberately: summarising is an LLM call. */
+  needsRefresh: boolean;
 }
 
 async function ensureCollectionExists(): Promise<void> {
@@ -142,59 +155,129 @@ async function summarise(text: string, previous: string | null): Promise<string 
  * so it falls back to today's truncation rather than paying an LLM call per turn
  * for a summary it would immediately throw away.
  */
+/**
+ * Split a conversation into "recent, verbatim" and "earlier, summarised".
+ *
+ * ## Why this never ran
+ *
+ * `loadConversationHistory` fetched every message and then did
+ * `.slice(-MAX_HISTORY)`, so it returned at most 30 — and the caller passed
+ * `keepRecent = 30`. The guard on the first line therefore matched on every
+ * turn and returned immediately. No `chat-compression` record has ever been
+ * written. Meanwhile message 31 and everything behind it was simply dropped by
+ * that slice: no summary, no note, and nothing in the reply to say the model
+ * was answering with a third of the thread missing. Seven live threads are past
+ * that line (73, 60, 50, 48, 39, 39, 39 messages).
+ *
+ * The loader now reaches `HISTORY_WINDOW` back, so there is something to
+ * compress.
+ *
+ * ## Why it never summarises inline
+ *
+ * `summarise()` is an LLM call and this is awaited before the system prompt is
+ * assembled — so doing it here would put a whole model round in front of the
+ * first token, on exactly the long threads that are already slowest. That is
+ * the cost the previous change spent its time removing.
+ *
+ * So: read the cache, never write it. When the cache is missing or stale the
+ * result says `needsRefresh`, and the caller refreshes AFTER the reply has gone
+ * out (`refreshCompression`). The turn that discovers the summary is stale
+ * still answers with honest degradation; the turn after it has the summary.
+ */
 export async function compressHistory(
   history: HistoryMessage[],
   conversationId?: string | null,
   keepRecent = KEEP_RECENT,
 ): Promise<CompressedHistory> {
   if (history.length <= keepRecent) {
-    return { messages: history, summary: null, compressedCount: 0, degraded: false };
+    return { messages: history, summary: null, compressedCount: 0, degraded: false, needsRefresh: false };
   }
 
   const older = history.slice(0, history.length - keepRecent);
   const recent = history.slice(-keepRecent);
 
   if (!conversationId) {
-    // No cache key: keep today's behaviour rather than re-summarising every turn,
-    // but say that context is missing instead of pretending it never existed.
-    return { messages: recent, summary: null, compressedCount: older.length, degraded: true };
+    // No cache key, so nothing can be summarised or stored. Say the context is
+    // missing rather than pretending it never existed.
+    return { messages: recent, summary: null, compressedCount: older.length, degraded: true, needsRefresh: false };
   }
 
   const cached = await loadCompression(conversationId);
   const coversUpTo = cached ? new Date(cached.coversUpTo).getTime() : 0;
   const fresh = older.filter((m) => m.createdAt.getTime() > coversUpTo);
+  const stale = fresh.length >= COMPRESS_THRESHOLD;
 
-  // Nothing new has fallen out since the last summary — reuse it as-is.
-  if (cached && fresh.length < COMPRESS_THRESHOLD) {
+  if (cached) {
     return {
       messages: recent,
       summary: cached.summary,
-      compressedCount: cached.messageCount,
-      degraded: false,
+      // Count what the summary actually covers, plus anything it does not yet.
+      compressedCount: cached.messageCount + (stale ? fresh.length : 0),
+      // A summary that is behind is still better than none, but the turn should
+      // not imply it covers messages it has never seen.
+      degraded: stale,
+      needsRefresh: stale,
     };
   }
 
-  const summary = await summarise(renderForSummary(fresh), cached?.summary ?? null);
-  if (!summary) {
-    // Honest degradation: keep MORE than we would have, and flag it.
-    return {
-      messages: history.slice(-(keepRecent * 2)),
-      summary: cached?.summary ?? null,
-      compressedCount: older.length,
-      degraded: !cached,
-    };
-  }
-
-  const rec: CompressionRecord = {
-    conversationId,
-    summary,
-    coversUpTo: older[older.length - 1].createdAt.toISOString(),
-    messageCount: (cached?.messageCount ?? 0) + fresh.length,
-    updatedAt: new Date().toISOString(),
+  // Nothing cached yet. Keep MORE than we otherwise would and be explicit that
+  // the earlier part is missing — the summary will exist for the next turn.
+  return {
+    messages: history.slice(-(keepRecent * 2)),
+    summary: null,
+    compressedCount: older.length,
+    degraded: true,
+    needsRefresh: true,
   };
-  await saveCompression(rec);
+}
 
-  return { messages: recent, summary, compressedCount: rec.messageCount, degraded: false };
+/**
+ * Bring a conversation's summary up to date. Call AFTER the reply has been
+ * sent — it makes an LLM call and must never sit in front of the first token.
+ *
+ * Safe to call when nothing needs doing; safe to call concurrently (the last
+ * write wins, and both writers are summarising the same prefix). Never throws:
+ * a summary that fails to refresh degrades the next turn's context, which the
+ * prompt says out loud, and that is not worth failing a turn over.
+ */
+export async function refreshCompression(
+  history: HistoryMessage[],
+  conversationId: string,
+  keepRecent = KEEP_RECENT,
+): Promise<{ refreshed: boolean; reason?: string }> {
+  try {
+    if (history.length <= keepRecent) return { refreshed: false, reason: 'nothing older than the window' };
+    const older = history.slice(0, history.length - keepRecent);
+
+    const cached = await loadCompression(conversationId);
+    const coversUpTo = cached ? new Date(cached.coversUpTo).getTime() : 0;
+    const fresh = older.filter((m) => m.createdAt.getTime() > coversUpTo);
+    if (cached && fresh.length < COMPRESS_THRESHOLD) {
+      return { refreshed: false, reason: 'summary already covers the older messages' };
+    }
+    // With no cache, summarise everything that has fallen out — not just the
+    // tail — or the first summary would silently start partway through.
+    const toSummarise = cached ? fresh : older;
+    if (toSummarise.length === 0) return { refreshed: false, reason: 'nothing to summarise' };
+
+    const summary = await summarise(renderForSummary(toSummarise), cached?.summary ?? null);
+    if (!summary) return { refreshed: false, reason: 'summariser returned nothing' };
+
+    await saveCompression({
+      conversationId,
+      summary,
+      coversUpTo: toSummarise[toSummarise.length - 1].createdAt.toISOString(),
+      messageCount: (cached?.messageCount ?? 0) + toSummarise.length,
+      updatedAt: new Date().toISOString(),
+    });
+    return { refreshed: true };
+  } catch (err) {
+    console.error(
+      '[compress] refresh failed:',
+      err instanceof Error ? err.message : err,
+    );
+    return { refreshed: false, reason: 'threw' };
+  }
 }
 
 /** The prompt section carrying the compressed history. */

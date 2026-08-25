@@ -1703,7 +1703,15 @@ export const orchestratorChats = pgTable('orchestrator_chats', {
   content: text('content').notNull(),
   metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  // The history loader reads a conversation newest-first with a LIMIT, on every
+  // turn. Before this the table had only its primary key, so that read was a
+  // scan of the whole table filtered down — fine at 3,064 rows and not fine
+  // later. Declared HERE rather than added by hand because `drizzle push`
+  // drops any index it cannot see in this file.
+  index('orchestrator_chats_conversation_idx').on(t.conversationId, t.createdAt),
+  index('orchestrator_chats_workflow_idx').on(t.workflowId, t.createdAt),
+]);
 
 export type OrchestratorChat = typeof orchestratorChats.$inferSelect;
 export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
