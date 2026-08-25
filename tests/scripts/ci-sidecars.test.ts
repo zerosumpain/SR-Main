@@ -59,9 +59,32 @@ describe('ci-deploy-sidecars manifest', () => {
     // This is the bug that shipped: the build ran from ci-release.sh, whose job
     // deliberately has no `npm ci`. Every sidecar warned, the script exited 0,
     // and the deploy reported success having changed nothing.
+    //
+    // The two halves now sit on different MACHINES — prebuild builds on
+    // porkserv, release stages on the VPS — so the invariant is checked at its
+    // source rather than by which script a job happens to call. Every manifest
+    // script must be built in prebuild, and the stage script, which runs where
+    // there is no node_modules, must not build at all.
     const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
-    const prebuild = ci.slice(ci.indexOf('name: Prebuild (VPS)'), ci.indexOf('name: Release (VPS)'));
-    expect(prebuild).toContain('ci-stage-sidecars.sh');
+    const start = ci.indexOf('name: Prebuild (porkserv)');
+    const end = ci.indexOf('name: Release (VPS)');
+    // Assert the markers, so a renamed job fails saying so rather than slicing
+    // an empty string and reporting "expected '' to contain ...".
+    expect(start, 'prebuild job not found in ci.yml — renamed?').toBeGreaterThan(-1);
+    expect(end, 'release job not found in ci.yml — renamed?').toBeGreaterThan(start);
+
+    const prebuild = ci.slice(start, end);
+    for (const e of entries) {
+      expect(prebuild, `${e.name}: not built in the prebuild job`).toContain(`npm run ${e.script}`);
+    }
+
+    // Comment lines are stripped first: the script's header explains the very
+    // history this guards, and says `npm run` while doing so.
+    const stageCode = readFileSync(SCRIPT, 'utf8')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('#'))
+      .join('\n');
+    expect(stageCode, 'the stage script must not build — its job has no node_modules').not.toMatch(/npm run/);
 
     const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
     expect(release).not.toContain('ci-stage-sidecars.sh');

@@ -45,14 +45,11 @@ for entry in "${SIDECARS[@]}"; do
 
   if [ ! -d "$PKG" ]; then warn "$NAME: $PKG missing — manifest and tree disagree"; continue; fi
 
-  if ! npm run "$SCRIPT"; then
-    warn "$NAME: 'npm run $SCRIPT' failed — the previous bundle stays live"
-    continue
-  fi
-
+  # Built by the prebuild job on porkserv (`npm run $SCRIPT`) and delivered in
+  # the release artifact. Nothing is built here: this job has no node_modules.
   BUNDLE="$PKG/dist/start.js"
   if [ ! -f "$BUNDLE" ]; then
-    warn "$NAME: $BUNDLE missing after '$SCRIPT' — the previous bundle stays live"
+    warn "$NAME: $BUNDLE missing from the release artifact — did the prebuild step for '$SCRIPT' fail? The previous bundle stays live"
     continue
   fi
   if [ ! -f "$PKG/$UNIT" ]; then

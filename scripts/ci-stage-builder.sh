@@ -23,11 +23,11 @@ SHA="$(git rev-parse HEAD)"
 STAGE_ROOT="$VPS_DIR/builder-releases"
 STAGE_DIR="$STAGE_ROOT/$SHA"
 
-echo "==> Building the jkai-builder bundle..."
-npm run build:builder
-
+# The bundle is built by the prebuild job on porkserv and arrives here inside
+# the release artifact. This script deliberately builds nothing: the release job
+# has no node_modules, because it no longer shares a workspace with the build.
 BUNDLE="packages/jkai-builder/dist/start.js"
-[ -f "$BUNDLE" ] || { echo "$BUNDLE missing after build:builder" >&2; exit 1; }
+[ -f "$BUNDLE" ] || { echo "$BUNDLE missing — the release artifact did not carry it (did the prebuild step for 'build:builder' fail?)" >&2; exit 1; }
 
 # Same discipline as ci-prebuild.sh: a staged directory either exists complete
 # or does not exist, so the watchdog can never pick up a half-written bundle.
