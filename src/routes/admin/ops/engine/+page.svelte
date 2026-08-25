@@ -98,6 +98,11 @@
       <span class="sr-label-tight">Service control</span>
       <span class="nm-sec-meta">
         {data.version ?? 'unknown version'}
+        {#if data.storeNewestAt}
+          <span class="stale-stamp" title="Hermes' own store last received data at this time. Anything read from it — version, curator, sessions, telemetry, tool audit — is as old as this.">
+            · frozen {new Date(data.storeNewestAt).toLocaleString('en-GB')}
+          </span>
+        {/if}
       </span>
     </div>
 
@@ -205,9 +210,11 @@
         skill library, sub-agent delegation, web search and browser control all come from
         here — and so does the dependency on homeserv being reachable.
       {:else}
-        The <strong>in-repo engine</strong> is answering chat. Every site toolset still
-        works (intel, canvas, datastore, drive, Gmail, research, decks); terminal, file
-        editing, skills, delegation, web search and browser control do not.
+        The <strong>in-repo engine</strong> is answering chat. Every site toolset works
+        (intel, canvas, datastore, drive, Gmail, research, decks), and so do the skill
+        library, sub-agent delegation, web search and browser control — those were ported
+        in. <strong>Terminal and file editing are the two that genuinely are not here</strong>:
+        there is no shell and no code sandbox on this lane.
       {/if}
     </p>
 
@@ -229,6 +236,10 @@
       Applies to the next message — no restart, no redeploy. Turns in flight finish on the
       engine that started them. Unset, this follows <code>JKAI_HERMES_CANVAS_CHAT</code>
       (currently <code>{data.flagEnvDefault ? 'on' : 'off'}</code> on this host).
+      {#if !data.flagEnabled}
+        Switching back sets the flag only — the <code>jkai-hermes</code> unit is stopped on
+        homeserv and this does not start it.
+      {/if}
     </p>
   </section>
 
@@ -384,6 +395,7 @@
   a.tele-row.link { text-decoration: none; }
   a.tele-row.link:hover { background: var(--bg-section); }
   a.tele-row.link .tr-name { color: var(--accent); }
+  .stale-stamp { color: var(--text-secondary); font-size: var(--fs-label-xs); }
   .curator { margin-top: 1rem; }
   .curator summary { font-size: var(--fs-label-xs); color: var(--text-secondary); cursor: pointer; }
   .curator pre { margin: 0.5rem 0 0; font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-secondary); background: var(--bg-section); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.7rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 22rem; overflow-y: auto; }

@@ -25,7 +25,9 @@
   <PageHeader
     kicker="Hermes"
     title="Sessions"
-    sub="Read-only view of the engine's session store."
+    sub={data.storeNewestAt
+      ? `Read-only view of the engine's session store — frozen at ${new Date(data.storeNewestAt).toLocaleString('en-GB')}, when Hermes last wrote to it.`
+      : "Read-only view of the engine's session store."}
   />
 
   {#if !data.available}

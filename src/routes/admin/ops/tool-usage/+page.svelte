@@ -113,7 +113,9 @@
   <PageHeader
     kicker="Ops"
     title="Tool usage"
-    sub="Forensic audit of jkai tool calls — frequency, trends, and how the toolset is actually used."
+    sub={data.audit?.storeNewestAt
+      ? `Forensic audit of jkai tool calls. The audit below reads Hermes' store, frozen at ${new Date(data.audit.storeNewestAt).toLocaleString('en-GB')}; the error rates read jkai_tool_traces and are live.`
+      : "Forensic audit of jkai tool calls — frequency, trends, and how the toolset is actually used."}
   />
 
   <!-- Date filter -->
