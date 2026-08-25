@@ -6,7 +6,7 @@ import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workfl
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { currentActivityId } from '$lib/jkai/activity-context';
-import { currentChatContext } from '$lib/jkai/chat-context';
+import { currentChatContext, noteChatRound } from '$lib/jkai/chat-context';
 import { currentResearchSessionId } from '$lib/deepdive/meter';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
 import type { ModelProvider } from '$lib/server/models/types';
@@ -99,6 +99,16 @@ function captureUsage(
     // See $lib/jkai/chat-context for why the job id is the right key.
     const chat = currentChatContext();
     const endedAt = Date.now();
+    // A turn is many rounds; the ledger line under the reply has to sum them.
+    noteChatRound({
+      provider,
+      model,
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+      cacheReadTokens,
+      reasoningTokens,
+      reportedCostUsd: reportedCost,
+    });
     recordDurableLLMCall({
       provider,
       model,

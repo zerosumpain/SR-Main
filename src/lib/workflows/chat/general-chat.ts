@@ -1,6 +1,6 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
-import { withChatContext } from '$lib/jkai/chat-context';
+import { withChatContext, emptyChatUsage, type ChatUsageTotals } from '$lib/jkai/chat-context';
 import { db } from '$lib/db';
 import {
   homeAssistantConfig,
@@ -681,7 +681,7 @@ export async function generalChat(
   input: { text: string; attachments?: JkaiAttachment[] },
   conversationHistory: HistoryMessage[],
   options: ChatOptions,
-): Promise<{ response: string }> {
+): Promise<{ response: string; usage: ChatUsageTotals }> {
   // Skipped for sub-agents — their output isn't meant for the user chat.
   const ack =
     options.conversationId && (options.subagentDepth ?? 0) === 0
@@ -708,10 +708,19 @@ export async function generalChat(
     // chat's model comes from the `jkai.chat.default_model` setting and not from
     // the workload registry the model picker writes to. A workload id there
     // would imply a switch that does not exist.
-    return await withChatContext(
-      { jobId: options.jobId ?? undefined, conversationId: options.conversationId ?? undefined },
+    const usage = emptyChatUsage();
+    const { response } = await withChatContext(
+      {
+        jobId: options.jobId ?? undefined,
+        conversationId: options.conversationId ?? undefined,
+        usage,
+      },
       () => runGeneralChat(input, conversationHistory, options, () => ack?.cancel()),
     );
+    // Returned even when every field is zero. A caller that gets no usage
+    // cannot tell "the turn was free" from "nobody measured it", and that
+    // ambiguity is what left every reply without a ledger line.
+    return { response, usage };
   } finally {
     ack?.cancel();
   }

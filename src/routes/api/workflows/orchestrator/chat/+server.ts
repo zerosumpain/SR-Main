@@ -36,6 +36,7 @@ import { requireConfirmation } from '$lib/workflows/chat/confirmation-gate';
 import { requireSecret, requireSecretUpdate } from '$lib/workflows/chat/secret-gate';
 import { specForRequest } from '$lib/workflows/site-tools/tools/request-credential';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
+import type { TurnStamp } from '$lib/jkai/turn-stamp';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
@@ -1602,7 +1603,12 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           }
         }
 
-        const { response: responseText } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
+        // Wall-clock for the whole turn, all rounds and tools included — the
+        // number the reader actually waited. Stamped here rather than at job
+        // creation so a spell queued behind another turn is not billed to this
+        // one's latency.
+        const turnStartedAt = Date.now();
+        const { response: responseText, usage: turnUsage } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
           workflowId,
           conversationId,
           jobId,
@@ -1669,9 +1675,49 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // persistToolTrace on the Hermes branch. Best-effort throughout: a
         // trace is a diagnostic and must never cost the user their reply.
         // Keyed by jobId like the Hermes one, so the two branches cannot
-        // collide and a re-run is idempotent. `costUsd` stays null — there is
-        // no per-turn stamp to read it from on this branch, and a wrong number
-        // is worse than an absent one.
+        // collide and a re-run is idempotent. `costUsd` comes from the turn
+        // stamp now; it stays null when the turn produced no usage at all,
+        // because an absent number beats a wrong one.
+        // Price the turn against the model that answered it.
+        //
+        // The loop never wrote `metadata.usage`, so four surfaces went blank at
+        // the cutover: the per-reply MODEL/TOK/LATENCY/£ line, the thread token
+        // count, the thread cost, and the context strip. Prod on 08-24: 12
+        // assistant turns, 0 carrying usage, against 7/7 and 3/3 on the two
+        // days before.
+        //
+        // Priced from `priceFor(provider, model)` rather than the conversation's
+        // stored `price_snapshot`, which is null on every recent row because it
+        // is only written by the model-switch PATCH — unreachable while the
+        // picker is hidden (PR 8). Waiting for that would have left these rows
+        // at zero even after the picker came back. The provider's own reported
+        // figure still wins where it exists: a per-token table cannot see a
+        // per-request fee.
+        //
+        // `priceFor` returns null for anything that is not OpenRouter, so a
+        // Codex turn prices at 0 — which is the truth. It spends quota, not
+        // cash. The UI declines to render a £ for it rather than claiming free.
+        const turnStamp: TurnStamp | null = (() => {
+          if (turnUsage.rounds === 0) return null;
+          if (turnUsage.inputTokens === 0 && turnUsage.outputTokens === 0) return null;
+          const provider = turnUsage.provider ?? modelContext.provider;
+          const model = turnUsage.model ?? modelContext.modelId;
+          const pricing = priceFor(provider, model);
+          const costUsd =
+            turnUsage.reportedCostUsd ??
+            (pricing ? computeCost(pricing, turnUsage.inputTokens, turnUsage.outputTokens) : 0);
+          return {
+            model,
+            provider,
+            inputTokens: turnUsage.inputTokens,
+            outputTokens: turnUsage.outputTokens,
+            cacheReadTokens: turnUsage.cacheReadTokens || null,
+            costUsd,
+            latencyMs: Date.now() - turnStartedAt,
+            rounds: turnUsage.rounds,
+          };
+        })();
+
         let traceId: string | null = null;
         if (traceRecorder.hasSteps() && (conversationId || workflowId)) {
           try {
@@ -1684,8 +1730,8 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
                 workflowId: workflowId ?? null,
                 prompt: (message ?? '').slice(0, 500),
                 model: modelContext.modelId,
-                provider: modelContext.provider,
-                costUsd: null,
+                provider: turnStamp?.provider ?? modelContext.provider,
+                costUsd: turnStamp?.costUsd ?? null,
                 stepCount: trace.stepCount,
                 errorCount: trace.errorCount,
                 durationMs: trace.durationMs,
@@ -1702,6 +1748,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         if (cleanedToolSteps.length > 0) assistantMetaParts.toolSteps = cleanedToolSteps;
         if (traceId) assistantMetaParts.traceId = traceId;
         if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;
+        if (turnStamp) assistantMetaParts.usage = turnStamp;
         const assistantMetadata = Object.keys(assistantMetaParts).length > 0 ? assistantMetaParts : undefined;
         let assistantMsgId: string | null = null;
         if (conversationId) {
@@ -1773,6 +1820,37 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           }
         }
 
+        // Accrue the turn onto the thread. Best-effort and in its own
+        // try/catch for the same reason the Hermes branch is: a rollup failure
+        // must never cost the user their reply.
+        //
+        // `recordConversationUsage` is deliberately not used — it prices from
+        // the stored `price_snapshot`, which is null on every recent row, so it
+        // would add a real token count and a zero cost. The stamp has already
+        // priced the turn properly.
+        if (conversationId && turnStamp) {
+          const dIn = turnStamp.inputTokens;
+          const dOut = turnStamp.outputTokens;
+          const dCost = turnStamp.costUsd;
+          if (dIn > 0 || dOut > 0 || dCost > 0) {
+            try {
+              await db
+                .update(conversations)
+                .set({
+                  promptTokens: sql`${conversations.promptTokens} + ${dIn}`,
+                  completionTokens: sql`${conversations.completionTokens} + ${dOut}`,
+                  costUsd: sql`${conversations.costUsd} + ${dCost.toFixed(6)}`,
+                })
+                .where(eq(conversations.id, conversationId));
+            } catch (usageErr) {
+              console.error(
+                '[general-chat] failed to accrue usage onto conversation:',
+                usageErr instanceof Error ? usageErr.message : usageErr,
+              );
+            }
+          }
+        }
+
         job.result = {
           success: true,
           workflow: null,
@@ -1783,6 +1861,10 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           // button was missing while you watched the turn finish and then
           // appeared if you reloaded — which is exactly how it was reported.
           ...(traceId ? { traceId } : {}),
+          // The client renders the ledger line from the live `done` payload and
+          // from `metadata.usage` on reload. Both, or the line appears only
+          // after a refresh.
+          ...(turnStamp ? { usage: turnStamp } : {}),
         };
       }
 

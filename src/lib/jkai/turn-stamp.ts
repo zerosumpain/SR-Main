@@ -14,6 +14,16 @@ export interface TurnStamp {
   cacheReadTokens: number | null;
   costUsd: number;
   latencyMs: number;
+  /**
+   * How many times the model was called to produce this reply.
+   *
+   * Absent on Hermes-era rows, which had no notion of it — Hermes reported one
+   * usage block per turn and the round structure stayed inside the gateway. On
+   * the in-process loop it is the single most useful number on the line: the
+   * first measured turn on production took NINE rounds at ~3.3s of
+   * time-to-first-token each, and that, not tool speed, is what a reply costs.
+   */
+  rounds?: number;
 }
 
 /** Narrow an unknown metadata blob to a TurnStamp. Old messages predate the
@@ -34,5 +44,8 @@ export function readTurnStamp(meta: unknown): TurnStamp | null {
     cacheReadTokens: typeof u['cacheReadTokens'] === 'number' ? u['cacheReadTokens'] : null,
     costUsd: typeof u['costUsd'] === 'number' ? u['costUsd'] : 0,
     latencyMs: typeof u['latencyMs'] === 'number' ? u['latencyMs'] : 0,
+    // Optional: undefined on every row written before the loop counted rounds,
+    // which must stay distinguishable from a genuine zero.
+    ...(typeof u['rounds'] === 'number' ? { rounds: u['rounds'] } : {}),
   };
 }
