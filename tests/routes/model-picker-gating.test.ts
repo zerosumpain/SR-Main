@@ -58,7 +58,9 @@ describe('switching a model does not cost a turn on the loop', () => {
     // The PATCH is the actual switch on this engine. Returning before it, or
     // before `onmodelchange`, would make the picker look broken.
     const guard = CHAT_AREA.indexOf('if (!hermesEnabled) return;');
-    const notify = CHAT_AREA.indexOf('onmodelchange?.({ provider, modelId });');
+    // Prefix, not the whole statement: the callback also reports whether the
+    // NEW model takes a thinking level, and the ordering is what this guards.
+    const notify = CHAT_AREA.indexOf('onmodelchange?.({ provider, modelId }');
     const patch = CHAT_AREA.indexOf('method: \'PATCH\'');
     expect(patch).toBeGreaterThan(-1);
     expect(notify).toBeGreaterThan(patch);

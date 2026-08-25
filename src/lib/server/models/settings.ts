@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { loadKeys } from '$lib/deepdive/keys';
 import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from './types';
+import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
 
 const TTL_MS = 30_000;
 
@@ -120,6 +121,32 @@ export async function resolveChatAltOpenRouterModel(): Promise<ModelContext | nu
   const v = await getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model');
   if (!v?.modelId) return null;
   return { provider: 'openrouter', modelId: v.modelId };
+}
+
+/**
+ * The thinking level a NEW chat thread starts on: whatever was last chosen.
+ *
+ * There is no separate "site default" control for this and there should not be
+ * one. A thinking level is a habit, not a policy — you turn it up because the
+ * work got harder and you leave it there — so the picker writes this key on
+ * every change and a fresh thread inherits it. Threads keep their own level in
+ * `jkai_conversations.thinking_level`, so changing it here never reaches back
+ * into a thread already running.
+ *
+ * Null (no row) means "provider default", the behaviour before the control
+ * existed. Note that is the ONLY way to express it: `app_settings.value` is
+ * `jsonb NOT NULL`, so clearing has to delete the row — see deleteSetting.
+ */
+const CHAT_THINKING_KEY = 'jkai.chat.thinking_level';
+
+export async function resolveDefaultThinkingLevel(): Promise<ThinkingLevel | null> {
+  const v = await getSetting<{ level?: unknown } | null>(CHAT_THINKING_KEY);
+  return isThinkingLevel(v?.level) ? v.level : null;
+}
+
+export async function setDefaultThinkingLevel(level: ThinkingLevel | null): Promise<void> {
+  if (level === null) await deleteSetting(CHAT_THINKING_KEY);
+  else await setSetting(CHAT_THINKING_KEY, { level });
 }
 
 /** /jkai approval-prompt UI behaviour — drives the inline Approve / Deny

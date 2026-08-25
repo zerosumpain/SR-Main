@@ -14,6 +14,7 @@ import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel, isHermesChatEnabled } from '$lib/server/models/settings';
+import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { getChatInputCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
@@ -1595,7 +1596,9 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // Workflow-context chats (workflowId present) use the builder model; general /jkai chats use the chat model.
         let modelContext: ModelContext = await resolveDefaultModel();
         let priceSnapshot: PriceSnapshot | null = null;
-        console.log(`[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId} (kind=${contextKind})`);
+        // The thread's own thinking level. Null for a thread that predates the
+        // control, or one left on "auto" — both mean "send no reasoning field".
+        let thinkingLevel: ThinkingLevel | null = null;
         // Resolved model is internal info (provider:modelId) — kept out of the
         // user-visible stream. Re-enable as a debug status if you need it back.
         if (conversationId) {
@@ -1610,8 +1613,17 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
               modelId: conv.modelId,
             });
             priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
+            thinkingLevel = isThinkingLevel(conv.thinkingLevel) ? conv.thinkingLevel : null;
           }
         }
+        // Logged AFTER the thread's pin is applied, not before: this line used
+        // to print the site default on every turn regardless of what the thread
+        // was actually pinned to, which is the opposite of useful when the
+        // question is "which model answered".
+        console.log(
+          `[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId}` +
+            ` thinking=${thinkingLevel ?? 'auto'} (kind=${contextKind})`,
+        );
 
         // Wall-clock for the whole turn, all rounds and tools included — the
         // number the reader actually waited. Stamped here rather than at job
@@ -1654,6 +1666,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
             publishJobEvent(jobId, event);
           },
           modelContext,
+          thinkingLevel,
           priceSnapshot,
           useIntelContext: useIntelContext !== false,
         });

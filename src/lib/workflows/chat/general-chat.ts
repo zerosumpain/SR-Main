@@ -15,6 +15,8 @@ import { getLLMClient } from '$lib/jkai/llm-client';
 import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
 import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
+import { thinkingRequestParams, type ThinkingLevel } from '$lib/models/thinking';
+import { coerceModelContext } from '$lib/constants/default-models';
 import { META_TOOL_DEFINITIONS, getToolsetDefinitions, getToolDefinitionsByName, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { setJobPhase } from '$lib/workflows/chat/job-store';
@@ -213,6 +215,10 @@ interface ChatOptions {
   onToolProgress?: (step: ToolProgress) => void;
   onStreamEvent?: (event: JobEvent) => void;
   modelContext: ModelContext;
+  /** How hard to tell the model to think, from the conversation's own setting.
+   *  Null/undefined sends no reasoning field, leaving the provider's default —
+   *  which is what every turn did before the chip existed. */
+  thinkingLevel?: ThinkingLevel | null;
   priceSnapshot: PriceSnapshot | null;
   /** When false, skips injecting the intel knowledge graph into the system prompt. Defaults to true. */
   useIntelContext?: boolean;
@@ -1125,6 +1131,14 @@ async function runGeneralChat(
       (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId);
     const turnCtx = escalates && thinkingCtx ? thinkingCtx : baseCtx;
     const { client, model } = await getLLMClient(turnCtx);
+    // Read off the context that will actually serve THIS round, not the
+    // conversation's: an escalated round can land on the other provider, and
+    // the two spell the field differently. `coerceModelContext` because a
+    // persisted row can carry a codex/ id under provider 'openrouter'.
+    const thinking = thinkingRequestParams(
+      coerceModelContext(turnCtx).provider,
+      options.thinkingLevel,
+    );
 
     // Halfway through available rounds: get a plain-English status update so
     // the user can see progress. Separate call with no tools, doesn't count
@@ -1152,6 +1166,10 @@ async function runGeneralChat(
           // Reasoning model needs ~4000 tokens just to think before producing
           // any output — 300 would guarantee empty content.
           max_tokens: 6000,
+          // Deliberately NOT carrying the turn's thinking level. This writes two
+          // conversational sentences about work already done; a thread set to
+          // `high` would buy nothing here and delay the one thing the call
+          // exists to deliver quickly. Same reasoning as the opening ack.
         });
         if (options.conversationId) {
           // Fire-and-forget: ~30ms per call we don't need to block on
@@ -1250,6 +1268,7 @@ async function runGeneralChat(
         temperature: 0.4,
         max_tokens: 16384,
         ...(tools ? { tools } : {}),
+        ...thinking,
         stream: true,
         stream_options: { include_usage: true },
       });
@@ -1325,6 +1344,7 @@ async function runGeneralChat(
             temperature: 0.4,
             max_tokens: 16384,
             ...(tools ? { tools } : {}),
+            ...thinking,
           });
           const rchoice = retry.choices[0];
           fullContent = rchoice?.message?.content ?? '';

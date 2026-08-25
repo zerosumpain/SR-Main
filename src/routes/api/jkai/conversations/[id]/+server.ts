@@ -3,12 +3,13 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
-import { getChatInputCapabilities } from '$lib/server/models/capabilities';
+import { getChatInputCapabilities, modelSupportsThinking } from '$lib/server/models/capabilities';
 import { hermesWillAnswerChat } from '$lib/resilience/hermes-reach';
-import { isHermesChatEnabled } from '$lib/server/models/settings';
+import { isHermesChatEnabled, setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { env } from '$env/dynamic/private';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
+import { isThinkingLevel } from '$lib/models/thinking';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const [conv] = await db
@@ -127,6 +128,11 @@ export const GET: RequestHandler = async ({ params }) => {
 		messages: messagesWithAttachments,
 		modelCapabilities: modelCaps,
 		modelContextLength: catalogue?.contextLength ?? null,
+		// Whether the composer shows a thinking-level chip at all. Read off the
+		// same catalogue row as the context window rather than a hand-kept list,
+		// so it tracks the nightly refresh; false for a model the catalogue has
+		// never heard of, which is the honest answer.
+		modelSupportsThinking: await modelSupportsThinking(pinnedModel),
 		activeBuild: activeBuild ?? null,
 	});
 };
@@ -146,15 +152,39 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	// Rename / pin / share — allowed at any time (unlike the model change,
 	// these are not locked after the first message).
-	if ('title' in body || 'pinned' in body || 'shareVisibility' in body || 'intelEnabled' in body) {
+	if (
+		'title' in body ||
+		'pinned' in body ||
+		'shareVisibility' in body ||
+		'intelEnabled' in body ||
+		'thinkingLevel' in body
+	) {
 		const set: Partial<{
 			title: string | null;
 			pinned: boolean;
 			shareVisibility: string;
 			shareToken: string;
 			intelEnabled: boolean;
+			thinkingLevel: string | null;
 		}> = {};
 		if ('intelEnabled' in body) set.intelEnabled = !!body.intelEnabled;
+		// Thinking level is deliberately NOT locked with the model: it does not
+		// touch price_snapshot, and the turn that came back thin is the moment
+		// you want to turn it up. Anything that is not a known level reads as
+		// "back to the provider default" rather than 400ing — the picker's
+		// "auto" option sends exactly that.
+		if ('thinkingLevel' in body) {
+			const level = isThinkingLevel(body.thinkingLevel) ? body.thinkingLevel : null;
+			set.thinkingLevel = level;
+			// Last pick wins for the next NEW thread. Best-effort: failing to
+			// remember a preference must not fail the change the user just made.
+			await setDefaultThinkingLevel(level).catch((err) =>
+				console.warn(
+					'[conversations] could not persist default thinking level:',
+					err instanceof Error ? err.message : err,
+				),
+			);
+		}
 		if ('title' in body) {
 			const t = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
 			set.title = t.length > 0 ? t : null;
@@ -229,5 +259,11 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		.where(eq(conversations.id, params.id))
 		.returning();
 
-	return json(updated);
+	// The new model may not take a reasoning instruction at all, so the answer
+	// travels back with the switch — otherwise the composer would keep offering
+	// a thinking chip for the model it just stopped using, until a reload.
+	return json({
+		...updated,
+		modelSupportsThinking: await modelSupportsThinking({ provider: modelProvider, modelId }),
+	});
 };
