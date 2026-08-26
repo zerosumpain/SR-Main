@@ -17,6 +17,7 @@ import {
   listNamingQueue,
 } from '$lib/daydream/places';
 import { errMsg } from '$lib/daydream/types';
+import { loadBoard, rateQuestion } from '$lib/daydream/hypotheses/store';
 
 export const GET: RequestHandler = async () => {
   try {
@@ -226,6 +227,25 @@ export const POST: RequestHandler = async ({ request }) => {
           return json({ error: 'no usable verdicts in the batch' }, { status: 400 });
         }
         return json({ ok: true, ...(await recordTriageBatch(items)) });
+      }
+
+      // The propositions board: everything asked, whatever the answer was.
+      case 'hypothesis_board': {
+        const limit = Math.min(Math.max(Number(body.limit) || 60, 1), 200);
+        return json({ ok: true, board: await loadBoard(limit) });
+      }
+
+      // Rating the QUESTION, not the statistics. He cannot overrule a q-value
+      // and should not be asked to; the signal is whether asking was worth it.
+      case 'rate_question': {
+        const id = str('id');
+        const verdict = str('verdict');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        if (verdict !== 'useful' && verdict !== 'not_useful') {
+          return json({ error: `unknown verdict: ${verdict || '(none)'}` }, { status: 400 });
+        }
+        await rateQuestion(id, verdict);
+        return json({ ok: true });
       }
 
       case 'ignore_place': {

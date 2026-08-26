@@ -4161,6 +4161,81 @@ export const daydreamDayFeatures = pgTable(
   ],
 );
 
+/**
+ * Questions the assistant decided were worth asking, and what the data said.
+ *
+ * The point of the table is the rows nobody would keep. `refuted`,
+ * `wrong_direction` and `underpowered` are stored exactly as durably as
+ * `supported`, because a system that keeps only its hits looks prescient and is
+ * unfalsifiable. "I checked whether shop visits track poor sleep; they do not,
+ * r = 0.06" is a useful thing to read, and until this table existed there was
+ * nowhere in this codebase for it to live.
+ *
+ * `proposedAt` is recorded separately from `testedAt` and always precedes it.
+ * That ordering is the pre-registration guarantee: the model proposed this
+ * claim without seeing a p-value, so the correction applies over the handful it
+ * asked for rather than the several hundred an exhaustive sweep runs. A row
+ * where the two are equal, or where the verdict was written by anything other
+ * than `judge()`, has lost that property.
+ */
+export const daydreamHypotheses = pgTable(
+  'daydream_hypotheses',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** Stable identity, so the same question is not asked twice. */
+    hypothesisKey: text('hypothesis_key').notNull(),
+
+    metricA: text('metric_a').notNull(),
+    metricB: text('metric_b').notNull(),
+    lagDays: integer('lag_days').notNull().default(0),
+    /** 'positive' | 'negative' | 'either' — stated BEFORE the test, so a
+     *  contradicting result is a refutation rather than a shrug. */
+    direction: text('direction').notNull(),
+
+    /** The model's words. Never rendered as fact, only as a question asked. */
+    question: text('question').notNull(),
+    rationale: text('rationale').notNull(),
+
+    /** 'supported' | 'refuted' | 'wrong_direction' | 'underpowered' | null. */
+    verdict: text('verdict'),
+    /** Deterministic, from judge(). A model never writes this. */
+    summary: text('summary'),
+    r: doublePrecision('r'),
+    pValue: doublePrecision('p_value'),
+    qValue: doublePrecision('q_value'),
+    pairs: integer('pairs'),
+    /** m — how many tests the correction ran over. Without it the q-value on
+     *  this row cannot be interpreted, or audited later. */
+    familySize: integer('family_size'),
+    fdr: doublePrecision('fdr'),
+
+    /** Model tokens spent proposing. Codex reports no price, so this is the
+     *  only honest cost figure. */
+    proposalTokens: integer('proposal_tokens').notNull().default(0),
+
+    proposedAt: timestamp('proposed_at', { withTimezone: true }).notNull().defaultNow(),
+    testedAt: timestamp('tested_at', { withTimezone: true }),
+    /** Retested periodically as the window fills — an underpowered question
+     *  becomes answerable, and a supported one can stop holding. */
+    lastRetestedAt: timestamp('last_retested_at', { withTimezone: true }),
+    retestCount: integer('retest_count').notNull().default(0),
+
+    /** Owner verdict on the QUESTION, not the statistics: was this worth
+     *  asking? That is the signal that shapes what gets proposed next. */
+    feedback: text('feedback'),
+    feedbackAt: timestamp('feedback_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('daydream_hypotheses_subject_key_idx').on(t.subject, t.hypothesisKey),
+    index('daydream_hypotheses_verdict_idx').on(t.verdict),
+    index('daydream_hypotheses_proposed_idx').on(t.proposedAt),
+  ],
+);
+
+export type DaydreamHypothesis = typeof daydreamHypotheses.$inferSelect;
+export type NewDaydreamHypothesis = typeof daydreamHypotheses.$inferInsert;
+
 export type DaydreamDayFeature = typeof daydreamDayFeatures.$inferSelect;
 export type NewDaydreamDayFeature = typeof daydreamDayFeatures.$inferInsert;
 
