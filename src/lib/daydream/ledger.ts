@@ -161,6 +161,22 @@ export async function loadDetectorRows(): Promise<DetectorRow[]> {
   });
 }
 
+/** Codex budget utilisation — the owner's caps, and how close to them
+ *  daydreaming is actually running. Under-running is a finding too: the whole
+ *  instruction was to sit near the limit rather than far below it. */
+export async function loadBudget() {
+  try {
+    const { resolveDaydreamModel } = await import('./compose');
+    const { budgetStatus } = await import('./budget');
+    const model = await resolveDaydreamModel();
+    const status = await budgetStatus({ isCodexModel: model.provider === 'codex' });
+    return { ...status, modelId: model.modelId, provider: model.provider };
+  } catch (err) {
+    console.error('[daydream] budget read failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 /** The current delivery threshold, and what it is derived from. */
 export async function loadThreshold(): Promise<{ value: number; feedbackCount: number }> {
   const feedback = await loadFeedback();
@@ -276,13 +292,14 @@ export async function snoozeThought(thoughtId: string, days: number): Promise<vo
 
 /** Everything the page needs, in one round of queries. */
 export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts] = await Promise.all([
+  const [engine, detectors, threshold, thoughts, places, counts, budget] = await Promise.all([
     loadEngineState(),
     loadDetectorRows(),
     loadThreshold(),
     loadThoughts(),
     loadPlaces(),
     loadCounts(),
+    loadBudget(),
   ]);
-  return { engine, detectors, threshold, thoughts, places, counts };
+  return { engine, detectors, threshold, thoughts, places, counts, budget };
 }

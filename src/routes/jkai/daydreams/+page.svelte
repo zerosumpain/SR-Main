@@ -44,6 +44,7 @@
   const unnamed = $derived(places.filter((p) => !p.label && p.status === 'active'));
   const named = $derived(places.filter((p) => p.label && p.status === 'active'));
 
+  const budget = $derived(data.budget);
   const readyCount = $derived(detectors.filter((d) => d.readiness?.ready).length);
   const mutedCount = $derived(detectors.filter((d) => d.muted).length);
 
@@ -103,6 +104,40 @@
 
   async function vote(t: Thought, verdict: 'useful' | 'not_useful' | 'never_kind') {
     await post({ action: 'feedback', id: t.id, verdict }, `${t.id}:${verdict}`);
+  }
+
+  let backfilling = $state(false);
+  let backfillNote = $state<string | null>(null);
+
+  async function runBackfill() {
+    backfilling = true;
+    backfillNote = null;
+    try {
+      const res = await fetch('/api/daydream/backfill', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ days: 30 }),
+      });
+      const out = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        backfill?: { fixesKept: number; daysFetched: number; fixesSeen: number; entity: string | null };
+        places?: { created: number } | null;
+      };
+      if (!res.ok || out.error) {
+        backfillNote = out.error ?? 'backfill failed';
+      } else {
+        const b = out.backfill;
+        backfillNote =
+          `Pulled ${b?.daysFetched ?? 0} days from ${b?.entity ?? 'Home Assistant'}: ` +
+          `${b?.fixesSeen ?? 0} fixes seen, ${b?.fixesKept ?? 0} kept` +
+          (out.places ? `, ${out.places.created} new places` : '');
+        await invalidateAll();
+      }
+    } catch {
+      backfillNote = 'backfill failed';
+    } finally {
+      backfilling = false;
+    }
   }
 
   async function submitName(placeId: string) {
@@ -195,6 +230,70 @@
         Sources that failed last tick:
         {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
       </p>
+    {/if}
+  </section>
+
+  <!-- ── BUDGET ─────────────────────────────────────────────────────────
+       The owner's caps on what daydreaming may spend, and how close it is
+       actually running to them. Under-running is a finding as much as
+       over-running: the instruction was to sit near the limit, not far below
+       it, so the paced target is shown beside the spend. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Budget</span>
+      <span class="nm-sec-meta">
+        {#if budget}{budget.modelId}{:else}unavailable{/if}
+      </span>
+    </div>
+
+    {#if !budget}
+      <p class="sec-lede">Could not read the model or the usage meter.</p>
+    {:else if !budget.applies}
+      <p class="sec-lede">
+        Running on <strong>{budget.provider}</strong>, so the subscription caps do not apply —
+        this spend is cash, and nothing here limits it.
+      </p>
+    {:else}
+      <div class="stat-grid">
+        <div class="stat-tile">
+          <div class="stat-num">{budget.spentTodayWeeklyPct}<span class="of">/{budget.dailyCapPct}%</span></div>
+          <div class="stat-label">of weekly, today</div>
+          <div class="stat-sub">paced target {budget.pacedTargetPct}%</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-num">{budget.spentThisWindowPct}<span class="of">/{budget.fiveHourCapPct}%</span></div>
+          <div class="stat-label">of this 5h window</div>
+          <div class="stat-sub">{budget.remainingWindowPct}% left</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-num">{budget.plan.depth}</div>
+          <div class="stat-label">working depth</div>
+          <div class="stat-sub">
+            {budget.plan.maxCandidates} candidate{budget.plan.maxCandidates === 1 ? '' : 's'}{budget.plan.verify ? ', verified' : ''}
+          </div>
+        </div>
+      </div>
+      {#if budget.blocked}
+        <p class="warn-line">Paused: {budget.blockedReason}</p>
+      {:else if !budget.reachable}
+        <p class="warn-line">
+          Usage meter unreachable — working at minimum depth rather than stopping.
+        </p>
+      {/if}
+      <p class="sec-lede budget-note">
+        Spare budget buys more <strong>thinking</strong>, never more notifications: extra
+        headroom adds a verification pass and more candidates considered. What reaches your
+        phone is capped separately at {4} a day.
+      </p>
+    {/if}
+
+    <div class="thought-actions">
+      <button class="row-link" disabled={backfilling} onclick={runBackfill}>
+        {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
+      </button>
+    </div>
+    {#if backfillNote}
+      <p class="sec-lede">{backfillNote}</p>
     {/if}
   </section>
 
@@ -529,6 +628,9 @@
   .det-badge.off { color: var(--error, #c44); }
   .det-weight { font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .det-votes { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+
+  .budget-note { margin-top: 0.9rem; margin-bottom: 0; }
+  .budget-note strong { color: var(--text-primary); font-weight: 700; }
 
   .empty { padding: 1.5rem; text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-ghost); font-style: italic; border: 1px dashed var(--line-strong); line-height: 1.6; }
 

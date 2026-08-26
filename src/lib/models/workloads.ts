@@ -163,6 +163,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'Writes code that ships unattended, so it was pinned in 2026-07-29 to stop a chat-default change silently altering what authors it. Still a deliberate choice — just one you can now see and make.',
   },
   {
+    id: 'daydream',
+    scope: 'site',
+    label: 'Daydreaming',
+    blurb: 'Phrases what the daydream detectors found, and verifies it against the evidence.',
+    key: 'jkai.daydream.model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default rather than pinning, because the work is short-form phrasing under a hard evidence constraint rather than code authoring. Worth knowing before changing it: on a Codex model this role is capped at 10% of the weekly allowance per day and 50% of the current 5-hour window, enforced in $lib/daydream/budget.ts. Move it to an OpenRouter model and those caps stop applying — the spend becomes cash instead, and nothing here limits it.',
+  },
+  {
     id: 'doctor',
     scope: 'site',
     label: 'Workflow doctor',
