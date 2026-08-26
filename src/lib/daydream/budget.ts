@@ -38,7 +38,7 @@
 // error would have a background job quietly eating a quota the owner is trying
 // to use.
 
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, eq, gte, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions, heartbeatPulses } from '$lib/db/schema';
 import { LOCAL_TZ } from './types';
@@ -51,7 +51,18 @@ export const FIVE_HOUR_CAP_PCT = 50;
 export const FIVE_HOUR_SECONDS = 18_000;
 export const WEEKLY_SECONDS = 604_800;
 
-/** The heartbeat action whose pulses carry the spend record. */
+/**
+ * Every daydream action that can spend, and therefore whose pulses carry a
+ * spend record.
+ *
+ * A list rather than a single name because the offer extractor in merge 5 is a
+ * second LLM consumer. If the caps only summed the composer's pulses, the
+ * extractor would spend the same subscription outside them — an enforced-looking
+ * cap that enforces half of the spend.
+ */
+export const SPENDING_ACTIONS = ['daydream-compose', 'daydream-offers'] as const;
+
+/** @deprecated kept so an older pulse reader still resolves. */
 export const COMPOSE_ACTION = 'daydream-compose';
 
 /**
@@ -161,7 +172,7 @@ export async function spentSince(since: Date): Promise<QuotaSpend> {
     .select({ details: heartbeatPulses.details })
     .from(heartbeatPulses)
     .innerJoin(heartbeatActions, eq(heartbeatActions.id, heartbeatPulses.actionId))
-    .where(and(eq(heartbeatActions.name, COMPOSE_ACTION), gte(heartbeatPulses.ts, since)));
+    .where(and(inArray(heartbeatActions.name, [...SPENDING_ACTIONS]), gte(heartbeatPulses.ts, since)));
 
   let weeklyPct = 0;
   let fiveHourPct = 0;

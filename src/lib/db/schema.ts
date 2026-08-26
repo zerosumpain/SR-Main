@@ -4109,3 +4109,58 @@ export const daydreamThoughts = pgTable(
 
 export type DaydreamThought = typeof daydreamThoughts.$inferSelect;
 export type NewDaydreamThought = typeof daydreamThoughts.$inferInsert;
+
+/**
+ * Offers extracted from bulk email, so "you have a voucher for this shop" is a
+ * fact rather than a guess.
+ *
+ * Two-stage by design. A free, rule-based filter over subject lines picks the
+ * shortlist — 1,073 bulk emails in ninety days is far too many to hand a model,
+ * and most of them are newsletters. Only the shortlist is extracted, and that
+ * extraction spends against the same Codex caps as everything else here.
+ *
+ * `expiresAt` is the column that matters most. An EXPIRED voucher is worse than
+ * no voucher: it sends you into a shop for nothing. Null means the email did
+ * not state a date, which is a different thing from "does not expire" and is
+ * scored lower rather than assumed generous.
+ */
+export const daydreamOffers = pgTable(
+  'daydream_offers',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** The BRAND, as a person would say it — "Sports Direct", not
+     *  "email.sportsdirect.com". It has to match a place label to be useful. */
+    merchant: text('merchant').notNull(),
+    /** One line, as it would be read back. */
+    summary: text('summary').notNull(),
+    /** Discount code, when the email carried one. */
+    code: text('code'),
+    /** Null when the email stated no date — NOT a synonym for "no expiry". */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /** 'high' | 'medium' | 'low' — the extractor's own confidence. Anything
+     *  below high is never used to interrupt, only to fill the page. */
+    confidence: text('confidence').notNull().default('medium'),
+    /** The intel note this came from, so a thought can cite it. */
+    noteId: text('note_id'),
+    /** Deep link back to the message in Gmail. */
+    sourceUrl: text('source_url'),
+    senderDomain: text('sender_domain'),
+    /** merchant + code + expiry day. Stops the same voucher landing twice when
+     *  a merchant re-sends it, which they all do. */
+    dedupeKey: text('dedupe_key').notNull(),
+    /** 'active' | 'expired' | 'dismissed' */
+    status: text('status').notNull().default('active'),
+    observedAt: timestamp('observed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_offers_dedupe_idx').on(t.dedupeKey),
+    index('daydream_offers_status_idx').on(t.status),
+    index('daydream_offers_merchant_idx').on(t.merchant),
+    index('daydream_offers_expires_idx').on(t.expiresAt),
+  ],
+);
+
+export type DaydreamOffer = typeof daydreamOffers.$inferSelect;
+export type NewDaydreamOffer = typeof daydreamOffers.$inferInsert;

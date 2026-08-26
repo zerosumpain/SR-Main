@@ -82,6 +82,13 @@ export const HOOK_BYPASSES: string[] = [
   // Read-only retrieval, POST only. Reached from a build by bash via
   // scripts/codegraph-query.mjs, and by the owner from chat and the UI.
   '/api/jkai/codegraph/query', // CLAUDE_CHANGELOG_SECRET or owner session
+  // Pulls a month of Home Assistant history into the daydream trail. POST only,
+  // Bearer DAYDREAM_MAINTENANCE_SECRET, and it FAILS CLOSED when that is unset:
+  // no secret means no bearer can ever match, so an unset variable leaves the
+  // route owner-session-only rather than open. Sibling `/api/daydream/thoughts`
+  // reads the owner's movements and is deliberately NOT here — this is an exact
+  // path, not a prefix.
+  '/api/daydream/backfill', // POST only · DAYDREAM_MAINTENANCE_SECRET or owner session
 ];
 
 /**
@@ -137,6 +144,7 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/dfe-data-strategy': 'KEYSTONE_INTEL_SECRET',
   '/api/claude-changelog': 'POST only · ingest secret',
   '/api/claude-changelog/ingest': 'POST only · Bearer CLAUDE_CHANGELOG_SECRET (fails closed)',
+  '/api/daydream/backfill': 'POST only · Bearer DAYDREAM_MAINTENANCE_SECRET or owner session (fails closed)',
   '/api/releases': 'POST only · RELEASE_LOG_SECRET',
   '/api/whatsapp/inbound': 'POST only · Bearer WHATSAPP_INBOUND_SECRET',
   '/api/health/workflow-engine': 'loopback only · watchdog probe',
