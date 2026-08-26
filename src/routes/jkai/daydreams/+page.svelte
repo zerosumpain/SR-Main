@@ -343,6 +343,7 @@
     pairs: number | null;
     familySize: number | null;
     retestCount: number;
+    retestInDays: number | null;
     feedback: string | null;
     proposedAt: string;
     testedAt: string | null;
@@ -384,6 +385,31 @@
   async function rateQ(row: BoardRow, verdict: 'useful' | 'not_useful') {
     const ok = await post({ action: 'rate_question', id: row.id, verdict }, `q:${row.id}`);
     if (ok) board = board.map((b) => (b.id === row.id ? { ...b, feedback: verdict } : b));
+  }
+
+  /**
+   * What a thought should actually say, now.
+   *
+   * A stored title is frozen at detect time. Ten rows in production read "What
+   * is this place you keep going to?" about places that had since been named,
+   * and the two that were genuinely open named nothing at all — one of them
+   * had "Hush Digital" sitting in its suggestion the whole time. Neither is
+   * answerable as written, which is the entire complaint.
+   *
+   * So the headline is resolved from the place as it stands: its name if it has
+   * one, the geocoder's guess if it does not, and only then the stored title.
+   */
+  function headline(t: Thought): string {
+    if (t.placeLabel) return t.placeLabel;
+    if (t.placeSuggested) return `Is this ${t.placeSuggested}?`;
+    if (t.placeAddress) return `The place on ${t.placeAddress}`;
+    return t.title;
+  }
+
+  /** A question about a place that now has a name has been answered, whatever
+   *  the row's status says. Saying so stops it reading as still open. */
+  function isAnswered(t: Thought): boolean {
+    return Boolean(t.placeLabel) && t.kind.startsWith('unknown');
   }
 
   /** Statuses that mean "this reached him". Only these can be rated. */
@@ -738,6 +764,15 @@
                   <span class="hyp-badge">{VERDICT_LABEL[q.verdict] ?? q.verdict}</span>
                   <span class="hyp-sum">{q.summary}</span>
                 </div>
+                <!-- Nothing is filtered by verdict when choosing what to
+                     retest, so every answer here is provisional. Saying when it
+                     is next checked is what stops "nothing there" reading as a
+                     closed case. -->
+                {#if q.retestInDays !== null}
+                  <div class="hyp-family mono">
+                    {q.retestInDays === 0 ? 'due to be checked again' : `checked again in ${q.retestInDays}d`}
+                  </div>
+                {/if}
                 {#if q.familySize}
                   <!-- The family size is shown because a q-value cannot be read
                        without it: q over 4 tests and q over 400 are not the
@@ -1132,12 +1167,27 @@
           <article class="thought st-{t.status}">
             <div class="thought-hd">
               <button class="thought-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
-                {t.title}
+                {headline(t)}
               </button>
-              <span class="thought-pill">{t.status}</span>
+              {#if isAnswered(t)}
+                <span class="thought-pill answered">answered</span>
+              {:else}
+                <span class="thought-pill">{t.status}</span>
+              {/if}
             </div>
 
-            <p class="thought-why">{t.explanation}</p>
+            <!-- A question about a place that now has a name is finished
+                 business, and saying so stops it reading as still open. The
+                 stored title is kept beneath, because it is what was actually
+                 asked at the time. -->
+            {#if isAnswered(t)}
+              <p class="thought-answered">
+                You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
+                It asked: “{t.title}”
+              </p>
+            {:else}
+              <p class="thought-why">{t.explanation}</p>
+            {/if}
 
             <div class="thought-meta">
               <span class="mono">{t.kind}</span>
@@ -1145,9 +1195,13 @@
               <span class="mono">score {t.score}</span>
               <span class="sep">·</span>
               <span>{ago(t.createdAt)}</span>
-              {#if t.placeLabel}
+              {#if !t.placeLabel && t.placeAddress}
                 <span class="sep">·</span>
-                <span class="place-tag">{t.placeLabel}</span>
+                <span class="place-tag">{t.placeAddress}</span>
+              {/if}
+              {#if !t.placeLabel && t.placeVisits}
+                <span class="sep">·</span>
+                <span class="mono">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
               {/if}
               {#if t.suppressedReason}
                 <span class="sep">·</span>
@@ -1510,6 +1564,13 @@
     margin: 0.4rem 0 0; font-family: var(--font-mono);
     font-size: var(--fs-label-xs); color: var(--accent);
   }
+
+  .thought-pill.answered { color: var(--accent); border-color: var(--accent); }
+  .thought-answered {
+    margin: 0.3rem 0 0; font-size: var(--fs-label-xs); line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .thought-answered strong { color: var(--text-primary); }
 
   /* Yesterday, and steering */
   .digest {

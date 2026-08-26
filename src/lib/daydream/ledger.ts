@@ -40,6 +40,11 @@ export interface LedgerThought {
    *  the markup so a row can say "DEC" instead of a uuid — and so a question
    *  about a place that has since been named is obvious on sight. */
   placeLabel: string | null;
+  /** The geocoder's guess, for a place still unnamed — so a question on the
+   *  ledger identifies somewhere even before it has been answered. */
+  placeSuggested: string | null;
+  placeAddress: string | null;
+  placeVisits: number | null;
   score: number;
   components: Record<string, number>;
   evidence: Array<{ kind: string; id: string; note?: string }>;
@@ -235,6 +240,9 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
       evidence: daydreamThoughts.evidence,
       placeId: daydreamThoughts.placeId,
       placeLabel: daydreamPlaces.label,
+      placeSuggested: daydreamPlaces.suggestedLabel,
+      placeAddress: daydreamPlaces.suggestedAddress,
+      placeVisits: daydreamPlaces.visitCount,
       status: daydreamThoughts.status,
       suppressedReason: daydreamThoughts.suppressedReason,
       channel: daydreamThoughts.channel,
@@ -259,6 +267,9 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
     placeLabel: r.placeLabel,
+    placeSuggested: r.placeSuggested,
+    placeAddress: r.placeAddress,
+    placeVisits: r.placeVisits,
     score: r.score,
     components: r.components,
     evidence: r.evidence,
