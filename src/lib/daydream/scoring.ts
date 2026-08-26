@@ -44,10 +44,45 @@ export const MAX_WEIGHT = 1.3;
 
 export type FeedbackVerdict = 'useful' | 'not_useful' | 'never_kind';
 
+/** Where a verdict came from. Kept alongside the verdict because the two are
+ *  different kinds of evidence and averaging them would lose the distinction. */
+export type FeedbackSource = 'explicit' | 'triage' | 'action';
+
+/**
+ * How much a verdict counts, by where it came from.
+ *
+ * `explicit` is the owner reading one thing and ruling on it — the strongest
+ * signal there is, and the unit everything else is priced against.
+ *
+ * `triage` is a verdict given in a sorting session, thirty at a time. Real, and
+ * the only realistic way out of a cold start that otherwise needs 25 responses
+ * at four interruptions a day. Discounted a little, because attention spread
+ * over thirty cards is not attention spent on one.
+ *
+ * `action` is inferred: he named the place the thought asked about. Good
+ * evidence, and deliberately the weakest, because he was acting on the subject
+ * rather than ruling on the suggestion — the objection `confirmPlace` has
+ * always raised against recording it at all. At 0.4 it can move a threshold
+ * over time and cannot, on its own, make a kind look loved.
+ */
+export const SOURCE_WEIGHTS: Record<FeedbackSource, number> = {
+  explicit: 1,
+  triage: 0.7,
+  action: 0.4,
+};
+
+export function sourceWeight(source: FeedbackSource | null | undefined): number {
+  // An unlabelled row is an explicit tap from before the column existed.
+  if (!source) return SOURCE_WEIGHTS.explicit;
+  return SOURCE_WEIGHTS[source] ?? SOURCE_WEIGHTS.explicit;
+}
+
 export interface FeedbackRow {
   kind: string;
   feedback: FeedbackVerdict;
   feedbackAt: Date;
+  /** Null on rows written before the column existed — treated as explicit. */
+  feedbackSource?: FeedbackSource | null;
   /** Where it landed, when it landed there — for the per-context weight. */
   placeId?: string | null;
   hourBand?: string | null;
@@ -82,7 +117,10 @@ export function tallyFeedback(
     // `never_kind` is an absolute mute handled elsewhere; counting it here too
     // would punish the kind twice for one tap.
     if (r.feedback !== 'useful' && r.feedback !== 'not_useful') continue;
-    const w = decayFactor(r.feedbackAt, now, halfLifeDays);
+    // Two independent discounts, multiplied: how old the verdict is, and how
+    // directly it was given. An inferred action from last week should not
+    // outweigh something he actually said this morning.
+    const w = decayFactor(r.feedbackAt, now, halfLifeDays) * sourceWeight(r.feedbackSource);
     if (r.feedback === 'useful') useful += w;
     else notUseful += w;
     n++;

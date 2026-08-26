@@ -12,7 +12,7 @@
 // key genuinely differs by kind: asking twice about the same place is annoying,
 // while a free-window suggestion should recur on a new day.
 
-import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
@@ -23,6 +23,7 @@ import {
   kindWeight,
   tallyFeedback,
   type FeedbackRow,
+  type FeedbackSource,
 } from './scoring';
 import type { Candidate } from './snapshot-types';
 
@@ -71,6 +72,7 @@ export async function loadFeedback(sinceDays = 180): Promise<FeedbackRow[]> {
       feedback: daydreamThoughts.feedback,
       feedbackAt: daydreamThoughts.feedbackAt,
       placeId: daydreamThoughts.placeId,
+      feedbackSource: daydreamThoughts.feedbackSource,
     })
     .from(daydreamThoughts)
     .where(and(isNotNull(daydreamThoughts.feedback), gte(daydreamThoughts.feedbackAt, since)));
@@ -82,6 +84,7 @@ export async function loadFeedback(sinceDays = 180): Promise<FeedbackRow[]> {
       feedback: r.feedback as FeedbackRow['feedback'],
       feedbackAt: r.feedbackAt as Date,
       placeId: r.placeId,
+      feedbackSource: r.feedbackSource as FeedbackRow['feedbackSource'],
     }));
 }
 
@@ -178,6 +181,11 @@ export async function persistCandidates(
           status,
           suppressedReason,
           runId: opts.runId,
+          // How many ticks have re-proposed this exact thing. The row is still
+          // one standing proposal rather than 144 a day, but the count survives
+          // — which is what lets the triage deck lead with the things that keep
+          // almost being said instead of whatever happened to be newest.
+          recurrenceCount: sql`${daydreamThoughts.recurrenceCount} + 1`,
           updatedAt: now,
         })
         .where(eq(daydreamThoughts.id, found.id));
@@ -243,12 +251,14 @@ export async function recordFeedback(
   thoughtId: string,
   verdict: 'useful' | 'not_useful' | 'never_kind',
   note?: string,
+  source: FeedbackSource = 'explicit',
 ): Promise<{ kind: string; muted: boolean }> {
   const now = new Date();
   const [row] = await db
     .update(daydreamThoughts)
     .set({
       feedback: verdict,
+      feedbackSource: source,
       feedbackNote: note?.slice(0, 500) ?? null,
       feedbackAt: now,
       status: verdict === 'useful' ? 'actioned' : 'dismissed',
@@ -268,6 +278,72 @@ export async function recordFeedback(
   }
 
   return { kind: row.kind, muted: false };
+}
+
+/**
+ * The sorting deck: things it nearly said, offered thirty at a time.
+ *
+ * The cold start is otherwise unreachable. `coldStartThreshold` needs about 25
+ * responses to fall from 0.75 to its floor; `MAX_PER_DAY` is 4, and with no
+ * push subscriber almost nothing is delivered at all — so at the observed rate
+ * that number is never reached and every ranking mechanism downstream is a
+ * random walk on an empty ledger.
+ *
+ * Suppressed thoughts are the natural material. They were judged not worth an
+ * interruption, which is a guess the system made with no evidence, and they are
+ * exactly the guesses worth checking. Rating one here costs nothing, because a
+ * page he opened is attention already offered.
+ *
+ * Ordered by recurrence first: something proposed forty times and never said is
+ * a far better question than something noticed once. That is the counterfactual
+ * the recurrence counter exists to preserve.
+ */
+export async function loadTriageDeck(limit = 30) {
+  return db
+    .select({
+      id: daydreamThoughts.id,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      explanation: daydreamThoughts.explanation,
+      narrative: daydreamThoughts.narrative,
+      verified: daydreamThoughts.verified,
+      score: daydreamThoughts.score,
+      recurrenceCount: daydreamThoughts.recurrenceCount,
+      suppressedReason: daydreamThoughts.suppressedReason,
+      createdAt: daydreamThoughts.createdAt,
+    })
+    .from(daydreamThoughts)
+    .where(and(eq(daydreamThoughts.status, 'suppressed'), isNull(daydreamThoughts.feedback)))
+    .orderBy(desc(daydreamThoughts.recurrenceCount), desc(daydreamThoughts.score))
+    .limit(limit);
+}
+
+/**
+ * Rule on a batch from the deck.
+ *
+ * Each verdict is written with `source: 'triage'` so it is worth 0.7 of a
+ * considered one — real signal, priced for the attention it actually had.
+ * Failures are collected rather than thrown: one bad id must not discard
+ * twenty-nine answers the owner already gave.
+ */
+export async function recordTriageBatch(
+  items: Array<{ id: string; verdict: 'useful' | 'not_useful' | 'never_kind' }>,
+): Promise<{ recorded: number; muted: string[]; failed: Array<{ id: string; error: string }> }> {
+  const muted: string[] = [];
+  const failed: Array<{ id: string; error: string }> = [];
+  let recorded = 0;
+
+  for (const item of items) {
+    try {
+      const res = await recordFeedback(item.id, item.verdict, undefined, 'triage');
+      recorded++;
+      if (res.muted) muted.push(res.kind);
+    } catch (err) {
+      failed.push({ id: item.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  return { recorded, muted, failed };
 }
 
 /** Counts by status, for the ledger page header. */

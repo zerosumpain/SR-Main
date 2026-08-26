@@ -182,6 +182,99 @@
     }
   }
 
+  // ── The sorting deck ──────────────────────────────────────────────────────
+  // The cold start is otherwise unreachable: the threshold needs ~25 responses
+  // to fall from 0.75 to its floor, the daily cap is 4, and with no push
+  // subscriber almost nothing is delivered at all. One sitting here produces
+  // more signal than six weeks of notifications, and costs no interruptions.
+  type DeckCard = {
+    id: string;
+    kind: string;
+    title: string;
+    explanation: string;
+    narrative: string | null;
+    verified: boolean | null;
+    score: number;
+    recurrenceCount: number;
+    suppressedReason: string | null;
+  };
+  type Verdict = 'useful' | 'not_useful' | 'never_kind';
+
+  let deckOpen = $state(false);
+  let deckLoading = $state(false);
+  let deckSaving = $state(false);
+  let deckError = $state<string | null>(null);
+  let deck = $state<DeckCard[]>([]);
+  let verdicts = $state<Record<string, Verdict>>({});
+  let deckDone = $state<{ recorded: number; failed: number } | null>(null);
+
+  const verdictCount = $derived(Object.keys(verdicts).length);
+
+  async function openDeck() {
+    deckOpen = true;
+    deckDone = null;
+    deckError = null;
+    deckLoading = true;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'triage_deck', limit: 30 }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { deck?: DeckCard[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      deck = out.deck ?? [];
+      verdicts = {};
+    } catch (err) {
+      deckError = err instanceof Error ? err.message : String(err);
+      deck = [];
+    } finally {
+      deckLoading = false;
+    }
+  }
+
+  /** Tapping the same verdict again clears it — a mis-tap costs one tap, not a
+   *  wrong vote he cannot take back. */
+  function setVerdict(id: string, v: Verdict) {
+    if (verdicts[id] === v) {
+      const { [id]: _dropped, ...rest } = verdicts;
+      verdicts = rest;
+    } else {
+      verdicts = { ...verdicts, [id]: v };
+    }
+  }
+
+  async function saveDeck() {
+    const payload = Object.entries(verdicts).map(([id, verdict]) => ({ id, verdict }));
+    if (payload.length === 0) return;
+    deckSaving = true;
+    deckError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'triage_batch', verdicts: payload }),
+      });
+      const out = (await res.json().catch(() => ({}))) as {
+        recorded?: number;
+        failed?: { id: string }[];
+        error?: string;
+      };
+      if (out.error) throw new Error(out.error);
+      deckDone = { recorded: out.recorded ?? 0, failed: (out.failed ?? []).length };
+      const failedIds = new Set((out.failed ?? []).map((f) => f.id));
+      deck = deck.filter((c) => failedIds.has(c.id) || !(c.id in verdicts));
+      const remaining: Record<string, Verdict> = {};
+      for (const [k, v] of Object.entries(verdicts)) if (failedIds.has(k)) remaining[k] = v;
+      verdicts = remaining;
+      await invalidateAll();
+    } catch (err) {
+      deckError = err instanceof Error ? err.message : String(err);
+    } finally {
+      deckSaving = false;
+    }
+  }
+
   /** Statuses that mean "this reached him". Only these can be rated. */
   const SHOWN_STATUSES = ['delivered', 'seen', 'actioned'];
 
@@ -229,6 +322,11 @@
   const proposedRules = $derived(rules.filter((r) => r.status === 'proposed'));
   const activeRules = $derived(rules.filter((r) => r.status === 'active'));
   const readyCount = $derived(detectors.filter((d) => d.readiness?.ready).length);
+  /** `counts.byStatus` is `{}` on the load-error path, so it is read through a
+   *  lookup rather than a property access. */
+  const suppressedCount = $derived(
+    (counts.byStatus as Record<string, number>)?.suppressed ?? 0,
+  );
   const mutedCount = $derived(detectors.filter((d) => d.muted).length);
 
   /** Has the engine ever actually run? Distinguishes "quiet" from "not wired". */
@@ -421,6 +519,91 @@
        actually running to them. Under-running is a finding as much as
        over-running: the instruction was to sit near the limit, not far below
        it, so the paced target is shown beside the spend. -->
+  <!-- The sorting deck. Everything about ranking is a random walk until the
+       ledger has feedback in it, and at four interruptions a day the 25
+       responses the threshold needs are never collected. One sitting closes
+       that gap and costs no interruption budget at all. -->
+  {#if suppressedCount}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">What it nearly said</span>
+        <span class="nm-sec-meta">{suppressedCount} held back</span>
+      </div>
+      <p class="sec-lede">
+        These scored below the bar, so nothing was sent. That bar was set with no
+        evidence — rating a few here is what moves it. Nothing you do in this
+        section interrupts you, and none of it counts as a notification.
+      </p>
+
+      <div class="session-bar">
+        {#if !deckOpen}
+          <button class="session-cta" onclick={openDeck}>Sort through them</button>
+          <span class="session-hint">Thirty at a time, most-repeated first.</span>
+        {:else}
+          <button class="row-link" onclick={() => { deckOpen = false; }}>Close</button>
+          {#if verdictCount}
+            <button class="session-cta" disabled={deckSaving} onclick={saveDeck}>
+              {deckSaving ? 'Saving…' : `Save ${verdictCount} verdict${verdictCount === 1 ? '' : 's'}`}
+            </button>
+          {/if}
+        {/if}
+      </div>
+
+      {#if deckDone}
+        <p class="session-done">
+          Recorded {deckDone.recorded}{deckDone.failed ? `, ${deckDone.failed} failed` : ''}.
+          Counted at 0.7 of a considered verdict.
+        </p>
+      {/if}
+      {#if deckError}<p class="nm-sec-error">{deckError}</p>{/if}
+
+      {#if deckOpen}
+        {#if deckLoading}
+          <p class="sec-lede">Loading…</p>
+        {:else if deck.length === 0}
+          <p class="sec-lede">Nothing left to sort.</p>
+        {:else}
+          <div class="session-list">
+            {#each deck as c (c.id)}
+              <div class="deck-card" class:ruled={verdicts[c.id]}>
+                <div class="deck-body">
+                  <div class="deck-hd">
+                    <span class="mono deck-kind">{c.kind}</span>
+                    <span class="sep">·</span>
+                    <span class="mono">score {c.score}</span>
+                    {#if c.recurrenceCount > 1}
+                      <span class="sep">·</span>
+                      <span class="mono deck-rec">proposed {c.recurrenceCount}×</span>
+                    {/if}
+                  </div>
+                  <div class="deck-title">{c.title}</div>
+                  <div class="deck-expl">{c.narrative || c.explanation}</div>
+                </div>
+                <div class="deck-actions">
+                  <button
+                    class="row-link"
+                    class:picked={verdicts[c.id] === 'useful'}
+                    onclick={() => setVerdict(c.id, 'useful')}
+                  >Useful</button>
+                  <button
+                    class="row-link"
+                    class:picked={verdicts[c.id] === 'not_useful'}
+                    onclick={() => setVerdict(c.id, 'not_useful')}
+                  >Not useful</button>
+                  <button
+                    class="row-link danger"
+                    class:picked={verdicts[c.id] === 'never_kind'}
+                    onclick={() => setVerdict(c.id, 'never_kind')}
+                  >Never this kind</button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </section>
+  {/if}
+
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Budget</span>
@@ -1079,6 +1262,27 @@
   .rate-cue {
     margin: 0.4rem 0 0; font-family: var(--font-mono);
     font-size: var(--fs-label-xs); color: var(--accent);
+  }
+
+  /* The sorting deck */
+  .deck-card {
+    display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+    gap: 0.6rem 1rem; padding: 0.6rem 0.75rem;
+    border: 1px solid var(--line-hair); background: var(--surface-sunken);
+    border-left: 3px solid transparent;
+  }
+  .deck-card.ruled { border-left-color: var(--accent); }
+  .deck-body { min-width: 0; flex: 1 1 22rem; display: flex; flex-direction: column; gap: 0.2rem; }
+  .deck-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .deck-kind { color: var(--text-secondary); }
+  /* Something proposed forty times and never said is a better question than
+     something noticed once, so the count is the thing that stands out. */
+  .deck-rec { color: var(--accent); }
+  .deck-title { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); }
+  .deck-expl { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 68ch; }
+  .deck-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .deck-actions .row-link.picked {
+    background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
   }
 
   /* Model phrasing, and how much of it to trust */
