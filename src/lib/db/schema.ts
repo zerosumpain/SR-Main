@@ -4360,6 +4360,109 @@ export const daydreamSpend = pgTable(
   ],
 );
 
+/**
+ * A durable queue of things the assistant is still chewing on.
+ *
+ * The difference from a hypothesis: a hypothesis is one testable claim,
+ * proposed and answered in a single tick and then finished. A LEAD is a line of
+ * enquiry that outlives a tick — "sleep and going out seem tangled up, work out
+ * how" — which spawns hypotheses, accumulates evidence across days, and is
+ * eventually either paid off or abandoned.
+ *
+ * `score` is what makes a frontier rather than a list. It is recomputed from
+ * the lead's own results — how many of its hypotheses held, how many came back
+ * empty — so effort follows what is paying off, and a line that has produced
+ * nothing for several rounds falls to the bottom on its own arithmetic rather
+ * than on a constant somebody chose.
+ *
+ * NOTE ON THE THRESHOLDS: `abandonAfterBarrenRounds` and the score weights are
+ * deliberately stored per-row and left at conservative defaults rather than
+ * tuned. The whole point of this table is to stop constants deciding what is
+ * interesting, and tuning them before the hypothesis engine has produced a
+ * month of real verdicts would be inventing exactly the numbers this feature
+ * exists to replace. They are set from measured behaviour, not guessed.
+ */
+export const daydreamLeads = pgTable(
+  'daydream_leads',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** Stable identity so the same line of enquiry is not opened twice. */
+    leadKey: text('lead_key').notNull(),
+    /** What it is trying to find out, in John's terms. */
+    title: text('title').notNull(),
+    /** The model's reasoning for opening it. Never rendered as fact. */
+    rationale: text('rationale').notNull(),
+    /** Metric names this lead is allowed to range over — its own allow-list,
+     *  narrower than the global one, so a lead cannot quietly become a sweep. */
+    metrics: jsonb('metrics').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+
+    /** 'open' | 'paid_off' | 'abandoned' | 'parked'. */
+    status: text('status').notNull().default('open'),
+    /** Recomputed each round from this lead's own results. */
+    score: doublePrecision('score').notNull().default(0.5),
+    /** Every input to `score`, named. Never show an unexplained number. */
+    scoreComponents: jsonb('score_components').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+
+    roundsRun: integer('rounds_run').notNull().default(0),
+    /** Consecutive rounds that produced no supported hypothesis. */
+    barrenRounds: integer('barren_rounds').notNull().default(0),
+    hypothesesSpawned: integer('hypotheses_spawned').notNull().default(0),
+    hypothesesHeld: integer('hypotheses_held').notNull().default(0),
+
+    /** Per-row so it can be tuned from evidence later without a migration. */
+    abandonAfterBarrenRounds: integer('abandon_after_barren_rounds').notNull().default(4),
+
+    /** Owner steer that opened this, when one did. */
+    steerId: text('steer_id'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    lastRoundAt: timestamp('last_round_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('daydream_leads_subject_key_idx').on(t.subject, t.leadKey),
+    index('daydream_leads_status_score_idx').on(t.status, t.score),
+  ],
+);
+
+export type DaydreamLead = typeof daydreamLeads.$inferSelect;
+
+/**
+ * One step of thinking, kept.
+ *
+ * The reviewable trace. Without it "the model explored during idle time" is an
+ * unfalsifiable claim and a token bill; with it there is a record of what it
+ * looked at, what it decided, and what that cost — which is the only way an
+ * exploration loop can be audited rather than trusted.
+ *
+ * Deliberately append-only and pruned by age, not by interest. Keeping only
+ * the steps that led somewhere would make the trace agree with the conclusion.
+ */
+export const daydreamLeadSteps = pgTable(
+  'daydream_lead_steps',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    leadId: text('lead_id').notNull(),
+    round: integer('round').notNull(),
+    /** 'plan' | 'spawn' | 'read' | 'judge' | 'prune'. */
+    kind: text('kind').notNull(),
+    /** What happened, in one deterministic line. */
+    note: text('note').notNull(),
+    /** Structured detail — hypothesis ids, verdicts, the numbers behind a
+     *  pruning decision. */
+    detail: jsonb('detail').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    tokens: integer('tokens').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_lead_steps_lead_idx').on(t.leadId, t.round),
+    index('daydream_lead_steps_created_idx').on(t.createdAt),
+  ],
+);
+
+export type DaydreamLeadStep = typeof daydreamLeadSteps.$inferSelect;
+
 export type DaydreamSpend = typeof daydreamSpend.$inferSelect;
 
 export type DaydreamDigest = typeof daydreamDigests.$inferSelect;
