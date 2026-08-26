@@ -38,10 +38,19 @@ function place(over: Partial<PlaceSummary> = {}): PlaceSummary {
   };
 }
 
-/** A snapshot with good coverage: one point every 10 minutes for `hours`. */
-function trailOf(hours: number, over: Partial<TrailPoint> = {}): TrailPoint[] {
+/**
+ * A well-observed trail: one point every `stepMins` for `hours`.
+ *
+ * The step defaults to the REAL poll cadence (2 minutes), not a round number.
+ * It used to be 10, and every coverage-gated test passed regardless — because
+ * the coverage divisor said 10 minutes while the activity ran every 2, so a
+ * tenth of the expected density still computed as fully covered. A fixture that
+ * only looks well-observed against a broken divisor is a fixture that tests
+ * nothing.
+ */
+function trailOf(hours: number, over: Partial<TrailPoint> = {}, stepMins = 2): TrailPoint[] {
   const out: TrailPoint[] = [];
-  for (let m = hours * 60; m >= 0; m -= 10) {
+  for (let m = hours * 60; m >= 0; m -= stepMins) {
     out.push({
       id: m,
       ts: ago(m),
