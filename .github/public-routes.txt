@@ -11,17 +11,6 @@
 # If CI fails on this file: a route was added under a public prefix. Confirm it
 # is MEANT to be anonymous — and if it self-gates, that the gate is actually
 # called — then run `npm run gate:public-routes -- --write` and commit.
-/api/admin/hermes/callefficiency
-/api/admin/hermes/cron
-/api/admin/hermes/models
-/api/admin/hermes/service
-/api/admin/hermes/sessions
-/api/admin/hermes/sessions/[id]
-/api/admin/hermes/status
-/api/admin/hermes/telemetry
-/api/admin/hermes/toolaudit
-/api/admin/hermes/whatsapp
-/api/admin/hermes/whatsapp/pair
 /api/admin/security
 /api/agent/actions
 /api/agent/activity
@@ -56,7 +45,6 @@
 /api/jkai/intel/backfill
 /api/jkai/intel/clusters/recalculate
 /api/jkai/intel/source-facets
-/api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
 /api/jkai/studio
 /api/jkai/studio/image

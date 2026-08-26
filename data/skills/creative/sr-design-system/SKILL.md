@@ -5,12 +5,12 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [design-system, branding, strangeramblings]
-    applies_to: [register_hermes_build, build_tweak]
+    applies_to: [register_chat_build, build_tweak]
 ---
 
 # Strange Ramblings Design System
 
-**Rule:** When building any static HTML app for strangeramblings.com (via `register_hermes_build` or `build_tweak`), apply this design system by default. Only deviate if the user explicitly asks for something different.
+**Rule:** When building any static HTML app for strangeramblings.com (via `register_chat_build` or `build_tweak`), apply this design system by default. Only deviate if the user explicitly asks for something different.
 
 ## Fonts (Google Fonts CDN)
 

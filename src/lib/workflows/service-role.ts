@@ -63,7 +63,7 @@ export function runsService(
  * Separate from `runsService('whatsapp')` in intent, and the reason the
  * delegation switch cannot simply read an environment variable: a WhatsApp
  * worker deployed alongside the web app reads the SAME EnvironmentFile, so it
- * would see `WHATSAPP_HERMES_BRIDGE_URL` set and conclude that it should
+ * would see the bridge URL set and conclude that it should
  * forward its sends — to itself.
  */
 export function ownsWhatsAppSession(env: NodeJS.ProcessEnv = process.env): boolean {

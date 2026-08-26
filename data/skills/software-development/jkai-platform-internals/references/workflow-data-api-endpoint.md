@@ -57,7 +57,7 @@ Build a single `index.html` file that:
 - Uses CDN libraries (Leaflet for maps, Chart.js for charts)
 - Applies the SR design system tokens (Archivo Black, DM Sans, JetBrains Mono, cream/brown palette)
 
-Register via `register_hermes_build` → publish via `build_control(action=publish)` → served at `/projects/<slug>/`.
+Register via `register_chat_build` → publish via `build_control(action=publish)` → served at `/projects/<slug>/`.
 
 The dashboard lives at a different path than the API, but since both are on `strangeramblings.com`, the relative `/api/...` path works without CORS issues.
 
@@ -80,4 +80,4 @@ The SQL migration and code deploy are independent — either can go first, but b
 - **Data store values are JSONB** — must be parsed; the schema column is `value` (not `data`)
 - **Workflow data store is per-workflow** — must filter by `workflowId`
 - **VPS data vs homeserv data** — the API endpoint on the VPS reads the VPS database. If the workflow only runs on VPS, only the VPS DB has data. Test with `curl` against the VPS, not localhost on homeserv.
-- **register_hermes_build runs the builder pipeline** — for pre-built dashboards this is unnecessary overhead, but it's the only way to get a `/jkai/builds/<id>` gallery page. Use `publish_page` if the gallery isn't needed.
+- **register_chat_build runs the builder pipeline** — for pre-built dashboards this is unnecessary overhead, but it's the only way to get a `/jkai/builds/<id>` gallery page. Use `publish_page` if the gallery isn't needed.

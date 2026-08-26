@@ -113,7 +113,7 @@ export function outcomeNote(bucket: BuildBucket): string | null {
   if (bucket === "capped")
     return "Stopped on its budget, not because the work was done";
   if (bucket === "stopped") return "Stopped by hand";
-  if (bucket === "registered") return "Filed by Hermes — the builder never ran";
+  if (bucket === "registered") return "Filed from chat — the builder never ran";
   if (bucket === "unknown") return "Unrecognised status";
   return null;
 }

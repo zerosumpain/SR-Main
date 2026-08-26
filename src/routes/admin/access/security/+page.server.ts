@@ -11,6 +11,7 @@ import {
   type HostPosture,
 } from '$lib/server/security-posture';
 import { homeservBase } from '$lib/server/homeserv-remote';
+import { serviceBridgeSecret } from '$lib/config/service-secret';
 
 /**
  * Reads the posture of this host directly, and of the peer over the same
@@ -26,12 +27,12 @@ import { homeservBase } from '$lib/server/homeserv-remote';
 async function peerPosture(fetchFn: typeof fetch): Promise<HostPosture | null> {
   const base = IS_HOMESERV ? env.VPS_ADMIN_SERVICE_URL : homeservBase();
   if (!base) return null;
-  const secret = env.HERMES_BRIDGE_SECRET;
+  const secret = serviceBridgeSecret();
   if (!secret) {
     return {
       host: 'peer',
       reachable: false,
-      error: 'HERMES_BRIDGE_SECRET not configured on this host',
+      error: 'SERVICE_BRIDGE_SECRET not configured on this host',
       sshd: null,
       fail2ban: null,
       exposure: null,

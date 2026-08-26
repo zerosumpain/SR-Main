@@ -4,6 +4,7 @@
 // refresh, a HEAD on an API, a freshness check against the table the data
 // actually lands in. Where a live call is not affordable (a paid search API) the
 // probe says so via `live: false` rather than implying it verified something.
+import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import type { ConnectorReport, ConnectorStatus, ConnectorTier } from './types';
 
 const TIMEOUT_MS = 8000;
@@ -670,14 +671,15 @@ function whatsappActions(broken: boolean): ConnectorReport['actions'] {
 
 async function probeWhatsApp(): Promise<ConnectorReport> {
   return guard('whatsapp', 'WhatsApp', 'Messaging', 'service', async () => {
-    const bridge = process.env.WHATSAPP_HERMES_BRIDGE_URL;
+    const bridge = whatsappBridgeUrl();
     if (!bridge) {
       return {
         status: 'unconfigured' as ConnectorStatus,
-        detail: 'WHATSAPP_HERMES_BRIDGE_URL not set — sends run through the in-process client',
+        detail: 'WHATSAPP_BRIDGE_URL not set — sends run through the in-process client',
         live: false,
-        // Pairing lives here now. Before the session moved off Hermes there was
-        // nowhere on the site to scan a QR, which is fine until the day you need to.
+        // Pairing lives here: the page polls the worker's /qr. Before the
+        // session moved onto the worker there was nowhere on the site to scan
+        // a QR, which is fine until the day you need to.
         fixUrl: '/admin/connections/whatsapp',
       };
     }

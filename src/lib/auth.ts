@@ -81,16 +81,10 @@ const PUBLIC_PATHS = [
   '/api/scraper/run',
   '/api/scraper/interactive',
   '/api/scraper/node',
-  // VPS→homeserv proxy for the Hermes admin pages (session inspector, telemetry,
-  // cron). Auth is enforced per-handler via a mandatory HERMES_BRIDGE_SECRET
-  // Bearer (assertHermesServiceRequest) — not Google OAuth, because the caller
-  // is the VPS reaching homeserv over Tailscale. Dropping the cookie gate here
-  // does NOT make the data public; the bearer is the real gate.
-  '/api/admin/hermes',
   // Same shape, opposite direction: the security panel reads the PEER host's
   // sshd/fail2ban posture, and each host can only read its own. The cookie gate
   // is dropped so the bearer can be the gate — and the handler still refuses
-  // anything without either a valid HERMES_BRIDGE_SECRET or an owner session,
+  // anything without either a valid SERVICE_BRIDGE_SECRET or an owner session,
   // so this does not make posture public. The one mutating action (unban) is
   // owner-session ONLY and rejects the bearer outright.
   '/api/admin/security',

@@ -26,7 +26,7 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // chat. Routing it through jkai_extended.invoke is fragile (the model
   // sometimes misforms the wrapper args), and the prompt-cost of a single
   // tool definition is modest vs. losing the "build me a quick app" UX.
-  'register_hermes_build',
+  'register_chat_build',
   // New-workflow path. Same rationale: the design-first flow ends with a
   // workflow_build_from_spec call, and the model must reliably hit it
   // after the user confirms. Cheap insurance.

@@ -2,7 +2,7 @@
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import { isUniformRows, unionColumns, type TraceStep, type TraceSubAgent } from '$lib/jkai/tool-trace';
   import { categorizeTool } from '$lib/workflows/chat/tool-summary';
-  import { rewriteHermesToolLog } from '$lib/workflows/chat/hermes-tool-log';
+  import { rewriteLegacyToolLog } from '$lib/workflows/chat/legacy-tool-log';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -317,14 +317,14 @@
   }
 
   /**
-   * `rewriteHermesToolLog` turns Hermes' interleaved `⚙️ mcp_jkai_…` log lines
+   * `rewriteLegacyToolLog` turns Hermes' interleaved `⚙️ mcp_jkai_…` log lines
    * into English, but emits them wrapped in HTML because its normal consumer is
    * the markdown pipeline. This panel renders plain text, so drop the tags —
    * rendering them literally is worse than not rewriting at all.
    */
   const replyText = $derived.by(() => {
     if (!data.reply) return '';
-    const rewritten = rewriteHermesToolLog(data.reply.content).replace(/<[^>]+>/g, '');
+    const rewritten = rewriteLegacyToolLog(data.reply.content).replace(/<[^>]+>/g, '');
     return rewritten.length > 2000 ? `${rewritten.slice(0, 2000)}…` : rewritten;
   });
 

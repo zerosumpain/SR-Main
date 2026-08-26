@@ -16,7 +16,7 @@ afterAll(() => {
 });
 
 beforeAll(() => {
-  process.env.HERMES_BRIDGE_SECRET = SECRET;
+  process.env.SERVICE_BRIDGE_SECRET = SECRET;
 });
 
 beforeEach(() => {
@@ -122,7 +122,7 @@ describe('mcp/jsonrpc', () => {
     expect(err.error.message).toMatch(/bearer/i);
   });
 
-  it('executes tools/call when bearer matches HERMES_BRIDGE_SECRET', async () => {
+  it('executes tools/call when bearer matches SERVICE_BRIDGE_SECRET', async () => {
     const { response } = await dispatchJsonRpc(
       {
         jsonrpc: '2.0',

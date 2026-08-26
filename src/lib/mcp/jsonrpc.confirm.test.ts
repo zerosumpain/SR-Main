@@ -16,7 +16,7 @@ import {
 const SECRET = 'mcp-confirm-test-secret-32-bytes-long-please-thanks';
 
 beforeAll(() => {
-  process.env.HERMES_BRIDGE_SECRET = SECRET;
+  process.env.SERVICE_BRIDGE_SECRET = SECRET;
 });
 
 beforeEach(() => {

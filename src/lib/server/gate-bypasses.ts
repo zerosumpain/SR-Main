@@ -35,7 +35,6 @@
 export const HOOK_BYPASSES: string[] = [
   '/dav', // Basic-Auth against webdav_credentials
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
-  '/api/jkai/prompts/hermes', // homeserv-only + SCRAPER_SERVICE_TOKEN (prompt workbench proxy)
   '/api/mcp', // bridge token (tools/list + tools/call)
   '/api/policy-engine', // POLICY_INGEST_SECRET
   '/api/claude-changelog', // POST only, ingest secret
@@ -137,8 +136,7 @@ export const HOOK_NON_BYPASSES: string[] = [
 export const BYPASS_GUARDS: Record<string, string> = {
   '/dav': 'HTTP Basic · webdav_credentials',
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
-  '/api/jkai/prompts/hermes': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
-  '/api/mcp': 'Bearer HERMES_BRIDGE_SECRET',
+  '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
   '/api/policy-engine': 'POLICY_INGEST_SECRET',
   '/api/data-standard-designer': 'DSD_INGEST_SECRET',
   '/api/dfe-data-strategy': 'KEYSTONE_INTEL_SECRET',

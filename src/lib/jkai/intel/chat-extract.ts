@@ -55,7 +55,7 @@ export function shouldExtractAtTurn(assistantTurns: number): boolean {
 /**
  * Hermes writes its own tool-call progress log into the assistant TEXT stream,
  * so `⚙️ mcp_jkai_knowledge_search: "data spine"` is stored as message content
- * (see $lib/workflows/chat/hermes-tool-log). It is machinery, not knowledge, and
+ * (see $lib/workflows/chat/legacy-tool-log). It is machinery, not knowledge, and
  * feeding it to the extractor invites entities named after MCP tools.
  */
 const TOOL_LOG_LINE_RE = /^\s*⚙️.*$/gm;

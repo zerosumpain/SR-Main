@@ -1,0 +1,11 @@
+-- jkai_builds.origin: 'hermes' → 'chat'.
+--
+-- The gateway that wrote these rows is retired; the origin it stamped is the
+-- last place its name survives in live data. The value means "chat registered
+-- these files itself, the builder never ran", which is still exactly true — so
+-- this is a rename, not a reclassification, and the rows keep their meaning.
+--
+-- Run once against production. `origin` has no DB-level constraint (the enum in
+-- schema.ts is TypeScript only), so this needs no migration alongside it, and
+-- `register_chat_build` accepts both values until it has been applied.
+UPDATE jkai_builds SET origin = 'chat' WHERE origin = 'hermes';

@@ -1,16 +1,14 @@
 /**
  * jkai WhatsApp worker — owns the WhatsApp session, off homeserv.
  *
- * WhatsApp does not need a residential IP, so by the Hermes-exit rule it does
- * not belong on homeserv. It does not belong in the web app either: a deploy
- * restarts that process, and restarting it drops the socket. So it gets its own
- * process, like the builder and the Codex bridge.
+ * WhatsApp does not need a residential IP, so it does not belong on homeserv.
+ * It does not belong in the web app either: a deploy restarts that process, and
+ * restarting it drops the socket. So it gets its own process, like the builder
+ * and the Codex bridge.
  *
- * It serves the SAME small HTTP contract the Hermes bridge did — /health,
- * /send, /typing, /send-media — so the site delegates to it by changing one URL
- * and nothing else. `WHATSAPP_HERMES_BRIDGE_URL` keeps its name deliberately:
- * renaming it would mean editing the production .env for no behavioural gain,
- * and that file has form.
+ * It serves a small HTTP contract — /health, /qr, /send, /typing, /send-media —
+ * so the site delegates to it by pointing `WHATSAPP_BRIDGE_URL` at it and
+ * changing nothing else.
  *
  * The unit sets JKAI_SERVICE_ROLE=whatsapp, which does two things
  * ($lib/workflows/service-role): this process runs the WhatsApp socket and NOT
@@ -79,8 +77,7 @@ async function main(): Promise<void> {
     try {
       if (req.method === 'GET' && path === '/health') {
         const s = wa.getState();
-        // Same shape the Hermes bridge answered with, so the site's existing
-        // health probe needs no change.
+        // The shape the site's health probe already expects.
         return json(res, 200, { status: s.status, connectedNumber: s.connectedNumber ?? null, queueLength: 0 });
       }
       if (req.method === 'GET' && path === '/qr') {

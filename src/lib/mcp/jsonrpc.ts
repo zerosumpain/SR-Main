@@ -22,20 +22,22 @@ import { isDestructive, describeDestructiveAction } from '$lib/workflows/chat/co
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 
-// Phase 1.5: all 132 registered tools are exposed via MCP. Hermes' skill
-// system constrains which subset the agent considers for a given chat
-// (jkai-canvas for workflow chats; jkai-general + domain skills for /jkai).
-// We trust the skill router; we don't gate at the MCP layer.
+// Every registered tool is exposed via MCP. We don't gate at the MCP layer.
 
 // SvelteKit loads .env into $env/dynamic/private at runtime. We lazy-import
 // it so unit tests (which use plain process.env via beforeAll) don't need to
-// stub the $env module. In SvelteKit runtime, env.HERMES_BRIDGE_SECRET wins;
-// in vitest, process.env.HERMES_BRIDGE_SECRET is the fallback.
+// stub the $env module. In SvelteKit runtime, `env` wins; in vitest,
+// `process.env` is the fallback.
+//
+// `HERMES_BRIDGE_SECRET` is the OLD name, read second so a host that has not
+// yet had the new one written keeps working. Drop the fallback once both
+// hosts' .env files carry SERVICE_BRIDGE_SECRET — see $lib/config/service-secret.
 async function resolveSecret(): Promise<string> {
-  if (process.env.HERMES_BRIDGE_SECRET) return process.env.HERMES_BRIDGE_SECRET;
+  const fromProcess = process.env.SERVICE_BRIDGE_SECRET ?? process.env.HERMES_BRIDGE_SECRET;
+  if (fromProcess) return fromProcess;
   try {
     const mod = await import('$env/dynamic/private');
-    return mod.env.HERMES_BRIDGE_SECRET ?? '';
+    return mod.env.SERVICE_BRIDGE_SECRET ?? mod.env.HERMES_BRIDGE_SECRET ?? '';
   } catch {
     return '';
   }
@@ -75,7 +77,7 @@ export interface DispatchContext {
   /**
    * Authorization-bearer value (the part after `Bearer `), or empty if absent.
    * Required for tools/list and tools/call; verified by constant-time compare
-   * against `HERMES_BRIDGE_SECRET`. Only the transport handshake and liveness
+   * against the service bridge secret. Only the transport handshake and liveness
    * probe (initialize, ping, notifications/*) are unauthenticated.
    */
   authBearer: string;
@@ -172,7 +174,7 @@ export function datestampContent(
  *                                                        (handshake + liveness only)
  *   - tools/list, tools/call                           → Authorization: Bearer
  *                                                        with constant-time match
- *                                                        against HERMES_BRIDGE_SECRET.
+ *                                                        against the bridge secret.
  *                                                        Scope binding happens at
  *                                                        the tool layer via the
  *                                                        workflow_id argument.

@@ -408,17 +408,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  // /api/jkai/prompts/hermes is service-to-service: the VPS prompt workbench
-  // proxies here so it can read/write ~/.hermes-jkai/*.md, which only exist on
-  // homeserv. Same shape as /api/scraper/script above — whitelist on homeserv
-  // only; the handler still enforces the service token itself.
-  if (pathname === '/api/jkai/prompts/hermes') {
-    const { hostname } = await import('os');
-    if (hostname() === 'homeserv' || process.env.HERMES_PROMPTS_LOCAL === '1') {
-      return resolve(event);
-    }
-  }
-
   // Public API routes — read-only, used by public pages (plus the write-only
   // heartbeat-renderer telemetry beacon, which stores nothing). The list lives
   // in $lib/server/public-api-paths so the security panel can display exactly
@@ -429,9 +418,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   // /api/mcp* are service-to-service: the routing proxy and the local
   // dispatcher both authenticate via `Authorization: Bearer
-  // HERMES_BRIDGE_SECRET` inside the handlers themselves. They must
-  // bypass the Auth.js gate so the VPS-originated tool calls from
-  // homeserv's Hermes can land here on the VPS.
+  // SERVICE_BRIDGE_SECRET` inside the handlers themselves. They must
+  // bypass the Auth.js gate so a tool call from an MCP client can land.
   if (pathname === '/api/mcp' || pathname.startsWith('/api/mcp/')) {
     return resolve(event);
   }
@@ -559,7 +547,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // /api/whatsapp/inbound is service-to-service: in delegated (production) mode
-  // Hermes relays owner WhatsApp messages here to run the approval-reply /
+  // The WhatsApp worker relays owner messages here to run the approval-reply /
   // whatsapp-trigger intercepts, with no user session. The handler
   // self-authenticates via `Authorization: Bearer WHATSAPP_INBOUND_SECRET` (and
   // is disabled 503 if the secret is unset), so it bypasses the Auth.js gate
@@ -627,7 +615,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     // Authed APIs are owner-only by default. A guest on the login allow-list has
     // a valid session but may only reach the guest-allowed surface (none, by
     // default). The genuinely public / service-to-service APIs (biome, agent,
-    // jkai proxy, space-lander, scraper, mcp, policy-engine, admin/hermes, …)
+    // jkai proxy, space-lander, scraper, mcp, policy-engine, …)
     // already returned earlier via isPublicPath and the explicit bypasses above,
     // so they never reach here. This subsumes the old /api/admin/* gate. Before
     // guests existed a session implied owner; introducing guests broke that

@@ -3,7 +3,7 @@
 ## The CSS to paste
 
 Copy this block into the `<head>` of the first `index.html` you pass to
-`register_hermes_build`. Don't ship a raw build and wait to be asked for a
+`register_chat_build`. Don't ship a raw build and wait to be asked for a
 re-skin — that costs a full rebuild round trip and John has called it out.
 
 ```html
@@ -51,7 +51,7 @@ For more component patterns — hover states, table styling, edge cases —
 
 1. Compose the file body (or bodies) inline with the SR tokens baked in. No
    staging, no `write_file`.
-2. Call `register_hermes_build({title, prompt, files: [{path, content}, …]})` —
+2. Call `register_chat_build({title, prompt, files: [{path, content}, …]})` —
    `path` is `"index.html"` (and any others), `content` is the literal body.
    Returns `{id, detailUrl: '/jkai/builds/<id>', publishHint}`. Share
    `detailUrl` with the user.
@@ -66,5 +66,5 @@ If the user wants further design iteration, `build_tweak({id, instruction:
 '<specific change>'})` — this is **async** (status goes to `running`, 1–5 min).
 Poll with `build_inspect({id})` when they ask "progress?".
 
-Use `register_hermes_build`, not `build_create` — `build_create` triggers the
+Use `register_chat_build`, not `build_create` — `build_create` triggers the
 full autonomous orchestrator, overkill for a 50-line app.

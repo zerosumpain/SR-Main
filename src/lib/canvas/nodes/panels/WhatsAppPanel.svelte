@@ -218,7 +218,7 @@
         value={mediaPathValue}
         oninput={(e) => set('mediaPath', (e.currentTarget as HTMLTextAreaElement).value)}
       ></textarea>
-      <span class="wa-hint">Local file to send. Requires the Hermes bridge.</span>
+      <span class="wa-hint">Local file to send. Requires the WhatsApp worker.</span>
     </label>
     <label class="wa-field">
       <span class="wa-label">Media URL</span>

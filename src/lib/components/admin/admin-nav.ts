@@ -82,10 +82,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Tasks', href: '/admin/ops/tasks' },
       { label: 'Actions', href: '/admin/ops/actions' },
       { label: 'Costs', href: '/admin/ops/costs' },
-      { label: 'Engine', href: '/admin/ops/engine', match: (p) => p === '/admin/ops/engine' },
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
-      { label: 'Sessions', href: '/admin/ops/sessions' },
-      { label: 'Cron', href: '/admin/ops/cron' },
       { label: 'Live', href: '/admin/ops/live' },
       { label: 'Architecture', href: '/admin/ops/architecture' },
       { label: 'Releases', href: '/admin/ops/releases' },
@@ -149,12 +146,8 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/agent/actions': '/admin/ops/actions',
   '/admin/agent/costs': '/admin/ops/costs',
   '/admin/agent': '/admin/ops/agent',
-  '/admin/hermes/cron': '/admin/ops/cron',
-  '/admin/hermes/sessions': '/admin/ops/sessions',
-  '/admin/hermes': '/admin/ops/engine',
   '/admin/pulse': '/admin/ops/live',
   '/admin/deepdive': '/admin/ai/keys',
-  '/admin/scheduled': '/admin/ops/cron',
   '/admin/login': '/login?callbackUrl=/admin',
 };
 

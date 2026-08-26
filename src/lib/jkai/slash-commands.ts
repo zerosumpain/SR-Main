@@ -52,7 +52,7 @@ function isApprovalPrompt(content: string): boolean {
 // the same buttons + auto-select behaviour the prose-fallback path uses, with
 // no second source of truth for the command strings.
 export const approvalAffordance: SlashAffordance = {
-  id: 'hermes-approval',
+  id: 'dangerous-command-approval',
   detect: isApprovalPrompt,
   buttons: [
     { label: 'Deny', command: '/deny', style: 'primary' },

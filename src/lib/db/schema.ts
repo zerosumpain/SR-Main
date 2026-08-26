@@ -1159,7 +1159,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
   enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
   planStatus: text('plan_status').notNull().default('approved'),
-  origin: text('origin', { enum: ['manual', 'hermes', 'forge', 'studio'] }).notNull().default('manual'),
+  origin: text('origin', { enum: ['manual', 'chat', 'hermes', 'forge', 'studio'] }).notNull().default('manual'),
   // Git-target mode (Brass & Rails Forge). NULL for every normal build —
   // when null the builder behaves byte-identically to before (same workspace,
   // same publish). When set, the build clones a git repo, branches, runs the
@@ -3053,38 +3053,6 @@ export const apiSecrets = pgTable('api_secrets', {
 }));
 
 export type ApiSecretRow = typeof apiSecrets.$inferSelect;
-
-// ── Hermes sessions ──────────────────────────────────────────────────────
-
-export const hermesSessions = pgTable('hermes_sessions', {
-  id: serial('id').primaryKey(),
-  hermesSessionId: text('hermes_session_id').notNull(),
-  kind: text('kind', { enum: ['build', 'canvas_chat', 'manual'] }).notNull(),
-  kindId: text('kind_id').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  closedAt: timestamp('closed_at', { withTimezone: true }),
-}, (t) => ({
-  uniqueByKind: uniqueIndex('hermes_sessions_kind_kind_id_idx').on(t.kind, t.kindId).where(sql`closed_at IS NULL`),
-}));
-
-export type HermesSessionRow = typeof hermesSessions.$inferSelect;
-
-// ── Hermes chat origin ───────────────────────────────────────────────────
-// Records which SvelteKit host a given chat_id originated on so the
-// homeserv-side `/api/mcp` routing proxy can forward tool calls back to
-// the correct backend. Written on inbound by the jkai_platform plugin
-// (Phase 3 of docs/superpowers/plans/2026-05-14-hermes-multi-origin-routing.md);
-// read by `/api/mcp/+server.ts`.
-
-export const hermesChatOrigin = pgTable('hermes_chat_origin', {
-  chatId: text('chat_id').primaryKey(),
-  origin: text('origin', { enum: ['vps', 'homeserv'] }).notNull(),
-  mcpUrl: text('mcp_url').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-export type HermesChatOriginRow = typeof hermesChatOrigin.$inferSelect;
 
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: uuid('id').primaryKey().defaultRandom(),
