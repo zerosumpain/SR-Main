@@ -8,7 +8,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { loadLedger, snoozeThought, unmuteKind } from '$lib/daydream/ledger';
-import { recordFeedback } from '$lib/daydream/thought-store';
+import { loadTriageDeck, recordFeedback, recordTriageBatch } from '$lib/daydream/thought-store';
 import {
   confirmPlace,
   describePlaceRhythm,
@@ -196,6 +196,36 @@ export const POST: RequestHandler = async ({ request }) => {
         }
 
         return json({ ok: true, named: named.length, failed, thoughtsResolved });
+      }
+
+      // The sorting deck. Suppressed candidates, ordered by how often they
+      // have been re-proposed and never said.
+      case 'triage_deck': {
+        const limit = Math.min(Math.max(Number(body.limit) || 30, 1), 100);
+        return json({ ok: true, deck: await loadTriageDeck(limit) });
+      }
+
+      case 'triage_batch': {
+        const raw = Array.isArray(body.verdicts) ? body.verdicts : null;
+        if (!raw || raw.length === 0) {
+          return json({ error: 'verdicts must be a non-empty array' }, { status: 400 });
+        }
+        if (raw.length > 100) {
+          return json({ error: 'at most 100 verdicts at a time' }, { status: 400 });
+        }
+        const allowed = new Set(['useful', 'not_useful', 'never_kind']);
+        const items: Array<{ id: string; verdict: 'useful' | 'not_useful' | 'never_kind' }> = [];
+        for (const r of raw) {
+          const it = (r ?? {}) as Record<string, unknown>;
+          const id = typeof it.id === 'string' ? it.id.trim() : '';
+          const verdict = typeof it.verdict === 'string' ? it.verdict : '';
+          if (!id || !allowed.has(verdict)) continue;
+          items.push({ id, verdict: verdict as 'useful' | 'not_useful' | 'never_kind' });
+        }
+        if (items.length === 0) {
+          return json({ error: 'no usable verdicts in the batch' }, { status: 400 });
+        }
+        return json({ ok: true, ...(await recordTriageBatch(items)) });
       }
 
       case 'ignore_place': {
