@@ -26,6 +26,7 @@ import { resolveDaydreamModel } from '../compose';
 import { SWEEP_METRICS } from '../stats/sweep';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { hypothesisKey, validateHypothesis, type HypothesisSpec } from './spec';
+import { activeSteers, renderSteers } from './steer';
 
 export const MAX_TOKENS = 1400;
 
@@ -54,6 +55,9 @@ const METRIC_NOTES: Record<string, string> = {
 
 export interface ProposalBatch {
   proposals: HypothesisSpec[];
+  /** Steer ids that shaped this batch, so one that has directed a fortnight of
+   *  questions and produced nothing is visible rather than assumed to work. */
+  steerIds: string[];
   /** Proposals thrown out, with the reason, so a proposer that has started
    *  emitting nonsense is visible rather than silently ignored. */
   rejected: Array<{ reason: string }>;
@@ -121,6 +125,12 @@ export async function gatherContext(subject = DEFAULT_SUBJECT): Promise<string> 
     );
   }
 
+  // What he has asked for, if anything. Rendered last so it sits closest to the
+  // request, and explicitly framed as preference over an unchanged allow-list.
+  const steers = await activeSteers(subject);
+  const steerBlock = renderSteers(steers);
+  if (steerBlock) parts.push(steerBlock);
+
   const liked = asked.filter((a) => a.feedback === 'useful').map((a) => a.q);
   const disliked = asked.filter((a) => a.feedback === 'not_useful').map((a) => a.q);
   if (liked.length) parts.push(`John found these worth asking:\n${liked.map((q) => `- ${q}`).join('\n')}`);
@@ -174,9 +184,10 @@ export async function proposeHypotheses(
   maxProposals = 5,
   subject = DEFAULT_SUBJECT,
 ): Promise<ProposalBatch> {
-  const result: ProposalBatch = { proposals: [], rejected: [], tokens: 0, error: null };
+  const result: ProposalBatch = { proposals: [], rejected: [], steerIds: [], tokens: 0, error: null };
   try {
     const context = await gatherContext(subject);
+    result.steerIds = (await activeSteers(subject)).map((s) => s.id);
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
 

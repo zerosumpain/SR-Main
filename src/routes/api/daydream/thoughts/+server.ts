@@ -18,6 +18,7 @@ import {
 } from '$lib/daydream/places';
 import { errMsg } from '$lib/daydream/types';
 import { loadBoard, rateQuestion } from '$lib/daydream/hypotheses/store';
+import { addSteer, listSteers, setSteerStatus } from '$lib/daydream/hypotheses/steer';
 
 export const GET: RequestHandler = async () => {
   try {
@@ -246,6 +247,29 @@ export const POST: RequestHandler = async ({ request }) => {
         }
         await rateQuestion(id, verdict);
         return json({ ok: true });
+      }
+
+      // Steering. Reorders what gets asked; grants no new access whatsoever.
+      case 'add_steer': {
+        const text = str('text');
+        if (!text) return json({ error: 'a steer needs some text' }, { status: 400 });
+        const id = await addSteer(text);
+        return json({ ok: true, id, steers: await listSteers() });
+      }
+
+      case 'list_steers': {
+        return json({ ok: true, steers: await listSteers() });
+      }
+
+      case 'set_steer_status': {
+        const id = str('id');
+        const status = str('status');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        if (status !== 'active' && status !== 'done' && status !== 'dropped') {
+          return json({ error: `unknown status: ${status || '(none)'}` }, { status: 400 });
+        }
+        await setSteerStatus(id, status);
+        return json({ ok: true, steers: await listSteers() });
       }
 
       case 'ignore_place': {

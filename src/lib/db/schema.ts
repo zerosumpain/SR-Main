@@ -4233,6 +4233,81 @@ export const daydreamHypotheses = pgTable(
   ],
 );
 
+/**
+ * Things John has asked it to look into.
+ *
+ * The only owner-authored text this engine could previously read was a place
+ * name. There was no way to say "look at what I'm spending at weekends", and
+ * so no way for his priorities to reach a system whose entire job is deciding
+ * what he'd find interesting.
+ *
+ * A steer REORDERS work. It grants no new access whatsoever: the proposer still
+ * sees only the metric catalogue, and a steer becomes at most a sentence of
+ * emphasis in its prompt. That boundary is deliberate and load-bearing — free
+ * text from a chat box that could widen what a model may read is an injection
+ * surface, and this one cannot, by construction.
+ */
+export const daydreamSteers = pgTable(
+  'daydream_steers',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** What he typed, verbatim. Rendered back to him; never executed. */
+    text: text('text').notNull(),
+    /** 'active' | 'done' | 'dropped'. */
+    status: text('status').notNull().default('active'),
+    /** How many proposal batches have been run under this steer, so one that
+     *  has shaped a fortnight of questions and produced nothing is visible. */
+    batchesInfluenced: integer('batches_influenced').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('daydream_steers_status_idx').on(t.status)],
+);
+
+export type DaydreamSteer = typeof daydreamSteers.$inferSelect;
+
+/**
+ * One card a morning: everything it thought yesterday, including the quiet parts.
+ *
+ * This is what decouples THINKING volume from TALKING volume. `budget.ts`
+ * already declares that spare budget buys thinking and never talking, but that
+ * was aspirational: a fifty-fold rise in thinking produced fifty times more
+ * rows nobody read, because the only way anything reached him was an
+ * interruption capped at four a day.
+ *
+ * A digest is not an interruption. It is a place for quiet output to land, and
+ * it reports the nothing as well as the something — a morning that says "18
+ * tests, nothing survived, 3 questions still short of data" is an honest and
+ * useful morning, and a digest that only appears when there is news is a digest
+ * that cannot be trusted when it is silent.
+ */
+export const daydreamDigests = pgTable(
+  'daydream_digests',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** Local day the digest covers. */
+    day: date('day').notNull(),
+    /** Deterministic summary, assembled from counts. Always present. */
+    summary: text('summary').notNull(),
+    /** Optional model phrasing over the same counts. Never the only record. */
+    narrative: text('narrative'),
+    /** Did anything check the narrative? Same three states as a thought. */
+    verified: boolean('verified'),
+    /** Every number the summary quotes, so none of them is unexplained. */
+    stats: jsonb('stats').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_digests_subject_day_idx').on(t.subject, t.day),
+    index('daydream_digests_day_idx').on(t.day),
+  ],
+);
+
+export type DaydreamDigest = typeof daydreamDigests.$inferSelect;
+
 export type DaydreamHypothesis = typeof daydreamHypotheses.$inferSelect;
 export type NewDaydreamHypothesis = typeof daydreamHypotheses.$inferInsert;
 
