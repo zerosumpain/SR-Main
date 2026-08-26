@@ -1,0 +1,540 @@
+<svelte:head><title>Daydreams — JKAI</title></svelte:head>
+<script lang="ts">
+  import type { PageData } from './$types';
+  import { invalidateAll } from '$app/navigation';
+
+  let { data }: { data: PageData } = $props();
+
+  type Thought = PageData['thoughts'][number];
+  type Place = PageData['places'][number];
+
+  // ── View state ────────────────────────────────────────────────────────────
+  // `all` is the default rather than `new`, because on any normal day nothing
+  // is new and a page that opens empty reads as broken. What the owner actually
+  // wants to know first is what it has been noticing at all.
+  type Filter = 'all' | 'said' | 'suppressed' | 'ruled';
+  let filter = $state<Filter>('all');
+  let expanded = $state<string | null>(null);
+  let busy = $state<string | null>(null);
+  let actionError = $state<string | null>(null);
+
+  // Naming a place — the loop the whole feature is built around.
+  let namingPlace = $state<string | null>(null);
+  let placeLabel = $state('');
+  let placeKind = $state('other');
+
+  const PLACE_KINDS = ['home', 'school', 'work', 'shop', 'cafe', 'gym', 'other'];
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  const thoughts = $derived(data.thoughts ?? []);
+  const places = $derived(data.places ?? []);
+  const detectors = $derived(data.detectors ?? []);
+  const counts = $derived(data.counts);
+  const engine = $derived(data.engine);
+
+  const said = $derived(thoughts.filter((t) => t.status === 'delivered' || t.status === 'new'));
+  const suppressed = $derived(thoughts.filter((t) => t.status === 'suppressed'));
+  const ruled = $derived(
+    thoughts.filter((t) => ['dismissed', 'actioned', 'snoozed'].includes(t.status)),
+  );
+  const visible = $derived(
+    filter === 'said' ? said : filter === 'suppressed' ? suppressed : filter === 'ruled' ? ruled : thoughts,
+  );
+
+  const unnamed = $derived(places.filter((p) => !p.label && p.status === 'active'));
+  const named = $derived(places.filter((p) => p.label && p.status === 'active'));
+
+  const readyCount = $derived(detectors.filter((d) => d.readiness?.ready).length);
+  const mutedCount = $derived(detectors.filter((d) => d.muted).length);
+
+  /** Has the engine ever actually run? Distinguishes "quiet" from "not wired". */
+  const hasRun = $derived(engine.lastDetectAt != null);
+
+  function ago(iso: string | null): string {
+    if (!iso) return 'never';
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
+
+  function pct(n: number | null | undefined): string {
+    return n == null ? '—' : `${Math.round(n * 100)}%`;
+  }
+
+  function rhythm(p: Place): string {
+    const parts = [`${p.visitCount} visit${p.visitCount === 1 ? '' : 's'}`];
+    if (p.medianDwellMins > 0) parts.push(`~${p.medianDwellMins} min`);
+    const total = p.dayHistogram.reduce((a, b) => a + b, 0);
+    if (total > 0) {
+      const peak = p.dayHistogram.indexOf(Math.max(...p.dayHistogram));
+      if (p.dayHistogram[peak] / total >= 0.5 && p.dayHistogram[peak] >= 2) {
+        parts.push(`usually ${DAYS[peak]}`);
+      }
+    }
+    return parts.join(' · ');
+  }
+
+  async function post(body: Record<string, unknown>, key: string) {
+    busy = key;
+    actionError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const out = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        actionError = out.error ?? 'that did not work';
+        return false;
+      }
+      await invalidateAll();
+      return true;
+    } catch {
+      actionError = 'that did not work';
+      return false;
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function vote(t: Thought, verdict: 'useful' | 'not_useful' | 'never_kind') {
+    await post({ action: 'feedback', id: t.id, verdict }, `${t.id}:${verdict}`);
+  }
+
+  async function submitName(placeId: string) {
+    if (!placeLabel.trim()) return;
+    const ok = await post(
+      { action: 'name_place', placeId, label: placeLabel, kind: placeKind },
+      `name:${placeId}`,
+    );
+    if (ok) {
+      namingPlace = null;
+      placeLabel = '';
+      placeKind = 'other';
+    }
+  }
+</script>
+
+<div class="wrap">
+  <header class="page-hdr">
+    <div>
+      <div class="kicker">JKAI · Daydreaming</div>
+      <h1>Daydreams</h1>
+      <p class="sub">
+        Everything jkai has noticed on spare cycles — including what it decided
+        <strong>not</strong> to say, and why. Rules do the noticing; a model only ever
+        phrases a finding that a rule already confirmed.
+      </p>
+    </div>
+    <div class="hdr-links">
+      <a class="back-link" href="/jkai">JKAI</a>
+    </div>
+  </header>
+
+  {#if data.loadError}
+    <div class="nm-sec-error">Could not read the ledger: {data.loadError}</div>
+  {/if}
+
+  {#if !data.enabled}
+    <div class="banner off">
+      Daydreaming is switched off (<code>daydream.enabled</code>). Nothing is being
+      observed or noticed.
+    </div>
+  {/if}
+
+  <!-- ── ENGINE STATE ───────────────────────────────────────────────────
+       Leads the page. Everything below is meaningless if the engine has not
+       run, and "quiet" and "not wired up" have to be tellable apart. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Engine</span>
+      <span class="nm-sec-meta">
+        {#if hasRun}last looked {ago(engine.lastDetectAt)}{:else}has not run yet{/if}
+      </span>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-tile">
+        <div class="stat-num">{engine.trailSpanDays ?? 0}</div>
+        <div class="stat-label">days of trail</div>
+        <div class="stat-sub">observed {ago(engine.lastObserveAt)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{pct(engine.coverage?.last24h)}</div>
+        <div class="stat-label">covered, 24h</div>
+        <div class="stat-sub">7d {pct(engine.coverage?.last7d)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{readyCount}<span class="of">/{detectors.length}</span></div>
+        <div class="stat-label">detectors ready</div>
+        <div class="stat-sub">{mutedCount} muted by you</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{counts.namedPlaces}<span class="of">/{counts.places}</span></div>
+        <div class="stat-label">places named</div>
+        <div class="stat-sub">{counts.unnamedPlaces} still unnamed</div>
+      </div>
+    </div>
+
+    {#if engine.summary}
+      <p class="engine-summary">{engine.summary}</p>
+    {/if}
+
+    {#if engine.pausedActions.length}
+      <p class="warn-line">
+        Not running: {engine.pausedActions.join(', ')}
+      </p>
+    {/if}
+
+    {#if engine.sources.some((s) => s.status === 'failed')}
+      <p class="warn-line">
+        Sources that failed last tick:
+        {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
+      </p>
+    {/if}
+  </section>
+
+  <!-- ── UNNAMED PLACES ─────────────────────────────────────────────────
+       Placed above the thoughts on purpose. Five of the eight detectors are
+       inert until a place has a name, so this is the highest-leverage thing
+       on the page and answering one question here unlocks more than any
+       amount of reading below. -->
+  {#if unnamed.length}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">What is this place?</span>
+        <span class="nm-sec-meta">{unnamed.length} unnamed</span>
+      </div>
+      <p class="sec-lede">
+        A named place turns a coordinate into a fact. Five of the eight detectors stay
+        silent until one has a name.
+      </p>
+
+      <div class="rows">
+        {#each unnamed as p (p.id)}
+          <div class="place-row">
+            <div class="place-id">
+              <span class="place-rhythm">{rhythm(p)}</span>
+            </div>
+            {#if namingPlace === p.id}
+              <div class="name-form">
+                <input
+                  class="nm-text-input"
+                  bind:value={placeLabel}
+                  placeholder="What is it called?"
+                  onkeydown={(e) => { if (e.key === 'Enter') submitName(p.id); }}
+                />
+                <select class="nm-text-input kind-select" bind:value={placeKind}>
+                  {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
+                </select>
+                <button
+                  class="row-link"
+                  disabled={busy === `name:${p.id}` || !placeLabel.trim()}
+                  onclick={() => submitName(p.id)}
+                >Save</button>
+                <button class="row-link" onclick={() => { namingPlace = null; placeLabel = ''; }}>Cancel</button>
+              </div>
+            {:else}
+              <div class="place-actions">
+                <button class="row-link" onclick={() => { namingPlace = p.id; placeLabel = ''; placeKind = 'other'; }}>
+                  Name it
+                </button>
+                <button
+                  class="row-link danger"
+                  disabled={busy === `ignore:${p.id}`}
+                  onclick={() => post({ action: 'ignore_place', placeId: p.id }, `ignore:${p.id}`)}
+                >Stop asking</button>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
+  <!-- ── THOUGHTS ───────────────────────────────────────────────────────── -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Thoughts</span>
+      <span class="nm-sec-meta">
+        threshold {data.threshold.value} · from {data.threshold.feedbackCount} response{data.threshold.feedbackCount === 1 ? '' : 's'}
+      </span>
+    </div>
+
+    <div class="filters">
+      <button class="filter" class:on={filter === 'all'} onclick={() => (filter = 'all')}>
+        All <span class="n">{thoughts.length}</span>
+      </button>
+      <button class="filter" class:on={filter === 'said'} onclick={() => (filter = 'said')}>
+        Above threshold <span class="n">{said.length}</span>
+      </button>
+      <button class="filter" class:on={filter === 'suppressed'} onclick={() => (filter = 'suppressed')}>
+        Held back <span class="n">{suppressed.length}</span>
+      </button>
+      <button class="filter" class:on={filter === 'ruled'} onclick={() => (filter = 'ruled')}>
+        You ruled on <span class="n">{ruled.length}</span>
+      </button>
+    </div>
+
+    {#if actionError}
+      <p class="warn-line err">{actionError}</p>
+    {/if}
+
+    {#if visible.length === 0}
+      <div class="empty">
+        {#if !hasRun}
+          The detect pass has not run yet.
+        {:else if thoughts.length === 0}
+          Nothing noticed yet. {detectors.length - readyCount} of {detectors.length} detectors are
+          still gathering the history they need — see below for what each is waiting for.
+        {:else}
+          Nothing in this view.
+        {/if}
+      </div>
+    {:else}
+      <div class="rows">
+        {#each visible as t (t.id)}
+          <article class="thought st-{t.status}">
+            <div class="thought-hd">
+              <button class="thought-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
+                {t.title}
+              </button>
+              <span class="thought-pill">{t.status}</span>
+            </div>
+
+            <p class="thought-why">{t.explanation}</p>
+
+            <div class="thought-meta">
+              <span class="mono">{t.kind}</span>
+              <span class="sep">·</span>
+              <span class="mono">score {t.score}</span>
+              <span class="sep">·</span>
+              <span>{ago(t.createdAt)}</span>
+              {#if t.suppressedReason}
+                <span class="sep">·</span>
+                <span class="held">held back: {t.suppressedReason}</span>
+              {/if}
+              {#if t.feedback}
+                <span class="sep">·</span>
+                <span class="voted">you said {t.feedback.replace('_', ' ')}</span>
+              {/if}
+            </div>
+
+            {#if expanded === t.id}
+              <div class="thought-detail">
+                <div class="detail-block">
+                  <span class="sr-label-tight">Why that score</span>
+                  <ul class="components">
+                    {#each Object.entries(t.components) as [k, v] (k)}
+                      <li><span class="ck">{k}</span><span class="cv">{v}</span></li>
+                    {/each}
+                  </ul>
+                </div>
+                {#if t.evidence.length}
+                  <div class="detail-block">
+                    <span class="sr-label-tight">Evidence</span>
+                    <ul class="evidence">
+                      {#each t.evidence as e, i (i)}
+                        <li><span class="ck">{e.kind}</span><span class="cv">{e.note || e.id}</span></li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
+            {#if !t.feedback}
+              <div class="thought-actions">
+                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
+                  Useful
+                </button>
+                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>
+                  Not useful
+                </button>
+                <button class="row-link danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
+                  Never this kind
+                </button>
+                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
+                  Snooze a week
+                </button>
+              </div>
+            {/if}
+          </article>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <!-- ── DETECTORS ──────────────────────────────────────────────────────
+       Every detector appears, ready or not. One missing would be
+       indistinguishable from one that is merely quiet — the same conflation
+       the readiness gate exists to prevent. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Detectors</span>
+      <span class="nm-sec-meta">{readyCount} of {detectors.length} ready</span>
+    </div>
+    <p class="sec-lede">
+      Each declares what it needs before it may speak, and returns nothing below that.
+      A weight of 1.00 means the ledger has no opinion about it yet.
+    </p>
+
+    <div class="rows tight">
+      {#each detectors as d (d.kind)}
+        <div class="det-row" class:muted={d.muted}>
+          <div class="det-main">
+            <span class="det-kind mono">{d.kind}</span>
+            <span class="det-desc">{d.description}</span>
+          </div>
+          <div class="det-state">
+            {#if d.muted}
+              <span class="det-badge off">muted</span>
+              <button class="row-link" disabled={busy === `unmute:${d.kind}`} onclick={() => post({ action: 'unmute_kind', kind: d.kind }, `unmute:${d.kind}`)}>
+                Un-mute
+              </button>
+            {:else if d.readiness?.ready}
+              <span class="det-badge on">ready</span>
+            {:else}
+              <span class="det-badge wait">{d.readiness?.reason ?? 'not yet assessed'}</span>
+            {/if}
+            <span class="det-weight mono" title="Learned multiplier from your feedback">
+              ×{d.weight.toFixed(2)}
+            </span>
+            {#if d.useful || d.notUseful}
+              <span class="det-votes mono">{d.useful}↑ {d.notUseful}↓</span>
+            {/if}
+          </div>
+        </div>
+      {/each}
+    </div>
+  </section>
+
+  <!-- ── NAMED PLACES ───────────────────────────────────────────────────── -->
+  {#if named.length}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Places you have named</span>
+        <span class="nm-sec-meta">{named.length}</span>
+      </div>
+      <div class="rows tight">
+        {#each named as p (p.id)}
+          <div class="place-row named">
+            <div class="place-id">
+              <span class="place-label">{p.label}</span>
+              <span class="place-rhythm">{p.kind} · {rhythm(p)}</span>
+            </div>
+            <span class="det-badge" class:on={p.hasMemory}>
+              {p.hasMemory ? 'in memory' : 'not in memory'}
+            </span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+</div>
+
+<style>
+  .wrap { max-width: 980px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+  .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
+  .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
+  .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; line-height: 1.05; }
+  .sub { margin: 0.6rem 0 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
+  .sub strong { color: var(--text-primary); font-weight: 700; }
+  .hdr-links { display: flex; gap: 1rem; }
+  .back-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .back-link:hover { text-decoration: underline; }
+
+  .banner { padding: 0.7rem 0.9rem; margin-bottom: 1.25rem; border-left: 3px solid var(--warn, #b0892a); background: var(--card-bg); font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); }
+  .banner code { font-family: var(--font-mono); color: var(--text-primary); }
+
+  .sec-lede { margin: 0 0 0.9rem; font-size: var(--fs-label); line-height: 1.55; color: var(--text-muted); max-width: 68ch; }
+
+  /* Engine */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; }
+  .stat-tile { border: 1px solid var(--line-strong); padding: 0.85rem 0.95rem; background: var(--bg); }
+  .stat-num { font-family: var(--font-display); font-size: 1.9rem; font-weight: 900; line-height: 1; color: var(--text-primary); }
+  .stat-num .of { font-size: 1rem; color: var(--text-ghost); }
+  .stat-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-top: 0.4rem; }
+  .stat-sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 0.25rem; }
+  .engine-summary { margin: 0.9rem 0 0; font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); }
+  .warn-line { margin: 0.6rem 0 0; font-size: var(--fs-label); line-height: 1.5; color: var(--warn, #b0892a); }
+  .warn-line.err { color: var(--error, #c44); }
+
+  /* Filters */
+  .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+  .filter { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.4rem 0.7rem; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-secondary); cursor: pointer; }
+  .filter:hover { border-color: var(--accent); color: var(--accent); }
+  .filter.on { border-color: var(--text-primary); color: var(--text-primary); background: var(--surface-sunken); }
+  .filter .n { color: var(--text-ghost); margin-left: 0.35rem; }
+
+  /* Thoughts */
+  .rows { display: flex; flex-direction: column; gap: 0.5rem; }
+  .rows.tight { gap: 0.3rem; }
+  .thought { border: 1px solid var(--line-strong); border-left: 3px solid var(--text-muted); background: var(--surface-sunken); padding: 0.85rem 1rem 0.75rem; }
+  .thought.st-new { border-left-color: var(--accent); }
+  .thought.st-delivered { border-left-color: var(--success, #2d7a3a); }
+  .thought.st-actioned { border-left-color: var(--success, #2d7a3a); }
+  .thought.st-suppressed { border-left-color: var(--text-ghost); }
+  .thought.st-dismissed { border-left-color: var(--error, #c44); }
+  .thought.st-snoozed { border-left-color: var(--warn, #b0892a); }
+
+  .thought-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+  .thought-title { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font: inherit; font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); cursor: pointer; overflow-wrap: anywhere; }
+  .thought-title:hover { color: var(--accent); }
+  .thought-pill { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.15rem 0.45rem; border: 1px solid var(--line-strong); color: var(--text-secondary); white-space: nowrap; }
+  .thought-why { margin: 0 0 0.55rem; font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-secondary); }
+  .thought-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .mono { font-family: var(--font-mono); }
+  .sep { color: var(--card-border); }
+  .held { color: var(--text-muted); }
+  .voted { color: var(--accent-ink); }
+
+  .thought-detail { margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid var(--line-hair); display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .detail-block { min-width: 0; }
+  .components, .evidence { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+  .components li, .evidence li { display: flex; justify-content: space-between; gap: 0.75rem; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.15rem; }
+  .ck { font-family: var(--font-mono); color: var(--text-muted); }
+  .cv { font-family: var(--font-mono); color: var(--text-primary); text-align: right; overflow-wrap: anywhere; }
+
+  .thought-actions, .place-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.7rem; }
+  .row-link { background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); cursor: pointer; }
+  .row-link:hover:not(:disabled) { text-decoration: underline; }
+  .row-link:disabled { opacity: 0.45; cursor: default; }
+  .row-link.danger { color: var(--error, #c44); }
+
+  /* Places */
+  .place-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.6rem 0.75rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
+  .place-row.named { background: none; border-color: var(--line-hair); }
+  .place-id { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+  .place-label { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); }
+  .place-rhythm { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .name-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .name-form .nm-text-input { width: auto; min-width: 12rem; }
+  .kind-select { min-width: 7rem; }
+
+  /* Detectors */
+  .det-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.55rem 0; border-bottom: 1px solid var(--line-hair); }
+  .det-row.muted { opacity: 0.6; }
+  .det-main { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+  .det-kind { font-size: var(--fs-label); color: var(--text-primary); }
+  .det-desc { font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-muted); max-width: 62ch; }
+  .det-state { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
+  .det-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .det-badge.on { color: var(--success, #2d7a3a); }
+  .det-badge.wait { color: var(--text-muted); }
+  .det-badge.off { color: var(--error, #c44); }
+  .det-weight { font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .det-votes { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+
+  .empty { padding: 1.5rem; text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-ghost); font-style: italic; border: 1px dashed var(--line-strong); line-height: 1.6; }
+
+  @media (max-width: 640px) {
+    .page-hdr { flex-direction: column; align-items: flex-start; }
+    .det-row { flex-direction: column; }
+    .thought-detail { grid-template-columns: 1fr; }
+  }
+</style>
