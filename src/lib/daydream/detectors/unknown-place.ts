@@ -12,12 +12,19 @@
 // first visit, and waiting for a third made a café invisible for weeks.
 
 import { describePlaceRhythm } from '../places';
-import { MIN_DWELL_MINS, MIN_VISITS_FOR_PLACE } from '../types';
+import { MIN_DWELL_MINS, MIN_VISITS_TO_ASK } from '../types';
 import { ramp } from './shared';
 import { notReady, ready, type Candidate, type DaydreamSnapshot, type Detector } from '../snapshot-types';
 
-/** Visits at which a place is worth asking about — now one. */
-const ASK_AT_VISITS = MIN_VISITS_FOR_PLACE;
+/**
+ * Visits before it is worth ASKING. Two — not the one that makes a place.
+ *
+ * A place exists after a single real stay so it can match offers and anchor
+ * proximity checks, all of which cost nothing. A question costs a notification
+ * and a decision, and somewhere visited once is usually somewhere that needs no
+ * name: a car park on the way to somewhere else, a waiting room, a one-off.
+ */
+const ASK_AT_VISITS = MIN_VISITS_TO_ASK;
 /** Where the visit component saturates: a place visited fifteen times is not
  *  three times more interesting than one visited five. */
 const SATURATE_AT_VISITS = 12;
@@ -37,7 +44,7 @@ export const unknownPlace: Detector = {
           candidates,
           1,
           'unnamed places',
-          `nowhere yet has an unnamed stay of ${MIN_DWELL_MINS}+ minutes`,
+          `nowhere unnamed has ${ASK_AT_VISITS}+ stays of ${MIN_DWELL_MINS}+ minutes yet`,
         );
   },
 

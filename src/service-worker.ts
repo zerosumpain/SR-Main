@@ -28,14 +28,27 @@ registerRoute(
 
 registerRoute(({ request }) => request.method !== 'GET', new NetworkOnly());
 
-// jkai navigations: network-first with a 30-day cache.
+// jkai navigations: network-first, with a cached shell for going offline.
+//
+// The age here is load-bearing and used to be 30 days, which is far longer than
+// it can safely be. A cached HTML shell names HASHED chunk files; a later deploy
+// publishes new hashes and `cleanupOutdatedCaches` removes the old ones. A shell
+// that outlives its chunks is a page that loads and then silently runs the wrong
+// code — which is exactly what happened on 2026-08-26: after three deploys in an
+// hour, /jkai/daydreams rendered the naming form from a build that predated the
+// map, so the map "was not rendering" when in fact it was not in the bundle the
+// browser had.
+//
+// One day keeps the offline shell useful (that is the point of caching a
+// navigation at all) while bounding how long a stale one can mislead. Network
+// still wins whenever it answers inside the timeout.
 registerRoute(
 	({ request, url }) =>
 		request.mode === 'navigate' && url.pathname.startsWith('/jkai'),
 	new NetworkFirst({
 		cacheName: 'jkai-navigation',
 		networkTimeoutSeconds: 5,
-		plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+		plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 })],
 	}),
 );
 
