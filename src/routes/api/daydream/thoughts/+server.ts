@@ -9,7 +9,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { loadLedger, snoozeThought, unmuteKind } from '$lib/daydream/ledger';
 import { recordFeedback } from '$lib/daydream/thought-store';
-import { confirmPlace, ignorePlace, isPlaceKind } from '$lib/daydream/places';
+import {
+  confirmPlace,
+  describePlaceRhythm,
+  ignorePlace,
+  isPlaceKind,
+  listNamingQueue,
+} from '$lib/daydream/places';
 import { errMsg } from '$lib/daydream/types';
 
 export const GET: RequestHandler = async () => {
@@ -116,6 +122,80 @@ export const POST: RequestHandler = async ({ request }) => {
         }
         const res = await confirmPlace(placeId, label, kind);
         return json({ ok: true, ...res });
+      }
+
+      // The sit-down session. One request returns the whole queue with its
+      // suggestions already attached, because the alternative — a lookup per
+      // card as the owner reaches it — puts a third party's latency and rate
+      // limit in the middle of a form the owner is trying to get through.
+      // `daydream-suggest` has already paid that cost in the background.
+      case 'naming_queue': {
+        const limit = Math.min(Math.max(Number(body.limit) || 60, 1), 200);
+        const places = await listNamingQueue(limit);
+        return json({
+          ok: true,
+          places: places.map((p) => ({
+            id: p.id,
+            visitCount: p.visitCount,
+            medianDwellMins: p.medianDwellMins,
+            rhythm: describePlaceRhythm(p),
+            lastSeenAt: p.lastSeenAt,
+            suggestedLabel: p.suggestedLabel,
+            suggestedKind: p.suggestedKind,
+            suggestedAddress: p.suggestedAddress,
+            // Coordinates deliberately omitted. The naming form needs to say
+            // WHERE, and the street address does that without putting a precise
+            // fix of the owner's home into a JSON payload the browser caches.
+          })),
+        });
+      }
+
+      // Naming several places in one go. The session is the point: thirty
+      // places in ten minutes costs no interruption budget, where the same
+      // thirty as notifications would take a week at MAX_PER_DAY.
+      case 'name_places': {
+        const items = Array.isArray(body.places) ? body.places : null;
+        if (!items || items.length === 0) {
+          return json({ error: 'places must be a non-empty array' }, { status: 400 });
+        }
+        if (items.length > 100) {
+          return json({ error: 'at most 100 places at a time' }, { status: 400 });
+        }
+
+        const named: string[] = [];
+        const failed: { placeId: string; error: string }[] = [];
+        let thoughtsResolved = 0;
+
+        // Sequential, and each failure is collected rather than thrown. One bad
+        // row in a batch of thirty must not discard the twenty-nine answers the
+        // owner already typed — losing those is losing the session.
+        for (const raw of items) {
+          const item = (raw ?? {}) as Record<string, unknown>;
+          const placeId = typeof item.placeId === 'string' ? item.placeId.trim() : '';
+          const label = typeof item.label === 'string' ? item.label.trim() : '';
+          const kind = typeof item.kind === 'string' ? item.kind.trim() : 'other';
+          if (!placeId) {
+            failed.push({ placeId: '(missing)', error: 'placeId is required' });
+            continue;
+          }
+          if (!label) {
+            failed.push({ placeId, error: 'a place needs a name' });
+            continue;
+          }
+          if (!isPlaceKind(kind)) {
+            failed.push({ placeId, error: `unknown place kind: ${kind}` });
+            continue;
+          }
+          try {
+            const res = await confirmPlace(placeId, label, kind);
+            thoughtsResolved += res.thoughtsResolved;
+            named.push(placeId);
+          } catch (err) {
+            failed.push({ placeId, error: errMsg(err) });
+          }
+        }
+
+        return json({ ok: true, named: named.length, failed, thoughtsResolved });
       }
 
       case 'ignore_place': {

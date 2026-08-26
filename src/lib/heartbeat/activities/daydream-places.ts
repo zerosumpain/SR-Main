@@ -1,6 +1,6 @@
 import { getSetting } from '$lib/server/models/settings';
 import { pruneTrail } from '$lib/daydream/observe';
-import { refreshPlaces } from '$lib/daydream/places';
+import { reconcileNamedPlaceThoughts, refreshPlaces } from '$lib/daydream/places';
 import { SETTINGS_ENABLED_KEY, TRAIL_RETENTION_DAYS } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
@@ -52,16 +52,28 @@ export const daydreamPlacesRefresh: ActivityHandler = {
     const refresh = await refreshPlaces({ windowDays: cfg.windowDays });
     const pruned = cfg.prune ? await pruneTrail(cfg.retentionDays) : 0;
 
+    // Close any question left standing about a place that has since been named.
+    // Runs on every refresh rather than only when a name is typed, because the
+    // trigger in `confirmPlace` only covers the one path that calls it.
+    const reconciled = await reconcileNamedPlaceThoughts();
+
     if (refresh.fixes === 0) {
-      return { outcome: 'ok', summary: 'no fixes in the window yet' };
+      return {
+        outcome: 'ok',
+        summary: reconciled
+          ? `no fixes in the window yet; closed ${reconciled} stale question${reconciled === 1 ? '' : 's'}`
+          : 'no fixes in the window yet',
+        details: { reconciled },
+      };
     }
 
     return {
       outcome: 'ok',
       summary:
         `${refresh.fixes} fixes → ${refresh.clusters} clusters; ` +
-        `+${refresh.created} places, ${refresh.updated} updated, ${refresh.rejected} below the bar`,
-      details: { ...refresh, pruned },
+        `+${refresh.created} places, ${refresh.updated} updated, ${refresh.rejected} below the bar` +
+        (reconciled ? `; closed ${reconciled} stale question${reconciled === 1 ? '' : 's'}` : ''),
+      details: { ...refresh, pruned, reconciled },
     };
   },
 };

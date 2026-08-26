@@ -64,6 +64,123 @@
     }
   }
 
+  // ── The naming session ────────────────────────────────────────────────────
+  // Thirty places in ten minutes, rather than four notifications a day for a
+  // week. The interruption budget in deliver.ts exists to protect attention the
+  // owner has not offered; a page they chose to open is attention they have, so
+  // the session spends none of it.
+  //
+  // Every row arrives pre-filled from `suggestedLabel`, which the background
+  // geocoder wrote hours ago. That is the difference between a confirmation and
+  // a memory test: "Costa Coffee, 12 High Row — yes?" is answerable on a phone,
+  // and a lat/lon is not.
+  type QueuePlace = {
+    id: string;
+    visitCount: number;
+    medianDwellMins: number;
+    rhythm: string;
+    lastSeenAt: string | null;
+    suggestedLabel: string | null;
+    suggestedKind: string | null;
+    suggestedAddress: string | null;
+  };
+
+  let sessionOpen = $state(false);
+  let sessionLoading = $state(false);
+  let sessionSaving = $state(false);
+  let sessionError = $state<string | null>(null);
+  let sessionQueue = $state<QueuePlace[]>([]);
+  /** placeId → what the owner has typed. Absent means untouched, so a row the
+   *  owner never looked at is never saved with a machine's guess in it. */
+  let drafts = $state<Record<string, { label: string; kind: string }>>({});
+  let sessionDone = $state<{ named: number; failed: number; thoughtsResolved: number } | null>(null);
+
+  const draftCount = $derived(
+    Object.values(drafts).filter((d) => d.label.trim().length > 0).length,
+  );
+
+  async function openSession() {
+    sessionOpen = true;
+    sessionDone = null;
+    sessionError = null;
+    sessionLoading = true;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'naming_queue', limit: 60 }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { places?: QueuePlace[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      sessionQueue = out.places ?? [];
+      drafts = {};
+    } catch (err) {
+      sessionError = err instanceof Error ? err.message : String(err);
+      sessionQueue = [];
+    } finally {
+      sessionLoading = false;
+    }
+  }
+
+  /** Accept the suggestion as-is. The commonest action, so it is one tap and
+   *  the row stays editable afterwards. */
+  function acceptSuggestion(p: QueuePlace) {
+    if (!p.suggestedLabel) return;
+    drafts = { ...drafts, [p.id]: { label: p.suggestedLabel, kind: p.suggestedKind ?? 'other' } };
+  }
+
+  function editDraft(p: QueuePlace, field: 'label' | 'kind', value: string) {
+    const current = drafts[p.id] ?? { label: '', kind: p.suggestedKind ?? 'other' };
+    drafts = { ...drafts, [p.id]: { ...current, [field]: value } };
+  }
+
+  function clearDraft(id: string) {
+    const { [id]: _dropped, ...rest } = drafts;
+    drafts = rest;
+  }
+
+  async function saveSession() {
+    const payload = Object.entries(drafts)
+      .filter(([, d]) => d.label.trim().length > 0)
+      .map(([placeId, d]) => ({ placeId, label: d.label.trim(), kind: d.kind }));
+    if (payload.length === 0) return;
+
+    sessionSaving = true;
+    sessionError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'name_places', places: payload }),
+      });
+      const out = (await res.json().catch(() => ({}))) as {
+        named?: number;
+        failed?: { placeId: string; error: string }[];
+        thoughtsResolved?: number;
+        error?: string;
+      };
+      if (out.error) throw new Error(out.error);
+      sessionDone = {
+        named: out.named ?? 0,
+        failed: (out.failed ?? []).length,
+        thoughtsResolved: out.thoughtsResolved ?? 0,
+      };
+      // Drop the rows that landed, so a partial failure leaves exactly the
+      // unsaved answers on screen rather than making the owner retype them.
+      const savedIds = new Set(payload.map((x) => x.placeId));
+      for (const f of out.failed ?? []) savedIds.delete(f.placeId);
+      sessionQueue = sessionQueue.filter((q) => !savedIds.has(q.id));
+      const remaining: Record<string, { label: string; kind: string }> = {};
+      for (const [k, v] of Object.entries(drafts)) if (!savedIds.has(k)) remaining[k] = v;
+      drafts = remaining;
+      await invalidateAll();
+    } catch (err) {
+      sessionError = err instanceof Error ? err.message : String(err);
+    } finally {
+      sessionSaving = false;
+    }
+  }
+
   const PLACE_KINDS = ['home', 'school', 'work', 'shop', 'cafe', 'gym', 'other'];
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -354,23 +471,111 @@
        inert until a place has a name, so this is the highest-leverage thing
        on the page and answering one question here unlocks more than any
        amount of reading below. -->
-  {#if unnamed.length}
+  {#if unnamed.length || quietUnnamed}
     <section class="nm-sec">
       <div class="nm-sec-hd">
         <span class="sr-label-tight">What is this place?</span>
-        <span class="nm-sec-meta">{unnamed.length} worth naming</span>
+        <span class="nm-sec-meta">{counts.unnamedPlaces} unnamed</span>
       </div>
       <p class="sec-lede">
-        A named place turns a coordinate into a fact. Five of the eight detectors stay
-        silent until one has a name.
+        A named place turns a coordinate into a fact. Seven of the nine detectors stay
+        silent until one has a name, so this is the highest-leverage thing on the page.
         {#if quietUnnamed}
-          <br />{quietUnnamed} other unnamed place{quietUnnamed === 1 ? '' : 's'} with fewer than
-          {ASK_AT_VISITS} visits {quietUnnamed === 1 ? 'is' : 'are'} kept but not asked about —
-          they still match offers and proximity.
+          <br />{quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} fewer than
+          {ASK_AT_VISITS} visits, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
+          interrupted about — but {quietUnnamed === 1 ? 'it is' : 'they are'} in the session below.
         {/if}
       </p>
 
-      <div class="rows">
+      <!-- The sit-down. A page the owner opened is attention they have offered,
+           so naming thirty places here costs none of the interruption budget
+           that four-a-day protects. -->
+      <div class="session-bar">
+        {#if !sessionOpen}
+          <button class="session-cta" onclick={openSession}>
+            Name them in one go — {counts.unnamedPlaces} waiting
+          </button>
+          <span class="session-hint">Each one arrives with a suggested name and address.</span>
+        {:else}
+          <button class="row-link" onclick={() => { sessionOpen = false; }}>Close the session</button>
+          {#if draftCount}
+            <button class="session-cta" disabled={sessionSaving} onclick={saveSession}>
+              {sessionSaving ? 'Saving…' : `Save ${draftCount} name${draftCount === 1 ? '' : 's'}`}
+            </button>
+          {/if}
+        {/if}
+      </div>
+
+      {#if sessionDone}
+        <p class="session-done">
+          Named {sessionDone.named}{sessionDone.failed ? `, ${sessionDone.failed} failed` : ''}.
+          {#if sessionDone.thoughtsResolved}
+            Closed {sessionDone.thoughtsResolved} open question{sessionDone.thoughtsResolved === 1 ? '' : 's'}.
+          {/if}
+        </p>
+      {/if}
+      {#if sessionError}
+        <p class="nm-sec-error">{sessionError}</p>
+      {/if}
+
+      {#if sessionOpen}
+        {#if sessionLoading}
+          <p class="sec-lede">Loading the queue…</p>
+        {:else if sessionQueue.length === 0}
+          <p class="sec-lede">Nothing left unnamed.</p>
+        {:else}
+          <div class="session-list">
+            {#each sessionQueue as q (q.id)}
+              {@const draft = drafts[q.id]}
+              <div class="session-row" class:filled={draft && draft.label.trim()}>
+                <div class="session-meta">
+                  <span class="session-rhythm">{q.rhythm}</span>
+                  {#if q.suggestedAddress}
+                    <span class="session-addr">{q.suggestedAddress}</span>
+                  {:else}
+                    <span class="session-addr none">no address found for this spot</span>
+                  {/if}
+                </div>
+                <div class="session-controls">
+                  {#if !draft && q.suggestedLabel}
+                    <button class="suggest-chip" onclick={() => acceptSuggestion(q)}>
+                      {q.suggestedLabel}{q.suggestedKind ? ` · ${q.suggestedKind}` : ''}
+                    </button>
+                    <button
+                      class="row-link"
+                      onclick={() => editDraft(q, 'label', '')}
+                    >Something else</button>
+                  {:else}
+                    <input
+                      class="nm-text-input session-input"
+                      value={draft?.label ?? ''}
+                      placeholder={q.suggestedLabel ?? 'What is it called?'}
+                      oninput={(e) => editDraft(q, 'label', e.currentTarget.value)}
+                    />
+                    <select
+                      class="nm-text-input kind-select"
+                      value={draft?.kind ?? q.suggestedKind ?? 'other'}
+                      onchange={(e) => editDraft(q, 'kind', e.currentTarget.value)}
+                    >
+                      {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
+                    </select>
+                    {#if draft}
+                      <button class="row-link" onclick={() => clearDraft(q.id)}>Skip</button>
+                    {/if}
+                  {/if}
+                  <button
+                    class="row-link danger"
+                    disabled={busy === `ignore:${q.id}`}
+                    onclick={() => post({ action: 'ignore_place', placeId: q.id }, `ignore:${q.id}`)}
+                  >Never ask</button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+
+      <div class="rows" class:hidden={sessionOpen}>
         {#each unnamed as p (p.id)}
           <div class="place-row">
             <div class="place-id">
@@ -781,6 +986,49 @@
   .name-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
   .name-form .nm-text-input { width: auto; min-width: 12rem; }
   .kind-select { min-width: 7rem; }
+
+  /* The naming session */
+  .session-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.75rem 0 0.5rem; }
+  .session-cta {
+    font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.02em;
+    padding: 0.5rem 0.9rem; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink);
+    border: 1px solid var(--accent);
+  }
+  .session-cta:hover:not(:disabled) { filter: brightness(1.08); }
+  .session-cta:disabled { opacity: 0.55; cursor: default; }
+  .session-hint { font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .session-done { margin: 0 0 0.5rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .session-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
+  .session-row {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 0.6rem 1rem; padding: 0.55rem 0.75rem;
+    border: 1px solid var(--line-hair); background: var(--surface-sunken);
+    border-left: 3px solid transparent;
+  }
+  /* An answered row reads as done at a glance, so a long session has a
+     visible floor rising under it rather than looking untouched throughout. */
+  .session-row.filled { border-left-color: var(--accent); }
+  .session-meta { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+  .session-rhythm { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .session-addr { font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .session-addr.none { color: var(--text-ghost); font-style: italic; }
+  .session-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .session-input { width: auto; min-width: 11rem; }
+  /* The suggestion IS the button — accepting it is the commonest action, so it
+     costs one tap and does not require reading a separate control first. */
+  .suggest-chip {
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    padding: 0.35rem 0.65rem; cursor: pointer; text-align: left;
+    background: none; color: var(--text-primary);
+    border: 1px dashed var(--line-strong);
+  }
+  .suggest-chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); }
+  .rows.hidden { display: none; }
+  @media (max-width: 560px) {
+    .session-row { flex-direction: column; align-items: stretch; }
+    .session-input { min-width: 0; width: 100%; }
+  }
 
   /* Detectors */
   .det-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.55rem 0; border-bottom: 1px solid var(--line-hair); }
