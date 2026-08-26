@@ -433,14 +433,32 @@ export async function confirmPlace(
   //
   // `actioned` is a PROTECTED status, so a later run cannot resurrect it.
   //
-  // Deliberately NOT recorded as feedback: acting on a suggestion is good
-  // evidence it was useful, but the learned weight and the exemplar bank are
-  // driven by explicit taps, and quietly manufacturing an upvote would inflate
-  // a kind's score with something the owner never said.
+  // Recorded as feedback, but LABELLED as inferred.
+  //
+  // This block used to record nothing, on the correct grounds that quietly
+  // manufacturing an upvote would inflate a kind's score with something the
+  // owner never said. The cost of that correctness was severe: he named five
+  // places — the exact act the whole feature exists to elicit — and the ledger
+  // learned nothing, while `coldStartThreshold` sat pinned at 0.75 waiting for
+  // 25 responses it had no way to collect.
+  //
+  // Keeping the provenance answers both. `feedbackSource: 'action'` weighs 0.4
+  // of a stated verdict, so it moves the threshold over time and cannot on its
+  // own make a kind look loved, and the page says "inferred from naming the
+  // place" rather than "you said useful". The original objection was to
+  // pretending; it was never to noticing.
   const { daydreamThoughts } = await import('$lib/db/schema');
   const resolved = await db
     .update(daydreamThoughts)
-    .set({ status: 'actioned', updatedAt: new Date() })
+    .set({
+      status: 'actioned',
+      // Only where he has not already ruled explicitly — a stated verdict is
+      // never overwritten by an inferred one.
+      feedback: sql`coalesce(${daydreamThoughts.feedback}, 'useful')`,
+      feedbackSource: sql`coalesce(${daydreamThoughts.feedbackSource}, 'action')`,
+      feedbackAt: sql`coalesce(${daydreamThoughts.feedbackAt}, now())`,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(daydreamThoughts.placeId, placeId),

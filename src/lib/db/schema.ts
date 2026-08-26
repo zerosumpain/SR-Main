@@ -4137,7 +4137,34 @@ export const daydreamThoughts = pgTable(
      *  absolute mute — not a down-weight. With push as the default channel it
      *  is the escape hatch, so no statistics stand between you and silence. */
     feedback: text('feedback'),
+    /**
+     * Where the verdict came from. 'explicit' | 'triage' | 'action'.
+     *
+     * The reason this column exists rather than a second boolean: `confirmPlace`
+     * has always refused to record naming a place as feedback, on the correct
+     * grounds that quietly manufacturing an upvote would inflate a kind's score
+     * with something the owner never said. But that left the strongest evidence
+     * the feature has ever produced — he named five places, which is the exact
+     * act the whole thing exists to elicit — recorded nowhere at all, while the
+     * threshold sat pinned at its ceiling waiting for 25 responses it had no way
+     * to get.
+     *
+     * Both concerns are real, and they are answerable at once by keeping the
+     * provenance instead of throwing the signal away. An action counts, at a
+     * discount, and says on the page that it was inferred rather than said.
+     */
+    feedbackSource: text('feedback_source'),
     feedbackNote: text('feedback_note'),
+    /**
+     * How many detect ticks have re-proposed this exact thing.
+     *
+     * `persistCandidates` updates a suppressed row in place every ten minutes,
+     * which is right — a candidate is one standing proposal, not 144 a day —
+     * but it meant the page could not tell a thing noticed once from a thing
+     * that has been almost-said forty times and never cleared the bar. That
+     * distinction is the whole basis for deciding what to triage first.
+     */
+    recurrenceCount: integer('recurrence_count').notNull().default(1),
     feedbackAt: timestamp('feedback_at', { withTimezone: true }),
     runId: text('run_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

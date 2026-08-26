@@ -156,3 +156,72 @@ describe('finalScore', () => {
     expect(finalScore(1, MAX_WEIGHT).score).toBe(1);
   });
 });
+
+describe('feedback source weighting', () => {
+  const now = new Date('2026-08-26T12:00:00Z');
+  const at = new Date('2026-08-26T11:00:00Z');
+
+  // The whole point of keeping provenance. `confirmPlace` used to record
+  // nothing, on the correct grounds that manufacturing an upvote would inflate
+  // a kind's score with something the owner never said. Recording it at a
+  // discount keeps the signal without the pretence.
+  it('counts an inferred action for less than a stated verdict', () => {
+    const explicit = tallyFeedback(
+      [{ kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'explicit' }],
+      now,
+    );
+    const action = tallyFeedback(
+      [{ kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'action' }],
+      now,
+    );
+    expect(action.useful).toBeLessThan(explicit.useful);
+    expect(action.useful).toBeGreaterThan(0);
+  });
+
+  it('puts a triage verdict between the two', () => {
+    const w = (source: 'explicit' | 'triage' | 'action') =>
+      tallyFeedback([{ kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: source }], now)
+        .useful;
+    expect(w('action')).toBeLessThan(w('triage'));
+    expect(w('triage')).toBeLessThan(w('explicit'));
+  });
+
+  // Rows written before the column existed must not silently lose weight.
+  it('treats an unlabelled row as explicit', () => {
+    const labelled = tallyFeedback(
+      [{ kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'explicit' }],
+      now,
+    );
+    const unlabelled = tallyFeedback([{ kind: 'k', feedback: 'useful', feedbackAt: at }], now);
+    expect(unlabelled.useful).toBeCloseTo(labelled.useful, 10);
+  });
+
+  // An inferred nudge should never be able to carry a kind on its own.
+  it('needs more than two actions to match one stated verdict', () => {
+    const oneExplicit = tallyFeedback(
+      [{ kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'explicit' }],
+      now,
+    ).useful;
+    const twoActions = tallyFeedback(
+      [
+        { kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'action' },
+        { kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'action' },
+      ],
+      now,
+    ).useful;
+    expect(twoActions).toBeLessThan(oneExplicit);
+  });
+
+  // `n` is the response COUNT the threshold decays on, and it is deliberately
+  // undiscounted: a verdict given is a verdict given, however it arrived.
+  it('counts every verdict once toward the response count', () => {
+    const t = tallyFeedback(
+      [
+        { kind: 'k', feedback: 'useful', feedbackAt: at, feedbackSource: 'action' },
+        { kind: 'k', feedback: 'not_useful', feedbackAt: at, feedbackSource: 'triage' },
+      ],
+      now,
+    );
+    expect(t.n).toBe(2);
+  });
+});
