@@ -465,6 +465,19 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/daydream/backfill POST is service-to-service: it pulls a month of
+  // Home Assistant history into the daydream trail and is triggered from a
+  // script, which has no user session. It self-authenticates via
+  // `Authorization: Bearer DAYDREAM_MAINTENANCE_SECRET` and ALSO accepts an
+  // owner session, so the button on /jkai/daydreams keeps working.
+  //
+  // Matched EXACTLY and POST-only, following the claude-changelog bypass above:
+  // a prefix here would hand the exemption to every future `/api/daydream/*`
+  // route, and `/api/daydream/thoughts` reads the owner's movements.
+  if (pathname === '/api/daydream/backfill' && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
   // /api/policy-engine/* (ingest + seed-workflows) are service-to-service: the
   // scheduled tracking workflows' http-request node has no user session. The
   // handlers self-authenticate via `Authorization: Bearer POLICY_INGEST_SECRET`,

@@ -315,12 +315,34 @@ export async function buildSnapshot(
     sources.push({ key: 'memories', status: 'failed', detail: errMsg(err) });
   }
 
-  // ── Offers — merge 5 ───────────────────────────────────────────────────
-  // Declared unavailable rather than empty. The two detectors that need it
-  // check `available` and report themselves not ready, instead of quietly
-  // finding nothing and looking like they work.
-  const offers = { available: false, items: [] };
-  sources.push({ key: 'offers', status: 'unavailable', detail: 'email offer index not built yet (merge 5)' });
+  // ── Offers ─────────────────────────────────────────────────────────────
+  // `available` is about whether the INDEX exists, not whether it currently
+  // holds anything. An empty index and a missing one look identical from a
+  // detector's side, and conflating them is how a broken feature passes for a
+  // quiet one — so a read failure reports unavailable, and an empty result
+  // reports available-and-empty.
+  let offers: DaydreamSnapshot['offers'] = { available: false, items: [] };
+  try {
+    const { listActiveOffers } = await import('./offers');
+    const rows = await listActiveOffers();
+    offers = {
+      available: true,
+      items: rows.map((o) => ({
+        id: o.id,
+        merchant: o.merchant,
+        summary: o.summary,
+        expiresAt: o.expiresAt,
+        emailId: o.noteId ?? o.id,
+      })),
+    };
+    sources.push({
+      key: 'offers',
+      status: rows.length ? 'ok' : 'empty',
+      detail: `${rows.length} live offers`,
+    });
+  } catch (err) {
+    sources.push({ key: 'offers', status: 'failed', detail: errMsg(err) });
+  }
 
   return {
     now,
