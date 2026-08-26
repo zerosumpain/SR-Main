@@ -6,6 +6,7 @@ import {
   integer,
   bigint,
   check,
+  date,
   doublePrecision,
   boolean,
   uniqueIndex,
@@ -4075,6 +4076,93 @@ export const daydreamPlaces = pgTable(
     index('daydream_places_label_idx').on(t.label),
   ],
 );
+
+/**
+ * One row per local day, per subject — the table that makes a cross-domain
+ * correlation computable at all.
+ *
+ * Nothing in this database previously put health, movement and activity on a
+ * common key. 472,072 Apple rows, 1,138 activities and 9,313 trail fixes exist,
+ * in four different time formats (a x100 integer with an offset string, a unix
+ * epoch, an ISO string with a Z, and a timestamptz) and two different scaling
+ * conventions — one of which, strain, is applied inconsistently within its own
+ * column. Asking "does poor sleep track shop visits?" was not gated, it was
+ * unanswerable.
+ *
+ * Two rules govern every column here:
+ *
+ *   EVERY FEATURE IS NULLABLE. A day with no reading stores null, never zero.
+ *   Zero is a measurement; absent is not. Conflating them is how "you took no
+ *   steps on Sunday" gets said about a day the phone was flat, and it is the
+ *   single fastest way to manufacture a correlation out of an outage.
+ *
+ *   COVERAGE TRAVELS WITH THE NUMBERS. `sources` records, per domain, whether
+ *   that day was actually observed. A statistical test can then exclude a day
+ *   it cannot see rather than treating it as a data point.
+ *
+ * Derived and disposable: every value is recomputed from the source tables, so
+ * this can be dropped and rebuilt. It is a cache with opinions, not a record.
+ */
+export const daydreamDayFeatures = pgTable(
+  'daydream_day_features',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** LOCAL calendar day (Europe/London), never UTC. A rhythm is a local fact
+     *  and a UTC day boundary puts half of every evening on the wrong date. */
+    day: date('day').notNull(),
+
+    // ── Movement, from the trail. No coordinates, ever. ──
+    trailFixes: integer('trail_fixes'),
+    trailCoverage: doublePrecision('trail_coverage'),
+    placesVisited: integer('places_visited'),
+    distinctPlaces: integer('distinct_places'),
+    minutesAtHome: integer('minutes_at_home'),
+    minutesOut: integer('minutes_out'),
+    firstOutAtMins: integer('first_out_at_mins'),
+    lastHomeAtMins: integer('last_home_at_mins'),
+
+    // ── Health. Normalised in features/normalise.ts, never inline. ──
+    steps: integer('steps'),
+    activeEnergyKj: doublePrecision('active_energy_kj'),
+    meanHeartRate: doublePrecision('mean_heart_rate'),
+    hrvMs: doublePrecision('hrv_ms'),
+    restingHeartRate: doublePrecision('resting_heart_rate'),
+    recoveryScore: doublePrecision('recovery_score'),
+    strain: doublePrecision('strain'),
+    sleepMinutes: doublePrecision('sleep_minutes'),
+    sleepPerformance: doublePrecision('sleep_performance'),
+    sleepEfficiency: doublePrecision('sleep_efficiency'),
+    disturbanceCount: integer('disturbance_count'),
+
+    // ── Deliberate activity. ──
+    workouts: integer('workouts'),
+    activeMinutes: doublePrecision('active_minutes'),
+    activityDistanceM: doublePrecision('activity_distance_m'),
+
+    // ── Diary. ──
+    calendarEvents: integer('calendar_events'),
+    calendarBusyMinutes: integer('calendar_busy_minutes'),
+
+    /**
+     * Per-domain observation state: 'ok' | 'partial' | 'absent'.
+     *
+     * The difference between "he did not go out" and "we could not see" — which
+     * is the entire reason the coverage gate exists elsewhere in this feature,
+     * and would be thrown away by a bare feature vector.
+     */
+    sources: jsonb('sources').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_day_features_subject_day_idx').on(t.subject, t.day),
+    index('daydream_day_features_day_idx').on(t.day),
+  ],
+);
+
+export type DaydreamDayFeature = typeof daydreamDayFeatures.$inferSelect;
+export type NewDaydreamDayFeature = typeof daydreamDayFeatures.$inferInsert;
 
 export type DaydreamPlace = typeof daydreamPlaces.$inferSelect;
 export type NewDaydreamPlace = typeof daydreamPlaces.$inferInsert;
