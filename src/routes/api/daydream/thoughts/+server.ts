@@ -95,7 +95,14 @@ export const POST: RequestHandler = async ({ request }) => {
           .limit(1);
         if (!place) return json({ error: 'no such place' }, { status: 404 });
         const { suggestPlaceName } = await import('$lib/daydream/geocode');
-        return json({ ok: true, suggestion: await suggestPlaceName(place.lat, place.lon) });
+        const { getPlaceVisits } = await import('$lib/daydream/places');
+        // Both in one round trip: the naming form wants them together, and two
+        // requests for one panel is two chances to half-render.
+        const [suggestion, visits] = await Promise.all([
+          suggestPlaceName(place.lat, place.lon),
+          getPlaceVisits(placeId),
+        ]);
+        return json({ ok: true, suggestion, visits });
       }
 
       case 'name_place': {

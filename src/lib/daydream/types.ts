@@ -88,7 +88,8 @@ export const MIN_VISITS_FOR_PLACE = 1;
 /**
  * How many visits before it is worth ASKING what a place is.
  *
- * Two, by the owner's instruction (2026-08-26). Deliberately separate from
+ * Three, by the owner's instruction (2026-08-26; raised from two the same day
+ * once the first list was seen). Deliberately separate from
  * MIN_VISITS_FOR_PLACE, because creating a place and asking about one are
  * different questions with different costs.
  *
@@ -100,7 +101,7 @@ export const MIN_VISITS_FOR_PLACE = 1;
  *
  * Conflating the two is what produced 81 questions from a month of trail.
  */
-export const MIN_VISITS_TO_ASK = 2;
+export const MIN_VISITS_TO_ASK = 3;
 
 /**
  * The dwell that separates being somewhere from passing it.

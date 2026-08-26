@@ -153,17 +153,20 @@ describe('positionIsUsable', () => {
 });
 
 describe('unknown_place', () => {
-  it('does NOT ask about somewhere visited once — a place exists, a question is earned', () => {
+  it('does NOT ask about somewhere visited once or twice', () => {
     // Creating a place and asking about one are different questions with
     // different costs: a place can match an offer for free, a question costs a
-    // notification. A single stop is usually a car park on the way somewhere.
-    const s = snap({ places: [place({ visitCount: 1, medianDwellMins: 40 })] });
-    expect(unknownPlace.readiness(s).ready).toBe(false);
-    expect(unknownPlace.detect(s)).toEqual([]);
+    // notification. One or two stops is usually a car park on the way
+    // somewhere, and the place still exists to be matched against.
+    for (const visitCount of [1, 2]) {
+      const s = snap({ places: [place({ visitCount, medianDwellMins: 40 })] });
+      expect(unknownPlace.readiness(s).ready).toBe(false);
+      expect(unknownPlace.detect(s)).toEqual([]);
+    }
   });
 
-  it('asks once it has been somewhere twice', () => {
-    const s = snap({ places: [place({ visitCount: 2, medianDwellMins: 25 })] });
+  it('asks once it has been somewhere three times', () => {
+    const s = snap({ places: [place({ visitCount: 3, medianDwellMins: 25 })] });
     expect(unknownPlace.readiness(s).ready).toBe(true);
     expect(unknownPlace.detect(s)).toHaveLength(1);
   });

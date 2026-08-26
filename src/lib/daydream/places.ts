@@ -320,7 +320,7 @@ export async function confirmPlace(
   label: string,
   kind: PlaceKind,
   opts: { conversationId?: string | null } = {},
-): Promise<{ memoryId: string }> {
+): Promise<{ memoryId: string; thoughtsResolved: number }> {
   const [place] = await db
     .select()
     .from(daydreamPlaces)
@@ -362,7 +362,31 @@ export async function confirmPlace(
     })
     .where(eq(daydreamPlaces.id, placeId));
 
-  return { memoryId: memory.id };
+  // The question has been answered, so the thought asking it is finished
+  // business. Without this it sits on the ledger still saying "What is this
+  // place you keep going to?" about somewhere that now has a name — the detector
+  // stops raising it, which is precisely why nothing would ever come along and
+  // tidy the existing row.
+  //
+  // `actioned` is a PROTECTED status, so a later run cannot resurrect it.
+  //
+  // Deliberately NOT recorded as feedback: acting on a suggestion is good
+  // evidence it was useful, but the learned weight and the exemplar bank are
+  // driven by explicit taps, and quietly manufacturing an upvote would inflate
+  // a kind's score with something the owner never said.
+  const { daydreamThoughts } = await import('$lib/db/schema');
+  const resolved = await db
+    .update(daydreamThoughts)
+    .set({ status: 'actioned', updatedAt: new Date() })
+    .where(
+      and(
+        eq(daydreamThoughts.placeId, placeId),
+        inArray(daydreamThoughts.status, ['new', 'delivered', 'seen', 'suppressed']),
+      ),
+    )
+    .returning({ id: daydreamThoughts.id });
+
+  return { memoryId: memory.id, thoughtsResolved: resolved.length };
 }
 
 /** "Stop asking about this one." A place-level mute that survives
@@ -372,4 +396,68 @@ export async function ignorePlace(placeId: string): Promise<void> {
     .update(daydreamPlaces)
     .set({ status: 'ignored', updatedAt: new Date() })
     .where(eq(daydreamPlaces.id, placeId));
+}
+
+// ── Visit history ────────────────────────────────────────────────────────────
+
+export interface PlaceVisit {
+  startedAt: string;
+  dwellMins: number;
+  /** Local, because a visit's day and time are local facts. "Tuesday 14:30" in
+   *  UTC is a different Tuesday for half the year. */
+  dateLabel: string;
+  dayName: string;
+  timeLabel: string;
+}
+
+/**
+ * When, exactly, was the owner here?
+ *
+ * The rhythm summary ("4 visits, usually Tuesday") is what a rule reasons with;
+ * this is what a PERSON needs to recognise a place. "Tue 12 Aug, 14:20, 40
+ * minutes" is a memory; "usually Tuesday afternoon" is a statistic, and nobody
+ * has ever recognised a dentist from a statistic.
+ *
+ * Derived on demand rather than stored: it is only ever wanted for the one
+ * place whose naming form is open, and computing it for all 84 on every page
+ * load would be a lot of segmentation for something nobody is looking at.
+ */
+export async function getPlaceVisits(placeId: string, limit = 12): Promise<PlaceVisit[]> {
+  const rows = await db
+    .select({ ts: daydreamTrail.ts })
+    .from(daydreamTrail)
+    .where(eq(daydreamTrail.placeId, placeId))
+    .orderBy(asc(daydreamTrail.ts));
+
+  if (rows.length === 0) return [];
+
+  const visits = segmentVisits(rows.map((r) => r.ts), VISIT_MAX_GAP_MINS).filter(
+    (v) => v.dwellMins >= MIN_DWELL_MINS,
+  );
+
+  const dateFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: LOCAL_TZ,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const dayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_TZ, weekday: 'long' });
+  const timeFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: LOCAL_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  // Newest first: the most recent visit is the one most likely to be recognised.
+  return visits
+    .slice(-limit)
+    .reverse()
+    .map((v) => ({
+      startedAt: v.startedAt.toISOString(),
+      dwellMins: v.dwellMins,
+      dateLabel: dateFmt.format(v.startedAt),
+      dayName: dayFmt.format(v.startedAt),
+      timeLabel: timeFmt.format(v.startedAt),
+    }));
 }

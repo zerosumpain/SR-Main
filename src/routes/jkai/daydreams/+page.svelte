@@ -27,12 +27,15 @@
   let placeKind = $state('other');
   let suggesting = $state(false);
   let suggestion = $state<{ name: string | null; kind: string | null; address: string | null } | null>(null);
+  type Visit = { startedAt: string; dwellMins: number; dateLabel: string; dayName: string; timeLabel: string };
+  let visits = $state<Visit[]>([]);
 
   async function openNaming(p: Place) {
     namingPlace = p.id;
     placeLabel = '';
     placeKind = 'other';
     suggestion = null;
+    visits = [];
     suggesting = true;
     try {
       const res = await fetch('/api/daydream/thoughts', {
@@ -42,7 +45,9 @@
       });
       const out = (await res.json().catch(() => ({}))) as {
         suggestion?: { name: string | null; kind: string | null; address: string | null };
+        visits?: Visit[];
       };
+      visits = out.visits ?? [];
       if (out.suggestion) {
         suggestion = out.suggestion;
         // Pre-fill, never auto-save. A geocoded guess is weaker evidence than
@@ -53,6 +58,7 @@
       }
     } catch {
       suggestion = null;
+      visits = [];
     } finally {
       suggesting = false;
     }
@@ -76,7 +82,15 @@
     filter === 'said' ? said : filter === 'suppressed' ? suppressed : filter === 'ruled' ? ruled : thoughts,
   );
 
-  const unnamed = $derived(places.filter((p) => !p.label && p.status === 'active'));
+  /** Places worth asking about. The one- and two-visit ones still exist and
+   *  still match offers and proximity — they are simply not questions. */
+  const ASK_AT_VISITS = 3;
+  const unnamed = $derived(
+    places.filter((p) => !p.label && p.status === 'active' && p.visitCount >= ASK_AT_VISITS),
+  );
+  const quietUnnamed = $derived(
+    places.filter((p) => !p.label && p.status === 'active' && p.visitCount < ASK_AT_VISITS).length,
+  );
   const named = $derived(places.filter((p) => p.label && p.status === 'active'));
 
   const budget = $derived(data.budget);
@@ -344,11 +358,16 @@
     <section class="nm-sec">
       <div class="nm-sec-hd">
         <span class="sr-label-tight">What is this place?</span>
-        <span class="nm-sec-meta">{unnamed.length} unnamed</span>
+        <span class="nm-sec-meta">{unnamed.length} worth naming</span>
       </div>
       <p class="sec-lede">
         A named place turns a coordinate into a fact. Five of the eight detectors stay
         silent until one has a name.
+        {#if quietUnnamed}
+          <br />{quietUnnamed} other unnamed place{quietUnnamed === 1 ? '' : 's'} with fewer than
+          {ASK_AT_VISITS} visits {quietUnnamed === 1 ? 'is' : 'are'} kept but not asked about —
+          they still match offers and proximity.
+        {/if}
       </p>
 
       <div class="rows">
@@ -370,6 +389,21 @@
                     No address found for this spot — the map is the better guide.
                   {/if}
                 </p>
+                {#if visits.length}
+                  <div class="visits">
+                    <span class="sr-label-tight">When you were here</span>
+                    <ul class="visit-list">
+                      {#each visits as v (v.startedAt)}
+                        <li>
+                          <span class="v-day">{v.dayName}</span>
+                          <span class="v-date">{v.dateLabel}</span>
+                          <span class="v-time mono">{v.timeLabel}</span>
+                          <span class="v-dwell mono">{v.dwellMins} min</span>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
                 <div class="name-form">
                   <input
                     class="nm-text-input"
@@ -728,6 +762,16 @@
   /* Places */
   .place-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.6rem 0.75rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
   .naming { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+  .visits { display: flex; flex-direction: column; gap: 0.35rem; }
+  .visit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+  .visit-list li { display: grid; grid-template-columns: 5.5rem 1fr 3.5rem 4.5rem; gap: 0.5rem; font-size: var(--fs-label-xs); padding: 0.2rem 0; border-bottom: 1px solid var(--line-hair); }
+  .v-day { color: var(--text-primary); }
+  .v-date { color: var(--text-secondary); }
+  .v-time, .v-dwell { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+  @media (max-width: 560px) {
+    .visit-list li { grid-template-columns: 4.5rem 1fr 3.2rem; }
+    .v-dwell { display: none; }
+  }
   .geo-line { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); }
   .geo-src { color: var(--text-ghost); }
   .place-row.named { background: none; border-color: var(--line-hair); }
