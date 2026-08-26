@@ -4306,6 +4306,62 @@ export const daydreamDigests = pgTable(
   ],
 );
 
+/**
+ * Money actually spent, as far as the mailbox can tell.
+ *
+ * This table is deliberately narrow, and the reason is worth stating because
+ * the obvious version of this feature is a trap. 605 email notes contain a
+ * currency amount — and an audit of them found the overwhelming majority are
+ * ADVERTISED prices, not payments: "Price reduced by £34.30", "Luxury Escapes
+ * From £879pp", "Up to 12 months at 0%". A spend series built from "emails
+ * mentioning money" would track how much marketing John receives, and it would
+ * correlate beautifully with things, and every word of it would be false.
+ *
+ * So only genuinely receipt-shaped mail is admitted, and the extracted amount
+ * must appear verbatim in the source text before the row is written. At the
+ * time of building that is 34 messages over eight weeks — about four a week.
+ *
+ * That density is why `daydream_spend` is NOT wired into the sweep metrics.
+ * Four points a week is nulls on most days, and every question asked of it
+ * would come back underpowered at best and spurious at worst. It accumulates
+ * first and earns its way in later; `spendDensity()` reports how close it is,
+ * so the decision is a number on a page rather than an opinion.
+ *
+ * It will always understate. No cash, no card-present spend without an emailed
+ * receipt, and nothing from a merchant who does not email. Anything reading
+ * this table must say so.
+ */
+export const daydreamSpend = pgTable(
+  'daydream_spend',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** The intel_notes row this came from. The provenance, and the dedupe key. */
+    sourceNoteId: text('source_note_id').notNull(),
+    merchant: text('merchant').notNull(),
+    /** Minor units (pence), integer — never a float. Money in floating point is
+     *  a rounding error waiting to be summed. */
+    amountMinor: integer('amount_minor').notNull(),
+    currency: text('currency').notNull().default('GBP'),
+    /** LOCAL day of the purchase, for joining against day features later. */
+    day: date('day').notNull(),
+    /** The exact substring the amount was read from. Stored so a wrong figure
+     *  can be traced to the text that produced it rather than argued about. */
+    evidence: text('evidence').notNull(),
+    /** Did the amount actually appear in the source? Written by code, never by
+     *  a model. A false here means the row is quarantined, not quoted. */
+    verified: boolean('verified').notNull().default(false),
+    extractedAt: timestamp('extracted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_spend_note_idx').on(t.sourceNoteId),
+    index('daydream_spend_day_idx').on(t.day),
+    index('daydream_spend_merchant_idx').on(t.merchant),
+  ],
+);
+
+export type DaydreamSpend = typeof daydreamSpend.$inferSelect;
+
 export type DaydreamDigest = typeof daydreamDigests.$inferSelect;
 
 export type DaydreamHypothesis = typeof daydreamHypotheses.$inferSelect;
