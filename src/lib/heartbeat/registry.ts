@@ -8,6 +8,7 @@ import { daydreamFeatures } from './activities/daydream-features';
 import { daydreamDigest } from './activities/daydream-digest';
 import { daydreamHypothesise } from './activities/daydream-hypothesise';
 import { daydreamPlacesRefresh } from './activities/daydream-places';
+import { daydreamSpendExtract } from './activities/daydream-spend';
 import { daydreamSweep } from './activities/daydream-sweep';
 import { daydreamSuggest } from './activities/daydream-suggest';
 import { daydreamDetect } from './activities/daydream-detect';
@@ -30,6 +31,7 @@ const handlers: ActivityHandler[] = [
   daydreamDigest,
   daydreamHypothesise,
   daydreamPlacesRefresh,
+  daydreamSpendExtract,
   daydreamSweep,
   daydreamSuggest,
   daydreamDetect,
