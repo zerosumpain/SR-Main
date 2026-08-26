@@ -189,6 +189,17 @@ export async function loadBudget() {
   }
 }
 
+/** Model-authored rules: what is waiting on a decision, and what is live. */
+export async function loadRules() {
+  try {
+    const { listRules } = await import('./rules/store');
+    return await listRules();
+  } catch (err) {
+    console.error('[daydream] rules read failed:', err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
 /** The current delivery threshold, and what it is derived from. */
 export async function loadThreshold(): Promise<{ value: number; feedbackCount: number }> {
   const feedback = await loadFeedback();
@@ -304,7 +315,7 @@ export async function snoozeThought(thoughtId: string, days: number): Promise<vo
 
 /** Everything the page needs, in one round of queries. */
 export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget] = await Promise.all([
+  const [engine, detectors, threshold, thoughts, places, counts, budget, rules] = await Promise.all([
     loadEngineState(),
     loadDetectorRows(),
     loadThreshold(),
@@ -312,6 +323,7 @@ export async function loadLedger() {
     loadPlaces(),
     loadCounts(),
     loadBudget(),
+    loadRules(),
   ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget };
+  return { engine, detectors, threshold, thoughts, places, counts, budget, rules };
 }

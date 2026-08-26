@@ -41,6 +41,7 @@ export const daydreamDetect: ActivityHandler = {
 
   async run(ctx) {
     const cfg = { ...DEFAULTS, ...(ctx.config as DetectConfig) };
+    let errorsLoadingRules: string | null = null;
 
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
     if (enabled === false) {
@@ -49,6 +50,22 @@ export const daydreamDetect: ActivityHandler = {
 
     const runId = `dd-${ctx.now}`;
     const snapshot = await buildSnapshot({ now: new Date(ctx.now) });
+
+    // Model-authored rules are loaded HERE and pushed into the detector, so the
+    // detector layer stays a pure function over a snapshot. Putting the query
+    // inside it would put I/O in the one layer whose whole value is having none.
+    let activeRuleCount = 0;
+    try {
+      const { listActiveRules } = await import('$lib/daydream/rules/store');
+      const { setActiveRules } = await import('$lib/daydream/detectors/rule-driven');
+      const rules = await listActiveRules();
+      setActiveRules(rules.map((r) => r.spec));
+      activeRuleCount = rules.length;
+    } catch (err) {
+      // A rule table that cannot be read costs the model-authored rules, never
+      // the hand-written ones.
+      errorsLoadingRules = errMsg(err);
+    }
 
     const woken = await wakeSnoozed(snapshot.now);
 
@@ -88,6 +105,8 @@ export const daydreamDetect: ActivityHandler = {
       summary: (errors.length ? `${errors.length} detector error(s); ` : '') + summary,
       details: {
         runId,
+        activeRules: activeRuleCount,
+        errorsLoadingRules,
         candidates: candidates.length,
         ...persisted,
         woken,

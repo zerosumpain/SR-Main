@@ -60,7 +60,7 @@ export const WEEKLY_SECONDS = 604_800;
  * extractor would spend the same subscription outside them — an enforced-looking
  * cap that enforces half of the spend.
  */
-export const SPENDING_ACTIONS = ['daydream-compose', 'daydream-offers'] as const;
+export const SPENDING_ACTIONS = ['daydream-compose', 'daydream-offers', 'daydream-rulesmith'] as const;
 
 /** @deprecated kept so an older pulse reader still resolves. */
 export const COMPOSE_ACTION = 'daydream-compose';

@@ -17,6 +17,7 @@ import { contextMeetsHealth } from './context-meets-health';
 import { freeWindow } from './free-window';
 import { patternBreak } from './pattern-break';
 import { correlationProbe } from './correlation-probe';
+import { ruleDriven } from './rule-driven';
 import type { Detector } from '../snapshot-types';
 
 export const DETECTORS: Detector[] = [
@@ -28,6 +29,7 @@ export const DETECTORS: Detector[] = [
   freeWindow,
   patternBreak,
   correlationProbe,
+  ruleDriven,
 ];
 
 export function getDetector(kind: string): Detector | null {

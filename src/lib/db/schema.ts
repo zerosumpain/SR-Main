@@ -4164,3 +4164,65 @@ export const daydreamOffers = pgTable(
 
 export type DaydreamOffer = typeof daydreamOffers.$inferSelect;
 export type NewDaydreamOffer = typeof daydreamOffers.$inferInsert;
+
+/**
+ * Rules a model proposed, and what happened to them.
+ *
+ * The mesh between rules-driven and model-driven: the model authors the RULE,
+ * deterministic code evaluates it. `spec` is a validated expression tree over a
+ * fixed allow-list of scalar facts — never code, never `eval`, and never able
+ * to name anything the fact extractor did not put in front of it.
+ *
+ * Nothing here fires until `status = 'active'`, and only the owner moves a rule
+ * there. A proposal that survives validation and backtesting is still only a
+ * proposal; the self-improvement engine auto-enables what it builds, and that
+ * is defensible for a tool nobody is interrupted by. This one buzzes a phone.
+ */
+export const daydreamRules = pgTable(
+  'daydream_rules',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** Becomes the thought `kind`, so it is also the mute key and the weight key. */
+    kind: text('kind').notNull(),
+    /** The validated RuleSpec. See $lib/daydream/rules/spec.ts. */
+    spec: jsonb('spec').$type<Record<string, unknown>>().notNull(),
+    /** 'proposed' | 'active' | 'rejected' | 'deprecated' */
+    status: text('status').notNull().default('proposed'),
+    /** Why the model proposed it, in its own words. Shown to the owner when
+     *  approving; never shown to the composer, which must work from evidence. */
+    rationale: text('rationale').notNull().default(''),
+    /** 'new' | 'tweak' | 'deprecate' — what the model was doing. */
+    proposalKind: text('proposal_kind').notNull().default('new'),
+    /** For a tweak or a deprecation, the rule it is about. */
+    supersedesId: text('supersedes_id'),
+
+    // ── Backtest ──
+    /** How many times it would have fired over the replayed window. */
+    backtestFires: integer('backtest_fires'),
+    backtestDays: integer('backtest_days'),
+    /**
+     * True when the replay could not reconstruct every fact the rule uses, so
+     * the firing count is a LOWER BOUND. Such a rule can never be auto-anything
+     * — an under-estimate is the dangerous direction for a noise check.
+     */
+    backtestLowerBound: boolean('backtest_lower_bound').notNull().default(false),
+    backtestNote: text('backtest_note'),
+
+    // ── Outcome, once live ──
+    firedCount: integer('fired_count').notNull().default(0),
+    usefulCount: integer('useful_count').notNull().default(0),
+    notUsefulCount: integer('not_useful_count').notNull().default(0),
+
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decidedBy: text('decided_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_rules_kind_idx').on(t.kind),
+    index('daydream_rules_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamRule = typeof daydreamRules.$inferSelect;
+export type NewDaydreamRule = typeof daydreamRules.$inferInsert;

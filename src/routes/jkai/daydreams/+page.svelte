@@ -80,6 +80,9 @@
   const named = $derived(places.filter((p) => p.label && p.status === 'active'));
 
   const budget = $derived(data.budget);
+  const rules = $derived(data.rules ?? []);
+  const proposedRules = $derived(rules.filter((r) => r.status === 'proposed'));
+  const activeRules = $derived(rules.filter((r) => r.status === 'active'));
   const readyCount = $derived(detectors.filter((d) => d.readiness?.ready).length);
   const mutedCount = $derived(detectors.filter((d) => d.muted).length);
 
@@ -514,6 +517,75 @@
     {/if}
   </section>
 
+  <!-- ── MODEL-AUTHORED RULES ───────────────────────────────────────────
+       The mesh. The model writes the rule; deterministic code evaluates it;
+       nothing fires until it is approved here. A proposal has already passed
+       validation and a backtest by the time it appears. -->
+  {#if proposedRules.length || activeRules.length}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Rules jkai wrote</span>
+        <span class="nm-sec-meta">
+          {proposedRules.length} awaiting you · {activeRules.length} live
+        </span>
+      </div>
+      <p class="sec-lede">
+        The model proposes rules as data — a condition over a fixed list of facts, never
+        code. Each is validated and replayed against your history before it reaches you.
+        <strong>Nothing fires until you approve it.</strong>
+      </p>
+
+      <div class="rows">
+        {#each proposedRules as r (r.id)}
+          <article class="thought st-new">
+            <div class="thought-hd">
+              <span class="thought-title as-text">{r.spec?.description ?? r.kind}</span>
+              <span class="thought-pill">{r.proposalKind}</span>
+            </div>
+            <p class="thought-why">{r.rationale}</p>
+            <div class="thought-meta">
+              <span class="mono">{r.kind}</span>
+              <span class="sep">·</span>
+              <span class="mono">
+                {#if r.backtestNote}{r.backtestNote}{:else}not backtested{/if}
+              </span>
+            </div>
+            {#if r.backtestLowerBound}
+              <p class="warn-line">
+                Estimate is a floor, not a count — the replay could not rebuild every fact
+                this rule uses, so it will fire more often than shown.
+              </p>
+            {/if}
+            <div class="thought-actions">
+              <button class="row-link" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'approve' }, `rule:${r.id}`)}>
+                Approve
+              </button>
+              <button class="row-link danger" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'reject' }, `rule:${r.id}`)}>
+                Reject
+              </button>
+            </div>
+          </article>
+        {/each}
+
+        {#each activeRules as r (r.id)}
+          <div class="det-row">
+            <div class="det-main">
+              <span class="det-kind mono">{r.kind}</span>
+              <span class="det-desc">{r.spec?.description ?? ''}</span>
+            </div>
+            <div class="det-state">
+              <span class="det-badge on">live</span>
+              <span class="det-votes mono">{r.firedCount} fired · {r.usefulCount}↑ {r.notUsefulCount}↓</span>
+              <button class="row-link danger" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'deprecate' }, `rule:${r.id}`)}>
+                Retire
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
   <!-- ── DETECTORS ──────────────────────────────────────────────────────
        Every detector appears, ready or not. One missing would be
        indistinguishable from one that is merely quiet — the same conflation
@@ -630,6 +702,8 @@
   .thought-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
   .thought-title { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font: inherit; font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); cursor: pointer; overflow-wrap: anywhere; }
   .thought-title:hover { color: var(--accent); }
+  .thought-title.as-text { cursor: default; }
+  .thought-title.as-text:hover { color: var(--text-primary); }
   .thought-pill { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.15rem 0.45rem; border: 1px solid var(--line-strong); color: var(--text-secondary); white-space: nowrap; }
   .thought-why { margin: 0 0 0.55rem; font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-secondary); }
   .thought-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
