@@ -6,6 +6,7 @@ import { workflowReview } from './activities/workflow-review';
 import { daydreamObserve } from './activities/daydream-observe';
 import { daydreamFeatures } from './activities/daydream-features';
 import { daydreamDigest } from './activities/daydream-digest';
+import { daydreamExplore } from './activities/daydream-explore';
 import { daydreamHypothesise } from './activities/daydream-hypothesise';
 import { daydreamPlacesRefresh } from './activities/daydream-places';
 import { daydreamSpendExtract } from './activities/daydream-spend';
@@ -29,6 +30,7 @@ const handlers: ActivityHandler[] = [
   daydreamObserve,
   daydreamFeatures,
   daydreamDigest,
+  daydreamExplore,
   daydreamHypothesise,
   daydreamPlacesRefresh,
   daydreamSpendExtract,
