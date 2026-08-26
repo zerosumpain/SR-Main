@@ -12,12 +12,14 @@
 import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
+  daydreamDigests,
   daydreamPlaces,
   daydreamThoughts,
   heartbeatActions,
   heartbeatPulses,
 } from '$lib/db/schema';
 import { DETECTORS } from './detectors';
+import { listSteers } from './hypotheses/steer';
 import { kindWeight, tallyFeedback, coldStartThreshold, type FeedbackRow } from './scoring';
 import { mutedKinds, loadFeedback } from './thought-store';
 import type { Readiness, SnapshotSource } from './snapshot-types';
@@ -271,6 +273,24 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
   }));
 }
 
+/** The most recent morning card, if there is one. */
+export async function loadLatestDigest() {
+  const [row] = await db
+    .select()
+    .from(daydreamDigests)
+    .orderBy(desc(daydreamDigests.day))
+    .limit(1);
+  if (!row) return null;
+  return {
+    day: row.day,
+    summary: row.summary,
+    narrative: row.narrative,
+    verified: row.verified,
+    stats: row.stats,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export async function loadPlaces(): Promise<LedgerPlace[]> {
   const rows = await db
     .select()
@@ -353,7 +373,7 @@ export async function snoozeThought(thoughtId: string, days: number): Promise<vo
 
 /** Everything the page needs, in one round of queries. */
 export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget, rules] = await Promise.all([
+  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers] = await Promise.all([
     loadEngineState(),
     loadDetectorRows(),
     loadThreshold(),
@@ -362,6 +382,8 @@ export async function loadLedger() {
     loadCounts(),
     loadBudget(),
     loadRules(),
+    loadLatestDigest(),
+    listSteers(),
   ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget, rules };
+  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers };
 }

@@ -3,6 +3,7 @@
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
+  import { untrack } from 'svelte';
   import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
 
   let { data }: { data: PageData } = $props();
@@ -273,6 +274,54 @@
     } finally {
       deckSaving = false;
     }
+  }
+
+  // ── Steering, and the morning card ────────────────────────────────────────
+  // The digest is what lets thinking volume rise without interruption volume
+  // rising with it: somewhere quiet output can land. The steer box is the only
+  // owner-authored text the engine has ever read beyond a place name — and it
+  // reorders work without granting one byte of new access.
+  const digest = $derived(data.digest);
+  type Steer = { id: string; text: string; status: string; batchesInfluenced: number };
+  let steers = $state<Steer[]>([]);
+  let steerText = $state('');
+  let steerBusy = $state(false);
+  let steerError = $state<string | null>(null);
+
+  $effect(() => {
+    // Tracked read of the loaded prop only; the write is untracked, so this
+    // cannot re-trigger on the array it just assigned.
+    const incoming = data.steers;
+    untrack(() => {
+      steers = (incoming ?? []) as Steer[];
+    });
+  });
+
+  async function steerPost(body: Record<string, unknown>) {
+    steerError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const out = (await res.json().catch(() => ({}))) as { steers?: Steer[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      if (out.steers) steers = out.steers;
+      return true;
+    } catch (err) {
+      steerError = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
+  async function submitSteer() {
+    const text = steerText.trim();
+    if (!text) return;
+    steerBusy = true;
+    const ok = await steerPost({ action: 'add_steer', text });
+    if (ok) steerText = '';
+    steerBusy = false;
   }
 
   // ── The propositions board ────────────────────────────────────────────────
@@ -581,6 +630,27 @@
        actually running to them. Under-running is a finding as much as
        over-running: the instruction was to sit near the limit, not far below
        it, so the paced target is shown beside the spend. -->
+  <!-- Yesterday, in one card. Quiet days are reported as clearly as busy ones —
+       a digest that only appears when there is news cannot be trusted when it
+       is silent. -->
+  {#if digest}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Yesterday</span>
+        <span class="nm-sec-meta">{digest.day}</span>
+      </div>
+      <p class="digest">{digest.summary}</p>
+      {#if digest.narrative}
+        <p class="narrative" class:unchecked={digest.verified === false}>
+          {digest.narrative}
+          <span class="narr-tag" class:ok={digest.verified === true}>
+            {digest.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+          </span>
+        </p>
+      {/if}
+    </section>
+  {/if}
+
   <!-- What it has been wondering about. The model picks the questions; code
        answers them. Everything asked is shown, however it turned out. -->
   <section class="nm-sec">
@@ -593,6 +663,46 @@
       deterministic statistics answer it. A question that came back empty is
       still worth reading — and is kept here exactly as long as one that held.
     </p>
+
+    <!-- Reorders what gets asked. Grants no new access: the proposer still sees
+         only the metric list, and a steer reaches it as quoted preference. -->
+    <div class="steer-box">
+      <label class="sr-label-tight" for="steer-input">Ask it to look into something</label>
+      <div class="steer-row">
+        <input
+          id="steer-input"
+          class="nm-text-input steer-input"
+          bind:value={steerText}
+          maxlength="280"
+          placeholder="e.g. whether going out late costs me the next morning"
+          onkeydown={(e) => { if (e.key === 'Enter') submitSteer(); }}
+        />
+        <button class="row-link" disabled={steerBusy || !steerText.trim()} onclick={submitSteer}>
+          {steerBusy ? 'Adding…' : 'Add'}
+        </button>
+      </div>
+      {#if steerError}<p class="nm-sec-error">{steerError}</p>{/if}
+      {#if steers.length}
+        <ul class="steer-list">
+          {#each steers as st (st.id)}
+            <li class="steer" class:done={st.status !== 'active'}>
+              <span class="steer-text">{st.text}</span>
+              <span class="steer-meta mono">
+                {st.status === 'active'
+                  ? `${st.batchesInfluenced} batch${st.batchesInfluenced === 1 ? '' : 'es'}`
+                  : st.status}
+              </span>
+              {#if st.status === 'active'}
+                <button class="row-link" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'done' })}>Done</button>
+                <button class="row-link danger" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'dropped' })}>Drop</button>
+              {:else}
+                <button class="row-link" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'active' })}>Reopen</button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
 
     <div class="session-bar">
       {#if !boardOpen}
@@ -1400,6 +1510,25 @@
     margin: 0.4rem 0 0; font-family: var(--font-mono);
     font-size: var(--fs-label-xs); color: var(--accent);
   }
+
+  /* Yesterday, and steering */
+  .digest {
+    margin: 0; padding: 0.7rem 0.9rem;
+    font-size: var(--fs-body-sm); line-height: 1.6; color: var(--text-primary);
+    background: var(--surface-sunken); border-left: 3px solid var(--accent);
+  }
+  .steer-box { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.6rem 0 0.9rem; }
+  .steer-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .steer-input { flex: 1 1 22rem; min-width: 0; }
+  .steer-list { list-style: none; margin: 0.2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+  .steer {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.6rem; border: 1px solid var(--line-hair);
+    background: var(--surface-sunken); border-left: 2px solid var(--accent);
+  }
+  .steer.done { border-left-color: var(--line-hair); opacity: 0.6; }
+  .steer-text { flex: 1 1 18rem; min-width: 0; font-size: var(--fs-label-xs); color: var(--text-primary); }
+  .steer-meta { font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   /* The propositions board */
   .hyp {

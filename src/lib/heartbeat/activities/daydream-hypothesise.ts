@@ -1,6 +1,7 @@
 import { getSetting } from '$lib/server/models/settings';
 import { proposeHypotheses } from '$lib/daydream/hypotheses/propose';
 import { saveProposals } from '$lib/daydream/hypotheses/store';
+import { markBatchInfluenced } from '$lib/daydream/hypotheses/steer';
 import { testDueHypotheses } from '$lib/daydream/hypotheses/test';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
@@ -56,6 +57,9 @@ export const daydreamHypothesise: ActivityHandler = {
       notes.push(`proposer failed: ${batch.error}`);
     } else {
       const saved = await saveProposals(batch.proposals, { tokens: batch.tokens });
+      // Count this batch against every steer that shaped it, so a steer that has
+      // directed a fortnight of questions and produced nothing is visible.
+      await markBatchInfluenced(batch.steerIds);
       notes.push(`${saved.saved} new question${saved.saved === 1 ? '' : 's'}`);
       if (saved.duplicates) notes.push(`${saved.duplicates} already asked`);
       if (batch.rejected.length) notes.push(`${batch.rejected.length} rejected`);
