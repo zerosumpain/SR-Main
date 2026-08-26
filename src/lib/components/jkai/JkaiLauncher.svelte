@@ -60,6 +60,7 @@
       items: [
         { code: 'MON', label: 'Monitors', href: '/jkai/monitors', desc: 'Watch X, tell me when Y', keywords: 'watch alert notify schedule' },
         { code: 'BR', label: 'Briefing', href: '/jkai/briefing', desc: 'Your daily digest', keywords: 'digest daily morning summary' },
+        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams', desc: 'What it noticed on spare cycles', keywords: 'daydream notice pattern idle location places suggestions' },
       ],
     },
     {

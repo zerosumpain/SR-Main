@@ -89,6 +89,7 @@
     { label: 'Research', href: '/jkai/research', meta: 'DEEP DIVE' },
     { label: 'Briefing', href: '/jkai/briefing', meta: 'DAILY' },
     { label: 'Monitors', href: '/jkai/monitors', meta: 'WATCHES' },
+    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'NOTICING' },
   ];
   const system = $derived<MenuRow[]>([
     { label: 'Agent team', href: '/jkai/agents', meta: 'DELEGATES' },
