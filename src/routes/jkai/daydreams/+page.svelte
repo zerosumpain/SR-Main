@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
+  import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -18,10 +19,44 @@
   let busy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
 
-  // Naming a place — the loop the whole feature is built around.
+  // Naming a place — the loop the whole feature is built around. Opening the
+  // form shows a map and asks the geocoder what is there, so the question is
+  // "is this right?" rather than "where were you on the 14th?".
   let namingPlace = $state<string | null>(null);
   let placeLabel = $state('');
   let placeKind = $state('other');
+  let suggesting = $state(false);
+  let suggestion = $state<{ name: string | null; kind: string | null; address: string | null } | null>(null);
+
+  async function openNaming(p: Place) {
+    namingPlace = p.id;
+    placeLabel = '';
+    placeKind = 'other';
+    suggestion = null;
+    suggesting = true;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'suggest_name', placeId: p.id }),
+      });
+      const out = (await res.json().catch(() => ({}))) as {
+        suggestion?: { name: string | null; kind: string | null; address: string | null };
+      };
+      if (out.suggestion) {
+        suggestion = out.suggestion;
+        // Pre-fill, never auto-save. A geocoded guess is weaker evidence than
+        // the owner's own answer, and only a confirmed name is ever quoted back
+        // as fact.
+        if (out.suggestion.name) placeLabel = out.suggestion.name;
+        if (out.suggestion.kind) placeKind = out.suggestion.kind;
+      }
+    } catch {
+      suggestion = null;
+    } finally {
+      suggesting = false;
+    }
+  }
 
   const PLACE_KINDS = ['home', 'school', 'work', 'shop', 'cafe', 'gym', 'other'];
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -320,28 +355,39 @@
               <span class="place-rhythm">{rhythm(p)}</span>
             </div>
             {#if namingPlace === p.id}
-              <div class="name-form">
-                <input
-                  class="nm-text-input"
-                  bind:value={placeLabel}
-                  placeholder="What is it called?"
-                  onkeydown={(e) => { if (e.key === 'Enter') submitName(p.id); }}
-                />
-                <select class="nm-text-input kind-select" bind:value={placeKind}>
-                  {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
-                </select>
-                <button
-                  class="row-link"
-                  disabled={busy === `name:${p.id}` || !placeLabel.trim()}
-                  onclick={() => submitName(p.id)}
-                >Save</button>
-                <button class="row-link" onclick={() => { namingPlace = null; placeLabel = ''; }}>Cancel</button>
+              <div class="naming">
+                <PlaceMap lat={p.lat} lon={p.lon} radiusM={p.radiusM} />
+                <p class="geo-line">
+                  {#if suggesting}
+                    Looking up what is there…
+                  {:else if suggestion?.address}
+                    {suggestion.address}
+                    {#if suggestion.name}<span class="geo-src">· suggested, check it</span>{/if}
+                  {:else}
+                    No address found for this spot — the map is the better guide.
+                  {/if}
+                </p>
+                <div class="name-form">
+                  <input
+                    class="nm-text-input"
+                    bind:value={placeLabel}
+                    placeholder="What is it called?"
+                    onkeydown={(e) => { if (e.key === 'Enter') submitName(p.id); }}
+                  />
+                  <select class="nm-text-input kind-select" bind:value={placeKind}>
+                    {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
+                  </select>
+                  <button
+                    class="row-link"
+                    disabled={busy === `name:${p.id}` || !placeLabel.trim()}
+                    onclick={() => submitName(p.id)}
+                  >Save</button>
+                  <button class="row-link" onclick={() => { namingPlace = null; placeLabel = ''; suggestion = null; }}>Cancel</button>
+                </div>
               </div>
             {:else}
               <div class="place-actions">
-                <button class="row-link" onclick={() => { namingPlace = p.id; placeLabel = ''; placeKind = 'other'; }}>
-                  Name it
-                </button>
+                <button class="row-link" onclick={() => openNaming(p)}>Name it</button>
                 <button
                   class="row-link danger"
                   disabled={busy === `ignore:${p.id}`}
@@ -607,6 +653,9 @@
 
   /* Places */
   .place-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.6rem 0.75rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
+  .naming { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+  .geo-line { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); }
+  .geo-src { color: var(--text-ghost); }
   .place-row.named { background: none; border-color: var(--line-hair); }
   .place-id { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
   .place-label { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); }

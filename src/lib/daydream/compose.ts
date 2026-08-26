@@ -102,6 +102,50 @@ export async function gatherFacts(evidence: EvidenceRef[]): Promise<string[]> {
   return facts;
 }
 
+/**
+ * What has landed well, and what has not.
+ *
+ * The third of the three learning mechanisms, and the only one that touches the
+ * model. The other two shape SELECTION — which thoughts clear the bar. This
+ * shapes PHRASING, by showing the composer what the owner actually kept.
+ *
+ * Deliberately small: a handful each way. A prompt stuffed with thirty
+ * exemplars stops being guidance and starts being a style the model imitates
+ * literally, and it costs tokens on every single call — the same argument
+ * `briefing/feedback.ts` makes for keeping its feedback line to eight items.
+ */
+export async function exemplarLines(limit = 4): Promise<string> {
+  try {
+    const { daydreamThoughts } = await import('$lib/db/schema');
+    const { desc, eq, isNotNull, and } = await import('drizzle-orm');
+
+    const pick = async (verdict: 'useful' | 'not_useful') =>
+      db
+        .select({ title: daydreamThoughts.title, narrative: daydreamThoughts.narrative })
+        .from(daydreamThoughts)
+        .where(and(eq(daydreamThoughts.feedback, verdict), isNotNull(daydreamThoughts.narrative)))
+        .orderBy(desc(daydreamThoughts.feedbackAt))
+        .limit(limit);
+
+    const [good, bad] = await Promise.all([pick('useful'), pick('not_useful')]);
+    const parts: string[] = [];
+    if (good.length) {
+      parts.push(
+        `These landed well, so match their register:\n${good.map((g) => `- ${g.narrative}`).join('\n')}`,
+      );
+    }
+    if (bad.length) {
+      parts.push(
+        `These did NOT land. Do not write like this:\n${bad.map((b) => `- ${b.narrative}`).join('\n')}`,
+      );
+    }
+    return parts.join('\n\n');
+  } catch {
+    // An unreadable ledger costs better phrasing, never the notification.
+    return '';
+  }
+}
+
 const SYSTEM = `You write one short notification for John about something his assistant noticed.
 
 Rules, in order of importance:
@@ -135,12 +179,15 @@ export async function composeNarrative(
   const model = await resolveDaydreamModel();
   const { client, model: modelId } = await getLLMClient(model);
 
+  const exemplars = await exemplarLines();
+
   const prompt = [
     `WHAT WAS NOTICED (rule-generated, already true):`,
     thought.explanation,
     '',
     'FACTS:',
     ...facts.map((f) => `- ${f}`),
+    ...(exemplars ? ['', exemplars] : []),
     '',
     'Write the notification.',
   ].join('\n');

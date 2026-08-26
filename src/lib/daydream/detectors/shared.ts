@@ -6,9 +6,22 @@ import { metresBetween } from '../cluster';
 import { MIN_COVERAGE } from '../types';
 import type { DaydreamSnapshot, PlaceSummary } from '../snapshot-types';
 
-/** How near counts as "you are at this thing". Beyond a place's own radius,
- *  because the point is proximity, not arrival. */
-export const NEARBY_M = 250;
+/**
+ * How near counts as "beside this thing" — 100 m, by the owner's instruction
+ * (2026-08-26).
+ *
+ * Deliberately distinct from being AT a place. A place's radius is a
+ * CLUSTERING parameter: it describes how wide the GPS scatter is around a spot
+ * you stood in, and it is 200 m because that is what separates two shops on the
+ * same street. Reusing it as a proximity threshold would mean "you are near
+ * Sports Direct" fired from 200 m away in any direction, which on a high street
+ * is several other shops.
+ *
+ * So `atPlace` asks "am I inside its scatter" and `placesNearby` asks "am I
+ * within 100 m of its centre". They answer different questions and neither
+ * substitutes for the other.
+ */
+export const NEARBY_M = 100;
 
 /** Places the owner has not muted. `ignored` means "stop mentioning this one",
  *  and it has to be honoured by every detector, not just the one that asked. */
@@ -16,15 +29,47 @@ export function activePlaces(s: DaydreamSnapshot): PlaceSummary[] {
   return s.places.filter((p) => p.status === 'active');
 }
 
-/** The place the owner is at or beside right now, nearest first. */
+/**
+ * Places within `withinM` of the current position, nearest first.
+ *
+ * Measured from the place's CENTRE, and deliberately NOT widened to its radius
+ * — see the note on NEARBY_M. A detector saying "you are beside X" is making a
+ * claim about where the owner is standing, and it should be a tight one.
+ */
 export function placesNearby(s: DaydreamSnapshot, withinM = NEARBY_M): PlaceSummary[] {
   if (!s.current) return [];
   const { lat, lon } = s.current;
   return activePlaces(s)
     .map((p) => ({ p, d: metresBetween(lat, lon, p.lat, p.lon) }))
-    .filter(({ p, d }) => d <= Math.max(withinM, p.radiusM))
+    .filter(({ d }) => d <= withinM)
     .sort((a, b) => a.d - b.d)
     .map(({ p }) => p);
+}
+
+/**
+ * The place the owner is currently INSIDE — within its own scatter radius.
+ *
+ * A different question from `placesNearby`: this one is "where am I", that one
+ * is "what is next to me". The trail's own `placeId` answers it directly when
+ * the fix resolved to a place, and the geometry is the fallback.
+ */
+export function atPlace(s: DaydreamSnapshot): PlaceSummary | null {
+  if (!s.current) return null;
+  if (s.current.placeId) {
+    const byId = activePlaces(s).find((p) => p.id === s.current!.placeId);
+    if (byId) return byId;
+  }
+  const { lat, lon } = s.current;
+  let best: PlaceSummary | null = null;
+  let bestD = Infinity;
+  for (const p of activePlaces(s)) {
+    const d = metresBetween(lat, lon, p.lat, p.lon);
+    if (d <= p.radiusM && d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
 }
 
 /**

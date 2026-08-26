@@ -9,7 +9,7 @@
 // explained and tested, whereas asking a model what is interesting produces
 // confident prose about things that are not there.
 
-import { unknownFrequentPlace } from './unknown-frequent-place';
+import { unknownPlace } from './unknown-place';
 import { nearOpenThread } from './near-open-thread';
 import { nearOffer } from './near-offer';
 import { interestMeetsPlace } from './interest-meets-place';
@@ -20,7 +20,7 @@ import { correlationProbe } from './correlation-probe';
 import type { Detector } from '../snapshot-types';
 
 export const DETECTORS: Detector[] = [
-  unknownFrequentPlace,
+  unknownPlace,
   nearOffer,
   contextMeetsHealth,
   nearOpenThread,

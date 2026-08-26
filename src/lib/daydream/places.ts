@@ -235,7 +235,7 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
 
 /**
  * Places worth asking about: enough visits to matter, still unnamed, not
- * muted. This is the input to the `unknown_frequent_place` thought.
+ * muted. This is the input to the `unknown_place` thought.
  */
 export async function listUnnamedPlaces(limit = 10) {
   return db
