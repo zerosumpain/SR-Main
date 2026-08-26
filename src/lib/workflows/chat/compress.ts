@@ -11,7 +11,7 @@ import type { HistoryMessage } from './conversation-history';
  * 31 onwards simply vanished, with nothing in the prompt saying so, which is why
  * a long thread would confidently contradict something agreed an hour earlier.
  *
- * Hermes compressed instead. This does the same, in three properties that matter:
+ * The old gateway compressed instead. This does the same, in three properties that matter:
  *
  * 1. **Incremental.** A summary records how far it covers, so each turn folds in
  *    only what newly fell out of the window. Without that, every turn on a long

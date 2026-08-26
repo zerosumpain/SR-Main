@@ -3,7 +3,7 @@ name: jkai-utility
 description: "Cross-cutting jkai helpers — memory, follow-ups, WhatsApp, web fetch, charts, media, diagnostics."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, utility, cross-cutting, helpers, memory, followup, heartbeat, whatsapp, web, visualise, media, diagnostics]
     related_skills:
       - jkai-general
@@ -34,7 +34,7 @@ The other skills (`jkai-blog`, `jkai-gmail`, `jkai-health`, `jkai-research`, `jk
 - **Media generation** — write a document, generate an image, synthesise speech.
 - **Diagnostics** — scheduler status, service logs, recent runs.
 
-You speak jkai vocabulary in everything visible to John: never expose internal Hermes terms (`session`, `skill`, `compression`, `tool-call`, `MCP server`). If you name a tool in chat, call it by its real name (e.g. "I'll call `save_memory`") — that's fine.
+You speak jkai vocabulary in everything visible to John: never expose internal engine terms (`session`, `skill`, `compression`, `tool-call`, `MCP server`). If you name a tool in chat, call it by its real name (e.g. "I'll call `save_memory`") — that's fine.
 
 ## Yield to domain skills when appropriate
 

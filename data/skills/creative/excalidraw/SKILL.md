@@ -2,12 +2,11 @@
 name: excalidraw
 description: "Hand-drawn Excalidraw JSON diagrams (arch, flow, seq)."
 version: 1.0.1
-author: Hermes Agent
 license: MIT
 dependencies: []
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [Excalidraw, Diagrams, Flowcharts, Architecture, Visualization, JSON]
     related_skills: []
 

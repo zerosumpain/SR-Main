@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { rewriteLegacyToolLog, stripLegacyToolLog, describeLegacyToolCall } from './legacy-tool-log';
 
 // The fixtures below are real lines taken from production `orchestrator_chats`
-// rows, including the ones where Hermes glues an entry onto the end of a
+// rows, including the ones where an entry is glued onto the end of a
 // sentence with no newline and the ones where it emits a bare ellipsis instead
 // of an argument.
 
@@ -87,7 +87,7 @@ describe('rewriteLegacyToolLog', () => {
   });
 });
 
-// Hermes picks the leading glyph per tool (`get_tool_emoji`), falling back to
+// The leading glyph was picked per tool, falling back to
 // ⚙️ only for tools that register none — which is every `mcp_jkai_*` tool. Its
 // own native tools carry their own glyph, so a ⚙️-only match covered the MCP
 // half of the log and missed the native half entirely.
@@ -184,7 +184,7 @@ describe('stripLegacyToolLog', () => {
     );
   });
 
-  it('separates prose when Hermes glues an entry onto the end of a sentence', () => {
+  it('separates prose when an entry is glued onto the end of a sentence', () => {
     const out = stripLegacyToolLog(
       'Checking the canvas now. ⚙️ mcp_jkai_workflow_lint: "spine" Lint passes.',
     );

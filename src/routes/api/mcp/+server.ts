@@ -1,10 +1,10 @@
 // MCP entry point — hands a tool call to this host's local dispatcher.
 //
-// It used to be a ROUTING proxy. The Hermes gateway connected to exactly one MCP
+// It used to be a ROUTING proxy. An external gateway connected to exactly one MCP
 // server, but a chat could originate on either homeserv or the VPS, and a tool
 // had to write to the right Postgres — so the gateway's plugin stamped
 // `params._meta.chat_id` on every call and this file looked the chat's origin up
-// in `hermes_chat_origin` to decide where to forward.
+// in a `chat origin` table to decide where to forward.
 //
 // Nothing writes that table now, so the lookup could only ever miss and fall
 // through to the local dispatcher. The forwarding machinery below is kept

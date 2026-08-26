@@ -12,14 +12,14 @@
  *  - `git_target_config` holds JSON `null`, not SQL NULL, on most rows, so
  *    `IS NOT NULL` matches every build ever created. The lane is decided on
  *    `repoUrl` being present.
- *  - 24 of those 83 rows never ran an iteration — 15 are Hermes registrations
+ *  - 24 of those 83 rows never ran an iteration — 15 are chat registrations
  *    that file `completed` before a file exists. Counting them inflated the
  *    success rate and dragged the median toward zero. Rates here are over
  *    builds that actually ran.
  *
  * A third trap, fixed later: `completed` is claimed by four different endings.
  * Only `delivered` means the builder produced the thing that was asked for —
- * budget cap-outs, hand-kills and Hermes registrations all filed the same word.
+ * budget cap-outs, hand-kills and chat registrations all filed the same word.
  * Rates here are over deliveries, which is why the headline moved 61% → 43%.
  *
  * Imports nothing but its sibling pure module: it is unit-tested, and anything
@@ -56,7 +56,7 @@ export interface LaneStat {
   capped: number;
   /** Stopped by hand, either before or after reaching `completed`. */
   stopped: number;
-  /** Filed by Hermes without the builder ever running. */
+  /** Filed from chat without the builder ever running. */
   registered: number;
   /** Delivered / ran, as a percentage. Null when nothing ran. */
   successRate: number | null;

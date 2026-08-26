@@ -3,16 +3,10 @@
  * picker's Workloads tab: read what every LLM role on the site is actually
  * running, and point one at a different model.
  *
- * Two scopes behind one endpoint, because from the operator's side they are one
- * question ("what is running what?") even though the mechanisms differ:
- *   - `site`   → an `app_settings` row, live immediately;
- *   - `hermes` → a key in the engine's own config.yaml, applied by
- *                `hermes config set` plus a gateway restart.
- *
- * The Hermes leg shells out on homeserv (proxied from the VPS), so it is slower
- * and can be unavailable. It is therefore best-effort: a Hermes outage returns
- * the site rows plus an error string rather than failing the whole read, since
- * the site half is still true and still actionable.
+ * Every role is an `app_settings` row and takes effect immediately. This once
+ * spanned two scopes with different mechanisms — the second belonged to an
+ * external runtime with its own config file, and could be unreachable — which
+ * is why the shape still reads as a "picture" assembled per request.
  */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';

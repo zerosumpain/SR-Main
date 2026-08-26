@@ -6,84 +6,54 @@ const ROOT = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 
 /**
- * Three admin surfaces read Hermes' own SQLite store, which stopped receiving
- * anything at 06:34 on 2026-08-24 when the engine did — and every one of them
- * rendered it as current.
+ * A store that has stopped receiving must not render as current.
  *
- * The sessions list is the worst of them, because nothing about it looks wrong:
- * `listSessions` is `ORDER BY started_at DESC LIMIT n` with no date filter, so
- * a dead store still produces a perfectly normal newest-first page. It just
- * never moves again.
+ * This was written for a store that did exactly that: the retired gateway's own
+ * SQLite stopped at 06:34 on 2026-08-24 and three admin surfaces went on showing
+ * it as live. The sessions list was the worst of them, because nothing about it
+ * looked wrong — `ORDER BY started_at DESC LIMIT n` with no date filter produces
+ * a perfectly normal newest-first page off a dead table. It just never moved
+ * again.
  *
- * A windowed query cannot detect this — inside a dead window it returns
- * nothing, and inside a live one it merely repeats the window. So freshness is
- * read unwindowed, once, and carried onto each surface.
+ * That store and those surfaces are gone. The property is not: tool usage and
+ * call efficiency now read `jkai_tool_traces`, and the same mistake is available
+ * to them the day recording stops. A WINDOWED query cannot detect it — inside a
+ * dead window it returns nothing, and inside a live one it merely repeats the
+ * window — so freshness must be read unwindowed and carried onto the surface.
  */
 
-describe('the frozen store is dated wherever it is read', () => {
-  it('has one unwindowed freshness reader', () => {
-    const src = read('src/lib/server/hermes-sessions.ts');
-    expect(src).toMatch(/export async function getStoreFreshness/);
-    // Unwindowed on purpose: a MAX over the window answers the wrong question.
-    expect(src).toMatch(/SELECT MAX\(timestamp\) AS newest FROM messages;/);
+describe('trace-backed reads date their own store', () => {
+  const audit = read('src/lib/server/tool-audit.ts');
+
+  it('reads newest and oldest UNWINDOWED', () => {
+    // Both sit in a sub-select with no `created_at >=` filter, unlike every
+    // other query in the file. That difference is the whole point.
+    expect(audit).toMatch(/\(SELECT max\(created_at\) FROM jkai_tool_traces\)\s+AS newest/);
+    expect(audit).toMatch(/\(SELECT min\(created_at\) FROM jkai_tool_traces\)\s+AS oldest/);
   });
 
-  it('returns null rather than a guess when it cannot be established', () => {
-    const src = read('src/lib/server/hermes-sessions.ts');
-    // Null reads as stale at every call site. A fabricated timestamp would read
+  it('returns null rather than a guess when the table is empty', () => {
+    // Null reads as stale at the call site. A fabricated timestamp would read
     // as fresh, which is the failure this exists to prevent.
-    expect(src).toMatch(/return epoch > 0 \? new Date\(epoch \* 1000\)\.toISOString\(\) : null;/);
+    expect(audit).toMatch(/storeNewestAt: m\.newest \? new Date\(m\.newest as string\)\.toISOString\(\) : null/);
+    expect(audit).toMatch(/coverageFrom: m\.oldest \? new Date\(m\.oldest as string\)\.toISOString\(\) : null/);
   });
 
-  it.each([
-    ['telemetry', 'src/lib/server/hermes-sessions.ts'],
-    ['tool audit', 'src/lib/server/hermes-sessions.ts'],
-  ])('stamps the %s payload', (_label, path) => {
-    expect(read(path)).toMatch(/storeNewestAt: await getStoreFreshness\(\)/);
+  it('carries the same unwindowed freshness onto call efficiency', () => {
+    // `newestTurnAt` is what stops a policy trial being graded on evidence
+    // older than the trial itself.
+    const eff = read('src/lib/selfimprove/call-efficiency.ts');
+    expect(eff).toMatch(/newestTurnAt/);
+    // The freshness query is the one without a day window.
+    const fresh = eff.slice(eff.indexOf('const fresh = await db.execute'));
+    expect(fresh.slice(0, 400)).not.toContain('INTERVAL');
   });
 
-  it('stamps the status payload too — version and curator come from that store', () => {
-    const src = read('src/lib/server/hermes-control.ts');
-    expect(src).toMatch(/storeNewestAt: string \| null;/);
-    expect(src).toMatch(/getStoreFreshness\(\)/);
-  });
-
-  it('does NOT stamp services — systemctl is live and true', () => {
-    // The one field on that object still answering a question about right now.
-    const src = read('src/lib/server/hermes-control.ts');
-    expect(src).toMatch(/serviceState\(GATEWAY_UNIT\)/);
-    expect(src).toMatch(/LIVE and true/);
-  });
-
-  it.each([
-    'src/routes/admin/ops/sessions/+page.svelte',
-    'src/routes/admin/ops/engine/+page.svelte',
-    'src/routes/admin/ops/tool-usage/+page.svelte',
-  ])('%s renders the date', (path) => {
-    expect(read(path)).toMatch(/storeNewestAt/);
-  });
-
-  it('says which half of tool-usage is live', () => {
-    // getToolErrorRates already reads jkai_tool_traces. Calling the whole page
-    // frozen would be as wrong as calling it current.
-    expect(read('src/routes/admin/ops/tool-usage/+page.svelte')).toMatch(/jkai_tool_traces and are live/);
-  });
-});
-
-describe('the engine panel describes the engine that is running', () => {
-  const src = read('src/routes/admin/ops/engine/+page.svelte');
-
-  it('no longer claims skills, delegation, web search and browser control are missing', () => {
-    // All four shipped in #429/#430. The panel was talking the reader out of
-    // the engine actually serving their chat.
-    expect(src).not.toMatch(/skills, delegation, web search and browser control do not/);
-  });
-
-  it('names the two that genuinely are absent', () => {
-    expect(src).toMatch(/Terminal and file editing are the two that genuinely are not here/);
-  });
-
-  it('warns that switching back will not start the stopped unit', () => {
-    expect(src).toMatch(/does not start it/);
+  it('renders the date on the page that reads it', () => {
+    const page = read('src/routes/admin/ops/tool-usage/+page.svelte');
+    expect(page).toMatch(/storeNewestAt/);
+    // And says when recording actually began, so an empty window is not read as
+    // a clean bill of health.
+    expect(page).toMatch(/coverageFrom/);
   });
 });

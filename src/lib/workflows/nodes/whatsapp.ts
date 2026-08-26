@@ -70,10 +70,10 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 /**
  * Resolve the configured media reference to a local-disk attachment the
- * WhatsApp service can send. A `mediaPath` is used directly (the Hermes bridge
+ * WhatsApp service can send. A `mediaPath` is used directly (the bridge
  * `/send-media` reads the absolute path). A `mediaUrl` is downloaded to a temp
  * file first and cleaned up afterwards. Media therefore requires the delegated
- * (Hermes bridge) mode, which reads a filesystem path.
+ * (delegated) mode, which reads a filesystem path.
  */
 async function resolveMedia(
   mediaPath: string,
@@ -268,7 +268,7 @@ export const whatsappExecutor: NodeExecutor = {
     //
     // This used to return `sent: false` with the error in the payload, which the
     // engine recorded as `node_status=completed, run_status=completed`. The
-    // production DB held 12 such rows reading `Hermes bridge unreachable` — every
+    // production DB held 12 such rows reading `WhatsApp bridge unreachable` — every
     // one of them a workflow whose entire purpose was to deliver a message,
     // reporting success while delivering nothing.
     //

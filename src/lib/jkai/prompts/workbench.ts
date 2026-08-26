@@ -3,9 +3,9 @@
 //
 // One stack now: this repo's `data/prompts/*.md`, compiled into `prompt_cache`.
 // It shapes every /jkai and WhatsApp reply as well as canvas workflow
-// generation. There used to be a second — the Hermes runtime's own `.md` files
+// generation. There used to be a second — an external runtime's own `.md` files
 // on homeserv — and the page's whole reason for existing was that the UI showed
-// one while claiming to be the other. With Hermes gone there is nothing left to
+// one while claiming to be the other. With that runtime gone there is nothing left to
 // confuse it with.
 import { getPromptFiles, savePromptFile, syncPrompts, compilePromptFiles } from '$lib/workflows/prompts/loader';
 import type { PromptFileEntry } from '$lib/workflows/prompts/loader';

@@ -26,7 +26,7 @@ export function clearLLMClientCache(): void {
  * because packages/jkai-codex-bridge translates /v1/chat/completions into
  * Codex SDK thread runs. That is the whole reason the bridge exists rather than
  * the SDK being imported here — it keeps the provider difference to a base URL,
- * so no call site has to know which one it is talking to, and it lets Hermes
+ * so no call site has to know which one it is talking to, and it lets a client
  * (a separate Python runtime) reach the same subscription by pointing its
  * `base_url` at the same port.
  */

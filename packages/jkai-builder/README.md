@@ -35,7 +35,7 @@ In production, a systemd user service at
 ## Running a build on Codex
 
 A build whose model id starts `codex/` runs on pi's own `openai-codex`
-provider — the Codex Responses API direct, the same route Hermes uses for chat.
+provider — the Codex Responses API direct, the same route chat uses.
 It does **not** go through `packages/jkai-codex-bridge`: the bridge starts a
 fresh Codex process per turn and carries ~9,700 tokens of the Codex CLI's own
 instructions on every call, which an agent making hundreds of tool calls per

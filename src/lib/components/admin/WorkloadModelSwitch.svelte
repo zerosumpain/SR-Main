@@ -14,7 +14,6 @@
    * All three write paths are existing endpoints, not new ones — a model change
    * keeps exactly one server-side guard on the whole site:
    *   site workload   → POST /api/jkai/models/workloads
-   *   hermes workload → POST /api/jkai/models/workloads  (config set + restart)
    *   site default    → POST /api/admin/models/settings
    */
   import type { WorkloadState } from '$lib/models/workloads';

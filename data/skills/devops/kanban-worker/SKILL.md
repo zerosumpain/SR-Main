@@ -4,7 +4,7 @@ description: Pitfalls, examples, and edge cases for Hermes Kanban workers. The l
 version: 2.0.0
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [kanban, multi-agent, collaboration, workflow, pitfalls]
     related_skills: [kanban-orchestrator]
 ---

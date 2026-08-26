@@ -61,7 +61,7 @@ register({
     const cadence = Math.max(30, Math.min(86400, Math.round(Number(args.cadence_seconds))));
     if (!Number.isFinite(cadence)) return { success: false, error: 'cadence_seconds must be a number ≥ 30' };
 
-    // Hermes hands us `chat_<uuid>`; the conversation tables key on the bare
+    // A caller may hand us `chat_<uuid>`; the conversation tables key on the bare
     // uuid. Storing the prefixed form is what made every targeted action fail
     // its lookup on every tick, silently, forever.
     const conversationId = normaliseConversationId(convArg.value);

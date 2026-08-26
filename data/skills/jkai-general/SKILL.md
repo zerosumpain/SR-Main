@@ -3,7 +3,7 @@ name: jkai-general
 description: "Top-level /jkai chat router: routes to a domain, or answers."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [routing, general-chat, jkai]
     related_skills:
       - jkai-canvas

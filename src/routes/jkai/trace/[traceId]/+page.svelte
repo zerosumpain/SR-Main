@@ -136,7 +136,7 @@
     categorizeTool(s.displayTool) || s.category;
 
   /**
-   * Several tools (Hermes' `web_extract` among them) return their payload as a
+   * Several tools (`web_extract` among them) return their payload as a
    * JSON *string* rather than an object, which renders as one escaped blob.
    * Parse it so the pretty-printer and the table-ifier can see the real shape;
    * the untouched original stays available under "raw json".
@@ -317,7 +317,7 @@
   }
 
   /**
-   * `rewriteLegacyToolLog` turns Hermes' interleaved `⚙️ mcp_jkai_…` log lines
+   * `rewriteLegacyToolLog` turns the interleaved `⚙️ mcp_jkai_…` log lines
    * into English, but emits them wrapped in HTML because its normal consumer is
    * the markdown pipeline. This panel renders plain text, so drop the tags —
    * rendering them literally is worse than not rewriting at all.
@@ -666,7 +666,7 @@
                             {#if step.resultClipped}
                               <p class="pane-note warn">
                                 incomplete JSON — the runtime clipped this result before the trace saw it
-                                (Hermes previews native tool results at 600 characters)
+                                (native tool results were previewed at 600 characters)
                               </p>
                             {/if}
                             {#if resTable}

@@ -156,7 +156,7 @@ export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
   // staging it to disk. Verified 2026-08-20: sent an image and a PDF to
   // codex/gpt-5.6-terra through getLLMClient and it answered "I can't access
   // the image" / "No document was attached". Claiming support here would
-  // surface a picker option that fails. (Chat is different — Hermes stages the
+  // surface a picker option that fails. (Chat is different — it stages the
   // bytes itself; see getChatInputCapabilities.)
   if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return TEXT_ONLY;
   warmCatalogueCaps();

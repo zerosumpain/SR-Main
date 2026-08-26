@@ -1,23 +1,18 @@
 // In-memory pub-sub for canvas-chat tool-step events.
 //
-// Why this exists: when the Hermes branch is on (JKAI_HERMES_CANVAS_CHAT=1),
-// /api/workflows/orchestrator/chat proxies the user message through the
-// HermesClient + JkaiPlatformAdapter. The adapter only streams send/replace/
-// finalize frames; it has no knowledge of structured tool-call events. Yet
-// the canvas UI's tool-step panel (ChatArea.svelte) expects `tool_start` /
-// `tool_result` events alongside `token` deltas to show "Hermes is calling
-// workflow_add_node...".
+// Why this exists: a tool call made over MCP carries no structured event back
+// to the canvas. The UI's tool-step panel (ChatArea.svelte) wants `tool_start` /
+// `tool_result` alongside `token` deltas so it can say "calling
+// workflow_add_node…", and the MCP transport has no channel for that.
 //
-// All Hermes tool calls flow through this SvelteKit process's MCP server
-// (src/lib/mcp/jsonrpc.ts → executeTool). So that layer publishes a
-// `ToolStepEvent` before and after every executeTool, keyed by the
-// `workflow_id` argument. The Hermes branch in the chat route subscribes for
-// the duration of the SSE response and merges those events into the same
-// stream the legacy path already populates.
+// Every MCP tool call runs through this process's own server
+// (src/lib/mcp/jsonrpc.ts → executeTool), so that layer publishes a
+// `ToolStepEvent` before and after each one, keyed by the `workflow_id`
+// argument. A caller subscribes for the duration of its SSE response and merges
+// those events into the stream it is already producing.
 //
-// In-memory; per-process; lost on SvelteKit restart. That's fine — the soak
-// runs against the long-lived prod systemd service, and dev iteration is
-// short-lived.
+// In-memory; per-process; lost on SvelteKit restart. That's fine — production
+// is a long-lived systemd service, and dev iteration is short-lived.
 
 export interface ToolStepEvent {
   workflowId: string;
@@ -123,7 +118,7 @@ export function hasToolConfirmer(busKey: string): boolean {
  *
  * Fails CLOSED in every ambiguous case — no confirmer, timeout, or a throwing
  * confirmer all resolve to `approved: false`. The wait budget is bounded well
- * under Hermes' hardcoded 300s httpx read timeout (tools/mcp_tool.py:1511,1556);
+ * under a typical MCP client's 300s read timeout;
  * waiting past that strands the turn on a stale "Working…" instead of
  * protecting anything, since the MCP client has already given up.
  */
@@ -135,7 +130,7 @@ export async function requestToolConfirmation(
 ): Promise<ToolConfirmDecision> {
   const fn = busKey ? confirmers.get(busKey) : undefined;
   if (!fn) {
-    // Unattended: a Hermes cron/WhatsApp session, or an external MCP client
+    // Unattended: a scheduled/WhatsApp turn, or an external MCP client
     // with no /jkai tab open. Deny by default; `allow` restores the old
     // ungated behaviour for anyone who needs it.
     const policy = (process.env.MCP_CONFIRM_UNATTENDED ?? 'deny').toLowerCase();
@@ -251,7 +246,7 @@ export function hasSecretRequester(busKey: string): boolean {
 
 /**
  * Budget for the human to fetch a key out of a vendor console. Deliberately
- * longer than a yes/no confirm but still under Hermes' 300s httpx read timeout,
+ * longer than a yes/no confirm but still under a 300s MCP read timeout,
  * past which the MCP client has given up and waiting protects nothing.
  */
 export const SECRET_REQUEST_TIMEOUT_MS = 180_000;

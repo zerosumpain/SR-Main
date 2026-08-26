@@ -400,7 +400,7 @@
   // heartbeat line is suppressed while a tool runs (it would duplicate the
   // step card), and the card itself carried no clock — so a 16-minute
   // `workflow_run` showed a pulsing dot and nothing else, and the only thing
-  // that ever broke the silence was Hermes' "iteration x/y" filler. The card
+  // that ever broke the silence was an "iteration x/y" filler line. The card
   // now carries its own elapsed time off the same 250ms `hbNow` ticker, and
   // offers a Cancel once the wait stops looking normal.
   const TOOL_STEP_SLOW_MS = 120_000;
@@ -450,12 +450,12 @@
   }
 
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
-  // Dangerous-command approval gate (Hermes `send_exec_approval` → kind="approval").
-  // No waiter/id: the card's buttons reply /approve|/deny, resolved gateway-side by
-  // the chat's session_key. Cleared on button click, turn end, or cancel.
+  // Dangerous-command approval gate (kind="approval"). No waiter/id: the card's
+  // buttons reply /approve|/deny, resolved by the chat's session_key. Cleared on
+  // button click, turn end, or cancel.
   let pendingApproval = $state<{ command: string; description: string; sessionKey: string } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
-  // Per-bubble reasoning state from Hermes `thinking` frames. Keyed by
+  // Per-bubble reasoning state from `thinking` frames. Keyed by
   // the assistant bubble's `message.id` (the in-flight `progressId`) so
   // the panel stays attached to its bubble after finalisation. Svelte 5
   // doesn't track in-place Map mutations, so we construct a fresh Map on
@@ -558,14 +558,14 @@
   });
 
   /**
-   * Fire a slash command (e.g. `/approve`) to Hermes WITHOUT recording it as
-   * a visible user bubble. Backend honours `silent: true` to skip the
+   * Fire a slash command (e.g. `/approve`) WITHOUT recording it as a visible
+   * user bubble. Backend honours `silent: true` to skip the
    * orchestratorChats user-row insert (chat/+server.ts).
    *
    * Called by SlashCommandButtonBar via the per-message `onSilentSend` prop.
-   * Reuses the same chat endpoint and SSE stream pipeline so Hermes' follow-
-   * up response (e.g. "✅ Command approved …") flows in as a normal
-   * assistant token stream — no special handling required on the recv side.
+   * Reuses the same chat endpoint and SSE stream pipeline so the follow-up
+   * response (e.g. "✅ Command approved …") flows in as a normal assistant
+   * token stream — no special handling required on the recv side.
    */
   async function silentSend(command: string): Promise<void> {
     if (!conversationId) return;
@@ -1033,10 +1033,10 @@
         researchRefs: meta?.researchRefs ?? undefined,
         // Hydrate workflow chips (created/updated canvases) across reloads
         workflowRefs: meta?.workflowRefs ?? undefined,
-        // The turn's recorded tool-call chain. This is the ONLY tool information
-        // that survives a reload on the Hermes engine — `metadata.toolSteps` is
-        // never written on that branch, so the inline step cards above are gone
-        // by now and the trace page is where the chain lives.
+        // The turn's recorded tool-call chain. For any turn whose
+        // `metadata.toolSteps` was never written, this is the ONLY tool
+        // information that survives a reload: the inline step cards above are
+        // gone by now and the trace page is where the chain lives.
         traceId: meta?.traceId ?? undefined,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
         // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
@@ -1289,7 +1289,7 @@
         messages = messages.map((m) => {
           if (m.id !== progressId || !m.toolSteps) return m;
           const idx = (() => {
-            // Prefer an exact id match — the bus + Hermes frames carry a stable
+            // Prefer an exact id match — bus events carry a stable
             // toolCallId, so concurrent calls of the SAME tool (e.g. many
             // parallel web_search / fetch_url) never write into each other's
             // card. Fall back to the most-recent running same-named step only
@@ -1430,7 +1430,7 @@
         if (ev.type === 'token') {
           a.liveTokens += ev.delta;
         } else if (ev.type === 'tool_start') {
-          // Hermes only relays child tool *starts* (completions are swallowed),
+          // Only child tool *starts* are relayed (completions are swallowed),
           // and children run their tools sequentially — so the arrival of the
           // next tool means the previous one finished. Close it out so the row
           // shows ✓ rather than an eternal spinner.
@@ -1779,8 +1779,8 @@
   // file_search hits render as clickable "sources" chips → open the file viewer at
   // the cited passage. Refs are attached to the assistant message server-side
   // (msg.fileRefs), populated live from the `done` event and on reload from
-  // persisted metadata (tool steps aren't persisted on the Hermes branch, so
-  // scraping them client-side was unreliable).
+  // persisted metadata (tool steps are not always persisted, so scraping them
+  // client-side was unreliable).
   type FileSearchRef = {
     fileId: string; source: string; modality: string; score: number;
     chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
@@ -2857,9 +2857,9 @@
                 <PromoteToolBanner messageId={msg.id} {marker} />
               {/each}
               {#if toolSteps.length === 0 && msg.traceId}
-                <!-- Reloaded history. `metadata.toolSteps` is never written on
-                     the Hermes branch, so there are no step cards to show — but
-                     the chain itself was recorded, and the trace page has it. -->
+                <!-- Reloaded history with no persisted `metadata.toolSteps`,
+                     so there are no step cards to show — but the chain itself
+                     was recorded, and the trace page has it. -->
                 <a
                   class="trace-standalone"
                   href={`/jkai/trace/${msg.traceId}`}
@@ -3913,7 +3913,7 @@
   }
   .src-tag-glyph { font-size: var(--fs-label-xs); line-height: 1; }
 
-  /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
+  /* Reasoning panel — thinking deltas */
   .reasoning-panel {
     margin: 4px 0;
     padding: 0;

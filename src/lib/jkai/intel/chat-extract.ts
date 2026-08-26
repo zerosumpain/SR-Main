@@ -53,7 +53,7 @@ export function shouldExtractAtTurn(assistantTurns: number): boolean {
 }
 
 /**
- * Hermes writes its own tool-call progress log into the assistant TEXT stream,
+ * The old gateway wrote its tool-call progress log into the assistant TEXT stream,
  * so `⚙️ mcp_jkai_knowledge_search: "data spine"` is stored as message content
  * (see $lib/workflows/chat/legacy-tool-log). It is machinery, not knowledge, and
  * feeding it to the extractor invites entities named after MCP tools.
@@ -61,12 +61,12 @@ export function shouldExtractAtTurn(assistantTurns: number): boolean {
 const TOOL_LOG_LINE_RE = /^\s*⚙️.*$/gm;
 
 /**
- * Slash-command output Hermes echoes into the thread as an assistant message —
+ * Slash-command output echoed into the thread as an assistant message —
  * `/model` being the common one. It carries no knowledge about the subject, and
  * before this it both polluted the transcript and counted as a turn, which
  * shifted the extraction cadence off the real replies.
  *
- * Defined in `$lib/jkai/hermes-frames`, which now also uses it to keep the echo
+ * Kept narrow deliberately, so a real reply opening with those words is the
  * off the text channel in the first place. One definition on purpose: a detector
  * kept in two places here has drifted before.
  */

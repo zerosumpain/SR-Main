@@ -3,7 +3,7 @@ name: jkai-calendar
 description: "Calendar — Apple/iCloud events, diary, appointments, date nights, family calendar. Never Google Calendar: John does not use it. Read and write iCloud events via the apple_calendar_* tools."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, calendar, apple, icloud, caldav, diary, appointments, events, family, date-night]
     related_skills:
       - jkai-general

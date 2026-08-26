@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { normaliseConversationId, normaliseOptionalConversationId } from './conversation-id';
 
 describe('normaliseConversationId', () => {
-  it('strips the Hermes chat_ prefix', () => {
+  it('strips the legacy chat_ prefix', () => {
     expect(normaliseConversationId('chat_67e007d3-67fc-42ac-8421-4da8ab210e30')).toBe(
       '67e007d3-67fc-42ac-8421-4da8ab210e30',
     );

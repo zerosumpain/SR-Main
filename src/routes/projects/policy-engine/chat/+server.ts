@@ -1,7 +1,7 @@
 // chat/+server.ts — the project-bound "Ask the Model" endpoint. Strictly scoped to THIS project:
 // it is guarded by the same visibility guard as the pages, retrieves only from the project's own
 // corpus index, and is prompted to refuse anything off-topic. It imports NONE of the jkai
-// orchestrator / hermes / conversation machinery — only the low-level LLM transport. Streams SSE.
+// orchestrator / conversation machinery — only the low-level LLM transport. Streams SSE.
 
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';

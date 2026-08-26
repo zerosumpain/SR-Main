@@ -304,7 +304,7 @@
       <div class="kicker">
         JKAI build ·
         <!-- The bucket, not the raw status: `completed` is claimed by a
-             delivery, a budget cap-out, a hand-kill and a Hermes
+             delivery, a budget cap-out, a hand-kill and a chat
              registration, and this pill painted all four the same green. -->
         <span class="status-pill" data-status={detailBucket} title={outcomeNote(detailBucket) ?? ''}
           >{bucketLabel(detailBucket)}</span

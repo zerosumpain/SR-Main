@@ -2,7 +2,7 @@
  * OpenAI-compatible HTTP face over the Codex CLI.
  *
  * Speaks just enough of /v1 for the site's existing `openai` SDK clients (and
- * Hermes' `base_url` setting) to treat the ChatGPT Pro subscription as though
+ * a `base_url` setting) to treat the ChatGPT Pro subscription as though
  * it were another provider:
  *
  *   GET  /health              liveness + whether `codex login` has been done

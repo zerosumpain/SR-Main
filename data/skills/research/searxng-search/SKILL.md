@@ -2,11 +2,11 @@
 name: searxng-search
 description: Free meta-search via SearXNG — aggregates 70+ engines. No API key needed.
 version: 1.0.0
-author: hermes-agent
+
 license: MIT
 platforms: [linux, macos]
 metadata:
-  hermes:
+  routing:
     tags: [search, searxng, meta-search, self-hosted, free, fallback]
     related_skills: [duckduckgo-search, domain-intel]
     fallback_for_toolsets: [web]

@@ -4,7 +4,7 @@
 //
 // These three existed already — `list_custom_tools`, `delete_tool` and a
 // `create_tool` — but only inside `META_TOOL_DEFINITIONS`, which is consumed by
-// `chat/general-chat.ts`. That engine went dormant at the Hermes cutover, so
+// `chat/general-chat.ts`. That engine went dormant at the cutover, so
 // from the day the flag flipped none of them was reachable from chat. Verified
 // against production 2026-08-11: absent from `tools/list`, and absent from every
 // `jkai_extended` search that should have found them.

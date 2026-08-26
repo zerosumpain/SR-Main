@@ -174,7 +174,7 @@ describe('watchdog — delegations are busy, not idle', () => {
       expect(job.activeTools).toBe(1);
       expect(job.phase).toBe('tool_running');
       // 16 min of silence — the shape of the canvas run that used to be reaped
-      // at 4 min while Hermes was still working.
+      // at 4 min while the agent was still working.
       vi.advanceTimersByTime(960_000);
       expect(job.status).toBe('running');
       expect(job.abortController.signal.aborted).toBe(false);
@@ -249,7 +249,7 @@ describe('watchdog — delegations are busy, not idle', () => {
 describe('cancelForScope — reporting what was superseded', () => {
   it('names the jobs it cancelled, not just how many', () => {
     // The newest job has to adopt the turn ids it superseded. A second message
-    // while the agent is answering does not start a second Hermes run: the
+    // while the agent is answering does not start a second run: the
     // running one is redirected (or the text merged into it) and keeps the FIRST
     // turn's stamp, so without these ids the newest job rejects the output that
     // is answering it. A count cannot carry that.

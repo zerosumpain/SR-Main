@@ -15,7 +15,7 @@ describe('keyFingerprint', () => {
   });
 
   it('separates the two live keys on this account', () => {
-    // The real pair: homeserv + Hermes on one key, the VPS on another. If these
+    // The real pair: homeserv on one key, the VPS on another. If these
     // ever compared equal the VPS would divide a combined ledger by a bill that
     // covered half of it.
     expect(keyFingerprint(A)).not.toBe(keyFingerprint(B));

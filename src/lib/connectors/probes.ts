@@ -689,9 +689,9 @@ async function probeWhatsApp(): Promise<ConnectorReport> {
     // Ask the process that owns the session, and nothing else.
     //
     // This used to fall back to `rWhatsAppStatus()` on homeserv and render
-    // Hermes' diagnosis — "Session is paired, but the Hermes gateway is failed"
+    // The old diagnosis — "Session is paired, but the gateway is failed"
     // — with the hint "Restart the bridge from the WhatsApp panel". The session
-    // has not lived in Hermes since 2026-08-24; it belongs to
+    // has not lived there since 2026-08-24; it belongs to
     // packages/jkai-wa-worker on the VPS. So on the one page you open during an
     // outage, this pointed at a gateway with no bearing on the fault, and the
     // restart it recommended has never fixed a logged-out session anyway.

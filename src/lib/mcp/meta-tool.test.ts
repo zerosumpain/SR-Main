@@ -368,7 +368,7 @@ describe("today's date never rides a cached tool description", () => {
       const tools = await listMcpTools();
       const meta = tools.find((t) => t.name === 'jkai_extended');
       expect(meta).toBeTruthy();
-      // Load-bearing. Hermes discovers tools ONCE on connect and re-discovers
+      // Load-bearing. A client discovers tools ONCE on connect and re-discovers
       // only on a `notifications/tools/list_changed` notification this server
       // never sends, so a date here freezes at connect time and goes stale for
       // as long as the gateway stays up. A confidently-stated wrong date is

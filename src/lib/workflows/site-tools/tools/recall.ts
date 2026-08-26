@@ -1,10 +1,10 @@
 // `recall` toolset — look things up in past conversations and in stored memory.
 //
-// The two Hermes verbs this replaces are low-volume (session_search 4 calls,
+// The two verbs this replaces are low-volume (session_search 4 calls,
 // memory 9 in 30 days) but they are the ones that make a long-running assistant
 // feel continuous rather than amnesiac.
 //
-// Memory itself already exists in-repo and is arguably better than the Hermes
+// Memory itself already exists in-repo and is arguably better than the old
 // equivalent: `memory-review.ts` extracts facts from idle conversations into
 // `jkai_memories` automatically, and `memorySection` injects them into every
 // system prompt. What was missing is the ability to interrogate that on demand,

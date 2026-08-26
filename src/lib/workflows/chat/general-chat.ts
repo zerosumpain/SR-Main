@@ -65,7 +65,7 @@ function detectExtendedAutonomy(userMessage: string): boolean {
  * worth an LLM call of its own.
  *
  * This used to fire at t=0, in parallel with prompt assembly. That was written
- * for the Hermes era, when the first round sat silent for 10–20s. It no longer
+ * for an era when the first round sat silent for 10–20s. It no longer
  * pays: the ack is aborted the moment the orchestrator emits its own first
  * content token, and the orchestrator now usually wins — measured 2026-08-24 on
  * production, ONE `status_update` row landed against 2,674 assistant rows.
@@ -462,7 +462,7 @@ async function runSingleToolCall(
         // and the absent half is the dangerous one. Every caller that passes no
         // parentJobId got the ungated path: the WhatsApp bridge
         // (workflows/whatsapp/orchestrator-bridge.ts), the follow-up queue, and
-        // agent delegation. Under Hermes the same turns went through the MCP
+        // agent delegation. Previously the same turns went through the MCP
         // dispatcher, which already denies by default when nobody is attached
         // (jkai/tool-step-bus.ts) — that is the behaviour being restored here,
         // including its MCP_CONFIRM_UNATTENDED escape hatch so the two paths
@@ -862,7 +862,7 @@ async function runGeneralChat(
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
-  // The skills index. One line per skill with its FULL description — Hermes cut
+  // The skills index. One line per skill with its FULL description — the old index cut
   // these to 60 characters, which is why whichever skill happened to fit a
   // keyword inside that budget won the routing regardless of merit.
   const skillsIndex = renderSkillIndex();
@@ -910,7 +910,7 @@ async function runGeneralChat(
 
   // What this conversation's model can actually read. Anything it cannot is
   // pre-analysed into text rather than sent as a part the provider will reject
-  // or quietly drop — this is the job Hermes used to do out of sight, and the
+  // or quietly drop — this is the job the gateway used to do out of sight, and the
   // reason attachments kept working on a text-only chat model.
   const mediaCaps = getModelCapabilities(options.modelContext);
 
@@ -969,7 +969,7 @@ async function runGeneralChat(
   // tool-policy publisher, which this file has never imported. The model was
   // being told to call tools it had not been handed.
   //
-  // Separately, open-web lookup was gone from a default turn. Hermes had web
+  // Separately, open-web lookup was gone from a default turn. The gateway had web
   // search on every one — 99 `web_search` and 72 `web_extract` calls in 45 days
   // — and the classifier only loads `research`/`web` on "research", "deep dive"
   // or a literal URL. Sampled real queries ("Carmel College term dates", "Apple
@@ -1286,7 +1286,7 @@ async function runGeneralChat(
         // answer second, and surfacing it is the whole point — it removes the
         // dead-air window that the narration ticker above only papered over.
         // Deliberately not accumulated into `fullContent` or persisted: the
-        // Hermes path treats reasoning as live-only too, so a reload drops it
+        // Reasoning is live-only, so a reload drops it
         // on both engines rather than one.
         const reasoningDelta = extractReasoningDelta(delta);
         if (reasoningDelta) {

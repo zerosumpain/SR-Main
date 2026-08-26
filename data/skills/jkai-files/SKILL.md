@@ -3,7 +3,7 @@ name: jkai-files
 description: "Browse, read, and search John's personal file vault at /drive and the WebDAV mount. Activates for @files or any file list/read request."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, files, vault, webdav, storage]
     related_skills:
       - jkai-general
@@ -20,7 +20,7 @@ Your job is read-only: list what's in the vault, **search it by content**, and f
 
 Files John drops into the **jkai chat** (the attach button or drag-and-drop) are copied into the vault under the `jkai/` folder and embedded, so they're browsable in /drive and searchable here too.
 
-You speak jkai vocabulary in everything visible to John: never expose internal Hermes terms (`session`, `skill`, `compression`, `tool-call`, `MCP server`). If you name a tool in chat, call it by its real name.
+You speak jkai vocabulary in everything visible to John: never expose internal engine terms (`session`, `skill`, `compression`, `tool-call`, `MCP server`). If you name a tool in chat, call it by its real name.
 
 ## When to activate
 

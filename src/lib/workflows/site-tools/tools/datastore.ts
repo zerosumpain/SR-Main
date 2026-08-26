@@ -1,7 +1,7 @@
 // src/lib/workflows/site-tools/tools/datastore.ts
 //
 // `datastore` toolset — full CRUD over the permanent, sitewide datastore
-// (`$lib/datastore`) from jkai chat + Hermes. All calls run as actor `jkai`;
+// (`$lib/datastore`) from jkai chat. All calls run as actor `jkai`;
 // row/collection permissions are enforced inside the access layer, never here.
 //
 // When to use which store (taught in the tool descriptions so the model routes

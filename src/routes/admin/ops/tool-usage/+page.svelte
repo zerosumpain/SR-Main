@@ -213,9 +213,8 @@
     </section>
   {/if}
 
-  <!-- Error rates. OUTSIDE the audit branch on purpose: this comes from
-       jkai_tool_traces in the app's own Postgres, so it still answers when the
-       Hermes session store above is unreachable. -->
+  <!-- Error rates. OUTSIDE the audit branch on purpose: it keeps the last
+       failure message per tool, which the ranking above has no room for. -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Error rates</span>

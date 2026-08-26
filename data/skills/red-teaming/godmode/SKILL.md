@@ -2,11 +2,10 @@
 name: godmode
 description: "Jailbreak LLMs: Parseltongue, GODMODE, ULTRAPLINIAN."
 version: 1.0.0
-author: Hermes Agent + Teknium
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [jailbreak, red-teaming, G0DM0D3, Parseltongue, GODMODE, uncensoring, safety-bypass, prompt-engineering, L1B3RT4S]
     related_skills: [obliteratus]
 ---

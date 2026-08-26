@@ -110,7 +110,7 @@ export async function resolveThinkingModel(): Promise<ModelContext | null> {
   // thinking tier the one role that ignored the operator's choice: with the
   // default on codex/gpt-5.6-terra, an unset thinking model still resolved to
   // deepseek/deepseek-v4-flash. It cost nothing in practice only because the
-  // sole caller (general-chat.ts) is dormant behind the Hermes engine — which
+  // sole caller (general-chat.ts) was dormant at the time — which
   // is exactly the kind of latent divergence that surfaces the day that path
   // wakes up.
   return resolveDefaultModel();

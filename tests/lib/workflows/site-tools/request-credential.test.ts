@@ -120,7 +120,7 @@ describe('provider validation', () => {
   it('is not marked destructive — the modal is the human gate', async () => {
     const mod = await import('$lib/workflows/site-tools/tools/request-credential');
     // The MCP destructive gate blocks up to 240s BEFORE the handler runs;
-    // stacking it in front of the 180s form wait would exceed Hermes' 300s
+    // stacking it in front of the 180s form wait would exceed a 300s
     // read timeout and strand the turn before the form appeared.
     expect((mod.default as { destructive?: boolean }).destructive).toBe(false);
   });

@@ -247,7 +247,7 @@ export interface PiInvocation {
  * CLI's own instructions on every single call. For chat that is a rounding
  * error; for an agent making hundreds of tool calls per iteration it is the
  * difference between slow and unusable. Pi talks the Codex Responses API
- * directly — the same route Hermes uses for chat, with real function tools.
+ * directly — the same route chat uses, with real function tools.
  *
  * That route authenticates from pi's OWN ChatGPT OAuth in
  * `~/.pi/agent/auth.json` (`pi`, then `/login`), which is a separate login

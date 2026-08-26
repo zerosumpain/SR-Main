@@ -17,7 +17,7 @@
   <div class="nm-sec">
     <h2 class="mb-2 text-sm uppercase tracking-wide" style="color:var(--text-secondary)">Default action on approval prompts</h2>
     <p class="text-xs mb-4" style="color:var(--text-secondary)">
-      Hermes pauses with an in-chat approval banner whenever the agent tries to run a
+      Chat pauses with an in-chat approval banner whenever the agent tries to run a
       command its guardrails flag as dangerous. When the user hasn't clicked a button after
       <strong>{autoSelectSeconds}s</strong>, the chat UI silently fires this default in their place. Set to
       <em>“None — wait for user”</em> to disable auto-select entirely (buttons still render).

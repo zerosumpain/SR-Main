@@ -6,7 +6,7 @@
  *   - id: stable identifier (used to track which prompts have been actioned)
  *   - detect(content): predicate over the assistant message text
  *   - buttons: list of buttons to render. Each button's `command` is sent
- *     to Hermes as a *silent* user message (the slash command is not
+ *     as a *silent* user message (the slash command is not
  *     persisted as a visible user bubble).
  *
  * Adding a new affordance = pushing one entry here. The chat UI does NOT
@@ -16,7 +16,7 @@
 export interface SlashButton {
   /** Label shown on the button. */
   label: string;
-  /** Slash command sent to Hermes. The Hermes side already interprets `/approve`,
+  /** Slash command sent to the agent, which already interprets `/approve`,
    *  `/approve always`, `/deny`, `/background`, etc. */
   command: string;
   /** Visual style hint. Default 'primary'. */
@@ -32,8 +32,8 @@ export interface SlashAffordance {
 
 const APPROVAL_PROMPT_PREFIX = '⚠️ **Dangerous command requires approval:**';
 
-/** Match Hermes's approval prompt — the only platform-emitted text that
- * currently requires a user decision. Hermes also signals approval-required
+/** Match the approval prompt — the only platform-emitted text that
+ * currently requires a user decision. Approval-required is also signalled
  * via plain text "you can /approve / /approve always / /deny" lines in some
  * other contexts; we keep detection narrow for now to avoid false positives
  * on assistant prose that happens to mention the same words. */

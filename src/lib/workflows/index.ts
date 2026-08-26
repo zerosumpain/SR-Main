@@ -281,7 +281,7 @@ async function bootWhatsApp() {
 
     await service.connect(config?.authDir || 'data/whatsapp-auth');
 
-    console.log(`[whatsapp] Service booted${delegated ? ' (delegated → Hermes bridge)' : ''}`);
+    console.log(`[whatsapp] Service booted${delegated ? ' (delegated → WhatsApp worker)' : ''}`);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[whatsapp] Boot failed:', msg);

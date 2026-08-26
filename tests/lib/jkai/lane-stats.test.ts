@@ -30,7 +30,7 @@ describe('laneOf', () => {
 	});
 
 	it('defaults everything else to app', () => {
-		for (const origin of ['manual', 'hermes', 'forge', 'change-request', null]) {
+		for (const origin of ['manual', 'chat', 'forge', 'change-request', null]) {
 			expect(laneOf({ origin, gitTargetConfig: null })).toBe('app');
 		}
 	});
@@ -46,7 +46,7 @@ describe('median', () => {
 
 describe('laneStats', () => {
 	it('excludes builds that never ran from every rate', () => {
-		// 15 Hermes registrations file `completed` with zero iterations and zero
+		// 15 chat registrations file `completed` with zero iterations and zero
 		// tokens. Counting them made the builder look better than it is.
 		const rows = [
 			b({ status: 'completed', iterationCount: 0 }),
@@ -131,7 +131,7 @@ describe('laneStats', () => {
 
 	it('counts registrations without letting them touch a rate', () => {
 		const rows = [
-			b({ origin: 'hermes', outcome: 'registered', iterationCount: 0 }),
+			b({ origin: 'chat', outcome: 'registered', iterationCount: 0 }),
 			b({ outcome: 'delivered', iterationCount: 2 }),
 		];
 		const app = laneStats(rows).find((s) => s.lane === 'app')!;

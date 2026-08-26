@@ -11,9 +11,9 @@ import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from 
  *    is registered as a trigger, but we no-op out fast. This is what every
  *    chat node in production actually is.
  *
- *  - Wired (any edges): unsupported. The wired path was backed by the Hermes
- *    gateway, which is gone; it never ran in production (no chat node has
- *    ever had an edge). It refuses loudly rather than returning an empty
+ *  - Wired (any edges): unsupported. The wired path was backed by an external
+ *    agent gateway that is now retired; it never ran in production (no chat
+ *    node has ever had an edge). It refuses loudly rather than returning an empty
  *    `response` that a downstream node would treat as a real answer.
  *    Use `llm-call` for a prompt→completion step.
  */

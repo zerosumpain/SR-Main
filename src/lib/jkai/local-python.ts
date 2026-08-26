@@ -1,17 +1,17 @@
 // Shared seam for the two free, on-device AI paths that have no Node
 // equivalent: faster-whisper speech-to-text and edge-tts speech synthesis.
 //
-// Both packages are currently installed only in the Hermes runtime's venv
+// Both packages are currently installed only in one venv on this box
 // (faster_whisper 1.2.1, edge_tts 7.2.7). That is a convenience, not a
 // dependency: `LOCAL_AI_PYTHON` points at whichever interpreter has them, so
-// moving off Hermes later is a config change rather than a code change.
+// moving the venv later is a config change rather than a code change.
 //
 // Everything here is best-effort by design. Neither package exists on the VPS,
 // so callers MUST treat unavailability as "fall back to the paid API path"
 // rather than an error — see extract/audio.ts and
 // site-tools/tools/media-generate-audio-tts.ts.
 //
-// Precedent for shelling out to a host binary from the app: hermes-sessions.ts
+// Precedent for shelling out to a host binary from the app: security-posture.ts
 // (`sqlite3 -readonly` via execFile). Same shape — execFile with an argv array
 // (no shell, so no injection surface), a hard timeout, and a bounded buffer.
 
@@ -23,7 +23,7 @@ const execFileP = promisify(execFile);
 
 // NOT the retired gateway. This is a plain Python venv that happens to sit
 // under `hermes-agent/` on homeserv, and it is what transcribes /drive audio.
-// It survives the Hermes removal because it is a live dependency — but the
+// It survives the gateway's removal because it is a live dependency — but the
 // directory it lives in does not, so MOVE THE VENV before deleting that tree,
 // or audio ingest silently reports "unavailable" (existsSync fails closed).
 // Override with LOCAL_AI_PYTHON once it moves.

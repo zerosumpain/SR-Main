@@ -15,7 +15,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const eff = await measureEfficiency(days);
   if (!eff) {
     return json(
-      { error: 'measurement unavailable — the Hermes session store could not be reached' },
+      { error: 'measurement unavailable — call efficiency could not be read' },
       { status: 503 },
     );
   }

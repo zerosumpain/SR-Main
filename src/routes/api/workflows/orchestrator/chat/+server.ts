@@ -49,10 +49,9 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     workflowId?: string;
     mode?: string;
     /** Do not persist a user bubble for this turn — it is machinery, not
-     *  conversation. The Hermes branch has always honoured it; this one never
-     *  read it, so a `/model` push would have shown up in the thread as if the
-     *  user had typed it. The client no longer sends one at this engine, and
-     *  this is the second lock on that door. */
+     *  conversation. This was once unread, so a silent `/model` push showed up
+     *  in the thread as if the user had typed it. Nothing sends one now; this
+     *  is the second lock on that door. */
     silent?: boolean;
     currentNodes?: any;
     currentEdges?: any;
@@ -132,8 +131,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     // then rejected with a 400 — on `codex/*`, which is TEXT_ONLY and the
     // pinned default, that is every image and every PDF. #427 built the
     // pre-analysis lane precisely so those work, and it lives downstream of
-    // this guard in `generalChat`; the Hermes branch above has no equivalent
-    // gate for the same reason (see the comment at the top of that branch).
+    // this guard in `generalChat`.
     //
     // Video still fails here, correctly — it has no extraction path.
     const caps = getChatInputCapabilities(ctx);
@@ -174,8 +172,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
 
   // Queue behind a turn that is still answering, rather than running alongside it.
   //
-  // The Hermes branch has done this since the cutover, gated on the gateway's
-  // `busy_input_mode`. This branch did not — so a second message sent while the
+  // This did not always queue — so a second message sent while the
   // first was still working started a CONCURRENT turn against the same
   // conversation. Both then streamed into the same thread and both appended to
   // history, which is how an answer arrives interleaved with the one before it.
@@ -193,9 +190,9 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     publishJobEvent(jobId, { type: 'status', text: 'Queued — finishing the previous message first' });
   }
 
-  // Durable copy of this turn's tool chain, for /jkai/trace/<id>. The Hermes
-  // branch has recorded one since the cutover; this branch did not, so
-  // bypassing Hermes silently turned the trace viewer off. `job.toolSteps`
+  // Durable copy of this turn's tool chain, for /jkai/trace/<id>. This was
+  // once unrecorded here, which silently turned the trace viewer off for every
+  // turn this path served. `job.toolSteps`
   // still feeds the live tool cards and survives a reload in message metadata,
   // but it carries no server-side timestamps — durations and ordering only
   // exist here. Same recorder, fed the same JobEvents.
@@ -450,11 +447,10 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           };
           return extractEphemeralSidecar(stored);
         });
-        // Durable tool-chain copy for /jkai/trace/<id>, mirroring
-        // persistToolTrace on the Hermes branch. Best-effort throughout: a
-        // trace is a diagnostic and must never cost the user their reply.
-        // Keyed by jobId like the Hermes one, so the two branches cannot
-        // collide and a re-run is idempotent. `costUsd` comes from the turn
+        // Durable tool-chain copy for /jkai/trace/<id>. Best-effort
+        // throughout: a trace is a diagnostic and must never cost the user
+        // their reply. Keyed by jobId, so a re-run is idempotent and two
+        // writers cannot collide. `costUsd` comes from the turn
         // stamp now; it stays null when the turn produced no usage at all,
         // because an absent number beats a wrong one.
         // Price the turn against the model that answered it.
@@ -600,8 +596,8 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         }
 
         // Accrue the turn onto the thread. Best-effort and in its own
-        // try/catch for the same reason the Hermes branch is: a rollup failure
-        // must never cost the user their reply.
+        // try/catch, for the same reason as the trace write above: a rollup
+        // failure must never cost the user their reply.
         //
         // `recordConversationUsage` is deliberately not used — it prices from
         // the stored `price_snapshot`, which is null on every recent row, so it

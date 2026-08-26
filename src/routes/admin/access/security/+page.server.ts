@@ -15,7 +15,7 @@ import { serviceBridgeSecret } from '$lib/config/service-secret';
 
 /**
  * Reads the posture of this host directly, and of the peer over the same
- * bridge-secret channel the Hermes admin surface uses. Each host can only see
+ * shared bridge-secret channel. Each host can only see
  * its own sshd/fail2ban, so a single-host view would always be half a picture —
  * and the half that matters (is the internet-facing box locked down?) is the
  * one you are not sitting on.

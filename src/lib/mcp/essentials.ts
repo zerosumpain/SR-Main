@@ -76,7 +76,7 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // entry point. Kept visible so "what do I know about X" reaches it directly.
   'knowledge_search',
   // ── Measured first-turn hot set (2026-08-20) ─────────────────────────────
-  // Not guessed. Counted out of Hermes' state.db: for every top-level jkai
+  // Not guessed. Counted out of the recorded turn history: for every top-level jkai
   // thread, the `jkai_extended` sub-tools invoked on the FIRST turn, ranked by
   // how many DISTINCT threads reached for them (raw call counts lie — a single
   // Home-Assistant thread can fire `ha_query_state` a hundred times). The five

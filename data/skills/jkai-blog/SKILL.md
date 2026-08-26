@@ -3,7 +3,7 @@ name: jkai-blog
 description: "Blog domain expert for strangeramblings.com — draft, read, edit, publish, and unpublish posts via the blog_* tools."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, blog, content, writing, publishing]
     related_skills:
       - jkai-general

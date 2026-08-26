@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { coerceOwnerPublish, needsHermesReconnect, MAX_PROMOTIONS } from './publish-input';
+import { coerceOwnerPublish, needsMcpReconnect, MAX_PROMOTIONS } from './publish-input';
 import { ESSENTIAL_TOOL_NAMES } from '$lib/mcp/essentials';
 
 const registered = new Set(['ha_render_template', 'ha_query_state', 'workflow_inspect', 'build_inspect', 'gmail_search', 'gmail_get_message', 'blog_list']);
@@ -82,13 +82,13 @@ describe('owner-authored policy publish', () => {
 
 describe('which changes need the gateway to reconnect', () => {
   it('flags promotions and global guidance, which live only in the manifest', () => {
-    expect(needsHermesReconnect({ promoteToEssential: ['gmail_search'], globalGuidance: [] })).toBe(true);
-    expect(needsHermesReconnect({ promoteToEssential: [], globalGuidance: ['never loop'] })).toBe(true);
+    expect(needsMcpReconnect({ promoteToEssential: ['gmail_search'], globalGuidance: [] })).toBe(true);
+    expect(needsMcpReconnect({ promoteToEssential: [], globalGuidance: ['never loop'] })).toBe(true);
   });
 
   it('does not flag a plain description override, which is applied per call', () => {
     // `dispatchMetaTool` runs `describeWithPolicy` on every list/schema, so an
     // extended tool's rewritten description is live without a restart.
-    expect(needsHermesReconnect({ promoteToEssential: [], globalGuidance: [] })).toBe(false);
+    expect(needsMcpReconnect({ promoteToEssential: [], globalGuidance: [] })).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ name: jkai-health
 description: "Health domain — sleep, training load, readiness, heart rate, and biome data from Apple Health + sensors."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, health, sleep, training, readiness, biome, hr]
     related_skills:
       - jkai-general
@@ -162,7 +162,7 @@ When you reply at a termination point, keep it short — one paragraph of number
 The five `health_*` tools are MCP site-tools served by the SvelteKit app. In most sessions they arrive as native tools in the `health` toolset. If they don't — e.g. the local dev server is down or the toolset isn't loaded — call them directly via the MCP JSON-RPC bridge on production:
 
 ```bash
-SECRET=$(grep HERMES_BRIDGE_SECRET ~/strange_rambling_svelte/.env | cut -d= -f2-)
+SECRET=$(grep SERVICE_BRIDGE_SECRET ~/strange_rambling_svelte/.env | cut -d= -f2-)
 curl -s -X POST 'https://strangeramblings.com/api/mcp/local' \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $SECRET" \
@@ -171,7 +171,7 @@ curl -s -X POST 'https://strangeramblings.com/api/mcp/local' \
 
 Key details (see `jkai-platform-internals` → `references/mcp-bridge-invocation.md`):
 - Endpoint: `/api/mcp/local` on either `localhost:5173` (homeserv) or production
-- Auth: `Authorization: Bearer <HERMES_BRIDGE_SECRET>` from `.env` — required for `tools/call`
+- Auth: `Authorization: Bearer <SERVICE_BRIDGE_SECRET>` from `.env` — required for `tools/call`
 - The tool result text field is double-JSON-encoded; parse twice to get the actual data object
 - If homeserv returns 500, go straight to production (`https://strangeramblings.com`) — the data is identical
 

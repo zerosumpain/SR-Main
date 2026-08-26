@@ -1,6 +1,6 @@
 // `discovery` toolset — how the model finds capability it was not handed.
 //
-// Hermes gave the chat surface four discovery verbs, and they were its second
+// The old gateway gave the chat surface four discovery verbs, and they were its second
 // heaviest category after the site's own tools: 174 `skill_view` calls and 147
 // `tool_search`/`tool_describe` calls in 14 days. The in-process lane had
 // `activate_toolset` and `jkai_help`, which answer "what toolsets exist" but not

@@ -25,7 +25,7 @@ function dataUrl(mime: string, buf: Buffer): string {
  *
  * `opts.caps` is what makes this safe on a model that cannot read the
  * attachment. Omit it and behaviour is exactly as before — every attachment
- * becomes a native part — which is right for Hermes, since it does its own
+ * becomes a native part — which is right for a caller that does its own
  * media handling. Pass it and any modality the model does not accept is
  * pre-analysed into text instead of being sent as a part the provider will
  * reject or silently drop.

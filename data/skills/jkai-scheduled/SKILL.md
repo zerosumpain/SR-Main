@@ -3,7 +3,7 @@ name: jkai-scheduled
 description: "Scheduled-callbacks domain — fire-and-forget time-based callbacks (reply, tool call, orchestrator turn). One-shot only, not cron."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, scheduled, callbacks, time, cron-lane]
     related_skills:
       - jkai-general

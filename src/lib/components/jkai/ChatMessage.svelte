@@ -135,7 +135,7 @@
       .replace(/<\/table>/g, '</table></div>');
   }
 
-  // Hermes writes its own tool-call log into the text stream (`⚙️
+  // The old gateway wrote its tool-call log into the text stream (`⚙️
   // mcp_jkai_recall_memories: "…"`), which is machinery, not answer. Strip it
   // BEFORE the markdown parse so both the live stream and stored history read
   // the same — see $lib/workflows/chat/legacy-tool-log. The steps are not lost:
@@ -241,7 +241,7 @@
     const latency = formatLatency(stamp.latencyMs);
     if (latency) chunks.push({ text: latency });
     // How many times the model was called for this one reply. Absent on
-    // Hermes-era rows, which had no notion of it. Worth the space: the first
+    // older rows, which had no notion of it. Worth the space: the first
     // measured turn on the loop took NINE rounds, and rounds — not tool speed —
     // are what a reply costs.
     if (typeof stamp.rounds === 'number' && stamp.rounds > 1) {

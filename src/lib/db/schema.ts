@@ -1086,7 +1086,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   status: text('status').notNull().default('pending'),
   // Why the build stopped, as distinct from `status`. `completed` is claimed
   // by three endings that are not the same thing: the builder delivered, it
-  // ran out of budget, or someone stopped it — plus Hermes registrations that
+  // ran out of budget, or someone stopped it — plus chat registrations that
   // file `completed` before a file exists. Counting them together reported 61%
   // success where 43% was delivered. A separate nullable column rather than new
   // statuses, because ten consumers read `status === 'completed'` to mean
@@ -1754,10 +1754,10 @@ export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
 // ==========================================
 //
 // The ordered chain of tool calls a single chat turn made, recorded server-side
-// in `handleWithHermes` and rendered by /jkai/trace/[traceId].
+// by the chat route and rendered by /jkai/trace/[traceId].
 //
 // This table exists because the chain is otherwise not durable anywhere: the
-// Hermes branch never writes `orchestrator_chats.metadata.toolSteps` (only the
+// Some turns never write `orchestrator_chats.metadata.toolSteps` (only the
 // retired in-process loop did), so tool activity lives in the watching browser
 // tab and dies on reload. Keeping it here rather than back in message metadata
 // is deliberate — the conversation loader selects `metadata` for every message

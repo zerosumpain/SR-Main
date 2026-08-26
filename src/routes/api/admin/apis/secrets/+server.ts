@@ -33,7 +33,7 @@ import { consumePendingCreate, resolveCreateInput } from '$lib/secrets/pending-c
 // for any private/loopback client address BEFORE any session check, so a
 // cookieless `curl http://127.0.0.1:5173/api/admin/apis/secrets` returns 200 —
 // verified. Anything that can make a loopback request in the site's own
-// environment (notably Hermes' `terminal`/`execute_code`, which jkai does reach
+// environment (notably `terminal`/`execute_code`, which an agent may reach
 // for) could otherwise rebind a credential's allowedHosts to its own host and
 // then read it back through a normal api_call. Host binding is the whole
 // security property, so the route that edits a binding cannot inherit an

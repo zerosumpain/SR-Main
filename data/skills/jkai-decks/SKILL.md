@@ -3,7 +3,7 @@ name: jkai-decks
 description: "Build sr. decks presentations from chat — design the slide outline first, then persist."
 version: 2.2.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, decks, presentation, slides, mcp]
     related_skills:
       - jkai-general

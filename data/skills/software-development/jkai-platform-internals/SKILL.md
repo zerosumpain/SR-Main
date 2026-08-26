@@ -4,7 +4,7 @@ description: "jkai SvelteKit platform internals — chat rendering, attachments,
 version: 1.2.0
 platforms: [linux]
 metadata:
-  hermes:
+  routing:
     tags: [jkai, architecture, debugging, chat, attachments, tool-step-bus, hermes-bridge, intel]
     related_skills: [systematic-debugging, dogfood]
 ---

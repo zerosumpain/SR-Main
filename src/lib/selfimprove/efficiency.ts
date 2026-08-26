@@ -147,7 +147,7 @@ export async function assessActiveTrial(): Promise<{ decision: TrialDecision; ac
   //
   // `windowDays` is ceil(ageDays), so the window always opens at or before the
   // trial started — which is correct while data is still arriving, and lethal
-  // once it stops. Hermes' session store froze on 2026-08-24; every query over
+  // once it stops. The old session store froze on 2026-08-24; every query over
   // it still returned rows, so v16 was on course to be KEPT on 9 turns dated
   // the day BEFORE its trial opened, with a verdict reading "-29% over 9
   // turns". A plausible verdict is worse than an absurd one — nobody checks it.

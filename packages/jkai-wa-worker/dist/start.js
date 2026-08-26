@@ -230,10 +230,10 @@ var init_service = __esm({
       maxReconnectAttempts = 5;
       saveCreds = null;
       credsWriteQueue = Promise.resolve();
-      // Delegated mode: when a bridge URL is set we don't run our
-      // own Baileys client (which would fight Hermes for the paired session and
+      // Delegated mode: when a bridge URL is set we don't run our own Baileys
+      // client (which would fight the owning process for the paired session and
       // loop on failed QR-pair attempts). Instead, every outbound send POSTs to
-      // the Hermes bridge's existing HTTP API. Inbound stays Hermes-only.
+      // the bridge's HTTP API, and inbound is relayed back to us.
       //
       // A WhatsApp worker deployed beside the web app reads the SAME
       // EnvironmentFile, so reading this variable alone would make it see a
@@ -482,13 +482,13 @@ var init_service = __esm({
             });
             if (!res.ok) {
               const body = await res.text().catch(() => "");
-              return { sent: false, error: `Hermes bridge /send returned ${res.status}: ${body.slice(0, 200)}` };
+              return { sent: false, error: `WhatsApp bridge /send returned ${res.status}: ${body.slice(0, 200)}` };
             }
             const json2 = await res.json().catch(() => ({}));
             return { sent: true, messageId: json2.messageId ?? json2.id };
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error";
-            return { sent: false, error: `Hermes bridge unreachable: ${msg}` };
+            return { sent: false, error: `WhatsApp bridge unreachable: ${msg}` };
           }
         }
         if (!this.sock || this.status !== "connected") {
@@ -568,13 +568,13 @@ var init_service = __esm({
             });
             if (!res.ok) {
               const body = await res.text().catch(() => "");
-              return { sent: false, error: `Hermes bridge /send-media returned ${res.status}: ${body.slice(0, 200)}` };
+              return { sent: false, error: `WhatsApp bridge /send-media returned ${res.status}: ${body.slice(0, 200)}` };
             }
             const json2 = await res.json().catch(() => ({}));
             return { sent: true, messageId: json2.messageId ?? json2.id };
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error";
-            return { sent: false, error: `Hermes bridge unreachable: ${msg}` };
+            return { sent: false, error: `WhatsApp bridge unreachable: ${msg}` };
           }
         }
         if (att.kind === "image") return this.sendImage(to, att, caption);
@@ -1765,7 +1765,7 @@ var init_schema = __esm({
       status: text("status").notNull().default("pending"),
       // Why the build stopped, as distinct from `status`. `completed` is claimed
       // by three endings that are not the same thing: the builder delivered, it
-      // ran out of budget, or someone stopped it — plus Hermes registrations that
+      // ran out of budget, or someone stopped it — plus chat registrations that
       // file `completed` before a file exists. Counting them together reported 61%
       // success where 43% was delivered. A separate nullable column rather than new
       // statuses, because ten consumers read `status === 'completed'` to mean
@@ -30163,7 +30163,7 @@ var init_whatsapp_def = __esm({
           message: { type: "string", description: "Message text. Supports {{input.field}} templates." },
           formatMarkdown: { type: "boolean", description: "Translate Markdown (**bold**, ## headings, [links](url), - bullets) into WhatsApp formatting before sending. Default true." },
           maxChunks: { type: "number", description: 'Messages over 4096 chars are split on paragraph boundaries into sequential sends; beyond this many chunks the rest is dropped with a "\u2026 (truncated)" tail. Default 3. 0 = no cap.' },
-          mediaPath: { type: "string", description: "Absolute path to a local file to send as an attachment (image/audio/video/document). Requires the Hermes bridge. Supports {{input.field}}." },
+          mediaPath: { type: "string", description: "Absolute path to a local file to send as an attachment (image/audio/video/document). Requires the WhatsApp worker. Supports {{input.field}}." },
           mediaUrl: { type: "string", description: "URL of a file to download and send as an attachment. Supports {{input.field}}." },
           caption: { type: "string", description: "Caption for the media attachment. Falls back to the message text. Supports {{input.field}}." },
           suppressDuplicateWindowMins: { type: "number", description: "Last-line-of-defence idempotency: skip the send if an identical message was already sent to this recipient within this many minutes (hash-based). Default 0 = off. The dedupe node upstream remains the primary pattern." }
@@ -30226,7 +30226,7 @@ var init_whatsapp_def = __esm({
           label: "Media file path",
           type: "template-textarea",
           placeholder: "/path/to/file.png or {{input.filePath}}",
-          description: "Local file to send as an attachment. Requires the Hermes bridge.",
+          description: "Local file to send as an attachment. Requires the WhatsApp worker.",
           section: "MEDIA",
           advancedOnly: true
         },
@@ -30261,7 +30261,7 @@ Behaviour:
 
 Downstream nodes read \`input.sent\`, \`input.messageId\`, \`input.messageIds\` (one per chunk), \`input.chunks\`, or \`input.error\`.
 
-Requires an active WhatsApp connection (Hermes bridge).`,
+Requires an active WhatsApp connection (the WhatsApp worker).`,
       llmExamples: [
         { to: "+447700900123", message: "Daily report: {{input.summary}}" },
         { to: "{{input.phone}}", message: "## Headlines\n{{input.digest}}", formatMarkdown: true },
@@ -33145,7 +33145,7 @@ var init_infrastructure_status_def = __esm({
       configSchema: {
         type: "object",
         properties: {
-          scope: { type: "string", description: "all | home_assistant | production_app | homeserv | pi_runner | hermes" },
+          scope: { type: "string", description: "all | home_assistant | production_app | homeserv | pi_runner" },
           historyLimit: { type: "number", description: "Number of audit records retained per workflow (1\u201352)." }
         }
       },
@@ -33158,12 +33158,11 @@ var init_infrastructure_status_def = __esm({
           { value: "home_assistant", label: "Home Assistant and integrations" },
           { value: "production_app", label: "Production app and scheduler" },
           { value: "homeserv", label: "Homeserv host" },
-          { value: "pi_runner", label: "Pi runner" },
-          { value: "hermes", label: "Hermes runtime" }
+          { value: "pi_runner", label: "Pi runner" }
         ], description: "Unavailable server-side integrations remain explicitly unavailable; no inferred health is shown." },
         { key: "historyLimit", label: "History retained", type: "number", min: 1, max: 52, description: "Durable audit records retained for this workflow." }
       ],
-      llmDescription: "Read-only, reusable infrastructure version-position review. For each detected capability it returns versionReviews with installed evidence, official latest stable release URL/date, bounded release-note benefits, compatibility implications and recommendation. It has separately-scoped collectors for Home Assistant, production app, homeserv, Pi runner and Hermes. It never runs shell commands or installs updates. Missing current-version or publisher evidence is returned as unavailable; never infer it.",
+      llmDescription: "Read-only, reusable infrastructure version-position review. For each detected capability it returns versionReviews with installed evidence, official latest stable release URL/date, bounded release-note benefits, compatibility implications and recommendation. It has separately-scoped collectors for Home Assistant, production app, homeserv and the Pi runner. It never runs shell commands or installs updates. Missing current-version or publisher evidence is returned as unavailable; never infer it.",
       llmExamples: [{ scope: "all", historyLimit: 12 }]
     };
   }
@@ -33674,7 +33673,7 @@ var init_registry_client = __esm({
       type: "chat",
       label: "Chat",
       category: "trigger",
-      description: "Conversational chat node. Unwired \u2192 acts as the canvas orchestrator panel (no role in execution). Wired \u2192 backed by Hermes (jkai-general). Trigger mode: user typing flows downstream as the LLM reply. Receiver mode: upstream output is the prompt; the reply is shown in the panel.",
+      description: "Conversational chat node. Unwired \u2192 acts as the canvas orchestrator panel (no role in execution). Wiring it is not supported \u2014 use `llm-call` for a prompt\u2192completion step.",
       configSchema: {
         type: "object",
         properties: {
@@ -40622,7 +40621,7 @@ function summarizeRunningTool(tool, args) {
       if (hosts.length > 1) return `reading ${hosts.length} pages`;
       return "reading a page";
     }
-    // ── Hermes native tools ──────────────────────────────────────────────
+    // ── Native agent tools ──────────────────────────────────────────────
     // Without these the generic fallback below grabs "the first short string
     // arg", which for a shell call is a raw command and for a browser click is
     // an opaque element ref like `e81`.
@@ -40816,14 +40815,14 @@ function summarizeToolResult(step) {
       if (hosts.length > 1) return `Read ${hosts.length} pages \u2014 ${trim2(hosts.join(", "), 50)}`;
       return n > 0 ? `Read ${n} page${n === 1 ? "" : "s"}` : "Read webpage";
     }
-    // ── Hermes native tools ──────────────────────────────────────────────
+    // ── Native agent tools ──────────────────────────────────────────────
     // The engine's own tools, all of which used to fall through to the generic
-    // default. Mind the names: Hermes says `read_file` / `write_file` /
+    // default. Mind the names: the agent says `read_file` / `write_file` /
     // `search_files`, while the SITE tools further down are `file_read` /
     // `file_list` / `file_search` — so the existing cases never matched them and
     // the busiest tools in the whole system rendered as "Done — read file".
     //
-    // Every one is summarised from its ARGUMENTS, because a Hermes result is
+    // Every one is summarised from its ARGUMENTS, because such a result is
     // previewed at 600 chars and is usually unparseable. Args reach this point
     // on a finished card only because the frame adapter remembers them from the
     // `started` frame — see `takeToolArgs` in $lib/jkai/sse-adapter.
@@ -62747,7 +62746,7 @@ var init_request_credential = __esm({
       },
       // NOT destructive. The MCP destructive gate blocks up to 240s on its own
       // confirm banner BEFORE the handler runs; stacking that in front of a 180s
-      // form wait would exceed Hermes' 300s read timeout and strand the turn before
+      // form wait would exceed a 300s MCP read timeout and strand the turn before
       // the form ever appeared. The modal IS the human gate — it shows the
       // destination and binding and requires an explicit save.
       destructive: false,
@@ -62897,7 +62896,7 @@ var init_update_credential = __esm({
       },
       // NOT destructive, for the same reason as request_credential: the MCP
       // destructive gate blocks up to 240s on its own banner BEFORE the handler
-      // runs, and stacking that in front of the 180s form wait would exceed Hermes'
+      // runs, and stacking that in front of the 180s form wait would exceed a client's
       // 300s read timeout and strand the turn before the form appeared. The modal IS
       // the human gate — it shows the before/after and requires an explicit save.
       destructive: false,
@@ -67689,7 +67688,7 @@ var init_infrastructure_status = __esm({
     init_executor2();
     init_data_store();
     init_infrastructure_status_def();
-    SCOPES = ["all", "home_assistant", "production_app", "homeserv", "pi_runner", "hermes"];
+    SCOPES = ["all", "home_assistant", "production_app", "homeserv", "pi_runner"];
     RELEASES = {
       home_assistant_core: { capability: "Home Assistant Core", url: "https://api.github.com/repos/home-assistant/core/releases/latest" },
       home_assistant_os: { capability: "Home Assistant OS", url: "https://api.github.com/repos/home-assistant/operating-system/releases/latest" },
@@ -67711,9 +67710,9 @@ var init_infrastructure_status = __esm({
           collectors.push(...await collectProduction());
           versionReviews.push(unavailableReview("strangeramblings production application", "No bounded version collector configured"));
         }
-        for (const absent of ["homeserv", "pi_runner", "hermes"]) if (scope === "all" || scope === absent) {
+        for (const absent of ["homeserv", "pi_runner"]) if (scope === "all" || scope === absent) {
           collectors.push(unavailable(absent, `${absent} server integration`, "No bounded server-side collector is configured."));
-          versionReviews.push(unavailableReview(absent === "pi_runner" ? "Pi runner(s)" : absent === "homeserv" ? "homeserv operating system and core service runtime" : "Hermes runtime", `${absent} server integration`));
+          versionReviews.push(unavailableReview(absent === "pi_runner" ? "Pi runner(s)" : "homeserv operating system and core service runtime", `${absent} server integration`));
         }
         const findings = findingsFromCollectors(collectors);
         const report = { auditedAt: (/* @__PURE__ */ new Date()).toISOString(), readOnly: true, scope, collectors, findings, versionReviews, updateCandidates: versionReviews.filter((entry) => entry.recommendation === "review first") };
@@ -76241,7 +76240,7 @@ async function bootWhatsApp() {
       service.onMessage((msg) => bridge.handleMessage(msg));
     }
     await service.connect(config?.authDir || "data/whatsapp-auth");
-    console.log(`[whatsapp] Service booted${delegated ? " (delegated \u2192 Hermes bridge)" : ""}`);
+    console.log(`[whatsapp] Service booted${delegated ? " (delegated \u2192 WhatsApp worker)" : ""}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[whatsapp] Boot failed:", msg);

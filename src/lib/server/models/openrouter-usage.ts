@@ -5,7 +5,7 @@
  * `agent_actions` is the site's own account of its LLM spend, and an account
  * kept by the thing being measured cannot tell you what it MISSED. Three known
  * classes of spend never reached it: embeddings and the FLUX image endpoint
- * (both now recorded), and the Hermes engine, which is a separate Python
+ * (both now recorded), and any separate runtime
  * runtime that never goes through the SvelteKit gateway at all. Only the
  * provider can settle the difference.
  *
@@ -16,7 +16,7 @@
  *
  * What IS reachable is `GET /api/v1/key`, which reports rolling usage windows
  * for the calling key. That is the right scope for the reconciliation, because
- * Hermes shares this key (`~/.hermes-jkai/.env` carries the same `sk-or-v1-56e8…`)
+ * A second host can share this key
  * — so "billed to this key" covers the site and the engine together, which is
  * exactly the boundary the ledger is trying to cover.
  *

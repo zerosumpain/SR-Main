@@ -10,19 +10,18 @@ const CHAT_ROUTE = readFileSync(
 );
 
 /**
- * The model picker was hidden behind `hermesEnabled`, which has been false
- * since the cutover — so every conversation since has run on the site default,
- * not because the pin stopped working but because there was no way to set it.
- * The loop honours the pin perfectly well; it coerces `conv.modelProvider` /
- * `conv.modelId` on every turn.
+ * The model picker was hidden behind an engine flag that had been false since
+ * the cutover — so every conversation ran on the site default, not because the
+ * pin stopped working but because there was no way to set it. The chat loop
+ * honours the pin perfectly well; it coerces `conv.modelProvider` /
+ * `conv.modelId` on every turn, and the PATCH below IS the switch.
  *
- * Un-gating it alone would have been a regression. `switchModel` pushed a
- * `/model` command as a chat turn — Hermes-era plumbing the loop has no use for
- * — and `handleWithLoop` did not read `silent`, so every switch would have
- * posted a visible user bubble and billed a full turn.
+ * The `/model` push that used to follow the PATCH is gone with the gateway that
+ * interpreted it. What remains worth pinning is that nothing re-introduces a
+ * chat turn to change a model, and that a silent turn cannot post a bubble.
  *
- * Source assertions, because the property is an ORDER of two gates and a
- * template condition, none of which a unit test can reach without a browser.
+ * Source assertions, because the property is an ORDER of operations and a
+ * template condition, neither of which a unit test can reach without a browser.
  */
 
 describe('the model picker is reachable again', () => {
@@ -31,45 +30,36 @@ describe('the model picker is reachable again', () => {
     expect(CHAT_AREA).toMatch(/\{#if conversationId\}\s*\n\s*<div class="model-switcher">/);
   });
 
-  it('does not gate the switcher on hermesEnabled', () => {
-    const at = CHAT_AREA.indexOf('<div class="model-switcher">');
-    expect(at).toBeGreaterThan(-1);
-    // Whatever `{#if}` most recently opened before the switcher must not be the
-    // engine flag.
-    const before = CHAT_AREA.slice(0, at);
-    const lastIf = before.lastIndexOf('{#if ');
-    const condition = before.slice(lastIf, lastIf + 60);
-    expect(condition).not.toContain('hermesEnabled');
+  it('carries no engine flag at all any more', () => {
+    // The prop, the gated surfaces and the flag itself are gone. A reappearance
+    // means someone re-added a branch for an engine that does not exist.
+    expect(CHAT_AREA).not.toContain('hermesEnabled');
   });
 
-  it('keeps the skill chip gated — the loop has no pinned-skill concept', () => {
-    // `handleWithLoop` never reads `pinnedSkill`; offering the control would be
-    // offering a setting that does nothing.
-    expect(CHAT_AREA).toMatch(/\{#if hermesEnabled && conversationId\}\s*\n\s*<div class="model-switcher skill-switcher">/);
+  it('offers no pinned-skill chip', () => {
+    // No server has ever read `pinnedSkill` since the cutover — the control
+    // would be a setting that does nothing.
+    expect(CHAT_AREA).not.toContain('pinnedSkill');
   });
 });
 
-describe('switching a model does not cost a turn on the loop', () => {
-  it('skips the /model push when Hermes is not the engine', () => {
-    expect(CHAT_AREA).toMatch(/if \(!hermesEnabled\) return;/);
-  });
-
-  it('still persists the switch and updates the UI before bailing', () => {
-    // The PATCH is the actual switch on this engine. Returning before it, or
-    // before `onmodelchange`, would make the picker look broken.
-    const guard = CHAT_AREA.indexOf('if (!hermesEnabled) return;');
+describe('switching a model does not cost a turn', () => {
+  it('persists the switch with a PATCH and tells the parent', () => {
+    // The PATCH is the actual switch. Returning before it, or before
+    // `onmodelchange`, would make the picker look broken.
+    const patch = CHAT_AREA.indexOf("method: 'PATCH'");
     // Prefix, not the whole statement: the callback also reports whether the
     // NEW model takes a thinking level, and the ordering is what this guards.
     const notify = CHAT_AREA.indexOf('onmodelchange?.({ provider, modelId }');
-    const patch = CHAT_AREA.indexOf('method: \'PATCH\'');
     expect(patch).toBeGreaterThan(-1);
     expect(notify).toBeGreaterThan(patch);
-    expect(guard).toBeGreaterThan(notify);
   });
 
-  it('leaves the open-time push gated on the same flag', () => {
-    // Both push sites, one rule.
-    expect(CHAT_AREA).toMatch(/const on = hermesEnabled;/);
+  it('pushes no /model command as a chat turn', () => {
+    // The gateway that read `/model` is gone. Posting one now would bill a turn
+    // to tell the loop something it already read off the conversation row.
+    expect(CHAT_AREA).not.toContain('tellHermesModel');
+    expect(CHAT_AREA).not.toMatch(/message: .{0,20}[Mm]odelCommand/);
   });
 });
 

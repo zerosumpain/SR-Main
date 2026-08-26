@@ -7,7 +7,7 @@ import { resolvePublishSlug, slugifyTitle } from '$lib/jkai/publish-slug';
 vi.mock('$lib/db', () => ({ db: {} }));
 
 /**
- * The four shapes `files` actually arrives in. Hermes stringifies nested
+ * The four shapes `files` actually arrives in. A model may stringify nested
  * argument values, so a well-formed call from the model reaches the tool
  * JSON-encoded to some depth. Before 2026-08-08 anything but the first shape
  * was rejected outright with "each file needs string path + string content",

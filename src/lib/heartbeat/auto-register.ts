@@ -32,7 +32,7 @@ export async function autoRegisterFromToolResult(opts: {
     return { registered: false, reason: `idPath '${opts.produces.idPath}' did not resolve to a string` };
   }
 
-  // Strip Hermes' `chat_` prefix here rather than at each call site. Wiring
+  // Strip the legacy `chat_` prefix here rather than at each call site. Wiring
   // this hook up without it would spawn a 30s watcher per build that errors
   // forever — the exact failure this whole change exists to end.
   const conversationId = normaliseConversationId(opts.conversationId);

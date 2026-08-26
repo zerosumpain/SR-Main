@@ -3,7 +3,7 @@ name: sr-design-system
 description: "Strange Ramblings design system — apply to all static apps unless the user requests otherwise."
 version: 1.0.0
 metadata:
-  hermes:
+  routing:
     tags: [design-system, branding, strangeramblings]
     applies_to: [register_chat_build, build_tweak]
 ---

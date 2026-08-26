@@ -3,7 +3,7 @@
  *  Written into `orchestrator_chats.metadata.usage` by the chat endpoint and
  *  also handed to the client on the `done` event, so the cost line under a
  *  reply is identical whether the turn just streamed or was reloaded from
- *  history. Cost is priced against the conversation's own model (Hermes's own
+ *  history. Cost is priced against the conversation's own model (the engine's own
  *  estimate is only a fallback), in USD — display converts to GBP.
  */
 export interface TurnStamp {
@@ -17,7 +17,7 @@ export interface TurnStamp {
   /**
    * How many times the model was called to produce this reply.
    *
-   * Absent on Hermes-era rows, which had no notion of it — Hermes reported one
+   * Absent on older rows, which had no notion of it — the gateway reported one
    * usage block per turn and the round structure stayed inside the gateway. On
    * the in-process loop it is the single most useful number on the line: the
    * first measured turn on production took NINE rounds at ~3.3s of

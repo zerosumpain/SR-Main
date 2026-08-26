@@ -16,9 +16,9 @@
  *   text deltas         33, incremental             1 block
  *   total                     1,389 ms           4,334 ms
  *
- * This is the transport Hermes used (`plugins/model-providers/openai-codex`,
- * `api_mode: codex_responses`), which is why chat felt faster before the Hermes
- * exit. Removing Hermes did not make Codex slower; it swapped a thin streaming
+ * This is the transport the old gateway used (`api_mode: codex_responses`),
+ * which is why chat felt faster before it was retired. Retiring it did not make
+ * Codex slower; it swapped a thin streaming
  * transport for a thick blocking one.
  */
 import { getCodexAuth, invalidateCodexAuth } from './codex-auth';

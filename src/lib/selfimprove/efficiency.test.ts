@@ -74,7 +74,7 @@ describe('trial verdict — a neutral result reverts', () => {
 });
 
 describe('staleness guard — never grade a trial on evidence older than itself', () => {
-  // The real incident, 2026-08-24. Hermes stopped; its session store froze at
+  // The real incident, 2026-08-24. The gateway stopped; its session store froze at
   // 06:34 but kept answering queries. Tool-policy v16's trial opened at 02:36
   // that morning and would decide on 09-07, by which time `windowDays` =
   // ceil(ageDays) opens the window well before the trial start. The 9 turns it

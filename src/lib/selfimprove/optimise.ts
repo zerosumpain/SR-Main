@@ -385,7 +385,7 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
   if (!eff) {
     actions.push({
       kind: 'efficiency_measured',
-      detail: 'measurement unavailable (Hermes session store unreachable)',
+      detail: 'measurement unavailable (call efficiency could not be read)',
     });
     return actions;
   }
@@ -408,7 +408,7 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
   const registry = getTools();
   const byName = new Map(registry.map((t) => [t.name, t]));
 
-  // Only tools this registry owns can be overlaid — Hermes built-ins
+  // Only tools this registry owns can be overlaid — an agent's built-ins
   // (browser_*, terminal, web_search) are not ours to describe.
   const candidates = eff.patterns
     .filter((p) => p.repeatCalls >= MIN_REPEAT_CALLS)

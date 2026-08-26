@@ -4,7 +4,7 @@
 // answer structural questions: how two people are connected, who sits between
 // two parts of your world, what surrounds an entity two hops out. Those are the
 // questions a graph exists for, and until now the graph could not be asked them
-// from chat — since the Hermes cutover, chat reached intel only through flat
+// from chat — since the cutover, chat reached intel only through flat
 // ranked hits with the edges stripped off.
 //
 // Everything here is read-only and shares the cached graph analysis with the

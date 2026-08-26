@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listPolicyVersions, publishPolicy, revertPolicyTo } from '$lib/toolpolicy/policy';
-import { coerceOwnerPublish, needsHermesReconnect } from '$lib/toolpolicy/publish-input';
+import { coerceOwnerPublish, needsMcpReconnect } from '$lib/toolpolicy/publish-input';
 import { getTools } from '$lib/workflows/site-tools/registry';
 import { measureEfficiency, snapshotOf } from '$lib/selfimprove/efficiency';
 import { getActivePolicy } from '$lib/toolpolicy/policy';
@@ -72,7 +72,7 @@ export const PUT: RequestHandler = async ({ request }) => {
   // would never be judged or rolled back — it would just sit there forever.
   const eff = await measureEfficiency();
   if (!eff) {
-    return json({ error: 'Cannot baseline: the Hermes session store is unreachable, so this change could never be measured or rolled back.' }, { status: 503 });
+    return json({ error: 'Cannot baseline: call efficiency could not be measured, so this change could never be judged or rolled back.' }, { status: 503 });
   }
 
   try {
@@ -90,12 +90,12 @@ export const PUT: RequestHandler = async ({ request }) => {
       active: published,
       baseline: snapshotOf(eff),
       // The caller MUST act on this. Promotions and global guidance reach the
-      // model only through the MCP manifest, which Hermes reads once on
-      // connect — publish without restarting and the trial measures a change
+      // model only through the MCP manifest, which a client reads once on
+      // connect — publish without reconnecting and the trial measures a change
       // the model never saw, then reverts it as "no effect".
-      requiresHermesReconnect: needsHermesReconnect(parsed.input),
-      ...(needsHermesReconnect(parsed.input)
-        ? { action: 'Restart the Hermes gateway (`systemctl --user restart jkai-hermes`) before this can take effect.' }
+      requiresMcpReconnect: needsMcpReconnect(parsed.input),
+      ...(needsMcpReconnect(parsed.input)
+        ? { action: 'Reconnect any MCP client before this can take effect — the manifest is read once, on connect.' }
         : {}),
     });
   } catch (err) {

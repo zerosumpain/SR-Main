@@ -13,7 +13,7 @@
  * `notifications` config (null/absent — the default for every existing
  * workflow) it does nothing, silently.
  *
- * WhatsApp sends are delegated to the Hermes bridge in production via the
+ * WhatsApp sends are delegated to the WhatsApp worker in production via the
  * WhatsApp service (`whatsapp/service.ts`), so this works in worker mode where
  * no local Baileys client is paired. The service is lazy-imported so the engine
  * doesn't pull in the WhatsApp stack unless a run actually needs to notify.
