@@ -263,15 +263,35 @@ export async function composeNarrative(
   return result;
 }
 
-/** Store the phrasing against the thought. */
+/**
+ * Store the phrasing against the thought, with what it cost and whether
+ * anything checked it.
+ *
+ * Takes the whole ComposeResult rather than a narrative and a number, because
+ * the two facts that were being dropped on the floor here — `verified` and the
+ * token counts — are exactly the ones the page needs to stop overstating what
+ * it knows. The old signature made discarding them the path of least
+ * resistance, and both were duly discarded: every thought in production reads
+ * cost 0.000000, and unverified prose was indistinguishable from verified.
+ */
 export async function saveNarrative(
   thoughtId: string,
-  narrative: string | null,
-  costUsd: number,
+  result: Pick<ComposeResult, 'narrative' | 'verified' | 'droppedReason' | 'tokens'>,
+  costUsd = 0,
 ): Promise<void> {
   const { daydreamThoughts } = await import('$lib/db/schema');
   await db
     .update(daydreamThoughts)
-    .set({ narrative, costUsd: String(costUsd), updatedAt: new Date() })
+    .set({
+      narrative: result.narrative,
+      // Null when there is no prose at all — "unverified" is a claim about
+      // something that exists, and saying it about nothing is its own small lie.
+      verified: result.narrative ? result.verified : null,
+      narrativeDroppedReason: result.droppedReason,
+      promptTokens: result.tokens.prompt,
+      completionTokens: result.tokens.completion,
+      costUsd: String(costUsd),
+      updatedAt: new Date(),
+    })
     .where(eq(daydreamThoughts.id, thoughtId));
 }

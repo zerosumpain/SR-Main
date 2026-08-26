@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
   import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
 
   let { data }: { data: PageData } = $props();
@@ -180,6 +181,19 @@
       sessionSaving = false;
     }
   }
+
+  /** Statuses that mean "this reached him". Only these can be rated. */
+  const SHOWN_STATUSES = ['delivered', 'seen', 'actioned'];
+
+  /**
+   * `?rate=<id>` — where a chat note's link lands.
+   *
+   * Derived rather than copied into state in an effect: the URL is already
+   * reactive, and syncing it into `$state` is the prop-to-state pattern that
+   * re-tracks its own proxy and hangs the page. Reading it directly has no such
+   * failure mode and needs no untrack.
+   */
+  const rateId = $derived(page.url.searchParams.get('rate'));
 
   const PLACE_KINDS = ['home', 'school', 'work', 'shop', 'cafe', 'gym', 'other'];
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -701,15 +715,42 @@
               <span class="mono">score {t.score}</span>
               <span class="sep">·</span>
               <span>{ago(t.createdAt)}</span>
+              {#if t.placeLabel}
+                <span class="sep">·</span>
+                <span class="place-tag">{t.placeLabel}</span>
+              {/if}
               {#if t.suppressedReason}
                 <span class="sep">·</span>
                 <span class="held">held back: {t.suppressedReason}</span>
+              {/if}
+              {#if t.promptTokens + t.completionTokens > 0}
+                <span class="sep">·</span>
+                <span class="mono tok">{t.promptTokens + t.completionTokens} tok</span>
               {/if}
               {#if t.feedback}
                 <span class="sep">·</span>
                 <span class="voted">you said {t.feedback.replace('_', ' ')}</span>
               {/if}
             </div>
+
+            {#if t.id === rateId}
+              <p class="rate-cue">Opened from a notification — your answer is below.</p>
+            {/if}
+            {#if t.narrative}
+              <!-- The model's phrasing, always shown as the model's. The rule's
+                   own explanation stays directly beneath it, so if this whole
+                   path failed permanently the ledger would still read. -->
+              <p class="narrative" class:unchecked={t.verified === false}>
+                {t.narrative}
+                <span class="narr-tag" class:ok={t.verified === true}>
+                  {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+                </span>
+              </p>
+            {:else if t.narrativeDroppedReason}
+              <!-- A composer that has quietly started refusing everything looks
+                   exactly like a quiet week unless this is on the page. -->
+              <p class="narr-dropped">phrasing dropped — {t.narrativeDroppedReason}</p>
+            {/if}
 
             {#if expanded === t.id}
               <div class="thought-detail">
@@ -734,7 +775,12 @@
               </div>
             {/if}
 
-            {#if !t.feedback}
+            <!-- Rating is offered only on what actually reached him. Asking
+                 "was this useful?" about a thought that was suppressed before
+                 it was ever sent is a question with no answer, and the vote it
+                 collects would train the weights on something he never saw.
+                 Production had verdict buttons on eight such rows. -->
+            {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
               <div class="thought-actions">
                 <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
                   Useful
@@ -1029,6 +1075,33 @@
     .session-row { flex-direction: column; align-items: stretch; }
     .session-input { min-width: 0; width: 100%; }
   }
+
+  .rate-cue {
+    margin: 0.4rem 0 0; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); color: var(--accent);
+  }
+
+  /* Model phrasing, and how much of it to trust */
+  .narrative {
+    margin: 0.4rem 0 0; padding: 0.5rem 0.7rem;
+    font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-primary);
+    background: var(--surface-sunken); border-left: 2px solid var(--line-strong);
+  }
+  /* Unchecked prose does not get to look like checked prose. The minimal depth
+     plan produces it routinely, and until now nothing on the page said so. */
+  .narrative.unchecked { border-left-color: var(--status-error, #c0392b); }
+  .narr-tag {
+    display: inline-block; margin-left: 0.4rem;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    letter-spacing: 0.04em; color: var(--status-error, #c0392b); white-space: nowrap;
+  }
+  .narr-tag.ok { color: var(--text-ghost); }
+  .narr-dropped {
+    margin: 0.4rem 0 0; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); color: var(--text-ghost);
+  }
+  .place-tag { color: var(--text-secondary); }
+  .tok { color: var(--text-ghost); }
 
   /* Detectors */
   .det-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.55rem 0; border-bottom: 1px solid var(--line-hair); }

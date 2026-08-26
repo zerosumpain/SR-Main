@@ -189,7 +189,7 @@ export async function deliver(
         const { postHeartbeatNote } = await import('$lib/heartbeat/llm');
         await postHeartbeatNote({
           conversationId,
-          text: `**${thought.title}**\n\n${body}`,
+          text: `**${thought.title}**\n\n${body}\n\n${feedbackLine(thought.id)}`,
           activityName: 'daydream-compose',
         });
         sent = true;
@@ -214,6 +214,27 @@ export async function deliver(
     .where(eq(daydreamThoughts.id, thought.id));
 
   return { sent, error };
+}
+
+/**
+ * The one line that makes a chat note answerable.
+ *
+ * There are no push subscribers, so every delivery lands here — a bold title
+ * and a paragraph, with no way to say anything back. That is why `feedback` is
+ * NULL on every thought in production: not indifference, no affordance. And
+ * with no feedback the cold-start threshold never falls from its 0.75 ceiling
+ * and every kind weight sits at exactly 1.0, so the whole learning apparatus
+ * downstream is idling on an empty input.
+ *
+ * A LINK, not a one-tap verdict URL, and deliberately so: `src/app.html` sets
+ * `data-sveltekit-preload-data="hover"` for the entire app, so a GET that
+ * records a vote could be fired by a preload the owner never chose — silently
+ * training the weights on a mouse movement. The anchor has no side effect; it
+ * opens the ledger at this thought, where the verdict buttons already live and
+ * a POST records the answer.
+ */
+export function feedbackLine(thoughtId: string): string {
+  return `[Useful? Rate it](/jkai/daydreams?rate=${thoughtId})`;
 }
 
 /** The conversation a chat note would land in — the most recently touched one.

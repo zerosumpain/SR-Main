@@ -98,7 +98,13 @@ export const daydreamCompose: ActivityHandler = {
     let composed = 0;
     let deliveredCount = 0;
     let dropped = 0;
-    let costUsd = 0;
+    // Stays zero while the daydream model is pinned to Codex, which bills
+    // nothing and reports no price. That is honest; tokens are the number that
+    // actually moves, so they are counted separately rather than folded into a
+    // currency figure that would be fiction.
+    const costUsd = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
 
     for (const thought of considered) {
       const decision = chooseChannel(
@@ -124,7 +130,15 @@ export const daydreamCompose: ActivityHandler = {
           dropped++;
           outcomes.push({ id: thought.id, kind: thought.kind, dropped: result.droppedReason });
         }
-        await saveNarrative(thought.id, narrative, costUsd);
+        // The counts the call actually returned. Previously `costUsd` — an
+        // accumulator declared at zero and never assigned — was passed here and
+        // written to every row, so the ledger reported 0.000000 for work that
+        // had definitely happened, and the returned token counts were dropped
+        // on the floor. A meter that always reads zero is worse than no meter:
+        // it looks like evidence.
+        promptTokens += result.tokens.prompt;
+        completionTokens += result.tokens.completion;
+        await saveNarrative(thought.id, result, costUsd);
       } catch (err) {
         outcomes.push({ id: thought.id, kind: thought.kind, error: errMsg(err) });
       }
@@ -156,6 +170,8 @@ export const daydreamCompose: ActivityHandler = {
         `${plan.depth}: ${composed} phrased, ${deliveredCount} delivered, ${dropped} dropped` +
         (isCodexModel ? ` · quota +${quota.weeklyPct}% wk` : ''),
       costUsd,
+      promptTokens,
+      completionTokens,
       details: {
         // `quota` is read back by budget.ts to enforce the caps — the key name
         // and shape are load-bearing, not cosmetic.
