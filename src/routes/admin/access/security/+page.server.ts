@@ -10,7 +10,7 @@ import {
   IS_HOMESERV,
   type HostPosture,
 } from '$lib/server/security-posture';
-import { homeservBase } from '$lib/server/hermes-remote';
+import { homeservBase } from '$lib/server/homeserv-remote';
 
 /**
  * Reads the posture of this host directly, and of the peer over the same

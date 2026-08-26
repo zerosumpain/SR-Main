@@ -16,7 +16,6 @@ import { asc, desc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { extractIntoIntel, type AutoExtractOutcome } from './auto-extract';
 import { publishConversationSignal } from '$lib/workflows/chat/followup-queue';
-import { COMMAND_ECHO_RE } from '$lib/jkai/hermes-frames';
 
 /**
  * Assistant-turn counts at which we re-extract.
@@ -71,6 +70,18 @@ const TOOL_LOG_LINE_RE = /^\s*⚙️.*$/gm;
  * off the text channel in the first place. One definition on purpose: a detector
  * kept in two places here has drifted before.
  */
+
+/**
+ * A command echo is not an answer. The `/model` switch the chat sends itself
+ * produces "Model switched to `z-ai/glm-5.1` …", and extracting that as
+ * knowledge is how a thread came to "know" a model id was a topic of interest.
+ *
+ * No glyph, unlike the tool-log lines above — this is a deliberate exception to
+ * the glyph-then-phrase shape, kept narrow so a real reply opening with
+ * "Usage:" is the only false positive it can produce.
+ */
+const COMMAND_ECHO_RE =
+  /^\s*(?:Model switched to|Usage:|Unknown command\b|Available (?:commands|models)\b)/i;
 
 /** The knowledge-bearing text of one assistant turn, or '' if there is none. */
 export function cleanAssistantContent(content: string): string {

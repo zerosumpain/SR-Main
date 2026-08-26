@@ -5,10 +5,10 @@
 // Everything else the engine does (build a tool, repair a tool, register an
 // API) adds capability. This measures the cost of USING it, and is the only
 // metric a nightly run is graded against. The measurement itself lives in
-// $lib/server/hermes-sessions (`getCallEfficiency`) because the turn data is in
-// homeserv's Hermes SQLite; this module owns the engine-side concerns —
-// snapshotting, persistence for the ledger, and deciding whether a live policy
-// change earned its place or must be rolled back.
+// `./call-efficiency` (`getCallEfficiency`), reading this app's own
+// `jkai_tool_traces`; this module owns the engine-side concerns — snapshotting,
+// persistence for the ledger, and deciding whether a live policy change earned
+// its place or must be rolled back.
 //
 // The headline number is the CHAT segment. Agentic turns (browser, terminal,
 // delegation) are measured and reported but never optimised against: their step
@@ -16,7 +16,7 @@
 // thorough work (owner decision, 2026-07-29).
 
 import { upsertRecord } from '$lib/datastore';
-import type { CallEfficiency } from '$lib/server/hermes-sessions';
+import { getCallEfficiency, type CallEfficiency } from './call-efficiency';
 import {
   getActivePolicy,
   revertPolicyTo,
@@ -28,12 +28,11 @@ import { COLLECTIONS, SYSTEM_ACTOR, TRIAL, asData, errMsg, type RunAction } from
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Read the metric. Returns null (never throws) when Hermes is unreachable —
- *  a missing measurement must skip the phase, not fail the run. */
+/** Read the metric. Returns null (never throws) when the query fails — a
+ *  missing measurement must skip the phase, not fail the run. */
 export async function measureEfficiency(days: number = TRIAL.windowDays): Promise<CallEfficiency | null> {
   try {
-    const { rCallEfficiency } = await import('$lib/server/hermes-remote');
-    return await rCallEfficiency(days);
+    return await getCallEfficiency(days);
   } catch (err) {
     console.error('[selfimprove] call-efficiency measurement failed:', errMsg(err));
     return null;

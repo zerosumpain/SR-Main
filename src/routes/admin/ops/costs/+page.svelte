@@ -37,22 +37,6 @@
   const dayPeak = $derived(Math.max(0.0000001, ...data.perDay.map((d) => d.cost)));
   const activityPeak = $derived(Math.max(0.0000001, ...data.byActivity.map((a) => a.costUsd)));
   const modelPeak = $derived(Math.max(0.0000001, ...data.byModel.map((m) => m.cost)));
-  const hermesModelPeak = $derived(
-    Math.max(0.0000001, ...(data.hermesSpend?.byModel ?? []).map((m) => m.costUsd)),
-  );
-
-  /**
-   * The engine counts cache reads BESIDE input tokens, not inside them — 163 of
-   * 269 sessions in a 30-day sample had more cache reads than input tokens, so
-   * `cacheRead / input` read 433% before this. The site ledger is the other way
-   * round: OpenRouter's `prompt_tokens` already includes `cached_tokens`, so the
-   * two cards genuinely need different arithmetic to mean the same thing —
-   * "what share of the prompt came from cache".
-   */
-  const hermesPromptTokens = $derived(
-    (data.hermesSpend?.overview.inputTokens ?? 0) + (data.hermesSpend?.overview.cacheReadTokens ?? 0),
-  );
-
   /** Every LLM role on the site, spending or not, with its spend attached.
    *  A role with no spend is not noise — it is either genuinely idle or not
    *  reaching the ledger, and both are worth seeing next to the ones that are. */
@@ -103,7 +87,7 @@
       hasSpend: false,
     });
 
-    for (const w of [...data.workloads.site, ...data.workloads.hermes]) {
+    for (const w of data.workloads.site) {
       const s = spendByKey.get(w.id);
       rows.push({
         key: w.id,
@@ -197,14 +181,8 @@
   <div class="stat-grid">
     <div class="stat-card">
       <div class="stat-card-label">{data.days === 1 ? 'Today' : `Last ${data.days} days`}</div>
-      <div class="stat-card-value">{usd(data.reconciliation.combinedWindowUsd ?? win.cost)}</div>
-      <div class="stat-card-meta">
-        {#if data.reconciliation.combinedWindowUsd != null}
-          site {usd(win.cost)} + engine {usd(data.hermesSpend!.overview.costUsd)}, overlap removed
-        {:else}
-          {num(win.calls)} calls · site only
-        {/if}
-      </div>
+      <div class="stat-card-value">{usd(win.cost)}</div>
+      <div class="stat-card-meta">{num(win.calls)} calls</div>
     </div>
     <div class="stat-card">
       <div class="stat-card-label">Run rate</div>
@@ -249,12 +227,6 @@
       The ledger is the site's own account of its spend, and an account kept by the thing being
       measured cannot report what it missed. These rows compare it against what OpenRouter actually
       billed this key.
-      {#if data.reconciliation.enginesShareKey === true}
-        The Hermes engine spends on the same key, so the comparison covers both.
-      {:else if data.reconciliation.enginesShareKey === false}
-        The Hermes engine spends on a <strong>different</strong> key, so these rows cover the site
-        only — see the note beneath the table.
-      {/if}
     </p>
 
     {#if !data.provider.key}
@@ -269,7 +241,7 @@
             <tr><th>Window</th><th>Billed by OpenRouter</th><th>Recorded here</th><th>Unaccounted</th><th>Coverage</th></tr>
           </thead>
           <tbody>
-            {#each [["OpenRouter's day (site ledger)", data.reconciliation.day], ["OpenRouter's week (site ledger)", data.reconciliation.week], ["OpenRouter's month (site ledger)", data.reconciliation.month], [data.reconciliation.enginesShareKey === true ? `Last ${data.days} days — site + engine` : `Last ${data.days} days — site + engine (recorded only)`, data.reconciliation.window]] as const as [label, r] (label)}
+            {#each [["OpenRouter's day", data.reconciliation.day], ["OpenRouter's week", data.reconciliation.week], ["OpenRouter's month", data.reconciliation.month], [`Last ${data.days} days`, data.reconciliation.window]] as const as [label, r] (label)}
               <tr>
                 <td>{label}</td>
                 <td class="num">{usd(r.billedUsd)}</td>
@@ -300,41 +272,11 @@
 
       <ul class="notes">
         <li>
-          The first three rows are the <strong>site ledger alone</strong>, against OpenRouter's own
-          day / week / month counters. OpenRouter does not say whether those are rolling or
-          period-to-date, and the ledger side is rolling — so early in a calendar period coverage may
-          read high. It does not read falsely low, which would be the dangerous direction for a
-          completeness check. The last adds the Hermes engine's separate store and removes the
-          overlap between them — /jkai web-chat turns are Hermes sessions that the chat endpoint also
-          back-fills into the site ledger, {usd(data.reconciliation.jkaiChatOverlapUsd)} of this window.
-          {#if data.reconciliation.enginesShareKey === true && data.reconciliation.window.billedUsd == null}
-            OpenRouter publishes day, week and month and nothing else, so a {data.days}-day window has
-            no counterpart to check against — pick 1d, 7d or 30d for the combined check.
-          {/if}
+          These rows compare the ledger against OpenRouter's own day / week / month counters.
+          OpenRouter does not say whether those are rolling or period-to-date, and the ledger side is
+          rolling — so early in a calendar period coverage may read high. It does not read falsely
+          low, which would be the dangerous direction for a completeness check.
         </li>
-        <!--
-          The engine does not necessarily bill the key above. On homeserv it does;
-          on the VPS it does not. Saying so is the whole point of the row — a
-          combined ledger over a key that billed half of it reads ~300% and looks
-          like a Codex artefact rather than a category error.
-        -->
-        {#if data.reconciliation.enginesShareKey === false}
-          <li>
-            <strong>The engine bills a different key.</strong> This host authenticates with
-            <code>{data.reconciliation.siteKeyLabel}</code>; the Hermes engine spends on
-            <code>{data.reconciliation.engineKeyLabel}</code>. Its
-            {usd(data.hermesSpend?.overview.costUsd ?? null)} is real and is counted in the combined
-            total, but it is <strong>not</strong> divided by the bill above, because that bill never
-            covered it. Both keys draw on the same account, so the lifetime figure below does cover
-            everything.
-          </li>
-        {:else if data.reconciliation.enginesShareKey === null && data.hermesSpend}
-          <li>
-            Whether the engine bills this same key could not be established — an older engine build,
-            or an unreadable config. The combined row is therefore <strong>not</strong> reconciled
-            against the bill; the recorded total still stands.
-          </li>
-        {/if}
         <li>
           <strong>Over 100% is possible and is not a bug.</strong> Codex calls are priced and recorded
           here but billed to a ChatGPT subscription, not to OpenRouter, so a Codex-heavy window
@@ -363,97 +305,6 @@
           </li>
         {/if}
       </ul>
-    {/if}
-  </section>
-
-  <!-- ── The engine's own ledger ─────────────────────────────────────────── -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Hermes engine</span>
-      <span class="nm-sec-meta">the engine's own store · last {data.days} days</span>
-    </div>
-    <p class="sec-lede">
-      The engine is a separate runtime that never goes through the site's LLM gateway, so none of this
-      appears in the table above.
-      {#if data.reconciliation.enginesShareKey === true}
-        It bills to the same OpenRouter key.
-      {:else if data.reconciliation.enginesShareKey === false}
-        It bills to a different OpenRouter key (<code>{data.reconciliation.engineKeyLabel}</code>) on
-        the same account.
-      {/if}
-      Read as a second source, not merged, because the two stores have different coverage and
-      different clocks.
-    </p>
-
-    {#if !data.hermesSpend}
-      <p class="empty-note">{data.hermesSpendError ?? 'The engine store did not answer.'}</p>
-    {:else}
-      <div class="stat-grid">
-        <div class="stat-card">
-          <div class="stat-card-label">Engine spend</div>
-          <div class="stat-card-value">{usd(data.hermesSpend.overview.costUsd)}</div>
-          <div class="stat-card-meta">{num(data.hermesSpend.overview.sessions)} sessions</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card-label">Tokens</div>
-          <div class="stat-card-value">{tokens(data.hermesSpend.overview.inputTokens + data.hermesSpend.overview.outputTokens)}</div>
-          <div class="stat-card-meta">
-            {tokens(data.hermesSpend.overview.inputTokens)} new in · {tokens(
-              data.hermesSpend.overview.outputTokens,
-            )} out
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card-label">Cached</div>
-          <div class="stat-card-value">
-            {hermesPromptTokens > 0
-              ? pct(data.hermesSpend.overview.cacheReadTokens / hermesPromptTokens)
-              : '—'}
-          </div>
-          <div class="stat-card-meta">
-            {tokens(data.hermesSpend.overview.cacheReadTokens)} of {tokens(hermesPromptTokens)} prompt tokens
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card-label">Reasoning</div>
-          <div class="stat-card-value">{tokens(data.hermesSpend.overview.reasoningTokens)}</div>
-          <div class="stat-card-meta">output tokens before the answer</div>
-        </div>
-      </div>
-
-      {#if data.hermesSpend.byModel.length}
-        <div class="nm-table-scroll">
-          <table class="nm-table">
-            <thead><tr><th>Model</th><th class="num">Spend</th><th class="num">Sessions</th><th class="num">In</th><th class="num">Out</th></tr></thead>
-            <tbody>
-              {#each data.hermesSpend.byModel as m (m.model)}
-                <tr>
-                  <td><code>{m.model}</code></td>
-                  <td class="num">
-                    <span class="bar-cell">
-                      <span class="bar" aria-hidden="true">
-                        <span class="bar-fill" style={`width:${Math.round((m.costUsd / hermesModelPeak) * 100)}%`}></span>
-                      </span>
-                      {usd(m.costUsd)}
-                    </span>
-                  </td>
-                  <td class="num">{num(m.sessions)}</td>
-                  <td class="num mono small">{tokens(m.inputTokens)}</td>
-                  <td class="num mono small">{tokens(m.outputTokens)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-
-      {#if data.hermesSpend.byPlatform.length}
-        <div class="chips">
-          {#each data.hermesSpend.byPlatform as p (p.source)}
-            <span class="chip mono">{p.source} · {usd(p.costUsd)} · {num(p.sessions)} sessions</span>
-          {/each}
-        </div>
-      {/if}
     {/if}
   </section>
 
@@ -487,7 +338,7 @@
     </div>
     <p class="sec-lede">
       Every LLM role on the site and in the engine, dearest first. The model is changed here — a site
-      role takes effect immediately, a Hermes role on the gateway restart the save performs. Rows
+      role takes effect immediately. Rows
       marked <em>per-call</em> pick their model per conversation or per node, so there is nothing on
       them to switch.
     </p>
@@ -511,7 +362,6 @@
                 <button class="row-name" onclick={() => toggle(r.key)} aria-expanded={expanded === r.key}>
                   {r.label}
                 </button>
-                {#if r.scope === 'hermes'}<span class="nm-pill" data-state="info">hermes</span>{/if}
                 {#if r.source === 'pinned'}<span class="nm-pill" data-state="active">pinned</span>{/if}
                 {#if r.source === 'code'}<span class="nm-pill" data-state="warn">code fallback</span>{/if}
               </td>
@@ -563,9 +413,6 @@
       </table>
     </div>
 
-    {#if data.workloads.hermesError}
-      <p class="empty-note small">Hermes roles unavailable: {data.workloads.hermesError}</p>
-    {/if}
   </section>
 
   <!-- ── Cost reduction ─────────────────────────────────────────────────── -->

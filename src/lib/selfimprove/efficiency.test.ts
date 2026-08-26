@@ -7,7 +7,7 @@ import {
   trialIsDecidable,
 } from './efficiency';
 import { TRIAL } from './types';
-import type { CallEfficiency } from '$lib/server/hermes-sessions';
+import type { CallEfficiency } from './call-efficiency';
 
 function eff(patch: Partial<CallEfficiency['chat']> = {}): CallEfficiency {
   const seg = {

@@ -30,7 +30,7 @@ import {
   sanitiseOverrides,
   type ToolOverride,
 } from '$lib/toolpolicy/policy';
-import type { CallPattern } from '$lib/server/hermes-sessions';
+import type { CallPattern } from './call-efficiency';
 import type { Budget } from './run';
 import {
   assessActiveTrial,

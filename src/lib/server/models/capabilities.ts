@@ -70,34 +70,21 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
  * model can accept.
  *
  * `getModelCapabilities` answers "can this model take an image in a content
- * part" — the right question for the legacy in-process lane, which builds those
- * content parts itself, and for the model picker, which should stay truthful
- * about the model.
+ * part" — the right question for the model picker, which should stay truthful
+ * about the model itself.
  *
- * Hermes is not that. It owns media handling: `_decide_image_input_mode` in
- * gateway/run.py attaches pixels natively when the model does vision and
- * otherwise pre-analyses the image with the auxiliary vision model and prepends
- * the description, and audio goes through STT the same way. So on the Hermes
- * lane a text-only model still gets the image — which is why the composer must
- * not grey the attachment out.
+ * The chat lane is not that. Images, PDFs and audio are pre-analysed into text
+ * when the model cannot read them natively (see `$lib/jkai/media/preanalyse`),
+ * so the composer must not grey them out on a text-only model.
  *
  * This mattered in practice: John's chats run on `codex/gpt-5.6-terra`, which
  * maps to TEXT_ONLY, so every image he attached was marked incompatible and
  * dropped from the turn before it was ever sent.
+ *
+ * Video is NOT included: there is no extraction path for it, so it stays gated
+ * on what the model itself accepts.
  */
-export function getChatInputCapabilities(
-  ctx: ModelContext,
-  opts: { hermes: boolean },
-): ModelCapabilities {
-  if (opts.hermes) return ALL;
-  // The in-process lane no longer inherits the model's raw limits. Images, PDFs
-  // and audio are pre-analysed into text when the model cannot read them
-  // natively (see $lib/jkai/media/preanalyse), so the composer must not grey
-  // them out — that was the one thing that broke the moment chat stopped going
-  // through Hermes.
-  //
-  // Video is NOT included: there is no extraction path for it, so it stays
-  // gated on what the model itself accepts.
+export function getChatInputCapabilities(ctx: ModelContext): ModelCapabilities {
   const native = getModelCapabilities(ctx);
   return { ...native, image: true, pdf: true, audio: true, documentText: true };
 }

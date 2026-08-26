@@ -193,9 +193,6 @@
         cancel
       </button>
 
-      {#if !isSiteDefault && workload!.scope === 'hermes'}
-        <span class="sw-note">Applied with a gateway restart.</span>
-      {/if}
       {#if err}<span class="sw-err">{err}</span>{/if}
     </div>
   {/if}

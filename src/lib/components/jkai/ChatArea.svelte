@@ -30,7 +30,6 @@
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import OpenRouterModelPicker from '$lib/components/jkai/OpenRouterModelPicker.svelte';
-  import { hermesModelCommand } from '$lib/jkai/hermes-model-command';
   import { coerceModelContext } from '$lib/constants/default-models';
   import {
     isThinkingLevel,
@@ -84,7 +83,6 @@
     useIntelContext = true,
     activeBuild = null,
     approvalUi,
-    hermesEnabled = false,
     onToggleThreadRail,
     onToggleGraphRail,
     graphRailOpen = true,
@@ -127,7 +125,6 @@
     useIntelContext?: boolean;
     activeBuild?: { id: string; status: string } | null;
     approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
-    hermesEnabled?: boolean;
     /** Raise the thread rail's slide-over (below 1100px it is off-canvas). */
     onToggleThreadRail?: () => void;
     /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
@@ -1616,40 +1613,11 @@
     void send();
   }
 
-  // ── Command palette (item 1) + model switcher (item 2) ──────────────────
-  // Both surfaces only function when Hermes handles the chat (`hermesEnabled`):
-  // the gateway interprets slash commands (/usage, /model …) before the agent
-  // runs, whereas the legacy in-process loop would forward them to the LLM as
-  // prose.
-
-  // Gateway slash commands that are safe to fire through the jkai bridge
-  // (verified at the platform-dispatch level in hermes gateway/run.py). `send`
-  // fires the command silently; `insert` drops it into the composer so the user
-  // can add an argument before sending.
-  const PALETTE_COMMANDS: { command: string; hint: string; mode: 'send' | 'insert' }[] = [
-    { command: '/usage', hint: 'Token usage & cost for this session', mode: 'send' },
-    { command: '/status', hint: 'Session status', mode: 'send' },
-    { command: '/compress', hint: 'Summarise & compress the context', mode: 'send' },
-    { command: '/goal', hint: 'Set a goal for the agent to pursue', mode: 'insert' },
-  ];
-  let paletteIndex = $state(0);
-  let paletteDismissed = $state(false);
-  const paletteMatches = $derived.by(() => {
-    if (!hermesEnabled || !conversationId) return [];
-    const v = input;
-    // Only while typing the command token itself — a space means we've moved on
-    // to arguments, so the palette gets out of the way.
-    if (!v.startsWith('/') || /\s/.test(v)) return [];
-    const q = v.slice(1).toLowerCase();
-    return PALETTE_COMMANDS.filter((c) => c.command.slice(1).toLowerCase().startsWith(q));
-  });
-  const paletteOpen = $derived(paletteMatches.length > 0 && !paletteDismissed);
+  // ── Model switcher ────────────────────────────────────────────────────────
 
   function onComposerInput() {
-    // Typing re-opens a dismissed palette and resets the highlight so a stale
+    // Typing re-opens a dismissed picker and resets the highlight so a stale
     // index can never point past the freshly-filtered list.
-    paletteDismissed = false;
-    paletteIndex = 0;
     mentionDismissed = false;
     mentionIndex = 0;
     // Editing a recalled message makes it the live draft: stop treating Up/Down
@@ -1699,22 +1667,10 @@
     });
   }
 
-  function selectPaletteCommand(cmd: { command: string; mode: 'send' | 'insert' }) {
-    paletteDismissed = true;
-    if (cmd.mode === 'send') {
-      input = '';
-      resetHistoryCycle();
-      void silentSend(cmd.command);
-    } else {
-      input = cmd.command + ' ';
-      tick().then(() => textareaEl?.focus());
-    }
-  }
-
   // "@" mention typeahead — @files searches /drive file content, @research
   // searches the materials (facts) of your deep-dive research sessions. Each
   // routes the turn to its domain skill and answers with citations. Triggers on
-  // an @-token being typed at the end of the input, mirroring the slash palette.
+  // an @-token being typed at the end of the input.
   const MENTION_OPTIONS: { token: string; hint: string }[] = [
     { token: '@files', hint: 'Search your /drive files by content — text, images, audio' },
     { token: '@research', hint: 'Search your deep-dive research materials by meaning' },
@@ -1739,9 +1695,9 @@
   }
 
   // ── Composer chips ────────────────────────────────────────────────────────
-  // The `/ prompt` and `⌥ workflow` chips are affordances for the typeahead
-  // that already exists: they seed the trigger character and focus the input,
-  // so the same palette opens whether you click or type.
+  // The `⌥ workflow` chip is an affordance for the typeahead that already
+  // exists: it seeds the trigger character and focuses the input, so the same
+  // picker opens whether you click or type.
   // The full prompt hint needs two lines at the phone's 16px input font (16px
   // is required — anything smaller makes iOS zoom the viewport on focus), and a
   // 48px field clips the second. Phones get the short form.
@@ -1754,14 +1710,9 @@
     return () => mq.removeEventListener('change', sync);
   });
   const composerPlaceholder = $derived(
-    isPhone ? 'Ask…' : 'Ask, or type / for prompts, ⌥ to fire a workflow…',
+    isPhone ? 'Ask…' : 'Ask, or type ⌥ to fire a workflow…',
   );
 
-  function insertSlash() {
-    paletteDismissed = false;
-    input = '/';
-    tick().then(() => textareaEl?.focus());
-  }
   function insertWorkflowMention() {
     mentionDismissed = false;
     input = input.length === 0 || input.endsWith(' ') ? `${input}@` : `${input} @`;
@@ -1867,13 +1818,6 @@
     researchModal = ref;
   }
 
-  // Skill picker — pins a jkai domain skill for the conversation (general chat),
-  // sent as `pinnedSkill` on each turn. 'Auto' (null) leaves jkai-general to
-  // route. Switchable any time; sticky until changed. Server + adapter both
-  // allowlist the value, so an off-list name can't load an arbitrary skill.
-  let pinnedSkill = $state<string | null>(null);
-  let skillMenuOpen = $state(false);
-
   // ── Composer chip menus ───────────────────────────────────────────────────
   // Both chip dropdowns are `position: fixed` and positioned from JS, which
   // looks like overkill until you open one on a phone.
@@ -1916,7 +1860,6 @@
     };
   }
 
-  let skillMenuPos = $state<MenuPos>({ left: 0, bottom: 0 });
   let thinkingMenuPos = $state<MenuPos>({ left: 0, bottom: 0 });
 
   /**
@@ -1933,28 +1876,13 @@
    * where the transcript is scrolled, so the anchor stays valid.
    */
   $effect(() => {
-    if (!skillMenuOpen && !thinkingMenuOpen) return;
+    if (!thinkingMenuOpen) return;
     const close = () => {
-      skillMenuOpen = false;
       thinkingMenuOpen = false;
     };
     window.addEventListener('resize', close);
     return () => window.removeEventListener('resize', close);
   });
-  const SKILL_OPTIONS: { value: string | null; label: string }[] = [
-    { value: null, label: 'Auto' },
-    { value: 'jkai-blog', label: 'Blog' },
-    { value: 'jkai-gmail', label: 'Email' },
-    { value: 'jkai-health', label: 'Health' },
-    { value: 'jkai-research', label: 'Research' },
-    { value: 'jkai-scheduled', label: 'Scheduled' },
-    { value: 'jkai-scraper', label: 'Scraper' },
-    { value: 'jkai-home-assistant', label: 'Home' },
-    { value: 'jkai-files', label: 'Files' },
-    { value: 'jkai-utility', label: 'Utility' },
-    { value: 'jkai-node-builder', label: 'Node Builder' },
-  ];
-  const pinnedSkillLabel = $derived(SKILL_OPTIONS.find((o) => o.value === pinnedSkill)?.label ?? 'Auto');
 
   // Model switcher — switchable only on a fresh conversation (no messages yet).
   // The conversation's model locks after the first message (the PATCH returns
@@ -2080,16 +2008,15 @@
   let routingVote = $state<'up' | 'down' | null>(null);
   const assistantReplyCount = $derived(messages.filter((m) => m.role === 'assistant' && !m.isProgress).length);
   const showRoutingFeedback = $derived(
-    hermesEnabled && !!routedInfo && routingVote === null && !loading && assistantReplyCount === 1,
+    !!routedInfo && routingVote === null && !loading && assistantReplyCount === 1,
   );
 
   async function applyRouting(text: string, isFirstMessage: boolean): Promise<void> {
-    // Only route the FIRST message of a conversation (model locks after it) and
-    // only on the Hermes engine (the switchModel /model path needs it).
+    // Only route the FIRST message of a conversation — the model locks after it.
     // `isFirstMessage` is snapshotted by the caller BEFORE it appends the
     // optimistic user bubble — reading `messages.length` here now would see that
     // bubble and silently disable routing for every conversation.
-    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
+    if (!conversationId || !isFirstMessage) return;
     // A hand-picked model wins over the router — overriding it would make the
     // picker feel broken.
     if (modelPickedByUser) return;
@@ -2183,153 +2110,9 @@
     }
     onmodelchange?.({ provider, modelId }, supportsThinking);
 
-    // 2) Tell Hermes for this chat session via the gateway /model command.
-    //
-    //    On the send path (`force`) we wait only for the POST — one ~90ms local
-    //    round trip that creates the job — not for the silent turn, which used
-    //    to hold the user's first message for up to 15s and was most of what
-    //    made a first reply feel 30s slow. The guarantee moves rather than
-    //    disappears: the pin job now exists before `send()` creates the user's
-    //    job, so the job store queues the user turn behind it per conversation
-    //    (`whenJobSettles`); and the server pump's `ensureModelPinned`
-    //    re-asserts the conversation's stored model regardless.
-    //
-    //    The manual picker waits for the whole turn: nothing is racing it there,
-    //    and the disabled composer is the only feedback the user gets.
-    //    None of this applies to the in-process loop. It reads the model off
-    //    the conversation row on every turn, so the PATCH above IS the switch —
-    //    pushing a `/model` command at it would post a visible user bubble
-    //    (handleWithLoop did not honour `silent`) and bill a whole turn to tell
-    //    it something it already knows. The open-time effect below is gated the
-    //    same way, on the same flag.
-    if (!hermesEnabled) return;
-
-    if (force) {
-      await tellHermesModel(provider, modelId);
-      return;
-    }
-    loading = true;
-    try {
-      await tellHermesModel(provider, modelId, { awaitTurn: true });
-    } finally {
-      loading = false;
-    }
+    // The PATCH above IS the switch: the chat loop re-reads the model off the
+    // conversation row on every turn, so there is nothing further to tell it.
   }
-
-  /** The `conversation:model` pair a `/model` push has already been fired for.
-   *  Written by `tellHermesModel` itself so BOTH push sites share one guard.
-   *  A plain `let`, never `$state`: the open-time effect below both reads and
-   *  writes it, and as reactive state that is the documented route to
-   *  `effect_update_depth_exceeded`. */
-  let modelPushedForKey: string | null = null;
-
-  /** Push a model choice to Hermes for this chat session via the gateway
-   *  `/model` command. Sent silently (no user bubble) and its confirmation reply
-   *  is drained without rendering.
-   *
-   *  Hermes keys the switch to the chat session and holds it in memory, so it
-   *  has to be pushed once per conversation — see the open-time effect below.
-   *
-   *  Resolves once the JOB EXISTS, not once the turn finishes. That distinction
-   *  is the whole of WS1: the job is created (and registered against this
-   *  conversation) by the POST, which costs one ~90ms local round trip, while
-   *  waiting for the turn cost up to 15s. Callers that need ordering await the
-   *  POST; nobody awaits the turn except the manual picker (`awaitTurn`), where
-   *  the user is not mid-send and the disabled composer is the feedback.
-   *
-   *  Awaiting the POST is not optional on the send path. Fired truly
-   *  and-forget, the pin's POST and the user turn's POST race each other to
-   *  `createJob`, and when the user's wins, the two run CONCURRENTLY on one
-   *  chat: the user's job then drops the pin turn's frames as foreign, the pin
-   *  job never sees a terminator, and — because the gateway queues — the next
-   *  message on that conversation sits behind it until the 255s idle watchdog
-   *  kills it. Measured 2026-08-20: a follow-up sent straight after a routed
-   *  first message took 4m14s to be answered. Awaiting the POST makes the pin
-   *  job discoverable before the user turn is created, so the user turn queues
-   *  behind it properly and the pin settles in seconds. */
-  async function tellHermesModel(
-    provider: ModelContext['provider'],
-    modelId: string,
-    opts?: { awaitTurn?: boolean },
-  ): Promise<void> {
-    // Claim the pair SYNCHRONOUSLY, before the first await. Both push sites — the
-    // open-time effect and `switchModel` — read this, so a switch that changes
-    // `currentModel` (and therefore re-runs the effect) cannot make the effect
-    // push the very model `switchModel` is already pushing. Measured 2026-08-20
-    // before this line existed: a first message sent TWO identical
-    // `/model deepseek-v4-pro` turns, and the user's turn then had to drop the
-    // second one's frames.
-    modelPushedForKey = `${conversationId ?? ''}:${modelId}`;
-    try {
-      const res = await fetch('/api/workflows/orchestrator/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: hermesModelCommand(provider, modelId), conversationId, silent: true }),
-      });
-      const data = await res.json().catch(() => null);
-      const jobId = data?.jobId;
-      if (!jobId) return;
-      // Drain the silent turn's confirmation so it isn't left to the job's own
-      // cleanup. Backgrounded unless the caller explicitly wants the turn.
-      const drained = Promise.race([
-        streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} }).done.catch(() => {}),
-        new Promise((r) => setTimeout(r, 15000)),
-      ]);
-      if (opts?.awaitTurn) await drained;
-    } catch {
-      // The choice is already persisted site-side; if the /model turn failed
-      // Hermes keeps its own default and pricing may be off until the next turn.
-    }
-  }
-
-  /** Make sure Hermes is running the model this conversation says it is —
-   *  pushed when the conversation OPENS, not when the user sends.
-   *
-   *  A conversation only ever told Hermes its model when the user *changed* the
-   *  picker. One that took the chat default silently never told it anything, so
-   *  Hermes fell back to `model.default` in its own config.yaml — the UI, the
-   *  price snapshot and the cost accounting all said one model while a different
-   *  one answered (seen 2026-08-09: a conversation stamped codex/gpt-5.6-terra
-   *  was served by deepseek-v4-flash on OpenRouter). That guarantee is still
-   *  here; it has just moved off the send path, where it was costing the user a
-   *  silent turn of up to 15s before their first message was even POSTed.
-   *
-   *  Three things hold the guarantee up now:
-   *    1. this push, fired the moment a FRESH conversation has an id — normally
-   *       while the user is still typing;
-   *    2. job-store queuing, which orders the silent turn ahead of the user's
-   *       turn on the same conversation even when they overlap; and
-   *    3. the server pump's `ensureModelPinned`, which re-reads the model off
-   *       the conversation row and re-asserts it before the user turn goes out.
-   *
-   *  Fresh conversations only. Pushing on every thread open would spend a silent
-   *  turn per thread the user merely glanced at, and an established thread's
-   *  model is locked anyway. */
-  $effect(() => {
-    // Tracked reads: only the signals that say "a fresh conversation is open,
-    // and this is the model it should be running".
-    const id = conversationId;
-    const provider = currentModel.provider;
-    const modelId = currentModel.modelId;
-    const fresh = messageCount === 0;
-    const on = hermesEnabled;
-    // Everything else — the guard and the write — is untracked, so this cannot
-    // subscribe to its own bookkeeping.
-    untrack(() => {
-      if (!on || !id || !fresh) return;
-      // The id decides the provider, never the stored field: `currentModel`
-      // falls back to 'openrouter' whenever the conversation row hasn't loaded,
-      // which would hand Hermes a codex/ id under the wrong provider. Coerce
-      // BEFORE building the key — `coerceModelContext` rewrites legacy ids and
-      // adds the `codex/` prefix, so a key built from the raw id would never
-      // match the one `tellHermesModel` records and this would fire every time.
-      const ctx = coerceModelContext({ provider, modelId });
-      if (modelPushedForKey === `${id}:${ctx.modelId}`) return;
-      // `tellHermesModel` claims the key itself, synchronously, so this and
-      // `switchModel` cannot both push the same pair.
-      void tellHermesModel(ctx.provider, ctx.modelId);
-    });
-  });
 
   /**
    * Fire the handed-over question once, as soon as it can actually be sent.
@@ -2446,33 +2229,18 @@
     }];
     scrollToBottom();
 
-    // Query-adaptive model pick. One ~70ms round trip, and it no longer drags a
-    // silent `/model` turn behind it: when routing switches the model the push
-    // is fire-and-forget (see `switchModel`), ordered ahead of this message by
-    // the job store and backstopped by the server pump. The unconditional pin
-    // that used to sit here has moved to conversation-open — see the effect
-    // beside `tellHermesModel`. First message of a conversation only.
+    // Query-adaptive model pick. One ~70ms round trip; the switch is a PATCH on
+    // the conversation row, which the next turn reads. First message only.
     await applyRouting(text, isFirstMessage);
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
     meterBegin();
 
-    // An "@files" mention routes this turn to the Files skill so the orchestrator
-    // reaches for the file_search tool (semantic search over /drive content); an
-    // "@research" mention routes to the Research skill for research_search
-    // (semantic search over deep-dive research materials). An explicit pinned
-    // skill wins; if both mentions appear, @files takes precedence (a turn pins
-    // one skill).
-    const mentionsFiles = /(^|\s)@files\b/i.test(text);
-    const mentionsResearch = /(^|\s)@research\b/i.test(text);
     // Entities named with @entity are sent as ids so the server can attach the
     // subgraph; clear them once the turn is away.
     const entityIds = pinnedEntityIds.slice();
     pinnedEntityIds = [];
-    const effectivePinnedSkill =
-      pinnedSkill ?? (mentionsFiles ? 'jkai-files' : mentionsResearch ? 'jkai-research' : undefined);
-
     try {
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -2482,7 +2250,6 @@
           conversationId,
           attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           useIntelContext,
-          pinnedSkill: effectivePinnedSkill,
           intelEntityIds: entityIds.length ? entityIds : undefined,
         }),
       });
@@ -2616,29 +2383,6 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (paletteOpen) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        paletteIndex = (paletteIndex + 1) % paletteMatches.length;
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        paletteIndex = (paletteIndex - 1 + paletteMatches.length) % paletteMatches.length;
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        const cmd = paletteMatches[paletteIndex];
-        if (cmd) selectPaletteCommand(cmd);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        paletteDismissed = true;
-        return;
-      }
-    }
     // The entity picker takes keys first — it only opens after "@entity ", so it
     // can never be live at the same time as the token picker.
     if (entityPickerOpen) {
@@ -3331,25 +3075,6 @@
             {/each}
           </div>
         {/if}
-        {#if paletteOpen}
-          <div class="cmd-palette" role="listbox" aria-label="Slash commands">
-            {#each paletteMatches as cmd, i (cmd.command)}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <button
-                type="button"
-                role="option"
-                aria-selected={i === paletteIndex}
-                class="cmd-row"
-                class:active={i === paletteIndex}
-                onmousedown={(e) => { e.preventDefault(); selectPaletteCommand(cmd); }}
-                onmouseenter={() => (paletteIndex = i)}
-              >
-                <span class="cmd-name">{cmd.command}</span>
-                <span class="cmd-hint">{cmd.hint}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
         {#if entityPickerOpen}
           <div class="cmd-palette" role="listbox" aria-label="Entities">
             {#each entityMatches as e, i (e.id)}
@@ -3394,57 +3119,9 @@
         {/if}
         <ComposerAttachmentTray items={pendingAttachments} onRemove={removeAttachment} />
 
-        <!-- Chip row: model, prompt, workflow, attach, voice — then a live
-             per-turn cost estimate pushed to the right. -->
+        <!-- Chip row: model, workflow, attach, voice — then a live per-turn
+             cost estimate pushed to the right. -->
         <div class="chip-row">
-          <!-- The skill chip stays gated on the engine: the in-process loop has
-               no pinned-skill concept — `handleWithLoop` never reads
-               `pinnedSkill` — so offering the control would be offering a
-               setting that does nothing. It discovers skills through the index
-               and `skill_view` instead. -->
-          {#if hermesEnabled && conversationId}
-            <div class="model-switcher skill-switcher">
-              <button
-                type="button"
-                class="model-btn"
-                onclick={(e) => {
-                  if (!skillMenuOpen) skillMenuPos = anchorMenu(e.currentTarget);
-                  skillMenuOpen = !skillMenuOpen;
-                }}
-                disabled={loading}
-                title="Pin a domain skill for this chat (or Auto-route)"
-              >
-                <span class="skill-glyph" aria-hidden="true">◈</span>
-                <span class="model-name">{pinnedSkillLabel}</span>
-                <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
-              </button>
-              {#if skillMenuOpen}
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <div class="model-backdrop" onclick={() => (skillMenuOpen = false)}></div>
-                <div
-                  class="model-menu"
-                  role="listbox"
-                  aria-label="Pin a skill"
-                  style="left: {skillMenuPos.left}px; bottom: {skillMenuPos.bottom}px"
-                >
-                  {#each SKILL_OPTIONS as opt (opt.label)}
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={opt.value === pinnedSkill}
-                      class="model-opt"
-                      class:active={opt.value === pinnedSkill}
-                      onclick={() => { pinnedSkill = opt.value; skillMenuOpen = false; }}
-                    >
-                      <span class="model-opt-name">{opt.label}</span>
-                      {#if opt.value === null}<span class="model-opt-provider">auto-route</span>{/if}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
           <!-- The model switcher is NOT gated on the engine. The loop honours
                the per-conversation pin — it coerces `conv.modelProvider` /
                `conv.modelId` on every turn — so the choice worked the whole
@@ -3543,9 +3220,6 @@
               </div>
             {/if}
           {/if}
-          <button type="button" class="composer-chip" onclick={insertSlash} title="Insert a saved prompt">
-            <span class="chip-glyph" aria-hidden="true">/</span><span class="chip-word">prompt</span>
-          </button>
           <button type="button" class="composer-chip" onclick={insertWorkflowMention} title="Fire a workflow">
             <span class="chip-glyph" aria-hidden="true">⌥</span><span class="chip-word">workflow</span>
           </button>

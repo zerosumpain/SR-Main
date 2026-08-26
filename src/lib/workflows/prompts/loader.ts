@@ -52,12 +52,15 @@ export function compilePromptFiles(dir: string = DEFAULT_PROMPTS_DIR): CompileRe
   };
 }
 
-export function getPromptFiles(dir: string = DEFAULT_PROMPTS_DIR): Array<{
+/** One prompt file on disk, as the workbench and the compiler both see it. */
+export interface PromptFileEntry {
   name: string;
   content: string;
   size: number;
   lastModified: string;
-}> {
+}
+
+export function getPromptFiles(dir: string = DEFAULT_PROMPTS_DIR): PromptFileEntry[] {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
     return [];

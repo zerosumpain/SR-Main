@@ -10,8 +10,6 @@
   const audit = $derived(data.audit);
   const topTools = $derived((audit?.tools ?? []).slice(0, 15));
   const topMax = $derived(Math.max(1, ...topTools.map((t) => t.calls)));
-  const jkaiTools = $derived((audit?.jkaiTools ?? []).slice(0, 15));
-  const jkaiMax = $derived(Math.max(1, ...jkaiTools.map((t) => t.calls)));
   const perDay = $derived(audit?.perDay ?? []);
   const dayPeak = $derived(Math.max(1, ...perDay.map((d) => d.calls)));
   const byHour = $derived(audit?.byHour ?? []);
@@ -114,7 +112,7 @@
     kicker="Ops"
     title="Tool usage"
     sub={data.audit?.storeNewestAt
-      ? `Forensic audit of jkai tool calls. The audit below reads Hermes' store, frozen at ${new Date(data.audit.storeNewestAt).toLocaleString('en-GB')}; the error rates read jkai_tool_traces and are live.`
+      ? `Forensic audit of jkai tool calls, read from jkai_tool_traces. Newest turn recorded ${new Date(data.audit.storeNewestAt).toLocaleString('en-GB')}.`
       : "Forensic audit of jkai tool calls — frequency, trends, and how the toolset is actually used."}
   />
 
@@ -126,17 +124,15 @@
       {/each}
     </span>
     <span class="host-note">
-      {data.direct ? `direct on ${data.hostname}` : data.canManage ? 'via homeserv over Tailscale' : 'engine store unreachable'}
+      {data.audit?.coverageFrom
+        ? `recording since ${new Date(data.audit.coverageFrom).toLocaleDateString('en-GB')}`
+        : 'no traces recorded yet'}
     </span>
   </div>
 
   {#if !audit}
     <section class="nm-sec">
-      <p class="empty-note">
-        {data.canManage
-          ? 'No tool-call data for this window (or the Hermes session store is unreachable).'
-          : 'The Hermes session store lives on homeserv — open this page from the homeserv instance, or configure the Tailscale bridge.'}
-      </p>
+      <p class="empty-note">No tool calls recorded in this window.</p>
     </section>
   {:else}
     <!-- Stat tiles -->
@@ -147,21 +143,11 @@
       <div class="stat"><span class="stat-v">{coverage}%</span><span class="stat-l">registry used ({data.registryCount - data.neverUsed.length}/{data.registryCount})</span></div>
     </div>
 
-    <!-- Top tools + jkai sub-tools -->
-    <div class="two-col">
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">Most-called tools</span><span class="nm-sec-meta">engine view</span></div>
-        {@render hbars(topTools, topMax)}
-      </section>
-      <section class="nm-sec">
-        <div class="nm-sec-hd"><span class="sr-label-tight">jkai tools (resolved)</span><span class="nm-sec-meta">via jkai_extended</span></div>
-        {#if jkaiTools.length}
-          {@render hbars(jkaiTools, jkaiMax)}
-        {:else}
-          <p class="empty-note">No jkai sub-tool calls resolved in this window.</p>
-        {/if}
-      </section>
-    </div>
+    <!-- Top tools -->
+    <section class="nm-sec">
+      <div class="nm-sec-hd"><span class="sr-label-tight">Most-called tools</span><span class="nm-sec-meta">last {data.days}d</span></div>
+      {@render hbars(topTools, topMax)}
+    </section>
 
     <!-- Trends -->
     <section class="nm-sec">
