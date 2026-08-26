@@ -286,10 +286,26 @@ export async function getWhoopBodyMeasurement(
   }
 }
 
-// Whoop strain is a 0–21 score, but some historical rows landed in the DB at
-// strain × 100 (legacy sync path — see series-30d-service, which carried this
-// fix first). Every reader of whoop_cycles.strain must pass through this, or
-// four corrupt days from July 2026 poison any average they feed.
+/**
+ * WHOOP strain, whichever way the row happened to be written.
+ *
+ * The note here used to say "some historical rows (legacy sync path)" and
+ * "four corrupt days from July 2026". Both were wrong, and the second badly so:
+ * an audit on 2026-08-26 found **51** rows spanning 2026-04-06 to 2026-08-03,
+ * written between 2026-04-27 and 2026-08-24 — interleaved daily with correct
+ * rows, not a contiguous historical block. Believing it was four old days is
+ * why nobody looked again for four months.
+ *
+ * The 51 rows were repaired on 2026-08-26 and a CHECK constraint on
+ * `whoop_cycles.strain` now rejects anything outside 0..21, so a writer doing
+ * this again fails loudly instead of silently. This function stays as the read
+ * side of that defence, and stays the ONLY implementation of it — there were
+ * three (here, series-30d-service, correlations-service) and a reader that had
+ * none, which is exactly how a correction rots.
+ *
+ * Safe only because of the gap: strain caps at 21 by definition, the largest
+ * genuine value on record is 20.33, and the smallest scaled one was 145.
+ */
 export function realStrain(raw: number): number {
   return raw > 22 ? raw / 100 : raw;
 }
