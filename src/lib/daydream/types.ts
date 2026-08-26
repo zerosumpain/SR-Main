@@ -70,10 +70,28 @@ export const MAX_USABLE_ACCURACY_M = 150;
  *  was written; kept identical so both surfaces agree on what one place is. */
 export const CLUSTER_RADIUS_M = 200;
 
-/** A cluster becomes a candidate place at this many distinct visits... */
-export const MIN_VISITS_FOR_PLACE = 3;
-/** ...each of at least this long. A drive-past is not a visit. */
-export const MIN_DWELL_MINS = 15;
+/**
+ * How many visits make a place.
+ *
+ * ONE, by the owner's instruction (2026-08-26): anywhere he has actually spent
+ * time is worth knowing about, not only somewhere he returns to. Requiring
+ * three visits meant a café he sat in for an hour was invisible until the third
+ * time, and the whole point of naming places is that a named place is what
+ * turns a coordinate into a fact.
+ *
+ * The flood this could cause is handled where floods belong — the delivery
+ * limits in deliver.ts, which cap interruptions at four a day whatever the
+ * detectors find. Creating a place is cheap; interrupting someone is not.
+ */
+export const MIN_VISITS_FOR_PLACE = 1;
+
+/**
+ * The dwell that separates being somewhere from passing it.
+ *
+ * Ten minutes, by the owner's instruction. Below this a "visit" is a traffic
+ * light, a queue at a junction, or GPS drift while stationary at a crossing.
+ */
+export const MIN_DWELL_MINS = 10;
 
 /** Fixes more than this far apart inside one place are two visits, not one. */
 export const VISIT_MAX_GAP_MINS = 45;

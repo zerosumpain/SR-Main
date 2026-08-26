@@ -1,26 +1,31 @@
 // The one that makes everything else work.
 //
-// A centroid with four visits is a fact about coordinates and is useless on its
-// own. It becomes useful the moment it has a name, and the only reliable source
-// of that name is the owner. Five of the other seven detectors are inert until
-// a place has one, which is why this one is first in the registry and why its
-// support gate is the lowest.
+// A centroid is a fact about coordinates and is useless on its own. It becomes
+// useful the moment it has a name, and the only reliable source of that name is
+// the owner. Five of the other seven detectors are inert until a place has one,
+// which is why this one is first in the registry and why its support gate is
+// the lowest.
+//
+// Renamed from `unknown_frequent_place` on 2026-08-26 when the bar dropped from
+// three visits to one. Frequency is no longer what makes a place worth asking
+// about — TIME SPENT is. Somewhere the owner sat for an hour matters on the
+// first visit, and waiting for a third made a café invisible for weeks.
 
 import { describePlaceRhythm } from '../places';
-import { MIN_VISITS_FOR_PLACE } from '../types';
+import { MIN_DWELL_MINS, MIN_VISITS_FOR_PLACE } from '../types';
 import { ramp } from './shared';
 import { notReady, ready, type Candidate, type DaydreamSnapshot, type Detector } from '../snapshot-types';
 
-/** Visits at which a place is interesting enough to interrupt for. */
+/** Visits at which a place is worth asking about — now one. */
 const ASK_AT_VISITS = MIN_VISITS_FOR_PLACE;
-/** Where the score saturates — a place visited fifteen times is not three times
- *  more interesting than one visited five. */
+/** Where the visit component saturates: a place visited fifteen times is not
+ *  three times more interesting than one visited five. */
 const SATURATE_AT_VISITS = 12;
 
-export const unknownFrequentPlace: Detector = {
-  kind: 'unknown_frequent_place',
+export const unknownPlace: Detector = {
+  kind: 'unknown_place',
   description:
-    'A place visited enough to matter that still has no name. Asks what it is, and writes the answer to memory.',
+    'Somewhere you spent real time that still has no name. Asks what it is, suggests one from the address, and writes the answer to memory.',
 
   readiness(s: DaydreamSnapshot) {
     const candidates = s.places.filter(
@@ -32,7 +37,7 @@ export const unknownFrequentPlace: Detector = {
           candidates,
           1,
           'unnamed places',
-          `no place yet has ${ASK_AT_VISITS} visits of ${15}+ minutes without a name`,
+          `nowhere yet has an unnamed stay of ${MIN_DWELL_MINS}+ minutes`,
         );
   },
 
@@ -45,11 +50,13 @@ export const unknownFrequentPlace: Detector = {
       .map((p) => {
         const rhythm = describePlaceRhythm(p);
         const visitScore = ramp(p.visitCount, ASK_AT_VISITS - 1, SATURATE_AT_VISITS);
-        const dwellScore = ramp(p.medianDwellMins, 15, 90);
-        const rawScore = Math.min(1, 0.55 + 0.3 * visitScore + 0.15 * dwellScore);
+        const dwellScore = ramp(p.medianDwellMins, MIN_DWELL_MINS, 90);
+        // Dwell now outweighs repetition: an hour somewhere once says more
+        // about a place mattering than three two-minute stops do.
+        const rawScore = Math.min(1, 0.5 + 0.35 * dwellScore + 0.15 * visitScore);
 
         return {
-          kind: 'unknown_frequent_place',
+          kind: 'unknown_place',
           title: `What is this place you keep going to?`,
           explanation:
             `An unnamed spot with ${rhythm}. Naming it turns a coordinate into a fact ` +
@@ -65,7 +72,7 @@ export const unknownFrequentPlace: Detector = {
           placeId: p.id,
           // Keyed on the place alone: asking twice about the same place is
           // annoying, and a dismissal should hold however the geometry moves.
-          dedupeKey: `unknown_frequent_place:${p.id}`,
+          dedupeKey: `unknown_place:${p.id}`,
           proposedActions: [
             { kind: 'name_place', label: 'Name this place', payload: p.id },
             { kind: 'ignore_place', label: 'Stop asking about it', payload: p.id },

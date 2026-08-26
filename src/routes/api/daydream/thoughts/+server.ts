@@ -67,6 +67,26 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'suggest_name': {
+        // Reverse-geocode the place's own centre. The caller passes an id, not
+        // coordinates — the client should never be the source of truth for
+        // where a place is, and passing lat/lon in would let any caller
+        // geocode arbitrary points through an owner-gated route.
+        const placeId = str('placeId');
+        if (!placeId) return json({ error: 'placeId is required' }, { status: 400 });
+        const { db } = await import('$lib/db');
+        const { daydreamPlaces } = await import('$lib/db/schema');
+        const { eq } = await import('drizzle-orm');
+        const [place] = await db
+          .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
+          .from(daydreamPlaces)
+          .where(eq(daydreamPlaces.id, placeId))
+          .limit(1);
+        if (!place) return json({ error: 'no such place' }, { status: 404 });
+        const { suggestPlaceName } = await import('$lib/daydream/geocode');
+        return json({ ok: true, suggestion: await suggestPlaceName(place.lat, place.lon) });
+      }
+
       case 'name_place': {
         const placeId = str('placeId');
         const label = str('label');

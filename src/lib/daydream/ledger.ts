@@ -43,6 +43,18 @@ export interface LedgerThought {
 
 export interface LedgerPlace {
   id: string;
+  /**
+   * Coordinates, for the naming map.
+   *
+   * Merge 3 deliberately withheld these — the page did not plot anything, and a
+   * lat/lon in a payload is the one thing here that matters if it escapes the
+   * gate. That call is reversed on the owner's instruction (2026-08-26): naming
+   * a place from a bare visit count is a memory test, and a map makes it a
+   * recognition. The route is owner-gated and the payload never leaves it.
+   */
+  lat: number;
+  lon: number;
+  radiusM: number;
   label: string | null;
   kind: string;
   source: string;
@@ -218,6 +230,9 @@ export async function loadPlaces(): Promise<LedgerPlace[]> {
 
   return rows.map((p) => ({
     id: p.id,
+    lat: p.lat,
+    lon: p.lon,
+    radiusM: p.radiusM,
     label: p.label,
     kind: p.kind,
     source: p.source,
@@ -227,9 +242,6 @@ export async function loadPlaces(): Promise<LedgerPlace[]> {
     hourHistogram: p.hourHistogram,
     lastSeenAt: p.lastSeenAt?.toISOString() ?? null,
     status: p.status,
-    // The place's coordinates are deliberately NOT returned. The page does not
-    // plot them, and a lat/lon in a payload is the one thing here that would
-    // matter if it ever escaped the gate.
     hasMemory: p.memoryId != null,
   }));
 }

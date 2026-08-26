@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DETECTORS, getDetector } from './index';
-import { unknownFrequentPlace } from './unknown-frequent-place';
+import { unknownPlace } from './unknown-place';
 import { nearOffer } from './near-offer';
 import { nearOpenThread } from './near-open-thread';
 import { interestMeetsPlace, recurringInterests } from './interest-meets-place';
@@ -149,31 +149,31 @@ describe('positionIsUsable', () => {
   });
 });
 
-describe('unknown_frequent_place', () => {
+describe('unknown_place', () => {
   it('asks about an unnamed place with enough visits', () => {
     const s = snap({ places: [place({ visitCount: 4 })] });
-    expect(unknownFrequentPlace.readiness(s).ready).toBe(true);
-    const [c] = unknownFrequentPlace.detect(s);
-    expect(c.kind).toBe('unknown_frequent_place');
+    expect(unknownPlace.readiness(s).ready).toBe(true);
+    const [c] = unknownPlace.detect(s);
+    expect(c.kind).toBe('unknown_place');
     expect(c.explanation).toContain('4 visits');
     expect(c.proposedActions.map((a) => a.kind)).toContain('name_place');
-    expect(c.dedupeKey).toBe('unknown_frequent_place:p1');
+    expect(c.dedupeKey).toBe('unknown_place:p1');
   });
 
   it('says nothing about a place that already has a name', () => {
     const s = snap({ places: [place({ label: 'The Gym' })] });
-    expect(unknownFrequentPlace.readiness(s).ready).toBe(false);
-    expect(unknownFrequentPlace.detect(s)).toEqual([]);
+    expect(unknownPlace.readiness(s).ready).toBe(false);
+    expect(unknownPlace.detect(s)).toEqual([]);
   });
 
   it('says nothing about a place the owner muted', () => {
     const s = snap({ places: [place({ status: 'ignored' })] });
-    expect(unknownFrequentPlace.detect(s)).toEqual([]);
+    expect(unknownPlace.detect(s)).toEqual([]);
   });
 
   it('keys on the place alone, so a dismissal holds as the geometry moves', () => {
-    const a = unknownFrequentPlace.detect(snap({ places: [place({ visitCount: 4 })] }))[0];
-    const b = unknownFrequentPlace.detect(snap({ places: [place({ visitCount: 9 })] }))[0];
+    const a = unknownPlace.detect(snap({ places: [place({ visitCount: 4 })] }))[0];
+    const b = unknownPlace.detect(snap({ places: [place({ visitCount: 9 })] }))[0];
     expect(a.dedupeKey).toBe(b.dedupeKey);
   });
 });
