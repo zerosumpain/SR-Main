@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   bigint,
+  check,
   doublePrecision,
   boolean,
   uniqueIndex,
@@ -271,6 +272,23 @@ export const whoopCycles = pgTable('whoop_cycles', {
   timezone: text('timezone').notNull(),
 
   // Core metrics
+  /**
+   * WHOOP's 0-21 day strain.
+   *
+   * Guarded by a CHECK, because for four months something wrote this column at
+   * strain x 100 and nothing noticed. 51 rows held values from 145 to 2033 on a
+   * scale that stops at 21, written between 2026-04-27 and 2026-08-24,
+   * interleaved with correct rows from the sync in this repo — so no date
+   * separates them and no flag on the row says which is which. The writer was
+   * never in this repository's history and is no longer present on either
+   * machine; it stopped of its own accord, which is the worst way for a bug to
+   * end because nothing was learned and nothing prevents its return.
+   *
+   * The constraint is the prevention. A scaled write now fails loudly at the
+   * database, naming itself, instead of silently poisoning every average that
+   * reads this column. Readers still normalise via `realStrain()` for the sake
+   * of anything that slipped in before this existed.
+   */
   strain: doublePrecision('strain').notNull(),
   kilojoule: doublePrecision('kilojoule').notNull(),
   averageHeartrate: integer('average_heartrate').notNull(),
@@ -278,7 +296,11 @@ export const whoopCycles = pgTable('whoop_cycles', {
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
-});
+}, (t) => [
+  // The prevention, at the only layer every writer must pass through. An app
+  // fix cannot help here: the writer that did this was never in this codebase.
+  check('whoop_cycles_strain_scale', sql`${t.strain} >= 0 and ${t.strain} <= 21`),
+]);
 
 export type WhoopCycleRecord = typeof whoopCycles.$inferSelect;
 

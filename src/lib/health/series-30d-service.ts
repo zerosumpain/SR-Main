@@ -1,4 +1,5 @@
 import { db } from '$lib/db';
+import { realStrain } from '$lib/health/whoop';
 import {
   whoopRecovery,
   whoopSleep,
@@ -91,12 +92,12 @@ export type HealthSeriesData = {
 
 const DAYS = 30;
 
-// Whoop strain is a 0–21 score. Some historical rows landed in the DB at
-// strain × 100 (legacy sync path). Detect either form and return the real
-// 0–21 value rounded to 1dp.
+// Rounding wrapper over the one canonical fix in $lib/health/whoop. This used
+// to carry its own copy of the `> 22 ? /100` rule, and so did
+// correlations-service — three implementations of one correction, which is how
+// a reader ends up without it. Only the 1dp rounding is local to this file.
 function normaliseStrain(raw: number): number {
-  const v = raw > 22 ? raw / 100 : raw;
-  return +v.toFixed(1);
+  return +realStrain(raw).toFixed(1);
 }
 
 function isoDate(unix: number): string {

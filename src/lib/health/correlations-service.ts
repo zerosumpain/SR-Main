@@ -1,4 +1,5 @@
 import { db } from '$lib/db';
+import { realStrain } from '$lib/health/whoop';
 import { whoopRecovery, whoopSleep, whoopCycles, appleHealthMetrics } from '$lib/db/schema';
 import { gte, eq, and } from 'drizzle-orm';
 import type { Correlation } from './series-30d-service';
@@ -235,8 +236,8 @@ export async function getCorrelations(): Promise<Correlation[]> {
   }
   for (const c of cycleRows) {
     const d = ensure(isoDate(c.startDate));
-    // Same scale fix as the 30d series: legacy rows landed at strain*100.
-    d.strain = c.strain > 22 ? c.strain / 100 : c.strain;
+    // One canonical fix, not a third copy of the same ternary.
+    d.strain = realStrain(c.strain);
   }
   // Sum per-bucket step deltas, then unscale (ingest stores value ×100).
   const stepsByDate = new Map<string, number>();
