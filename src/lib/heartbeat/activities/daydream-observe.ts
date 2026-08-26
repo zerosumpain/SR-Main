@@ -5,7 +5,7 @@ import {
   recordFix,
   recordGap,
 } from '$lib/daydream/observe';
-import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
+import { OBSERVE_CADENCE_SECONDS, SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-observe';
@@ -44,7 +44,8 @@ export const daydreamObserve: ActivityHandler = {
   name: NAME,
   description:
     'Poll floor for the daydream trail. Records where John is when the Home Assistant push stream has gone quiet, and records an explicit gap row when it looks and cannot see — so coverage is computable rather than assumed. No LLM.',
-  defaultCadenceSeconds: 120,
+  // Same constant coverage divides by. Written once so they cannot drift.
+  defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
   // Deliberately 24/7: a trail with a nightly hole cannot answer "did he sleep
   // at home", and the gap rows would make that hole indistinguishable from an

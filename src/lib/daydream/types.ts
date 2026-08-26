@@ -121,11 +121,28 @@ export const LOCAL_TZ = 'Europe/London';
 // ── Coverage ─────────────────────────────────────────────────────────────────
 
 /**
- * The poll floor aims for one observation per this interval, so expected
- * observations over a window are computable and coverage is a real fraction
- * rather than a vibe.
+ * How often the poll floor actually runs. THE single source of the number —
+ * `daydream-observe` takes its default cadence from here.
  */
-export const POLL_INTERVAL_MINS = 10;
+export const OBSERVE_CADENCE_SECONDS = 120;
+
+/**
+ * The interval coverage divides by, to turn "how many fixes" into "what
+ * fraction of this window did we actually see".
+ *
+ * DERIVED from the cadence rather than written down beside it, because the two
+ * drifting apart silently disables the coverage gate — which is what happened
+ * between 2026-08-26 and the same evening. This said 10 while the activity ran
+ * every 2 minutes, so a fully-observed hour produced 30 fixes against 6
+ * expected, coverage computed 5.0, clamped to 1.0, and read "perfect" whatever
+ * the sensor had done. It would only have dipped under the 0.6 gate if more
+ * than 80% of polls failed.
+ *
+ * Three detectors gate on that number precisely so a dead sensor cannot read as
+ * a change in behaviour. A gate that always passes is worse than no gate: it
+ * looks like protection.
+ */
+export const POLL_INTERVAL_MINS = OBSERVE_CADENCE_SECONDS / 60;
 
 /**
  * A detector reasoning about a window must see at least this fraction of it

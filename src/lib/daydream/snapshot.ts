@@ -16,12 +16,13 @@ import { db } from '$lib/db';
 import {
   daydreamPlaces,
   daydreamTrail,
+  heartbeatActions,
   intelNotes,
   jkaiMemories,
   researchSessions,
 } from '$lib/db/schema';
 import { coverageOf } from './cluster';
-import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from './types';
+import { DEFAULT_SUBJECT, LOCAL_TZ, POLL_INTERVAL_MINS, errMsg } from './types';
 import type {
   CalendarEvent,
   DaydreamSnapshot,
@@ -140,11 +141,33 @@ export async function buildSnapshot(
     : null;
 
   // ── Coverage ───────────────────────────────────────────────────────────
+  //
+  // The interval is read from the observe action's LIVE cadence, not assumed.
+  // The compile-time constant already ties the default to the divisor, but the
+  // cadence is editable per row, and a row edited to 600s against a divisor of
+  // 120s would quietly re-open exactly the hole this is here to close: coverage
+  // reading 1.0 while most of the window went unobserved.
+  let pollIntervalMins = POLL_INTERVAL_MINS;
+  try {
+    const [observe] = await db
+      .select({ cadenceSeconds: heartbeatActions.cadenceSeconds })
+      .from(heartbeatActions)
+      .where(eq(heartbeatActions.name, 'daydream-observe'))
+      .limit(1);
+    if (observe?.cadenceSeconds && observe.cadenceSeconds > 0) {
+      pollIntervalMins = observe.cadenceSeconds / 60;
+    }
+  } catch {
+    // Fall back to the constant. A coverage figure from the default interval is
+    // still meaningful; refusing to compute one would silence every detector.
+  }
+
   const cov = (hours: number) =>
     coverageOf(
       trail.map((t) => ({ ts: t.ts, source: t.source })),
       new Date(now.getTime() - hours * 3_600_000),
       now,
+      pollIntervalMins,
     );
   const coverage = { last24h: cov(24), last7d: cov(24 * 7) };
 

@@ -215,19 +215,24 @@ describe('looksLikeRail', () => {
 
 describe('coverage', () => {
   const start = at(0);
-  const end = at(60); // one hour, so 6 expected observations at 10-minute polling
+  const end = at(60);
+  // The interval is passed EXPLICITLY throughout: these cases are about the
+  // function's semantics, and pinning them to whatever the shipped constant
+  // happens to be is how a test starts silently asserting the default rather
+  // than the behaviour. A separate case below checks the constant itself.
+  const EVERY_10 = 10;
 
   it('is 1 for a fully observed window', () => {
     const rows = [0, 10, 20, 30, 40, 50].map((m) => ({ ts: at(m), source: 'poll' }));
-    expect(coverageOf(rows, start, end)).toBe(1);
+    expect(coverageOf(rows, start, end, EVERY_10)).toBe(1);
   });
 
   it('does not count gap rows as observations', () => {
     // The system looked six times and failed six times. It knows nothing about
     // this hour, and must not be able to claim otherwise.
     const rows = [0, 10, 20, 30, 40, 50].map((m) => ({ ts: at(m), source: 'gap' }));
-    expect(coverageOf(rows, start, end)).toBe(0);
-    expect(hasCoverage(rows, start, end)).toBe(false);
+    expect(coverageOf(rows, start, end, EVERY_10)).toBe(0);
+    expect(hasCoverage(rows, start, end, 0.6)).toBe(false);
   });
 
   it('blocks a detector when the sensor was mostly down', () => {
@@ -236,7 +241,8 @@ describe('coverage', () => {
   });
 
   it('allows a detector once enough of the window is observed', () => {
-    const rows = [0, 10, 20, 30].map((m) => ({ ts: at(m), source: 'poll' }));
+    // Enough for a 2-minute expectation, which is what actually ships.
+    const rows = Array.from({ length: 24 }, (_, i) => ({ ts: at(i * 2), source: 'poll' }));
     expect(hasCoverage(rows, start, end, 0.6)).toBe(true);
   });
 
@@ -246,11 +252,33 @@ describe('coverage', () => {
       { ts: at(5), source: 'poll' },
       { ts: at(500), source: 'poll' },
     ];
-    expect(coverageOf(rows, start, end)).toBeCloseTo(1 / 6, 5);
+    expect(coverageOf(rows, start, end, EVERY_10)).toBeCloseTo(1 / 6, 5);
   });
 
   it('is 0 for a zero-length or inverted window rather than dividing by zero', () => {
-    expect(coverageOf([], start, start)).toBe(0);
-    expect(coverageOf([], end, start)).toBe(0);
+    expect(coverageOf([], start, start, EVERY_10)).toBe(0);
+    expect(coverageOf([], end, start, EVERY_10)).toBe(0);
+  });
+});
+
+describe('coverage divisor matches the poll cadence', () => {
+  it('POLL_INTERVAL_MINS is derived from the observe cadence, not written twice', async () => {
+    // The bug this guards: the divisor said 10 minutes while the activity ran
+    // every 2, so a fully-observed hour computed coverage 5.0, clamped to 1.0,
+    // and the gate three detectors rely on could never fail. A gate that always
+    // passes is worse than no gate, because it looks like protection.
+    const { OBSERVE_CADENCE_SECONDS, POLL_INTERVAL_MINS } = await import('./types');
+    expect(POLL_INTERVAL_MINS).toBe(OBSERVE_CADENCE_SECONDS / 60);
+  });
+
+  it('reports a half-observed window as half, not as full', () => {
+    const now = new Date('2026-08-26T13:00:00Z');
+    const start = new Date(now.getTime() - 60 * 60_000);
+    // One fix every 4 minutes against a 2-minute expectation: half.
+    const rows = Array.from({ length: 15 }, (_, i) => ({
+      ts: new Date(start.getTime() + i * 4 * 60_000),
+      source: 'poll',
+    }));
+    expect(coverageOf(rows, start, now, 2)).toBeCloseTo(0.5, 1);
   });
 });
