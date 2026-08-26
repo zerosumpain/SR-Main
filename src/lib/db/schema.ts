@@ -4081,6 +4081,36 @@ export const daydreamThoughts = pgTable(
     explanation: text('explanation').notNull(),
     /** Optional model phrasing, applied to survivors only. Never required. */
     narrative: text('narrative'),
+    /**
+     * Did the verify pass actually rule on `narrative`?
+     *
+     * Three states, and the third is the one that matters. `null` means no
+     * model prose exists. `true` means a second pass checked every claim
+     * against the FACTS block and let it through. `false` means prose exists
+     * that NOTHING checked — which already happens today, because
+     * DEPTH_PLANS.minimal sets verify:false and compose returns early with the
+     * narrative populated. Until this column existed there was no way to tell
+     * the two apart on the page, so unchecked prose read exactly like checked
+     * prose. The headline promotion gates on `true`, never on "narrative is
+     * non-null".
+     */
+    verified: boolean('verified'),
+    /** Why the phrasing was thrown away, when it was — "no usable evidence",
+     *  "verify failed: …", or the model's own SKIP. Rendered on the ledger, so
+     *  a composer that has started refusing everything is visible rather than
+     *  looking like a quiet week. */
+    narrativeDroppedReason: text('narrative_dropped_reason'),
+    /**
+     * What the phrasing actually cost, in tokens.
+     *
+     * Tokens rather than only money, because the daydream model is pinned to
+     * Codex, where price is NULL on every row — a pounds-only meter reads
+     * 0.000000 whatever the work was, which is exactly the state this feature
+     * shipped in. `costUsd` below stays, and stays honest at zero for a model
+     * that bills nothing; these are the numbers that move.
+     */
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
     score: doublePrecision('score').notNull().default(0),
     /** Every component of `score`. Rule: never show an unexplained number. */
     components: jsonb('components').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),

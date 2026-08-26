@@ -28,6 +28,16 @@ export interface LedgerThought {
   title: string;
   explanation: string;
   narrative: string | null;
+  /** null = no model prose. true = the verify pass ruled on it. false = prose
+   *  that nothing checked, which the minimal depth plan produces routinely. */
+  verified: boolean | null;
+  narrativeDroppedReason: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  /** The place's name, when it has one. Joined here rather than looked up in
+   *  the markup so a row can say "DEC" instead of a uuid — and so a question
+   *  about a place that has since been named is obvious on sight. */
+  placeLabel: string | null;
   score: number;
   components: Record<string, number>;
   evidence: Array<{ kind: string; id: string; note?: string }>;
@@ -208,8 +218,31 @@ export async function loadThreshold(): Promise<{ value: number; feedbackCount: n
 
 export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
   const rows = await db
-    .select()
+    .select({
+      id: daydreamThoughts.id,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      explanation: daydreamThoughts.explanation,
+      narrative: daydreamThoughts.narrative,
+      verified: daydreamThoughts.verified,
+      narrativeDroppedReason: daydreamThoughts.narrativeDroppedReason,
+      promptTokens: daydreamThoughts.promptTokens,
+      completionTokens: daydreamThoughts.completionTokens,
+      score: daydreamThoughts.score,
+      components: daydreamThoughts.components,
+      evidence: daydreamThoughts.evidence,
+      placeId: daydreamThoughts.placeId,
+      placeLabel: daydreamPlaces.label,
+      status: daydreamThoughts.status,
+      suppressedReason: daydreamThoughts.suppressedReason,
+      channel: daydreamThoughts.channel,
+      deliveredAt: daydreamThoughts.deliveredAt,
+      feedback: daydreamThoughts.feedback,
+      createdAt: daydreamThoughts.createdAt,
+      updatedAt: daydreamThoughts.updatedAt,
+    })
     .from(daydreamThoughts)
+    .leftJoin(daydreamPlaces, eq(daydreamThoughts.placeId, daydreamPlaces.id))
     .orderBy(desc(daydreamThoughts.createdAt))
     .limit(limit);
 
@@ -219,6 +252,11 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     title: r.title,
     explanation: r.explanation,
     narrative: r.narrative,
+    verified: r.verified,
+    narrativeDroppedReason: r.narrativeDroppedReason,
+    promptTokens: r.promptTokens,
+    completionTokens: r.completionTokens,
+    placeLabel: r.placeLabel,
     score: r.score,
     components: r.components,
     evidence: r.evidence,
