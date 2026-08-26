@@ -275,6 +275,68 @@
     }
   }
 
+  // ── The propositions board ────────────────────────────────────────────────
+  // Questions the assistant chose to ask, and what the data said back. Every
+  // verdict is shown, not just the ones that held: a board of only its hits
+  // looks clever and cannot be argued with.
+  type BoardRow = {
+    id: string;
+    question: string;
+    rationale: string;
+    metricA: string;
+    metricB: string;
+    lagDays: number;
+    direction: string;
+    verdict: string | null;
+    summary: string | null;
+    r: number | null;
+    qValue: number | null;
+    pairs: number | null;
+    familySize: number | null;
+    retestCount: number;
+    feedback: string | null;
+    proposedAt: string;
+    testedAt: string | null;
+  };
+
+  let boardOpen = $state(false);
+  let boardLoading = $state(false);
+  let boardError = $state<string | null>(null);
+  let board = $state<BoardRow[]>([]);
+
+  const VERDICT_LABEL: Record<string, string> = {
+    supported: 'held up',
+    refuted: 'nothing there',
+    wrong_direction: 'backwards',
+    underpowered: 'not enough data',
+  };
+
+  async function openBoard() {
+    boardOpen = true;
+    boardError = null;
+    boardLoading = true;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'hypothesis_board', limit: 60 }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { board?: BoardRow[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      board = out.board ?? [];
+    } catch (err) {
+      boardError = err instanceof Error ? err.message : String(err);
+      board = [];
+    } finally {
+      boardLoading = false;
+    }
+  }
+
+  async function rateQ(row: BoardRow, verdict: 'useful' | 'not_useful') {
+    const ok = await post({ action: 'rate_question', id: row.id, verdict }, `q:${row.id}`);
+    if (ok) board = board.map((b) => (b.id === row.id ? { ...b, feedback: verdict } : b));
+  }
+
   /** Statuses that mean "this reached him". Only these can be rated. */
   const SHOWN_STATUSES = ['delivered', 'seen', 'actioned'];
 
@@ -519,6 +581,81 @@
        actually running to them. Under-running is a finding as much as
        over-running: the instruction was to sit near the limit, not far below
        it, so the paced target is shown beside the spend. -->
+  <!-- What it has been wondering about. The model picks the questions; code
+       answers them. Everything asked is shown, however it turned out. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">What it wondered</span>
+      <span class="nm-sec-meta">questions, and the answers</span>
+    </div>
+    <p class="sec-lede">
+      The assistant chooses what to investigate before it sees any results, then
+      deterministic statistics answer it. A question that came back empty is
+      still worth reading — and is kept here exactly as long as one that held.
+    </p>
+
+    <div class="session-bar">
+      {#if !boardOpen}
+        <button class="session-cta" onclick={openBoard}>Open the board</button>
+      {:else}
+        <button class="row-link" onclick={() => { boardOpen = false; }}>Close</button>
+      {/if}
+    </div>
+
+    {#if boardError}<p class="nm-sec-error">{boardError}</p>{/if}
+
+    {#if boardOpen}
+      {#if boardLoading}
+        <p class="sec-lede">Loading…</p>
+      {:else if board.length === 0}
+        <p class="sec-lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
+      {:else}
+        <div class="session-list">
+          {#each board as q (q.id)}
+            <div class="hyp" class:held={q.verdict === 'supported'}>
+              <div class="hyp-q">{q.question}</div>
+              <div class="hyp-meta">
+                <span class="mono">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
+                {#if q.lagDays}<span class="sep">·</span><span class="mono">next day</span>{/if}
+                <span class="sep">·</span>
+                <span class="mono">expected {q.direction}</span>
+                {#if q.retestCount > 0}
+                  <span class="sep">·</span><span class="mono">retested {q.retestCount}×</span>
+                {/if}
+              </div>
+              {#if q.verdict}
+                <div class="hyp-verdict v-{q.verdict}">
+                  <span class="hyp-badge">{VERDICT_LABEL[q.verdict] ?? q.verdict}</span>
+                  <span class="hyp-sum">{q.summary}</span>
+                </div>
+                {#if q.familySize}
+                  <!-- The family size is shown because a q-value cannot be read
+                       without it: q over 4 tests and q over 400 are not the
+                       same number. -->
+                  <div class="hyp-family mono">corrected across {q.familySize} test{q.familySize === 1 ? '' : 's'}</div>
+                {/if}
+              {:else}
+                <div class="hyp-verdict v-untested">
+                  <span class="hyp-badge">not answered yet</span>
+                </div>
+              {/if}
+              <div class="hyp-why">{q.rationale}</div>
+              <div class="hyp-actions">
+                {#if q.feedback}
+                  <span class="voted">you said {q.feedback.replace('_', ' ')}</span>
+                {:else}
+                  <span class="hyp-ask">Worth asking?</span>
+                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
+                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+  </section>
+
   <!-- The sorting deck. Everything about ranking is a random walk until the
        ledger has feedback in it, and at four interruptions a day the 25
        responses the threshold needs are never collected. One sitting closes
@@ -1263,6 +1400,33 @@
     margin: 0.4rem 0 0; font-family: var(--font-mono);
     font-size: var(--fs-label-xs); color: var(--accent);
   }
+
+  /* The propositions board */
+  .hyp {
+    display: flex; flex-direction: column; gap: 0.35rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--line-hair); background: var(--surface-sunken);
+    border-left: 3px solid var(--line-strong);
+  }
+  .hyp.held { border-left-color: var(--accent); }
+  .hyp-q { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); max-width: 70ch; }
+  .hyp-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .hyp-verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+  .hyp-badge {
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 0.15rem 0.4rem; border: 1px solid currentColor; white-space: nowrap;
+  }
+  /* A refuted question is not a failure and is not styled as one. It is an
+     answer, and reading it is the point of keeping it. */
+  .v-supported .hyp-badge { color: var(--accent); }
+  .v-refuted .hyp-badge, .v-underpowered .hyp-badge, .v-untested .hyp-badge { color: var(--text-ghost); }
+  .v-wrong_direction .hyp-badge { color: var(--status-error, #c0392b); }
+  .hyp-sum { font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .hyp-family { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .hyp-why { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 70ch; }
+  .hyp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.15rem; }
+  .hyp-ask { font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   /* The sorting deck */
   .deck-card {
