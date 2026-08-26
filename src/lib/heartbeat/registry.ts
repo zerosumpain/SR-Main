@@ -8,6 +8,7 @@ import { daydreamPlacesRefresh } from './activities/daydream-places';
 import { daydreamDetect } from './activities/daydream-detect';
 import { daydreamCompose } from './activities/daydream-compose';
 import { daydreamOffersScan } from './activities/daydream-offers';
+import { daydreamRulesmith } from './activities/daydream-rulesmith';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -24,6 +25,7 @@ const handlers: ActivityHandler[] = [
   daydreamDetect,
   daydreamCompose,
   daydreamOffersScan,
+  daydreamRulesmith,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));

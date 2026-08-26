@@ -36,6 +36,7 @@ export const load: PageServerLoad = async () => {
       places: [],
       counts: { byStatus: {}, places: 0, namedPlaces: 0, unnamedPlaces: 0, thoughts7d: 0 },
       budget: null,
+      rules: [],
       enabled: true,
       loadError: errMsg(err),
     };

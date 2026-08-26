@@ -9,6 +9,8 @@ import { freeWindow, learnedBusyHour, localDay, localHour } from './free-window'
 import { patternBreak, findRoutines } from './pattern-break';
 import { correlationProbe, findRepeatedPasses, isoWeek, MIN_SUPPORT } from './correlation-probe';
 import { looseMatch, positionIsUsable } from './shared';
+import { ruleDriven, setActiveRules, dedupeKeyFor } from './rule-driven';
+import type { RuleSpec } from '../rules/spec';
 import type { DaydreamSnapshot, PlaceSummary, TrailPoint } from '../snapshot-types';
 
 // A Wednesday afternoon in August.
@@ -96,9 +98,10 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
 }
 
 describe('the registry', () => {
-  it('exposes eight detectors with unique kinds', () => {
-    expect(DETECTORS).toHaveLength(8);
-    expect(new Set(DETECTORS.map((d) => d.kind)).size).toBe(8);
+  it('exposes the eight hand-written detectors plus the rule runner, all unique', () => {
+    expect(DETECTORS).toHaveLength(9);
+    expect(new Set(DETECTORS.map((d) => d.kind)).size).toBe(9);
+    expect(DETECTORS.map((d) => d.kind)).toContain('rule_driven');
   });
 
   it('resolves a detector by kind', () => {
@@ -544,5 +547,60 @@ describe('correlation_probe', () => {
   it('recurs weekly rather than daily', () => {
     expect(isoWeek(new Date('2026-08-26T00:00:00Z'))).toBe(isoWeek(new Date('2026-08-28T00:00:00Z')));
     expect(isoWeek(new Date('2026-08-26T00:00:00Z'))).not.toBe(isoWeek(new Date('2026-09-05T00:00:00Z')));
+  });
+});
+
+
+describe('rule_driven — model-authored rules behave like any other detector', () => {
+  const spec: RuleSpec = {
+    kind: 'test_long_stop',
+    description: 'A long stop somewhere.',
+    title: 'Long stop at {{place}}',
+    explanation: 'You have been here {{minutesAtCurrentPlace}} minutes.',
+    when: { fact: 'minutesAtCurrentPlace', op: 'gte', value: 20 },
+    base: 0.5,
+    terms: [],
+    minTrailDays: 5,
+    dedupe: 'place-day',
+    rationale: 'testing',
+  };
+
+  it('says nothing when no rule has been approved', () => {
+    setActiveRules([]);
+    const s = snap();
+    expect(ruleDriven.readiness(s).ready).toBe(false);
+    expect(ruleDriven.detect(s)).toEqual([]);
+  });
+
+  it('fires under the RULE kind, not its own', () => {
+    // So per-kind weights, cooldowns and "never this kind" work per rule.
+    // One bad rule must not silence the whole mechanism.
+    setActiveRules([spec]);
+    const trail = trailOf(2, { placeId: 'p1' });
+    const s = snap({
+      trail,
+      places: [place({ id: 'p1', label: 'The Cafe' })],
+      current: { ...snap().current!, placeId: 'p1' },
+    });
+    const [c] = ruleDriven.detect(s);
+    expect(c.kind).toBe('test_long_stop');
+    expect(c.title).toBe('Long stop at The Cafe');
+    setActiveRules([]);
+  });
+
+  it('honours each rule\'s own minimum support', () => {
+    setActiveRules([{ ...spec, minTrailDays: 400 }]);
+    const s = snap({ trailSpanDays: 30 });
+    expect(ruleDriven.readiness(s).ready).toBe(false);
+    expect(ruleDriven.detect(s)).toEqual([]);
+    setActiveRules([]);
+  });
+
+  it('dedupes by the shape the rule asked for', () => {
+    const s = snap();
+    expect(dedupeKeyFor({ ...spec, dedupe: 'day' }, s, 'p1')).toBe('test_long_stop:2026-08-26');
+    expect(dedupeKeyFor({ ...spec, dedupe: 'place' }, s, 'p1')).toBe('test_long_stop:p1');
+    expect(dedupeKeyFor({ ...spec, dedupe: 'place-day' }, s, 'p1')).toBe('test_long_stop:p1:2026-08-26');
+    expect(dedupeKeyFor({ ...spec, dedupe: 'place' }, s, null)).toBe('test_long_stop:_nowhere');
   });
 });

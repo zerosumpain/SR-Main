@@ -67,6 +67,17 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'decide_rule': {
+        const ruleId = str('ruleId');
+        const decision = str('decision');
+        if (!ruleId) return json({ error: 'ruleId is required' }, { status: 400 });
+        if (decision !== 'approve' && decision !== 'reject' && decision !== 'deprecate') {
+          return json({ error: 'decision must be approve, reject or deprecate' }, { status: 400 });
+        }
+        const { decideRule } = await import('$lib/daydream/rules/store');
+        return json({ ok: true, ...(await decideRule(ruleId, decision)) });
+      }
+
       case 'suggest_name': {
         // Reverse-geocode the place's own centre. The caller passes an id, not
         // coordinates — the client should never be the source of truth for
