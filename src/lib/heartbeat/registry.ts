@@ -5,6 +5,7 @@ import { buildProgressCheck } from './activities/build-progress-check';
 import { workflowReview } from './activities/workflow-review';
 import { daydreamObserve } from './activities/daydream-observe';
 import { daydreamPlacesRefresh } from './activities/daydream-places';
+import { daydreamSuggest } from './activities/daydream-suggest';
 import { daydreamDetect } from './activities/daydream-detect';
 import { daydreamCompose } from './activities/daydream-compose';
 import { daydreamOffersScan } from './activities/daydream-offers';
@@ -22,6 +23,7 @@ const handlers: ActivityHandler[] = [
   workflowReview,
   daydreamObserve,
   daydreamPlacesRefresh,
+  daydreamSuggest,
   daydreamDetect,
   daydreamCompose,
   daydreamOffersScan,

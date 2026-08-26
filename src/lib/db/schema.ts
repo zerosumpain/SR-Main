@@ -4014,6 +4014,21 @@ export const daydreamPlaces = pgTable(
     source: text('source').notNull().default('inferred'),
     /** The jkai_memories row written when you confirmed this place. */
     memoryId: text('memory_id'),
+    /**
+     * What the reverse geocoder thinks this place is called, precomputed so the
+     * naming form opens already filled in.
+     *
+     * Deliberately NOT `label`. Writing a guess into `label` would collapse the
+     * confirmed > geocoded > inferred ladder above: everything downstream treats
+     * a non-null label as "the owner said so", and seven detectors gate on
+     * exactly that. A suggestion is scaffolding for a human answer, never a
+     * substitute for one, so it lives in its own columns and only a tap ever
+     * promotes it into `label`.
+     */
+    suggestedLabel: text('suggested_label'),
+    suggestedKind: text('suggested_kind'),
+    suggestedAddress: text('suggested_address'),
+    suggestedAt: timestamp('suggested_at', { withTimezone: true }),
     visitCount: integer('visit_count').notNull().default(0),
     medianDwellMins: integer('median_dwell_mins').notNull().default(0),
     /** Visit counts by weekday (7) and by local hour (24) — a cheap rhythm
