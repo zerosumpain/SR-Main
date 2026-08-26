@@ -5,6 +5,7 @@ import { buildProgressCheck } from './activities/build-progress-check';
 import { workflowReview } from './activities/workflow-review';
 import { daydreamObserve } from './activities/daydream-observe';
 import { daydreamPlacesRefresh } from './activities/daydream-places';
+import { daydreamDetect } from './activities/daydream-detect';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -18,6 +19,7 @@ const handlers: ActivityHandler[] = [
   workflowReview,
   daydreamObserve,
   daydreamPlacesRefresh,
+  daydreamDetect,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));
