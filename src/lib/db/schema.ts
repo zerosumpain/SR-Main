@@ -3899,3 +3899,213 @@ export const codegraphQueries = pgTable(
 );
 export type CodegraphQuery = typeof codegraphQueries.$inferSelect;
 export type NewCodegraphQuery = typeof codegraphQueries.$inferInsert;
+
+// ── Daydreaming ──────────────────────────────────────────────────────────────
+//
+// A background state in which jkai looks at what it already knows — where you
+// are, where you have been, how you slept, what is in your inbox and calendar —
+// and asks whether anything is worth saying. Most ticks it says nothing.
+//
+// Three tables, and the split between them is the design:
+//
+//   daydream_trail   the sensor record. High volume, narrow, pruned.
+//   daydream_places  what the trail's repeated stops MEAN. Named by you.
+//   daydream_thoughts what was noticed, what was said, and how it landed.
+//
+// The detectors that read these are deliberately RULE-BASED (same argument as
+// intel_insights above): a rule that fires on a measurable condition can be
+// trusted, explained and tested. The model's job is phrasing a confirmed
+// finding, never deciding there is one.
+
+/**
+ * One observation of where the subject was — or one record of having looked
+ * and failed.
+ *
+ * **A gap is a row, not an absence of rows.** The push writer only fires on
+ * GPS change, so standing still produces no pushes; if silence meant "no data"
+ * the trail could not tell stillness from a dead sensor, and every "you have
+ * not left the house in three days" would be a coin flip. So the poll floor
+ * writes `source: 'poll'` when it gets a fix and `source: 'gap'` when it looked
+ * and could not — and coverage over a window is then computable rather than
+ * assumed. Home Assistant runs on homeserv while the site runs on the VPS, so
+ * "could not" is a real, recurring state, not a theoretical one.
+ */
+export const daydreamTrail = pgTable(
+  'daydream_trail',
+  {
+    id: serial('id').primaryKey(),
+    /**
+     * When the fix was OBSERVED. Distinct from `createdAt`, which is when the
+     * row was written — a queued push can land minutes late, and everything
+     * time-weighted has to read this one. Same lesson as intel_notes.observedAt.
+     */
+    ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
+    /** Whose fix. 'john' today; the column exists so a second subject never
+     *  means a second table. Family members are presence-only by policy. */
+    subject: text('subject').notNull().default('john'),
+    /** 'push' | 'poll' | 'gap' — see the note above. */
+    source: text('source').notNull(),
+    lat: doublePrecision('lat'),
+    lon: doublePrecision('lon'),
+    accuracyM: doublePrecision('accuracy_m'),
+    /** Home Assistant's own state string ('home', 'not_home', a zone name).
+     *  HA's zone logic is authoritative for "am I home"; the radius check is
+     *  only a fallback, exactly as the location-context node has it. */
+    haState: text('ha_state'),
+    isHome: boolean('is_home'),
+    distanceHomeKm: doublePrecision('distance_home_km'),
+    /** Derived from the PREVIOUS fix. Null when there is no usable previous
+     *  fix, when the gap is too long to mean anything, or when the implied
+     *  speed is physically absurd (a GPS jump, not a journey). */
+    speedKmh: doublePrecision('speed_kmh'),
+    /** 'still' | 'walking' | 'active' | 'vehicle' | 'rail' | 'unknown'.
+     *  Deliberately coarse: GPS speed cannot separate running from cycling, so
+     *  it does not pretend to. Advisory only — never stated to you as fact. */
+    mode: text('mode').notNull().default('unknown'),
+    placeId: text('place_id'),
+    batteryPct: integer('battery_pct'),
+    /** Age of the underlying HA reading at write time. A fresh row carrying a
+     *  two-hour-old reading is not a fresh observation. */
+    readingAgeS: integer('reading_age_s'),
+    /** Why a gap row exists — the error, verbatim, so a silent trail is
+     *  diagnosable after the fact rather than merely noticeable. */
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_trail_ts_idx').on(t.ts),
+    index('daydream_trail_subject_ts_idx').on(t.subject, t.ts),
+    index('daydream_trail_place_idx').on(t.placeId),
+    index('daydream_trail_source_idx').on(t.source),
+  ],
+);
+
+export type DaydreamTrailRow = typeof daydreamTrail.$inferSelect;
+export type NewDaydreamTrailRow = typeof daydreamTrail.$inferInsert;
+
+/**
+ * A place the trail keeps returning to.
+ *
+ * Clusters are cheap; MEANING is not. A centroid with four visits is a fact
+ * about coordinates and says nothing useful — it becomes useful the moment it
+ * has a name, and the only reliable source of that name is you. So the whole
+ * point of this table is `source: 'confirmed'`: an unnamed frequent place
+ * raises a question, your answer is written to jkai_memories under the
+ * existing `places` category, and the memory id is recorded here so the two
+ * can never drift apart.
+ */
+export const daydreamPlaces = pgTable(
+  'daydream_places',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    lat: doublePrecision('lat').notNull(),
+    lon: doublePrecision('lon').notNull(),
+    /** Derived from member spread, floored at the clustering radius. */
+    radiusM: doublePrecision('radius_m').notNull(),
+    /** Null until named. A null label is the trigger for asking. */
+    label: text('label'),
+    /** 'home' | 'school' | 'work' | 'shop' | 'cafe' | 'gym' | 'other' | 'unknown' */
+    kind: text('kind').notNull().default('unknown'),
+    /**
+     * 'confirmed' — you said so. Quotable back to you as fact.
+     * 'geocoded'  — Nominatim reverse lookup. Good for a street, weak for a shop.
+     * 'inferred'  — pattern only. Never stated as fact, only ever as a question.
+     */
+    source: text('source').notNull().default('inferred'),
+    /** The jkai_memories row written when you confirmed this place. */
+    memoryId: text('memory_id'),
+    visitCount: integer('visit_count').notNull().default(0),
+    medianDwellMins: integer('median_dwell_mins').notNull().default(0),
+    /** Visit counts by weekday (7) and by local hour (24) — a cheap rhythm
+     *  summary, so "usually Tuesday afternoon" costs no query. */
+    dayHistogram: jsonb('day_histogram').$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    hourHistogram: jsonb('hour_histogram').$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    /**
+     * 'active' | 'ignored' | 'merged'. `ignored` is you saying "stop asking
+     * about this one" — a place-level mute that survives re-clustering, which
+     * a dismissed thought alone would not.
+     */
+    status: text('status').notNull().default('active'),
+    mergedIntoId: text('merged_into_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_places_status_idx').on(t.status),
+    index('daydream_places_kind_idx').on(t.kind),
+    index('daydream_places_label_idx').on(t.label),
+  ],
+);
+
+export type DaydreamPlace = typeof daydreamPlaces.$inferSelect;
+export type NewDaydreamPlace = typeof daydreamPlaces.$inferInsert;
+
+/**
+ * One daydream: what was noticed, what was said about it, and how it landed.
+ *
+ * Modelled on intel_insights, for the same reason that table exists — a
+ * finding that is recomputed per request cannot be dismissed, cannot be
+ * snoozed, and has no yesterday to compare against. `dedupeKey` is the
+ * identity that survives recomputation.
+ *
+ * Rows land here whether or not they were ever delivered, INCLUDING the ones
+ * suppressed by rate limits or a learned weight, with the reason. A ledger
+ * that only records what got through cannot answer the one question worth
+ * asking of this feature: is it any good?
+ */
+export const daydreamThoughts = pgTable(
+  'daydream_thoughts',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    /** Deterministic, rule-generated. Always present, even when the model
+     *  never ran — so a thought is explainable without an LLM call. */
+    explanation: text('explanation').notNull(),
+    /** Optional model phrasing, applied to survivors only. Never required. */
+    narrative: text('narrative'),
+    score: doublePrecision('score').notNull().default(0),
+    /** Every component of `score`. Rule: never show an unexplained number. */
+    components: jsonb('components').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    /** Typed references to what this rests on — trail ids, place ids, email
+     *  ids, memory ids, calendar uids. The composer may fetch ONLY these. */
+    evidence: jsonb('evidence').$type<Array<{ kind: string; id: string; note?: string }>>().notNull().default(sql`'[]'::jsonb`),
+    placeId: text('place_id'),
+    dedupeKey: text('dedupe_key').notNull(),
+    /** new | delivered | seen | dismissed | actioned | snoozed | suppressed */
+    status: text('status').notNull().default('new'),
+    /** Why it never went out: 'below_threshold', 'rate_limited',
+     *  'quiet_hours', 'kind_muted', 'evidence_unverified'. */
+    suppressedReason: text('suppressed_reason'),
+    snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
+    proposedActions: jsonb('proposed_actions')
+      .$type<Array<{ kind: string; label: string; payload: string }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** 'push' | 'chat' | 'silent' — one channel per thought, never two. */
+    channel: text('channel'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+    /** 'useful' | 'not_useful' | 'never_kind'. `never_kind` is an immediate,
+     *  absolute mute — not a down-weight. With push as the default channel it
+     *  is the escape hatch, so no statistics stand between you and silence. */
+    feedback: text('feedback'),
+    feedbackNote: text('feedback_note'),
+    feedbackAt: timestamp('feedback_at', { withTimezone: true }),
+    runId: text('run_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_thoughts_dedupe_idx').on(t.dedupeKey),
+    index('daydream_thoughts_status_idx').on(t.status),
+    index('daydream_thoughts_kind_idx').on(t.kind),
+    index('daydream_thoughts_created_idx').on(t.createdAt),
+    index('daydream_thoughts_feedback_idx').on(t.feedback),
+  ],
+);
+
+export type DaydreamThought = typeof daydreamThoughts.$inferSelect;
+export type NewDaydreamThought = typeof daydreamThoughts.$inferInsert;
