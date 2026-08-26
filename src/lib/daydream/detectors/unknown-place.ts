@@ -62,10 +62,26 @@ export const unknownPlace: Detector = {
         // about a place mattering than three two-minute stops do.
         const rawScore = Math.min(1, 0.5 + 0.35 * dwellScore + 0.15 * visitScore);
 
+        // Ask about somewhere he can RECOGNISE. "What is this place you keep
+        // going to?" is unanswerable on a phone and unanswerable on the ledger
+        // — ten of them sat there naming nothing. A suggested name and a street
+        // turn it into a yes/no.
+        const where = p.suggestedAddress ? ` (${p.suggestedAddress})` : '';
+        const title = p.suggestedLabel
+          ? `Is this ${p.suggestedLabel}?`
+          : p.suggestedAddress
+            ? `What is the place on ${p.suggestedAddress}?`
+            : `What is this place you keep going to?`;
+
         return {
           kind: 'unknown_place',
-          title: `What is this place you keep going to?`,
+          title,
           explanation:
+            (p.suggestedLabel
+              ? `The geocoder suggests ${p.suggestedLabel}${where}. `
+              : p.suggestedAddress
+                ? `Somewhere around ${p.suggestedAddress}. `
+                : '') +
             `An unnamed spot with ${rhythm}. Naming it turns a coordinate into a fact ` +
             `everything else can use — and five of the other detectors stay silent until it has one.`,
           rawScore,

@@ -7,6 +7,7 @@ import { db } from '$lib/db';
 import { daydreamHypotheses } from '$lib/db/schema';
 import { DEFAULT_SUBJECT } from '../types';
 import { hypothesisKey, type HypothesisSpec } from './spec';
+import { RETEST_AFTER_DAYS } from './test';
 
 export interface SaveResult {
   saved: number;
@@ -79,6 +80,11 @@ export interface BoardRow {
   feedback: string | null;
   proposedAt: string;
   testedAt: string | null;
+  lastRetestedAt: string | null;
+  /** Days until this is asked again. Every verdict here is provisional —
+   *  nothing is filtered by verdict when picking what to retest — and showing
+   *  the horizon is what stops a refutation reading as a closed case. */
+  retestInDays: number | null;
 }
 
 /**
@@ -115,6 +121,13 @@ export async function loadBoard(limit = 60, subject = DEFAULT_SUBJECT): Promise<
     feedback: r.feedback,
     proposedAt: r.proposedAt.toISOString(),
     testedAt: r.testedAt?.toISOString() ?? null,
+    lastRetestedAt: r.lastRetestedAt?.toISOString() ?? null,
+    retestInDays: (() => {
+      const last = r.lastRetestedAt ?? r.testedAt;
+      if (!last) return null;
+      const due = last.getTime() + RETEST_AFTER_DAYS * 86_400_000;
+      return Math.max(0, Math.ceil((due - Date.now()) / 86_400_000));
+    })(),
   }));
 }
 

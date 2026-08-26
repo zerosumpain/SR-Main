@@ -28,6 +28,20 @@ export interface PlaceSummary {
   lon: number;
   radiusM: number;
   label: string | null;
+  /**
+   * What the geocoder thinks it is called, and where.
+   *
+   * Carried into the snapshot so a detector can ASK ABOUT A PLACE BY NAME.
+   * Without it the only question this feature could form was "what is this
+   * place you keep going to?" about a coordinate — unanswerable on a phone,
+   * and unanswerable on the ledger too, which is why ten of them sat there
+   * saying nothing identifiable.
+   *
+   * Still not a label: a suggestion identifies the place in a question, and
+   * only a tap turns it into a fact.
+   */
+  suggestedLabel?: string | null;
+  suggestedAddress?: string | null;
   kind: string;
   source: string;
   visitCount: number;
