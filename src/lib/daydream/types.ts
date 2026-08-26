@@ -86,6 +86,23 @@ export const CLUSTER_RADIUS_M = 200;
 export const MIN_VISITS_FOR_PLACE = 1;
 
 /**
+ * How many visits before it is worth ASKING what a place is.
+ *
+ * Two, by the owner's instruction (2026-08-26). Deliberately separate from
+ * MIN_VISITS_FOR_PLACE, because creating a place and asking about one are
+ * different questions with different costs.
+ *
+ * A place should EXIST after one real stay: it can then match an offer, anchor
+ * a proximity check, and quietly accumulate visits. None of that costs anyone
+ * anything. Asking about it costs a notification and a decision, and somewhere
+ * visited once is usually somewhere that does not need a name — a car park on
+ * the way to somewhere else, a waiting room, a one-off.
+ *
+ * Conflating the two is what produced 81 questions from a month of trail.
+ */
+export const MIN_VISITS_TO_ASK = 2;
+
+/**
  * The dwell that separates being somewhere from passing it.
  *
  * Ten minutes, by the owner's instruction. Below this a "visit" is a traffic
