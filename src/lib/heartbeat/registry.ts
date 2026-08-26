@@ -3,6 +3,8 @@ import { chatContinuation } from './activities/chat-continuation';
 import { conversationCheckin } from './activities/conversation-checkin';
 import { buildProgressCheck } from './activities/build-progress-check';
 import { workflowReview } from './activities/workflow-review';
+import { daydreamObserve } from './activities/daydream-observe';
+import { daydreamPlacesRefresh } from './activities/daydream-places';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -14,6 +16,8 @@ const handlers: ActivityHandler[] = [
   conversationCheckin,
   buildProgressCheck,
   workflowReview,
+  daydreamObserve,
+  daydreamPlacesRefresh,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));

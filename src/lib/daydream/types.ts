@@ -1,0 +1,167 @@
+// src/lib/daydream/types.ts
+//
+// Shared constants and types for daydreaming — the background state in which
+// jkai looks at what it already knows and asks whether anything is worth
+// saying. Kept free of `$lib/db` so the pure modules (cluster, coverage, mode
+// inference) can be unit-tested without a database or a clock.
+//
+// The numbers here are the feature's judgement, so they live in one file
+// rather than scattered as literals: what counts as a place, what counts as
+// still, how long the trail is kept, and how much of a window has to be
+// observed before a detector is allowed to have an opinion about it.
+
+/** Whose trail. Family members are presence-only by policy; see schema.ts. */
+export const DEFAULT_SUBJECT = 'john';
+
+// ── Trail sources ────────────────────────────────────────────────────────────
+
+export const TRAIL_SOURCES = ['push', 'poll', 'gap'] as const;
+export type TrailSource = (typeof TRAIL_SOURCES)[number];
+
+// ── Movement mode ────────────────────────────────────────────────────────────
+
+/**
+ * Deliberately coarse. GPS speed cannot separate running from cycling — both
+ * sit in the same band — so the mode does not pretend to, and `active` covers
+ * both. Health data can tell them apart later; a speed threshold never will.
+ * Nothing here is ever stated to the owner as fact.
+ */
+export const MOVEMENT_MODES = ['still', 'walking', 'active', 'vehicle', 'rail', 'unknown'] as const;
+export type MovementMode = (typeof MOVEMENT_MODES)[number];
+
+/** Upper bound (km/h, exclusive) for each band. Order matters. */
+export const MODE_THRESHOLDS_KMH: ReadonlyArray<{ under: number; mode: MovementMode }> = [
+  { under: 1.5, mode: 'still' },
+  { under: 6.5, mode: 'walking' },
+  { under: 18, mode: 'active' },
+  { under: Infinity, mode: 'vehicle' },
+];
+
+/**
+ * Rail is a REFINEMENT of `vehicle`, not a band of its own: sustained high
+ * speed along a near-constant bearing. Without map matching this also catches
+ * a motorway, which is precisely why the mode is advisory — a wrong guess here
+ * costs a slightly-off suggestion, never a stated fact.
+ */
+export const RAIL_MIN_KMH = 55;
+export const RAIL_MIN_FIXES = 3;
+export const RAIL_MAX_BEARING_DELTA_DEG = 12;
+
+/**
+ * Two fixes further apart than this say nothing about speed — you could have
+ * gone anywhere and come back. Beyond it, speed is null rather than a fiction.
+ */
+export const MAX_SPEED_WINDOW_MINS = 20;
+
+/**
+ * An implied speed above this is a GPS jump, not a journey (a bad fix in a
+ * city centre routinely implies four figures). Recorded as null, and the fix
+ * itself is still kept — the position may be fine even when the delta is not.
+ */
+export const ABSURD_SPEED_KMH = 400;
+
+/** A fix less accurate than this is stored but never used to open or close a
+ *  visit — a 500 m accuracy circle "arrives" at places you drove past. */
+export const MAX_USABLE_ACCURACY_M = 150;
+
+// ── Clustering / places ──────────────────────────────────────────────────────
+
+/** Matches the radius the family-presence stats endpoint has used since it
+ *  was written; kept identical so both surfaces agree on what one place is. */
+export const CLUSTER_RADIUS_M = 200;
+
+/** A cluster becomes a candidate place at this many distinct visits... */
+export const MIN_VISITS_FOR_PLACE = 3;
+/** ...each of at least this long. A drive-past is not a visit. */
+export const MIN_DWELL_MINS = 15;
+
+/** Fixes more than this far apart inside one place are two visits, not one. */
+export const VISIT_MAX_GAP_MINS = 45;
+
+/** Local timezone for the day/hour histograms. A place's rhythm is a LOCAL
+ *  fact — "usually Tuesday afternoon" is meaningless in UTC. */
+export const LOCAL_TZ = 'Europe/London';
+
+// ── Coverage ─────────────────────────────────────────────────────────────────
+
+/**
+ * The poll floor aims for one observation per this interval, so expected
+ * observations over a window are computable and coverage is a real fraction
+ * rather than a vibe.
+ */
+export const POLL_INTERVAL_MINS = 10;
+
+/**
+ * A detector reasoning about a window must see at least this fraction of it
+ * actually observed. Below it, the honest answer is "I do not know", and
+ * silence beats "you have not left the house in three days" when the truth is
+ * that homeserv was down.
+ */
+export const MIN_COVERAGE = 0.6;
+
+// ── Retention ────────────────────────────────────────────────────────────────
+
+/** Raw fixes are pruned at this age. Aggregated places are kept. */
+export const TRAIL_RETENTION_DAYS = 90;
+
+// ── Settings keys (app_settings) ─────────────────────────────────────────────
+
+/** Master kill switch. Unset/null is treated as ENABLED, matching the
+ *  self-improvement engine's convention. */
+export const SETTINGS_ENABLED_KEY = 'daydream.enabled';
+/** Per-kind mute list, written by a `never_kind` tap. */
+export const SETTINGS_MUTED_KINDS_KEY = 'daydream.muted_kinds';
+
+/** Env var holding the shared secret for the push ingest endpoint. */
+export const INGEST_SECRET_ENV = 'DAYDREAM_INGEST_SECRET';
+
+// ── Shapes ───────────────────────────────────────────────────────────────────
+
+/** A position report, from either writer, before it becomes a row. */
+export interface IncomingFix {
+  lat: number;
+  lon: number;
+  accuracyM?: number | null;
+  /** ISO8601. Defaults to now — but a queued push can be minutes old. */
+  at?: string | null;
+  batteryPct?: number | null;
+  /** Home Assistant's own state string; authoritative for "am I home". */
+  haState?: string | null;
+  /** Seconds since the underlying HA reading was taken. */
+  readingAgeS?: number | null;
+}
+
+/** The minimum a previous row has to expose to derive speed and mode. */
+export interface PriorFix {
+  ts: Date;
+  lat: number | null;
+  lon: number | null;
+}
+
+/** A point going into the clusterer. `idx` travels through so callers can map
+ *  members back to their own rows without a second lookup. */
+export interface ClusterPoint {
+  idx: number;
+  lat: number;
+  lon: number;
+  ts: Date;
+}
+
+export interface Cluster {
+  lat: number;
+  lon: number;
+  /** `idx` values of the member points, in insertion order. */
+  members: number[];
+}
+
+/** A contiguous stay at one place. */
+export interface Visit {
+  startedAt: Date;
+  endedAt: Date;
+  dwellMins: number;
+  fixCount: number;
+}
+
+export function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}

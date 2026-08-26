@@ -17,6 +17,12 @@ const PUBLIC_PATHS = [
   '/api/jkai/proxy',
   '/api/jkai/cors',
   '/api/live-walk',
+  // The daydream trail's push ingest — a Home Assistant automation posts GPS
+  // changes here with a shared secret (DAYDREAM_INGEST_SECRET), exactly as
+  // /api/live-walk works. Listed as the EXACT path, never as '/api/daydream':
+  // the match here is a prefix, and the thoughts and feedback endpoints that
+  // live under that tree are owner-only.
+  '/api/daydream/observe',
   // One hashed 256-bit capability per shared drive file, resolved in
   // $lib/file-shares; the drive itself stays owner-gated. Expired, revoked and
   // unknown tokens all 404 alike. This is a PREFIX — check-public-routes.mjs

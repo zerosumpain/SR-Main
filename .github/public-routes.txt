@@ -41,6 +41,7 @@
 /api/claude-changelog/session/[id]
 /api/data-standard-designer/ingest
 /api/data-standard-designer/seed-workflows
+/api/daydream/observe
 /api/deepdive/index-sources
 /api/deepdive/reindex-facts
 /api/dfe-data-strategy/intel
