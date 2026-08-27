@@ -283,6 +283,38 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
 }
 
 /**
+ * Which place is home.
+ *
+ * `kind = 'home'` is not unique and was never going to be: "Grandparents" is
+ * genuinely somebody's home, and on 2026-08-27 three active places carried the
+ * kind — the house, the grandparents' 1.2 km away, and a road cluster 260 m up
+ * the street that had been given the same label as the house.
+ *
+ * The previous query took `limit(1)` with NO ordering, so which one it returned
+ * was whatever Postgres happened to hand back. It happened to be right. It is
+ * the input to `distance_home_km` on every trail fix and to the weather
+ * fallback, so "happened to be right" is not good enough: a table rewrite or a
+ * different plan would have silently moved home 1.2 km and nothing anywhere
+ * would have reported it.
+ *
+ * Most lived-in wins — visits first, then dwell. Whatever else is called home,
+ * the one you sleep at has the numbers.
+ */
+export async function getHomePlace(): Promise<{ lat: number; lon: number } | null> {
+  const [home] = await db
+    .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
+    .from(daydreamPlaces)
+    .where(and(eq(daydreamPlaces.kind, 'home'), eq(daydreamPlaces.status, 'active')))
+    .orderBy(
+      sql`${daydreamPlaces.visitCount} desc`,
+      sql`${daydreamPlaces.medianDwellMins} desc`,
+      sql`${daydreamPlaces.id}`,
+    )
+    .limit(1);
+  return home ?? null;
+}
+
+/**
  * Close any open question about a place that now has a name.
  *
  * `confirmPlace` already does this for the place it just named, and that fast
