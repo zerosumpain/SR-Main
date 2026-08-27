@@ -18,6 +18,7 @@ export interface IntelCounts {
   events: number;
   watched: number;
   unconnected: number;
+  heldMail: number;
 }
 
 export interface IntelSurface {
@@ -35,6 +36,18 @@ export interface IntelSurface {
 }
 
 export const SURFACES: IntelSurface[] = [
+  {
+    href: '/jkai/intel/mail',
+    label: 'Mail',
+    stage: '00 gate',
+    question: 'Which email is allowed into the graph at all — one thread, or a whole sender, at a time.',
+    ratherThan:
+      'Before capture, not after it. Notes shows what the graph was read FROM; this decides what it is allowed to read. Rejecting here never deletes the mail — daydreaming keeps reading it.',
+    count: 'heldMail',
+    // A held queue is not a problem until it is a backlog. Set where a mailbox
+    // stops being workable in one sitting.
+    warnAbove: 200,
+  },
   {
     href: '/jkai/intel/notes',
     label: 'Notes',

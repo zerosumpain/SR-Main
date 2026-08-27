@@ -2115,6 +2115,32 @@ export const intelNotes = pgTable('intel_notes', {
    * time rather than the sender-written `Date` header.
    */
   observedAt: timestamp('observed_at', { withTimezone: true }),
+  /**
+   * Whether this note's content is allowed into the entity graph.
+   *
+   * A note and the graph rows read out of it used to be the same decision: if
+   * something was ingested, it was extracted. That was tolerable while the
+   * corpus was hand-written notes and Drive uploads, and it stopped being
+   * tolerable when the rolling Gmail sweep started reading the whole mailbox —
+   * 2,781 of 3,116 notes came from email, 67% of live entities were asserted by
+   * an email note alone, and the single most common relationship type in the
+   * graph became `offers` (1,368 edges) because marketing mail is mostly
+   * offers. The graph was answering "what is being sold to me" when it was
+   * asked "who do I work with".
+   *
+   * So the two decisions are now separate. The note is the CORPUS — it is
+   * always stored, and daydream's voucher, receipt and interest readers scan it
+   * exactly as before. This column is the GRAPH GATE.
+   *
+   *   'admitted' — extracted, and its entities and edges are in the graph.
+   *   'pending'  — stored and searchable, never extracted. Costs no LLM call.
+   *   'rejected' — refused by the owner. Never extracted, never re-queued.
+   *
+   * Defaulted to 'admitted' so every non-email source behaves precisely as it
+   * did: only the Gmail sweep writes 'pending', and only because it was asked
+   * to. Nothing here is a general-purpose moderation queue.
+   */
+  graphState: text('graph_state').notNull().default('admitted'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -2126,6 +2152,9 @@ export const intelNotes = pgTable('intel_notes', {
     'hnsw',
     sql`${t.embedding} vector_cosine_ops`,
   ),
+  // The mail queue's every read is "pending email notes, newest first", and the
+  // graph's every read is now "admitted only". Both are this index.
+  byGraphState: index('intel_notes_graph_state_idx').on(t.graphState, t.source),
 }));
 
 export type IntelNote = typeof intelNotes.$inferSelect;
@@ -2798,6 +2827,66 @@ export const fileEmbeddings = pgTable(
 
 export type FileEmbedding = typeof fileEmbeddings.$inferSelect;
 export type NewFileEmbedding = typeof fileEmbeddings.$inferInsert;
+
+// One row per chunk of an ADMITTED email — the body, and any attachment whose
+// text was read. Deliberately a sibling of `file_embeddings` rather than more
+// rows inside it: that table's `file_id` is a real foreign key into
+// `workflow_files` with a cascade on it, and an email is not a Drive file.
+//
+// Same vector space as the @files index on purpose (text-embedding-3-small,
+// 1536-dim, unit-normalized at write time), so a single query can be ranked
+// across both corpora without re-embedding. The attachment BYTES are not here —
+// they are saved into /drive on admission and indexed by $lib/file-index like
+// any other upload, which is why an attachment is searchable, previewable and
+// citable without this module knowing what a PDF is.
+//
+// Only admitted mail is embedded. A pending note is stored and readable but
+// costs nothing, which is the whole point of the gate.
+export const mailEmbeddings = pgTable(
+  'mail_embeddings',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    noteId: text('note_id')
+      .notNull()
+      .references(() => intelNotes.id, { onDelete: 'cascade' }),
+    /** The note's `metadata.contentHash` when this chunk was embedded. A thread
+     *  that gains a reply changes it, which is what makes re-indexing cheap. */
+    contentHash: text('content_hash').notNull(),
+    chunkOrd: integer('chunk_ord').notNull(),
+    /** Thread subject at embed time — the citation label. */
+    source: text('source').notNull(),
+    /** 'body' | 'attachment'. Kept so a search can say where a passage came
+     *  from; "it was in the covering note" and "it was on page 9 of the PDF"
+     *  are different claims about the same thread. */
+    part: text('part').notNull().default('body'),
+    /** Attachment filename for an `attachment` chunk; null for the body. */
+    filename: text('filename'),
+    text: text('text').notNull(),
+    charStart: integer('char_start').notNull(),
+    charEnd: integer('char_end').notNull(),
+    embeddingModel: text('embedding_model').notNull(),
+    embeddingDim: integer('embedding_dim').notNull(),
+    embedding: vector('embedding').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byNote: index('mail_embeddings_note_idx').on(t.noteId),
+    // Plain, not unique. A unique index on a populated table breaks
+    // non-interactive `drizzle-kit push` (reference_drizzle_unique_push_gotcha),
+    // and re-indexing deletes a note's rows before inserting anyway, so there is
+    // nothing for uniqueness to protect.
+    byNoteChunk: index('mail_embeddings_note_chunk_idx').on(t.noteId, t.chunkOrd),
+    // Same reasoning as the notes/entities HNSW indexes: without it every search
+    // is a Seq Scan over the whole corpus.
+    byEmbedding: index('mail_embeddings_embedding_hnsw_idx').using(
+      'hnsw',
+      sql`${t.embedding} vector_cosine_ops`,
+    ),
+  }),
+);
+
+export type MailEmbedding = typeof mailEmbeddings.$inferSelect;
+export type NewMailEmbedding = typeof mailEmbeddings.$inferInsert;
 
 // One row per provisioned WebDAV mount credential. The mount client uses
 // HTTP Basic Auth — username is informational (we use the label), password

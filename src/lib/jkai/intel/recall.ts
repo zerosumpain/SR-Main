@@ -34,6 +34,9 @@ async function findSimilarNotes(noteId: string, limit = 10): Promise<SimilarNote
            n.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId}) as distance
     FROM intel_notes n
     WHERE n.id != ${noteId}
+      -- Same reason as searchIntel: a note held at the mail gate is embedded so
+      -- the queue can cluster it, not so it can be recalled as evidence.
+      AND n.graph_state = 'admitted'
       AND n.embedding IS NOT NULL
       AND (SELECT embedding FROM intel_notes WHERE id = ${noteId}) IS NOT NULL
     ORDER BY distance ASC

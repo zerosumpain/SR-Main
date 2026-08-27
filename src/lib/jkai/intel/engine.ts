@@ -169,6 +169,11 @@ export async function runIntelSweep(
         const sweep = await ingestGmailThreads({ mode: 'rolling' });
         return {
           threads: sweep.threads,
+          // Under the gate this is the number that means something: threads
+          // captured and waiting at /jkai/intel/mail. `extracted` is 0 by design
+          // on a gated night, and a stage line of nothing but zeros reads as a
+          // broken sweep rather than a working one.
+          held: sweep.held,
           extracted: sweep.extracted,
           entities: sweep.entities,
           links: sweep.edges,
@@ -189,6 +194,29 @@ export async function runIntelSweep(
       }, batch),
     );
   }
+
+  // The owner's approved rules, immediately after the sweep that captured the
+  // mail they act on. A rule that ran before the sweep would be a night behind
+  // for ever, always deciding about yesterday's post.
+  //
+  // Unconditional: with no active rule this is a single datastore read that
+  // returns `ran: false`, which is the normal state until the owner approves
+  // one. Reporting it as a stage anyway means "no rules are on" is visible in
+  // the run log rather than being indistinguishable from "the stage is broken".
+  stages.push(
+    await runStage('mail-rules', async () => {
+      const { applyMailRules } = await import('./mail-rules/apply');
+      const applied = await applyMailRules();
+      return {
+        activeRules: applied.activeRules,
+        scanned: applied.scanned,
+        admitted: applied.admitted,
+        rejected: applied.rejected,
+        deferred: applied.deferred,
+        failed: applied.failed,
+      };
+    }, batch),
+  );
 
   // Resolution BEFORE scoring, and after mail: the night's new entities are
   // exactly the ones most likely to duplicate something, and confidence,

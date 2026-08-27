@@ -1,4 +1,22 @@
-// Gmail → intel graph.
+// Gmail → intel CORPUS, and — only by permission — the intel graph.
+//
+// READ THIS FIRST, because the module's name is now half a lie. A sweep no
+// longer feeds the graph. Since 2026-08-27 it captures threads as notes and
+// stops at a gate (`intel_notes.graph_state`); entities and edges are written
+// only when the owner admits a thread, or when a rule they approved admits it
+// for them. See ./mail-admit for the other half.
+//
+// Why: the rolling sweep worked exactly as designed and the design was wrong.
+// Reading a whole mailbox into a knowledge graph makes the graph a description
+// of what is being marketed to you. Measured before the gate — 2,781 of 3,116
+// notes from email, 8,974 of 13,469 entities asserted by an email note alone,
+// and `offers` the most common relationship type in the entire graph at 1,368
+// edges, ahead of every professional relation there is. `emailKind` could not
+// save it either: 933 of those offer edges came from mail classified as
+// *correspondence*, because a brand that mails from an ordinary domain is
+// indistinguishable from a colleague by its address alone.
+//
+// Everything below still runs. What changed is where it stops.
 //
 // The mailbox is the largest body of first-hand intelligence the system has and
 // the only one it never read: /drive uploads and finished deep dives already
@@ -44,6 +62,7 @@ import {
   attachmentSection,
   skippedAttachmentsNote,
   fetchAttachmentText,
+  fetchAttachmentBytes,
   type AttachmentRefInput,
 } from './gmail-attachments';
 
@@ -459,7 +478,7 @@ function formatAddress(a: ParsedAddress): string {
   return a.name === a.email ? a.email : `${a.name} <${a.email}>`;
 }
 
-function threadSubject(thread: ThreadInput): string {
+export function threadSubject(thread: ThreadInput): string {
   for (const m of thread.messages ?? []) {
     const s = (m.headers?.subject ?? '').trim();
     // The first message carries the subject; replies prefix it endlessly.
@@ -726,6 +745,27 @@ export interface GmailIngestOptions {
   extractBudget?: number;
   /** Rolling only — decode and read attachments. Defaults on. */
   includeAttachments?: boolean;
+  /**
+   * Hold every thread at the graph gate instead of reading it into the graph.
+   * DEFAULTS ON, and the default is the point.
+   *
+   * A sweep used to be an ingest: every thread it could afford became entities,
+   * relationships and timeline events on the spot. Measured on the live graph
+   * that produced 8,974 entities asserted by an email note alone, 11,458 edges
+   * out of 16,727, and `offers` as the single most common relationship type in
+   * a knowledge graph about a person's working life. The mailbox was not
+   * feeding the graph, it was outvoting it.
+   *
+   * With the gate on, a sweep is a CAPTURE: the note is written, embedded and
+   * searchable, and nothing reaches the graph until the owner admits it (or a
+   * rule they approved admits it for them). Nothing is extracted, no attachment
+   * is downloaded, and the whole 150-call nightly budget goes unspent — the
+   * model cost moves to admission, where it buys something asked for.
+   *
+   * Pass `false` only for a deliberate ungated ingest of a query the owner has
+   * already vouched for; the admission path is the supported route.
+   */
+  gate?: boolean;
 }
 
 export interface GmailThreadOutcome {
@@ -761,6 +801,8 @@ export interface GmailIngestResult {
   attachments: number;
   /** Threads given their free structural edges, body deferred to a later run. */
   deferred: number;
+  /** Threads captured as notes and held at the gate, awaiting admission. */
+  held: number;
   /** Model calls left when the run ended. 0 means there is more to do. */
   budgetLeft: number;
   /** Duplicate entities resolved automatically after the sweep. */
@@ -834,7 +876,7 @@ async function storedHashes(refIds: string[]): Promise<Map<string, string>> {
   return out;
 }
 
-async function resolveAccount(accountId?: number): Promise<GmailAccount> {
+export async function resolveAccount(accountId?: number): Promise<GmailAccount> {
   const { db } = await import('$lib/db');
   if (accountId) {
     const [acct] = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, accountId)).limit(1);
@@ -921,7 +963,7 @@ export function threadTimestamp(thread: ThreadInput): number | null {
  * own `fetchMessage` per message — the same route the `gmail_get_thread` tool
  * takes, so MIME walking and base64url decoding have one implementation.
  */
-async function fetchThread(acct: GmailAccount, threadId: string): Promise<ThreadInput> {
+export async function fetchThread(acct: GmailAccount, threadId: string): Promise<ThreadInput> {
   const { gmailService } = await import('$lib/workflows/gmail/service');
   const oauth = await gmailService.getAuthenticatedClient(acct);
   const gmail = gmailService.gmailClientFor(oauth);
@@ -938,6 +980,75 @@ async function fetchThread(acct: GmailAccount, threadId: string): Promise<Thread
     }
   }
   return { id: threadId, messages };
+}
+
+/**
+ * Every attachment worth keeping from a thread — bytes AND text.
+ *
+ * The sweep's `threadAttachmentText` below reads a document, appends its text
+ * to the note and throws the file away, which was right while nothing kept
+ * attachments. Admission keeps them: the bytes are saved into /drive so the
+ * document itself survives with previews, citations and the @files index, and
+ * the text is chunked into `mail_embeddings` alongside the body.
+ *
+ * Same planner, same budget, same order as the sweep — this differs only in
+ * what it hands back. A document whose text cannot be extracted is still
+ * returned with its bytes: an unreadable PDF is a file worth having even when
+ * it is not a passage worth searching.
+ */
+export interface ThreadAttachment {
+  filename: string;
+  mimeType: string;
+  bytes: Buffer;
+  /** Extracted text, or null when the document yielded none. */
+  text: string | null;
+}
+
+export async function threadAttachments(
+  acct: GmailAccount,
+  thread: ThreadInput,
+): Promise<{ attachments: ThreadAttachment[]; skipped: Array<{ filename: string; reason: string }> }> {
+  const messageIdFor = new Map<string, string>();
+  const all: AttachmentRefInput[] = [];
+  for (const msg of thread.messages ?? []) {
+    if (!msg.id) continue;
+    for (const att of msg.attachments ?? []) {
+      if (!att?.attachmentId) continue;
+      all.push(att);
+      messageIdFor.set(att.attachmentId, msg.id);
+    }
+  }
+  if (!all.length) return { attachments: [], skipped: [] };
+
+  const plan = planAttachments(all);
+  if (!plan.fetch.length) return { attachments: [], skipped: plan.skipped };
+
+  const { gmailService } = await import('$lib/workflows/gmail/service');
+  const oauth = await gmailService.getAuthenticatedClient(acct);
+  const gmail = gmailService.gmailClientFor(oauth);
+
+  const out: ThreadAttachment[] = [];
+  for (const att of plan.fetch) {
+    const messageId = messageIdFor.get(att.attachmentId);
+    if (!messageId) continue;
+    const bytes = await fetchAttachmentBytes(gmail, messageId, att);
+    if (!bytes) continue;
+    let text: string | null = null;
+    try {
+      const { extractText } = await import('$lib/jkai/extract');
+      text = ((await extractText(bytes, att.mimeType, att.filename))?.text ?? '').trim() || null;
+    } catch (err) {
+      // Keep the file, lose the passage. Reported rather than swallowed so a
+      // systematically unreadable format shows up in the log instead of looking
+      // like an empty mailbox.
+      console.warn(
+        `[intel:gmail] could not extract ${att.filename}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    out.push({ filename: att.filename, mimeType: att.mimeType, bytes, text });
+  }
+  return { attachments: out, skipped: plan.skipped };
 }
 
 /**
@@ -1186,7 +1297,12 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
   const fallbackQuery = queryForMode(mode);
   const query = (opts.query ?? fallbackQuery).trim() || fallbackQuery;
   const rolling = mode === 'rolling';
-  const includeAttachments = opts.includeAttachments !== false;
+  const gated = opts.gate !== false;
+  // Under the gate nothing is extracted, so there is nothing for an attachment
+  // to be extracted INTO. They are read at admission instead, where the bytes
+  // are also saved to /drive and indexed — which is the first time this has
+  // kept an attachment rather than reading it once and throwing it away.
+  const includeAttachments = !gated && opts.includeAttachments !== false;
 
   // A rolling sweep pages the whole window and rations the expensive half; the
   // marked sweep keeps its original single-request, everything-extracted shape.
@@ -1227,6 +1343,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
     edges: 0,
     attachments: 0,
     deferred: 0,
+    held: 0,
     budgetLeft: 0,
     autoMerged: 0,
     items: [],
@@ -1287,7 +1404,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       // body-less thread returned before this and contributed nothing at all.
       const hasAttachments = (thread.messages ?? []).some((m) => (m.attachments ?? []).length > 0);
       if (!noteText || (noteText.length < MIN_EXTRACT_CHARS && !hasAttachments)) {
-        if (structural.entities.length) {
+        if (!gated && structural.entities.length) {
           const stats = await persistStructuralOnly(
             structural,
             {
@@ -1334,7 +1451,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       // is thrown away, since only the body extraction consumes it. On a first
       // backfill of a large mailbox that is thousands of pointless downloads.
       if (extractBudget <= 0) {
-        if (structural.entities.length) {
+        if (!gated && structural.entities.length) {
           const stats = await persistStructuralOnly(
             structural,
             {
@@ -1357,7 +1474,10 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         continue;
       }
 
-      extractBudget--;
+      // Only a real extraction spends from the budget. Under the gate no model
+      // is called, so decrementing here would ration a sweep that costs nothing
+      // and leave most of the mailbox uncaptured for no reason at all.
+      if (!gated) extractBudget--;
 
       // Only now is it worth reading the attachments: this thread's body IS
       // being extracted, so the document text has somewhere to go.
@@ -1386,12 +1506,19 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         // to avoid. Messages are immutable, so this still changes whenever the
         // thread does.
         contentHash: hash,
+        hold: gated,
         metadata: {
           channel: 'gmail',
           gmailThreadId: threadId,
           gmailAccount: acct.email,
           participants: structural.participants.map((p) => p.email),
           sourceUrl: `https://mail.google.com/mail/u/0/#all/${threadId}`,
+          // Recorded from the message metadata Gmail already returned — no
+          // download. Under the gate no attachment is read, so the note text
+          // carries no `--- filename ---` block and "does this thread have
+          // documents?" would otherwise be unanswerable for every held thread,
+          // including in a rule backtest.
+          attachmentCount: (thread.messages ?? []).reduce((n, m) => n + (m.attachments?.length ?? 0), 0),
           // Only written when true. A `false` on every ordinary thread would
           // make the key meaningless to filter on and would say we had checked
           // — which for anything ingested before this existed we had not.
@@ -1405,6 +1532,12 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         result.extracted++;
         result.entities += outcome.entityCount;
         item.entityCount = outcome.entityCount;
+      } else if (outcome.status === 'held') {
+        // Captured, not skipped. Counting a held thread as skipped would make a
+        // fully successful gated sweep read as a sweep that did nothing, which
+        // is exactly the "silent no-op dressed as success" the engine's stage
+        // reporting exists to prevent.
+        result.held++;
       } else if (outcome.status === 'unchanged') {
         result.unchanged++;
       } else if (outcome.status === 'failed') {
@@ -1416,7 +1549,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       // Header-derived edges are only worth writing when the thread actually
       // changed — on an unchanged thread they are already in the graph, and
       // re-persisting them would inflate every observation count for free.
-      if (outcome.status === 'extracted' && outcome.noteId && structural.entities.length) {
+      if (!gated && outcome.status === 'extracted' && outcome.noteId && structural.entities.length) {
         const stats = await persistExtraction(outcome.noteId, structural, { recency, observedAt });
         item.edges = stats.relationshipCount;
         result.edges += stats.relationshipCount;
@@ -1441,7 +1574,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
   // depending on who typed the header — so a 12-week sweep without this would
   // hand over hundreds of pairs to review by hand. Only merges at or above the
   // unchanged 0.85 threshold; nothing here lowers the bar.
-  if (result.extracted > 0 || result.edges > 0) {
+  if (!gated && (result.extracted > 0 || result.edges > 0)) {
     try {
       batch.beat('resolving duplicates');
       const { autoMergeDuplicates } = await import('./resolve/merge');
@@ -1461,8 +1594,10 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
   }
 
   console.log(
-    `[intel:gmail] ${mode} sweep "${query}" on ${acct.email} — ${result.threads} threads, ` +
-      `${result.extracted} extracted (${result.entities} entities, ${result.edges} edges, ${result.attachments} attachments), ` +
+    `[intel:gmail] ${mode}${gated ? ' gated' : ''} sweep "${query}" on ${acct.email} — ${result.threads} threads, ` +
+      (gated
+        ? `${result.held} held for admission, `
+        : `${result.extracted} extracted (${result.entities} entities, ${result.edges} edges, ${result.attachments} attachments), `) +
       `${result.unchanged} unchanged, ${result.deferred} deferred, ${result.failed} failed`,
   );
   if (rolling && result.deferred > 0) {
