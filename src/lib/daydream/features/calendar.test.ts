@@ -40,6 +40,9 @@ describe('isAllDay', () => {
   it('rejects a timed meeting', () => {
     expect(isAllDay({ start: '2026-08-26T09:00:00.000Z', end: '2026-08-26T10:00:00.000Z' })).toBe(false);
   });
+  it('accepts a UTC-midnight whole-day span — how iCloud floating dates arrive under BST', () => {
+    expect(isAllDay({ start: '2026-08-26T00:00:00.000Z', end: '2026-08-27T00:00:00.000Z' })).toBe(true);
+  });
 });
 
 describe('summariseChunk', () => {
@@ -88,6 +91,17 @@ describe('summariseChunk', () => {
     const out = summariseChunk(events, days, false);
     expect(out.get('2026-08-26')).toEqual({ events: 1, busyMinutes: 0, partial: false });
     expect(out.get('2026-08-27')?.events).toBe(1);
+  });
+
+  it('counts a multi-day timed span once and gives it no busy minutes', () => {
+    // A "holiday" entered as a timed event from 9am — without the length bound
+    // this flooded every covered day to the 1440 clamp on the first prod run.
+    const events: CalendarEventRow[] = [
+      { start: '2026-08-25T09:00:00+01:00', end: '2026-08-28T17:00:00+01:00' },
+    ];
+    const out = summariseChunk(events, days, false);
+    expect(out.get('2026-08-25')).toEqual({ events: 1, busyMinutes: 0, partial: false });
+    expect(out.get('2026-08-26')?.busyMinutes).toBe(0);
   });
 
   it('stamps every day partial when the chunk was partial', () => {
