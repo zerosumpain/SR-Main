@@ -108,6 +108,15 @@ are spent only on threads somebody asked for.
   participant at high confidence. Measured before the first run: of those 8,974
   entities, 5,875 were `confirmed` and **zero** were watched, lensed or filed.
   The real owner signals are `watched`, `lens` and dossier membership.
+- **The `from` field must stop at the `·` separator.** `sendersIn` originally
+  matched `from\s+[^<\n]*<(…)>`, and on a line like
+  `[1] · from service@paypal.co.uk · to John Kelly <me@gmail.com>` that runs
+  straight past the bare sender and captures the RECIPIENT. Every transactional
+  email where the sender has no display name and the owner does was read as a
+  message the owner had sent — `ownerReplied` and `twoWay` both true. The seed
+  rule's first backtest offered PayPal receipts as two-way correspondence, which
+  is how it was caught. **The gate is what made this safe: the rule sat at
+  `proposed` with its samples on screen, and nothing was admitted.**
 - **`perWeek` divides by the corpus's real span.** A rule replayed over eleven
   days and reported "per week" without dividing overstates itself twofold, and
   every threshold downstream then means nothing.

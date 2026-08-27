@@ -77,6 +77,27 @@ describe('sendersIn', () => {
   it('does not treat a recipient as a sender', () => {
     expect(sendersIn(BROADCAST)).not.toContain(OWNER);
   });
+
+  it('does not read the RECIPIENT as the sender when the sender has no display name', () => {
+    // The exact production line that exposed this. One message, from PayPal,
+    // owner only on the `to` side. The old pattern let `[^<\n]*` run past the
+    // bare sender and capture <johnkelly.main@gmail.com>, so every transactional
+    // email of this shape backtested as a thread the owner had replied to.
+    const receipt = [
+      'Subject: HUBX STUDIOS LTD: $1.99 USD',
+      'Participants: service@paypal.co.uk, John Kelly <johnkelly.main@gmail.com>',
+      'Messages: 1 (2026-08-27)',
+      '',
+      '[1] · 2026-08-27 · from service@paypal.co.uk · to John Kelly <johnkelly.main@gmail.com>',
+      "You've authorised $1.99 USD to HUBX STUDIOS LTD",
+    ].join('\n');
+    expect(sendersIn(receipt)).toEqual(['service@paypal.co.uk']);
+  });
+
+  it('still reads a sender that has BOTH a display name and angle brackets', () => {
+    const line = '[1] · 2026-08-01 · from Jane Doe <jane@x.com> · to John Kelly <me@x.com>';
+    expect(sendersIn(line)).toEqual(['jane@x.com']);
+  });
 });
 
 describe('subjectFamily', () => {
@@ -139,6 +160,36 @@ describe('factsFor', () => {
   it('still reads attachments off the text for notes written before the count existed', () => {
     const withBlock = `${TWO_WAY}\n\n--- tender.pdf ---\nsome extracted text`;
     expect(factsFor(note(withBlock), NOW).hasAttachments).toBe(true);
+  });
+
+  it('does not call a one-message receipt a conversation the owner joined', () => {
+    // The end-to-end version of the sendersIn bug: this is what made the seed
+    // rule's backtest offer PayPal receipts as two-way correspondence.
+    const receipt = [
+      'Subject: HUBX STUDIOS LTD: $1.99 USD',
+      'Participants: service@paypal.co.uk, John Kelly <johnkelly.main@gmail.com>',
+      'Messages: 1 (2026-08-27)',
+      '',
+      '[1] · 2026-08-27 · from service@paypal.co.uk · to John Kelly <johnkelly.main@gmail.com>',
+      "You've authorised $1.99 USD to HUBX STUDIOS LTD. Transaction date 27 Aug 2026. Order ID order-01a0. Thank you for using PayPal.",
+    ].join('\n');
+    const facts = factsFor(
+      {
+        title: 'HUBX STUDIOS LTD: $1.99 USD',
+        rawContent: receipt,
+        metadata: {
+          gmailAccount: 'johnkelly.main@gmail.com',
+          participants: ['service@paypal.co.uk', 'johnkelly.main@gmail.com'],
+          emailKind: 'correspondence',
+          senderDomain: 'paypal.co.uk',
+        },
+        observedAt: '2026-08-27T09:00:00Z',
+        createdAt: '2026-08-27T09:00:00Z',
+      },
+      NOW,
+    );
+    expect(facts.ownerReplied).toBe(false);
+    expect(facts.twoWay).toBe(false);
   });
 
   it('handles a header-only stub without inventing anything', () => {

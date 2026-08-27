@@ -105,18 +105,41 @@ export function messageCountOf(body: string): number {
   return blocks?.length ?? (body?.trim() ? 1 : 0);
 }
 
-/** Every address that appears as a message SENDER in the note text. */
+/**
+ * Every address that appears as a message SENDER in the note text.
+ *
+ * The note writes one line per message:
+ *
+ *   [1] · 2026-08-01 · from Jane Doe <jane@x.com> · to John Kelly <me@x.com>
+ *   [1] · 2026-08-27 · from service@paypal.co.uk · to John Kelly <me@x.com>
+ *
+ * The `from` field is read up to the next `·` and no further, which is the
+ * whole trick. An earlier version matched `from\s+[^<\n]*<(…)>` — and on the
+ * SECOND line above `[^<\n]*` sails straight past the bare sender and captures
+ * the RECIPIENT's angle-bracketed address. Every transactional email where the
+ * sender has no display name and the owner does was therefore read as a message
+ * the owner had sent, making `ownerReplied` and `twoWay` true for a large slice
+ * of the mailbox. A PayPal receipt with one message backtested as a two-way
+ * conversation; the seed rule's samples are what caught it.
+ */
 export function sendersIn(body: string): string[] {
   const out = new Set<string>();
-  // `[1] 2026-08-01 · from Jane Doe <jane@x.com> · to …`
-  const re = /^\[\d+\][^\n]*?\bfrom\s+[^<\n]*<([^<>\s]+@[^<>\s]+)>/gim;
+  const re = /^\[\d+\][^\n]*?\bfrom\s+([^\n·]*)/gim;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(body ?? '')) !== null) out.add(m[1].toLowerCase());
-  // Some senders have no display name, so `formatAddress` prints the bare
-  // address with no angle brackets. Without this branch a whole class of
-  // threads reports zero senders and `ownerReplied` is false for all of them.
-  const bare = /^\[\d+\][^\n]*?\bfrom\s+([^\s<>·]+@[^\s<>·]+)/gim;
-  while ((m = bare.exec(body ?? '')) !== null) out.add(m[1].toLowerCase());
+  while ((m = re.exec(body ?? '')) !== null) {
+    const field = m[1];
+    // Prefer the angle-bracketed address: a display name can itself contain
+    // something that looks like an address.
+    const angled = /<([^<>\s]+@[^<>\s]+)>/.exec(field);
+    if (angled) {
+      out.add(angled[1].toLowerCase());
+      continue;
+    }
+    // No display name — `formatAddress` printed the bare address. Without this
+    // branch a whole class of threads reports zero senders.
+    const bare = /([^\s<>,;]+@[^\s<>,;]+)/.exec(field);
+    if (bare) out.add(bare[1].toLowerCase());
+  }
   return [...out];
 }
 
