@@ -15,9 +15,11 @@ import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamPlaces,
+  daydreamSpend,
   daydreamTrail,
   heartbeatActions,
   intelNotes,
+  intelTimelineEvents,
   jkaiMemories,
   researchSessions,
 } from '$lib/db/schema';
@@ -356,6 +358,82 @@ export async function buildSnapshot(
     sources.push({ key: 'memories', status: 'failed', detail: errMsg(err) });
   }
 
+  // ── Email facts ────────────────────────────────────────────────────────
+  // The intel ingest has been extracting dated events from email nightly for
+  // months; until 2026-08-27 daydream read only note TITLES. These are the
+  // structured rows — a renewal, an appointment, a delivery — with the event's
+  // own date, which is what lets a thought look FORWARD.
+  let emailFacts: DaydreamSnapshot['emailFacts'] = {
+    available: false,
+    upcoming: [],
+    recent: [],
+  };
+  try {
+    const today = localParts(now).localDate;
+    const horizon = new Date(now.getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
+    const recentFloor = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const pick = {
+      id: intelTimelineEvents.id,
+      date: intelTimelineEvents.date,
+      type: intelTimelineEvents.type,
+      title: intelTimelineEvents.title,
+      noteId: intelTimelineEvents.noteId,
+    };
+    const upcoming = await db
+      .select(pick)
+      .from(intelTimelineEvents)
+      .where(and(gte(intelTimelineEvents.date, today), sql`${intelTimelineEvents.date} <= ${horizon}`))
+      .orderBy(intelTimelineEvents.date)
+      .limit(40);
+    const recent = await db
+      .select(pick)
+      .from(intelTimelineEvents)
+      .where(and(gte(intelTimelineEvents.date, recentFloor), sql`${intelTimelineEvents.date} < ${today}`))
+      .orderBy(desc(intelTimelineEvents.date))
+      .limit(20);
+    emailFacts = { available: true, upcoming, recent };
+    sources.push({
+      key: 'email-facts',
+      status: upcoming.length + recent.length ? 'ok' : 'empty',
+      detail: `${upcoming.length} upcoming, ${recent.length} recent dated events`,
+    });
+  } catch (err) {
+    sources.push({ key: 'email-facts', status: 'failed', detail: errMsg(err) });
+  }
+
+  // ── Spend ──────────────────────────────────────────────────────────────
+  // Verified rows only — the quarantine is the email extractor's whole point,
+  // and the bank rows are born verified. Written since merge 5 (2026-08-26)
+  // and read by NOTHING until 2026-08-27.
+  let spend: DaydreamSnapshot['spend'] = { available: false, recent: [], totalMinor30d: 0 };
+  try {
+    const floor = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const rows = await db
+      .select({
+        id: daydreamSpend.id,
+        day: daydreamSpend.day,
+        merchant: daydreamSpend.merchant,
+        amountMinor: daydreamSpend.amountMinor,
+        currency: daydreamSpend.currency,
+      })
+      .from(daydreamSpend)
+      .where(and(eq(daydreamSpend.verified, true), gte(daydreamSpend.day, floor)))
+      .orderBy(desc(daydreamSpend.day))
+      .limit(100);
+    spend = {
+      available: true,
+      recent: rows.slice(0, 30),
+      totalMinor30d: rows.reduce((a, r) => a + r.amountMinor, 0),
+    };
+    sources.push({
+      key: 'spend',
+      status: rows.length ? 'ok' : 'empty',
+      detail: `${rows.length} verified rows in 30d`,
+    });
+  } catch (err) {
+    sources.push({ key: 'spend', status: 'failed', detail: errMsg(err) });
+  }
+
   // ── Family ─────────────────────────────────────────────────────────────
   // Coordinate-free by construction: what leaves this section is home-or-not,
   // a confirmed place label, and a distance — the same discipline the compose
@@ -442,6 +520,8 @@ export async function buildSnapshot(
     interests,
     offers,
     memories,
+    emailFacts,
+    spend,
     family,
     sources,
   };

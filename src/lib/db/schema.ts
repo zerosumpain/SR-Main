@@ -4112,6 +4112,13 @@ export const daydreamDayFeatures = pgTable(
     calendarEvents: integer('calendar_events'),
     calendarBusyMinutes: integer('calendar_busy_minutes'),
 
+    /** Spend EVIDENCED that day — verified email receipts plus the bank rails
+     *  when armed. Minor units. A zero is a true statement about evidence, not
+     *  about spending; an unreadable spend table leaves the day null. Added
+     *  2026-08-27 by manual ALTER (drizzle push is unsafe while two unrelated
+     *  table drops are pending). */
+    verifiedSpendMinor: integer('verified_spend_minor'),
+
     /**
      * Per-domain observation state: 'ok' | 'partial' | 'absent'.
      *

@@ -161,6 +161,24 @@ export interface DaydreamSnapshot {
   memories: MemoryRow[];
 
   /**
+   * Dated facts the email ingest already extracted — renewals, appointments,
+   * deliveries — split by which side of now they sit on. Structured rows only;
+   * no email body ever rides in a snapshot.
+   */
+  emailFacts: {
+    available: boolean;
+    upcoming: EmailFact[];
+    recent: EmailFact[];
+  };
+
+  /** Verified spend (email receipts + bank rails when armed), newest first. */
+  spend: {
+    available: boolean;
+    recent: SpendFact[];
+    totalMinor30d: number;
+  };
+
+  /**
    * Where the rest of the household is, coordinate-free. Labels come from the
    * shared place graph; a member with no fresh fix carries nulls rather than
    * being dropped, so "not tracked right now" stays distinguishable from
@@ -172,6 +190,23 @@ export interface DaydreamSnapshot {
   };
 
   sources: SnapshotSource[];
+}
+
+export interface EmailFact {
+  id: string;
+  /** YYYY-MM-DD (the event's own date, not the email's). */
+  date: string;
+  type: string;
+  title: string;
+  noteId: string;
+}
+
+export interface SpendFact {
+  id: string;
+  day: string;
+  merchant: string;
+  amountMinor: number;
+  currency: string;
 }
 
 export interface FamilyMember {
