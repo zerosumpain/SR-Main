@@ -111,3 +111,37 @@ are spent only on threads somebody asked for.
 - **`perWeek` divides by the corpus's real span.** A rule replayed over eleven
   days and reported "per week" without dividing overstates itself twofold, and
   every threshold downstream then means nothing.
+
+## Running any of this against production
+
+The purge, the sweep and the rules are all owner-gated routes, so the way to run
+them without a browser session is to import the deployed chunk (see
+`reference_running_deployed_chunks_on_vps`). Two things that bit during rollout:
+
+- **Set `JKAI_SERVICE_ROLE=builder`.** Importing almost any server chunk boots
+  the platform services, including a second Baileys client — and a duplicate
+  WhatsApp client can log the VPS session out. That role owns nothing. Do **not**
+  reach for `JKAI_BUILDER_PROCESS=1` instead: it *also* turns off
+  `isAutoExtractEnabled()`, so `extractIntoIntel` returns `disabled` and the
+  sweep silently writes no notes at all.
+- **Pick the chunk by what it EXPORTS, not by what it mentions.** A content
+  search for `ROLLING_GMAIL_INTEL_QUERY` matches the route chunk too, which
+  re-exports only `GET`/`POST`. And the private-env chunk exports two functions,
+  `b` and `s` — `s` is `set_private_env`; taking "the first function" gets `b`
+  and leaves `DATABASE_URL` undefined behind a misleading SASL error.
+
+## Rollout, 2026-08-27
+
+Backup: `~/backups/intel-pre-mail-gate-20260827.sql.gz` (111 MB) on the VPS.
+
+| | before | after |
+|---|---|---|
+| live entities | 13,469 | **4,495** |
+| relationships | 16,727 | **5,234** |
+| email-derived graph rows | 11,458 | **0** |
+| most common relationship | `offers` (1,368) | `uses` (367) |
+| email notes | 2,781 | 2,781, all `pending` |
+
+Daydream verified unaffected after the purge: `offers.ts` sees 899 bulk threads
+in its 45-day window, `spend/read.ts` sees all 2,781, `snapshot.ts` sees 2,138
+interest terms, and every body is intact.
