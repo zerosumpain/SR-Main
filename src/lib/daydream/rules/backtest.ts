@@ -162,6 +162,8 @@ function snapshotAt(
     memories: [],
     // Replay is the owner's world only; a family rule read against this
     // snapshot sees `available: false` and its facts stay null (lowerBound).
+    emailFacts: { available: false, upcoming: [], recent: [] },
+    spend: { available: false, recent: [], totalMinor30d: 0 },
     family: { available: false, members: [] },
     sources: [{ key: 'replay', status: 'ok', detail: 'trail and places only' }],
   };

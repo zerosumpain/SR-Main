@@ -53,6 +53,7 @@ const METRIC_NOTES: Record<string, string> = {
   lastHomeAtMins: 'minutes after midnight he was last seen at home',
   calendarEvents: 'calendar events that day',
   calendarBusyMinutes: 'minutes of timed calendar commitments, overlaps merged',
+  verifiedSpendMinor: 'evidenced spend that day in pence (receipts + bank when armed) — understates cash',
 };
 
 export interface ProposalBatch {

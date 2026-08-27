@@ -101,6 +101,8 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
     interests: [],
     offers: { available: false, items: [] },
     memories: [],
+    emailFacts: { available: false, upcoming: [], recent: [] },
+    spend: { available: false, recent: [], totalMinor30d: 0 },
     family: { available: false, members: [] },
     sources: [],
     ...over,

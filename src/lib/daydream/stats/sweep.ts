@@ -49,6 +49,7 @@ export const SWEEP_METRICS = [
   'lastHomeAtMins',
   'calendarEvents',
   'calendarBusyMinutes',
+  'verifiedSpendMinor',
 ] as const;
 export type SweepMetric = (typeof SWEEP_METRICS)[number];
 

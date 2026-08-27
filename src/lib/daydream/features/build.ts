@@ -13,12 +13,13 @@
 // here. This file decides which rows belong to which day and how a day's worth
 // of samples collapses to one number; that file decides what the numbers mean.
 
-import { and, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   activities,
   appleHealthMetrics,
   daydreamDayFeatures,
+  daydreamSpend,
   daydreamTrail,
   whoopCycles,
   whoopRecovery,
@@ -109,10 +110,13 @@ type DayBucket = {
   /** Null = the diary could not be read for this day (absent), which is a
    *  different fact from a day it answered about with nothing on it. */
   calendar: CalendarDay | null;
+  /** Minor units summed over verified spend rows; null until the spend table
+   *  was readable for this build (then every day defaults to a true zero). */
+  spendMinor: number | null;
 };
 
 function emptyBucket(day: string): DayBucket {
-  return { day, apple: new Map(), trail: [], strain: [], recovery: [], sleep: [], activities: [], calendar: null };
+  return { day, apple: new Map(), trail: [], strain: [], recovery: [], sleep: [], activities: [], calendar: null, spendMinor: null };
 }
 
 /**
@@ -306,6 +310,24 @@ export async function buildDayFeatures(
     result.errors.push(`activities: ${errMsg(err)}`);
   }
 
+  // ── Spend: verified rows, summed per local day ──
+  // The day column IS the local day (the extractor and the bank mapper both
+  // key it that way), so this is a plain group-by. When the table is readable,
+  // every bucketed day gets at least a zero — "no evidenced spend" is a real
+  // observation of the evidence, deliberately unlike the sensor domains.
+  let spendReadable = false;
+  try {
+    const rows = await db
+      .select({ day: daydreamSpend.day, total: sql<number>`sum(${daydreamSpend.amountMinor})::int` })
+      .from(daydreamSpend)
+      .where(and(eq(daydreamSpend.verified, true), gte(daydreamSpend.day, localDay(from))))
+      .groupBy(daydreamSpend.day);
+    spendReadable = true;
+    for (const r of rows) bucket(r.day).spendMinor = r.total;
+  } catch (err) {
+    result.errors.push(`spend: ${errMsg(err)}`);
+  }
+
   // ── Calendar: whole window, chunked under the tool's 100-row cap ──
   // Unlike the other domains this is a live CalDAV read, not a table. A failed
   // chunk leaves its days ABSENT; a day the diary answered about with no events
@@ -319,6 +341,12 @@ export async function buildDayFeatures(
     for (const [day, row] of cal) bucket(day).calendar = row;
   } catch (err) {
     result.errors.push(`calendar: ${errMsg(err)}`);
+  }
+
+  // Spend zeros: only once the table proved readable, and only for days that
+  // exist in the build at all — a day with no bucket has no row to be zero on.
+  if (spendReadable) {
+    for (const b of buckets.values()) if (b.spendMinor == null) b.spendMinor = 0;
   }
 
   // ── Collapse each day and write it ──
@@ -379,6 +407,7 @@ export function collapse(b: DayBucket, subject: string) {
     whoopSleep: b.sleep.length === 0 ? 'absent' : 'ok',
     activities: b.activities.length === 0 ? 'absent' : 'ok',
     calendar: b.calendar == null ? 'absent' : b.calendar.partial ? 'partial' : 'ok',
+    spend: b.spendMinor == null ? 'absent' : 'ok',
   };
 
   const activeMinutes = b.activities.length
@@ -430,6 +459,8 @@ export function collapse(b: DayBucket, subject: string) {
 
     calendarEvents: b.calendar ? b.calendar.events : null,
     calendarBusyMinutes: b.calendar ? b.calendar.busyMinutes : null,
+
+    verifiedSpendMinor: b.spendMinor,
 
     sources,
   };

@@ -60,6 +60,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     const result = await backfillFromHomeAssistant({
       days: Number.isFinite(days) && days > 0 ? days : DEFAULT_BACKFILL_DAYS,
       entity: typeof body.entity === 'string' ? body.entity : undefined,
+      // Family history lands under the right person (D1, 2026-08-27). Without
+      // this the route pinned every backfill to the default subject, so a
+      // pull of person.katie's tracker would have written rows as john.
+      subject: typeof body.subject === 'string' ? body.subject : undefined,
+      personEntity: typeof body.personEntity === 'string' ? body.personEntity : undefined,
     });
 
     // Places are derived FROM the trail, so a backfill that did not re-cluster
