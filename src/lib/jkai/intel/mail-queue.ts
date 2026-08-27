@@ -24,7 +24,7 @@
 // The ranking and grouping functions are PURE and exported for their tests; the
 // two functions at the bottom are the only ones that touch the database.
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
 import { factsFor, subjectFamily, type MailFacts, type NoteForFacts } from './mail-facts';
@@ -285,7 +285,7 @@ export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
 }
 
 /**
- * Embed held threads that have no vector yet.
+ * Embed email threads that have no vector yet — held or admitted.
  *
  * The gated sweep embeds what it captures, which leaves a gap nothing else
  * would ever close: a thread captured BEFORE the gate existed already has a
@@ -317,7 +317,18 @@ export async function backfillPendingEmbeddings(limit = 400): Promise<{
     .where(
       and(
         eq(intelNotes.source, 'email'),
-        eq(intelNotes.graphState, 'pending'),
+        // Pending AND admitted, not pending alone.
+        //
+        // An admitted note gets its embedding from `extractIntoIntel`, where the
+        // call is deliberately non-fatal — an embedding outage must not undo an
+        // admission that succeeded. The consequence is that a thread admitted
+        // during an outage keeps its entities and never gets a vector, and
+        // filtering this backfill to `pending` meant nothing ever went back for
+        // it. Six of the first twelve admissions ended up in exactly that state.
+        //
+        // `rejected` is excluded on purpose: refused mail is never searched and
+        // never clustered, so a vector for it would be paid for and never read.
+        inArray(intelNotes.graphState, ['pending', 'admitted']),
         sql`${intelNotes.embedding} IS NULL`,
         sql`length(coalesce(${intelNotes.rawContent}, '')) >= 200`,
       ),
