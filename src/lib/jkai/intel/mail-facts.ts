@@ -21,6 +21,8 @@
 //
 // PURE — no DB, no clock passed implicitly, no network. `now` is an argument.
 
+import { classifyEmail } from './email-kind';
+
 export const MAIL_FACT_KEYS = [
   // ── Who sent it ──
   /** Sender domain, lowercased, e.g. `linkedin.com`. */
@@ -188,9 +190,29 @@ export function factsFor(note: NoteForFacts, now: number): MailFacts {
     ? Math.max(0, Math.round((now - observedMs) / 86_400_000))
     : 9999;
 
+  // `senderDomain` and `emailKind` are written at ingest by `emailFacets`, and a
+  // large slice of the corpus never went through it: the 837 structural stubs
+  // were written by `persistStructuralOnly`, which builds its own metadata and
+  // has no classifier step. Left as-is that put 1,043 of 2,857 held threads —
+  // 37% of the queue — into a single cluster called "unknown", which is not a
+  // decision anybody can make.
+  //
+  // So classify from the participants when the stored value is missing. The
+  // classifier is pure and the participant list is on every email note, so this
+  // costs nothing and needs no re-sweep. Domain RULES are not applied here (they
+  // need a database), which is the one difference from ingest-time facets: a
+  // fallback classification reads the shape of the address only. The stored
+  // value always wins where there is one.
+  const stored = {
+    domain: String(meta.senderDomain ?? '').toLowerCase(),
+    kind: String(meta.emailKind ?? ''),
+  };
+  const derived =
+    stored.domain && stored.kind ? null : classifyEmail(participants, owner ? [owner] : []);
+
   return {
-    senderDomain: String(meta.senderDomain ?? '').toLowerCase(),
-    emailKind: String(meta.emailKind ?? 'correspondence'),
+    senderDomain: stored.domain || derived?.domain?.toLowerCase() || '',
+    emailKind: stored.kind || derived?.kind || 'correspondence',
     participantCount: participants.length,
     messageCount: messageCountOf(body),
     ownerReplied: !!owner && senders.includes(owner),

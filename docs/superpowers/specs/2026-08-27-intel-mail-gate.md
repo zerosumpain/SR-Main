@@ -117,6 +117,17 @@ are spent only on threads somebody asked for.
   rule's first backtest offered PayPal receipts as two-way correspondence, which
   is how it was caught. **The gate is what made this safe: the rule sat at
   `proposed` with its samples on screen, and nothing was admitted.**
+- **A third of the queue had no sender.** `senderDomain` and `emailKind` are
+  written at ingest by `emailFacets`, and `persistStructuralOnly` builds its own
+  metadata with no classifier step — so all 837 stubs plus a couple of hundred
+  others (1,043 of 2,857, 37%) collapsed into one cluster called "unknown".
+  `factsFor` now falls back to `classifyEmail` over the stored participants.
+  Domain rules are not applied in the fallback (they need a database), so a
+  stored verdict always wins.
+- **The rolling sweep will not recapture the old stubs.** Its query is
+  `newer_than:84d` capped at 2,000 threads, and the stubs sit beyond that. They
+  stay header-only and the queue marks them `captured: false` — admission
+  re-reads them from Gmail by thread id, which is unaffected by the window.
 - **`perWeek` divides by the corpus's real span.** A rule replayed over eleven
   days and reported "per week" without dividing overstates itself twofold, and
   every threshold downstream then means nothing.
