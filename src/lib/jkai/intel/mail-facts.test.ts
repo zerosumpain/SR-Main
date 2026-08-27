@@ -192,6 +192,38 @@ describe('factsFor', () => {
     expect(facts.twoWay).toBe(false);
   });
 
+  it('classifies from the participants when ingest never stored a sender', () => {
+    // 1,043 of 2,857 held threads had no `senderDomain` — the structural stubs
+    // were written by persistStructuralOnly, which has no classifier step — and
+    // they all collapsed into one cluster called "unknown", 37% of the queue.
+    const facts = factsFor(
+      note(STUB, { participants: ['welcome@supabase.com', OWNER], senderDomain: undefined, emailKind: undefined }),
+      NOW,
+    );
+    expect(facts.senderDomain).toBe('supabase.com');
+    expect(facts.emailKind).not.toBe('');
+  });
+
+  it('recognises a bulk sender in the fallback, not just an unknown one', () => {
+    const facts = factsFor(
+      note(BROADCAST, { participants: ['offers@send.shop.com', OWNER], senderDomain: undefined, emailKind: undefined }),
+      NOW,
+    );
+    expect(facts.senderDomain).toBe('send.shop.com');
+    expect(facts.emailKind).toBe('bulk');
+  });
+
+  it('prefers what ingest stored over the fallback', () => {
+    // Ingest-time facets apply the owner's domain RULES; the fallback cannot,
+    // so a stored verdict must always win.
+    const facts = factsFor(
+      note(BROADCAST, { participants: ['offers@send.shop.com', OWNER], senderDomain: 'shop.com', emailKind: 'notification' }),
+      NOW,
+    );
+    expect(facts.senderDomain).toBe('shop.com');
+    expect(facts.emailKind).toBe('notification');
+  });
+
   it('handles a header-only stub without inventing anything', () => {
     const facts = factsFor(note(STUB, { emailKind: 'notification', structuralOnly: true }), NOW);
     expect(facts.ownerReplied).toBe(false);
