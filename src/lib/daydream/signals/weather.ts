@@ -111,11 +111,8 @@ export async function dailyPositions(
 }
 
 async function homeCoordinates(): Promise<{ lat: number; lon: number } | null> {
-  const [home] = await db
-    .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
-    .from(daydreamPlaces)
-    .where(and(eq(daydreamPlaces.kind, 'home'), eq(daydreamPlaces.status, 'active')))
-    .limit(1);
+  const { getHomePlace } = await import('../places');
+  const home = await getHomePlace();
   if (!home) return null;
   return { lat: Math.round(home.lat * 100) / 100, lon: Math.round(home.lon * 100) / 100 };
 }

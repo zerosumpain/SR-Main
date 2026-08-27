@@ -73,14 +73,10 @@ function resolveIsHome(haState: string | null | undefined, distanceHomeKm: numbe
 
 /** The home place, when one has been established. Null is normal on day one —
  *  the place graph has to see you at home a few times first. */
-async function getHomePlace(): Promise<{ lat: number; lon: number } | null> {
-  const [home] = await db
-    .select({ lat: daydreamPlaces.lat, lon: daydreamPlaces.lon })
-    .from(daydreamPlaces)
-    .where(and(eq(daydreamPlaces.kind, 'home'), eq(daydreamPlaces.status, 'active')))
-    .limit(1);
-  return home ?? null;
-}
+// Home comes from places.ts so there is ONE answer to "which place is home".
+// Two copies of this query with different ordering would put two different
+// houses into distance_home_km and the weather fallback.
+import { getHomePlace } from './places';
 
 /**
  * The most recent positioned fixes, for deriving speed and spotting rail.
