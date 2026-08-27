@@ -156,7 +156,7 @@
   let placeKind = $state('other');
   let suggesting = $state(false);
   let suggestion = $state<{ name: string | null; kind: string | null; address: string | null } | null>(null);
-  type Visit = { startedAt: string; dwellMins: number; dateLabel: string; dayName: string; timeLabel: string };
+  type Visit = { startedAt: string; dwellMins: number; subject: string; dateLabel: string; dayName: string; timeLabel: string };
   let visits = $state<Visit[]>([]);
 
   async function openNaming(p: Place) {
@@ -592,6 +592,10 @@
     places.filter((p) => !p.label && p.status === 'active' && p.visitCount < askAtVisits).length,
   );
   const named = $derived(places.filter((p) => p.label && p.status === 'active'));
+  /** Clusters the trail passes THROUGH. Reported rather than hidden: half the
+   *  place table was road before the stillness rule, and a count that silently
+   *  drops from 160 to 82 looks like data loss unless the page says why. */
+  const transitPlaces = $derived(places.filter((p) => p.status === 'transit').length);
 
   const budget = $derived(data.budget);
   const rules = $derived(data.rules ?? []);
@@ -1350,6 +1354,12 @@
         No places yet. They emerge from the household trail — one stay of ten minutes
         makes a place, three visits makes a question.
       </div>
+      {#if transitPlaces}
+        <p class="sec-lede">
+          {transitPlaces} {transitPlaces === 1 ? 'cluster is' : 'clusters are'} set aside as
+          transit — points the trail passes through rather than stops at.
+        </p>
+      {/if}
     </section>
   {/if}
   <!-- ── UNNAMED PLACES ─────────────────────────────────────────────────
@@ -1366,6 +1376,11 @@
       <p class="sec-lede">
         A named place turns a coordinate into a fact. Several of the detectors stay
         silent until one has a name, so this is the highest-leverage thing on the page.
+        {#if transitPlaces}
+          <br />{transitPlaces} more {transitPlaces === 1 ? 'cluster is' : 'clusters are'} set
+          aside as transit — junctions and stretches of road the trail passes through rather
+          than stops at. They are never asked about.
+        {/if}
         {#if quietUnnamed}
           <br />{quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} fewer than
           {askAtVisits} visits, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
@@ -1482,10 +1497,11 @@
                 </p>
                 {#if visits.length}
                   <div class="visits">
-                    <span class="sr-label-tight">When you were here</span>
+                    <span class="sr-label-tight">Who was here, and when</span>
                     <ul class="visit-list">
-                      {#each visits as v (v.startedAt)}
+                      {#each visits as v (v.startedAt + v.subject)}
                         <li>
+                          <span class="v-who">{cap(v.subject)}</span>
                           <span class="v-day">{v.dayName}</span>
                           <span class="v-date">{v.dateLabel}</span>
                           <span class="v-time mono">{v.timeLabel}</span>
@@ -2083,12 +2099,13 @@
   .naming { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
   .visits { display: flex; flex-direction: column; gap: 0.35rem; }
   .visit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
-  .visit-list li { display: grid; grid-template-columns: 5.5rem 1fr 3.5rem 4.5rem; gap: 0.5rem; font-size: var(--fs-label-xs); padding: 0.2rem 0; border-bottom: 1px solid var(--line-hair); }
-  .v-day { color: var(--text-primary); }
+  .visit-list li { display: grid; grid-template-columns: 4.2rem 5.5rem 1fr 3.5rem 4.5rem; gap: 0.5rem; font-size: var(--fs-label-xs); padding: 0.2rem 0; border-bottom: 1px solid var(--line-hair); }
+  .v-who { color: var(--text-primary); font-weight: 500; }
+  .v-day { color: var(--text-secondary); }
   .v-date { color: var(--text-secondary); }
   .v-time, .v-dwell { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
   @media (max-width: 560px) {
-    .visit-list li { grid-template-columns: 4.5rem 1fr 3.2rem; }
+    .visit-list li { grid-template-columns: 3.8rem 4.5rem 1fr 3.2rem; }
     .v-dwell { display: none; }
   }
   .geo-line { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); }

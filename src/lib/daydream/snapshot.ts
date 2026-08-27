@@ -116,7 +116,15 @@ export async function buildSnapshot(
   // ── Places ─────────────────────────────────────────────────────────────
   let places: PlaceSummary[] = [];
   try {
-    places = (await db.select().from(daydreamPlaces)) as unknown as PlaceSummary[];
+    // ACTIVE only. `atPlace` and `placesNearby` read this list, and before the
+    // stillness rule it also carried every stretch of road the old dwell
+    // measure had promoted — so driving through a junction could set
+    // `atPlaceKind` for any rule that asked. A retired, merged or muted place
+    // is not somewhere you are.
+    places = (await db
+      .select()
+      .from(daydreamPlaces)
+      .where(eq(daydreamPlaces.status, 'active'))) as unknown as PlaceSummary[];
     sources.push({
       key: 'places',
       status: places.length ? 'ok' : 'empty',

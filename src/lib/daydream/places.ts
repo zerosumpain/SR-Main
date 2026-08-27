@@ -30,7 +30,6 @@ import {
   MIN_DWELL_MINS,
   MIN_VISITS_FOR_PLACE,
   TRAIL_RETENTION_DAYS,
-  VISIT_MAX_GAP_MINS,
   type ClusterPoint,
 } from './types';
 
@@ -42,6 +41,8 @@ export interface RefreshResult {
   updated: number;
   /** Clusters that did not clear the visit/dwell bar — noise, drive-pasts. */
   rejected: number;
+  /** Places that USED to qualify and no longer do — retired to `transit`. */
+  retired: number;
   /** Trail rows whose `place_id` was filled in or corrected. */
   reassigned: number;
 }
@@ -52,6 +53,7 @@ export const EMPTY_REFRESH: RefreshResult = {
   created: 0,
   updated: 0,
   rejected: 0,
+  retired: 0,
   reassigned: 0,
 };
 
@@ -108,6 +110,7 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       lon: daydreamTrail.lon,
       accuracyM: daydreamTrail.accuracyM,
       placeId: daydreamTrail.placeId,
+      subject: daydreamTrail.subject,
     })
     .from(daydreamTrail)
     .where(and(gte(daydreamTrail.ts, since), isNotNull(daydreamTrail.lat)))
@@ -142,9 +145,16 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
 
   for (const cluster of clusters) {
     const members = cluster.members.map((i) => usable[i]);
+    // Per subject, and dwell measured as time actually spent standing still —
+    // see segmentVisits. A cluster on a road now produces no qualifying visit
+    // at all, however many times the household drives through it.
     const visits = segmentVisits(
-      members.map((m) => m.ts),
-      VISIT_MAX_GAP_MINS,
+      members.map((m) => ({
+        ts: m.ts,
+        lat: m.lat as number,
+        lon: m.lon as number,
+        subject: m.subject,
+      })),
     );
     const realVisits = visits.filter((v) => v.dwellMins >= MIN_DWELL_MINS);
 
@@ -170,6 +180,21 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       // fortnight — you named it, it stays named.
       if (matched && matched.source === 'confirmed') {
         for (const m of members) assignment.set(m.id, matched.id);
+      } else if (matched && matched.status === 'active') {
+        // It used to qualify and does not any more. Retiring it is the point:
+        // the stillness rule reclassified 78 stretches of road that the old
+        // span-based dwell had promoted to places, and leaving them `active`
+        // would keep them in the naming queue, on the map and in the rule
+        // facts with stats that no longer describe anything.
+        //
+        // `transit` rather than `ignored` — `ignored` is you saying "stop
+        // asking about this one", and overloading it would lose the difference
+        // between a mute you chose and a judgement the engine made.
+        await db
+          .update(daydreamPlaces)
+          .set({ status: 'transit', updatedAt: new Date() })
+          .where(eq(daydreamPlaces.id, matched.id));
+        result.retired++;
       } else {
         result.rejected++;
       }
@@ -190,14 +215,23 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       dayHistogram: histogram(7, dayHours.map((d) => d.day)),
       hourHistogram: histogram(24, dayHours.map((d) => d.hour)),
       firstSeenAt: realVisits[0].startedAt,
-      lastSeenAt: realVisits[realVisits.length - 1].endedAt,
+      // Max end, not the end of the last-started visit: visits from different
+      // people interleave, so the two are no longer the same row.
+      lastSeenAt: new Date(Math.max(...realVisits.map((v) => v.endedAt.getTime()))),
       updatedAt: new Date(),
     };
 
     let placeId: string;
     if (matched) {
-      // Geometry and stats refresh; the owner's answer does not.
-      await db.update(daydreamPlaces).set(stats).where(eq(daydreamPlaces.id, matched.id));
+      // Geometry and stats refresh; the owner's answer does not. A place that
+      // was retired to `transit` and now qualifies again comes back — the
+      // retirement is a judgement about the evidence, so it has to be
+      // revisable when the evidence changes. An `ignored` place stays ignored:
+      // that one is the owner's.
+      await db
+        .update(daydreamPlaces)
+        .set(matched.status === 'transit' ? { ...stats, status: 'active' } : stats)
+        .where(eq(daydreamPlaces.id, matched.id));
       placeId = matched.id;
       result.updated++;
     } else {
@@ -490,6 +524,9 @@ export async function ignorePlace(placeId: string): Promise<void> {
 export interface PlaceVisit {
   startedAt: string;
   dwellMins: number;
+  /** Whose visit. Five people write the trail, and "Jemima, Tuesday 14:20" is
+   *  a great deal easier to place than an anonymous Tuesday 14:20. */
+  subject: string;
   /** Local, because a visit's day and time are local facts. "Tuesday 14:30" in
    *  UTC is a different Tuesday for half the year. */
   dateLabel: string;
@@ -511,16 +548,29 @@ export interface PlaceVisit {
  */
 export async function getPlaceVisits(placeId: string, limit = 12): Promise<PlaceVisit[]> {
   const rows = await db
-    .select({ ts: daydreamTrail.ts })
+    .select({
+      ts: daydreamTrail.ts,
+      lat: daydreamTrail.lat,
+      lon: daydreamTrail.lon,
+      subject: daydreamTrail.subject,
+    })
     .from(daydreamTrail)
-    .where(eq(daydreamTrail.placeId, placeId))
+    .where(and(eq(daydreamTrail.placeId, placeId), isNotNull(daydreamTrail.lat)))
     .orderBy(asc(daydreamTrail.ts));
 
   if (rows.length === 0) return [];
 
-  const visits = segmentVisits(rows.map((r) => r.ts), VISIT_MAX_GAP_MINS).filter(
-    (v) => v.dwellMins >= MIN_DWELL_MINS,
-  );
+  // The SAME segmenter the place builder uses. If this list showed visits that
+  // did not count, the naming card would be arguing with the reason the place
+  // is on the list at all.
+  const visits = segmentVisits(
+    rows.map((r) => ({
+      ts: r.ts,
+      lat: r.lat as number,
+      lon: r.lon as number,
+      subject: r.subject,
+    })),
+  ).filter((v) => v.dwellMins >= MIN_DWELL_MINS);
 
   const dateFmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: LOCAL_TZ,
@@ -543,6 +593,7 @@ export async function getPlaceVisits(placeId: string, limit = 12): Promise<Place
     .map((v) => ({
       startedAt: v.startedAt.toISOString(),
       dwellMins: v.dwellMins,
+      subject: v.subject,
       dateLabel: dateFmt.format(v.startedAt),
       dayName: dayFmt.format(v.startedAt),
       timeLabel: timeFmt.format(v.startedAt),
