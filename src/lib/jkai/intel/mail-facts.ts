@@ -145,6 +145,57 @@ export function sendersIn(body: string): string[] {
   return [...out];
 }
 
+/**
+ * Addresses on the note's own `Participants:` header line.
+ *
+ * The note text opens with `Participants: a@x.com, John Kelly <me@y.com>`, and
+ * unlike `metadata.participants` this line is NOT robot-filtered. That is the
+ * whole reason it is worth parsing: see `counterpartyOf`.
+ */
+export function participantsLineIn(body: string): string[] {
+  const line = /^Participants:\s*(.+)$/m.exec(body ?? '');
+  if (!line) return [];
+  const out = new Set<string>();
+  const re = /([^\s<>,;]+@[^\s<>,;]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line[1])) !== null) out.add(m[1].toLowerCase().replace(/[.,;]+$/, ''));
+  return [...out];
+}
+
+/**
+ * The address this thread came FROM, as best it can be known.
+ *
+ * `metadata.participants` is the obvious source and is not enough on its own:
+ * it is written from `threadParticipants`, which runs every address through
+ * `isPersonAddress` to keep `noreply@` robots from becoming high-degree person
+ * entities. Excellent for the graph, useless here — for automated mail it
+ * filters out the only counterparty, leaving a participant list containing the
+ * owner and nobody else. Measured on the live queue: 1,048 of 2,862 held
+ * threads, 37%, every one of them landing in a single cluster called "unknown"
+ * with 733 of them flagged important by Gmail.
+ *
+ * So fall through three sources, cheapest and most trustworthy first:
+ *
+ *   1. `metadata.participants` — robot-filtered, but a real header when present
+ *   2. the `from` line of each message in the note body — not filtered
+ *   3. the note's `Participants:` header line — not filtered, and the only one
+ *      a header-only stub has
+ *
+ * PURE, and it reads only what the sweep already stored.
+ */
+export function counterpartyOf(
+  body: string,
+  participants: readonly string[],
+  owner: string,
+): string | null {
+  const notOwner = (a: string) => a && a !== owner;
+  const fromMeta = participants.find(notOwner);
+  if (fromMeta) return fromMeta;
+  const fromBody = sendersIn(body).find(notOwner);
+  if (fromBody) return fromBody;
+  return participantsLineIn(body).find(notOwner) ?? null;
+}
+
 /** Normalised subject, for grouping a mailbox by conversation family.
  *
  *  Strips reply/forward prefixes, digits, dates and bracketed tags — the parts
@@ -207,12 +258,18 @@ export function factsFor(note: NoteForFacts, now: number): MailFacts {
     domain: String(meta.senderDomain ?? '').toLowerCase(),
     kind: String(meta.emailKind ?? ''),
   };
-  const derived =
-    stored.domain && stored.kind ? null : classifyEmail(participants, owner ? [owner] : []);
+  // Classify the counterparty found across all three sources, not the
+  // robot-filtered participant list alone — see `counterpartyOf`.
+  const counterparty = stored.domain ? null : counterpartyOf(body, participants, owner);
+  const derived = counterparty ? classifyEmail([counterparty], owner ? [owner] : []) : null;
 
   return {
     senderDomain: stored.domain || derived?.domain?.toLowerCase() || '',
-    emailKind: stored.kind || derived?.kind || 'correspondence',
+    // The DERIVED kind wins where ingest stored no domain, because in that case
+    // the stored kind is `classifyEmail`'s "no counterparty recorded" default —
+    // it says 'correspondence' about every robot in the mailbox, which is how
+    // 733 automated threads came to look like personal mail.
+    emailKind: (stored.domain ? stored.kind : derived?.kind) || stored.kind || 'correspondence',
     participantCount: participants.length,
     messageCount: messageCountOf(body),
     ownerReplied: !!owner && senders.includes(owner),

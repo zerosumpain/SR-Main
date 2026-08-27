@@ -192,6 +192,53 @@ describe('factsFor', () => {
     expect(facts.twoWay).toBe(false);
   });
 
+  it('finds the sender in the body when the robot filter left only the owner', () => {
+    // The real production shape: threadParticipants drops noreply@ addresses via
+    // isPersonAddress — right for the graph, and it leaves the participant list
+    // containing nobody but the owner. 1,048 of 2,862 held threads looked like
+    // this, all in one cluster called "unknown", 733 of them Gmail-important.
+    const robot = [
+      'Subject: [zerosumpain/SR-Main] Run failed',
+      'Participants: johnkelly.main@gmail.com',
+      'Messages: 1 (2026-08-26)',
+      '',
+      '[1] · 2026-08-26 · from notifications@github.com · to John Kelly <johnkelly.main@gmail.com>',
+      'The run failed on master. See the logs for details and rerun the job when ready.',
+    ].join('\n');
+    const facts = factsFor(
+      {
+        title: '[zerosumpain/SR-Main] Run failed',
+        rawContent: robot,
+        // Exactly what the sweep stored: owner only, kind defaulted, no domain.
+        metadata: {
+          gmailAccount: 'johnkelly.main@gmail.com',
+          participants: ['johnkelly.main@gmail.com'],
+          emailKind: 'correspondence',
+        },
+        observedAt: '2026-08-26T09:00:00Z',
+        createdAt: '2026-08-26T09:00:00Z',
+      },
+      NOW,
+    );
+    expect(facts.senderDomain).toBe('github.com');
+    // And it must stop calling a robot "correspondence".
+    expect(facts.emailKind).toBe('notification');
+  });
+
+  it('finds the sender on a stub\'s Participants line, where there is no body', () => {
+    const facts = factsFor(
+      {
+        title: 'Supa Update July 2026',
+        rawContent: `Email thread: Supa Update July 2026\nParticipants: welcome@supabase.com, ${OWNER}`,
+        metadata: { gmailAccount: OWNER, participants: [OWNER], structuralOnly: true },
+        observedAt: '2026-08-20T09:00:00Z',
+        createdAt: '2026-08-20T09:00:00Z',
+      },
+      NOW,
+    );
+    expect(facts.senderDomain).toBe('supabase.com');
+  });
+
   it('classifies from the participants when ingest never stored a sender', () => {
     // 1,043 of 2,857 held threads had no `senderDomain` — the structural stubs
     // were written by persistStructuralOnly, which has no classifier step — and
