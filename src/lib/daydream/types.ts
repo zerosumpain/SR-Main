@@ -13,6 +13,28 @@
 /** Whose trail. Family members are presence-only by policy; see schema.ts. */
 export const DEFAULT_SUBJECT = 'john';
 
+/** One tracked person: a trail subject and the HA entity that carries them. */
+export interface SubjectEntity {
+  subject: string;
+  entity: string;
+}
+
+/**
+ * Everyone the trail observes. Verified against live HA state 2026-08-27 —
+ * all five person entities carry GPS attributes. The schema's original
+ * "family members are presence-only by policy" note was retired by the
+ * owner's D1 decision (2026-08-27): full trails for everyone. A subject whose
+ * entity disappears from HA degrades to per-subject gap rows, which is the
+ * honest record of "we looked and could not see them".
+ */
+export const FAMILY_SUBJECTS: SubjectEntity[] = [
+  { subject: 'john', entity: 'person.john' },
+  { subject: 'katie', entity: 'person.katie' },
+  { subject: 'fintan', entity: 'person.fintan' },
+  { subject: 'jemima', entity: 'person.jemima' },
+  { subject: 'rory', entity: 'person.rory' },
+];
+
 // ── Trail sources ────────────────────────────────────────────────────────────
 
 export const TRAIL_SOURCES = ['push', 'poll', 'gap'] as const;

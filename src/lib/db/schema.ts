@@ -3932,7 +3932,7 @@ export const daydreamTrail = pgTable(
      */
     ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
     /** Whose fix. 'john' today; the column exists so a second subject never
-     *  means a second table. Family members are presence-only by policy. */
+     *  means a second table. The whole household writes trail rows since 2026-08-27 (owner's D1 decision). */
     subject: text('subject').notNull().default('john'),
     /** 'push' | 'poll' | 'gap' — see the note above. */
     source: text('source').notNull(),

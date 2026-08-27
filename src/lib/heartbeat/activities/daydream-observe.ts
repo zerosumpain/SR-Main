@@ -1,11 +1,18 @@
 import { getSetting } from '$lib/server/models/settings';
 import {
   hasFreshFix,
-  pollHomeAssistant,
+  pollAllSubjects,
   recordFix,
   recordGap,
 } from '$lib/daydream/observe';
-import { OBSERVE_CADENCE_SECONDS, SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
+import {
+  DEFAULT_SUBJECT,
+  FAMILY_SUBJECTS,
+  OBSERVE_CADENCE_SECONDS,
+  SETTINGS_ENABLED_KEY,
+  errMsg,
+  type SubjectEntity,
+} from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-observe';
@@ -13,11 +20,13 @@ const NAME = 'daydream-observe';
 interface ObserveConfig {
   /** Stand down while the push stream is this fresh. */
   pushFreshMins?: number;
-  /** The Home Assistant entity carrying the position. */
+  /** Legacy single-entity override, honoured for the default subject. */
   personEntity?: string;
+  /** Everyone to observe. Defaults to the whole household (FAMILY_SUBJECTS). */
+  subjects?: SubjectEntity[];
 }
 
-const DEFAULTS: Required<ObserveConfig> = {
+const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
   pushFreshMins: 10,
   personEntity: 'person.john',
 };
@@ -43,7 +52,7 @@ const DEFAULTS: Required<ObserveConfig> = {
 export const daydreamObserve: ActivityHandler = {
   name: NAME,
   description:
-    'Poll floor for the daydream trail. Records where John is when the Home Assistant push stream has gone quiet, and records an explicit gap row when it looks and cannot see — so coverage is computable rather than assumed. No LLM.',
+    'Poll floor for the daydream trail. Records where the whole household is in one Home Assistant round trip — the push stream only covers John — and records an explicit per-subject gap row when it looks and cannot see, so coverage is computable rather than assumed. No LLM.',
   // Same constant coverage divides by. Written once so they cannot drift.
   defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
@@ -54,6 +63,12 @@ export const daydreamObserve: ActivityHandler = {
 
   async run(ctx) {
     const cfg = { ...DEFAULTS, ...(ctx.config as ObserveConfig) };
+    const subjects: SubjectEntity[] =
+      cfg.subjects ??
+      FAMILY_SUBJECTS.map((s) =>
+        // The legacy personEntity override still steers the default subject.
+        s.subject === DEFAULT_SUBJECT ? { ...s, entity: cfg.personEntity } : s,
+      );
 
     // Unset/null means enabled, matching the self-improvement engine.
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
@@ -61,48 +76,65 @@ export const daydreamObserve: ActivityHandler = {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
     }
 
-    if (await hasFreshFix(cfg.pushFreshMins * 60_000)) {
+    // The push stream only carries the default subject, so only that subject
+    // may stand down on its freshness — everyone else is poll-only.
+    const due: SubjectEntity[] = [];
+    for (const s of subjects) {
+      const fresh =
+        s.subject === DEFAULT_SUBJECT && (await hasFreshFix(cfg.pushFreshMins * 60_000, s.subject));
+      if (!fresh) due.push(s);
+    }
+    if (due.length === 0) {
       return {
         outcome: 'ok',
         summary: `push stream fresh (<${cfg.pushFreshMins}m) — no poll needed`,
       };
     }
 
-    const polled = await pollHomeAssistant(cfg.personEntity);
+    const polled = await pollAllSubjects(due);
 
-    if ('error' in polled) {
-      // Not an error outcome: HA being unreachable from the VPS is an ordinary
-      // recurring state, and marking it `error` would burn the action's
-      // failure budget and eventually pause the one thing recording that we
-      // cannot see. The gap row IS the result.
-      await recordGap(polled.error);
-      return {
-        outcome: 'ok',
-        summary: `gap recorded: ${polled.error.slice(0, 120)}`,
-        details: { gap: true, reason: polled.error },
-      };
-    }
+    const fixes: string[] = [];
+    const gaps: string[] = [];
+    const errors: string[] = [];
+    const details: Record<string, unknown> = {};
 
-    try {
-      const fix = await recordFix(polled.fix, 'poll');
-      return {
-        outcome: 'ok',
-        summary: `fix @ ${fix.mode}${fix.isHome ? ' (home)' : ''}${
-          fix.placeId ? ' at a known place' : ''
-        }`,
-        details: {
+    for (const s of due) {
+      const res = polled.get(s.subject) ?? { error: 'not polled' };
+      if ('error' in res) {
+        // Not an error outcome: HA being unreachable from the VPS is an
+        // ordinary recurring state, and marking it `error` would burn the
+        // action's failure budget and eventually pause the one thing recording
+        // that we cannot see. The gap row IS the result — one per subject,
+        // because five people un-observed is five facts.
+        await recordGap(res.error, s.subject);
+        gaps.push(s.subject);
+        details[s.subject] = { gap: true, reason: res.error.slice(0, 200) };
+        continue;
+      }
+      try {
+        const fix = await recordFix(res.fix, 'poll', s.subject);
+        fixes.push(`${s.subject}${fix.isHome ? '@home' : fix.placeId ? '@place' : ''}`);
+        details[s.subject] = {
           trailId: fix.id,
           mode: fix.mode,
-          speedKmh: fix.speedKmh,
-          placeId: fix.placeId,
           isHome: fix.isHome,
-          distanceHomeKm: fix.distanceHomeKm,
-        },
-      };
-    } catch (err) {
-      const reason = errMsg(err);
-      await recordGap(`fix rejected: ${reason}`);
-      return { outcome: 'error', summary: reason.slice(0, 200) };
+          placeId: fix.placeId,
+        };
+      } catch (err) {
+        const reason = errMsg(err);
+        await recordGap(`fix rejected: ${reason}`, s.subject);
+        errors.push(`${s.subject}: ${reason.slice(0, 80)}`);
+        details[s.subject] = { rejected: reason.slice(0, 200) };
+      }
     }
+
+    const bits: string[] = [];
+    if (fixes.length) bits.push(`fixes: ${fixes.join(', ')}`);
+    if (gaps.length) bits.push(`gaps: ${gaps.join(', ')}`);
+    if (errors.length) bits.push(`rejected: ${errors.join('; ')}`);
+
+    // Every fix rejected and none written is a fault; gaps alone are not.
+    const outcome = errors.length > 0 && fixes.length === 0 ? 'error' : 'ok';
+    return { outcome, summary: bits.join(' · ') || 'nothing to record', details };
   },
 };

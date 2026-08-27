@@ -22,7 +22,7 @@ import {
   researchSessions,
 } from '$lib/db/schema';
 import { coverageOf } from './cluster';
-import { DEFAULT_SUBJECT, LOCAL_TZ, POLL_INTERVAL_MINS, errMsg } from './types';
+import { DEFAULT_SUBJECT, FAMILY_SUBJECTS, LOCAL_TZ, POLL_INTERVAL_MINS, errMsg } from './types';
 import type {
   CalendarEvent,
   DaydreamSnapshot,
@@ -356,6 +356,49 @@ export async function buildSnapshot(
     sources.push({ key: 'memories', status: 'failed', detail: errMsg(err) });
   }
 
+  // ── Family ─────────────────────────────────────────────────────────────
+  // Coordinate-free by construction: what leaves this section is home-or-not,
+  // a confirmed place label, and a distance — the same discipline the compose
+  // fact block applies to the owner's own trail. A member with no positioned
+  // fix in the window still appears, with nulls, so "not tracked right now"
+  // never reads as "not at home".
+  let family: DaydreamSnapshot['family'] = { available: false, members: [] };
+  try {
+    const others = FAMILY_SUBJECTS.filter((f) => f.subject !== subject);
+    const members: DaydreamSnapshot['family']['members'] = [];
+    for (const f of others) {
+      const [row] = await db
+        .select({
+          ts: daydreamTrail.ts,
+          isHome: daydreamTrail.isHome,
+          placeId: daydreamTrail.placeId,
+          distanceHomeKm: daydreamTrail.distanceHomeKm,
+        })
+        .from(daydreamTrail)
+        .where(and(eq(daydreamTrail.subject, f.subject), isNotNull(daydreamTrail.lat)))
+        .orderBy(desc(daydreamTrail.ts))
+        .limit(1);
+      const place = row?.placeId ? places.find((pl) => pl.id === row.placeId) : null;
+      members.push({
+        subject: f.subject,
+        isHome: row?.isHome ?? null,
+        placeLabel: place?.label ?? null,
+        distanceHomeKm: row?.distanceHomeKm ?? null,
+        ageMins: row ? Math.round((now.getTime() - row.ts.getTime()) / 60_000) : null,
+        lastSeenAt: row?.ts ?? null,
+      });
+    }
+    family = { available: true, members };
+    const seen = members.filter((m) => m.lastSeenAt != null).length;
+    sources.push({
+      key: 'family',
+      status: seen ? 'ok' : 'empty',
+      detail: `${seen}/${members.length} members with a positioned fix`,
+    });
+  } catch (err) {
+    sources.push({ key: 'family', status: 'failed', detail: errMsg(err) });
+  }
+
   // ── Offers ─────────────────────────────────────────────────────────────
   // `available` is about whether the INDEX exists, not whether it currently
   // holds anything. An empty index and a missing one look identical from a
@@ -399,6 +442,7 @@ export async function buildSnapshot(
     interests,
     offers,
     memories,
+    family,
     sources,
   };
 }

@@ -160,7 +160,29 @@ export interface DaydreamSnapshot {
 
   memories: MemoryRow[];
 
+  /**
+   * Where the rest of the household is, coordinate-free. Labels come from the
+   * shared place graph; a member with no fresh fix carries nulls rather than
+   * being dropped, so "not tracked right now" stays distinguishable from
+   * "not at home".
+   */
+  family: {
+    available: boolean;
+    members: FamilyMember[];
+  };
+
   sources: SnapshotSource[];
+}
+
+export interface FamilyMember {
+  subject: string;
+  isHome: boolean | null;
+  /** Confirmed label of the known place they are at, if any. Never coordinates. */
+  placeLabel: string | null;
+  distanceHomeKm: number | null;
+  /** Minutes since their latest positioned fix; null when they have none. */
+  ageMins: number | null;
+  lastSeenAt: Date | null;
 }
 
 // ── What a detector returns ──────────────────────────────────────────────────

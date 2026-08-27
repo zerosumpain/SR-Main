@@ -116,6 +116,15 @@ export function extractFacts(s: DaydreamSnapshot): Facts {
     calendarPartial: s.calendar.available ? s.calendar.partial : null,
     unnamedPlaceCount: s.places.filter((p) => p.status === 'active' && !p.label).length,
     recurringInterestCount: recurringInterests(s.interests, s.now).length,
+
+    // Counts only. A member is "tracked" when their latest fix is fresh enough
+    // to mean anything (an hour); a stale member is neither home nor away.
+    familyTracked: s.family.available
+      ? s.family.members.filter((m) => m.ageMins != null && m.ageMins <= 60).length
+      : null,
+    familyAtHome: s.family.available
+      ? s.family.members.filter((m) => m.ageMins != null && m.ageMins <= 60 && m.isHome === true).length
+      : null,
     // No ids here, deliberately. An id is a handle, and handles are how a
     // scalar allow-list stops being one.
   } satisfies Record<FactKey, FactValue> & { [k: string]: FactValue };
