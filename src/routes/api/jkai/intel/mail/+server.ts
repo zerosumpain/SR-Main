@@ -7,7 +7,7 @@
 // lives in $lib/jkai/intel/mail-*; this route validates and shapes.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { loadMailQueue, similarPending } from '$lib/jkai/intel/mail-queue';
+import { loadMailQueue, similarPending, backfillPendingEmbeddings } from '$lib/jkai/intel/mail-queue';
 import { admitMailNotes, rejectMailNotes, requeueMailNotes } from '$lib/jkai/intel/mail-admit';
 
 /**
@@ -45,6 +45,13 @@ export const POST: RequestHandler = async ({ request }) => {
   const action = String(body.action ?? '');
   const noteIds = readIds(body.noteIds);
   const reason = typeof body.reason === 'string' ? body.reason.slice(0, 500) : undefined;
+
+  if (action === 'backfill-embeddings') {
+    // Held threads captured before the gate existed carry a content hash, so
+    // the sweep will never re-read them and they would stay unembedded — and
+    // therefore invisible to "find more like this" — indefinitely.
+    return json(await backfillPendingEmbeddings());
+  }
 
   if (action === 'similar') {
     const [noteId] = noteIds;

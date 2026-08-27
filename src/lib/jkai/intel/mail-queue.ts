@@ -285,6 +285,59 @@ export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
 }
 
 /**
+ * Embed held threads that have no vector yet.
+ *
+ * The gated sweep embeds what it captures, which leaves a gap nothing else
+ * would ever close: a thread captured BEFORE the gate existed already has a
+ * `contentHash`, so the sweep answers 'unchanged' and never touches it again —
+ * and 418 of the first 2,781 held threads had a hash and no embedding. They
+ * cluster by sender and subject perfectly well; what they drop out of is
+ * `similarPending`, silently, for ever.
+ *
+ * Bounded per call so one request cannot walk the whole corpus, and skipped for
+ * anything too short to embed usefully — a 124-character structural stub has no
+ * topic to find.
+ */
+export async function backfillPendingEmbeddings(limit = 400): Promise<{
+  scanned: number;
+  embedded: number;
+  failed: number;
+  remaining: number;
+}> {
+  const out = { scanned: 0, embedded: 0, failed: 0, remaining: 0 };
+  const { embedNote } = await import('./embed');
+
+  const rows = await db
+    .select({ id: intelNotes.id })
+    .from(intelNotes)
+    .where(
+      and(
+        eq(intelNotes.source, 'email'),
+        eq(intelNotes.graphState, 'pending'),
+        sql`${intelNotes.embedding} IS NULL`,
+        sql`length(coalesce(${intelNotes.rawContent}, '')) >= 200`,
+      ),
+    )
+    .orderBy(desc(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`))
+    .limit(limit + 1);
+
+  out.remaining = Math.max(0, rows.length - limit);
+  for (const row of rows.slice(0, limit)) {
+    out.scanned++;
+    try {
+      await embedNote(row.id);
+      out.embedded++;
+    } catch (err) {
+      // One unembeddable note must not cost the batch.
+      out.failed++;
+      console.warn(`[intel:mail-queue] could not embed ${row.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  console.log(`[intel:mail-queue] embedded ${out.embedded}/${out.scanned} held threads, ${out.remaining} still to do`);
+  return out;
+}
+
+/**
  * Pending threads that read like this one — the topic axis.
  *
  * One kNN query against the note embeddings the gated sweep already paid for,
