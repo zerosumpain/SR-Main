@@ -33,18 +33,18 @@ Rules worth knowing before touching this:
   agent scaffolding into every call: measured **12,040 prompt tokens and ~6.9s**
   for "reply ok", against **26 tokens and 1.4s** on the raw API. It also could
   not stream — one block per turn — which is why chat felt slower after the
-  Hermes exit (Hermes used this same raw transport). Rollback without a deploy:
-  set `CODEX_BRIDGE_TRANSPORT=sdk` and restart the service.
+  gateway was retired (it had used this same raw transport). Rollback without a
+  deploy: set `CODEX_BRIDGE_TRANSPORT=sdk` and restart the service.
 - **Codex still costs a round trip per tool call**, but ~1.4s, not ~10s. A long
   builder chain is no longer the crawl it was.
-- **Codex is text-only *through this gateway*.** Anything that builds its own
-  content parts must check `getModelCapabilities()` first — the site default may
-  now be a Codex model. **But `/jkai` chat does not go through this gateway**;
-  Hermes answers it, and Hermes owns media handling — it attaches pixels
-  natively where the model does vision and otherwise pre-analyses the image with
-  its auxiliary vision model. Measured: it routes `codex/gpt-5.6-terra` as
-  `native`. So chat asks `getChatInputCapabilities(ctx, { hermes })` instead.
-  Applying the model gate there dropped every image John attached, twice.
+- **Codex is text-only.** Anything that builds its own content parts must check
+  `getModelCapabilities()` first — the site default may now be a Codex model.
+  **`/jkai` chat asks a different question**: `getChatInputCapabilities(ctx)`,
+  which reports what the CHAT can accept rather than what the model can. Images,
+  PDFs and audio are pre-analysed into text (`$lib/jkai/media/preanalyse`) when
+  the model cannot read them natively, so the composer must not grey them out —
+  applying the model gate there dropped every image John attached, twice. Video
+  stays gated on the model, because nothing can extract text from it.
 - **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
 - The bridge lives in `packages/jkai-codex-bridge` (see its README). A merge to
   master deploys it via `scripts/ci-stage-sidecars.sh` in the release job;

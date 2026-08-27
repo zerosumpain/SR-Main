@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "jkai": {
-    "//piVersion": "The pi coding-agent version the autonomous builder runs. THE canonical pin: the sandbox Dockerfile, the host install in scripts/deploy-builder.sh, and PI_VERSION in src/lib/jkai/pi-runner.ts all derive from this, and a unit test fails if the runner's copy drifts. Upgrading pi means changing this value in a PR and letting a canary build prove it \u2014 not running `npm i -g` on the box. Read pi-runner.ts's assertPiVersion() for why an unpinned floating install is dangerous here.",
+    "//piVersion": "The pi coding-agent version the autonomous builder runs. THE canonical pin: the sandbox Dockerfile, the host install in scripts/deploy-builder.sh, and PI_VERSION in src/lib/jkai/pi-runner.ts all derive from this, and a unit test fails if the runner's copy drifts. Upgrading pi means changing this value in a PR and letting a canary build prove it — not running `npm i -g` on the box. Read pi-runner.ts's assertPiVersion() for why an unpinned floating install is dangerous here.",
     "piVersion": "0.73.1"
   },
   "scripts": {
@@ -68,7 +68,6 @@
     "workbox-window": "^7.4.1"
   },
   "dependencies": {
-    "3d-force-graph": "^1.80.0",
     "@auth/core": "^0.41.1",
     "@auth/sveltekit": "^1.11.1",
     "@azure/storage-blob": "^12.33.0",
@@ -82,16 +81,17 @@
     "@sveltejs/adapter-node": "^5.5.4",
     "@threlte/core": "^8.5.0",
     "@threlte/extras": "^9.9.0",
-    "@tiptap/core": "^3.22.5",
-    "@tiptap/extension-image": "^3.22.5",
-    "@tiptap/extension-link": "^3.22.5",
-    "@tiptap/extension-placeholder": "^3.22.5",
-    "@tiptap/extension-text-style": "^3.22.5",
-    "@tiptap/starter-kit": "^3.22.5",
+    "@tiptap/core": "^3.30.5",
+    "@tiptap/extension-image": "^3.30.5",
+    "@tiptap/extension-link": "^3.30.5",
+    "@tiptap/extension-placeholder": "^3.30.5",
+    "@tiptap/extension-text-style": "^3.30.5",
+    "@tiptap/starter-kit": "^3.30.5",
     "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.1",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "@xyflow/svelte": "^1.5.2",
+    "3d-force-graph": "^1.80.0",
     "croner": "^10.0.1",
     "d3": "^7.9.0",
     "d3-array": "^3.2.4",
