@@ -47,6 +47,7 @@ describe('describeSweep', () => {
       signalsConsidered: 24,
       signalsSwept: 24,
       nearDuplicates: 0,
+      constantSignals: 0,
       findings: [],
       errors: [],
     });
@@ -58,7 +59,7 @@ describe('describeSweep', () => {
   it('leads with the reason when there was not enough data', () => {
     const line = describeSweep({
       windowDays: 120, from: '', to: '', testsRun: 0, fdr: 0.1,
-      naiveHits: 0, signalsConsidered: 0, signalsSwept: 0, nearDuplicates: 0,
+      naiveHits: 0, signalsConsidered: 0, signalsSwept: 0, nearDuplicates: 0, constantSignals: 0,
       findings: [], errors: ['only 3 days of features; needs 14'],
     });
     expect(line).toBe('only 3 days of features; needs 14');
@@ -72,18 +73,41 @@ describe('describeSweep — the open registry', () => {
   };
 
   it('says how many signals it swept, not just how many tests it ran', () => {
-    const line = describeSweep({ ...base, signalsConsidered: 30, signalsSwept: 30, nearDuplicates: 0 });
+    const line = describeSweep({ ...base, signalsConsidered: 30, signalsSwept: 30, nearDuplicates: 0, constantSignals: 0 });
     expect(line).toContain('30 signals');
   });
 
   it('reports suppressed duplicate instruments rather than leaving a gap', () => {
     // Two entities reporting the same room is the case this exists for.
-    const line = describeSweep({ ...base, signalsConsidered: 30, signalsSwept: 30, nearDuplicates: 4 });
+    const line = describeSweep({ ...base, signalsConsidered: 30, signalsSwept: 30, nearDuplicates: 4, constantSignals: 0 });
     expect(line).toContain('4 suppressed as duplicate instruments');
   });
 
   it('never lets the cap bound coverage silently', () => {
-    const line = describeSweep({ ...base, signalsConsidered: 200, signalsSwept: 120, nearDuplicates: 0 });
+    const line = describeSweep({ ...base, signalsConsidered: 200, signalsSwept: 120, nearDuplicates: 0, constantSignals: 0 });
     expect(line).toContain('80 eligible signals not tested');
+  });
+});
+
+describe('describeSweep — signals that never moved', () => {
+  const base = {
+    windowDays: 120, from: '2026-05-01', to: '2026-08-26', fdr: 0.1,
+    testsRun: 900, naiveHits: 40, findings: [], errors: [],
+  };
+
+  it('says how many were dropped for never moving', () => {
+    // Fourteen connectivity sensors all sitting at 1.0 on the first live run.
+    const line = describeSweep({
+      ...base, signalsConsidered: 44, signalsSwept: 30, nearDuplicates: 0, constantSignals: 14,
+    });
+    expect(line).toContain('14 never moved');
+  });
+
+  it('does not report a cap when the shortfall was constants', () => {
+    // 44 eligible, 14 constant, 30 swept — nothing was capped away.
+    const line = describeSweep({
+      ...base, signalsConsidered: 44, signalsSwept: 30, nearDuplicates: 0, constantSignals: 14,
+    });
+    expect(line).not.toContain('not tested');
   });
 });

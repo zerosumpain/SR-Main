@@ -137,3 +137,38 @@ describe('harvest', () => {
     expect(keys).toContain('ha:person.john');
   });
 });
+
+describe('harvest — things that are numbers but not measurements', () => {
+  it('does not register an identifier as a series', () => {
+    // The first live run registered camera.front_door_live_view#last_video_id
+    // at 7.67e18. It is a number, it changes daily, and it correlates with
+    // nothing — exactly what the sweep's hand-written metric list existed to
+    // keep out. Removing that list means catching it here.
+    const { specs } = harvest([
+      {
+        entity_id: 'camera.front_door_live_view',
+        state: 'idle',
+        attributes: { friendly_name: 'Front Door Live view', last_video_id: 7673494648215080000 },
+      },
+    ]);
+    expect(specs.map((s) => s.key)).not.toContain('ha:camera.front_door_live_view#last_video_id');
+  });
+
+  it('rejects identifier-shaped names whatever the value', () => {
+    const { specs } = harvest([
+      {
+        entity_id: 'sensor.thing',
+        state: 'ok',
+        attributes: { device_id: 4, serial_number: 12, session_uuid: 9, mac: 1 },
+      },
+    ]);
+    expect(specs).toEqual([]);
+  });
+
+  it('keeps a real reading that happens to have a small number', () => {
+    const { specs } = harvest([
+      { entity_id: 'sensor.room', state: 'ok', attributes: { humidity: 4 } },
+    ]);
+    expect(specs.map((s) => s.key)).toContain('ha:sensor.room#humidity');
+  });
+});

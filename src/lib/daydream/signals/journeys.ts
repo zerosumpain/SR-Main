@@ -151,6 +151,12 @@ export async function buildJourneySignals(
     const a = labelOf.get(j.fromPlaceId);
     const b = labelOf.get(j.toPlaceId);
     if (!a || !b) continue;
+    // Labels are not unique — two distinct places are both called "Elton
+    // Parade" (the house, and a road cluster beside it), which produced a
+    // route signal named "Elton Parade→Elton Parade". Comparing ids is not
+    // enough when the KEY is built from labels: a route a reader cannot tell
+    // apart is not a route.
+    if (a === b) continue;
     const id = `route:${a}→${b}`;
     const day = localDayOf(j.startedAt);
     (routeDays.get(id) ?? routeDays.set(id, new Set()).get(id)!).add(day);
