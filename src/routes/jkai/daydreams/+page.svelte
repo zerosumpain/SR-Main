@@ -628,6 +628,64 @@
     return n == null ? '—' : `${Math.round(n * 100)}%`;
   }
 
+  /** Coordinates for a thought's place, fetched on demand and held only for
+   *  this render — the ledger payload still never carries a lat/lon. */
+  type ThoughtPlace = {
+    lat: number;
+    lon: number;
+    radiusM: number;
+    label: string | null;
+    suggestedLabel: string | null;
+    suggestedAddress: string | null;
+  };
+  let thoughtPlace = $state<Record<string, ThoughtPlace>>({});
+  let noteDraft = $state<Record<string, string>>({});
+  const MAX_NOTE_CHARS = 1000;
+
+  async function showOnMap(thoughtId: string) {
+    busy = `${thoughtId}:map`;
+    actionError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'thought_map', thoughtId }),
+      });
+      const out = await res.json();
+      if (!res.ok) throw new Error(out?.error ?? 'could not load that map');
+      // A thought about nowhere is a normal answer, not a failure.
+      if (out.place) thoughtPlace = { ...thoughtPlace, [thoughtId]: out.place };
+      else actionError = 'That one is not about a place.';
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'could not load that map';
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function saveNote(t: { id: string }) {
+    const text = (noteDraft[t.id] ?? '').trim();
+    if (!text) return;
+    busy = `${t.id}:note`;
+    actionError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'add_note', thoughtId: t.id, text }),
+      });
+      const out = await res.json();
+      if (!res.ok) throw new Error(out?.error ?? 'could not save that note');
+      delete noteDraft[t.id];
+      noteDraft = { ...noteDraft };
+      await invalidateAll();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'could not save that note';
+    } finally {
+      busy = null;
+    }
+  }
+
   function rhythm(p: Place): string {
     // Days first — that is what "keeps going there" means. Person-visits follow
     // only when they differ, because "5 visits across 1 day" is the whole
@@ -981,6 +1039,73 @@
                     </div>
                   </div>
                 {/if}
+
+                <!-- Somewhere on a map, when the thought is about somewhere.
+                     "What is this place you keep going to?" is unanswerable
+                     from a name and a visit count. Coordinates are fetched on
+                     demand by an owner-gated action; they never ride the
+                     ledger payload. -->
+                {#if t.placeId}
+                  <div class="detail-block">
+                    <span class="sr-label-tight">Where</span>
+                    {#if thoughtPlace[t.id]}
+                      <PlaceMap
+                        lat={thoughtPlace[t.id].lat}
+                        lon={thoughtPlace[t.id].lon}
+                        radiusM={thoughtPlace[t.id].radiusM}
+                      />
+                      {#if thoughtPlace[t.id].suggestedAddress}
+                        <p class="geo-line">{thoughtPlace[t.id].suggestedAddress}</p>
+                      {/if}
+                    {:else}
+                      <button
+                        class="row-link"
+                        disabled={busy === `${t.id}:map`}
+                        onclick={() => showOnMap(t.id)}
+                      >
+                        {busy === `${t.id}:map` ? 'Loading the map…' : 'Show it on a map'}
+                      </button>
+                    {/if}
+                  </div>
+                {/if}
+
+                <!-- A verdict says whether it landed; it can never say WHY.
+                     "Good call, but some of those calendar events are rolling
+                     reminders" is the correction that actually changes the next
+                     one, and there was nowhere to put it. Saved verbatim, and
+                     written to memory so the rest of jkai reads it too. -->
+                <div class="detail-block">
+                  <span class="sr-label-tight">Add some depth</span>
+                  {#if t.note && noteDraft[t.id] === undefined}
+                    <p class="note-said">{t.note}</p>
+                    <button class="row-link" onclick={() => { noteDraft[t.id] = t.note ?? ''; }}>
+                      Change what you said
+                    </button>
+                  {:else}
+                    <textarea
+                      class="note-input"
+                      rows="3"
+                      maxlength={MAX_NOTE_CHARS}
+                      placeholder="Anything it should know — what it got wrong, what it missed, what these actually are."
+                      bind:value={noteDraft[t.id]}
+                    ></textarea>
+                    <div class="thought-actions">
+                      <button
+                        class="row-link"
+                        disabled={busy === `${t.id}:note` || !(noteDraft[t.id] ?? '').trim()}
+                        onclick={() => saveNote(t)}
+                      >
+                        {busy === `${t.id}:note` ? 'Saving…' : 'Save this'}
+                      </button>
+                      {#if t.note}
+                        <button class="row-link" onclick={() => { delete noteDraft[t.id]; noteDraft = { ...noteDraft }; }}>
+                          Cancel
+                        </button>
+                      {/if}
+                    </div>
+                    <p class="note-hint">Kept as a memory, so it informs what it says next.</p>
+                  {/if}
+                </div>
               </div>
             {/if}
 
@@ -2106,6 +2231,25 @@
   /* Places */
   .place-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.6rem 0.75rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
   .naming { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+  .note-input {
+    width: 100%;
+    font: inherit;
+    font-size: var(--fs-label-sm, 0.875rem);
+    color: var(--text-primary);
+    background: var(--surface-2, transparent);
+    border: 1px solid var(--line-hair);
+    border-radius: 2px;
+    padding: 0.5rem;
+    resize: vertical;
+  }
+  .note-said {
+    margin: 0 0 0.35rem;
+    font-size: var(--fs-label-sm, 0.875rem);
+    color: var(--text-primary);
+    border-left: 2px solid var(--accent);
+    padding-left: 0.6rem;
+  }
+  .note-hint { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); color: var(--text-muted); }
   .visits { display: flex; flex-direction: column; gap: 0.35rem; }
   .visit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
   .visit-list li { display: grid; grid-template-columns: 4.2rem 5.5rem 1fr 3.5rem 4.5rem; gap: 0.5rem; font-size: var(--fs-label-xs); padding: 0.2rem 0; border-bottom: 1px solid var(--line-hair); }

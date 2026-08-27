@@ -159,6 +159,32 @@ async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
   return out;
 }
 
+/**
+ * What John has said about previous suggestions, verbatim.
+ *
+ * Carded explicitly rather than left to the snapshot's 200-memory sweep, which
+ * has no ordering guarantee: a correction typed yesterday about a suggestion
+ * the engine is about to make again is the most valuable card in the pack, and
+ * it should not be competing for a slot with a two-year-old note about coffee.
+ *
+ * Verbatim, and cited like everything else. A note can therefore correct a
+ * musing without becoming a second surface on which to invent one.
+ */
+async function noteCards(): Promise<PackInputs['aggregates']> {
+  try {
+    const { recentNotes } = await import('../notes');
+    const rows = await recentNotes();
+    return rows
+      .filter((r) => r.note)
+      .map((r) => ({
+        key: `note:${r.id}`,
+        text: `You said about "${r.title}": ${r.note}`,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 async function recentVerdicts(): Promise<PackInputs['verdicts']> {
   try {
     return await db
@@ -228,19 +254,23 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, notes] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
       weekAhead(),
       buildProfileLines(now),
+      noteCards(),
     ]);
     const pack = assemblePack({
       snapshot,
       verdicts,
       // Hand-written aggregates first, then whatever the registry discovered —
       // the second list is the one that grows without anyone editing this file.
-      aggregates: [...aggregates, ...signals],
+      // Hand-written aggregates, then the registry, then anything John has
+      // said in his own words. His corrections go LAST so they are the nearest
+      // thing to the instruction when the pack is read.
+      aggregates: [...aggregates, ...signals, ...notes],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
