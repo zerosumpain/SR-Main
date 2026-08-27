@@ -1,4 +1,11 @@
 import { getSetting } from '$lib/server/models/settings';
+import {
+  attributeSpend,
+  budgetStatus,
+  readQuotaMark,
+  ZERO_SPEND,
+} from '$lib/daydream/budget';
+import { resolveDaydreamModel } from '$lib/daydream/compose';
 import { proposeHypotheses } from '$lib/daydream/hypotheses/propose';
 import { saveProposals } from '$lib/daydream/hypotheses/store';
 import { markBatchInfluenced } from '$lib/daydream/hypotheses/steer';
@@ -50,19 +57,43 @@ export const daydreamHypothesise: ActivityHandler = {
     const notes: string[] = [];
     let tokens = 0;
 
-    // ── Propose, blind ──
-    const batch = await proposeHypotheses(cfg.maxProposals);
-    tokens = batch.tokens;
-    if (batch.error) {
-      notes.push(`proposer failed: ${batch.error}`);
+    // Proposing calls a model, so it spends against the same Codex caps as the
+    // composer — daydream-hypothesise is in SPENDING_ACTIONS and its quota
+    // delta is written to details.quota below. Testing is deterministic and
+    // free, so a blocked budget skips the proposal half only: questions already
+    // on the board still fall due and still get answered.
+    const model = await resolveDaydreamModel();
+    const isCodexModel = model.provider === 'codex';
+    const budget = await budgetStatus({ now: new Date(ctx.now), isCodexModel });
+    let quota = { ...ZERO_SPEND };
+    let proposed = 0;
+    let rejected: unknown[] = [];
+    let proposeError: string | null = null;
+
+    if (budget.blocked) {
+      notes.push(`proposing skipped — ${budget.blockedReason}`);
     } else {
-      const saved = await saveProposals(batch.proposals, { tokens: batch.tokens });
-      // Count this batch against every steer that shaped it, so a steer that has
-      // directed a fortnight of questions and produced nothing is visible.
-      await markBatchInfluenced(batch.steerIds);
-      notes.push(`${saved.saved} new question${saved.saved === 1 ? '' : 's'}`);
-      if (saved.duplicates) notes.push(`${saved.duplicates} already asked`);
-      if (batch.rejected.length) notes.push(`${batch.rejected.length} rejected`);
+      // ── Propose, blind ──
+      const before = isCodexModel ? await readQuotaMark() : null;
+      const batch = await proposeHypotheses(cfg.maxProposals);
+      const after = isCodexModel ? await readQuotaMark() : null;
+      quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+
+      tokens = batch.tokens;
+      proposed = batch.proposals.length;
+      rejected = batch.rejected;
+      proposeError = batch.error ?? null;
+      if (batch.error) {
+        notes.push(`proposer failed: ${batch.error}`);
+      } else {
+        const saved = await saveProposals(batch.proposals, { tokens: batch.tokens });
+        // Count this batch against every steer that shaped it, so a steer that has
+        // directed a fortnight of questions and produced nothing is visible.
+        await markBatchInfluenced(batch.steerIds);
+        notes.push(`${saved.saved} new question${saved.saved === 1 ? '' : 's'}`);
+        if (saved.duplicates) notes.push(`${saved.duplicates} already asked`);
+        if (batch.rejected.length) notes.push(`${batch.rejected.length} rejected`);
+      }
     }
 
     // ── Test everything due, correcting across the batch ──
@@ -75,19 +106,21 @@ export const daydreamHypothesise: ActivityHandler = {
       );
     }
 
-    const errors = [...(batch.error ? [batch.error] : []), ...run.errors];
+    const errors = [...(proposeError ? [proposeError] : []), ...run.errors];
 
     // A proposer that failed AND nothing to test is a dead cycle worth seeing.
-    if (batch.error && run.tested === 0) {
-      return { outcome: 'error', summary: notes.join('; '), details: { errors, tokens } };
+    if (proposeError && run.tested === 0) {
+      return { outcome: 'error', summary: notes.join('; '), details: { errors, tokens, quota } };
     }
 
     return {
       outcome: 'ok',
       summary: notes.join('; ') || 'nothing to propose or test',
       details: {
-        proposed: batch.proposals.length,
-        rejected: batch.rejected,
+        // Load-bearing: budget.ts reads this key back to enforce the caps.
+        quota,
+        proposed,
+        rejected,
         tokens,
         ...run,
       },

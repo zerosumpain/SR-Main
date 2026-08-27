@@ -55,12 +55,21 @@ export const WEEKLY_SECONDS = 604_800;
  * Every daydream action that can spend, and therefore whose pulses carry a
  * spend record.
  *
- * A list rather than a single name because the offer extractor in merge 5 is a
- * second LLM consumer. If the caps only summed the composer's pulses, the
- * extractor would spend the same subscription outside them — an enforced-looking
- * cap that enforces half of the spend.
+ * A list rather than a single name because the composer is not the only LLM
+ * consumer. If the caps only summed the composer's pulses, every other
+ * extractor and proposer would spend the same subscription outside them — an
+ * enforced-looking cap that enforces half of the spend. EVERY activity that
+ * calls a model must be here AND write its quota delta to `details.quota`;
+ * daydream-hypothesise and daydream-spend were missing until 2026-08-27 and
+ * their spend was invisible to the caps.
  */
-export const SPENDING_ACTIONS = ['daydream-compose', 'daydream-offers', 'daydream-rulesmith'] as const;
+export const SPENDING_ACTIONS = [
+  'daydream-compose',
+  'daydream-offers',
+  'daydream-rulesmith',
+  'daydream-hypothesise',
+  'daydream-spend',
+] as const;
 
 /** @deprecated kept so an older pulse reader still resolves. */
 export const COMPOSE_ACTION = 'daydream-compose';

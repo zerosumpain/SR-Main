@@ -51,6 +51,8 @@ const METRIC_NOTES: Record<string, string> = {
   distinctPlaces: 'how many different known places he was at',
   firstOutAtMins: 'minutes after midnight he first left home',
   lastHomeAtMins: 'minutes after midnight he was last seen at home',
+  calendarEvents: 'calendar events that day',
+  calendarBusyMinutes: 'minutes of timed calendar commitments, overlaps merged',
 };
 
 export interface ProposalBatch {

@@ -20,7 +20,7 @@ const DEFAULTS: Required<DetectConfig> = { disabledKinds: [] };
  * The thinking half of daydreaming — and it does not think in the way the name
  * suggests.
  *
- * Eight pure detectors run over one snapshot. Each declares what it needs
+ * The pure detectors run over one snapshot. Each declares what it needs
  * before it may speak at all, and returns nothing below that. No LLM is
  * involved and none may be: the model's job comes later, phrasing a finding
  * that a rule already confirmed.
@@ -34,7 +34,7 @@ const DEFAULTS: Required<DetectConfig> = { disabledKinds: [] };
 export const daydreamDetect: ActivityHandler = {
   name: NAME,
   description:
-    'Runs the eight daydream detectors over one snapshot every 10 minutes and writes what they find to the ledger. Each detector declares a minimum support and stays silent below it. No LLM, no notifications.',
+    'Runs the daydream detectors over one snapshot every 10 minutes and writes what they find to the ledger. Each detector declares a minimum support and stays silent below it. No LLM, no notifications.',
   defaultCadenceSeconds: 600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,

@@ -1,6 +1,6 @@
 // src/lib/daydream/features/build.ts
 //
-// Turning five tables with four time formats into one row per day.
+// Turning five tables and a live diary read into one row per day.
 //
 // The joining is the whole job. Apple stores a local ISO string with an offset,
 // Whoop stores a unix epoch on one table and an ISO string with a Z on two
@@ -34,6 +34,7 @@ import {
   secondsToMinutes,
   strainValue,
 } from './normalise';
+import { fetchCalendarDays, toolChunkFetch, type CalendarDay } from './calendar';
 
 /** How many days one build covers by default. */
 export const DEFAULT_WINDOW_DAYS = 120;
@@ -105,10 +106,13 @@ type DayBucket = {
   recovery: Array<{ score: number; rhr: number; hrv: number }>;
   sleep: Array<{ minutes: number; performance: number | null; efficiency: number | null; disturbances: number | null }>;
   activities: Array<{ minutes: number | null; distanceM: number | null }>;
+  /** Null = the diary could not be read for this day (absent), which is a
+   *  different fact from a day it answered about with nothing on it. */
+  calendar: CalendarDay | null;
 };
 
 function emptyBucket(day: string): DayBucket {
-  return { day, apple: new Map(), trail: [], strain: [], recovery: [], sleep: [], activities: [] };
+  return { day, apple: new Map(), trail: [], strain: [], recovery: [], sleep: [], activities: [], calendar: null };
 }
 
 /**
@@ -119,7 +123,13 @@ function emptyBucket(day: string): DayBucket {
  * whole window is a few tens of thousands of rows.
  */
 export async function buildDayFeatures(
-  opts: { windowDays?: number; subject?: string; now?: Date } = {},
+  opts: {
+    windowDays?: number;
+    subject?: string;
+    now?: Date;
+    /** Test seam. Production uses the site-tools registry via toolChunkFetch(). */
+    calendarFetch?: Parameters<typeof fetchCalendarDays>[2];
+  } = {},
 ): Promise<BuildResult> {
   const windowDays = opts.windowDays ?? DEFAULT_WINDOW_DAYS;
   const subject = opts.subject ?? DEFAULT_SUBJECT;
@@ -296,6 +306,21 @@ export async function buildDayFeatures(
     result.errors.push(`activities: ${errMsg(err)}`);
   }
 
+  // ── Calendar: whole window, chunked under the tool's 100-row cap ──
+  // Unlike the other domains this is a live CalDAV read, not a table. A failed
+  // chunk leaves its days ABSENT; a day the diary answered about with no events
+  // is a real zero. Truncated or partially-read chunks mark their days partial.
+  try {
+    const cal = await fetchCalendarDays(
+      localDay(from),
+      localDay(now),
+      opts.calendarFetch ?? toolChunkFetch(),
+    );
+    for (const [day, row] of cal) bucket(day).calendar = row;
+  } catch (err) {
+    result.errors.push(`calendar: ${errMsg(err)}`);
+  }
+
   // ── Collapse each day and write it ──
   const days = [...buckets.values()].sort((a, b) => a.day.localeCompare(b.day));
   result.days = days.length;
@@ -353,6 +378,7 @@ export function collapse(b: DayBucket, subject: string) {
     whoopRecovery: b.recovery.length === 0 ? 'absent' : 'ok',
     whoopSleep: b.sleep.length === 0 ? 'absent' : 'ok',
     activities: b.activities.length === 0 ? 'absent' : 'ok',
+    calendar: b.calendar == null ? 'absent' : b.calendar.partial ? 'partial' : 'ok',
   };
 
   const activeMinutes = b.activities.length
@@ -402,8 +428,8 @@ export function collapse(b: DayBucket, subject: string) {
         )
       : null,
 
-    calendarEvents: null,
-    calendarBusyMinutes: null,
+    calendarEvents: b.calendar ? b.calendar.events : null,
+    calendarBusyMinutes: b.calendar ? b.calendar.busyMinutes : null,
 
     sources,
   };
