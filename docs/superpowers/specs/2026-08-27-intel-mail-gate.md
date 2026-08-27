@@ -117,13 +117,19 @@ are spent only on threads somebody asked for.
   rule's first backtest offered PayPal receipts as two-way correspondence, which
   is how it was caught. **The gate is what made this safe: the rule sat at
   `proposed` with its samples on screen, and nothing was admitted.**
-- **A third of the queue had no sender.** `senderDomain` and `emailKind` are
-  written at ingest by `emailFacets`, and `persistStructuralOnly` builds its own
-  metadata with no classifier step — so all 837 stubs plus a couple of hundred
-  others (1,043 of 2,857, 37%) collapsed into one cluster called "unknown".
-  `factsFor` now falls back to `classifyEmail` over the stored participants.
-  Domain rules are not applied in the fallback (they need a database), so a
-  stored verdict always wins.
+- **A third of the queue had no sender, and `metadata.participants` could not
+  fix it.** 1,048 of 2,862 held threads (37%) had no `senderDomain` and collapsed
+  into one cluster called "unknown", 733 of them Gmail-important. The cause is
+  `threadParticipants` running every address through `isPersonAddress` to keep
+  `noreply@` robots out of the graph — correct there, and it means an automated
+  thread's stored participant list contains the owner and **nobody else**. There
+  is no counterparty in the metadata to classify.
+  `counterpartyOf` therefore falls through three sources: stored participants,
+  then the `from` line of each message in the note body, then the note's
+  `Participants:` header line (the only one a stub has). Neither of the last two
+  is robot-filtered. The derived `emailKind` wins where ingest stored no domain,
+  because the stored value there is `classifyEmail`'s "no counterparty recorded"
+  default — which called every robot in the mailbox `correspondence`.
 - **The rolling sweep will not recapture the old stubs.** Its query is
   `newer_than:84d` capped at 2,000 threads, and the stubs sit beyond that. They
   stay header-only and the queue marks them `captured: false` — admission
