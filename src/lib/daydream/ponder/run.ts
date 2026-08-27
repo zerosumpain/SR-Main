@@ -12,13 +12,15 @@
 // candidate, so the threshold, kind weights, mutes, cooldowns and delivery
 // caps all still stand between anything here and the owner's attention.
 
-import { desc, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamDayFeatures,
   daydreamHypotheses,
   daydreamLeads,
   daydreamThoughts,
+  daydreamObservations,
+  daydreamSignals,
 } from '$lib/db/schema';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDaydreamModel } from '../compose';
@@ -85,6 +87,74 @@ async function featureAggregates(now: Date): Promise<PackInputs['aggregates']> {
     }
   } catch {
     // Aggregates are garnish; the pack stands without them.
+  }
+  return out;
+}
+
+/** How many discovered signals may reach one pack. A limit on the pack, not
+ *  a claim that nothing else exists — the sweep still sees all of them. */
+const PACK_SIGNAL_LIMIT = 15;
+
+/**
+ * The signal registry, summarised for the pack.
+ *
+ * This is what makes the open registry reach the model at all: the sweep proves
+ * relationships, but a musing needs the reading itself in front of it. A card
+ * per signal is the whole point — indoor temperature, the weather where John
+ * actually was, how long the school run took — none of which needed a line of
+ * code here to become sayable.
+ *
+ * Ranked by how much each MOVED over the week, because a signal that sat still
+ * is not worth a card. A thermostat pinned at 21 °C for seven days tells the
+ * model nothing it can say anything about, and it would crowd out the one that
+ * swung ten degrees. Capped, and the cap is a limit on the pack, not a claim
+ * that nothing else exists.
+ */
+async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
+  const out: PackInputs['aggregates'] = [];
+  try {
+    const from = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const rows = await db
+      .select({
+        key: daydreamObservations.signalKey,
+        label: daydreamSignals.label,
+        unit: daydreamSignals.unit,
+        source: daydreamSignals.source,
+        mean: sql<number | null>`avg(${daydreamObservations.valueMean})`,
+        lo: sql<number | null>`min(${daydreamObservations.valueMin})`,
+        hi: sql<number | null>`max(${daydreamObservations.valueMax})`,
+        days: sql<number>`count(distinct ${daydreamObservations.day})::int`,
+      })
+      .from(daydreamObservations)
+      .innerJoin(daydreamSignals, eq(daydreamSignals.key, daydreamObservations.signalKey))
+      .where(and(gte(daydreamObservations.day, from), eq(daydreamSignals.status, 'active')))
+      .groupBy(daydreamObservations.signalKey, daydreamSignals.label, daydreamSignals.unit, daydreamSignals.source);
+
+    const scored = rows
+      .filter((r) => r.mean != null && r.days >= 2 && r.hi != null && r.lo != null)
+      .map((r) => ({
+        ...r,
+        // Relative spread, so a temperature in °C and a step count are ranked
+        // on the same scale rather than by whichever happens to be bigger.
+        spread: Math.abs(r.mean as number) > 1e-9 ? ((r.hi as number) - (r.lo as number)) / Math.abs(r.mean as number) : 0,
+      }))
+      .filter((r) => r.spread > 0)
+      .sort((a, b) => b.spread - a.spread)
+      .slice(0, PACK_SIGNAL_LIMIT);
+
+    const round = (n: number) => (Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 10) / 10);
+    for (const r of scored) {
+      const unit = r.unit ? ` ${r.unit}` : '';
+      out.push({
+        key: `signal:${r.key}`,
+        text:
+          `${r.label} over the last ${r.days} day${r.days === 1 ? '' : 's'}: ` +
+          `mean ${round(r.mean as number)}${unit}, ` +
+          `range ${round(r.lo as number)}–${round(r.hi as number)}${unit}.`,
+      });
+    }
+  } catch {
+    // Garnish, like the feature aggregates. The pack stands without them.
   }
   return out;
 }
@@ -158,16 +228,19 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, week, profileLines] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
+      signalAggregates(now),
       weekAhead(),
       buildProfileLines(now),
     ]);
     const pack = assemblePack({
       snapshot,
       verdicts,
-      aggregates,
+      // Hand-written aggregates first, then whatever the registry discovered —
+      // the second list is the one that grows without anyone editing this file.
+      aggregates: [...aggregates, ...signals],
       weekAhead: week,
       feedbackLines: [],
       profileLines,

@@ -29,6 +29,7 @@ import {
   MAX_USABLE_ACCURACY_M,
   MIN_DWELL_MINS,
   MIN_VISITS_FOR_PLACE,
+  MIN_VISITS_TO_ASK,
   TRAIL_RETENTION_DAYS,
   type ClusterPoint,
 } from './types';
@@ -206,11 +207,19 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       lon: m.lon as number,
     })));
     const dayHours = realVisits.map((v) => localDayHour(v.startedAt));
+    // Local days, not UTC days: a 00:30 stay under BST belongs to the evening
+    // it started in. Same reason localDayHour exists.
+    const distinctDays = new Set(
+      realVisits.map((v) =>
+        new Intl.DateTimeFormat('en-CA', { timeZone: LOCAL_TZ }).format(v.startedAt),
+      ),
+    ).size;
     const stats = {
       lat: cluster.lat,
       lon: cluster.lon,
       radiusM,
       visitCount: realVisits.length,
+      distinctDays,
       medianDwellMins: median(realVisits.map((v) => v.dwellMins)),
       dayHistogram: histogram(7, dayHours.map((d) => d.day)),
       hourHistogram: histogram(24, dayHours.map((d) => d.hour)),
@@ -329,6 +338,7 @@ export async function listNamingQueue(limit = 60) {
     .from(daydreamPlaces)
     .where(and(eq(daydreamPlaces.status, 'active'), sql`${daydreamPlaces.label} is null`))
     .orderBy(
+      sql`${daydreamPlaces.distinctDays} desc`,
       sql`${daydreamPlaces.visitCount} desc`,
       sql`(${daydreamPlaces.suggestedLabel} is null)`,
       sql`${daydreamPlaces.lastSeenAt} desc nulls last`,
@@ -337,8 +347,14 @@ export async function listNamingQueue(limit = 60) {
 }
 
 /**
- * Places worth asking about: enough visits to matter, still unnamed, not
- * muted. This is the input to the `unknown_place` thought.
+ * Places worth asking about: gone to on enough separate DAYS to be a habit,
+ * still unnamed, not muted.
+ *
+ * Days rather than visits since 2026-08-27 — `visitCount` is person-visits, so
+ * one outing with the whole family in the car reads five.
+ *
+ * (The `unknown_place` detector filters the snapshot itself rather than calling
+ * this; the two must agree, which is why the threshold lives in `types.ts`.)
  */
 export async function listUnnamedPlaces(limit = 10) {
   return db
@@ -348,10 +364,10 @@ export async function listUnnamedPlaces(limit = 10) {
       and(
         eq(daydreamPlaces.status, 'active'),
         sql`${daydreamPlaces.label} is null`,
-        gte(daydreamPlaces.visitCount, MIN_VISITS_FOR_PLACE),
+        gte(daydreamPlaces.distinctDays, MIN_VISITS_TO_ASK),
       ),
     )
-    .orderBy(sql`${daydreamPlaces.visitCount} desc`)
+    .orderBy(sql`${daydreamPlaces.distinctDays} desc`)
     .limit(limit);
 }
 

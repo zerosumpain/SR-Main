@@ -28,6 +28,7 @@ function place(over: Partial<PlaceSummary> = {}): PlaceSummary {
     kind: 'unknown',
     source: 'inferred',
     visitCount: 4,
+    distinctDays: 4,
     medianDwellMins: 25,
     dayHistogram: [0, 0, 0, 0, 0, 0, 0],
     hourHistogram: new Array(24).fill(0),
@@ -165,26 +166,42 @@ describe('positionIsUsable', () => {
 });
 
 describe('unknown_place', () => {
-  it('does NOT ask about somewhere visited once or twice', () => {
+  it('does NOT ask about somewhere gone to on one or two days', () => {
     // Creating a place and asking about one are different questions with
     // different costs: a place can match an offer for free, a question costs a
     // notification. One or two stops is usually a car park on the way
     // somewhere, and the place still exists to be matched against.
-    for (const visitCount of [1, 2]) {
-      const s = snap({ places: [place({ visitCount, medianDwellMins: 40 })] });
+    for (const distinctDays of [1, 2]) {
+      const s = snap({
+        places: [place({ visitCount: distinctDays, distinctDays, medianDwellMins: 40 })],
+      });
       expect(unknownPlace.readiness(s).ready).toBe(false);
       expect(unknownPlace.detect(s)).toEqual([]);
     }
   });
 
-  it('asks once it has been somewhere three times', () => {
-    const s = snap({ places: [place({ visitCount: 3, medianDwellMins: 25 })] });
+  it('does NOT mistake one family outing for a habit', () => {
+    // The failure this threshold exists to stop. Visits went per-subject on
+    // 2026-08-27, so five people in one car on one afternoon is five visits —
+    // and eleven of the thirteen places in the live naming queue were exactly
+    // that. "Somewhere you keep going" is a claim about DAYS.
+    const s = snap({
+      places: [place({ visitCount: 5, distinctDays: 1, medianDwellMins: 53 })],
+    });
+    expect(unknownPlace.readiness(s).ready).toBe(false);
+    expect(unknownPlace.detect(s)).toEqual([]);
+  });
+
+  it('asks once it has been somewhere on three separate days', () => {
+    const s = snap({
+      places: [place({ visitCount: 3, distinctDays: 3, medianDwellMins: 25 })],
+    });
     expect(unknownPlace.readiness(s).ready).toBe(true);
     expect(unknownPlace.detect(s)).toHaveLength(1);
   });
 
-  it('asks about an unnamed place with enough visits', () => {
-    const s = snap({ places: [place({ visitCount: 4 })] });
+  it('asks about an unnamed place with enough days', () => {
+    const s = snap({ places: [place({ visitCount: 4, distinctDays: 4 })] });
     expect(unknownPlace.readiness(s).ready).toBe(true);
     const [c] = unknownPlace.detect(s);
     expect(c.kind).toBe('unknown_place');
@@ -452,6 +469,7 @@ describe('pattern_break', () => {
     label: 'The Gym',
     kind: 'gym',
     visitCount: 6,
+    distinctDays: 6,
     dayHistogram: [0, 0, 5, 0, 1, 0, 0], // mostly Wednesday (index 2)
     hourHistogram: (() => {
       const h = new Array(24).fill(0);

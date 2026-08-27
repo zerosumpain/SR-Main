@@ -79,6 +79,9 @@ export interface LedgerPlace {
   kind: string;
   source: string;
   visitCount: number;
+  /** Separate local days anyone stayed here. `visitCount` is person-visits, so
+   *  a family outing reads five; repetition is a question about days. */
+  distinctDays: number;
   medianDwellMins: number;
   dayHistogram: number[];
   hourHistogram: number[];
@@ -322,6 +325,7 @@ export async function loadPlaces(): Promise<LedgerPlace[]> {
     kind: p.kind,
     source: p.source,
     visitCount: p.visitCount,
+    distinctDays: p.distinctDays,
     medianDwellMins: p.medianDwellMins,
     dayHistogram: p.dayHistogram,
     hourHistogram: p.hourHistogram,

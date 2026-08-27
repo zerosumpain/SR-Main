@@ -45,6 +45,9 @@ export interface PlaceSummary {
   kind: string;
   source: string;
   visitCount: number;
+  /** Separate LOCAL days anyone stayed here — repetition, as opposed to the
+   *  person-visits in `visitCount`. */
+  distinctDays: number;
   medianDwellMins: number;
   dayHistogram: number[];
   hourHistogram: number[];

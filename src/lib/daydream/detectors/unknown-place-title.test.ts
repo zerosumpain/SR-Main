@@ -6,7 +6,7 @@ function place(over: Partial<PlaceSummary>): PlaceSummary {
   return {
     id: 'p1', lat: 0, lon: 0, radiusM: 200, label: null,
     suggestedLabel: null, suggestedAddress: null,
-    kind: 'unknown', source: 'inferred', visitCount: 5, medianDwellMins: 40,
+    kind: 'unknown', source: 'inferred', visitCount: 5, distinctDays: 5, medianDwellMins: 40,
     dayHistogram: [2, 1, 1, 0, 1, 0, 0], hourHistogram: new Array(24).fill(1),
     firstSeenAt: null, lastSeenAt: null, status: 'active',
     ...over,

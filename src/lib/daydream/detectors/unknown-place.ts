@@ -17,17 +17,22 @@ import { ramp } from './shared';
 import { notReady, ready, type Candidate, type DaydreamSnapshot, type Detector } from '../snapshot-types';
 
 /**
- * Visits before it is worth ASKING. Two — not the one that makes a place.
+ * Separate DAYS before it is worth ASKING.
  *
  * A place exists after a single real stay so it can match offers and anchor
  * proximity checks, all of which cost nothing. A question costs a notification
  * and a decision, and somewhere visited once is usually somewhere that needs no
  * name: a car park on the way to somewhere else, a waiting room, a one-off.
+ *
+ * Counted in DAYS since 2026-08-27, not person-visits. Once visits became
+ * per-subject the household aggregate started reading five for a single outing
+ * with five people in the car, and eleven of the thirteen places in the queue
+ * were one afternoon each. "Somewhere you keep going" is a claim about days.
  */
-const ASK_AT_VISITS = MIN_VISITS_TO_ASK;
-/** Where the visit component saturates: a place visited fifteen times is not
- *  three times more interesting than one visited five. */
-const SATURATE_AT_VISITS = 12;
+const ASK_AT_DAYS = MIN_VISITS_TO_ASK;
+/** Where the repetition component saturates: somewhere gone to on fifteen days
+ *  is not three times more interesting than one gone to on five. */
+const SATURATE_AT_DAYS = 12;
 
 export const unknownPlace: Detector = {
   kind: 'unknown_place',
@@ -36,7 +41,7 @@ export const unknownPlace: Detector = {
 
   readiness(s: DaydreamSnapshot) {
     const candidates = s.places.filter(
-      (p) => p.status === 'active' && !p.label && p.visitCount >= ASK_AT_VISITS,
+      (p) => p.status === 'active' && !p.label && p.distinctDays >= ASK_AT_DAYS,
     ).length;
     return candidates > 0
       ? ready(candidates, 1, 'unnamed places')
@@ -44,19 +49,19 @@ export const unknownPlace: Detector = {
           candidates,
           1,
           'unnamed places',
-          `nowhere unnamed has ${ASK_AT_VISITS}+ stays of ${MIN_DWELL_MINS}+ minutes yet`,
+          `nowhere unnamed has been visited on ${ASK_AT_DAYS}+ separate days for ${MIN_DWELL_MINS}+ minutes yet`,
         );
   },
 
   detect(s: DaydreamSnapshot): Candidate[] {
     return s.places
-      .filter((p) => p.status === 'active' && !p.label && p.visitCount >= ASK_AT_VISITS)
-      // Most-visited first: the place it is least odd to be asked about.
-      .sort((a, b) => b.visitCount - a.visitCount)
+      .filter((p) => p.status === 'active' && !p.label && p.distinctDays >= ASK_AT_DAYS)
+      // Most days first: the place it is least odd to be asked about.
+      .sort((a, b) => b.distinctDays - a.distinctDays)
       .slice(0, 3)
       .map((p) => {
         const rhythm = describePlaceRhythm(p);
-        const visitScore = ramp(p.visitCount, ASK_AT_VISITS - 1, SATURATE_AT_VISITS);
+        const visitScore = ramp(p.distinctDays, ASK_AT_DAYS - 1, SATURATE_AT_DAYS);
         const dwellScore = ramp(p.medianDwellMins, MIN_DWELL_MINS, 90);
         // Dwell now outweighs repetition: an hour somewhere once says more
         // about a place mattering than three two-minute stops do.

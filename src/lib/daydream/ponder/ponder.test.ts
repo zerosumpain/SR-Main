@@ -24,7 +24,7 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
     places: [
       {
         id: 'p-home', lat: 54.5, lon: -1.5, radiusM: 200, label: 'Home', kind: 'home',
-        source: 'confirmed', visitCount: 40, medianDwellMins: 600,
+        source: 'confirmed', visitCount: 40, distinctDays: 40, medianDwellMins: 600,
         dayHistogram: [], hourHistogram: [], firstSeenAt: null, lastSeenAt: null, status: 'active',
       },
     ],

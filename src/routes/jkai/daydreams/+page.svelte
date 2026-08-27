@@ -585,11 +585,13 @@
    *  copy that drifts; the fallback only covers the load-error path. */
   const delivery = $derived(data.delivery);
   const askAtVisits = $derived(delivery?.minVisitsToAsk ?? 3);
+  // DAYS, not person-visits: five people in one car on one afternoon is one
+  // day, and asking "what is this place you keep going to?" about it is wrong.
   const unnamed = $derived(
-    places.filter((p) => !p.label && p.status === 'active' && p.visitCount >= askAtVisits),
+    places.filter((p) => !p.label && p.status === 'active' && p.distinctDays >= askAtVisits),
   );
   const quietUnnamed = $derived(
-    places.filter((p) => !p.label && p.status === 'active' && p.visitCount < askAtVisits).length,
+    places.filter((p) => !p.label && p.status === 'active' && p.distinctDays < askAtVisits).length,
   );
   const named = $derived(places.filter((p) => p.label && p.status === 'active'));
   /** Clusters the trail passes THROUGH. Reported rather than hidden: half the
@@ -627,7 +629,14 @@
   }
 
   function rhythm(p: Place): string {
-    const parts = [`${p.visitCount} visit${p.visitCount === 1 ? '' : 's'}`];
+    // Days first — that is what "keeps going there" means. Person-visits follow
+    // only when they differ, because "5 visits across 1 day" is the whole
+    // household in one car and reads as a habit if you show only the 5.
+    const days = p.distinctDays ?? 0;
+    const parts = days
+      ? [`${days} day${days === 1 ? '' : 's'}`]
+      : [`${p.visitCount} visit${p.visitCount === 1 ? '' : 's'}`];
+    if (days && p.visitCount > days) parts.push(`${p.visitCount} visits`);
     if (p.medianDwellMins > 0) parts.push(`~${p.medianDwellMins} min`);
     const total = p.dayHistogram.reduce((a, b) => a + b, 0);
     if (total > 0) {
@@ -1382,8 +1391,8 @@
           than stops at. They are never asked about.
         {/if}
         {#if quietUnnamed}
-          <br />{quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} fewer than
-          {askAtVisits} visits, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
+          <br />{quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} been visited on fewer
+          than {askAtVisits} separate days, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
           interrupted about — but {quietUnnamed === 1 ? 'it is' : 'they are'} in the session below.
         {/if}
       </p>
