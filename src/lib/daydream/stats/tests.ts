@@ -2,9 +2,11 @@
 //
 // The statistical instruments, and the thing that stops them lying.
 //
-// The lying is the point of this file. A feature store with 24 metrics offers
-// 276 distinct pairs; testing all of them at p < 0.05 produces about 14
-// "significant" results by chance alone, on data with no structure whatsoever.
+// The lying is the point of this file. A feature store with m metrics offers
+// m(m-1)/2 distinct pairs — SWEEP_METRICS in sweep.ts is the live list, and at
+// twenty-odd metrics that is a couple of hundred pairs; testing all of them at
+// p < 0.05 produces about one "significant" result per twenty pairs by chance
+// alone, on data with no structure whatsoever.
 // A model handed that list will write fourteen confident sentences about
 // someone's life, every one of them false, and they will read exactly like the
 // true ones. There is no multiple-comparisons control anywhere in this codebase
@@ -13,8 +15,8 @@
 //
 // So every test here returns a p-value, every sweep passes through
 // `benjaminiHochberg`, and nothing downstream is allowed to quote a result that
-// has not been corrected. The correction is not decoration: at 276 tests it is
-// the difference between a finding and a coin toss.
+// has not been corrected. The correction is not decoration: at hundreds of
+// tests it is the difference between a finding and a coin toss.
 //
 // PURE. No database, no clock, no imports.
 

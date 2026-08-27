@@ -444,13 +444,16 @@
   );
 
   /** Places worth asking about. The one- and two-visit ones still exist and
-   *  still match offers and proximity — they are simply not questions. */
-  const ASK_AT_VISITS = 3;
+   *  still match offers and proximity — they are simply not questions.
+   *  The threshold comes from the ledger (MIN_VISITS_TO_ASK), not a local
+   *  copy that drifts; the fallback only covers the load-error path. */
+  const delivery = $derived(data.delivery);
+  const askAtVisits = $derived(delivery?.minVisitsToAsk ?? 3);
   const unnamed = $derived(
-    places.filter((p) => !p.label && p.status === 'active' && p.visitCount >= ASK_AT_VISITS),
+    places.filter((p) => !p.label && p.status === 'active' && p.visitCount >= askAtVisits),
   );
   const quietUnnamed = $derived(
-    places.filter((p) => !p.label && p.status === 'active' && p.visitCount < ASK_AT_VISITS).length,
+    places.filter((p) => !p.label && p.status === 'active' && p.visitCount < askAtVisits).length,
   );
   const named = $derived(places.filter((p) => p.label && p.status === 'active'));
 
@@ -649,13 +652,27 @@
         {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
       </p>
     {/if}
+
+    {#if delivery && !delivery.hasPushSubscriber}
+      <!-- The documented root cause of the empty feedback ledger: with nowhere
+           to push, every thought falls back to a chat note whose feedback link
+           is rarely followed, so the learning loop never gets an input. -->
+      <p class="warn-line">
+        No device is subscribed to push — thoughts fall back to chat notes, and without
+        feedback taps the confidence threshold never relaxes.
+      </p>
+    {/if}
+
+    <div class="thought-actions">
+      <button class="row-link" disabled={backfilling} onclick={runBackfill}>
+        {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
+      </button>
+    </div>
+    {#if backfillNote}
+      <p class="sec-lede">{backfillNote}</p>
+    {/if}
   </section>
 
-  <!-- ── BUDGET ─────────────────────────────────────────────────────────
-       The owner's caps on what daydreaming may spend, and how close it is
-       actually running to them. Under-running is a finding as much as
-       over-running: the instruction was to sit near the limit, not far below
-       it, so the paced target is shown beside the spend. -->
   <!-- Yesterday, in one card. Quiet days are reported as clearly as busy ones —
        a digest that only appears when there is news cannot be trusted when it
        is silent. -->
@@ -931,25 +948,17 @@
       <p class="sec-lede budget-note">
         Spare budget buys more <strong>thinking</strong>, never more notifications: extra
         headroom adds a verification pass and more candidates considered. What reaches your
-        phone is capped separately at {4} a day.
+        phone is capped separately at {delivery?.maxPerDay ?? 4} a day.
       </p>
     {/if}
 
-    <div class="thought-actions">
-      <button class="row-link" disabled={backfilling} onclick={runBackfill}>
-        {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
-      </button>
-    </div>
-    {#if backfillNote}
-      <p class="sec-lede">{backfillNote}</p>
-    {/if}
   </section>
 
   <!-- ── UNNAMED PLACES ─────────────────────────────────────────────────
-       Placed above the thoughts on purpose. Five of the eight detectors are
-       inert until a place has a name, so this is the highest-leverage thing
-       on the page and answering one question here unlocks more than any
-       amount of reading below. -->
+       Placed above the thoughts on purpose. Several detectors are inert until
+       a place has a name, so this is the highest-leverage thing on the page
+       and answering one question here unlocks more than any amount of
+       reading below. -->
   {#if unnamed.length || quietUnnamed}
     <section class="nm-sec">
       <div class="nm-sec-hd">
@@ -957,11 +966,11 @@
         <span class="nm-sec-meta">{counts.unnamedPlaces} unnamed</span>
       </div>
       <p class="sec-lede">
-        A named place turns a coordinate into a fact. Seven of the nine detectors stay
+        A named place turns a coordinate into a fact. Several of the detectors stay
         silent until one has a name, so this is the highest-leverage thing on the page.
         {#if quietUnnamed}
           <br />{quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} fewer than
-          {ASK_AT_VISITS} visits, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
+          {askAtVisits} visits, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
           interrupted about — but {quietUnnamed === 1 ? 'it is' : 'they are'} in the session below.
         {/if}
       </p>

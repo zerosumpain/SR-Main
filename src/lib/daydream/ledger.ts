@@ -382,9 +382,27 @@ export async function snoozeThought(thoughtId: string, days: number): Promise<vo
     .where(eq(daydreamThoughts.id, thoughtId));
 }
 
+/**
+ * Delivery facts the page used to hardcode and let drift: the daily cap read
+ * "4" as a literal while deliver.ts owned the real number, and the ask-at
+ * threshold was a second copy of MIN_VISITS_TO_ASK. The push-subscriber state
+ * is here because it explains the dead learning loop — no subscriber means
+ * every thought falls back to a chat note, where feedback rarely comes.
+ */
+export async function loadDelivery() {
+  const { MAX_PER_DAY, PER_KIND_COOLDOWN_HOURS, hasPushSubscriber } = await import('./deliver');
+  const { MIN_VISITS_TO_ASK } = await import('./types');
+  return {
+    maxPerDay: MAX_PER_DAY,
+    perKindCooldownHours: PER_KIND_COOLDOWN_HOURS,
+    minVisitsToAsk: MIN_VISITS_TO_ASK,
+    hasPushSubscriber: await hasPushSubscriber(),
+  };
+}
+
 /** Everything the page needs, in one round of queries. */
 export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers] = await Promise.all([
+  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery] = await Promise.all([
     loadEngineState(),
     loadDetectorRows(),
     loadThreshold(),
@@ -395,6 +413,7 @@ export async function loadLedger() {
     loadRules(),
     loadLatestDigest(),
     listSteers(),
+    loadDelivery(),
   ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers };
+  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery };
 }

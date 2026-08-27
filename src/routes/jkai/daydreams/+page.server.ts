@@ -39,6 +39,7 @@ export const load: PageServerLoad = async () => {
       rules: [],
       digest: null,
       steers: [],
+      delivery: null,
       enabled: true,
       loadError: errMsg(err),
     };

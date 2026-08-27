@@ -47,6 +47,8 @@ export const SWEEP_METRICS = [
   'distinctPlaces',
   'firstOutAtMins',
   'lastHomeAtMins',
+  'calendarEvents',
+  'calendarBusyMinutes',
 ] as const;
 export type SweepMetric = (typeof SWEEP_METRICS)[number];
 
@@ -68,6 +70,7 @@ const ENTANGLED: ReadonlySet<string> = new Set(
     ['sleepMinutes', 'sleepEfficiency'],
     ['sleepPerformance', 'sleepEfficiency'],
     ['activeMinutes', 'workouts'],
+    ['calendarEvents', 'calendarBusyMinutes'],
     ['activeMinutes', 'activityDistanceM'],
     ['activeMinutes', 'steps'],
     ['steps', 'activeEnergyKj'],

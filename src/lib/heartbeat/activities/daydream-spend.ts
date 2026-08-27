@@ -2,7 +2,14 @@ import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamSpend } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
-import { extractSpend } from '$lib/daydream/spend/read';
+import {
+  attributeSpend,
+  budgetStatus,
+  readQuotaMark,
+  ZERO_SPEND,
+} from '$lib/daydream/budget';
+import { resolveDaydreamModel } from '$lib/daydream/compose';
+import { EMPTY_EXTRACT, extractSpend } from '$lib/daydream/spend/read';
 import { spendDensity } from '$lib/daydream/spend/extract';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
@@ -44,7 +51,26 @@ export const daydreamSpendExtract: ActivityHandler = {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
     }
 
-    const res = await extractSpend({ limit: cfg.limit, sinceDays: cfg.sinceDays });
+    // Extraction calls a model, so it spends against the same Codex caps as the
+    // composer — daydream-spend is in SPENDING_ACTIONS and writes its quota
+    // delta to details.quota below. Blocked budget → skip extraction entirely
+    // (receipts keep for six hours); tight budget → the scan yields to the
+    // composer and takes the smaller share, same as the offer scan.
+    const model = await resolveDaydreamModel();
+    const isCodexModel = model.provider === 'codex';
+    const budget = await budgetStatus({ now: new Date(ctx.now), isCodexModel });
+
+    let quota = { ...ZERO_SPEND };
+    let res: Awaited<ReturnType<typeof extractSpend>>;
+    if (budget.blocked) {
+      res = { ...EMPTY_EXTRACT, errors: [] };
+    } else {
+      const cap = budget.plan.depth === 'deep' ? cfg.limit : Math.min(5, cfg.limit);
+      const before = isCodexModel ? await readQuotaMark() : null;
+      res = await extractSpend({ limit: cap, sinceDays: cfg.sinceDays });
+      const after = isCodexModel ? await readQuotaMark() : null;
+      quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+    }
 
     const [totals] = await db
       .select({
@@ -54,10 +80,12 @@ export const daydreamSpendExtract: ActivityHandler = {
       .from(daydreamSpend);
     const density = spendDensity(totals?.n ?? 0, totals?.days ?? 0);
 
-    const bits = [
-      `${res.shortlisted} of ${res.considered} looked like receipts`,
-      `${res.written} recorded`,
-    ];
+    const bits = budget.blocked
+      ? [`extraction skipped — ${budget.blockedReason}`]
+      : [
+          `${res.shortlisted} of ${res.considered} looked like receipts`,
+          `${res.written} recorded`,
+        ];
     // A model that has started inventing totals shows up here rather than in
     // the data, because the verification refuses the row silently otherwise.
     if (res.unverified) bits.push(`${res.unverified} refused — amount not in the source`);
@@ -70,9 +98,10 @@ export const daydreamSpendExtract: ActivityHandler = {
     // Every extraction failing while some were shortlisted is a fault; finding
     // no receipts at all in a quiet week is not.
     if (res.shortlisted > 0 && res.written === 0 && res.errors.length) {
-      return { outcome: 'error', summary: bits.join('; '), details: { ...res, density } };
+      return { outcome: 'error', summary: bits.join('; '), details: { quota, ...res, density } };
     }
 
-    return { outcome: 'ok', summary: bits.join('; '), details: { ...res, density } };
+    // The quota key is load-bearing: budget.ts reads it back to enforce the caps.
+    return { outcome: 'ok', summary: bits.join('; '), details: { quota, ...res, density } };
   },
 };

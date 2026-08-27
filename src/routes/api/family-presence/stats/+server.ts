@@ -3,22 +3,13 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowDataStore } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+// The daydream trail engine owns the clustering geometry; this endpoint had its
+// own inline copy of the same 200 m greedy clusterer, which is exactly how the
+// two surfaces would one day disagree about what counts as one place.
+import { clusterPoints, haversineKm } from '$lib/daydream/cluster';
+import { CLUSTER_RADIUS_M } from '$lib/daydream/types';
 
 const WORKFLOW_ID = '75bd5bc5-3297-4509-956e-3851b3811491';
-
-const EARTH_R = 6371; // km
-const CLUSTER_RADIUS_M = 200; // metres
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-	const dLat = ((lat2 - lat1) * Math.PI) / 180;
-	const dLon = ((lon2 - lon1) * Math.PI) / 180;
-	const a =
-		Math.sin(dLat / 2) ** 2 +
-		Math.cos((lat1 * Math.PI) / 180) *
-			Math.cos((lat2 * Math.PI) / 180) *
-			Math.sin(dLon / 2) ** 2;
-	return EARTH_R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 /** Cluster all GPS history points per person, geocode via geocache. */
 function clusterHistoryPoints(
@@ -36,43 +27,17 @@ function clusterHistoryPoints(
 	}
 	if (points.length === 0) return [];
 
-	// Simple greedy clustering: assign each point to nearest existing cluster within radius,
-	// or start a new cluster.
-	interface Cluster {
-		lat: number;
-		lon: number;
-		points: typeof points;
-	}
-	const clusters: Cluster[] = [];
-
-	for (const p of points) {
-		let bestIdx = -1;
-		let bestDist = Infinity;
-		for (let i = 0; i < clusters.length; i++) {
-			const d = haversineKm(p.lat, p.lon, clusters[i].lat, clusters[i].lon) * 1000;
-			if (d < CLUSTER_RADIUS_M && d < bestDist) {
-				bestDist = d;
-				bestIdx = i;
-			}
-		}
-		if (bestIdx >= 0) {
-			clusters[bestIdx].points.push(p);
-			// Update centroid (running average)
-			const c = clusters[bestIdx];
-			const n = c.points.length;
-			c.lat = c.lat + (p.lat - c.lat) / n;
-			c.lon = c.lon + (p.lon - c.lon) / n;
-		} else {
-			clusters.push({ lat: p.lat, lon: p.lon, points: [p] });
-		}
-	}
+	const clusters = clusterPoints(
+		points.map((p, idx) => ({ idx, lat: p.lat, lon: p.lon, ts: new Date(p.ts) })),
+		CLUSTER_RADIUS_M,
+	);
 
 	// Reverse-geocode each cluster centroid via geocache
 	return clusters
 		.map((c) => {
 			const name = nearestGeocacheName(c.lat, c.lon, geocache) || `${c.lat.toFixed(4)}, ${c.lon.toFixed(4)}`;
-			const persons = [...new Set(c.points.map((p) => p.person))];
-			return { name, lat: c.lat, lon: c.lon, visits: c.points.length, persons, avgDwell: 0 };
+			const persons = [...new Set(c.members.map((idx) => points[idx].person))];
+			return { name, lat: c.lat, lon: c.lon, visits: c.members.length, persons, avgDwell: 0 };
 		})
 		.sort((a, b) => b.visits - a.visits)
 		.slice(0, 20);

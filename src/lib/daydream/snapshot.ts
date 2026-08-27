@@ -2,7 +2,7 @@
 //
 // Assembling everything a detector is allowed to look at, once per tick.
 //
-// Built once and handed to all eight detectors, so they cannot disagree about
+// Built once and handed to every detector, so they cannot disagree about
 // what time it is, how well the sensor was working, or what the owner's own
 // baseline is. Every source is best-effort and records what happened in
 // `sources` — the briefing engine's shape, and for the same reason: a snapshot
@@ -232,6 +232,24 @@ export async function buildSnapshot(
     });
   } catch (err) {
     sources.push({ key: 'training-load', status: 'failed', detail: errMsg(err) });
+  }
+
+  try {
+    const { getReadiness } = await import('$lib/health/readiness-service');
+    const r = await getReadiness();
+    // getReadiness() defaults every missing factor to 50 and always returns a
+    // score, so a score alone is not evidence of data. The HRV factor carries
+    // its raw inputs only when a real recovery row existed — that is the gate
+    // between "readiness is 50" and "there is nothing to be ready about".
+    const hasRealData = r.factors.hrvTrend.raw != null || r.factors.hrvTrend.avg7d != null;
+    if (hasRealData) health.readiness = { score: Math.round(r.score), label: r.label };
+    sources.push({
+      key: 'readiness',
+      status: health.readiness ? 'ok' : 'empty',
+      detail: health.readiness ? `${health.readiness.score} (${health.readiness.label})` : 'no recovery data',
+    });
+  } catch (err) {
+    sources.push({ key: 'readiness', status: 'failed', detail: errMsg(err) });
   }
 
   // ── Calendar ───────────────────────────────────────────────────────────
