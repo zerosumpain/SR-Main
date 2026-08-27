@@ -37,6 +37,16 @@ export async function interceptOwnerInbound(
   const approval = await handleApprovalReply(from, text ?? '');
   if (approval.handled) return { handled: true, reply: approval.reply };
 
+  // Daydream feedback — a short verdict reply ("useful" / "not that" / "never")
+  // against the most recently delivered, still-unrated thought. Sits between
+  // approvals (which own their keywords) and workflow dispatch: the matcher is
+  // a closed phrase list additionally gated on an awaiting thought, so it can
+  // only very rarely shadow a trigger keyword — and a trigger named "useful"
+  // would deserve it.
+  const { interceptDaydreamFeedback } = await import('$lib/daydream/wa-feedback');
+  const feedback = await interceptDaydreamFeedback(text ?? '');
+  if (feedback.handled) return { handled: true, reply: feedback.reply };
+
   // D3 — whatsapp-trigger keyword dispatch. Runs AFTER the approval intercept so
   // approve/deny/yes/no always resolve an approval first.
   const { dispatchWhatsAppWorkflow } = await import('./workflow-dispatch');

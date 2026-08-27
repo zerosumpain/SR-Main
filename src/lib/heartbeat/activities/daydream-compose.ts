@@ -8,7 +8,7 @@ import {
   ZERO_SPEND,
 } from '$lib/daydream/budget';
 import { composeNarrative, resolveDaydreamModel, saveNarrative } from '$lib/daydream/compose';
-import { chooseChannel, deliver, hasPushSubscriber, readRateState } from '$lib/daydream/deliver';
+import { chooseChannel, deliver, hasPushSubscriber, hasWhatsAppOwner, readRateState } from '$lib/daydream/deliver';
 import { listUndelivered } from '$lib/daydream/thought-store';
 import { loadThreshold } from '$lib/daydream/ledger';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
@@ -91,7 +91,7 @@ export const daydreamCompose: ActivityHandler = {
     const plan = budget.plan;
 
     const { value: threshold } = await loadThreshold();
-    const [rateState, pushable] = await Promise.all([readRateState(now), hasPushSubscriber()]);
+    const [rateState, pushable, waOwner] = await Promise.all([readRateState(now), hasPushSubscriber(), hasWhatsAppOwner()]);
 
     const considered = pending.slice(0, plan.maxCandidates);
     const outcomes: Array<Record<string, unknown>> = [];
@@ -110,7 +110,7 @@ export const daydreamCompose: ActivityHandler = {
       const decision = chooseChannel(
         { kind: thought.kind, score: thought.score },
         rateState,
-        { now, threshold, hasPushSubscriber: pushable },
+        { now, threshold, hasPushSubscriber: pushable, hasWhatsApp: waOwner },
       );
 
       // Nothing that is going to stay silent gets phrased unless the budget is

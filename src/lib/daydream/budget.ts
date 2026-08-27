@@ -70,6 +70,7 @@ export const SPENDING_ACTIONS = [
   'daydream-hypothesise',
   'daydream-spend',
   'daydream-ponder',
+  'daydream-weekly',
 ] as const;
 
 /** @deprecated kept so an older pulse reader still resolves. */

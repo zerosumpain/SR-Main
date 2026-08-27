@@ -346,6 +346,56 @@ export const briefingComposeExecutor: NodeExecutor = {
       record('knowledge', 'Knowledge graph', 'empty', 'no matching entities in the graph');
     }
 
+    // ---- Daydreams (self-sourced) ---------------------------------------
+    // The one section no canvas node feeds: the daydream engine lives in this
+    // codebase, so the composer reads its ledger directly rather than asking
+    // the owner to rewire the production canvas. Optional by design — a
+    // briefing without it is a briefing, so its failure records a soft gap,
+    // never a truth violation.
+    try {
+      const { db } = await import('$lib/db');
+      const { daydreamThoughts, daydreamLeads } = await import('$lib/db/schema');
+      const { and, desc, eq, gte, sql: dsql } = await import('drizzle-orm');
+      const since = new Date(Date.now() - 24 * 3_600_000);
+
+      const said = await db
+        .select({ title: daydreamThoughts.title, kind: daydreamThoughts.kind })
+        .from(daydreamThoughts)
+        .where(and(eq(daydreamThoughts.status, 'delivered'), gte(daydreamThoughts.deliveredAt, since)))
+        .orderBy(desc(daydreamThoughts.score))
+        .limit(2);
+      const [held] = await db
+        .select({ n: dsql<number>`count(*)::int` })
+        .from(daydreamThoughts)
+        .where(and(eq(daydreamThoughts.status, 'suppressed'), gte(daydreamThoughts.updatedAt, since)));
+      const [open] = await db
+        .select({ n: dsql<number>`count(*)::int` })
+        .from(daydreamLeads)
+        .where(eq(daydreamLeads.status, 'open'));
+
+      if (said.length) {
+        facts.push({
+          section: 'Daydreams',
+          label: 'It said',
+          value: said.map((t) => `“${t.title}”`).join(' · ').slice(0, 300),
+          source: 'daydream',
+        });
+      }
+      if ((held?.n ?? 0) > 0) {
+        facts.push({ section: 'Daydreams', label: 'Held back', value: `${held.n} below the bar`, source: 'daydream' });
+      }
+      if ((open?.n ?? 0) > 0) {
+        facts.push({ section: 'Daydreams', label: 'Investigating', value: `${open.n} open line${open.n === 1 ? '' : 's'} of enquiry`, source: 'daydream' });
+      }
+      if (said.length || (held?.n ?? 0) > 0 || (open?.n ?? 0) > 0) {
+        record('daydreams', 'Daydreams', 'ok', `${said.length} said, ${held?.n ?? 0} held`);
+      } else {
+        record('daydreams', 'Daydreams', 'empty', 'a quiet day — nothing raised, nothing held');
+      }
+    } catch (err) {
+      record('daydreams', 'Daydreams', 'failed', err instanceof Error ? err.message : String(err));
+    }
+
     // ---- Source ledger from the run itself ------------------------------
     // A namespaced key only exists when its branch succeeded; a node that
     // failed leaves no trace in the merged payload, so "absent" and "broken"
