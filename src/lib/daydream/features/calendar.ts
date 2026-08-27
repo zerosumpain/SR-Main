@@ -90,7 +90,12 @@ export function nextDay(day: string): string {
 
 /**
  * Structural all-day detection, because the tool's row shape does not promise
- * a flag: a date-only start, or a midnight-to-midnight span in whole days.
+ * a flag: a date-only start, or a whole-day span starting at midnight — LOCAL
+ * midnight or UTC midnight, because iCloud serialises an all-day event as a
+ * floating DATE that reaches us rendered as UTC-midnight ISO, which under BST
+ * is an hour off local midnight. The first production run missed that shape,
+ * classified the events as timed, and every day's busy minutes clamped to
+ * 1440.
  */
 export function isAllDay(ev: CalendarEventRow): boolean {
   if (/^\d{4}-\d{2}-\d{2}$/.test(ev.start.trim())) return true;
@@ -99,8 +104,19 @@ export function isAllDay(ev: CalendarEventRow): boolean {
   if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
   const span = end - start;
   if (span < 86_400_000 || span % 86_400_000 !== 0) return false;
-  return dayStartUtc(localDayOf(new Date(start))).getTime() === start;
+  if (start % 86_400_000 === 0) return true; // UTC midnight
+  return dayStartUtc(localDayOf(new Date(start))).getTime() === start; // local midnight
 }
+
+/**
+ * A "timed" event at least this long is not occupying anyone's attention the
+ * way a meeting does — it is a holiday, a reminder span, or an all-day entry
+ * in some serialisation the structural check above does not recognise. It
+ * still counts as an event on its start day but contributes no busy minutes;
+ * without this bound, one such event floods every day it covers to the
+ * 1440-minute clamp and the metric stops meaning anything.
+ */
+export const MAX_TIMED_EVENT_MS = 20 * 3_600_000;
 
 /**
  * Collapse a chunk's events into per-day counts and merged busy minutes.
@@ -142,7 +158,9 @@ export function summariseChunk(
     const end = ev.end ? Date.parse(ev.end) : start;
     const d = out.get(localDayOf(new Date(start)));
     if (d) d.events++;
-    if (Number.isFinite(end) && end > start) timed.push({ start, end });
+    if (Number.isFinite(end) && end > start && end - start < MAX_TIMED_EVENT_MS) {
+      timed.push({ start, end });
+    }
   }
 
   // Merge overlapping timed intervals once, then clip per day.
