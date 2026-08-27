@@ -232,16 +232,26 @@ export async function runIntelSweep(
   // during an outage costs one call rather than several hundred.
   stages.push(
     await runStage('embeddings', async () => {
-      const [{ backfillPendingEmbeddings }, { backfillMailIndex }] = await Promise.all([
-        import('./mail-queue'),
-        import('$lib/mail-index/store'),
-      ]);
+      const [{ backfillPendingEmbeddings }, { backfillMailIndex }, { backfillEntityEmbeddings }] =
+        await Promise.all([
+          import('./mail-queue'),
+          import('$lib/mail-index/store'),
+          import('./embed'),
+        ]);
       const notes = await backfillPendingEmbeddings();
       const passages = await backfillMailIndex();
+      // Entities too. #515 wired the two mail backfills and left this one out,
+      // which showed up immediately: 135 entities carried no vector after the
+      // outage, and an unembedded entity cannot be matched against — so the next
+      // extraction forks a duplicate rather than binding to it (see extract.ts,
+      // which filters candidates on `embedding IS NOT NULL`).
+      const entities = await backfillEntityEmbeddings();
       return {
         notesEmbedded: notes.embedded,
         notesRemaining: notes.remaining,
         threadsIndexed: passages.indexed,
+        entitiesEmbedded: entities.embedded,
+        entitiesRemaining: entities.remaining,
         // Reported as a number because the run log stores numbers. 1 means the
         // provider was still refusing, which is why the other figures are low.
         providerRefused: notes.stopped || passages.stopped ? 1 : 0,
