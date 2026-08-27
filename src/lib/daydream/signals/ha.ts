@@ -69,6 +69,21 @@ function isPlainNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+/**
+ * Attribute names that are identifiers rather than quantities.
+ *
+ * The first live run registered `camera.front_door_live_view#last_video_id`
+ * with a value of 7.67e18. It is a number, it changes daily, and it correlates
+ * with nothing — which is precisely the failure the sweep's hand-written metric
+ * list was written to prevent ("an automatic sweep would silently start testing
+ * identifiers"). Removing the list means catching this here instead.
+ */
+const IDENTIFIER_ATTRIBUTE = /(^|_)(id|ids|uuid|guid|serial|serial_number|mac|token|hash|revision|sequence)$/;
+
+/** No genuine household reading is this large. A number past 2^53-ish is an
+ *  identifier or a timestamp in nanoseconds, never a temperature. */
+const ABSURD_MAGNITUDE = 1e12;
+
 /** HA reports booleans as on/off, open/closed, home/not_home. A duty cycle over
  *  a day is a genuinely useful series, so they are kept as 0/1. */
 function asBoolean(state: string): number | null {
@@ -136,7 +151,9 @@ export function harvest(states: HAState[]): HarvestResult {
     // Where the temperature, humidity and pressure actually live.
     for (const [name, value] of Object.entries(attrs)) {
       if (IGNORED_ATTRIBUTES.has(name)) continue;
+      if (IDENTIFIER_ATTRIBUTE.test(name)) continue;
       if (!isPlainNumber(value)) continue;
+      if (Math.abs(value) >= ABSURD_MAGNITUDE) continue;
       const key = signalKey('ha', `${e.entity_id}#${name}`);
       specs.push({
         key,

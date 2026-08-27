@@ -162,6 +162,8 @@ export interface SweepResult {
   /** Pairs suppressed as the same instrument read twice. Reported, because a
    *  suppression is a decision and an unexplained absence is not. */
   nearDuplicates: number;
+  /** Eligible signals dropped for never moving over the window. */
+  constantSignals: number;
   findings: Finding[];
   errors: string[];
 }
@@ -198,6 +200,18 @@ function column(rows: Row[], key: string): Array<number | null> {
   });
 }
 
+/** Whether a column carries any variation at all. Two distinct values is the
+ *  minimum that can produce a correlation of any kind. */
+function isConstant(column: Array<number | null>): boolean {
+  let seen: number | null = null;
+  for (const v of column) {
+    if (v == null) continue;
+    if (seen == null) seen = v;
+    else if (v !== seen) return false;
+  }
+  return true;
+}
+
 /**
  * The aligned daily matrix, one column per registered signal.
  *
@@ -210,7 +224,14 @@ function column(rows: Row[], key: string): Array<number | null> {
  */
 export async function loadSignalMatrix(
   opts: { windowDays?: number; subject?: string; now?: Date; minDays?: number } = {},
-): Promise<{ days: string[]; series: Map<string, Array<number | null>>; labels: Map<string, string>; considered: number }> {
+): Promise<{
+  days: string[];
+  series: Map<string, Array<number | null>>;
+  labels: Map<string, string>;
+  considered: number;
+  /** Eligible signals dropped for never moving. Reported, not hidden. */
+  constant: number;
+}> {
   const windowDays = opts.windowDays ?? 120;
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const now = opts.now ?? new Date();
@@ -226,7 +247,7 @@ export async function loadSignalMatrix(
     .slice(0, MAX_SWEEP_SIGNALS);
 
   if (chosen.length === 0) {
-    return { days: [], series: new Map(), labels, considered: eligible.length };
+    return { days: [], series: new Map(), labels, considered: eligible.length, constant: 0 };
   }
 
   const rows = await db
@@ -257,12 +278,25 @@ export async function loadSignalMatrix(
 
   const days = [...dayset].sort();
   const series = new Map<string, Array<number | null>>();
+  let constant = 0;
   for (const c of chosen) {
     const m = byKeyDay.get(c.key);
-    series.set(c.key, days.map((d) => m?.get(d) ?? null));
+    const column = days.map((d) => m?.get(d) ?? null);
+    // A series that never moves cannot correlate with anything: `pearson`
+    // returns 0 for zero variance, so it produces no finding — but it still
+    // costs a test against every other signal, and m is the denominator the
+    // false-discovery correction divides by. The first live discovery run
+    // registered fourteen connectivity sensors all sitting at 1.0; left in,
+    // they would have made every real finding harder to detect while being
+    // incapable of producing one.
+    if (isConstant(column)) {
+      constant++;
+      continue;
+    }
+    series.set(c.key, column);
   }
 
-  return { days, series, labels, considered: eligible.length };
+  return { days, series, labels, considered: eligible.length, constant };
 }
 
 /**
@@ -289,7 +323,7 @@ export async function runSweep(
   const now = opts.now ?? new Date();
   const errors: string[] = [];
 
-  const { days, series, labels, considered } = await loadSignalMatrix({
+  const { days, series, labels, considered, constant } = await loadSignalMatrix({
     windowDays,
     subject: opts.subject ?? DEFAULT_SUBJECT,
     now,
@@ -305,14 +339,14 @@ export async function runSweep(
     signalsConsidered: considered,
     signalsSwept: series.size,
     nearDuplicates: 0,
+    constantSignals: constant,
     findings: [],
     errors,
   };
 
-  if (considered > series.size) {
-    errors.push(
-      `capped at ${MAX_SWEEP_SIGNALS} signals; ${considered - series.size} eligible were not tested`,
-    );
+  const capped = Math.max(0, considered - series.size - constant);
+  if (capped > 0) {
+    errors.push(`capped at ${MAX_SWEEP_SIGNALS} signals; ${capped} eligible were not tested`);
   }
 
   if (days.length < MIN_PAIRS) {
@@ -393,8 +427,9 @@ export function describeSweep(s: SweepResult): string {
     // decision the sweep made, and the count is how anyone would notice it
     // making that decision too often.
     (s.nearDuplicates ? `; ${s.nearDuplicates} suppressed as duplicate instruments` : '') +
-    (s.signalsConsidered > s.signalsSwept
-      ? `; ${s.signalsConsidered - s.signalsSwept} eligible signals not tested (cap ${MAX_SWEEP_SIGNALS})`
+    (s.constantSignals ? `; ${s.constantSignals} never moved` : '') +
+    (s.signalsConsidered - s.signalsSwept - s.constantSignals > 0
+      ? `; ${s.signalsConsidered - s.signalsSwept - s.constantSignals} eligible signals not tested (cap ${MAX_SWEEP_SIGNALS})`
       : '')
   );
 }
