@@ -11,15 +11,23 @@ import { loadMailQueue, similarPending, backfillPendingEmbeddings } from '$lib/j
 import { admitMailNotes, rejectMailNotes, requeueMailNotes } from '$lib/jkai/intel/mail-admit';
 
 /**
- * Threads one request may admit.
+ * How long one admit request will work before handing the rest back.
  *
- * Each admission is a Gmail round trip, a model call and an embedding batch —
- * roughly a second and a half of work. A "admit all 300 of linkedin.com" click
- * has to be bounded or it is a request that cannot finish inside any sensible
- * timeout, and the owner would be left unable to tell a slow request from a
- * failed one. The response says how many were left so the UI can offer to
- * continue.
+ * The site sits behind a Cloudflare tunnel, which gives up on a request at 100
+ * seconds. Admission costs 27–50 SECONDS per thread on production — a Gmail
+ * round trip, attachment downloads, a Codex extraction and an embedding batch —
+ * so a request for four threads ran past that limit, the owner's browser got a
+ * 524, and the mail was admitted anyway while the page still showed it pending.
+ * Seen 2026-08-27 19:52–19:54.
+ *
+ * 60s leaves room for the slowest single thread to finish after the last budget
+ * check and still land inside the proxy's window. The client re-sends whatever
+ * comes back in `remaining`.
  */
+const ADMIT_BUDGET_MS = 60_000;
+
+/** A hard ceiling as well as the time budget, so one request can never hold a
+ *  connection open on a pathological list even if every thread is instant. */
 const MAX_ADMIT_PER_REQUEST = 40;
 /** Rejections are a single UPDATE and a ledger write, so they scale far higher. */
 const MAX_REJECT_PER_REQUEST = 1000;
@@ -64,13 +72,24 @@ export const POST: RequestHandler = async ({ request }) => {
   try {
     if (action === 'admit') {
       const batch = noteIds.slice(0, MAX_ADMIT_PER_REQUEST);
-      const result = await admitMailNotes(batch, { actor: 'owner', reason });
-      return json({ ...result, remaining: Math.max(0, noteIds.length - batch.length) });
+      const result = await admitMailNotes(batch, {
+        actor: 'owner',
+        reason,
+        budgetMs: ADMIT_BUDGET_MS,
+      });
+      // Everything the caller asked for that this request did not get to: what
+      // the time budget deferred, plus anything past the hard cap.
+      return json({
+        ...result,
+        remaining: [...result.remaining, ...noteIds.slice(MAX_ADMIT_PER_REQUEST)],
+      });
     }
     if (action === 'reject') {
+      // No time budget: a rejection is one UPDATE and a ledger write, so a
+      // thousand of them finish in well under the proxy's window.
       const batch = noteIds.slice(0, MAX_REJECT_PER_REQUEST);
       const result = await rejectMailNotes(batch, { actor: 'owner', reason });
-      return json({ ...result, remaining: Math.max(0, noteIds.length - batch.length) });
+      return json({ ...result, remaining: noteIds.slice(MAX_REJECT_PER_REQUEST) });
     }
     if (action === 'requeue') {
       return json({ requeued: await requeueMailNotes(noteIds.slice(0, MAX_REJECT_PER_REQUEST)) });

@@ -58,36 +58,86 @@
     selected = new Set();
   }
 
+  /**
+   * Send an action, continuing until the server says there is nothing left.
+   *
+   * Admission costs 27–50 SECONDS per thread — Gmail, attachments, a Codex
+   * extraction — and the site is behind a Cloudflare tunnel that abandons a
+   * request at 100 seconds. So the server works to a time budget and hands back
+   * the threads it did not reach; this loop re-sends them.
+   *
+   * The bug this replaces: one request for four threads ran ~160s, the browser
+   * got a 524, and because the fetch rejected the page never refreshed — so
+   * mail that HAD been admitted still showed as pending and it read as a total
+   * failure. Progress is reported every round for the same reason: a silent
+   * two-minute wait is indistinguishable from a hang.
+   */
   async function act(action: 'admit' | 'reject' | 'requeue', noteIds: string[]) {
     if (!noteIds.length || busy) return;
     busy = true;
-    message = action === 'admit' ? `Reading ${noteIds.length} thread(s)…` : '';
+    const total = noteIds.length;
+    const tally = { admitted: 0, rejected: 0, requeued: 0, failed: 0, entities: 0, edges: 0, attachments: 0, chunks: 0 };
+    let queue = [...noteIds];
+    let rounds = 0;
+
     try {
-      const res = await fetch('/api/jkai/intel/mail', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action, noteIds }),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        message = body?.error ?? 'That did not work.';
-        return;
+      while (queue.length) {
+        if (action === 'admit') {
+          const done = total - queue.length;
+          message = `Reading ${done + 1}–${total} of ${total}… (about 40s each, leave this open)`;
+        }
+        const res = await fetch('/api/jkai/intel/mail', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action, noteIds: queue }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          message = body?.error ?? 'That did not work.';
+          break;
+        }
+
+        tally.admitted += body.admitted ?? 0;
+        tally.rejected += body.rejected ?? 0;
+        tally.requeued += body.requeued ?? 0;
+        tally.failed += body.failed ?? 0;
+        tally.entities += body.entities ?? 0;
+        tally.edges += body.edges ?? 0;
+        tally.attachments += body.attachmentsSaved ?? 0;
+        tally.chunks += body.chunks ?? 0;
+
+        const left: string[] = Array.isArray(body.remaining) ? body.remaining : [];
+        // Guard against a server that returns the same work forever: if a round
+        // made no progress, stop rather than spin.
+        if (left.length >= queue.length) {
+          queue = [];
+          message = 'Stopped — the server returned no progress on that batch.';
+          break;
+        }
+        queue = left;
+        rounds += 1;
       }
-      if (action === 'admit') {
-        message =
-          `Admitted ${body.admitted} — ${body.entities} entities, ${body.edges} links, ` +
-          `${body.attachmentsSaved} attachments saved, ${body.chunks} passages indexed` +
-          (body.failed ? `. ${body.failed} failed.` : '') +
-          (body.remaining ? ` ${body.remaining} left — run it again to continue.` : '');
-      } else if (action === 'reject') {
-        message = `Rejected ${body.rejected}${body.remaining ? `, ${body.remaining} left` : ''}.`;
-      } else {
-        message = `Put ${body.requeued} back in the queue.`;
+
+      if (queue.length === 0 && rounds > 0) {
+        if (action === 'admit') {
+          message =
+            `Admitted ${tally.admitted} — ${tally.entities} entities, ${tally.edges} links, ` +
+            `${tally.attachments} attachments saved, ${tally.chunks} passages indexed` +
+            (tally.failed ? `. ${tally.failed} failed.` : '.');
+        } else if (action === 'reject') {
+          message = `Rejected ${tally.rejected}.`;
+        } else {
+          message = `Put ${tally.requeued} back in the queue.`;
+        }
       }
       clearSelection();
       await invalidateAll();
     } catch (err) {
-      message = err instanceof Error ? err.message : String(err);
+      // Even on a network failure the earlier rounds really did land, so the
+      // page is refreshed regardless — the old version left it stale and made a
+      // partial success look like a total one.
+      message = `${err instanceof Error ? err.message : String(err)} — ${tally.admitted + tally.rejected + tally.requeued} of ${total} were done before this.`;
+      await invalidateAll().catch(() => {});
     } finally {
       busy = false;
     }
