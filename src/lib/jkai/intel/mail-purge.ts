@@ -23,15 +23,27 @@
 //
 // ── What survives, and why ──────────────────────────────────────────────────
 //
-// Two things the owner authored are never touched, because a purge of MACHINE
+// Things the owner AUTHORED are never touched, because a purge of MACHINE
 // extraction that also destroyed hand-made decisions would be a worse graph,
 // not a cleaner one:
 //
-//   - relationships with `manual = true` — an edge drawn by hand
-//   - entities with `confirmed = true` — a node judged real in triage
+//   - relationships with `manual = true` — an edge drawn or confirmed by hand
+//     (only ./confirm-link ever writes it)
+//   - entities the owner has `watched`, assigned a `lens`, or filed in a dossier
 //
-// A confirmed entity keeps its node and loses its email evidence links, which
-// is the honest outcome: you vouched for the thing, not for the marketing email
+// **`confirmed` is deliberately NOT on that list, and that is the correction
+// that made this module work.** It reads like a triage verdict and is not one:
+// `graph.ts` sets `confirmed: true` automatically whenever an extraction
+// re-asserts an entity at high confidence, and `structuralEdges` asserts every
+// email participant at high confidence — so nearly every person the mailbox
+// ever mentioned was auto-confirmed on its second sighting. Measured before the
+// first run: of the 8,974 entities asserted only by email, 5,875 carried
+// `confirmed`, and ZERO were watched, lensed or in a dossier. Honouring
+// `confirmed` would have preserved 5,875 junk nodes and quietly turned a total
+// reset into a two-thirds one.
+//
+// A preserved entity keeps its node and loses its email evidence links, which is
+// the honest outcome: you vouched for the thing, not for the marketing email
 // that happened to mention it.
 //
 // Everything is counted before it is deleted and the whole thing runs in ONE
@@ -62,8 +74,9 @@ export interface MailPurgeResult {
   /** Edges left alone because the owner drew them by hand. */
   relationshipsKeptManual: number;
   entitiesRemoved: number;
-  /** Entities left alone because the owner confirmed them in triage. */
-  entitiesKeptConfirmed: number;
+  /** Entities left alone because the owner watched, lensed or filed them.
+   *  NOT `confirmed` — see the module note; that flag is machine-written. */
+  entitiesKeptOwned: number;
   /** Entities that keep their node because a non-email note also asserts them. */
   entitiesKeptOtherEvidence: number;
   noteEntityLinksRemoved: number;
@@ -80,7 +93,7 @@ const EMPTY: Omit<MailPurgeResult, 'dryRun'> = {
   relationshipsRemoved: 0,
   relationshipsKeptManual: 0,
   entitiesRemoved: 0,
-  entitiesKeptConfirmed: 0,
+  entitiesKeptOwned: 0,
   entitiesKeptOtherEvidence: 0,
   noteEntityLinksRemoved: 0,
   timelineEventsRemoved: 0,
@@ -154,17 +167,28 @@ export async function purgeMailFromGraph(opts: MailPurgeOptions = {}): Promise<M
 
       const orphanIds = candidateIds.filter((id) => !survivors.has(id));
 
-      // Confirmed entities are the owner's judgement and outrank the purge.
-      const confirmed = orphanIds.length
+      // Anything the owner actually acted on outranks the purge.
+      //
+      // Watchlist, lens and dossier membership are the three signals only a
+      // person can produce. `confirmed` is not among them — see the module note.
+      const owned = orphanIds.length
         ? await tx
             .select({ id: intelEntities.id })
             .from(intelEntities)
-            .where(and(inArray(intelEntities.id, orphanIds), eq(intelEntities.confirmed, true)))
+            .where(
+              and(
+                inArray(intelEntities.id, orphanIds),
+                sql`(${intelEntities.watched} OR ${intelEntities.lens} IS NOT NULL OR EXISTS (
+                  SELECT 1 FROM intel_dossier_items d
+                  WHERE d.kind = 'entity' AND d.ref_id = ${intelEntities.id}
+                ))`,
+              ),
+            )
         : [];
-      const confirmedSet = new Set(confirmed.map((r) => r.id));
-      result.entitiesKeptConfirmed = confirmedSet.size;
+      const ownedSet = new Set(owned.map((r) => r.id));
+      result.entitiesKeptOwned = ownedSet.size;
 
-      doomedIds = orphanIds.filter((id) => !confirmedSet.has(id));
+      doomedIds = orphanIds.filter((id) => !ownedSet.has(id));
 
       // Merge tombstones. A row whose `merged_into_id` points at something
       // about to be deleted is an alias of a node that will stop existing, and
@@ -321,7 +345,7 @@ export async function purgeMailAndRefresh(opts: MailPurgeOptions = {}): Promise<
     console.log(
       `[intel:mail-purge] removed ${result.entitiesRemoved} entities, ${result.relationshipsRemoved} edges, ` +
         `${result.timelineEventsRemoved} events, ${result.insightsRemoved} insights from ${result.notesRetained} email notes; ` +
-        `kept ${result.entitiesKeptConfirmed} confirmed entities and ${result.relationshipsKeptManual} manual edges; ` +
+        `kept ${result.entitiesKeptOwned} entities you had acted on and ${result.relationshipsKeptManual} manual edges; ` +
         `${result.notesHeld} notes now awaiting admission`,
     );
   }

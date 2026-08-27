@@ -5,11 +5,12 @@
  * careful in review: it deletes thousands of rows across seven tables, and the
  * two ways it can be wrong are both silent.
  *
- *   - Delete too much — take out the notes daydreaming reads, or an entity the
- *     owner confirmed, or an edge they drew by hand. Nobody notices for weeks.
- *   - Delete too little — leave an orphaned entity or a dangling edge behind,
- *     so the graph still says "5% savings ending" after a purge that reported
- *     success.
+ *   - Delete too much — take out the notes daydreaming reads, an entity the
+ *     owner watched, or an edge they drew by hand. Nobody notices for weeks.
+ *   - Delete too little — leave an orphaned entity or a dangling edge behind, so
+ *     the graph still says "5% savings ending" after a purge that reported
+ *     success. The subtle version of this is honouring `confirmed`, which reads
+ *     like a human verdict and is written by a machine.
  *
  * So this builds a small graph with one of each case in it, purges, and checks
  * every survivor and every casualty by name.
@@ -41,7 +42,8 @@ const ids = {
   otherNote: '',
   junkEntity: '',
   sharedEntity: '',
-  confirmedEntity: '',
+  watchedEntity: '',
+  autoConfirmedEntity: '',
   typeId: '',
 };
 
@@ -108,26 +110,33 @@ beforeAll(async () => {
       { name: `${TAG} 5% savings ending`, typeId: ids.typeId },
       // Asserted by the email AND a file. Should survive.
       { name: `${TAG} a real organisation`, typeId: ids.typeId },
-      // Asserted only by the email, but the owner confirmed it. Should survive.
-      { name: `${TAG} confirmed thing`, typeId: ids.typeId, confirmed: true },
+      // Asserted only by the email, but the owner put it on the watchlist.
+      // Deliberately ALSO carries `confirmed`, because that flag is written
+      // automatically by graph.ts and must not be what saves it — 5,875 junk
+      // entities carried it on production.
+      { name: `${TAG} watched thing`, typeId: ids.typeId, confirmed: true, watched: true },
+      // Machine-confirmed and nothing else. Must NOT survive.
+      { name: `${TAG} auto-confirmed junk`, typeId: ids.typeId, confirmed: true },
     ])
     .returning({ id: intelEntities.id, name: intelEntities.name });
   ids.junkEntity = rows.find((r) => r.name.includes('savings'))!.id;
   ids.sharedEntity = rows.find((r) => r.name.includes('organisation'))!.id;
-  ids.confirmedEntity = rows.find((r) => r.name.includes('confirmed'))!.id;
+  ids.watchedEntity = rows.find((r) => r.name.includes('watched'))!.id;
+  ids.autoConfirmedEntity = rows.find((r) => r.name.includes('auto-confirmed'))!.id;
 
   await db.insert(intelNoteEntities).values([
     { noteId: ids.emailNote, entityId: ids.junkEntity, relevance: 'mentioned' },
     { noteId: ids.emailNote, entityId: ids.sharedEntity, relevance: 'mentioned' },
     { noteId: ids.otherNote, entityId: ids.sharedEntity, relevance: 'mentioned' },
-    { noteId: ids.emailNote, entityId: ids.confirmedEntity, relevance: 'mentioned' },
+    { noteId: ids.emailNote, entityId: ids.watchedEntity, relevance: 'mentioned' },
+    { noteId: ids.emailNote, entityId: ids.autoConfirmedEntity, relevance: 'mentioned' },
   ]);
 
   await db.insert(intelRelationships).values([
     // Machine-extracted from the email. Should go.
     { sourceEntityId: ids.junkEntity, targetEntityId: ids.sharedEntity, type: 'offers', sourceNoteId: ids.emailNote },
     // Drawn by hand, cited to the email. Should survive, provenance cleared.
-    { sourceEntityId: ids.sharedEntity, targetEntityId: ids.confirmedEntity, type: 'works_with', sourceNoteId: ids.emailNote, manual: true },
+    { sourceEntityId: ids.sharedEntity, targetEntityId: ids.watchedEntity, type: 'works_with', sourceNoteId: ids.emailNote, manual: true },
   ]);
 
   await db.insert(intelTimelineEvents).values({
@@ -149,10 +158,11 @@ describe('purgeMailFromGraph', () => {
 
     const dry = await purgeMailFromGraph({ dryRun: true, noteIds: [ids.emailNote] });
     expect(dry.dryRun).toBe(true);
-    expect(dry.entitiesRemoved).toBe(1);
+    // The junk entity AND the merely-auto-confirmed one.
+    expect(dry.entitiesRemoved).toBe(2);
     expect(dry.relationshipsRemoved).toBe(1);
     expect(dry.relationshipsKeptManual).toBe(1);
-    expect(dry.entitiesKeptConfirmed).toBe(1);
+    expect(dry.entitiesKeptOwned).toBe(1);
     expect(dry.entitiesKeptOtherEvidence).toBe(1);
 
     // A dry run must not have touched anything.
@@ -193,10 +203,23 @@ describe('purgeMailFromGraph', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('keeps an entity the owner confirmed, even with no other evidence', async () => {
+  it('keeps an entity the owner watched, even with no other evidence', async () => {
     if (!dbReady) return;
-    const rows = await db.select({ id: intelEntities.id }).from(intelEntities).where(eq(intelEntities.id, ids.confirmedEntity));
+    const rows = await db.select({ id: intelEntities.id }).from(intelEntities).where(eq(intelEntities.id, ids.watchedEntity));
     expect(rows).toHaveLength(1);
+  });
+
+  it('does NOT keep an entity that is merely machine-confirmed', async () => {
+    // The correction this whole guard turns on. `confirmed` is written by
+    // graph.ts on any re-assertion at high confidence, so honouring it would
+    // have preserved 5,875 of the 8,974 junk entities on production and turned
+    // a total reset into a two-thirds one.
+    if (!dbReady) return;
+    const rows = await db
+      .select({ id: intelEntities.id })
+      .from(intelEntities)
+      .where(eq(intelEntities.id, ids.autoConfirmedEntity));
+    expect(rows).toHaveLength(0);
   });
 
   it('keeps a hand-drawn edge but clears its dead citation', async () => {

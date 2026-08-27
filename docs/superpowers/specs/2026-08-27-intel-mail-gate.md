@@ -56,8 +56,8 @@ admitMailNotes()       →  header edges + body extraction + attachments→/driv
 ```
 
 - **Purge** — `mail-purge.ts`, set-based, one transaction, dry-run first.
-  Preserves `manual` relationships and `confirmed` entities: a purge of machine
-  extraction must not destroy the owner's own decisions.
+  Preserves `manual` relationships and entities the owner **watched, lensed or
+  filed in a dossier**. See the gotcha on `confirmed` below.
 - **Clusters** — sender domain, and subject family within a sender
   (`subjectFamily` strips order numbers, so 200 shipping notices are one
   decision). Topic-by-embedding is on demand (`similarPending`), not up front.
@@ -101,6 +101,13 @@ are spent only on threads somebody asked for.
 - **`twoWay` counts senders, not participants.** A mailshot to fifty people has
   fifty participants and one sender; counting participants would admit every
   newsletter in the mailbox.
+- **`confirmed` is not a human verdict.** It reads like one, and honouring it in
+  the purge would have preserved 5,875 of the 8,974 junk entities — a two-thirds
+  reset dressed as a total one. `graph.ts:308` sets it automatically on any
+  re-assertion at high confidence, and `structuralEdges` asserts every email
+  participant at high confidence. Measured before the first run: of those 8,974
+  entities, 5,875 were `confirmed` and **zero** were watched, lensed or filed.
+  The real owner signals are `watched`, `lens` and dossier membership.
 - **`perWeek` divides by the corpus's real span.** A rule replayed over eleven
   days and reported "per week" without dividing overstates itself twofold, and
   every threshold downstream then means nothing.
