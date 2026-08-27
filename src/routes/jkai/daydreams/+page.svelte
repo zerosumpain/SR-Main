@@ -527,6 +527,12 @@
     await post({ action: 'feedback', id: t.id, verdict }, `${t.id}:${verdict}`);
   }
 
+  // One-tap execution of an action a musing proposed. The server re-validates
+  // the stored action before anything runs.
+  async function runAction(t: Thought, index: number) {
+    await post({ action: 'run_action', id: t.id, index }, `${t.id}:act${index}`);
+  }
+
   let backfilling = $state(false);
   let backfillNote = $state<string | null>(null);
 
@@ -1263,6 +1269,18 @@
                         <li><span class="ck">{e.kind}</span><span class="cv">{e.note || e.id}</span></li>
                       {/each}
                     </ul>
+                  </div>
+                {/if}
+                {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
+                  <div class="detail-block">
+                    <span class="sr-label-tight">It suggests</span>
+                    <div class="thought-actions">
+                      {#each t.proposedActions ?? [] as a, i (i)}
+                        <button class="row-link" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
+                          {a.label}
+                        </button>
+                      {/each}
+                    </div>
                   </div>
                 {/if}
               </div>

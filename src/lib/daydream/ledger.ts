@@ -48,6 +48,8 @@ export interface LedgerThought {
   score: number;
   components: Record<string, number>;
   evidence: Array<{ kind: string; id: string; note?: string }>;
+  /** One-tap actions a musing proposed; executed via the run_action endpoint. */
+  proposedActions: Array<{ kind: string; label: string; payload: string }>;
   placeId: string | null;
   status: string;
   suppressedReason: string | null;
@@ -238,6 +240,7 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
       score: daydreamThoughts.score,
       components: daydreamThoughts.components,
       evidence: daydreamThoughts.evidence,
+      proposedActions: daydreamThoughts.proposedActions,
       placeId: daydreamThoughts.placeId,
       placeLabel: daydreamPlaces.label,
       placeSuggested: daydreamPlaces.suggestedLabel,
@@ -270,6 +273,7 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     placeSuggested: r.placeSuggested,
     placeAddress: r.placeAddress,
     placeVisits: r.placeVisits,
+    proposedActions: (r.proposedActions ?? []) as LedgerThought['proposedActions'],
     score: r.score,
     components: r.components,
     evidence: r.evidence,

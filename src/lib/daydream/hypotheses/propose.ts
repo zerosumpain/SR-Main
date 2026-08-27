@@ -18,9 +18,9 @@
 //
 // All model access goes through $lib/jkai/llm-client, never a provider SDK.
 
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamDayFeatures, daydreamHypotheses } from '$lib/db/schema';
+import { daydreamDayFeatures, daydreamHypotheses, daydreamLeads } from '$lib/db/schema';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDaydreamModel } from '../compose';
 import { SWEEP_METRICS } from '../stats/sweep';
@@ -126,6 +126,35 @@ export async function gatherContext(subject = DEFAULT_SUBJECT): Promise<string> 
           .map((a) => `- [${a.verdict ?? 'untested'}] ${a.q}${a.feedback ? ` (John: ${a.feedback})` : ''}`)
           .join('\n'),
     );
+  }
+
+  // Open lines of enquiry from the ponder engine's frontier. Like a steer,
+  // this reorders attention and grants no new access — the metric allow-list
+  // is unchanged, questions inside these sets are simply preferred. It is
+  // what closes the leads loop: a lead owns the hypotheses inside its metric
+  // set, so questions asked here are how a lead earns its keep or gets
+  // abandoned.
+  try {
+    const openLeads = await db
+      .select({
+        title: daydreamLeads.title,
+        metrics: daydreamLeads.metrics,
+        score: daydreamLeads.score,
+      })
+      .from(daydreamLeads)
+      .where(and(eq(daydreamLeads.subject, subject), eq(daydreamLeads.status, 'open')))
+      .orderBy(desc(daydreamLeads.score))
+      .limit(3);
+    if (openLeads.length) {
+      parts.push(
+        'OPEN LINES OF ENQUIRY — prefer questions whose metrics sit inside one of these sets:\n' +
+          openLeads
+            .map((l) => `- ${l.title} [${((l.metrics ?? []) as string[]).join(', ')}]`)
+            .join('\n'),
+      );
+    }
+  } catch {
+    // The frontier is optional context; proposing works without it.
   }
 
   // What he has asked for, if anything. Rendered last so it sits closest to the
