@@ -81,6 +81,15 @@ export interface AdmitResult {
   attachmentsSaved: number;
   chunks: number;
   items: AdmitOutcome[];
+  /**
+   * Threads not attempted because the time budget ran out. The caller is
+   * expected to send these back in a follow-up request.
+   *
+   * NOT a count — the actual ids, so a client can continue without re-deriving
+   * which ones it asked for. A count would make the client guess, and guessing
+   * wrong here means silently skipping somebody's mail.
+   */
+  remaining: string[];
 }
 
 /** Who asked. Recorded on the decision so the rule engine can tell a rule's
@@ -93,6 +102,23 @@ export interface AdmitOptions {
   ruleKey?: string;
   /** Why, in the owner's words. Stored on the decision. */
   reason?: string;
+  /**
+   * Stop starting new threads once this many ms have elapsed.
+   *
+   * Admission is slow in a way no amount of tuning fixes: a thread costs a
+   * Gmail round trip, attachment downloads, an extraction and an embedding
+   * batch — measured at 27–50 SECONDS each on production, mostly Codex latency.
+   * A request admitting four threads therefore ran past Cloudflare's 100-second
+   * proxy limit, and the owner's browser got a 524 while the server carried on
+   * working: the mail was admitted, the page never refreshed, and it looked
+   * exactly like a failure.
+   *
+   * So the unit of work is TIME, not count. A caller sets a budget it knows
+   * fits inside its own timeout and re-sends `remaining` until it is empty.
+   * Checked BEFORE starting a thread, never mid-thread — a half-admitted thread
+   * would be far worse than a slow one.
+   */
+  budgetMs?: number;
 }
 
 function slugForFile(text: string, max = 60): string {
@@ -195,8 +221,13 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
     attachmentsSaved: 0,
     chunks: 0,
     items: [],
+    remaining: [],
   };
   if (!noteIds.length) return result;
+
+  const startedAt = Date.now();
+  const budgetMs = opts.budgetMs ?? Number.POSITIVE_INFINITY;
+  const outOfTime = () => Date.now() - startedAt >= budgetMs;
 
   const notes = await db
     .select({
@@ -217,7 +248,18 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
     }
   }
 
-  for (const note of notes) {
+  // Preserve the caller's order, so "stopped after the budget" means the same
+  // thing as "got through the first N of what I asked for". A Postgres result
+  // set has no order of its own, and handing back a `remaining` list computed
+  // against an arbitrary order would look random to whoever sent it.
+  const ordered = noteIds.map((id) => found.get(id)).filter((n): n is (typeof notes)[number] => !!n);
+
+  for (const note of ordered) {
+    // Checked before the thread starts, never during one.
+    if (outOfTime()) {
+      result.remaining.push(note.id);
+      continue;
+    }
     const meta = (note.metadata ?? {}) as Record<string, unknown>;
     const threadId = typeof meta.gmailThreadId === 'string' ? meta.gmailThreadId : null;
     const item: AdmitOutcome = { noteId: note.id, subject: note.title ?? '', status: 'failed' };
@@ -394,7 +436,8 @@ export async function admitMailNotes(noteIds: string[], opts: AdmitOptions = {})
   }
   console.log(
     `[intel:mail-admit] ${result.admitted} admitted (${result.entities} entities, ${result.edges} edges, ` +
-      `${result.attachmentsSaved} attachments, ${result.chunks} passages), ${result.failed} failed`,
+      `${result.attachmentsSaved} attachments, ${result.chunks} passages), ${result.failed} failed` +
+      (result.remaining.length ? `, ${result.remaining.length} left for the next request` : ''),
   );
   return result;
 }
