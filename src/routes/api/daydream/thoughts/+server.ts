@@ -66,6 +66,52 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'run_action': {
+        // One-tap execution of an action a musing proposed. The stored action
+        // re-validates through the closed vocabulary before anything runs, so
+        // the execute path can never do what the propose path would refuse.
+        // Acting on a thought is the strongest engagement signal there is, so
+        // it also records an inferred `useful` — the same noticing-without-
+        // pretending shape confirmPlace uses.
+        const id = str('id');
+        const index = Number(body.index);
+        if (!id || !Number.isFinite(index)) {
+          return json({ error: 'id and index are required' }, { status: 400 });
+        }
+        const { db } = await import('$lib/db');
+        const { daydreamThoughts } = await import('$lib/db/schema');
+        const { eq } = await import('drizzle-orm');
+        const [thought] = await db
+          .select({
+            id: daydreamThoughts.id,
+            feedback: daydreamThoughts.feedback,
+            proposedActions: daydreamThoughts.proposedActions,
+          })
+          .from(daydreamThoughts)
+          .where(eq(daydreamThoughts.id, id))
+          .limit(1);
+        if (!thought) return json({ error: 'no such thought' }, { status: 404 });
+        const actions = (thought.proposedActions ?? []) as Array<{ kind: string; label: string; payload: string }>;
+        const proposed = actions[index];
+        if (!proposed) return json({ error: 'no such action on this thought' }, { status: 400 });
+        const { fromProposedAction, executeAction } = await import('$lib/daydream/actions');
+        const v = fromProposedAction(proposed);
+        if ('error' in v) return json({ error: `action invalid: ${v.error}` }, { status: 400 });
+        const run = await executeAction(v.action, { key: `tap:${id}:${index}` });
+        if (!run.ok) return json({ error: run.detail }, { status: 500 });
+        await db
+          .update(daydreamThoughts)
+          .set({
+            status: 'actioned',
+            ...(thought.feedback
+              ? {}
+              : { feedback: 'useful', feedbackSource: 'action', feedbackAt: new Date() }),
+            updatedAt: new Date(),
+          })
+          .where(eq(daydreamThoughts.id, id));
+        return json({ ok: true, detail: run.detail });
+      }
+
       case 'unmute_kind': {
         const kind = str('kind');
         if (!kind) return json({ error: 'kind is required' }, { status: 400 });

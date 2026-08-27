@@ -46,6 +46,9 @@ export interface PersistResult {
   suppressed: number;
   /** Dropped before writing because the kind is muted outright. */
   muted: number;
+  /** Dedupe keys inserted (not updated) this run — what lets a caller act
+   *  exactly once per NEW thought instead of once per tick. */
+  createdKeys: string[];
 }
 
 export const EMPTY_PERSIST: PersistResult = {
@@ -54,6 +57,7 @@ export const EMPTY_PERSIST: PersistResult = {
   protectedSkipped: 0,
   suppressed: 0,
   muted: 0,
+  createdKeys: [],
 };
 
 /** Kinds the owner has silenced with `never this kind`. An absolute mute:
@@ -125,7 +129,7 @@ export async function persistCandidates(
   opts: { runId: string; now?: Date },
 ): Promise<PersistResult> {
   const now = opts.now ?? new Date();
-  const result: PersistResult = { ...EMPTY_PERSIST };
+  const result: PersistResult = { ...EMPTY_PERSIST, createdKeys: [] };
   if (candidates.length === 0) return result;
 
   const muted = await mutedKinds();
@@ -213,6 +217,7 @@ export async function persistCandidates(
         // engine fires actions without a lock.
         .onConflictDoNothing({ target: daydreamThoughts.dedupeKey });
       result.created++;
+      result.createdKeys.push(candidate.dedupeKey);
     }
   }
 

@@ -214,3 +214,44 @@ describe('renderTemplate', () => {
     expect(renderTemplate('at {{place}}', facts(), { label: null })).toBe('at this place');
   });
 });
+
+
+describe('rule action extension (D4)', () => {
+  const base = {
+    kind: 'quiet_friday_reminder',
+    description: 'Reminds about the weekly shop on quiet Fridays',
+    title: 'Weekly shop?',
+    explanation: 'It is Friday and nobody has left the house.',
+    when: { all: [{ fact: 'isWeekday', op: 'eq', value: true }] },
+    base: 0.5,
+    terms: [],
+    minTrailDays: 7,
+    dedupe: 'day',
+    rationale: 'Fires on a repeating pattern the owner described.',
+  };
+
+  it('accepts a rule with a valid standing action', () => {
+    const v = validateRuleSpec({
+      ...base,
+      action: { kind: 'remind', params: { inHours: 4, text: 'Weekly shop tonight?' } },
+    });
+    expect(v.ok).toBe(true);
+  });
+
+  it('refuses an action outside the vocabulary', () => {
+    const v = validateRuleSpec({
+      ...base,
+      action: { kind: 'send_money', params: {} },
+    });
+    expect(v.ok).toBe(false);
+    expect(v.errors.join(' ')).toContain('action');
+  });
+
+  it('refuses an unbounded reminder', () => {
+    const v = validateRuleSpec({
+      ...base,
+      action: { kind: 'remind', params: { inHours: 100000, text: 'never' } },
+    });
+    expect(v.ok).toBe(false);
+  });
+});

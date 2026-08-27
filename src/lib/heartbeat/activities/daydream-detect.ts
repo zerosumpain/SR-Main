@@ -55,11 +55,13 @@ export const daydreamDetect: ActivityHandler = {
     // detector layer stays a pure function over a snapshot. Putting the query
     // inside it would put I/O in the one layer whose whole value is having none.
     let activeRuleCount = 0;
+    let activeRules: Array<{ spec: { kind: string; action?: unknown } }> = [];
     try {
       const { listActiveRules } = await import('$lib/daydream/rules/store');
       const { setActiveRules } = await import('$lib/daydream/detectors/rule-driven');
       const rules = await listActiveRules();
       setActiveRules(rules.map((r) => r.spec));
+      activeRules = rules as typeof activeRules;
       activeRuleCount = rules.length;
     } catch (err) {
       // A rule table that cannot be read costs the model-authored rules, never
@@ -92,6 +94,34 @@ export const daydreamDetect: ActivityHandler = {
 
     const persisted = await persistCandidates(candidates, { runId, now: snapshot.now });
 
+    // ── Standing actions (owner's D4) ──
+    // An approved rule that carries an action DOES its thing when it fires —
+    // but only for thoughts CREATED this run. An updated thought is the same
+    // standing proposal recurring, and re-executing on every tick would turn
+    // one approved reminder into thirty. The action re-validates through the
+    // same closed vocabulary it was proposed under; a stored rule can never
+    // execute anything the propose path would have refused.
+    const actionsRun: string[] = [];
+    if (persisted.createdKeys.length && activeRules.some((r) => r.spec.action)) {
+      const { validateAction, executeAction } = await import('$lib/daydream/actions');
+      for (const candidate of candidates) {
+        if (!persisted.createdKeys.includes(candidate.dedupeKey)) continue;
+        const rule = activeRules.find((r) => r.spec.kind === candidate.kind && r.spec.action);
+        if (!rule) continue;
+        const v = validateAction(rule.spec.action);
+        if ('error' in v) {
+          errors.push(`${candidate.kind}: stored action invalid — ${v.error}`);
+          continue;
+        }
+        try {
+          const run = await executeAction(v.action, { key: candidate.dedupeKey, now: snapshot.now });
+          actionsRun.push(`${candidate.kind}: ${run.ok ? run.detail : `FAILED — ${run.detail}`}`);
+        } catch (err) {
+          errors.push(`${candidate.kind}: action failed — ${errMsg(err)}`);
+        }
+      }
+    }
+
     const failedSources = snapshot.sources.filter((s) => s.status === 'failed');
 
     const summary =
@@ -116,6 +146,7 @@ export const daydreamDetect: ActivityHandler = {
         trailSpanDays: snapshot.trailSpanDays,
         sources: snapshot.sources,
         failedSources: failedSources.map((s) => `${s.key}: ${s.detail}`),
+        actionsRun,
         errors,
       },
     };

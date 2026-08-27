@@ -20,6 +20,8 @@
 //
 // PURE — no DB, no clock, no network.
 
+import { validateAction } from '../actions';
+
 /**
  * Every fact a rule may reference. Adding one is a deliberate act: it widens
  * what rules can see, and each is derived by our own code in facts.ts.
@@ -273,6 +275,11 @@ export function validateRuleSpec(spec: unknown): ValidationResult {
   }
 
   validateCondition(s.when, 1, errors, { n: 0 });
+
+  if (s.action !== undefined) {
+    const v = validateAction(s.action);
+    if ('error' in v) errors.push(`action: ${v.error}`);
+  }
 
   return { ok: errors.length === 0, errors };
 }

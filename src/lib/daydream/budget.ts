@@ -69,6 +69,7 @@ export const SPENDING_ACTIONS = [
   'daydream-rulesmith',
   'daydream-hypothesise',
   'daydream-spend',
+  'daydream-ponder',
 ] as const;
 
 /** @deprecated kept so an older pulse reader still resolves. */

@@ -122,6 +122,29 @@ export const daydreamCompose: ActivityHandler = {
       }
 
       let narrative: string | null = null;
+      // A ponder musing arrives with its narrative already written and
+      // citation-audited — re-phrasing it would spend tokens to launder an
+      // audited sentence through an unaudited pass. It goes straight to
+      // delivery.
+      if (thought.narrative) {
+        narrative = thought.narrative;
+        const sendResult = await deliver(thought, decision, now);
+        if (sendResult.sent) {
+          deliveredCount++;
+          rateState.todayCount++;
+          rateState.lastDeliveredAt = now;
+          rateState.lastByKind.set(thought.kind, now);
+        }
+        outcomes.push({
+          id: thought.id,
+          kind: thought.kind,
+          channel: decision.channel,
+          sent: sendResult.sent,
+          preNarrated: true,
+          reason: decision.suppressedReason ?? sendResult.error,
+        });
+        continue;
+      }
       try {
         const result = await composeNarrative(thought, { verify: plan.verify });
         composed++;
