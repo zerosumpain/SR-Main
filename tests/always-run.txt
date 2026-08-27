@@ -41,6 +41,7 @@ tests/lib/workflows/site-tools/node-builder.test.ts
 tests/routes/admin-stale-stamps.test.ts
 tests/routes/chat-trace-link.test.ts
 tests/routes/model-picker-gating.test.ts
+tests/scripts/check-module-boundaries.test.ts
 tests/scripts/ci-release-shape.test.ts
 tests/scripts/ci-sidecars.test.ts
 tests/scripts/gate-level.test.ts

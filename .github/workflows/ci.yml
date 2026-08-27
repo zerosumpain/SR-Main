@@ -116,16 +116,28 @@ jobs:
             echo "Test shards: \`$SHARDS\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Runs at EVERY level — these two ARE the whole gate for a documentation-
-      # only change, so they must not sit behind an `if`.
+      # Runs at EVERY level — these ARE the whole gate for a documentation-only
+      # change, so they must not sit behind an `if`.
       #
-      # No setup-node and no `npm ci`: both linters import nothing but `node:fs`,
-      # so the runner's preinstalled Node is enough. That is what makes an L1 gate
-      # ~25s instead of ~40s. They ran on Node 22 before this split and run on the
-      # image default now; both scripts only read files and compare strings, and
-      # any incompatibility would be a loud red gate rather than a silent pass.
+      # No setup-node and no `npm ci`: every linter here imports nothing but
+      # `node:fs` (and `node:child_process` for `git ls-files`), so the runner's
+      # preinstalled Node is enough. That is what makes an L1 gate ~25s instead
+      # of ~40s, and it is a constraint on anything added to this line: give one
+      # of them a dependency and it silently drops out of the L1 gate. They ran
+      # on Node 22 before this split and run on the image default now; all four
+      # only read files and compare strings, and any incompatibility would be a
+      # loud red gate rather than a silent pass.
+      #
+      # gate:schema-imports was in the local `npm run gate` chain but had never
+      # been wired in here, so the one check standing between a `$lib` import in
+      # schema.ts and a drizzle push that fails while the release reports success
+      # only ever ran on a laptop. Added 2026-08-27.
       - name: Lint gates
-        run: npm run gate:public-routes && npm run gate:font-sizes
+        run: |
+          npm run gate:public-routes &&
+          npm run gate:font-sizes &&
+          npm run gate:schema-imports &&
+          npm run gate:boundaries
 
   # ── the type check ───────────────────────────────────────────────────────────
   #
