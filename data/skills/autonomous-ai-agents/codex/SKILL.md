@@ -2,13 +2,12 @@
 name: codex
 description: "Delegate coding to OpenAI Codex CLI (features, PRs)."
 version: 1.0.1
-author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [Coding-Agent, Codex, OpenAI, Code-Review, Refactoring]
-    related_skills: [claude-code, hermes-agent]
+    related_skills: [claude-code]
 ---
 
 # Codex CLI

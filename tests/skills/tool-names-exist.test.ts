@@ -17,7 +17,7 @@ const ROOT = resolve(__dirname, '../..');
  * jkai's own prompt stack and its own `jkai-*` skills.
  *
  * Deliberately NOT extended to the whole corpus. `autonomous-ai-agents/*`
- * documents Claude Code, Codex, opencode and Hermes, where `terminal()` is
+ * documents Claude Code, Codex and opencode, where `terminal()` is
  * real; rewriting those would make accurate documentation wrong.
  */
 

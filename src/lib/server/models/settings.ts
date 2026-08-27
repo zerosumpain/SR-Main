@@ -110,7 +110,7 @@ export async function resolveThinkingModel(): Promise<ModelContext | null> {
   // thinking tier the one role that ignored the operator's choice: with the
   // default on codex/gpt-5.6-terra, an unset thinking model still resolved to
   // deepseek/deepseek-v4-flash. It cost nothing in practice only because the
-  // sole caller (general-chat.ts) is dormant behind the Hermes engine — which
+  // sole caller (general-chat.ts) was dormant at the time — which
   // is exactly the kind of latent divergence that surfaces the day that path
   // wakes up.
   return resolveDefaultModel();
@@ -150,8 +150,7 @@ export async function setDefaultThinkingLevel(level: ThinkingLevel | null): Prom
 }
 
 /** /jkai approval-prompt UI behaviour — drives the inline Approve / Deny
- *  buttons that appear under Hermes' "dangerous command requires approval"
- *  messages. `defaultAction` is what auto-fires after `autoSelectMs` if the
+ *  buttons that appear under a "dangerous command requires approval" message. `defaultAction` is what auto-fires after `autoSelectMs` if the
  *  user doesn't click; `'none'` disables auto-select (buttons still render,
  *  user must click). */
 export interface ApprovalUiSettings {
@@ -172,32 +171,6 @@ export async function getApprovalUiSettings(): Promise<ApprovalUiSettings> {
 
 export async function setApprovalUiSettings(value: ApprovalUiSettings): Promise<void> {
   await setSetting(APPROVAL_UI_KEY, value);
-}
-
-/** Which engine answers /jkai chat.
- *
- * `true` → Hermes (the gateway on homeserv: terminal, file editing, skills,
- * delegation, web search). `false` → the in-repo `generalChat` loop, which
- * keeps every site toolset (intel, canvas, datastore, drive, Gmail…) but has
- * no terminal, file or browser tools.
- *
- * Unset falls back to the `JKAI_HERMES_CANVAS_CHAT` env var, so a host that
- * has never touched the toggle behaves exactly as it did before. Setting it
- * from /admin/ops/engine overrides the env var — which is the point: flipping
- * engines used to need an env edit and a redeploy on the VPS.
- *
- * Read per request (30s cache in getSetting), never captured at module load,
- * or the toggle would need a restart to take effect.
- */
-const HERMES_CHAT_KEY = 'jkai.chat.hermes_enabled';
-
-export async function isHermesChatEnabled(envDefault: boolean): Promise<boolean> {
-  const v = await getSetting<boolean | null>(HERMES_CHAT_KEY);
-  return typeof v === 'boolean' ? v : envDefault;
-}
-
-export async function setHermesChatEnabled(enabled: boolean): Promise<void> {
-  await setSetting(HERMES_CHAT_KEY, enabled);
 }
 
 export async function getOpenRouterApiKey(): Promise<string | undefined> {

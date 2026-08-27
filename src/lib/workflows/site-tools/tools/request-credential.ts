@@ -286,7 +286,7 @@ const def: ToolDefinition = {
   },
   // NOT destructive. The MCP destructive gate blocks up to 240s on its own
   // confirm banner BEFORE the handler runs; stacking that in front of a 180s
-  // form wait would exceed Hermes' 300s read timeout and strand the turn before
+  // form wait would exceed a 300s MCP read timeout and strand the turn before
   // the form ever appeared. The modal IS the human gate — it shows the
   // destination and binding and requires an explicit save.
   destructive: false,

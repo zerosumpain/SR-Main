@@ -35,24 +35,13 @@ describe('getModelCapabilities', () => {
 });
 
 describe('getChatInputCapabilities', () => {
-  it('accepts every kind on the Hermes lane, whatever the model says', () => {
-    // Hermes owns media handling: an image goes to the model natively when it
-    // does vision and through the auxiliary vision model as a description when
-    // it doesn't. Gating on the model here is what dropped every image John
-    // attached to a Codex conversation before it was ever sent.
-    expect(getChatInputCapabilities(CODEX, { hermes: true })).toEqual({
-      image: true, audio: true, video: true, pdf: true, documentText: true,
-    });
-    expect(getChatInputCapabilities(TEXT_ONLY_OPENROUTER, { hermes: true }).image).toBe(true);
-  });
-
-  it('allows image, pdf and audio on the in-process lane regardless of the model', () => {
-    // The in-process lane used to inherit the model's raw limits, which is why
-    // attachments died the moment chat stopped going through Hermes. It now
-    // pre-analyses anything the model cannot read into text (see
-    // $lib/jkai/media/preanalyse), so the composer must not grey them out.
+  it('allows image, pdf and audio regardless of the model', () => {
+    // Chat used to inherit the model's raw limits, which greyed out every
+    // attachment on a text-only model. It now pre-analyses anything the model
+    // cannot read into text (see $lib/jkai/media/preanalyse), so the composer
+    // must not gate them.
     for (const ctx of [CODEX, TEXT_ONLY_OPENROUTER, MULTIMODAL]) {
-      const caps = getChatInputCapabilities(ctx, { hermes: false });
+      const caps = getChatInputCapabilities(ctx);
       expect(caps.image).toBe(true);
       expect(caps.pdf).toBe(true);
       expect(caps.audio).toBe(true);
@@ -61,8 +50,8 @@ describe('getChatInputCapabilities', () => {
   });
 
   it('still gates VIDEO on the model, because nothing can extract text from it', () => {
-    expect(getChatInputCapabilities(TEXT_ONLY_OPENROUTER, { hermes: false }).video).toBe(false);
-    expect(getChatInputCapabilities(MULTIMODAL, { hermes: false }).video).toBe(
+    expect(getChatInputCapabilities(TEXT_ONLY_OPENROUTER).video).toBe(false);
+    expect(getChatInputCapabilities(MULTIMODAL).video).toBe(
       getModelCapabilities(MULTIMODAL).video,
     );
   });

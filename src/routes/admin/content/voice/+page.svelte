@@ -105,7 +105,7 @@
       <div class="nm-sec-hd"><span class="sr-label-tight">Changing it</span></div>
       <p class="note">
         Re-measure with <code>npx tsx scripts/build-voice-card.ts --corpus corpus.json --write</code>
-        (see <code>docs/voice-corpus.md</code>), then push it to Hermes, the Claude skill and
+        (see <code>docs/voice-corpus.md</code>), then push it to the Claude skill and
         sr-docs with <code>scripts/sync-voice.sh</code>. Commit the result — the card is
         version-controlled on purpose, so a change to how everything writes is reviewable.
       </p>

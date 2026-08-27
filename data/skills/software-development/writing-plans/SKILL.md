@@ -2,11 +2,10 @@
 name: writing-plans
 description: "Write implementation plans: bite-sized tasks, paths, code."
 version: 1.1.0
-author: Hermes Agent (adapted from obra/superpowers)
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [planning, design, implementation, workflow, documentation]
     related_skills: [subagent-driven-development, test-driven-development, requesting-code-review]
 ---

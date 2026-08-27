@@ -2,12 +2,11 @@
 name: obliteratus
 description: "OBLITERATUS: abliterate LLM refusals (diff-in-means)."
 version: 2.0.0
-author: Hermes Agent
 license: MIT
 dependencies: [obliteratus, torch, transformers, bitsandbytes, accelerate, safetensors]
 platforms: [linux, macos]
 metadata:
-  hermes:
+  routing:
     tags: [Abliteration, Uncensoring, Refusal-Removal, LLM, Weight-Projection, SVD, Mechanistic-Interpretability, HuggingFace, Model-Surgery]
     related_skills: [vllm, gguf, huggingface-tokenizers]
 ---

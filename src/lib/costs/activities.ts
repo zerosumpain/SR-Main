@@ -39,7 +39,7 @@ export const SOURCE_ACTIVITIES: ActivityDef[] = [
   {
     key: 'source:jkai-chat',
     label: 'jkai chat turns',
-    blurb: 'Hermes chat replies on /jkai, billed per conversation. The model is the one the conversation is pinned to.',
+    blurb: 'Chat replies on /jkai, billed per conversation. The model is the one the conversation is pinned to.',
     workloadId: null,
   },
   {

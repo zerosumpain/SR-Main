@@ -6,7 +6,7 @@ author: Orchestra Research
 license: MIT
 dependencies: [axolotl, torch, transformers, datasets, peft, accelerate, deepspeed]
 metadata:
-  hermes:
+  routing:
     tags: [Fine-Tuning, Axolotl, LLM, LoRA, QLoRA, DPO, KTO, ORPO, GRPO, YAML, HuggingFace, DeepSpeed, Multimodal]
 
 ---

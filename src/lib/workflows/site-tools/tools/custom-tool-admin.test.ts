@@ -67,7 +67,7 @@ beforeEach(() => {
 
 describe('list_custom_tools', () => {
   // These three were only ever wired into general-chat.ts, which went dormant
-  // at the Hermes cutover — so from that day chat could not see, repair or
+  // at the cutover — so from that day chat could not see, repair or
   // remove any of the tools the platform had written for itself.
   it('names the tools that are failing rather than leaving arithmetic to the reader', async () => {
     state.rows = [

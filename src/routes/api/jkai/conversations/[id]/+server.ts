@@ -4,9 +4,7 @@ import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
 import { getChatInputCapabilities, modelSupportsThinking } from '$lib/server/models/capabilities';
-import { hermesWillAnswerChat } from '$lib/resilience/hermes-reach';
-import { isHermesChatEnabled, setDefaultThinkingLevel } from '$lib/server/models/settings';
-import { env } from '$env/dynamic/private';
+import { setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { isThinkingLevel } from '$lib/models/thinking';
@@ -62,18 +60,10 @@ export const GET: RequestHandler = async ({ params }) => {
 	// still carry provider 'zai' + a bare GLM id — coerce to an OpenRouter
 	// context so old conversations render (and price) as openrouter.
 	const pinnedModel = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
-	// What the ACTIVE ENGINE can accept, not what the model can — Hermes routes
-	// a text-only model's images through its vision auxiliary, so the composer
-	// must not grey them out. Falls back to the model's own limits when the
-	// legacy in-process lane is serving chat.
-	// Reachability matters as much as the setting: if homeserv is dark the loop
-	// answers, and the loop has different attachment support.
-	const hermes = await hermesWillAnswerChat(
-		isHermesChatEnabled,
-		env.JKAI_HERMES_CANVAS_CHAT === '1',
-		env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790',
-	);
-	const modelCaps = getChatInputCapabilities(pinnedModel, { hermes });
+	// What the CHAT can accept, not what the model can: images, PDFs and audio
+	// are pre-analysed into text for a model that cannot read them natively, so
+	// the composer must not grey them out.
+	const modelCaps = getChatInputCapabilities(pinnedModel);
 
 	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;
 	const [activeBuild] = await db
@@ -222,12 +212,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	const { modelProvider, modelId } = body;
 
-	// Codex is a valid provider for a conversation. Chat turns run on Hermes,
-	// which reaches Codex through its own native openai-codex profile (the
-	// Responses API, where tool-calling works) rather than through our
-	// jkai-codex-bridge — so the bridge's inability to take caller-supplied
-	// tool schemas does not constrain chat. This validator predated the second
-	// provider and rejected every Codex pick with a 400 the UI swallowed
+	// Codex is a valid provider for a conversation. This validator predated the
+	// second provider and rejected every Codex pick with a 400 the UI swallowed
 	// silently, which looked like "the picker doesn't work".
 	if (modelProvider !== 'openrouter' && modelProvider !== 'codex') {
 		throw error(400, 'modelProvider must be openrouter or codex');

@@ -2,13 +2,12 @@
 name: teams-meeting-pipeline
 description: Teams meeting summaries, job replay, Graph subscriptions.
 version: 1.1.0
-author: Hermes Agent + Teknium
 license: MIT
 prerequisites:
   env_vars: [MSGRAPH_TENANT_ID, MSGRAPH_CLIENT_ID, MSGRAPH_CLIENT_SECRET]
   commands: [hermes]
 metadata:
-  hermes:
+  routing:
     tags: [Teams, Microsoft Graph, Meetings, Productivity, Operations]
     related_docs:
       - /docs/guides/microsoft-graph-app-registration

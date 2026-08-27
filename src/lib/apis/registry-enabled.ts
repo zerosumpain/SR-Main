@@ -16,7 +16,7 @@
 //     de-duplication in the OAuth helper cannot span two hosts.
 //   - The two hosts encrypt with different INTEGRATION_CREDENTIALS_KEYs, so
 //     neither is a usable backup of the other. Divergence is silent.
-//   - jkai/Hermes already reads production's registry: the MCP gateway's
+//   - jkai chat already reads production's registry: the MCP client's
 //     upstream is https://strangeramblings.com/api/mcp. homeserv's copy served
 //     nothing, while /admin/ai/apis on homeserv:5173 still rendered it — a
 //     stale view that reads as authoritative.

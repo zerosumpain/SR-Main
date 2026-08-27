@@ -11,13 +11,7 @@
  *     production, so it silently ran the code fallback;
  *  2. roles hardcoded as module constants with NO settings key at all —
  *     self-improve and the workflow doctor, both pinned to
- *     `deepseek/deepseek-v4-flash` in their `types.ts`; and
- *  3. the Hermes engine, which keeps its OWN model config in
- *     `~/.hermes-jkai/config.yaml` that the site had never written to. That is
- *     where most of the residual OpenRouter spend actually lived: with the site
- *     default on `codex/gpt-5.6-terra`, Hermes' own `model.default` still billed
- *     439 OpenRouter calls in the 7 days to 2026-08-12, none of them visible in
- *     `agent_actions` because Hermes bypasses the SvelteKit gateway.
+ *     `deepseek/deepseek-v4-flash` in their `types.ts`.
  *
  * A carve-out is legitimate — several here are load-bearing, and the `reason`
  * field records why — but an INVISIBLE carve-out is not, because the only way
@@ -43,10 +37,7 @@ import {
 /** Where the setting lives, which decides how a change is applied. */
 export type WorkloadScope =
   /** An `app_settings` row read by a named resolver in the SvelteKit app. */
-  | 'site'
-  /** A dotted key in Hermes' own config.yaml, written with `hermes config set`
-   *  and picked up on the next gateway restart. */
-  | 'hermes';
+  | 'site';
 
 /**
  * What a model must be able to do to serve this role.
@@ -91,7 +82,7 @@ export interface WorkloadDef {
   label: string;
   /** What actually runs on this model, in one line. */
   blurb: string;
-  /** `app_settings` key (site scope) or Hermes dotted config key (hermes scope). */
+  /** The `app_settings` key this role reads. */
   key: string;
   /**
    * A legacy environment variable that still answers for this role when nothing
@@ -105,16 +96,6 @@ export interface WorkloadDef {
    * is the exact gap this workload was added to close.
    */
   envKey?: string;
-  /**
-   * Hermes scope only: the dotted key holding the PROVIDER beside `key`.
-   *
-   * Hermes reaches Codex through its own native `openai-codex` transport (the
-   * Responses API), not through our bridge — and it wants the bare slug, with
-   * no `codex/` prefix. So writing a model without writing its provider leaves
-   * the engine trying to fetch an OpenAI slug from OpenRouter, which 400s at
-   * call time on a path nobody is watching. Always written as a pair.
-   */
-  providerKey?: string;
   /**
    * The model used when the key is unset.
    *
@@ -275,92 +256,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
   },
 ];
 
-/**
- * Hermes engine roles — read and written with `hermes config get|set`, which is
- * the sanctioned path (hand-editing config.yaml round-trips badly: the gateway
- * rewrites key order on restart).
- *
- * These take effect on the next gateway restart, which the save performs.
- */
-export const HERMES_WORKLOADS: WorkloadDef[] = [
-  {
-    id: 'hermes-default',
-    scope: 'hermes',
-    label: 'Engine default',
-    blurb:
-      "Every Hermes session the site does not explicitly re-model: WhatsApp DMs, canvas chats, smoke turns. NOT /jkai web chat, which pushes its own model per conversation.",
-    key: 'model.default',
-    providerKey: 'model.provider',
-    fallbackModelId: null,
-    requires: 'tools',
-    catalogue: 'tools',
-    reason: null,
-  },
-  {
-    id: 'hermes-delegation',
-    scope: 'hermes',
-    label: 'Delegation',
-    blurb: 'Child agents Hermes spawns to delegate sub-tasks.',
-    key: 'delegation.model',
-    providerKey: 'delegation.provider',
-    fallbackModelId: null,
-    requires: 'tools',
-    catalogue: 'tools',
-    reason: null,
-  },
-  {
-    id: 'hermes-fallback',
-    scope: 'hermes',
-    label: 'Engine fallback',
-    blurb: 'What Hermes retries on when the primary provider errors.',
-    key: 'fallback_model.model',
-    providerKey: 'fallback_model.provider',
-    fallbackModelId: null,
-    requires: 'tools',
-    catalogue: 'tools',
-    reason:
-      'Worth keeping on a DIFFERENT provider from the primary — a fallback that shares the primary\'s outage is not a fallback.',
-  },
-  {
-    id: 'hermes-vision',
-    scope: 'hermes',
-    label: 'Engine vision',
-    blurb: 'Hermes-side image understanding (its own auxiliary model, not the site vision role).',
-    key: 'auxiliary.vision.model',
-    providerKey: 'auxiliary.vision.provider',
-    fallbackModelId: null,
-    requires: 'image-input',
-    catalogue: 'tools',
-    reason: 'Must accept images.',
-  },
-  {
-    id: 'hermes-web-extract',
-    scope: 'hermes',
-    label: 'Web extract',
-    blurb: 'Reading and summarising fetched web pages.',
-    key: 'auxiliary.web_extract.model',
-    providerKey: 'auxiliary.web_extract.provider',
-    fallbackModelId: null,
-    requires: null,
-    catalogue: 'tools',
-    reason: null,
-  },
-  {
-    id: 'hermes-compression',
-    scope: 'hermes',
-    label: 'Compression',
-    blurb: 'Compacting long sessions when the context fills.',
-    key: 'auxiliary.compression.model',
-    providerKey: 'auxiliary.compression.provider',
-    fallbackModelId: null,
-    requires: null,
-    catalogue: 'tools',
-    reason:
-      'Runs against very long inputs on a schedule the user never sees — cheap and long-context matters more than reasoning here.',
-  },
-];
-
-export const WORKLOADS: WorkloadDef[] = [...SITE_WORKLOADS, ...HERMES_WORKLOADS];
+export const WORKLOADS: WorkloadDef[] = [...SITE_WORKLOADS];
 
 export type WorkloadId = string;
 
@@ -381,9 +277,7 @@ export type WorkloadSource =
   /** No setting, but a legacy environment variable (`envKey`) answers. */
   | 'env'
   /** No setting and no code fallback — it follows the site default. */
-  | 'default'
-  /** Read from Hermes' config.yaml. */
-  | 'hermes';
+  | 'default';
 
 export interface WorkloadState {
   id: string;

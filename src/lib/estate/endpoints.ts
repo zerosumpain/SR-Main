@@ -208,7 +208,7 @@ export const ENDPOINTS: EstateEndpoint[] = [
     host: 'vps',
     exposure: 'loopback',
     auth: 'service-token',
-    note: 'Moved here from homeserv when Hermes stopped. Every owner alert, including backup failures, goes through it.',
+    note: 'Moved here from homeserv with the WhatsApp session. Every owner alert, including backup failures, goes through it.',
     configuredIn: 'jkai-wa-worker.service',
     probeId: 'whatsapp-bridge',
   },

@@ -3,8 +3,8 @@
  *
  * Why this exists: the collapsible Reasoning panel in the chat UI is driven by
  * `{type:'thinking'}` JobEvents, and until now the only thing that produced one
- * was the Hermes frame adapter ($lib/jkai/sse-adapter). So with Hermes bypassed
- * (`jkai.chat.hermes_enabled=false`) the panel had no input: general-chat's
+ * was the gateway's frame adapter. So once that was retired the panel had no
+ * input: general-chat's
  * streaming loop read `delta.content` and `delta.tool_calls` and silently
  * dropped everything else, leaving the synthetic "Still thinking…" narration
  * ticker as the only sign of life on a reasoning-heavy turn.

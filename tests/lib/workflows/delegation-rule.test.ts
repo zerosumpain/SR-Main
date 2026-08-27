@@ -18,14 +18,19 @@ describe('the delegation rule is not duplicated', () => {
     'src/lib/workflows/whatsapp/service.ts',
   ];
 
-  it.each(files)('%s never decides delegation from the env var alone', (rel) => {
+  it.each(files)('%s never decides delegation from the bridge URL alone', (rel) => {
     const src = readFileSync(join(ROOT, rel), 'utf8');
     // Every place that reads the bridge URL to decide delegation must also
     // consult ownsWhatsAppSession(). Grep is the right tool: the point is that
     // a NEW third place would be caught too.
-    const readsEnv = /WHATSAPP_HERMES_BRIDGE_URL/.test(src);
-    if (!readsEnv) return;
-    expect(src, `${rel} reads WHATSAPP_HERMES_BRIDGE_URL but never calls ownsWhatsAppSession()`)
+    //
+    // Matches BOTH the accessor and either raw env name. The accessor exists to
+    // give the fallback one home, but a future call site could still reach past
+    // it — and a guard that only knew the accessor would wave that through,
+    // which is the same shape as the bug it was written for.
+    const readsBridgeUrl = /whatsappBridgeUrl|WHATSAPP_BRIDGE_URL|WHATSAPP_HERMES_BRIDGE_URL/.test(src);
+    if (!readsBridgeUrl) return;
+    expect(src, `${rel} reads the WhatsApp bridge URL but never calls ownsWhatsAppSession()`)
       .toMatch(/ownsWhatsAppSession/);
   });
 

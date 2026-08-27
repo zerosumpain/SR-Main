@@ -108,7 +108,7 @@ describe('classifySignature — the failures production actually produces', () =
   });
 
   it('flags a family-level catch as not confident', () => {
-    const broad = classifySignature(input({ signature: 'HERMES_BRIDGE_SECRET not configured' }))!;
+    const broad = classifySignature(input({ signature: 'SERVICE_BRIDGE_SECRET not configured' }))!;
     expect(broad.fixKind).toBe('missing-credential');
     expect(broad.confident).toBe(false);
 

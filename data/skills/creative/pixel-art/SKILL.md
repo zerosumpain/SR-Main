@@ -6,7 +6,7 @@ author: dodo-reach
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [creative, pixel-art, arcade, snes, nes, gameboy, retro, image, video]
     category: creative
     credits:

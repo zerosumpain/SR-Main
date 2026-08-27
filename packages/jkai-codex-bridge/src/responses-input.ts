@@ -13,7 +13,7 @@
  * `function_call` / `function_call_output` items. Same conversation, told to
  * the model in its own grammar.
  *
- * Shapes follow Hermes' `codex_responses_adapter.py`, which drove this exact
+ * Shapes follow the Codex responses adapter, which drove this exact
  * endpoint in production for months — including the two rules below that look
  * arbitrary and are not.
  */

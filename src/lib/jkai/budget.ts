@@ -36,7 +36,7 @@ function cooldown(oldestInWindow: number | undefined, reason: string) {
  * The floor every build gets unless its creator says otherwise.
  *
  * This existed twice, copy-pasted, in the manual API and forge — and not at
- * all on the Hermes chat tool, which passed `budgetConfig: {}`. Because every
+ * all on the chat build tool, which passed `budgetConfig: {}`. Because every
  * check here is guarded on truthiness, an absent key is not a default, it is
  * "no cap": the no-progress brake only arms when `maxIdleIterations` is set,
  * so the two highest-volume entry points had no brake at all. Build 42244cc0

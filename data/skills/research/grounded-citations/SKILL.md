@@ -2,11 +2,10 @@
 name: grounded-citations
 description: "Ground answers and documents in cited, verifiable sources."
 version: 1.1.0
-author: Hermes Agent + Teknium
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [Research, Citations, Grounding, Sources, Web, Reports]
     category: research
     related_skills: [research-paper-writing, arxiv, ocr-and-documents]

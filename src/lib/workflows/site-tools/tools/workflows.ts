@@ -480,7 +480,7 @@ register({
     // Refuse when called from a canvas chat — the user is on an existing
     // canvas and wants nodes added to *that* canvas, not a brand-new one.
     // The MCP layer threads the inbound chat_id as `conversationId`; for
-    // canvas_chat sessions Hermes sets chat_id = the canvas's workflow_id
+    // canvas_chat sessions set chat_id = the canvas's workflow_id
     // (a UUID), so a UUID-shaped conversationId is the "we're on a canvas"
     // signal. jkai-general sessions get synthetic non-UUID ids.
     if (ctx?.conversationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ctx.conversationId)) {
@@ -554,7 +554,7 @@ register({
           // chat node — same wiring `pinConversationToCanvasChat` uses for
           // `?conv=` deep-links from /jkai.
           //
-          // Hermes' chat_id has the form `chat_<uuid>`; orchestrator_chats
+          // A legacy chat_id has the form `chat_<uuid>`; orchestrator_chats
           // stores the bare uuid as conversation_id. Strip the prefix.
           const conversationId = ctx?.conversationId?.startsWith('chat_')
             ? ctx.conversationId.slice('chat_'.length)

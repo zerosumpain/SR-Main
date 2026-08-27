@@ -450,7 +450,7 @@ export async function listCanvases(): Promise<CanvasSummary[]> {
 /**
  * Create a fresh canvas — a workflow named `canvas:<slug>` seeded with a
  * trigger node and a chat node, deliberately *not* wired together. The
- * unwired chat node acts as the canvas orchestrator panel (Hermes
+ * unwired chat node acts as the canvas orchestrator panel (the
  * jkai-canvas, design-first edit flow). If the user later wires it into
  * the DAG it becomes a workflow step. Rejects if the slug is already taken.
  */

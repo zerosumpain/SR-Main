@@ -20,9 +20,16 @@
     cardTitle: string | null;
     cardBlurb: string | null;
     cardTag: string | null;
-    origin: 'manual' | 'hermes' | string | null;
+    origin: 'manual' | 'chat' | string | null;
     createdAt: string | Date;
   };
+
+  /** Chat wrote the files itself, whatever it was called at the time. `hermes`
+   *  is the legacy stamp for the same thing; matching only the new value would
+   *  drop every pre-rename build out of its own filter and its own count. */
+  function isChatOrigin(origin: string | null): boolean {
+    return origin === 'chat' || origin === 'hermes';
+  }
 
   let { builds: initialBuilds, lanes = [] }: { builds: Build[]; lanes?: LaneStat[] } = $props();
   let builds = $state<Build[]>(initialBuilds);
@@ -33,7 +40,7 @@
   let filter = $state<
     | 'all' | 'running' | 'queued' | 'paused' | 'awaiting'
     | 'delivered' | 'capped' | 'stopped' | 'registered' | 'failed' | 'unknown'
-    | 'published' | 'hermes'
+    | 'published' | 'chat'
   >('all');
   let toast = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -52,8 +59,8 @@
       ? builds
       : filter === 'published'
         ? builds.filter((b) => b.publishedSlug)
-        : filter === 'hermes'
-          ? builds.filter((b) => b.origin === 'hermes')
+        : filter === 'chat'
+          ? builds.filter((b) => isChatOrigin(b.origin))
           : builds.filter((b) => bucket(b) === filter),
   );
 
@@ -63,7 +70,7 @@
       running: 0, queued: 0, paused: 0, awaiting: 0, failed: 0,
       delivered: 0, capped: 0, stopped: 0, registered: 0, unknown: 0,
       published: builds.filter((b) => b.publishedSlug).length,
-      hermes: builds.filter((b) => b.origin === 'hermes').length,
+      chat: builds.filter((b) => isChatOrigin(b.origin)).length,
     };
     for (const b of builds) c[bucket(b)] = (c[bucket(b)] || 0) + 1;
     return c;
@@ -347,7 +354,7 @@
         { k: 'registered', label: 'Registered' },
         { k: 'unknown', label: 'Unknown' },
         { k: 'published', label: 'Published' },
-        { k: 'hermes', label: 'From Hermes' },
+        { k: 'chat', label: 'From chat' },
       ] as f (f.k)}
         <button
           class="chip"
@@ -408,11 +415,11 @@
           {@const canPromote = !isPublished && b.status !== 'queued' && b.status !== 'pending'}
           {@const isBusy = busyId === b.id}
           {@const buc = bucket(b)}
-          {@const isHermes = b.origin === 'hermes'}
+          {@const isChat = isChatOrigin(b.origin)}
           <article
             class="build-card"
             class:selected={isSelected}
-            class:hermes={isHermes}
+            class:chat={isChat}
             data-status={buc}
             data-origin={b.origin ?? 'manual'}
           >
@@ -427,8 +434,8 @@
                 {#if isSelected}✓{:else}&nbsp;{/if}
               </button>
 
-              {#if isHermes}
-                <span class="origin-flag" title="Built by Hermes via chat/WhatsApp">Hermes</span>
+              {#if isChat}
+                <span class="origin-flag" title="Written by chat itself — the builder never ran">Chat</span>
               {/if}
 
               <div class="quick-actions">
@@ -867,10 +874,10 @@
   }
   .build-card:hover { border-color: var(--text-primary); }
   .build-card.selected { border-color: var(--accent); }
-  /* Hermes-origin builds get a distinctive left rail + accent border on top
+  /* Chat-origin builds get a distinctive left rail + accent border on top
      so users can tell at a glance which entries came in via the agent vs.
      were started manually from /jkai/builds/new. */
-  .build-card.hermes {
+  .build-card.chat {
     border-left: 3px solid var(--accent-ink);
     border-top: 2px solid var(--accent-ink);
   }

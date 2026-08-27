@@ -58,10 +58,10 @@ export type JobPhase =
 
 export type JobEvent =
   | { type: 'token'; delta: string }
-  // Hermes `replace` frame: overwrite the in-flight bubble's content with
+  // `replace`: overwrite the in-flight bubble's content with
   // the full new body (the model issued a revision, not an append).
   | { type: 'replace_bubble'; content: string }
-  // Hermes `thinking` frame: a reasoning-delta routed to the collapsible
+  // `thinking`: a reasoning-delta routed to the collapsible
   // Reasoning panel beside the in-flight assistant bubble. Eliminates the
   // dead-air window on reasoning-heavy turns (GLM-5, Claude extended
   // thinking) by surfacing model deliberation before the first answer
@@ -93,7 +93,7 @@ export type JobEvent =
   // backwards compatibility with clients that predate updates.
   | ({ type: 'secret_request' } & (SecretRequestEvent | SecretUpdateEvent))
   | { type: 'secret_ack'; requestId: string; handle?: string; stored: boolean }
-  // Dangerous-command approval gate surfaced by the Hermes plugin's
+  // Dangerous-command approval gate surfaced by the agent's
   // `send_exec_approval` (kind="approval" frame). The card's buttons reply
   // `/approve` | `/deny`, resolved gateway-side by the chat's session_key — so
   // there's no `_ack` correlation event, unlike confirm/clarify.
@@ -244,13 +244,14 @@ export interface JobScope {
   conversationId?: string | null;
   chatNodeId?: string | null;
   /**
-   * Which engine is actually running this turn. Set at creation, never inferred
-   * later — the `jkai.chat.hermes_enabled` setting says what the NEXT turn will
-   * use, not what THIS job used, and the two diverge the moment chat fails over
-   * to the in-process loop because homeserv went dark. A `clarify_ack` routed by
-   * the setting instead of this field gets posted to the wrong engine.
+   * Which engine ran this turn. Set at creation, never inferred later.
+   *
+   * There is one engine now, so this is a constant — kept because the property
+   * it encodes is what an ack must be routed by. Reading a setting instead of
+   * the job's own record is how a `clarify_ack` once reached the wrong engine,
+   * and a second engine would reintroduce exactly that.
    */
-  engine?: 'hermes' | 'loop';
+  engine?: 'loop';
 }
 
 export interface OrchestratorJob {
@@ -280,21 +281,21 @@ export interface OrchestratorJob {
   // so an unattended user-input gate doesn't reap the job after 4 min.
   waiterOpenedAt: number | null;
   // Count of in-flight `delegate_task` calls (started but not yet resolved).
-  // A synchronous delegation is BUSY, not idle — Hermes runs the child agents
+  // A synchronous delegation is BUSY, not idle — the child agents run
   // in worker threads and, by design, does not stream their intermediate tool
   // calls back to the parent, so the parent's SSE stream goes silent for the
   // whole delegation. Without this the 4-min idle watchdog reaps a perfectly
   // healthy job mid-delegation ("likely stuck"). While >0 the watchdog applies
   // the delegation limits below instead of the normal idle limit.
   activeDelegations: number;
-  // Count of in-flight tool calls that are NOT delegations. Hermes emits
+  // Count of in-flight tool calls that are NOT delegations. The agent emits
   // nothing at all between `tool_start` and `tool_result`, so a single long
   // tool call (a canvas `workflow_run`, a deep scrape, a slow MCP round-trip)
   // looks exactly like a hung job. It used to be rescued by accident: the
   // gateway's 3-minute "⏳ Working…" filler arrived as a text frame and reset
   // the idle timer. That filler is now routed off the text channel (and
   // switched off at the gateway), so the exemption has to be explicit — or a
-  // legitimate 16-minute tool call is reaped at 4 min while Hermes carries on
+  // legitimate 16-minute tool call is reaped at 4 min while the agent carries on
   // producing the real answer into a dead stream.
   activeTools: number;
   // Set when this job's message is queued BEHIND another turn on the same
@@ -323,16 +324,16 @@ const HARD_TIMEOUT_MS = 600_000; // 10 min total
 const WAITER_IDLE_TIMEOUT_MS = 24 * 60 * 60_000; // 24 h
 const WAITER_HARD_TIMEOUT_MS = 48 * 60 * 60_000; // 48 h total cap with waiter open
 // A `delegate_task` runs child agents that are busy but silent on the parent
-// stream (Hermes surfaces only their final summary). Tolerate a long quiet spell
+// stream (only their final summary surfaces). Tolerate a long quiet spell
 // — a node-builder sub-agent can churn for many minutes — while still keeping a
 // generous hard cap so a genuinely wedged child is eventually reaped, not hung
 // forever.
 const DELEGATION_IDLE_TIMEOUT_MS = 30 * 60_000; // 30 min of parent silence while delegating
 const DELEGATION_HARD_TIMEOUT_MS = 45 * 60_000; // 45 min total while a delegation is active
-// An ordinary tool call is silent for its whole duration too. Sized just under
-// Hermes' own `agent.gateway_timeout` (1800s in ~/.hermes-jkai/config.yaml) so
-// Hermes — which owns the turn and can still deliver the answer — gives up
-// first, rather than SvelteKit reaping a live stream out from under it.
+// An ordinary tool call is silent for its whole duration too. Sized under the
+// agent's own turn timeout so the side that owns the turn — and can still
+// deliver the answer — gives up first, rather than the job store reaping a live
+// stream out from under it.
 const TOOL_IDLE_TIMEOUT_MS = 20 * 60_000; // 20 min inside a single tool call
 // A queued turn is silent for exactly as long as the turn ahead of it runs, and
 // that one is bounded by its own hard limit. Generous, because the alternative is
@@ -552,7 +553,7 @@ function scopeMatches(job: OrchestratorJob, scope: JobScope): boolean {
  * other canvases' jobs alone.
  *
  * Returns the ids it cancelled, because the superseding job needs them: a second
- * message sent while the agent is answering does NOT start a second Hermes run —
+ * message sent while the agent is answering does NOT start a second run —
  * the running one is redirected, or the text merged into it, and it keeps the
  * FIRST turn's stamp. The new job adopts these ids so it renders the output that
  * is actually answering it instead of rejecting it as another turn's. See

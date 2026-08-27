@@ -3,7 +3,7 @@ name: jkai-node-builder
 description: "Designs and ships a new workflow node for jkai when no existing node fits."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [node-builder, codegen, workflow, mcp, jkai]
     related_skills:
       - jkai-canvas

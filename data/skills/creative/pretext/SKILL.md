@@ -2,11 +2,10 @@
 name: pretext
 description: "Build creative browser demos with @chenglou/pretext — DOM-free text layout, ASCII art, typographic flow, generative text art."
 version: 1.0.0
-author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [creative-coding, typography, pretext, ascii-art, canvas, generative, text-layout, kinetic-typography]
     related_skills: [p5js, claude-design, excalidraw, architecture-diagram]
 ---

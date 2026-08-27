@@ -181,7 +181,7 @@ export async function executeTool(
 
   // Attach a durable watcher to anything that spawns a long-running task.
   //
-  // This hook used to live in general-chat.ts, which the Hermes cutover made
+  // This hook used to live in general-chat.ts, which the cutover made
   // dormant — so every `producesLongRunningTask` declaration went inert and
   // the last auto-bound watcher dates from May. The model was told by the tool
   // catalogue that watchers attach themselves, so it stopped registering them;

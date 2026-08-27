@@ -3,7 +3,7 @@ name: jkai-canvas
 description: "Canvas orchestrator — edit workflow DAGs via MCP tools, scoped to the current chat's workflow_id."
 version: 1.2.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, canvas, workflow, dag, mcp, orchestrator]
     related_skills:
       - jkai-node-builder

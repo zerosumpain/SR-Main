@@ -3,7 +3,7 @@ name: jkai-money
 description: "PayPal, transactions, receipts, payments, invoices, subscriptions, refunds, statements, bank and card charges — look a payment up on the payment rail via api_integration_call, never by searching email."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, money, paypal, truelayer, bank, card, transactions, receipts, payments, invoices, subscriptions, refunds, billing]
     related_skills:
       - jkai-general

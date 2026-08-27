@@ -3,7 +3,7 @@ name: jkai-general
 description: "Top-level /jkai chat router: routes to a domain, or answers."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [routing, general-chat, jkai]
     related_skills:
       - jkai-canvas
@@ -30,7 +30,7 @@ This is the full inventory for general chat — no need to discover or debate it
 - `memory(action, target, content)` — add/replace/remove persistent memory.
 - `schedule_reply_at(when, message)` / `register_heartbeat_action(...)` — scheduling + heartbeat.
 - `send_message(target, message)` — push a message to any connected platform.
-- `register_hermes_build({title, prompt, files: [{path, content}]})` — ship a static HTML/CSS/JS app from chat (see "Building static apps" below).
+- `register_chat_build({title, prompt, files: [{path, content}]})` — ship a static HTML/CSS/JS app from chat (see "Building static apps" below).
 - `workflow_build_from_spec(...)` — create a new workflow (design-first; never on first turn).
 - `jkai_extended({operation: 'list'|'schema'|'invoke'|'names', name?, args?})` — discover and invoke any of ~125 domain tools (gmail, health, blog, research, scraper, build, ha, render, etc.). Use `names` for the cheapest survey (tool names only).
 
@@ -43,7 +43,7 @@ This is the full inventory for general chat — no need to discover or debate it
 
 **Domain tools** (via `jkai_extended.invoke`, e.g. `gmail_search`, `health_sleep`): see the routing section below.
 
-**You do NOT have:** filesystem access or DB queries against host paths (`/home/john/…`, `/tmp/…`) — use the MCP tools. `terminal`, `execute_code`, `process` and the sandbox `write_file` belong to the build runner, not this chat; never stage files for `register_hermes_build`, pass content inline.
+**You do NOT have:** filesystem access or DB queries against host paths (`/home/john/…`, `/tmp/…`) — use the MCP tools. `terminal`, `execute_code`, `process` and the sandbox `write_file` belong to the build runner, not this chat; never stage files for `register_chat_build`, pass content inline.
 
 **Hard rule — never source a credential yourself.** Do not use `terminal`, `execute_code`, `read_file` or anything else to find an API key: not in `.env`, not in `keys.json`, not in `~/.hermes-jkai/`, not from the environment, not by grepping for it. This is not a style preference and speed is not a justification.
 
@@ -229,7 +229,7 @@ source couldn't be read. Stop and change tack. Before any extra search ask:
 
 ## Building static apps from chat
 
-A small self-contained web app — *"build me a calculator", "a single-page timer"* — ships via **`register_hermes_build` only**. No `write_file`, no `terminal`, no `execute_code`; nothing is staged on disk.
+A small self-contained web app — *"build me a calculator", "a single-page timer"* — ships via **`register_chat_build` only**. No `write_file`, no `terminal`, no `execute_code`; nothing is staged on disk.
 
 **The one rule that trips this up:** `files[].content` is the **literal file body as a string** — NOT a path, NOT a filename. `{ path: 'index.html', content: '/home/john/app.html' }` publishes a page containing that path string and nothing else. Paste the whole document inline, however large; one `files` entry per file.
 
@@ -237,7 +237,7 @@ A small self-contained web app — *"build me a calculator", "a single-page time
 
 **Read `skill_view(name='jkai-general', reference='references/static-app-builds.md')` before you write the HTML** — the exact CSS to paste into `<head>`, and the publish flow (`build_control` to publish, `build_tweak` for async iteration, `build_inspect` to poll).
 
-Use `register_hermes_build`, not `build_create` — `build_create` triggers the full autonomous orchestrator, overkill for a 50-line app.
+Use `register_chat_build`, not `build_create` — `build_create` triggers the full autonomous orchestrator, overkill for a 50-line app.
 
 ## Pitfall — "how much X do you have" means stored data, not a live fetch
 

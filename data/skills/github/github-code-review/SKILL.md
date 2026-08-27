@@ -2,11 +2,10 @@
 name: github-code-review
 description: "Review PRs: diffs, inline comments via gh or REST."
 version: 1.1.0
-author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [GitHub, Code-Review, Pull-Requests, Git, Quality]
     related_skills: [github-auth, github-pr-workflow]
 ---
@@ -409,7 +408,7 @@ Collect your findings and submit them as a formal review with inline comments.
 **With gh:**
 ```bash
 # If no issues — approve
-gh pr review $PR_NUMBER --approve --body "Reviewed by Hermes Agent. Code looks clean — good test coverage, no security concerns."
+gh pr review $PR_NUMBER --approve --body "Reviewed automatically. Code looks clean — good test coverage, no security concerns."
 
 # If issues found — request changes with inline comments
 gh pr review $PR_NUMBER --request-changes --body "Found a few issues — see inline comments."
@@ -462,7 +461,7 @@ gh pr comment $PR_NUMBER --body "$(cat <<'EOF'
 - Good error handling in the middleware layer
 
 ---
-*Reviewed by Hermes Agent*
+
 EOF
 )"
 ```

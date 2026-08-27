@@ -14,10 +14,10 @@ Available on:
 
 ## Auth
 
-`tools/call` requires `Authorization: Bearer <HERMES_BRIDGE_SECRET>`. Read the secret from `~/strange_rambling_svelte/.env`:
+`tools/call` requires `Authorization: Bearer <SERVICE_BRIDGE_SECRET>`. Read the secret from `~/strange_rambling_svelte/.env`:
 
 ```bash
-SECRET=$(grep HERMES_BRIDGE_SECRET ~/strange_rambling_svelte/.env | cut -d= -f2-)
+SECRET=$(grep SERVICE_BRIDGE_SECRET ~/strange_rambling_svelte/.env | cut -d= -f2-)
 ```
 
 Note: `terminal()` tool output masks the secret as `***`, but the shell variable holds the real value.

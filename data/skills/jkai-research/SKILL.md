@@ -3,7 +3,7 @@ name: jkai-research
 description: "Deep-dive research — autonomous sessions, semantic search of findings, reports, and web look-ups via research_* tools."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, research, deep-dive, sources, reports]
     related_skills:
       - jkai-general

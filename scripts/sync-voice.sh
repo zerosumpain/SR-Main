@@ -8,21 +8,19 @@
 # --check writes nothing and exits non-zero if any destination is out of date.
 #
 # WHY THIS EXISTS. The card lives in data/voice/ and SvelteKit surfaces read it
-# directly. Three other things write in John's voice and cannot see that file:
-# the Hermes agent behind /jkai chat, Claude Code (and the builder it drives),
-# and the sr-docs content tree. Before this script those three had either a
-# stale copy of his voice or none at all. One generator, four destinations, so
-# they cannot drift apart again.
+# directly. Two other things write in John's voice and cannot see that file:
+# Claude Code (and the builder it drives), and the sr-docs content tree. Before
+# this script those two had either a stale copy of his voice or none at all.
+# One generator, three destinations, so they cannot drift apart again.
+#
+# /jkai CHAT IS NOT A DESTINATION HERE. Its voice used to be written into the
+# retired gateway's own SKILL.md on this box; it now lives in data/prompts/ in
+# this repo and ships with an ordinary deploy.
 #
 # HOMESERV ONLY, and it needs no rsync line in ci-release.sh. Every destination
 # is a path on this box; nothing here runs on the VPS. (New scripts usually DO
 # need their own rsync line — ci-release.sh syncs scripts/ by allow-list — so
 # the absence of one here is deliberate, not an oversight.)
-#
-# THE HERMES EDIT DOES NOT TAKE EFFECT UNTIL A RESTART. Editing a SKILL.md has
-# no effect on live /jkai chat until `systemctl --user restart jkai-hermes`;
-# this script does it for you and says so. Skipping it looks exactly like bad
-# prompt engineering and has burned a day before.
 
 set -euo pipefail
 
@@ -35,7 +33,6 @@ CHECK_ONLY=0
 CARD="data/voice/voice-card.json"
 [[ -f "$CARD" ]] || { echo "No $CARD. Run scripts/build-voice-card.ts first." >&2; exit 1; }
 
-HERMES_SKILL="$HOME/.hermes-jkai/skills/jkai-general/SKILL.md"
 CLAUDE_SKILL_DIR="$HOME/.claude/skills/john-voice"
 SRDOCS_PAGE="$HOME/sr-docs/content/internal/design-system/john-voice.md"
 
@@ -44,8 +41,8 @@ END='<!-- VOICE:END -->'
 
 changed=0
 
-# Render a register's block via the same code the app uses, so what Hermes and
-# Claude are told is byte-identical to what the SvelteKit surfaces are told.
+# Render a register's block via the same code the app uses, so what Claude is
+# told is byte-identical to what the SvelteKit surfaces are told.
 render() {
   npx tsx --eval "
     import { readFileSync } from 'node:fs';
@@ -87,40 +84,7 @@ echo "==> Rendering blocks from $CARD"
 CHAT_BLOCK="$(render chat 0)"
 PROSE_BLOCK="$(render public-prose 2)"
 
-# --- 1. Hermes -------------------------------------------------------------
-#
-# The voice goes into jkai-general, the always-loaded router, NOT a skill of its
-# own. Hermes truncates every skill description to 60 characters and is told to
-# load anything "even partially relevant", so a `jkai-voice` skill would either
-# be routed past when it mattered or loaded for everything. Voice applies to
-# every reply, so it belongs in the prompt that is always present.
-echo "==> Hermes ($HERMES_SKILL)"
-if [[ ! -f "$HERMES_SKILL" ]]; then
-  echo "  ! jkai-general not found — skipping Hermes" >&2
-else
-  section="$BEGIN
-## Voice — how John writes, and how you write to him
-
-$CHAT_BLOCK
-$END"
-  # Replace between the markers if they are there, append if not. Done in
-  # python because the block contains every character bash would try to expand.
-  updated="$(SECTION="$section" BEGIN="$BEGIN" END="$END" python3 - "$HERMES_SKILL" <<'PY'
-import os, sys
-src = open(sys.argv[1], encoding='utf-8').read()
-begin, end, section = os.environ['BEGIN'], os.environ['END'], os.environ['SECTION']
-if begin in src and end in src:
-    a, b = src.index(begin), src.index(end) + len(end)
-    out = src[:a] + section + src[b:]
-else:
-    out = src.rstrip('\n') + '\n\n' + section + '\n'
-sys.stdout.write(out)
-PY
-)"
-  write_if_changed "$HERMES_SKILL" "$updated" "jkai-general voice section"
-fi
-
-# --- 2. Claude Code --------------------------------------------------------
+# --- 1. Claude Code --------------------------------------------------------
 echo "==> Claude Code ($CLAUDE_SKILL_DIR)"
 claude_skill="---
 name: john-voice
@@ -151,7 +115,7 @@ The plan and the reasoning live in
 "
 write_if_changed "$CLAUDE_SKILL_DIR/SKILL.md" "$claude_skill" "john-voice skill"
 
-# --- 3. sr-docs ------------------------------------------------------------
+# --- 2. sr-docs ------------------------------------------------------------
 echo "==> sr-docs ($SRDOCS_PAGE)"
 if [[ ! -d "$HOME/sr-docs/content" ]]; then
   echo "  ! sr-docs not found — skipping"
@@ -192,7 +156,7 @@ overwritten; change the card or the exemplars instead.
   write_if_changed "$SRDOCS_PAGE" "$srdocs" "sr-docs page"
 fi
 
-# --- restart ---------------------------------------------------------------
+# --- done -------------------------------------------------------------------
 if (( CHECK_ONLY )); then
   (( changed )) && { echo; echo "Out of date. Run without --check."; exit 1; }
   echo; echo "Everything up to date."
@@ -200,16 +164,10 @@ if (( CHECK_ONLY )); then
 fi
 
 if (( changed )); then
-  echo "==> Restarting jkai-hermes (a SKILL.md edit does nothing until this happens)"
-  if systemctl --user restart jkai-hermes 2>/dev/null; then
-    echo "  + jkai-hermes restarted"
-  else
-    echo "  ! could not restart jkai-hermes — do it by hand:" >&2
-    echo "      systemctl --user restart jkai-hermes" >&2
-  fi
   echo
-  echo "Commit the Hermes edit in ~/.hermes-jkai (it is its own repo) and the"
-  echo "sr-docs page in ~/sr-docs."
+  echo "Commit the sr-docs page in ~/sr-docs."
+  echo "The CHAT voice is not synced here — it lives in data/prompts/ in this"
+  echo "repo and ships with a normal deploy."
 else
-  echo; echo "Nothing changed; Hermes left alone."
+  echo; echo "Nothing changed."
 fi

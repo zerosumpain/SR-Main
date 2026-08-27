@@ -6,7 +6,7 @@ import type { ToolProgressStep } from './job-store';
  * words, with the raw args/result one click away. Everything in this module feeds
  * that: `resolveDisplayTool` unmasks the real tool, `categorizeTool` supplies the
  * one-word bucket, and the two `summarize*` functions produce the outcome text.
- * The bus (`$lib/mcp/jsonrpc`), the Hermes frame adapter (`$lib/jkai/sse-adapter`)
+ * The bus (`$lib/mcp/jsonrpc`)
  * and the UI all import from here so every render path agrees.
  */
 
@@ -21,7 +21,7 @@ export type ToolCategory =
  * it. Two transforms:
  *   1. `jkai_extended` is an MCP-layer meta-dispatcher — the real tool + its args
  *      ride inside `{ operation:'invoke', name, args }`. Unwrap to the inner tool.
- *   2. Hermes namespaces MCP tools as `mcp_<server>_<tool>` (e.g.
+ *   2. An MCP client namespaces tools as `mcp_<server>_<tool>` (e.g.
  *      `mcp_jkai_jkai_extended`). Strip that prefix so categorisation/labelling
  *      see the bare tool name.
  * Everything else passes through untouched.
@@ -77,7 +77,7 @@ export function categorizeTool(tool: string): ToolCategory {
   if (startsAny('terminal', 'exec', 'bash', 'shell', 'run_command', 'python')) return 'RUN';
   if (
     startsAny(
-      // `web_extract` is one of Hermes' core native tools (it sits alongside
+      // `web_extract` is one of the agent's core native tools (it sits alongside
       // web_search in the runtime's own tool log) and was falling through to
       // the neutral TOOL bucket — a plainly WEB action labelled as unknown.
       'web_search', 'web_extract', 'fetch_url', 'webpage_fetch', 'stealth_scrape',
@@ -99,7 +99,7 @@ export function categorizeTool(tool: string): ToolCategory {
 /**
  * Unwrap the `{ success, data }` envelope site-tools return; passthrough otherwise.
  *
- * Hermes built-ins return their result as a JSON *string* (`web_search` →
+ * Some built-ins return their result as a JSON *string* (`web_search` →
  * `json.dumps({success, data:{web:[…]}})`), which arrives here verbatim. Parse
  * that first, so a string result isn't silently flattened to `{}` — that was
  * why every `web_search` card read "0 results". A frame the adapter truncated
@@ -127,7 +127,7 @@ function unwrap(result: unknown): Record<string, unknown> {
  * `memories`), and several also carry an explicit `count`. Try `count` first,
  * then the first array under a known key.
  *
- * `web` is Hermes' key for `web_search` (`data.web[]`, per its own
+ * `web` is the key `web_search` uses (`data.web[]`, per its own
  * `web_search_tool` docstring) — omitting it made every search card read
  * "0 results" while the backend was returning five.
  */
@@ -153,7 +153,7 @@ function firstUrl(d: Record<string, unknown>): unknown {
  *
  * `web_extract` takes `urls`, and it arrives in one of two shapes: a real array
  * when the call comes off the MCP bus, or a **JSON string containing an array**
- * once it has been through Hermes' argument preview
+ * once it has been through the argument preview
  * (`_compact_tool_value` stringifies nested values). Reading only the array form
  * left the summariser with nothing to say, which is how `web_extract` ended up
  * labelled "Done — web extract" despite its arguments naming the page exactly.
@@ -230,7 +230,7 @@ const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
 /**
- * What a `delegate_task` call is trying to achieve, from its args. Hermes takes
+ * What a `delegate_task` call is trying to achieve, from its args. It takes
  * either a single `goal` (+ optional context/toolsets) or a batch `tasks:[…]`
  * (each a goal string or `{goal|task|prompt}` object). Returns the lead goal
  * text + how many sub-agents were requested.
@@ -328,7 +328,7 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
     case 'webpage_fetch': return str('url') ? `fetching ${host(str('url')) ?? trim(str('url')!, 50)}` : 'fetching a page';
     case 'web_extract': {
       // Without this the generic fallback prints the raw `urls` argument, which
-      // on the Hermes path is a JSON-encoded array — `["https://…"]`, brackets,
+      // on that path is a JSON-encoded array — `["https://…"]`, brackets,
       // quotes and all — in the middle of the running line.
       const urls = urlsFromArgs(a);
       const hosts = [...new Set(urls.map((u) => host(u)).filter((h): h is string => !!h))];
@@ -336,7 +336,7 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       if (hosts.length > 1) return `reading ${hosts.length} pages`;
       return 'reading a page';
     }
-    // ── Hermes native tools ──────────────────────────────────────────────
+    // ── Native agent tools ──────────────────────────────────────────────
     // Without these the generic fallback below grabs "the first short string
     // arg", which for a shell call is a raw command and for a browser click is
     // an opaque element ref like `e81`.
@@ -510,13 +510,13 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       return h ? `Fetched ${h}` : 'Fetched webpage';
     }
     case 'web_extract': {
-      // Built from the ARGS first, deliberately. Hermes previews native tool
+      // Built from the ARGS first, deliberately. The agent previews native tool
       // results at 600 chars, so a `web_extract` result is usually a JSON string
       // cut mid-object that `unwrap` cannot parse — there is no count and no
       // title to read. The URLs it was given are complete, and they are what a
       // person would name the action by anyway.
       const rows = Array.isArray(d.results) ? (d.results as Array<Record<string, unknown>>) : [];
-      // Hermes sends args on `started` but not on `completed`, so on the finished
+      // Args arrive on `started` but not on `completed`, so on the finished
       // card the URLs have to come from the result. Args stay the fallback for
       // the bus path and for a result too clipped to parse.
       const resultUrls = rows.map((r) => r.url).filter((u): u is string => typeof u === 'string' && !!u);
@@ -535,14 +535,14 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       if (hosts.length > 1) return `Read ${hosts.length} pages — ${trim(hosts.join(', '), 50)}`;
       return n > 0 ? `Read ${n} page${n === 1 ? '' : 's'}` : 'Read webpage';
     }
-    // ── Hermes native tools ──────────────────────────────────────────────
+    // ── Native agent tools ──────────────────────────────────────────────
     // The engine's own tools, all of which used to fall through to the generic
-    // default. Mind the names: Hermes says `read_file` / `write_file` /
+    // default. Mind the names: the agent says `read_file` / `write_file` /
     // `search_files`, while the SITE tools further down are `file_read` /
     // `file_list` / `file_search` — so the existing cases never matched them and
     // the busiest tools in the whole system rendered as "Done — read file".
     //
-    // Every one is summarised from its ARGUMENTS, because a Hermes result is
+    // Every one is summarised from its ARGUMENTS, because such a result is
     // previewed at 600 chars and is usually unparseable. Args reach this point
     // on a finished card only because the frame adapter remembers them from the
     // `started` frame — see `takeToolArgs` in $lib/jkai/sse-adapter.

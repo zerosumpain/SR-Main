@@ -204,10 +204,10 @@
           <div class="nm-tile-sub">By model, by tool, by day.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
-        <a class="nm-tile" href={`/admin/ops/engine${t}`}>
-          <div class="nm-tile-eyebrow">Engine</div>
-          <div class="nm-tile-title">Hermes Console</div>
-          <div class="nm-tile-sub">Engine status, sessions inspector, cron authoring.</div>
+        <a class="nm-tile" href={`/admin/ops/tool-usage${t}`}>
+          <div class="nm-tile-eyebrow">Tools</div>
+          <div class="nm-tile-title">Tool Usage</div>
+          <div class="nm-tile-sub">What gets called, what never does, what fails.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
         <a class="nm-tile" href={`/admin/ops/live${t}`}>

@@ -2,11 +2,10 @@
 name: github-auth
 description: "GitHub auth setup: HTTPS tokens, SSH keys, gh CLI login."
 version: 1.1.0
-author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [GitHub, Authentication, Git, gh-cli, SSH, Setup]
     related_skills: [github-pr-workflow, github-code-review, github-issues, github-repo-management]
 ---

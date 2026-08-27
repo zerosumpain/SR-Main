@@ -1,7 +1,13 @@
-// Rewrite Hermes' inline tool-call log into plain English.
+// Rewrite the old inline tool-call log into plain English.
 //
-// Hermes interleaves a progress log into the assistant's *text stream*, so these
-// lines land in `orchestrator_chats.content` and render as prose in the bubble:
+// THIS IS A READER FOR STORED HISTORY. The engine that wrote these lines (the
+// gateway) is retired, so nothing produces them any more — but every chat it
+// answered is still in `orchestrator_chats`, and without this the markup renders
+// raw in the bubble. Deleting it would not remove machinery from the site; it
+// would put machinery back into two years of transcripts.
+//
+// That engine interleaved a progress log into the assistant's *text stream*, so
+// these lines land in `orchestrator_chats.content` and render as prose:
 //
 //   ⚙️ mcp_jkai_recall_memories: "david foley"
 //   ⚙️ mcp_jkai_jkai_extended: "workflow_inspect" (×2)
@@ -14,36 +20,34 @@
 // module's job is only to make the *prose* copy readable: same line, same rough
 // length, said in English.
 //
-// **The leading glyph is per-tool, not always ⚙️.** Hermes resolves it with
-// `get_tool_emoji(tool, default="⚙️")` (gateway/run.py), which reads the tool
-// registry's own `emoji` field first. Only tools with no registered emoji — every
-// `mcp_jkai_*` tool, because they arrive over MCP — fall back to ⚙️. Hermes' own
-// native tools each carry their own: 🔍 web_search, 📄 web_extract, 🐍
-// execute_code, 💻 terminal, 🔀 delegate_task, 📚 skill_view, … So matching on
-// ⚙️ alone covers the MCP half of the log and silently misses the native half.
+// **The leading glyph is per-tool, not always ⚙️.** Only tools with no
+// registered emoji — every `mcp_jkai_*` tool, because they arrived over MCP —
+// fall back to ⚙️. Native tools each carried their own: 🔍 web_search, 📄
+// web_extract, 🐍 execute_code, 💻 terminal, 🔀 delegate_task, 📚 skill_view, …
+// So matching on ⚙️ alone covers the MCP half of the log and silently misses
+// the native half.
 //
 // It is a pure string transform over the raw message text, applied before the
-// markdown parse, so it fixes live streaming and stored history alike with no
-// migration.
+// markdown parse, so it needs no migration.
 
 /** Marks a rewritten line so the bubble can style it as machinery, not answer. */
 export const TOOL_LOG_CLASS = 'tool-log-step';
 
 /**
- * One Hermes log entry.
+ * One log entry.
  *
- * `arg` is whatever Hermes put after the colon — usually a query string, but for
+ * `arg` is whatever followed the colon — usually a query string, but for
  * the `jkai_extended` meta-dispatcher it is the *inner tool name*, which is why
  * that case is unwrapped rather than quoted.
  */
-export interface HermesToolLogEntry {
+export interface LegacyToolLogEntry {
   tool: string;
   arg: string | null;
   count: number;
 }
 
 /**
- * The glyphs Hermes puts in front of a *tool* entry — an explicit allowlist of
+ * The glyphs that preceded a *tool* entry — an explicit allowlist of
  * the `emoji=` values registered across its tool modules, plus ⚙️/⚡, the two
  * hardcoded fallbacks for tools that register none (which is every MCP tool).
  *
@@ -53,9 +57,9 @@ export interface HermesToolLogEntry {
  * `— kicker:`. Matching any leading glyph would rewrite those into "Ran
  * Corrected".
  *
- * Hermes' status glyphs (`⏳ Working — 12 min`, `⏱️ Agent inactive…`) are still
+ * The status glyphs (`⏳ Working — 12 min`, `⏱️ Agent inactive…`) are still
  * out of this list, but no longer because they're harmless — they never reach
- * the bubble at all now. `$lib/jkai/hermes-frames` recognises them on the frame
+ * the bubble at all now — the frame classifier recognised them on the
  * stream and routes them off the text channel, because re-editing them was what
  * wiped the answer out of the bubble and the persisted row. This module only
  * ever sees the reply, so it only has to worry about the tool log.
@@ -79,13 +83,13 @@ const GLYPH_ALT = `(?:${TOOL_GLYPHS.map((g) => g.replace(/[.*+?^${}()|[\]\\]/g, 
  * rather than being rewritten and then rewritten again.
  *
  * The quoted-argument branch cannot close on the first quote: search queries
- * routinely contain their own, and Hermes logs
+ * routinely contain their own, and the log wrote
  * `🔍 web_search: ""House of Lords" benefits pension fre..."` — stopping at the
  * first inner quote captured an empty argument and spilled the remainder of the
  * query into the reply as loose prose.
  *
  * Nor can it close on the LAST quote of the line, which is what it used to do.
- * Hermes glues the answer straight onto the end of an entry with no newline, and
+ * The answer was glued straight onto the end of an entry with no newline, and
  * the answer has curly quotes in it. Real production row:
  *
  *   ⚙️ mcp__jkai__jkai_extended: "workflow_run" (×2)The live check completed,
@@ -103,7 +107,7 @@ const GLYPH_ALT = `(?:${TOOL_GLYPHS.map((g) => g.replace(/[.*+?^${}()|[\]\\]/g, 
  *                                               there is no closing quote at
  *                                               the end of the line to aim for
  *
- * The glued-on text is usually one of Hermes' own `⏳ Working — 3 min` status
+ * The glued-on text is usually one of the `⏳ Working — 3 min` status
  * lines, which are already English and are deliberately left where they are.
  */
 const ENTRY_RE = new RegExp(
@@ -118,7 +122,7 @@ const ENTRY_RE = new RegExp(
 );
 
 /**
- * Hermes tools whose names carry no underscore. Needed because the second half
+ * Tools whose names carry no underscore. Needed because the second half
  * of the false-positive guard is "the token looks like a tool name", and
  * `snake_case` is the only structural tell most of them have.
  */
@@ -137,7 +141,7 @@ function looksLikeToolToken(name: string): boolean {
 }
 
 /**
- * Strip Hermes' `mcp_<server>_` namespace. Server names carry no underscore.
+ * Strip the `mcp_<server>_` namespace. Server names carry no underscore.
  *
  * Both separator spellings are live: 342 `mcp_jkai_…` against 176
  * `mcp__jkai__…` across 45 days of production rows, because the MCP client
@@ -156,7 +160,7 @@ function looksLikeToolName(value: string): boolean {
 }
 
 function quote(value: string, max = 48): string {
-  // Hermes has usually already clipped the preview with a literal `...`; fold
+  // The preview was usually already clipped with a literal `...`; fold
   // that into a real ellipsis so it matches the one our own clipping adds
   // rather than showing two spellings in the same sentence.
   const clean = value.trim().replace(/\s+/g, ' ').replace(/\.{3,}$/, '…');
@@ -167,7 +171,7 @@ function quote(value: string, max = 48): string {
 /**
  * Name a URL argument the way a person would — `parliament.uk`, not a quoted
  * 90-character path truncated mid-slug. Several of the native tools (web_extract,
- * browser_navigate, fetch_url) take a URL as their whole preview, and Hermes has
+ * browser_navigate, fetch_url) take a URL as their whole preview, which has
  * usually already clipped it, so the raw string is both long and broken.
  */
 function prettyUrl(value: string): string {
@@ -176,7 +180,7 @@ function prettyUrl(value: string): string {
     const h = new URL(raw).hostname.replace(/^www\./, '');
     if (h) return h;
   } catch {
-    // Hermes truncates the preview, so a clipped URL often will not parse.
+    // The preview is truncated, so a clipped URL often will not parse.
     const m = raw.match(/^https?:\/\/(?:www\.)?([^/\s]+)/i);
     if (m) return m[1];
   }
@@ -191,7 +195,7 @@ function humanise(tool: string): string {
 /**
  * Verb phrases for the tools that actually show up in the log. Each takes the
  * argument (already trimmed, may be null) and returns a sentence WITHOUT the
- * repeat suffix — `describeHermesToolCall` appends that.
+ * repeat suffix — `describeLegacyToolCall` appends that.
  *
  * Everything not listed falls through to a generic `Ran <tool>` phrasing, which
  * is honest rather than wrong. Add a row here when a new tool starts appearing.
@@ -225,7 +229,7 @@ const PHRASES: Record<string, (arg: string | null) => string> = {
   webpage_fetch: (a) => (a ? `Fetched ${prettyUrl(a)}` : 'Fetched a web page'),
   x_search: (a) => (a ? `Searched X for ${quote(a)}` : 'Searched X'),
 
-  // Hermes' own session / skill machinery
+  // The agent's own session / skill machinery
   session_search: (a) => (a ? `Searched past conversations for ${quote(a)}` : 'Searched past conversations'),
   skill_view: (a) => (a ? `Read its ${a.replace(/[-_]/g, ' ')} playbook` : 'Read one of its playbooks'),
   skills_list: () => 'Checked which playbooks it has',
@@ -324,7 +328,7 @@ const PHRASES: Record<string, (arg: string | null) => string> = {
  * tool name, so `jkai_extended: "workflow_inspect"` describes a canvas read, not
  * a lookup of the string "workflow_inspect".
  */
-export function describeHermesToolCall(entry: HermesToolLogEntry): string {
+export function describeLegacyToolCall(entry: LegacyToolLogEntry): string {
   let tool = stripMcpNamespace(entry.tool);
   let arg = entry.arg && entry.arg.trim().length > 0 ? entry.arg.trim() : null;
 
@@ -361,15 +365,15 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Rewrite every Hermes tool-log entry in `text` into a plain-English step line.
+ * Rewrite every tool-log entry in `text` into a plain-English step line.
  *
  * Emitted as a block-level `<div class="tool-log-step">` surrounded by blank
  * lines so `marked` treats it as an HTML block rather than folding it into the
- * neighbouring paragraph — Hermes often glues an entry straight onto the end of
+ * neighbouring paragraph — an entry is often glued straight onto the end of
  * a sentence with no newline at all. The chat sanitiser allows `div` + `class`,
  * so the markup survives to the bubble.
  */
-export function rewriteHermesToolLog(text: string): string {
+export function rewriteLegacyToolLog(text: string): string {
   if (!text || !TOOL_GLYPHS.some((g) => text.includes(g))) return text;
 
   const rewritten = text.replace(
@@ -388,7 +392,7 @@ export function rewriteHermesToolLog(text: string): string {
       // the untouched match when it does not.
       if (!looksLikeToolToken(tool)) return match;
       const arg = quotedBeforeCount ?? quotedToEol ?? quotedThenProse ?? bare ?? null;
-      const sentence = describeHermesToolCall({
+      const sentence = describeLegacyToolCall({
         tool,
         arg: arg === undefined ? null : arg,
         count: count ? Number(count) : 1,
@@ -403,25 +407,25 @@ export function rewriteHermesToolLog(text: string): string {
 }
 
 /**
- * Remove every Hermes tool-log entry from `text`, leaving only the answer.
+ * Remove every tool-log entry from `text`, leaving only the answer.
  *
  * This is what the chat bubble uses. The English rewrite above was a halfway
  * house — it made the machinery readable, but it is still machinery sitting in
  * the middle of a reply, and the thread already has a proper home for it: the
  * tool-call trace behind the *analyse* button, which is the durable record of
- * what actually ran. `rewriteHermesToolLog` stays for that page.
+ * what actually ran. `rewriteLegacyToolLog` stays for that page.
  *
  * Same matcher and same two guards as the rewrite, so anything the rewrite
  * would have left alone — `✅ Corrected:`, `📋 Summary:`, a half-streamed tool
  * name with no colon yet — survives here untouched too.
  *
- * Each entry becomes a paragraph break rather than nothing at all: Hermes glues
+ * Each entry becomes a paragraph break rather than nothing at all: the writer glued
  * entries onto the end of a sentence with no newline, so deleting in place
  * would run the sentence before straight into the one after. The `\n{3,}`
  * collapse afterwards means a run of consecutive entries still leaves a single
  * blank line, not a gulf.
  */
-export function stripHermesToolLog(text: string): string {
+export function stripLegacyToolLog(text: string): string {
   if (!text || !TOOL_GLYPHS.some((g) => text.includes(g))) return text;
 
   const stripped = text.replace(ENTRY_RE, (match, tool: string) =>

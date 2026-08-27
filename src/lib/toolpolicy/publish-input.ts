@@ -105,7 +105,7 @@ export function coerceOwnerPublish(raw: unknown, registered: Set<string>): Owner
  * Does this version change anything that only reaches the model through the
  * MCP **manifest**?
  *
- * Load-bearing operationally. Hermes discovers tools once on connect and
+ * Load-bearing operationally. An MCP client discovers tools once on connect and
  * re-discovers only on a `notifications/tools/list_changed` notification this
  * server never sends, so:
  *
@@ -113,12 +113,12 @@ export function coerceOwnerPublish(raw: unknown, registered: Set<string>): Owner
  *     `jkai_extended` list/schema call, because `dispatchMetaTool` applies the
  *     policy per call; but
  *   - `promoteToEssential` and `globalGuidance` live only in `listMcpTools()`,
- *     so they sit inert until the gateway reconnects.
+ *     so they sit inert until the client reconnects.
  *
- * Publishing one of those without restarting Hermes means the trial measures a
+ * Publishing one of those without reconnecting means the trial measures a
  * change the model never saw, and the engine then reverts it as "no effect" —
  * a false negative written permanently into the ledger. So the API says so.
  */
-export function needsHermesReconnect(input: Pick<PublishInput, 'promoteToEssential' | 'globalGuidance'>): boolean {
+export function needsMcpReconnect(input: Pick<PublishInput, 'promoteToEssential' | 'globalGuidance'>): boolean {
   return Boolean(input.promoteToEssential?.length) || Boolean(input.globalGuidance?.length);
 }

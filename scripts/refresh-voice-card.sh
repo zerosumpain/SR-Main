@@ -156,8 +156,8 @@ cp -al "$REPO/node_modules" "$WORKTREE/node_modules" 2>>"$LOG" || {
 cd "$WORKTREE" || finish 1
 
 # --- 2. catch up the stacks that do not share this filesystem -------------
-# If a previous month's PR was merged, master now carries a card that Hermes,
-# the Claude skill and sr-docs have never seen — and until sync-voice.sh runs,
+# If a previous month's PR was merged, master now carries a card that the Claude
+# skill and sr-docs have never seen — and until sync-voice.sh runs,
 # the merge changed nothing about how anything actually writes. Do it first, so
 # a merged card takes effect even in a month where nothing new gets proposed.
 if [[ $DRY_RUN -eq 0 ]]; then
@@ -166,24 +166,21 @@ if [[ $DRY_RUN -eq 0 ]]; then
   else
     log "master's card is newer than the synced copies — syncing"
     if scripts/sync-voice.sh >>"$LOG" 2>&1; then
-      # Both destinations are their own repos and sync-voice.sh deliberately
-      # leaves committing to the caller. Explicit paths only.
-      git -C "$HOME/.hermes-jkai" add skills/jkai-general/SKILL.md >/dev/null 2>&1 \
-        && git -C "$HOME/.hermes-jkai" commit -q -m "voice: sync the card from master" >/dev/null 2>&1 \
-        && log "committed the Hermes edit"
+      # sr-docs is its own repo and sync-voice.sh deliberately leaves committing
+      # to the caller. Explicit paths only.
       git -C "$HOME/sr-docs" add content/internal/design-system/john-voice.md >/dev/null 2>&1 \
         && git -C "$HOME/sr-docs" commit -q -m "voice: sync the card from master" >/dev/null 2>&1 \
         && log "committed the sr-docs page"
       notify "🗣️ The voice card that was merged is now live everywhere.
 
-Hermes, the john-voice Claude skill and sr-docs have been re-rendered from
-master's card, and jkai-hermes has been restarted."
+The john-voice Claude skill and sr-docs have been re-rendered from master's
+card."
     else
       log "sync-voice.sh FAILED"
       notify_if_changed "🔴 voice sync failed after a card merge
 
-Master carries a new card but Hermes, the Claude skill and sr-docs still hold
-the old one, so /jkai chat is writing to a card that is no longer current.
+Master carries a new card but the Claude skill and sr-docs still hold the old
+one.
   cd ~/strange_rambling_svelte && scripts/sync-voice.sh"
     fi
   fi
@@ -386,7 +383,7 @@ The prohibitions and the persona lines are hand-written and also untouched.
 
 ## After merging
 
-Nothing downstream changes on merge alone. Hermes, the \`john-voice\` Claude
+Nothing downstream changes on merge alone. The \`john-voice\` Claude
 skill and sr-docs read their own copies, and the next run of this job syncs them
 — or \`scripts/sync-voice.sh\` does it now.
 

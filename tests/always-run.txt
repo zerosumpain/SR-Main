@@ -31,7 +31,6 @@ tests/lib/node-builder/codegen/index-patch.test.ts
 tests/lib/node-builder/codegen/panel.test.ts
 tests/lib/node-builder/codegen/registry-patch.test.ts
 tests/lib/node-builder/codegen/write-files.test.ts
-tests/lib/server/hermes-remote-writes-refuse.test.ts
 tests/lib/workflows/chat/destructive-gate-unattended.test.ts
 tests/lib/workflows/chat/prompt-cache-order.test.ts
 tests/lib/workflows/chat/thinking-level-wiring.test.ts

@@ -12,7 +12,7 @@ function finish(jobId: string): void {
 
 /**
  * A second message sent while the first is still answering must WAIT, not run
- * alongside it. The Hermes branch has queued since the cutover; the in-process
+ * alongside it. Queuing was once done upstream only; the in-process
  * branch did not, so two turns streamed into the same conversation at once and
  * both appended to history — which is how an answer arrives interleaved with the
  * one before it.

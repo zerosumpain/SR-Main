@@ -3,7 +3,7 @@ name: jkai-gmail
 description: "Gmail domain — search, read, reply, send, and label messages across connected Gmail accounts."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, gmail, email, inbox, labels, multi-account]
     related_skills:
       - jkai-general

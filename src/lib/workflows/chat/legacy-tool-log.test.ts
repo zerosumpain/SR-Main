@@ -1,59 +1,59 @@
 import { describe, it, expect } from 'vitest';
-import { rewriteHermesToolLog, stripHermesToolLog, describeHermesToolCall } from './hermes-tool-log';
+import { rewriteLegacyToolLog, stripLegacyToolLog, describeLegacyToolCall } from './legacy-tool-log';
 
 // The fixtures below are real lines taken from production `orchestrator_chats`
-// rows, including the ones where Hermes glues an entry onto the end of a
+// rows, including the ones where an entry is glued onto the end of a
 // sentence with no newline and the ones where it emits a bare ellipsis instead
 // of an argument.
 
-describe('describeHermesToolCall', () => {
+describe('describeLegacyToolCall', () => {
   it('strips the mcp_<server>_ namespace and names the action', () => {
-    expect(describeHermesToolCall({ tool: 'mcp_jkai_recall_memories', arg: 'david foley', count: 1 })).toBe(
+    expect(describeLegacyToolCall({ tool: 'mcp_jkai_recall_memories', arg: 'david foley', count: 1 })).toBe(
       'Searched saved memories for “david foley”',
     );
   });
 
   it('unwraps jkai_extended to the inner tool it dispatched to', () => {
-    expect(describeHermesToolCall({ tool: 'mcp_jkai_jkai_extended', arg: 'workflow_inspect', count: 1 })).toBe(
+    expect(describeLegacyToolCall({ tool: 'mcp_jkai_jkai_extended', arg: 'workflow_inspect', count: 1 })).toBe(
       'Read the current canvas',
     );
   });
 
   it('treats a non-identifier jkai_extended argument as a lookup subject', () => {
-    expect(describeHermesToolCall({ tool: 'mcp_jkai_jkai_extended', arg: 'intel entity', count: 1 })).toBe(
+    expect(describeLegacyToolCall({ tool: 'mcp_jkai_jkai_extended', arg: 'intel entity', count: 1 })).toBe(
       'Looked up “intel entity”',
     );
   });
 
   it('reports a repeat count in words rather than ×N', () => {
-    expect(describeHermesToolCall({ tool: 'mcp_jkai_ha_get_history', arg: null, count: 3 })).toBe(
+    expect(describeLegacyToolCall({ tool: 'mcp_jkai_ha_get_history', arg: null, count: 3 })).toBe(
       'Read device history — 3 calls',
     );
   });
 
   it('falls back to a generic phrasing for an unmapped tool', () => {
-    expect(describeHermesToolCall({ tool: 'mcp_jkai_some_new_thing', arg: null, count: 1 })).toBe(
+    expect(describeLegacyToolCall({ tool: 'mcp_jkai_some_new_thing', arg: null, count: 1 })).toBe(
       'Ran some new thing',
     );
-    expect(describeHermesToolCall({ tool: 'mcp_jkai_some_new_thing', arg: 'abc', count: 1 })).toBe(
+    expect(describeLegacyToolCall({ tool: 'mcp_jkai_some_new_thing', arg: 'abc', count: 1 })).toBe(
       'Ran some new thing on “abc”',
     );
   });
 });
 
-describe('rewriteHermesToolLog', () => {
+describe('rewriteLegacyToolLog', () => {
   it('leaves text without a tool log untouched', () => {
     const text = 'Here is a normal reply with **markdown** and no machinery.';
-    expect(rewriteHermesToolLog(text)).toBe(text);
+    expect(rewriteLegacyToolLog(text)).toBe(text);
   });
 
   it('rewrites a leading entry into a step div', () => {
-    const out = rewriteHermesToolLog('⚙️ mcp_jkai_recall_memories: "david foley"');
+    const out = rewriteLegacyToolLog('⚙️ mcp_jkai_recall_memories: "david foley"');
     expect(out).toBe('<div class="tool-log-step">Searched saved memories for “david foley”</div>');
   });
 
   it('splits an entry that is glued onto the end of a sentence', () => {
-    const out = rewriteHermesToolLog(
+    const out = rewriteLegacyToolLog(
       'Pulling the live intel entity rather than trusting the summary.⚙️ mcp_jkai_knowledge_search: "David Foley"\n\n**David Foley** — confirmed.',
     );
     expect(out).toBe(
@@ -64,7 +64,7 @@ describe('rewriteHermesToolLog', () => {
   });
 
   it('handles the bare-ellipsis form and a run of glued entries', () => {
-    const out = rewriteHermesToolLog(
+    const out = rewriteLegacyToolLog(
       '⚙️ mcp_jkai_ha_get_history... (×2)⚙️ mcp_jkai_ha_get_history... (×3)',
     );
     expect(out).toBe(
@@ -74,7 +74,7 @@ describe('rewriteHermesToolLog', () => {
   });
 
   it('escapes HTML in an argument so a crafted reply cannot inject markup', () => {
-    const out = rewriteHermesToolLog('⚙️ mcp_jkai_file_search: "<img src=x onerror=alert(1)>"');
+    const out = rewriteLegacyToolLog('⚙️ mcp_jkai_file_search: "<img src=x onerror=alert(1)>"');
     expect(out).not.toContain('<img');
     expect(out).toContain('&lt;img');
   });
@@ -83,17 +83,17 @@ describe('rewriteHermesToolLog', () => {
     // Mid-stream the tool name is still being emitted; rewriting here would show
     // one sentence and then replace it a token later.
     const partial = 'Checking now. ⚙️ mcp_jkai_recall_mem';
-    expect(rewriteHermesToolLog(partial)).toBe(partial);
+    expect(rewriteLegacyToolLog(partial)).toBe(partial);
   });
 });
 
-// Hermes picks the leading glyph per tool (`get_tool_emoji`), falling back to
+// The leading glyph was picked per tool, falling back to
 // ⚙️ only for tools that register none — which is every `mcp_jkai_*` tool. Its
 // own native tools carry their own glyph, so a ⚙️-only match covered the MCP
 // half of the log and missed the native half entirely.
-describe('rewriteHermesToolLog — native tools with their own glyph', () => {
+describe('rewriteLegacyToolLog — native tools with their own glyph', () => {
   it('rewrites the web_search / web_extract log from the House of Lords reply', () => {
-    const out = rewriteHermesToolLog(
+    const out = rewriteLegacyToolLog(
       '🔍 web_search: "House of Lords members salary allowan..."\n' +
         '📄 web_extract: "https://www.parliament.uk/business/lo..."\n' +
         '🔍 web_search: "House of Lords daily allowance £371 £..."',
@@ -114,7 +114,7 @@ describe('rewriteHermesToolLog — native tools with their own glyph', () => {
     ['🌐 browser_navigate: "https://www.parliament.uk/x"', 'Opened parliament.uk in a browser'],
     ['🔀 delegate_task: "check the deploy"', 'Handed a sub-agent the job of “check the deploy”'],
   ])('rewrites %s', (input, expected) => {
-    expect(rewriteHermesToolLog(input)).toBe(`<div class="tool-log-step">${expected}</div>`);
+    expect(rewriteLegacyToolLog(input)).toBe(`<div class="tool-log-step">${expected}</div>`);
   });
 
   // Regression: search queries carry their own quotes far more often than not
@@ -122,16 +122,16 @@ describe('rewriteHermesToolLog — native tools with their own glyph', () => {
   // on the first inner quote captured nothing and spilled the rest of the query
   // into the reply as loose prose.
   it('keeps a phrase-quoted query whole instead of spilling it into the prose', () => {
-    expect(rewriteHermesToolLog('🔍 web_search: ""House of Lords" benefits pension fre..."')).toBe(
+    expect(rewriteLegacyToolLog('🔍 web_search: ""House of Lords" benefits pension fre..."')).toBe(
       '<div class="tool-log-step">Searched the web for “"House of Lords" benefits pension fre…”</div>',
     );
-    expect(rewriteHermesToolLog('🔍 web_search: "site:parliament.uk "members of the lo..."')).not.toContain(
+    expect(rewriteLegacyToolLog('🔍 web_search: "site:parliament.uk "members of the lo..."')).not.toContain(
       'House of Lords" benefits',
     );
   });
 
   it('counts repeats on a native-tool entry too', () => {
-    expect(rewriteHermesToolLog('🔍 web_search: "peers" (×4)')).toBe(
+    expect(rewriteLegacyToolLog('🔍 web_search: "peers" (×4)')).toBe(
       '<div class="tool-log-step">Searched the web for “peers” — 4 calls</div>',
     );
   });
@@ -139,7 +139,7 @@ describe('rewriteHermesToolLog — native tools with their own glyph', () => {
 
 // The guard that stops the wider glyph match from eating the answer itself.
 // Every fixture below is a real shape found in production assistant replies.
-describe('rewriteHermesToolLog — leaves prose alone', () => {
+describe('rewriteLegacyToolLog — leaves prose alone', () => {
   it.each([
     '✅ Corrected: the figure is £371 a day.',
     '🥇 WINNER: the second approach.',
@@ -148,17 +148,17 @@ describe('rewriteHermesToolLog — leaves prose alone', () => {
     '📋 Summary: three things changed.',
     '💬 Note: this is only an estimate.',
   ])('does not rewrite %s', (text) => {
-    expect(rewriteHermesToolLog(text)).toBe(text);
+    expect(rewriteLegacyToolLog(text)).toBe(text);
   });
 
   it('leaves the ⏳ and ⏱️ status lines alone — they are already English', () => {
     const status =
       '⏳ Working — 12 min (iteration 5/90, receiving stream response)\n⏱️ Agent inactive for 30 min — no tool calls';
-    expect(rewriteHermesToolLog(status)).toBe(status);
+    expect(rewriteLegacyToolLog(status)).toBe(status);
   });
 
   it('still rewrites a real entry sitting next to prose that uses a tool glyph', () => {
-    const out = rewriteHermesToolLog('✅ Corrected: see below.\n🔍 web_search: "peers"');
+    const out = rewriteLegacyToolLog('✅ Corrected: see below.\n🔍 web_search: "peers"');
     expect(out).toContain('✅ Corrected: see below.');
     expect(out).toContain('<div class="tool-log-step">Searched the web for “peers”</div>');
   });
@@ -166,13 +166,13 @@ describe('rewriteHermesToolLog — leaves prose alone', () => {
 
 // What the chat bubble actually uses. The steps stay in the tool-call trace
 // behind the *analyse* button; the reply is only the answer.
-describe('stripHermesToolLog', () => {
+describe('stripLegacyToolLog', () => {
   it('removes an entry entirely rather than describing it', () => {
-    expect(stripHermesToolLog('⚙️ mcp_jkai_recall_memories: "david foley"')).toBe('');
+    expect(stripLegacyToolLog('⚙️ mcp_jkai_recall_memories: "david foley"')).toBe('');
   });
 
   it('keeps the prose on both sides and does not run the sentences together', () => {
-    const out = stripHermesToolLog(
+    const out = stripLegacyToolLog(
       'Applying the dedupe path and adding canvas notes.\n' +
         '⚙️ mcp_jkai_workflow_amend: "workflow_amend" (×2)\n' +
         '🔍 web_search: "peers"\n' +
@@ -184,8 +184,8 @@ describe('stripHermesToolLog', () => {
     );
   });
 
-  it('separates prose when Hermes glues an entry onto the end of a sentence', () => {
-    const out = stripHermesToolLog(
+  it('separates prose when an entry is glued onto the end of a sentence', () => {
+    const out = stripLegacyToolLog(
       'Checking the canvas now. ⚙️ mcp_jkai_workflow_lint: "spine" Lint passes.',
     );
     expect(out).toBe('Checking the canvas now.\n\nLint passes.');
@@ -194,7 +194,7 @@ describe('stripHermesToolLog', () => {
 
   it('leaves a reply with no tool log byte-identical', () => {
     const text = 'The figure is £371 a day.\n\n- one\n- two';
-    expect(stripHermesToolLog(text)).toBe(text);
+    expect(stripLegacyToolLog(text)).toBe(text);
   });
 
   it('leaves prose that merely uses a tool glyph alone', () => {
@@ -204,23 +204,23 @@ describe('stripHermesToolLog', () => {
       '💬 Note: this is only an estimate.',
       '⏳ Working — 12 min (iteration 5/90, receiving stream response)',
     ]) {
-      expect(stripHermesToolLog(text)).toBe(text);
+      expect(stripLegacyToolLog(text)).toBe(text);
     }
   });
 
   it('drops a phrase-quoted search query whole, with no prose spill', () => {
-    const out = stripHermesToolLog('🔍 web_search: ""House of Lords" benefits pension fre..."');
+    const out = stripLegacyToolLog('🔍 web_search: ""House of Lords" benefits pension fre..."');
     expect(out).toBe('');
   });
 
   it('collapses a run of consecutive entries to a single break, not a gulf', () => {
-    const out = stripHermesToolLog(
+    const out = stripLegacyToolLog(
       'Before.\n⚙️ mcp_jkai_ha_get_history... (×2)\n⚙️ mcp_jkai_ha_query_state...\n🔍 web_search: "x"\nAfter.',
     );
     expect(out).toBe('Before.\n\nAfter.');
   });
 
   it('leaves a message that is only tool log with nothing at all — the bubble is skipped', () => {
-    expect(stripHermesToolLog('⚙️ mcp_jkai_workflow_run: "spine"\n⚙️ mcp_jkai_workflow_lint...')).toBe('');
+    expect(stripLegacyToolLog('⚙️ mcp_jkai_workflow_run: "spine"\n⚙️ mcp_jkai_workflow_lint...')).toBe('');
   });
 });

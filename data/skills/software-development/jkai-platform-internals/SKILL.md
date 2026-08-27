@@ -4,7 +4,7 @@ description: "jkai SvelteKit platform internals — chat rendering, attachments,
 version: 1.2.0
 platforms: [linux]
 metadata:
-  hermes:
+  routing:
     tags: [jkai, architecture, debugging, chat, attachments, tool-step-bus, hermes-bridge, intel]
     related_skills: [systematic-debugging, dogfood]
 ---
@@ -337,22 +337,22 @@ Both the page route (e.g. `/broads`) AND the API route (e.g. `/api/broads`) need
 
 See `references/design-system.md` for the canonical design tokens (fonts, colors, nm-* CSS classes, typography scale, layout patterns). Load this when building any HTML artifact that should match the SR site look — it avoids grepping the codebase for CSS variables each time.
 
-### Builds system: register_hermes_build
+### Builds system: register_chat_build
 
-`register_hermes_build` inserts a `jkai_builds` row and calls `orchestrator.startBuild()`, which triggers the **full autonomous builder pipeline** (LLM iterations, sandbox execution, evaluation loop).
+`register_chat_build` inserts a `jkai_builds` row and calls `orchestrator.startBuild()`, which triggers the **full autonomous builder pipeline** (LLM iterations, sandbox execution, evaluation loop).
 
-**For pre-built static HTML:** `register_hermes_build` *works* — it returns a completed build with a working `/jkai/builds/<id>` page. However it runs the builder orchestrator unnecessarily. For simpler serving:
+**For pre-built static HTML:** `register_chat_build` *works* — it returns a completed build with a working `/jkai/builds/<id>` page. However it runs the builder orchestrator unnecessarily. For simpler serving:
 - **`publish_page`** → serves at `/projects/<slug>/` immediately, no pipeline, no rebuild.
 - **`static/` + `PUBLIC_PATHS`** → for persistent standalone tools.
-Use `register_hermes_build` when you want the build to appear in the `/jkai/builds` gallery (user can view, publish, or iterate from there).
+Use `register_chat_build` when you want the build to appear in the `/jkai/builds` gallery (user can view, publish, or iterate from there).
 
 The builder tools in `src/lib/workflows/site-tools/tools/builds.ts`:
-- `register_hermes_build` → full orchestrator pipeline (NOT for pre-built HTML)
+- `register_chat_build` → full orchestrator pipeline (NOT for pre-built HTML)
 - `build_write_file` → write a file into an existing build workspace
 - `build_tweak` → inject an improvement instruction into a running build
 - `build_control` → pause/resume/stop/publish an existing build
 
-**Registering a preprint HTML build — the payload-escaping trap.** `register_hermes_build`
+**Registering a preprint HTML build — the payload-escaping trap.** `register_chat_build`
 wants the file *body* in `files[].content`. Hand-writing a large HTML file inline in the JSON
 call is fragile: one stray `"`, unescaped glyph, or over-long field makes the whole call fail to
 parse (observed: `{"success":false,"error":"each file needs string path + string content"}`

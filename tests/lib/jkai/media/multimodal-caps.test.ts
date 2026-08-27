@@ -66,7 +66,7 @@ describe('buildMultimodalContent capability gating', () => {
   });
 
   it('WITHOUT caps behaves exactly as before — native parts, no pre-analysis', async () => {
-    // This is the Hermes path and any other caller that handles media itself.
+    // This is any caller that handles media itself.
     // Changing it would have been a silent regression for them.
     const parts = await buildMultimodalContent('x', [
       att('image', 'image/png'),

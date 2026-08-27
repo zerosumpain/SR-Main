@@ -9,7 +9,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, customTools } from '$lib/db/schema';
 import { and, eq, gte, desc } from 'drizzle-orm';
 import { DatastoreError, getRecordByKey, upsertRecord } from '$lib/datastore';
-import { rToolAudit } from '$lib/server/hermes-remote';
+import { getToolAudit } from '$lib/server/tool-audit';
 import {
   COLLECTIONS,
   SYSTEM_ACTOR,
@@ -59,7 +59,7 @@ export async function gatherSignals(): Promise<GatheredSignals> {
 
   let toolAudit: unknown | null = null;
   try {
-    toolAudit = await rToolAudit(7);
+    toolAudit = await getToolAudit(7);
   } catch {
     toolAudit = null;
   }

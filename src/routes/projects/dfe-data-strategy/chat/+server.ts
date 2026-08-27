@@ -1,7 +1,7 @@
 // chat/+server.ts — the project-bound "Ask the model" endpoint for Keystone. Strictly scoped
 // to THIS project: guarded by the same visibility guard as the pages, retrieves only from the
 // project's own corpus, prompted to refuse off-topic. Streams SSE. Imports only the low-level
-// LLM transport (no orchestrator / hermes).
+// LLM transport (no orchestrator).
 
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';

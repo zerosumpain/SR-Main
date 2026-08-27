@@ -6,7 +6,7 @@ import { getTool } from '$lib/workflows/site-tools/registry';
  * Whether a tool must ask the user before running. Single source of truth is
  * the `destructive` flag on each ToolDefinition (registry-internal.ts) — set
  * it on the tool, not in a list here. The MCP layer surfaces the same flag to
- * Hermes as `annotations.destructiveHint`.
+ * a client as `annotations.destructiveHint`.
  */
 export function isDestructive(toolName: string): boolean {
   return getTool(toolName)?.destructive === true;

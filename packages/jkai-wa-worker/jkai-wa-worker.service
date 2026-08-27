@@ -9,7 +9,7 @@ WorkingDirectory=/opt/strange-rambling-svelte
 EnvironmentFile=/opt/strange-rambling-svelte/.env
 # The role is what makes this safe: it runs the WhatsApp socket and NOT the
 # scheduler, and it is never treated as "delegated" — otherwise it would read
-# WHATSAPP_HERMES_BRIDGE_URL from this same file and forward sends to itself.
+# WHATSAPP_BRIDGE_URL from this same file and forward sends to itself.
 Environment=JKAI_SERVICE_ROLE=whatsapp
 ExecStart=/usr/bin/node /opt/strange-rambling-svelte/packages/jkai-wa-worker/dist/start.js
 Restart=on-failure

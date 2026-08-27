@@ -213,16 +213,16 @@ describe('whatsapp executor — media', () => {
 
 describe('whatsapp executor — a send that did not send is a FAILURE', () => {
   /**
-   * The production DB held 12 node_executions reading `Hermes bridge
+   * The production DB held 12 node_executions reading `WhatsApp bridge
    * unreachable`, every one of them `node_status=completed,
    * run_status=completed`. Workflows whose entire purpose was to deliver a
    * message were reporting success while delivering nothing.
    */
   it('throws when the bridge is unreachable, carrying the underlying error', async () => {
-    mockSendMessage.mockResolvedValue({ sent: false, error: 'Hermes bridge unreachable' });
+    mockSendMessage.mockResolvedValue({ sent: false, error: 'WhatsApp bridge unreachable' });
     await expect(
       whatsappExecutor.execute({}, { to: '+123', message: 'hi', formatMarkdown: false }, ctx()),
-    ).rejects.toThrow(/Hermes bridge unreachable/);
+    ).rejects.toThrow(/WhatsApp bridge unreachable/);
   });
 
   it('names how far it got when a multi-chunk send fails partway', async () => {

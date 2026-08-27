@@ -73,12 +73,12 @@ describe('ownsWhatsAppSession — the self-delegation trap', () => {
     expect(
       ownsWhatsAppSession(env({
         JKAI_SERVICE_ROLE: 'whatsapp',
-        WHATSAPP_HERMES_BRIDGE_URL: 'http://homeserv:3000',
+        WHATSAPP_BRIDGE_URL: 'http://127.0.0.1:3110',
       })),
     ).toBe(true);
   });
 
   it('leaves the web app delegated when a bridge URL is set', () => {
-    expect(ownsWhatsAppSession(env({ WHATSAPP_HERMES_BRIDGE_URL: 'http://homeserv:3000' }))).toBe(false);
+    expect(ownsWhatsAppSession(env({ WHATSAPP_BRIDGE_URL: 'http://127.0.0.1:3110' }))).toBe(false);
   });
 });

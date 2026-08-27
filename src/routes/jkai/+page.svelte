@@ -546,7 +546,6 @@
             altOpenRouterModel={data.chatAltOpenRouterModel}
             messageCount={pane.messages.length}
             approvalUi={data.approvalUi}
-            hermesEnabled={data.hermesEnabled}
             activeBuild={pane.activeBuild}
             active={tab.id === activeId}
             onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}

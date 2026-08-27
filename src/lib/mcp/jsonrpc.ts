@@ -1,6 +1,6 @@
 // MCP Streamable HTTP transport — JSON-RPC dispatcher.
 //
-// Hermes' MCP client (Python `mcp` SDK) speaks the Streamable HTTP transport
+// An MCP client (e.g. the Python `mcp` SDK) speaks the Streamable HTTP transport
 // from the MCP spec, not our previous bespoke {name, arguments} POST shape.
 // The protocol is JSON-RPC 2.0 over HTTP:
 //
@@ -22,20 +22,22 @@ import { isDestructive, describeDestructiveAction } from '$lib/workflows/chat/co
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 
-// Phase 1.5: all 132 registered tools are exposed via MCP. Hermes' skill
-// system constrains which subset the agent considers for a given chat
-// (jkai-canvas for workflow chats; jkai-general + domain skills for /jkai).
-// We trust the skill router; we don't gate at the MCP layer.
+// Every registered tool is exposed via MCP. We don't gate at the MCP layer.
 
 // SvelteKit loads .env into $env/dynamic/private at runtime. We lazy-import
 // it so unit tests (which use plain process.env via beforeAll) don't need to
-// stub the $env module. In SvelteKit runtime, env.HERMES_BRIDGE_SECRET wins;
-// in vitest, process.env.HERMES_BRIDGE_SECRET is the fallback.
+// stub the $env module. In SvelteKit runtime, `env` wins; in vitest,
+// `process.env` is the fallback.
+//
+// `HERMES_BRIDGE_SECRET` is the OLD name, read second so a host that has not
+// yet had the new one written keeps working. Drop the fallback once both
+// hosts' .env files carry SERVICE_BRIDGE_SECRET — see $lib/config/service-secret.
 async function resolveSecret(): Promise<string> {
-  if (process.env.HERMES_BRIDGE_SECRET) return process.env.HERMES_BRIDGE_SECRET;
+  const fromProcess = process.env.SERVICE_BRIDGE_SECRET ?? process.env.HERMES_BRIDGE_SECRET;
+  if (fromProcess) return fromProcess;
   try {
     const mod = await import('$env/dynamic/private');
-    return mod.env.HERMES_BRIDGE_SECRET ?? '';
+    return mod.env.SERVICE_BRIDGE_SECRET ?? mod.env.HERMES_BRIDGE_SECRET ?? '';
   } catch {
     return '';
   }
@@ -45,7 +47,7 @@ async function resolveSecret(): Promise<string> {
 // looks like an MCP date-stamped version. Per spec, the server MUST respond
 // with the same version if it supports it, else its latest. We support the
 // full stable protocol surface, so echoing is the safe default for forward
-// and backward compat (e.g. Hermes' bundled SDK sends 2025-11-25 today, but
+// and backward compat (e.g. a bundled SDK sends 2025-11-25 today, but
 // older clients may send 2025-03-26).
 const FALLBACK_PROTOCOL_VERSION = '2025-03-26';
 const MCP_PROTOCOL_VERSION_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -75,7 +77,7 @@ export interface DispatchContext {
   /**
    * Authorization-bearer value (the part after `Bearer `), or empty if absent.
    * Required for tools/list and tools/call; verified by constant-time compare
-   * against `HERMES_BRIDGE_SECRET`. Only the transport handshake and liveness
+   * against the service bridge secret. Only the transport handshake and liveness
    * probe (initialize, ping, notifications/*) are unauthenticated.
    */
   authBearer: string;
@@ -136,7 +138,7 @@ async function verifyBearer(bearer: string): Promise<boolean> {
  * A second content block carrying today's date, on the calls where the model
  * is orienting before it composes arguments.
  *
- * It goes on RESULTS, never on a tool description. Hermes discovers tools once
+ * It goes on RESULTS, never on a tool description. A client discovers tools once
  * on connect and re-discovers only on a `notifications/tools/list_changed`
  * notification, which this server does not send — so anything time-varying in
  * the manifest freezes at connect time and goes stale for as long as the
@@ -172,7 +174,7 @@ export function datestampContent(
  *                                                        (handshake + liveness only)
  *   - tools/list, tools/call                           → Authorization: Bearer
  *                                                        with constant-time match
- *                                                        against HERMES_BRIDGE_SECRET.
+ *                                                        against the bridge secret.
  *                                                        Scope binding happens at
  *                                                        the tool layer via the
  *                                                        workflow_id argument.
@@ -231,10 +233,9 @@ export async function dispatchJsonRpc(
         // `initialize` and `ping` stay open on purpose: they are the transport
         // handshake and liveness probe and disclose nothing. Gating only the
         // catalogue keeps MCP clients able to connect while making them prove
-        // who they are before they can enumerate. Hermes is unaffected — it
-        // sends a static Authorization header on every request to this server
-        // (mcp_servers.jkai.headers in ~/.hermes-jkai/config.yaml), and the
-        // routing proxy at /api/mcp forwards that header verbatim.
+        // who they are before they can enumerate. A configured client is
+        // unaffected — it sends a static Authorization header on every request,
+        // and /api/mcp forwards that header verbatim.
         if (!(await verifyBearer(ctx.authBearer))) {
           return {
             response: errResponse(id, -32001, 'unauthorized: invalid or missing bearer token'),
@@ -265,7 +266,7 @@ export async function dispatchJsonRpc(
         }
 
         if (!(await verifyBearer(ctx.authBearer))) {
-          // Auth-shaped JSON-RPC error: -32001 lets clients (incl. Hermes')
+          // Auth-shaped JSON-RPC error: -32001 lets clients
           // distinguish auth failure from "tool itself errored".
           return {
             response: errResponse(id, -32001, 'unauthorized: invalid or missing bearer token'),
@@ -275,11 +276,10 @@ export async function dispatchJsonRpc(
         // Surface this tool call to SSE subscribers (the canvas tool-step
         // panel + the general /jkai chat's attachment promoter). Canvas
         // chats pass `workflow_id` in the tool args; general /jkai chats
-        // have no canvas, so Hermes' jkai_platform plugin injects the
-        // chat_id into `params._meta.chat_id` (Phase 2 of the multi-origin
-        // routing work). The chat-handler's `subscribeToolSteps(chatId,…)`
-        // matches the latter; canvas subscribers continue to match the
-        // former.
+        // have no canvas, so a client may instead carry the chat_id in
+        // `params._meta.chat_id`. The chat-handler's
+        // `subscribeToolSteps(chatId,…)` matches the latter; canvas subscribers
+        // continue to match the former.
         const busKey = String(
           args.workflow_id ?? args.workflowId ?? meta.chat_id ?? '',
         );
@@ -290,10 +290,10 @@ export async function dispatchJsonRpc(
         const disp = resolveDisplayTool(name, args);
 
         // Destructive-action gate. Until 2026-07-27 this ran ONLY inside
-        // general-chat.ts, which `JKAI_HERMES_CANVAS_CHAT=1` bypasses — so on
-        // the live path nothing stood between the agent and `publish_page` /
-        // `gmail_send` / `node_builder_commit_and_deploy` except Hermes' own
-        // approval behaviour, detected site-side by string-matching its output.
+        // general-chat.ts, which the MCP path bypasses — so nothing stood
+        // between an MCP client and `publish_page` / `gmail_send` /
+        // `node_builder_commit_and_deploy` except that client's own approval
+        // behaviour, detected site-side by string-matching its output.
         // Gate here, at the dispatcher, because this is the agent-driven
         // surface: `executeTool`'s other callers (heartbeat, briefing,
         // scheduled, selfimprove, workflow nodes) are headless by design and

@@ -1,7 +1,7 @@
 /**
  * jkai-codex-bridge — standalone entry point.
  *
- * Puts an OpenAI-compatible HTTP face on the Codex CLI so the site (and Hermes)
+ * Puts an OpenAI-compatible HTTP face on the Codex CLI so the site
  * can spend John's ChatGPT Pro subscription instead of per-token OpenRouter
  * credit. See ../README.md for why this is a separate process rather than an
  * import inside the SvelteKit app.

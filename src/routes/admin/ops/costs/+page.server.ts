@@ -9,7 +9,7 @@
  * the page needs the same picture the model picker has.
  *
  * Mutations do NOT live here. Switching a model POSTs to the existing
- * /api/jkai/models/workloads (site + Hermes scopes) and /api/admin/models/settings
+ * /api/jkai/models/workloads and /api/admin/models/settings
  * (the site default), so there is exactly one server-side guard for a model
  * change on the whole site rather than a second copy of the capability rules.
  */
@@ -21,9 +21,7 @@ import { describeSiteWorkloads } from '$lib/server/models/workload-settings';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterKeyUsage } from '$lib/server/models/openrouter-usage';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
-import { rHermesModels, rTelemetry, canManageHermes } from '$lib/server/hermes-remote';
-import type { Telemetry } from '$lib/server/hermes-sessions';
-import { HERMES_WORKLOADS, WORKLOADS, type WorkloadState } from '$lib/models/workloads';
+import { WORKLOADS, type WorkloadState } from '$lib/models/workloads';
 import { activityKey, allActivities } from '$lib/costs/activities';
 import {
   findSwaps,
@@ -285,62 +283,6 @@ export const load: PageServerLoad = async ({ url }) => {
     getOpenRouterCredits(),
   ]);
 
-  /**
-   * The Hermes engine keeps its OWN ledger, in its own SQLite session store, and
-   * it is the largest thing the site's ledger cannot see: the engine is a
-   * separate Python runtime that never goes through the SvelteKit gateway, so
-   * WhatsApp DMs, canvas chats, delegation children and its auxiliary models
-   * bill to the shared OpenRouter key and appear here nowhere.
-   *
-   * Read it as a SECOND SOURCE rather than merged into `agent_actions` — the
-   * same treatment /admin/ops/tool-usage gives it, and for the same reason: the
-   * two stores have different coverage and different clocks, and folding one
-   * into the other hides which is which. Best-effort; the engine being
-   * unreachable must not blank the page.
-   */
-  let hermesSpend: Telemetry | null = null;
-  let hermesSpendError: string | null = null;
-  if (canManageHermes()) {
-    try {
-      hermesSpend = await rTelemetry(days);
-    } catch (err) {
-      hermesSpendError = err instanceof Error ? err.message : String(err);
-    }
-  } else {
-    hermesSpendError = 'The engine session store lives on homeserv.';
-  }
-
-  // Hermes' own roles live in its config.yaml, not our DB. Best-effort exactly
-  // as /api/jkai/models/workloads does it: an engine outage must not blank the
-  // page, because the site half is still true and still actionable.
-  let hermesWorkloads: WorkloadState[] = [];
-  let hermesError: string | null = canManageHermes() ? null : 'Hermes is not reachable from this host.';
-  if (canManageHermes()) {
-    try {
-      const rows = await rHermesModels();
-      hermesWorkloads = HERMES_WORKLOADS.map((def) => {
-        const row = rows.find((r) => r.id === def.id);
-        const effectiveModelId = row?.modelId ?? '—';
-        return {
-          id: def.id,
-          scope: def.scope,
-          label: def.label,
-          blurb: def.blurb,
-          key: def.key,
-          reason: def.reason,
-          requires: def.requires,
-          catalogue: def.catalogue,
-          setModelId: row?.modelId ?? null,
-          effectiveModelId,
-          source: 'hermes' as const,
-          divergesFromDefault: effectiveModelId !== siteDefault.modelId,
-        };
-      });
-    } catch (err) {
-      hermesError = err instanceof Error ? err.message : String(err);
-    }
-  }
-
   const catalogue = catalogueRows.map(toCatalogueModel);
 
   // ── Roll the (activity, model) grid into the shapes the page renders ──────
@@ -441,64 +383,12 @@ export const load: PageServerLoad = async ({ url }) => {
    */
   const [today, week, month] = [todayTotals[0], weekTotals[0], monthTotals[0]];
 
-  /**
-   * The two ledgers overlap on exactly one thing, and adding them without
-   * removing it would double-count.
-   *
-   * /jkai web-chat turns are Hermes sessions that the chat endpoint ALSO
-   * back-fills into `agent_actions` with `source='jkai-chat'`. Every other
-   * Hermes session (WhatsApp, canvas, delegation, smoke) exists only in the
-   * engine's store. So the honest total is
-   *   site ledger − jkai-chat + the whole engine figure.
-   *
-   * Only computable for the selected window, because the engine's telemetry is
-   * fetched for that window. The day/week/month rows below therefore stay on
-   * the site ledger alone and say so — a number that silently changes meaning
-   * per row is worse than three that each say what they are.
-   */
-  const jkaiChatInWindow = byActivityModel
-    .filter((r) => (r.activity ?? null) === null && r.source === 'jkai-chat')
-    .reduce((acc, r) => acc + n(r.cost), 0);
-  const combinedWindowUsd =
-    hermesSpend ? n(w?.cost) - jkaiChatInWindow + hermesSpend.overview.costUsd : null;
-
-  /**
-   * Does the engine's spend even land on the key we are reconciling against?
-   *
-   * On homeserv it does — the site and Hermes read the same `sk-or-v1-…`. On
-   * the VPS they do not: production authenticates with its own key while the
-   * engine keeps billing homeserv's. Adding the engine's $12.78 to the site
-   * ledger and dividing by production's key produced ~300% "coverage", which
-   * reads as a Codex artefact rather than the category error it is.
-   *
-   * Three-valued on purpose. `null` means the engine did not say — an older
-   * homeserv build, or an unreadable Hermes `.env` — and an unknown must render
-   * as a caveat, never as either claim.
-   */
-  const engineKey = hermesSpend?.keyFingerprint ?? null;
-  const siteKey = keyUsage?.fingerprint ?? null;
-  const enginesShareKey: boolean | null =
-    engineKey && siteKey ? engineKey === siteKey : null;
-
   const reconciliation = {
     day: reconcile(keyUsage?.daily ?? null, n(today?.cost)),
     week: reconcile(keyUsage?.weekly ?? null, n(week?.cost)),
     month: reconcile(keyUsage?.monthly ?? null, n(month?.cost)),
-    /**
-     * The selected window, counting the engine too — but ONLY where that is a
-     * like-for-like comparison. Where the engine bills a different key, the
-     * combined figure is still shown (it is the honest total spend); it just
-     * is not divided by a bill that never covered it.
-     */
-    window:
-      enginesShareKey === true
-        ? reconcile(windowBilled(keyUsage, days), combinedWindowUsd ?? n(w?.cost))
-        : reconcile(null, combinedWindowUsd ?? n(w?.cost)),
-    combinedWindowUsd,
-    jkaiChatOverlapUsd: jkaiChatInWindow,
-    enginesShareKey,
-    engineKeyLabel: engineKey,
-    siteKeyLabel: siteKey,
+    window: reconcile(windowBilled(keyUsage, days), n(w?.cost)),
+    siteKeyLabel: keyUsage?.fingerprint ?? null,
   };
 
   return {
@@ -551,14 +441,9 @@ export const load: PageServerLoad = async ({ url }) => {
       otherKeysUsd:
         credits && keyUsage ? Math.max(0, credits.usedUsd - keyUsage.lifetime) : null,
     },
-    hermesSpend,
-    hermesSpendError,
     workloads: {
       siteDefaultModelId: siteDefault.modelId,
       site: siteWorkloads,
-      hermes: hermesWorkloads,
-      hermesError,
-      hermesManageable: canManageHermes(),
     },
     /** Only the fields the switcher and the swap table need — the full
      *  catalogue row carries a `raw` blob per model and would be megabytes. */

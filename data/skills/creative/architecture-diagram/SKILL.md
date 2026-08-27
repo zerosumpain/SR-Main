@@ -7,7 +7,7 @@ license: MIT
 dependencies: []
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  routing:
     tags: [architecture, diagrams, SVG, HTML, visualization, infrastructure, cloud]
     related_skills: [concept-diagrams, excalidraw]
 ---

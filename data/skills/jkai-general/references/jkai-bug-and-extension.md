@@ -16,13 +16,12 @@ Stop and ask before: editing any file, running build/install/test, running
 Approval is per-rung: "Fix it" → investigate and propose. "apply" / "ship it" /
 "deploy" → the next mutation. Compound phrases carry all the way through.
 
-## Two channels
+## One channel
 
-- **Channel C — SvelteKit, `~/strange_rambling_svelte/`.** Default to
-  `/jkai/curate` (worktree + PR). Apply in-tree only if John explicitly waves
-  off worktrees.
-- **Channel B — Hermes, `~/.hermes-jkai/`.** Commit to
-  `zerosumpain/homeserv-hermes-jkai`, then restart `jkai-hermes.service`.
+- **SvelteKit, `~/strange_rambling_svelte/`.** Default to `/jkai/curate`
+  (worktree + PR). Apply in-tree only if John explicitly waves off worktrees.
+  There is no second channel: the external agent runtime that used to be one was
+  retired on 2026-08-24, and nothing should start it.
 
 ## Change-request path instead of worktrees
 

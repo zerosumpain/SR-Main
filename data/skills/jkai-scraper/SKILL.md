@@ -3,7 +3,7 @@ name: jkai-scraper
 description: "Stealth Playwright scraper — author, edit, test, and inspect per-domain scripts. Homeserv-only."
 version: 0.1.0
 metadata:
-  hermes:
+  routing:
     tags: [jkai, scraper, stealth, playwright, residential-ip]
     related_skills:
       - jkai-general

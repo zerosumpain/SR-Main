@@ -1,7 +1,7 @@
 // `browser` toolset — a real headless browser, running where the residential IP
 // is (homeserv), driven from wherever chat happens.
 //
-// Verb set chosen from measured use on the Hermes chat surface over 30 days:
+// Verb set chosen from measured use on the chat surface over 30 days:
 // console 74, navigate 52, click 21, snapshot 20, scroll 1, get_images 1. `type`
 // is included because click-driven flows need it even though it did not appear;
 // `vision` (6 calls) is deliberately left out — the vision path already exists in

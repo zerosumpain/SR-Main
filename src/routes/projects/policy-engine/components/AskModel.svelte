@@ -1,6 +1,6 @@
 <script lang="ts">
   // AskModel — the project-bound RAG chat. Self-contained: imports the shared app store (for the
-  // live-scenario snapshot) and NOTHING from jkai/hermes/orchestrator. Posts to ./chat (the scoped
+  // live-scenario snapshot) and NOTHING from jkai/orchestrator. Posts to ./chat (the scoped
   // endpoint), streams the answer, and shows the sources it grounded on. Conversation is ephemeral
   // (in-page + localStorage), never written to any shared conversation store.
   import { onMount } from 'svelte';

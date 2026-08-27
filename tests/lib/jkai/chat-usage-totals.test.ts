@@ -124,7 +124,7 @@ describe('turn stamp round-trip', () => {
     expect(stamp?.latencyMs).toBe(41405);
   });
 
-  it('leaves rounds undefined on a Hermes-era row rather than inventing zero', () => {
+  it('leaves rounds undefined on an older row rather than inventing zero', () => {
     // Those turns had rounds, we just never counted them. Zero would be a claim.
     const stamp = readTurnStamp({
       usage: { model: 'm', provider: 'openrouter', inputTokens: 10, outputTokens: 5 },

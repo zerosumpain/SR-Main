@@ -1,6 +1,6 @@
-// Exposes the full site-tools registry to Hermes over MCP. See
+// Exposes the full site-tools registry over MCP. See
 // jsonrpc.ts for the JSON-RPC dispatcher and auth model.
-// Toolset-level filtering is handled by Hermes skills, not here.
+// Toolset-level filtering is handled by the client's skills, not here.
 //
 // Exception: when JKAI_MCP_META_TOOL=1, tools/list collapses to the 6
 // essential tools (see ./essentials.ts) plus the `jkai_extended` meta-tool
@@ -34,7 +34,7 @@ export interface McpTool {
   inputSchema: Record<string, unknown>;
   /**
    * MCP standard tool annotations. `destructiveHint` mirrors the site-tool's
-   * `destructive` flag so the Hermes agent can require user confirmation
+   * `destructive` flag so the calling agent can require user confirmation
    * before invoking it — the live-path equivalent of the in-repo
    * confirmation gate (which only covers the legacy general-chat engine).
    */
@@ -60,13 +60,13 @@ function toolToMcp(def: ToolDefinition, policy: ToolPolicyVersion): McpTool {
 /**
  * Today's date, in London.
  *
- * The Hermes system prompt carries no date at all, and most jkai tools want an
+ * An agent's system prompt often carries no date at all, and most jkai tools want an
  * absolute ISO instant, so "3 days ago" or "tomorrow" cost a `current_date`
  * round trip before anything else could run — four of them across the ten
  * conversations this came out of.
  *
  * **This must never be attached to a tool DESCRIPTION.** It was, briefly, and
- * that was wrong: Hermes discovers tools once on connect and re-discovers only
+ * that was wrong: a client discovers tools once on connect and re-discovers only
  * on a `notifications/tools/list_changed` notification, which this server does
  * not send. So a date in the manifest is frozen at connect time and goes stale
  * for as long as the gateway stays up — and a confidently-stated wrong date is

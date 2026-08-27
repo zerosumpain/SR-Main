@@ -31,7 +31,7 @@ describe('skill index', () => {
 
 describe('the 60-character truncation trap', () => {
   /**
-   * Hermes cut every description to exactly 60 chars when building its index,
+   * The old index cut every description to exactly 60 chars,
    * then told the model to load anything "even partially relevant". So routing
    * was decided by which keywords happened to survive the cut — `google-workspace`
    * owned every calendar question because it was the only line short enough to
@@ -119,7 +119,7 @@ describe('readSkillBody', () => {
 describe('parseFrontmatter', () => {
   it('reads name, description and tags', () => {
     const p = parseFrontmatter(
-      '---\nname: demo\ndescription: "Does a thing"\nmetadata:\n  hermes:\n    tags: [a, b]\n---\n\nBody here',
+      '---\nname: demo\ndescription: "Does a thing"\nmetadata:\n  routing:\n    tags: [a, b]\n---\n\nBody here',
     );
     expect(p).toMatchObject({ name: 'demo', description: 'Does a thing', tags: ['a', 'b'] });
     expect(p.body.trim()).toBe('Body here');

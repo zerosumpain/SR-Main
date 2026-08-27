@@ -109,6 +109,7 @@ import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { initHomeAssistantService } from './homeassistant/service';
 import { runsService, ownsWhatsAppSession } from './service-role';
+import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import {
   DYNAMIC_NODES_DIR,
   loadDynamicNodeDefinitions,
@@ -234,11 +235,9 @@ const dynamicDefs = loadDynamicNodeDefinitions(DYNAMIC_NODES_DIR);
 
 // Boot WhatsApp service if enabled.
 //
-// Delegated mode: when WHATSAPP_HERMES_BRIDGE_URL is set, every outbound send
-// POSTs to the Hermes WA bridge instead of running our own Baileys. We don't
-// wire the OrchestratorBridge — inbound WhatsApp is Hermes-owned (the platform
-// plugin handles DMs + home channel). That was already how things worked in
-// practice; only outbound was duplicated, which is what kept failing.
+// Delegated mode: when a bridge URL is set, every outbound send POSTs to the
+// process that owns the session (packages/jkai-wa-worker on the VPS) instead of
+// running our own Baileys.
 async function bootWhatsApp() {
   // Delegation is ONE rule, and it lives in service-role. Reading the env var
   // directly here is what broke the cutover: the WhatsApp worker owns the
@@ -246,7 +245,7 @@ async function bootWhatsApp() {
   // but this line still said "delegated", so the OrchestratorBridge was never
   // wired and inbound messages went nowhere. Outbound worked, which made it
   // look fine.
-  const delegated = !!process.env.WHATSAPP_HERMES_BRIDGE_URL && !ownsWhatsAppSession();
+  const delegated = !!whatsappBridgeUrl() && !ownsWhatsAppSession();
 
   try {
     const [config] = await db
@@ -282,7 +281,7 @@ async function bootWhatsApp() {
 
     await service.connect(config?.authDir || 'data/whatsapp-auth');
 
-    console.log(`[whatsapp] Service booted${delegated ? ' (delegated → Hermes bridge)' : ''}`);
+    console.log(`[whatsapp] Service booted${delegated ? ' (delegated → WhatsApp worker)' : ''}`);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[whatsapp] Boot failed:', msg);

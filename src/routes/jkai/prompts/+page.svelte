@@ -12,7 +12,7 @@
   const initialFile = initialStack?.files[0] ?? null;
 
   let stacks = $state<LoadedStack[]>(data.stacks);
-  let selectedStack = $state<StackId>(initialStack?.id ?? 'chat');
+  let selectedStack = $state<StackId>(initialStack?.id ?? 'builder');
   let selectedFile = $state<string | null>(initialFile?.name ?? null);
 
   let editContent = $state(initialFile?.content ?? '');

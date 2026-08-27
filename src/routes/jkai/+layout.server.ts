@@ -18,7 +18,7 @@ const DAILY_BUDGET_SETTING_KEY = 'jkai.dailyBudgetUsd';
 
 /** The hub header renders on every /jkai page, so this load runs on every
  *  navigation. It is deliberately three cheap aggregates — no filesystem
- *  reads, no Hermes round-trip. Anything per-thread (context use, thread cost)
+ *  reads, no cross-host round-trip. Anything per-thread (context use, thread cost)
  *  is client state and arrives via $lib/jkai/hub-bus. */
 export const load: LayoutServerLoad = async () => {
   // Auth is handled centrally by hooks.server.ts

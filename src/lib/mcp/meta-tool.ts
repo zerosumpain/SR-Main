@@ -6,7 +6,7 @@
 // through `jkai_extended` (operation:"invoke") or called directly by name.
 //
 // Why a meta-tool: with 130+ tools the MCP manifest pushes ~28k tokens into
-// every Hermes prompt before the user message is even seen. Phase 3 of the
+// every agent prompt before the user message is even seen. Phase 3 of the
 // prefill-reduction plan (docs/plans/2026-05-27-jkai-prefill-reduction.md).
 
 import { executeTool, getTools } from '$lib/workflows/site-tools/registry';

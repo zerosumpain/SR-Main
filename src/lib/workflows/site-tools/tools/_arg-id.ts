@@ -26,7 +26,7 @@
 // This is the same fault that made `ha_query_state` return `404 Not Found` on
 // `entityId` (32 of 72 calls), and the repo had already settled the principle
 // twice before that: `resolveWorkflowId` in `$lib/mcp/server.ts` takes
-// `workflow_id` or `workflowId`, and Hermes' own arguments arrive stringified
+// `workflow_id` or `workflowId`, and some clients' arguments arrive stringified
 // often enough that the house rule is coerce, never reject.
 //
 // Renaming the parameters instead would be the tidier fix and the wrong one:

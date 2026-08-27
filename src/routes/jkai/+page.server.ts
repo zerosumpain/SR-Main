@@ -6,9 +6,6 @@ import { getConversationList } from '$lib/jkai/queries';
 import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { BRIEFINGS_COLLECTION, type BriefingData } from '$lib/briefing/types';
-import { env } from '$env/dynamic/private';
-import { isHermesChatEnabled } from '$lib/server/models/settings';
-import { hermesWillAnswerChat } from '$lib/resilience/hermes-reach';
 
 /** How long a briefing counts as "today's" and is worth surfacing on the chat page. */
 const BRIEFING_FRESH_MS = 20 * 60 * 60 * 1000;
@@ -100,14 +97,5 @@ export const load: PageServerLoad = async ({ url }) => {
     chatAltOpenRouterModel,
     approvalUi,
     freshBriefing,
-    // Gates the in-composer command palette + model switcher (they only work
-    // when Hermes handles the chat; the legacy loop would pass slashes as prose).
-    // Selected AND reachable — the composer must name the engine that will
-    // actually answer, not the one the env var prefers.
-    hermesEnabled: await hermesWillAnswerChat(
-      isHermesChatEnabled,
-      env.JKAI_HERMES_CANVAS_CHAT === '1',
-      env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790',
-    ),
   };
 };

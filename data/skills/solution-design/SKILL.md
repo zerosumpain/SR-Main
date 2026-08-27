@@ -3,7 +3,7 @@ name: solution-design
 description: "Route design tasks to the right specialist; carries the known-misdiagnosis table. Load before building anything non-trivial."
 version: 1.0.0
 metadata:
-  hermes:
+  routing:
     tags: [design, discipline, precedent, debugging, routing]
     related_skills:
       - jkai-general

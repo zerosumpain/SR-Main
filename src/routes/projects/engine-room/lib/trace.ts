@@ -7,7 +7,7 @@
 //
 // Durations are in MILLISECONDS and are order-of-magnitude honest, not stopwatch-exact:
 // they come from the instrumentation in src/lib/jkai/ttft-metrics.ts, the streaming
-// analysis in docs/plans/2026-05-26-jkai-hermes-ttft-and-dead-air.md, and the shapes of
+// analysis in docs/plans/2026-05-26-jkai-hermes-ttft-and-dead-air.md (a dated record), and the shapes of
 // real runs. Where a range is wide, the scenario says so.
 
 export type StageId = 'arrive' | 'assemble' | 'route' | 'reason' | 'act' | 'answer';

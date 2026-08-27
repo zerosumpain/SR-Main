@@ -95,7 +95,7 @@ const INFRA_RE =
  *
  * Naming a variable is not leaking its value, but it does tell a reader exactly
  * which levers exist and what to go looking for (`CURATE_WORKSPACE_DIR`,
- * `PUBLIC_SITE_URL`, `JKAI_HERMES_CANVAS_CHAT`). Needs two segments so ordinary
+ * `PUBLIC_SITE_URL`, `SERVICE_BRIDGE_SECRET`). Needs two segments so ordinary
  * shouty prose and acronyms ("SSR", "API", "UK") do not match.
  */
 const ENV_VAR_RE = /\b[A-Z][A-Z0-9]{1,}(_[A-Z0-9]+)+\b/;

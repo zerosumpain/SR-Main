@@ -62,12 +62,12 @@ export const NODES: ArchNode[] = [
   { id: 'vps-app', label: 'SvelteKit app', kind: 'app', group: 'hetzner', note: ':4173 · adapter-node', url: 'https://strangeramblings.com', healthId: 'workflow-engine' },
   { id: 'vps-db', label: 'PostgreSQL 16', kind: 'datastore', group: 'hetzner', note: 'Docker · pgvector', healthId: 'database' },
   { id: 'vps-builder', label: 'jkai-builder', kind: 'service', group: 'hetzner', note: 'sidecar · unix socket' },
+  { id: 'vps-wa', label: 'jkai-wa-worker', kind: 'service', group: 'hetzner', note: 'sidecar · :3110 · owns the WhatsApp session', healthId: 'whatsapp' },
   { id: 'vps-cf', label: 'cloudflared', kind: 'service', group: 'hetzner', note: 'tunnel client' },
 
   // homeserv (home)
   { id: 'hs-svc', label: 'SvelteKit (dev)', kind: 'app', group: 'home', note: ':5173 · scrape proxy', healthId: 'homeserv' },
   { id: 'hs-sandbox', label: 'jkai-sandbox', kind: 'service', group: 'home', note: 'Docker · Playwright' },
-  { id: 'hs-hermes', label: 'Hermes + WhatsApp bridge', kind: 'service', group: 'home', note: 'orchestrator', healthId: 'hermes' },
 
   // Azure
   { id: 'az-blob', label: 'Blob Storage', kind: 'storage', group: 'azure', note: 'srdrive4bbb12aa · Cool · LRS', healthId: 'azure' },
@@ -80,7 +80,7 @@ export const NODES: ArchNode[] = [
   { id: 'openrouter', label: 'OpenRouter', kind: 'external', group: 'llm', note: 'all models · incl. GLM via z-ai/*' },
 
   // Messaging
-  { id: 'whatsapp', label: 'WhatsApp', kind: 'external', group: 'messaging', note: 'via Hermes bridge' },
+  { id: 'whatsapp', label: 'WhatsApp', kind: 'external', group: 'messaging', note: 'via the wa-worker' },
 
   // Backup & Recovery
   { id: 'b2', label: 'Backblaze B2', kind: 'backup', group: 'backup', note: 'restic · daily 03:00' },
@@ -98,10 +98,9 @@ export const EDGES: ArchEdge[] = [
   { from: 'vps-app', to: 'google', label: 'OAuth · Gmail', kind: 'data' },
   { from: 'vps-app', to: 'openrouter', label: 'LLM gateway', kind: 'data' },
   { from: 'vps-app', to: 'hs-svc', label: 'scrape proxy (Tailscale)', kind: 'control' },
-  { from: 'vps-app', to: 'hs-hermes', label: 'Hermes bridge (Tailscale)', kind: 'control' },
   { from: 'hs-svc', to: 'hs-sandbox', label: 'stealth scrape' },
-  { from: 'hs-hermes', to: 'whatsapp', label: 'send / receive', kind: 'data' },
-  { from: 'hs-hermes', to: 'az-blob', label: 'Terraform / az', kind: 'control' },
+  { from: 'vps-app', to: 'vps-wa', label: 'delegated sends', kind: 'control' },
+  { from: 'vps-wa', to: 'whatsapp', label: 'send / receive', kind: 'data' },
   { from: 'vps-db', to: 'b2', label: 'restic', kind: 'backup' },
   { from: 'vps-db', to: 'hs-svc', label: 'DB pull 02:30', kind: 'backup' },
   { from: 'vps-app', to: 'github', label: 'deploy from', kind: 'backup' },

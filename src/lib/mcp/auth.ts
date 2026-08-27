@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 // `skill` pins a specific jkai domain skill for the turn — the skill name rides
 // in `kindId` (validated server-side against the pickable-skills allowlist).
-// NOTE: this enum MUST stay in sync with VALID_KINDS in the Hermes plugin's
+// NOTE: this enum MUST stay in sync with the kinds any MCP client's
 // auth.py (the inbound verifier) — a kind accepted by one but not the other
 // produces a 403 on every message of that kind.
 export type TokenKind = 'build' | 'canvas_chat' | 'manual' | 'skill';

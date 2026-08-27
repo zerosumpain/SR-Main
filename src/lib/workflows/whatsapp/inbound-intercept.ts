@@ -6,10 +6,10 @@
  *  - `OrchestratorBridge.handleMessage` — the non-delegated topology, where our
  *    own Baileys socket receives inbound messages.
  *  - `POST /api/whatsapp/inbound` — the DELEGATED topology (production), where
- *    Hermes owns the WhatsApp connection and relays owner messages to us over
+ *    another process owns the WhatsApp connection and relays owner messages to us over
  *    HTTP. Without this entry point the D2/D3 inbound halves were dead code in
  *    production: the bridge is never wired in delegated mode, so an owner
- *    "APPROVE <code>" reply was handled by Hermes as ordinary chat and never
+ *    "APPROVE <code>" reply was handled there as ordinary chat and never
  *    resolved the paused run.
  *
  * Both intercept functions are owner-gated and shape-gated internally, so a

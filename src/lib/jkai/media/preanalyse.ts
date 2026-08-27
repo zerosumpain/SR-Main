@@ -12,11 +12,11 @@ import {
 /**
  * Turn an attachment a model cannot natively read into text it can.
  *
- * This is what Hermes has been doing invisibly: the pinned chat model is
+ * This is what the old gateway did invisibly: the pinned chat model is
  * text-only through the gateway, yet images, PDFs and voice notes work in /jkai
- * because Hermes pre-analyses them and prepends the description. Take Hermes
+ * because it pre-analysed them and prepended the description. Take that
  * away without this and every attachment silently stops working —
- * `getChatInputCapabilities` is literally `if (opts.hermes) return ALL`.
+ * away and a text-only model silently drops every attachment.
  *
  * Two decisions worth knowing about, both learned the hard way here:
  *

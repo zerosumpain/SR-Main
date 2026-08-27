@@ -3,14 +3,14 @@ name: sr-design-system
 description: "Strange Ramblings design system — apply to all static apps unless the user requests otherwise."
 version: 1.0.0
 metadata:
-  hermes:
+  routing:
     tags: [design-system, branding, strangeramblings]
-    applies_to: [register_hermes_build, build_tweak]
+    applies_to: [register_chat_build, build_tweak]
 ---
 
 # Strange Ramblings Design System
 
-**Rule:** When building any static HTML app for strangeramblings.com (via `register_hermes_build` or `build_tweak`), apply this design system by default. Only deviate if the user explicitly asks for something different.
+**Rule:** When building any static HTML app for strangeramblings.com (via `register_chat_build` or `build_tweak`), apply this design system by default. Only deviate if the user explicitly asks for something different.
 
 ## Fonts (Google Fonts CDN)
 

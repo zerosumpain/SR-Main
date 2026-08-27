@@ -28,7 +28,7 @@ skill load.
    prompt's `MEMORY` block for the always-injected set. Get IDs for everything
    you may prune.
 2. **Move platform how-tos into skills first.** For each fact that is really
-   "how to do X on this platform" (publish_page, register_hermes_build,
+   "how to do X on this platform" (publish_page, register_chat_build,
    TrueLayer creds, workflow merge behaviour), check whether a skill already
    covers it. If yes → delete the memory entry. If no → patch the governing
    skill (or its `references/`) with the fact, THEN delete the memory entry.
@@ -55,7 +55,7 @@ skill load.
 
 | Keep in memory | Prune / move to skill |
 |---|---|
-| Personal facts (kids' ages, asthma, HA device inventory, bike prefs, pizza dough) | Platform how-tos (publish_page, register_hermes_build, TrueLayer creds) |
+| Personal facts (kids' ages, asthma, HA device inventory, bike prefs, pizza dough) | Platform how-tos (publish_page, register_chat_build, TrueLayer creds) |
 | Compact must-always-know platform facts (MCP→production) | Stale snapshots (balances, node counts, "last ran") |
 | Open investigation notes (unresolved workflow bugs) | Duplicates of user profile |
 | | Wrong/contradictory entries (highest priority) |

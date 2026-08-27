@@ -92,7 +92,7 @@ export async function probeEstate(): Promise<Record<string, HealthStatus>> {
     ['portainer', tcpProbe(TAILNET.porkserv, 9443)],
     // Loopback on the VPS ONLY. Probing 127.0.0.1:3110 from anywhere else can
     // never succeed, so it would paint a permanently-red tile for a service
-    // that is fine — the same false-alarm shape as the Hermes probe that read
+    // that is fine — the same false-alarm shape as the old gateway probe that read
     // "down" for months because it was asking the wrong path.
     ['whatsapp-bridge', onVps ? tcpProbe('127.0.0.1', 3110) : Promise.resolve<HealthStatus>('unknown')],
     ['openrouter', httpProbe('https://openrouter.ai/api/v1/models')],

@@ -9,7 +9,7 @@ description: |
 version: 2.0.0
 platforms: [macos, windows, linux]
 metadata:
-  hermes:
+  routing:
     tags: [computer-use, desktop, automation, gui, cross-platform]
     category: desktop
     related_skills: []

@@ -69,7 +69,7 @@ export async function manageServeConfig(buildId: string): Promise<void> {
   }
 
   // serve-manager runs the dev-server promotion flow; it doesn't apply to
-  // static-kind builds (register_hermes_build) which are served directly
+  // static-kind builds (register_chat_build) which are served directly
   // by the proxy from the live/ workspace. Bail early if startCommand is
   // null — only the dev-server path needs to start a process.
   if (!config.startCommand) {

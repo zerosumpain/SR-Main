@@ -12,7 +12,7 @@
 export const DEFAULT_CHAT_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
 // One default for every LLM task on the site, including the autonomous builder
-// and Hermes delegation children (John, 2026-07-25: "the default model should be
+// and delegation children (John, 2026-07-25: "the default model should be
 // the one any llm task uses across the whole site"). This deliberately retires
 // the separate fast-model carve-out that existed because glm-5.2 timed out on
 // tool-heavy delegation — see reference_glm52_agentic_slowness for the history,

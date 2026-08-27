@@ -4,14 +4,14 @@ import { join, relative, sep } from 'path';
 /**
  * The skills library, read from `data/skills/`.
  *
- * These are the 126 SKILL.md files Hermes has been routing on. They move here so
+ * These are the 126 SKILL.md files chat routes on. They live here so
  * the in-process chat lane can use them too — `data/` is already rsynced by
  * `ci-release.sh`, so they need no deployment work of their own.
  *
- * ONE DELIBERATE DIFFERENCE FROM HERMES, and it is the whole reason routing
+ * ONE DELIBERATE DIFFERENCE FROM THE OLD INDEX, and it is the whole reason routing
  * should get better rather than merely equal:
  *
- *   Hermes truncates every description to exactly 60 characters when it builds
+ *   It truncated every description to exactly 60 characters when building
  *   the index, and then instructs the model to load anything "even partially
  *   relevant". 41 of these 126 descriptions are longer than 60 chars, so their
  *   keywords are cut mid-sentence — and whichever skill happens to fit a keyword

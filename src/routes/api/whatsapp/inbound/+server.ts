@@ -1,13 +1,12 @@
 // POST /api/whatsapp/inbound — delegated-mode inbound relay.
 //
-// In the DELEGATED topology (WHATSAPP_HERMES_BRIDGE_URL set — production on
-// homeserv) Hermes owns the WhatsApp connection and our OrchestratorBridge is
-// never wired, so the D2 approval-reply and D3 whatsapp-trigger inbound handlers
-// have no way to fire. This endpoint is the entry point Hermes relays owner
-// messages to BEFORE its own chat handling: it runs the exact same
-// interceptOwnerInbound(from, text) sequence the bridge uses and returns
-// { handled, reply } so Hermes can send the reply and skip normal chat when we
-// consumed the message.
+// In the DELEGATED topology (WHATSAPP_BRIDGE_URL set) another process owns the
+// WhatsApp connection and our OrchestratorBridge is never wired, so the D2
+// approval-reply and D3 whatsapp-trigger inbound handlers have no way to fire.
+// This endpoint is the entry point that process relays owner messages to BEFORE
+// its own chat handling: it runs the exact same interceptOwnerInbound(from,
+// text) sequence the bridge uses and returns { handled, reply } so the caller
+// can send the reply and skip normal chat when we consumed the message.
 //
 // Auth: requires a Bearer token matching WHATSAPP_INBOUND_SECRET (mirrors the
 // policy-engine / scraper service-to-service routes). If the secret is UNSET the
