@@ -21,11 +21,14 @@ import {
   RAIL_MAX_BEARING_DELTA_DEG,
   RAIL_MIN_FIXES,
   RAIL_MIN_KMH,
+  STILL_MAX_GAP_MINS,
+  STILL_RADIUS_M,
   VISIT_MAX_GAP_MINS,
   type Cluster,
   type ClusterPoint,
   type MovementMode,
   type PriorFix,
+  type StayFix,
   type Visit,
 } from './types';
 
@@ -122,47 +125,100 @@ export function clusterRadiusM(
 }
 
 /**
- * Split time-ordered fixes at one place into separate visits.
+ * Split the fixes at one place into separate visits, and measure how much of
+ * each was actually spent standing still.
  *
- * Two fixes more than `maxGapMins` apart are two visits — you left and came
- * back. Without this every stop at the same shop over three months reads as
- * one continuous ninety-day stay, and both the visit count and the dwell
- * become meaningless.
+ * The naive version of this function — segment on a time gap, call the span
+ * from first fix to last one the dwell — is what put 78 stretches of road into
+ * the place graph. Three things went wrong with it, and this rewrite is aimed
+ * at all three:
+ *
+ *   A ROUND TRIP IS NOT A STAY. Driving out past a junction at 10:43 and back
+ *   past it at 11:07 produced two fixes 24 minutes apart, inside one 200 m
+ *   cluster, with no gap large enough to split them. The span said 24 minutes;
+ *   nobody had stopped for a second of it. Time only accrues here between
+ *   fixes that are close together in BOTH space and time, so the hole in the
+ *   middle of a round trip counts for nothing.
+ *
+ *   A HOUSEHOLD IS NOT A PERSON. The trail carries five people since the D1
+ *   decision, and feeding all five sets of timestamps into one segmenter welds
+ *   them together: three family members passing the same junction within a
+ *   minute of each other read as one visit, and 55% of qualifying visits on
+ *   production mixed more than one person. It also wrecks the real places —
+ *   home came out as 12 visits with a 53-hour median dwell, both figures
+ *   fiction. Visits are per subject; the household aggregate is a SUM of those,
+ *   which is a different and defensible thing.
+ *
+ *   SPEED WAS RECORDED AND NEVER READ. Every trail row carries `speed_kmh` and
+ *   `mode`, and the old place builder consulted neither. This one does not read
+ *   them either — but only because it measures the same thing better: `mode` is
+ *   derived against the previous fix wherever that was, so it is wrong on
+ *   arrival, whereas displacement between two fixes INSIDE the cluster is a
+ *   direct observation of whether you moved.
+ *
+ * Returns visits ordered by start, across all subjects.
  */
 export function segmentVisits(
-  timestamps: Date[],
-  maxGapMins = VISIT_MAX_GAP_MINS,
+  fixes: StayFix[],
+  opts: { maxGapMins?: number; stillRadiusM?: number; stillMaxGapMins?: number } = {},
 ): Visit[] {
-  const ts = [...timestamps].sort((a, b) => a.getTime() - b.getTime());
-  if (ts.length === 0) return [];
+  const maxGapMins = opts.maxGapMins ?? VISIT_MAX_GAP_MINS;
+  const stillRadiusM = opts.stillRadiusM ?? STILL_RADIUS_M;
+  const stillMaxGapMins = opts.stillMaxGapMins ?? STILL_MAX_GAP_MINS;
+
+  const bySubject = new Map<string, StayFix[]>();
+  for (const f of fixes) {
+    if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
+    const list = bySubject.get(f.subject) ?? [];
+    list.push(f);
+    bySubject.set(f.subject, list);
+  }
 
   const visits: Visit[] = [];
-  let start = ts[0];
-  let prev = ts[0];
-  let count = 1;
 
-  const close = (endedAt: Date, fixCount: number) => {
-    visits.push({
-      startedAt: start,
-      endedAt,
-      dwellMins: Math.round((endedAt.getTime() - start.getTime()) / 60000),
-      fixCount,
-    });
-  };
+  for (const [subject, list] of bySubject) {
+    const ordered = [...list].sort((a, b) => a.ts.getTime() - b.ts.getTime());
 
-  for (let i = 1; i < ts.length; i++) {
-    const gapMins = (ts[i].getTime() - prev.getTime()) / 60000;
-    if (gapMins > maxGapMins) {
-      close(prev, count);
-      start = ts[i];
-      count = 0;
+    let run: StayFix[] = [];
+    const closeRun = () => {
+      if (run.length === 0) return;
+      const startedAt = run[0].ts;
+      const endedAt = run[run.length - 1].ts;
+
+      // The measurement. An interval counts only when it is short enough to be
+      // continuous observation AND small enough to be standing still; anything
+      // else is a hole in the record or a journey, and neither is time spent.
+      let dwellMs = 0;
+      for (let i = 1; i < run.length; i++) {
+        const gapMins = (run[i].ts.getTime() - run[i - 1].ts.getTime()) / 60_000;
+        if (gapMins > stillMaxGapMins) continue;
+        const moved = metresBetween(run[i - 1].lat, run[i - 1].lon, run[i].lat, run[i].lon);
+        if (moved > stillRadiusM) continue;
+        dwellMs += run[i].ts.getTime() - run[i - 1].ts.getTime();
+      }
+
+      visits.push({
+        subject,
+        startedAt,
+        endedAt,
+        dwellMins: Math.round(dwellMs / 60_000),
+        spanMins: Math.round((endedAt.getTime() - startedAt.getTime()) / 60_000),
+        fixCount: run.length,
+      });
+      run = [];
+    };
+
+    for (const f of ordered) {
+      if (run.length > 0) {
+        const gapMins = (f.ts.getTime() - run[run.length - 1].ts.getTime()) / 60_000;
+        if (gapMins > maxGapMins) closeRun();
+      }
+      run.push(f);
     }
-    prev = ts[i];
-    count++;
+    closeRun();
   }
-  close(prev, count);
 
-  return visits;
+  return visits.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 }
 
 /** Median, rounded. Empty input is 0 rather than NaN — a place with no

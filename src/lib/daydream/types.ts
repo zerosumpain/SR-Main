@@ -136,6 +136,32 @@ export const MIN_DWELL_MINS = 10;
 /** Fixes more than this far apart inside one place are two visits, not one. */
 export const VISIT_MAX_GAP_MINS = 45;
 
+/**
+ * How far you may drift between two consecutive fixes and still count as
+ * having stayed put.
+ *
+ * Seventy-five metres, from the trail itself: at places that are genuinely
+ * destinations the median movement between consecutive fixes is 0 m and the
+ * 90th percentile is 1 m — a stationary phone barely jitters. At places that
+ * turned out to be roads the median is 107 m. The threshold sits far above the
+ * noise and far below a vehicle covering ground, so it separates the two
+ * without either being a close call.
+ */
+export const STILL_RADIUS_M = 75;
+
+/**
+ * The longest gap between two fixes that still counts as continuous
+ * observation.
+ *
+ * Six minutes — three polls at the two-minute cadence, so a stay survives two
+ * missed observations. It has to stay well under VISIT_MAX_GAP_MINS or the
+ * failure this constant exists to prevent comes straight back: leaving a road
+ * junction and returning twenty minutes later is two passes, and crediting the
+ * hole between them as time spent is exactly how 78 stretches of road became
+ * places.
+ */
+export const STILL_MAX_GAP_MINS = 6;
+
 /** Local timezone for the day/hour histograms. A place's rhythm is a LOCAL
  *  fact — "usually Tuesday afternoon" is meaningless in UTC. */
 export const LOCAL_TZ = 'Europe/London';
@@ -230,11 +256,34 @@ export interface Cluster {
 }
 
 /** A contiguous stay at one place. */
+/**
+ * One stay at one place by one person.
+ *
+ * `dwellMins` is deliberately NOT `endedAt - startedAt`. It is the time
+ * actually spent stationary and under observation — see `segmentVisits`. The
+ * wall-clock span is kept alongside it as `spanMins` because the two disagree
+ * in a way that is worth being able to see: a visit whose span is long and
+ * whose dwell is short is a journey through, not a stay.
+ */
 export interface Visit {
+  /** Whose stay. Visits are segmented per person; a household's passes through
+   *  the same junction are not one visit between them. */
+  subject: string;
   startedAt: Date;
   endedAt: Date;
+  /** Stationary, continuously-observed minutes. What qualifies a visit. */
   dwellMins: number;
+  /** First fix to last fix. For display and diagnosis only. */
+  spanMins: number;
   fixCount: number;
+}
+
+/** A trail fix as the segmenter needs it: when, where, and whose. */
+export interface StayFix {
+  ts: Date;
+  lat: number;
+  lon: number;
+  subject: string;
 }
 
 export function errMsg(err: unknown): string {

@@ -4029,9 +4029,17 @@ export const daydreamPlaces = pgTable(
     firstSeenAt: timestamp('first_seen_at', { withTimezone: true }),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     /**
-     * 'active' | 'ignored' | 'merged'. `ignored` is you saying "stop asking
-     * about this one" — a place-level mute that survives re-clustering, which
-     * a dismissed thought alone would not.
+     * 'active' | 'ignored' | 'merged' | 'transit'.
+     *
+     * `ignored` is you saying "stop asking about this one" — a place-level mute
+     * that survives re-clustering, which a dismissed thought alone would not.
+     *
+     * `transit` is the ENGINE saying it: a cluster the trail passes through
+     * rather than stops at. Kept distinct from `ignored` on purpose — one is
+     * your decision and permanent, the other is a judgement about the evidence
+     * and is revised the moment somebody actually spends ten still minutes
+     * there. Before the stillness rule (2026-08-27) these were indistinguishable
+     * from destinations and made up half the table.
      */
     status: text('status').notNull().default('active'),
     mergedIntoId: text('merged_into_id'),
