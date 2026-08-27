@@ -322,7 +322,28 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
       })
       .where(eq(intelNotes.id, noteId));
 
-    await embedNote(noteId);
+    // Non-fatal, and the ordering is why. By this line the entities and edges
+    // are committed and the note is already marked `processed` / `admitted`, so
+    // throwing here would return 'failed' for work that had entirely succeeded:
+    // the queue would say "retry me" about a thread already in the graph, and
+    // the caller would skip recording the decision. Inconsistent, not merely
+    // untidy.
+    //
+    // It is also the exact failure seen on 2026-08-27. Extraction fell back to
+    // Codex when OpenRouter ran out of credit and succeeded; embeddings cannot
+    // fall back (the bridge has no such endpoint), so this line threw and took a
+    // good admission down with it. An entity without a vector is still an
+    // entity — it just will not match by similarity until re-embedded, which is
+    // what `backfillPendingEmbeddings` and the entity backfill sweep are for.
+    //
+    // Matches the two entity-embedding call sites in ./graph, both of which
+    // already swallow this.
+    await embedNote(noteId).catch((err) =>
+      console.warn(
+        `[intel:auto] ${input.kind} ${input.refId} extracted but not embedded:`,
+        err instanceof Error ? err.message : err,
+      ),
+    );
 
     console.log(
       `[intel:auto] ${input.kind} ${input.refId} → ${stats.entityCount} entities, ${stats.relationshipCount} relationships`,
