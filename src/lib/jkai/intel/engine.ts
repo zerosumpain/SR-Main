@@ -218,6 +218,37 @@ export async function runIntelSweep(
     }, batch),
   );
 
+  // Catch up on embeddings that an outage left behind.
+  //
+  // Embeddings are the ONE thing that cannot fall back to Codex — the bridge has
+  // no such endpoint and there is nothing upstream to call, so while the
+  // OpenRouter key is out of credit every vector write on the site fails. That
+  // is survivable (extraction falls back, admission still works, entities still
+  // land) but it is only survivable because of this stage: without something
+  // that goes back for the misses, an outage leaves a permanently half-embedded
+  // corpus and the gap is invisible until a search quietly returns nothing.
+  //
+  // Both backfills stop early when the provider is still refusing, so a night
+  // during an outage costs one call rather than several hundred.
+  stages.push(
+    await runStage('embeddings', async () => {
+      const [{ backfillPendingEmbeddings }, { backfillMailIndex }] = await Promise.all([
+        import('./mail-queue'),
+        import('$lib/mail-index/store'),
+      ]);
+      const notes = await backfillPendingEmbeddings();
+      const passages = await backfillMailIndex();
+      return {
+        notesEmbedded: notes.embedded,
+        notesRemaining: notes.remaining,
+        threadsIndexed: passages.indexed,
+        // Reported as a number because the run log stores numbers. 1 means the
+        // provider was still refusing, which is why the other figures are low.
+        providerRefused: notes.stopped || passages.stopped ? 1 : 0,
+      };
+    }, batch),
+  );
+
   // Resolution BEFORE scoring, and after mail: the night's new entities are
   // exactly the ones most likely to duplicate something, and confidence,
   // watchlist and lenses should all run against the merged graph rather than

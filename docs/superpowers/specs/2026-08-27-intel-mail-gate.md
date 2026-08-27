@@ -210,3 +210,32 @@ Honest limitation: Codex is text-only, so a retried call carrying image or PDF
 parts will fail on the bridge. That is no worse than the 402 it replaces, but it
 means this covers the text workloads (extraction, doctor, self-improvement,
 admission), not everything.
+
+
+## Why embeddings cannot fall back to Codex
+
+Asked for directly, and checked rather than assumed:
+
+- `POST http://127.0.0.1:5207/v1/embeddings` → **404 "No route"**. The bridge
+  serves `/v1/models`, `/v1/chat/completions` and `/v1/grounded/chat/completions`
+  and nothing else (`packages/jkai-codex-bridge/src/server.ts`).
+- That is not a bridge omission to be implemented. Codex exposes no embeddings
+  API upstream — `packages/jkai-codex-bridge/README.md:48`: *"One thing genuinely
+  doesn't exist: embeddings. No endpoint at all, so those paths stay on
+  OpenRouter."*
+- OpenRouter is the **only** LLM credential on the box. `api_secrets` holds seven
+  entries — darwin-ldbws, openrouter, openrouteservice, paypal ×2, truelayer ×2 —
+  and no OpenAI, Voyage, Cohere or Gemini key.
+- Any *other* embedding model would be a different vector space. The corpus is
+  1536-dim `text-embedding-3-small`; mixing spaces does not error, it silently
+  returns wrong neighbours, which is worse than returning none.
+
+So during an OpenRouter outage embeddings stop, and that is a fact about the
+providers rather than a design choice. **The design choice is making it cost
+nothing permanent**: the nightly `embeddings` stage re-embeds whatever was
+missed, and both backfills stop early while the provider is still refusing, so
+an outage night costs one call rather than several hundred.
+
+**The one real fix for redundancy** is a direct OpenAI API key: same model, same
+1536 dimensions, same vector space, so it is a true drop-in rather than a second
+corpus. Nothing else on the market is.
