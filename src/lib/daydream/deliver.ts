@@ -26,7 +26,7 @@ export const PER_KIND_COOLDOWN_HOURS = 20;
 /** Nothing buzzes outside these local hours, whatever it scored. */
 export const QUIET_HOURS = { start: 8, end: 21 };
 
-export type Channel = 'push' | 'chat' | 'silent';
+export type Channel = 'whatsapp' | 'push' | 'chat' | 'silent';
 
 export interface DeliveryDecision {
   channel: Channel;
@@ -103,7 +103,7 @@ export async function readRateState(now: Date): Promise<RateState> {
 export function chooseChannel(
   thought: { kind: string; score: number },
   state: RateState,
-  opts: { now: Date; threshold: number; hasPushSubscriber: boolean },
+  opts: { now: Date; threshold: number; hasPushSubscriber: boolean; hasWhatsApp?: boolean },
 ): DeliveryDecision {
   const { now, threshold } = opts;
 
@@ -132,13 +132,14 @@ export function chooseChannel(
     return { channel: 'silent', suppressedReason: 'min_gap' };
   }
 
-  if (!opts.hasPushSubscriber) {
-    // Nowhere to push. Chat still reaches a desk, and is not a downgrade the
-    // owner needs telling about.
-    return { channel: 'chat', suppressedReason: null };
-  }
-
-  return { channel: 'push', suppressedReason: null };
+  // Channel preference (owner's D3, 2026-08-27): WhatsApp is the push
+  // channel — it is the one surface where a reply comes back. Web-push stays
+  // as the fallback for a device that subscribed; chat is the floor.
+  if (opts.hasWhatsApp) return { channel: 'whatsapp', suppressedReason: null };
+  if (opts.hasPushSubscriber) return { channel: 'push', suppressedReason: null };
+  // Nowhere to push. Chat still reaches a desk, and is not a downgrade the
+  // owner needs telling about.
+  return { channel: 'chat', suppressedReason: null };
 }
 
 /** Send it, and record what happened. One channel per thought, never two. */
@@ -151,7 +152,28 @@ export async function deliver(
   let sent = false;
   let error: string | null = null;
 
-  if (decision.channel === 'push') {
+  if (decision.channel === 'whatsapp') {
+    try {
+      const { ownerPhone } = await import('$lib/config/owner');
+      const to = ownerPhone();
+      if (!to) {
+        error = 'WORKFLOW_NOTIFY_PHONE unset';
+      } else {
+        const { executeTool } = await import('$lib/workflows/site-tools/registry');
+        // Same transport the briefing uses — the registry handles delegation,
+        // so this works identically whether this host or another owns the
+        // WhatsApp session.
+        const message =
+          `💭 *${thought.title.slice(0, 120)}*\n\n${body.slice(0, 500)}\n\n` +
+          `Reply 👍 / 👎 / "never" — or rate it: https://strangeramblings.com/jkai/daydreams?rate=${thought.id}`;
+        const res = await executeTool('whatsapp_send', { to, message });
+        if (res?.success) sent = true;
+        else error = (res as { error?: string } | undefined)?.error ?? 'whatsapp_send failed';
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  } else if (decision.channel === 'push') {
     try {
       const { notifyAllSubscribers } = await import('$lib/server/push');
       await notifyAllSubscribers({
@@ -251,6 +273,18 @@ export async function latestConversationId(): Promise<string | null> {
     return row?.id ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Is WhatsApp a live channel? A number to send to is the whole test — the
+ *  registry's delegation handles which host actually holds the session, and a
+ *  send that still fails is recorded suppressed, never delivered. */
+export async function hasWhatsAppOwner(): Promise<boolean> {
+  try {
+    const { ownerPhone } = await import('$lib/config/owner');
+    return ownerPhone() != null;
+  } catch {
+    return false;
   }
 }
 

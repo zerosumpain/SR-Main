@@ -1733,13 +1733,18 @@
       </p>
     {/if}
 
-    {#if delivery && !delivery.hasPushSubscriber}
+    {#if delivery?.hasWhatsApp}
+      <p class="sec-lede">
+        Delivering over <strong>WhatsApp</strong> — reply 👍 / 👎 / "never" to any
+        thought within 12 hours and it counts as feedback.
+      </p>
+    {:else if delivery && !delivery.hasPushSubscriber}
       <!-- The documented root cause of the empty feedback ledger: with nowhere
            to push, every thought falls back to a chat note whose feedback link
            is rarely followed, so the learning loop never gets an input. -->
       <p class="warn-line">
-        No device is subscribed to push — thoughts fall back to chat notes, and without
-        feedback taps the confidence threshold never relaxes.
+        No WhatsApp number and no push subscriber — thoughts fall back to chat notes, and
+        without feedback the confidence threshold never relaxes.
       </p>
     {/if}
 

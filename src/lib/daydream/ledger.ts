@@ -707,13 +707,14 @@ export async function loadTelemetry() {
  * every thought falls back to a chat note, where feedback rarely comes.
  */
 export async function loadDelivery() {
-  const { MAX_PER_DAY, PER_KIND_COOLDOWN_HOURS, hasPushSubscriber } = await import('./deliver');
+  const { MAX_PER_DAY, PER_KIND_COOLDOWN_HOURS, hasPushSubscriber, hasWhatsAppOwner } = await import('./deliver');
   const { MIN_VISITS_TO_ASK } = await import('./types');
   return {
     maxPerDay: MAX_PER_DAY,
     perKindCooldownHours: PER_KIND_COOLDOWN_HOURS,
     minVisitsToAsk: MIN_VISITS_TO_ASK,
     hasPushSubscriber: await hasPushSubscriber(),
+    hasWhatsApp: await hasWhatsAppOwner(),
   };
 }
 
