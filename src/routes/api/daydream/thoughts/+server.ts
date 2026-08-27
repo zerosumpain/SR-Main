@@ -96,6 +96,58 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ positions });
       }
 
+      case 'thought_map': {
+        // A place question without a map is a memory test. Coordinates are
+        // fetched here, one owner-gated read for one render, rather than riding
+        // in the ledger payload — the standing rule this feature has kept since
+        // merge 3, and the same shape `family_now` and the naming card use.
+        const thoughtId = typeof body.thoughtId === 'string' ? body.thoughtId : '';
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+
+        const { db } = await import('$lib/db');
+        const { daydreamPlaces, daydreamThoughts } = await import('$lib/db/schema');
+        const { eq } = await import('drizzle-orm');
+
+        const [row] = await db
+          .select({
+            lat: daydreamPlaces.lat,
+            lon: daydreamPlaces.lon,
+            radiusM: daydreamPlaces.radiusM,
+            label: daydreamPlaces.label,
+            suggestedLabel: daydreamPlaces.suggestedLabel,
+            suggestedAddress: daydreamPlaces.suggestedAddress,
+          })
+          .from(daydreamThoughts)
+          .innerJoin(daydreamPlaces, eq(daydreamPlaces.id, daydreamThoughts.placeId))
+          .where(eq(daydreamThoughts.id, thoughtId))
+          .limit(1);
+
+        // Not every thought is about somewhere. A thought with no place is a
+        // normal answer, not an error.
+        if (!row) return json({ place: null });
+        return json({ place: row });
+      }
+
+      case 'add_note': {
+        // Free text, because the closed feedback vocabulary carries a verdict
+        // and never a reason, and the reason is the half worth having.
+        const thoughtId = typeof body.thoughtId === 'string' ? body.thoughtId : '';
+        const text = typeof body.text === 'string' ? body.text : '';
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        if (!text.trim()) return json({ error: 'a note needs some words' }, { status: 400 });
+
+        const { addNote } = await import('$lib/daydream/notes');
+        try {
+          const result = await addNote(thoughtId, text);
+          return json({ ok: true, ...result });
+        } catch (err) {
+          return json(
+            { error: err instanceof Error ? err.message : 'could not save that note' },
+            { status: 400 },
+          );
+        }
+      }
+
       case 'set_enabled': {
         // The kill switch, finally a control rather than a banner naming a
         // settings key. Boolean set explicitly both ways — setSetting(k, null)

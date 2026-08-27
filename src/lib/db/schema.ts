@@ -4675,6 +4675,24 @@ export const daydreamThoughts = pgTable(
      * discount, and says on the page that it was inferred rather than said.
      */
     feedbackSource: text('feedback_source'),
+    /**
+     * What John said about this one, in his own words.
+     *
+     * The feedback vocabulary is a closed phrase list — useful, not that, never
+     * — which is right for a verdict and useless for a reason. The reason is
+     * the valuable part: "good call, but some of those calendar events are
+     * rolling reminders" is a correction no thumbs-down could carry, and
+     * without somewhere to put it the only options were to accept a flawed
+     * suggestion or mute the whole kind.
+     *
+     * Also written to `jkai_memories` so the rest of jkai can read it, on the
+     * same argument `confirmPlace` makes: the useful place for something the
+     * owner typed is the store everything already reads, not one feature's
+     * private column. This column is the display copy and the link.
+     */
+    note: text('note'),
+    noteMemoryId: text('note_memory_id'),
+    noteAt: timestamp('note_at', { withTimezone: true }),
     feedbackNote: text('feedback_note'),
     /**
      * How many detect ticks have re-proposed this exact thing.
