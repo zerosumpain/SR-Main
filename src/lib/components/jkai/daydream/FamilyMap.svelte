@@ -141,7 +141,7 @@
   }
   :global(.fam-tip) {
     font-family: var(--font-mono, monospace);
-    font-size: 10px;
+    font-size: var(--fs-label-xs, 12px);
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }

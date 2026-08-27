@@ -125,7 +125,7 @@
   .tip {
     position: absolute; top: -6px; transform: translate(-50%, -100%);
     background: var(--text-primary); color: var(--bg);
-    font-family: var(--font-mono, monospace); font-size: 10px;
+    font-family: var(--font-mono, monospace); font-size: var(--fs-label-xs, 12px);
     padding: 3px 8px; border-radius: 2px; white-space: nowrap; pointer-events: none;
     display: flex; gap: 8px; z-index: 3;
   }
