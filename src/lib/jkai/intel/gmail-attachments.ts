@@ -160,19 +160,55 @@ export function skippedAttachmentsNote(skipped: AttachmentPlan['skipped']): stri
  * $lib/workflows/gmail/service, passed in rather than constructed so this stays
  * one client-per-sweep and the module needs no `$env` import.
  */
-export async function fetchAttachmentText(
-  gmailClient: {
-    users: {
-      messages: {
-        attachments: {
-          get(params: { userId: string; messageId: string; id: string }): Promise<{ data: { data?: string | null } }>;
-        };
+/** The one Gmail call this module makes, declared structurally so the planner
+ *  and both fetchers can be tested without a Gmail client. */
+export interface GmailAttachmentClient {
+  users: {
+    messages: {
+      attachments: {
+        get(params: { userId: string; messageId: string; id: string }): Promise<{ data: { data?: string | null } }>;
       };
     };
-  },
+  };
+}
+
+export async function fetchAttachmentText(
+  gmailClient: GmailAttachmentClient,
   messageId: string,
   ref: PlannedAttachment,
 ): Promise<string | null> {
+  const buffer = await fetchAttachmentBytes(gmailClient, messageId, ref);
+  if (!buffer) return null;
+  try {
+    const { extractText } = await import('$lib/jkai/extract');
+    const result = await extractText(buffer, ref.mimeType, ref.filename);
+    return (result?.text ?? '').trim() || null;
+  } catch (err) {
+    console.warn(
+      `[intel:gmail] attachment ${ref.filename} unreadable:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
+ * The attachment's actual bytes.
+ *
+ * Split out of `fetchAttachmentText` when admission started KEEPING attachments
+ * rather than reading them once and discarding them. A sweep only ever wanted
+ * the text; an admitted thread saves the document into /drive, where it gets
+ * previews, citations and the @files index for free — and none of that is
+ * possible from extracted text alone.
+ *
+ * Returns null rather than throwing on every failure path, including the size
+ * ceiling: one oversized spreadsheet must not cost the thread its admission.
+ */
+export async function fetchAttachmentBytes(
+  gmailClient: GmailAttachmentClient,
+  messageId: string,
+  ref: PlannedAttachment,
+): Promise<Buffer | null> {
   try {
     const res = await gmailClient.users.messages.attachments.get({
       userId: 'me',
@@ -185,13 +221,10 @@ export async function fetchAttachmentText(
     // Gmail returns base64url, not standard base64.
     const buffer = Buffer.from(b64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
     if (!buffer.byteLength || buffer.byteLength > MAX_ATTACHMENT_BYTES) return null;
-
-    const { extractText } = await import('$lib/jkai/extract');
-    const result = await extractText(buffer, ref.mimeType, ref.filename);
-    return (result?.text ?? '').trim() || null;
+    return buffer;
   } catch (err) {
     console.warn(
-      `[intel:gmail] attachment ${ref.filename} unreadable:`,
+      `[intel:gmail] attachment ${ref.filename} could not be downloaded:`,
       err instanceof Error ? err.message : err,
     );
     return null;

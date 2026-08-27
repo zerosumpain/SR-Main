@@ -1,0 +1,309 @@
+// The admission queue — 2,781 held threads made decidable.
+//
+// A list of 2,781 emails is not a queue, it is a refusal to help. The whole
+// value of this module is that almost none of those threads deserve an
+// individual judgement: a mailbox is enormously repetitive, and the decisions
+// that matter are about GROUPS. 204 sender domains cover the corpus, and inside
+// a domain the subjects repeat — "Your order #204-3656 has shipped" and "Your
+// order #887-1120 has shipped" are one decision and two hundred emails.
+//
+// So the queue offers three ways in, cheapest first:
+//
+//   1. **Suggestions** — a ranked shortlist of threads that look like they
+//      matter, so there is somewhere obvious to start.
+//   2. **Clusters** — by sender, and by subject family within a sender. One
+//      keystroke settles a hundred threads.
+//   3. **Individual threads** — for the ones that genuinely are one-offs.
+//
+// Clustering is deterministic and free: no model, no vectors, no clock. Topic
+// grouping by EMBEDDING exists too but is deliberately on-demand
+// (`similarPending`), one kNN query when the owner asks "what else looks like
+// this" — clustering 2,781 vectors pairwise up front would cost minutes of
+// database time to produce groups that subject families already describe well.
+//
+// The ranking and grouping functions are PURE and exported for their tests; the
+// two functions at the bottom are the only ones that touch the database.
+
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { db } from '$lib/db';
+import { intelNotes } from '$lib/db/schema';
+import { factsFor, subjectFamily, type MailFacts, type NoteForFacts } from './mail-facts';
+
+export interface QueueNote extends NoteForFacts {
+  id: string;
+  graphState: string;
+}
+
+export interface QueueRow {
+  id: string;
+  subject: string;
+  senderDomain: string;
+  emailKind: string;
+  important: boolean;
+  ownerReplied: boolean;
+  twoWay: boolean;
+  hasAttachments: boolean;
+  messageCount: number;
+  bodyChars: number;
+  observedAt: string | null;
+  /** True when the note is a header-only stub the sweep never captured a body
+   *  for. Admission re-reads the thread from Gmail, so it is still admittable —
+   *  but the queue must not show an empty preview and call it the email. */
+  captured: boolean;
+  score: number;
+  /** Why it scored — shown on the row so a suggestion is never a black box. */
+  reasons: string[];
+  gmailUrl: string | null;
+}
+
+/**
+ * How much this thread looks like something worth having in the graph.
+ *
+ * Weighted rather than boolean, and every weight is explained on the row. The
+ * signals are ordered by how much they proved to be worth on the live mailbox:
+ * whether YOU replied is the strongest single indicator that a thread was a
+ * conversation, and Gmail's own IMPORTANT flag is the strongest indicator that
+ * arrived free — it is trained on years of what this mailbox actually reads.
+ *
+ * PURE.
+ */
+export function scoreThread(facts: MailFacts): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+  const add = (n: number, why: string) => {
+    score += n;
+    reasons.push(why);
+  };
+
+  if (facts.ownerReplied) add(4, 'you replied');
+  if (facts.twoWay) add(3, 'two-way conversation');
+  if (facts.gmailImportant) add(3, 'Gmail marked it important');
+
+  if (facts.emailKind === 'correspondence') add(2, 'from an ordinary address');
+  else if (facts.emailKind === 'bulk') add(-3, 'bulk sender');
+  else if (facts.emailKind === 'notification') add(-1, 'automated notification');
+
+  if (facts.hasAttachments) add(1, 'has attachments');
+  if (facts.bodyChars > 1500) add(1, 'substantial text');
+  else if (facts.bodyChars < 200) add(-2, 'almost no text');
+
+  if (facts.ageDays <= 30) add(1, 'recent');
+  else if (facts.ageDays > 60) add(-1, 'older than two months');
+
+  // A thread with two to five people is a working conversation. Fifty is a
+  // distribution list, and its participants are an audience, not a network.
+  if (facts.participantCount >= 2 && facts.participantCount <= 5) add(1, 'small group');
+  else if (facts.participantCount > 20) add(-2, 'broadcast to a large list');
+
+  return { score, reasons };
+}
+
+/** Turn a stored note into the row the queue renders. PURE. */
+export function toQueueRow(note: QueueNote, now: number): QueueRow {
+  const facts = factsFor(note, now);
+  const { score, reasons } = scoreThread(facts);
+  const meta = note.metadata ?? {};
+  const threadId = typeof meta.gmailThreadId === 'string' ? meta.gmailThreadId : null;
+  const observed = note.observedAt ?? note.createdAt;
+  return {
+    id: note.id,
+    subject: note.title ?? '(no subject)',
+    senderDomain: facts.senderDomain || 'unknown',
+    emailKind: facts.emailKind,
+    important: facts.gmailImportant,
+    ownerReplied: facts.ownerReplied,
+    twoWay: facts.twoWay,
+    hasAttachments: facts.hasAttachments,
+    messageCount: facts.messageCount,
+    bodyChars: facts.bodyChars,
+    observedAt: observed ? new Date(observed).toISOString() : null,
+    captured: meta.structuralOnly !== true && facts.bodyChars >= 200,
+    score,
+    reasons,
+    gmailUrl: threadId ? `https://mail.google.com/mail/u/0/#all/${threadId}` : null,
+  };
+}
+
+export type ClusterKind = 'sender' | 'subject';
+
+export interface QueueCluster {
+  /** Stable id for the admit-all call: `sender:linkedin.com`. */
+  key: string;
+  kind: ClusterKind;
+  label: string;
+  /** Sender domain for a sender cluster; the parent domain for a subject one. */
+  domain: string;
+  count: number;
+  /** Threads in this cluster Gmail marked important. */
+  importantCount: number;
+  /** Threads the owner replied to. The number that says "look at this one". */
+  repliedCount: number;
+  /** Median score, so a cluster can be ordered by how promising it is. */
+  score: number;
+  oldest: string | null;
+  newest: string | null;
+  /** Up to five subjects, for the card. */
+  samples: string[];
+  noteIds: string[];
+}
+
+function medianOf(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round(((sorted[mid - 1] + sorted[mid]) / 2) * 10) / 10;
+}
+
+function buildCluster(key: string, kind: ClusterKind, label: string, domain: string, rows: QueueRow[]): QueueCluster {
+  const dates = rows.map((r) => r.observedAt).filter((d): d is string => !!d).sort();
+  return {
+    key,
+    kind,
+    label,
+    domain,
+    count: rows.length,
+    importantCount: rows.filter((r) => r.important).length,
+    repliedCount: rows.filter((r) => r.ownerReplied).length,
+    score: medianOf(rows.map((r) => r.score)),
+    oldest: dates[0] ?? null,
+    newest: dates[dates.length - 1] ?? null,
+    samples: rows.slice(0, 5).map((r) => r.subject),
+    noteIds: rows.map((r) => r.id),
+  };
+}
+
+/** A subject family needs at least this many threads to be worth offering as
+ *  its own decision; below it the sender cluster already covers them. */
+export const MIN_SUBJECT_CLUSTER = 3;
+
+/**
+ * Group the queue. PURE.
+ *
+ * Sender clusters always; subject-family clusters WITHIN a sender, but only
+ * where the family is big enough to be a decision of its own. The two are
+ * returned as one list rather than nested, because the question the owner is
+ * answering is the same either way — "do these belong in the graph?" — and a
+ * tree would make them navigate a hierarchy to answer it.
+ */
+export function clusterQueue(rows: QueueRow[]): QueueCluster[] {
+  const byDomain = new Map<string, QueueRow[]>();
+  for (const row of rows) {
+    const list = byDomain.get(row.senderDomain);
+    if (list) list.push(row);
+    else byDomain.set(row.senderDomain, [row]);
+  }
+
+  const clusters: QueueCluster[] = [];
+  for (const [domain, domainRows] of byDomain) {
+    const byFamily = new Map<string, QueueRow[]>();
+    for (const row of domainRows) {
+      const family = subjectFamily(row.subject);
+      if (!family) continue;
+      const list = byFamily.get(family);
+      if (list) list.push(row);
+      else byFamily.set(family, [row]);
+    }
+
+    const claimed = new Set<string>();
+    for (const [family, familyRows] of byFamily) {
+      if (familyRows.length < MIN_SUBJECT_CLUSTER) continue;
+      // A family that IS the whole sender adds nothing over the sender cluster.
+      if (familyRows.length === domainRows.length) continue;
+      clusters.push(
+        buildCluster(`subject:${domain}:${family}`, 'subject', family, domain, familyRows),
+      );
+      for (const row of familyRows) claimed.add(row.id);
+    }
+
+    // The sender cluster covers everything from that sender, including threads
+    // a subject cluster also claims. Deliberately overlapping: "all of
+    // linkedin.com" and "the connection invitations" are both decisions the
+    // owner might want, and forcing them to be disjoint would make the first
+    // one mean something other than what it says.
+    clusters.push(buildCluster(`sender:${domain}`, 'sender', domain, domain, domainRows));
+  }
+
+  // Biggest first — the queue drains fastest from the top, and a 300-thread
+  // sender is where a single keystroke is worth the most.
+  return clusters.sort((a, b) => b.count - a.count || b.score - a.score);
+}
+
+export interface MailQueue {
+  pending: number;
+  admitted: number;
+  rejected: number;
+  /** Highest-scoring pending threads, for the shortlist. */
+  suggestions: QueueRow[];
+  clusters: QueueCluster[];
+  /** Every pending row, for the "all threads" tab. Bounded. */
+  rows: QueueRow[];
+  truncated: boolean;
+}
+
+/** Bounded so one enormous backlog cannot make the page a 30 MB payload. */
+const MAX_ROWS = 4000;
+const SUGGESTION_COUNT = 25;
+
+/** Load and shape the whole queue. The only DB read the page needs. */
+export async function loadMailQueue(now = Date.now()): Promise<MailQueue> {
+  const [counts] = await db
+    .select({
+      pending: sql<number>`count(*) filter (where ${intelNotes.graphState} = 'pending')::int`,
+      admitted: sql<number>`count(*) filter (where ${intelNotes.graphState} = 'admitted')::int`,
+      rejected: sql<number>`count(*) filter (where ${intelNotes.graphState} = 'rejected')::int`,
+    })
+    .from(intelNotes)
+    .where(eq(intelNotes.source, 'email'));
+
+  const notes = await db
+    .select({
+      id: intelNotes.id,
+      title: intelNotes.title,
+      rawContent: intelNotes.rawContent,
+      metadata: intelNotes.metadata,
+      observedAt: intelNotes.observedAt,
+      createdAt: intelNotes.createdAt,
+      graphState: intelNotes.graphState,
+    })
+    .from(intelNotes)
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')))
+    .orderBy(desc(sql`coalesce(${intelNotes.observedAt}, ${intelNotes.createdAt})`))
+    .limit(MAX_ROWS + 1);
+
+  const truncated = notes.length > MAX_ROWS;
+  const rows = notes.slice(0, MAX_ROWS).map((n) => toQueueRow(n as QueueNote, now));
+
+  return {
+    pending: Number(counts?.pending) || 0,
+    admitted: Number(counts?.admitted) || 0,
+    rejected: Number(counts?.rejected) || 0,
+    suggestions: [...rows].sort((a, b) => b.score - a.score).slice(0, SUGGESTION_COUNT),
+    clusters: clusterQueue(rows),
+    rows,
+    truncated,
+  };
+}
+
+/**
+ * Pending threads that read like this one — the topic axis.
+ *
+ * One kNN query against the note embeddings the gated sweep already paid for,
+ * run when the owner asks rather than for every thread up front. Subject
+ * families catch the repetitive mail; this catches the case they cannot, where
+ * the same subject matter arrives under a dozen different subject lines.
+ */
+export async function similarPending(noteId: string, limit = 40): Promise<string[]> {
+  const { rows } = await db.execute(sql`
+    SELECT n.id
+    FROM intel_notes n
+    WHERE n.id <> ${noteId}
+      AND n.source = 'email'
+      AND n.graph_state = 'pending'
+      AND n.embedding IS NOT NULL
+      AND (SELECT embedding FROM intel_notes WHERE id = ${noteId}) IS NOT NULL
+      AND (n.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId})) < 0.35
+    ORDER BY n.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId})
+    LIMIT ${limit}
+  `);
+  return (rows as Array<Record<string, unknown>>).map((r) => String(r.id));
+}

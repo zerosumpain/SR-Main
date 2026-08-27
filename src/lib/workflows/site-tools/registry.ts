@@ -36,6 +36,7 @@ import './tools/route-export';
 import './tools/route-plan';
 import './tools/knowledge';
 import './tools/intel-graph';
+import './tools/mail';
 import './tools/codegraph';
 import './tools/agents';
 import './tools/discovery';

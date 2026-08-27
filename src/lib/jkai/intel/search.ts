@@ -84,7 +84,14 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
              : sql`0.5::float8`} AS distance
     FROM intel_notes n
     WHERE
-      ${q ? sql`(n.title ILIKE ${`%${q}%`} OR COALESCE(n.processed_content, n.raw_content) ILIKE ${`%${q}%`})` : sql`TRUE`}
+      -- Only what the graph is actually allowed to know. A note held at the mail
+      -- gate is stored and embedded so the admission queue can cluster and search
+      -- it, and this is the door it must not come through: intel recall answers
+      -- questions ABOUT the graph, and a marketing email nobody approved is not
+      -- part of it. Admitted mail is searchable here and, at passage level, via
+      -- $lib/mail-index.
+      n.graph_state = 'admitted'
+      AND ${q ? sql`(n.title ILIKE ${`%${q}%`} OR COALESCE(n.processed_content, n.raw_content) ILIKE ${`%${q}%`})` : sql`TRUE`}
       ${fromTs ? sql`AND n.created_at >= ${fromTs}::timestamptz` : sql``}
       ${toTs ? sql`AND n.created_at < ${toTs}::timestamptz` : sql``}
       ${tagFilter ? sql`AND n.metadata->>'sourceTag' = ANY(${pgTextArray(tagFilter)}::text[])` : sql``}

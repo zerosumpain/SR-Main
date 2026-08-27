@@ -105,6 +105,12 @@ async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]>
       FROM intel_notes n
       WHERE n.embedding IS NOT NULL
         AND n.status = 'processed'
+        -- Stated explicitly, even though a held note's status is 'held' and the
+        -- line above already excludes it. That exclusion is incidental — it
+        -- depends on two columns happening to agree — and this is the door the
+        -- whole mail gate exists to keep shut: chat must never answer from an
+        -- email nobody approved.
+        AND n.graph_state = 'admitted'
       ORDER BY distance ASC
       LIMIT 5
     `);
