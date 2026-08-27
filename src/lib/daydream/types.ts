@@ -162,6 +162,19 @@ export const STILL_RADIUS_M = 75;
  */
 export const STILL_MAX_GAP_MINS = 6;
 
+/**
+ * The floor below which a stretch of movement is not a journey.
+ *
+ * Two minutes and three hundred metres. Under either, what is being described
+ * is a walk to the car, a lap of a car park, or GPS wandering while stationary
+ * — none of which anyone would call a journey, and all of which would otherwise
+ * inflate a daily count into meaninglessness. Nine "journeys" appeared on one
+ * measured day with only sixteen moving fixes between them, which is what an
+ * unfloored count looks like.
+ */
+export const MIN_JOURNEY_MINS = 2;
+export const MIN_JOURNEY_METRES = 300;
+
 /** Local timezone for the day/hour histograms. A place's rhythm is a LOCAL
  *  fact — "usually Tuesday afternoon" is meaningless in UTC. */
 export const LOCAL_TZ = 'Europe/London';

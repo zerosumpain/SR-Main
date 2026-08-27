@@ -4064,6 +4064,115 @@ export const daydreamPlaces = pgTable(
 );
 
 /**
+ * Every series daydream has ever discovered, whatever produced it.
+ *
+ * The feature store below is a wide table of hand-written columns, which means
+ * the set of things daydream can notice is fixed at the moment somebody last
+ * edited `features/build.ts`. Home Assistant alone exposes 415 entities
+ * carrying 427 numeric attributes across 263 of them; daydream read five.
+ * `sensor.john_s_echo_temperature` has been reporting the indoor temperature
+ * all along and nothing ever looked at it.
+ *
+ * So: discovery registers, nothing hand-writes. A source enumerates what it can
+ * see, calls `registerSignal` for anything new, and from then on that series is
+ * swept, carded and ponderable with no code change anywhere. That includes
+ * sources that do not exist yet — a future connector, or a tool the
+ * self-improvement loop writes itself, joins by calling the same function.
+ *
+ * `key` is namespaced by source so two sources can never collide:
+ * `ha:sensor.john_s_echo_temperature`, `ha:weather.forecast_home#humidity`,
+ * `weather:temperature_2m`, `journey:minutes_moving`, `feature:hrvMs`.
+ *
+ * Registering is NOT the same as trusting. A signal enters the sweep only once
+ * it has enough observed days to clear `MIN_PAIRS`, which is why a newly
+ * discovered sensor is silent for a fortnight rather than immediately
+ * contributing noise to a false-discovery correction.
+ */
+export const daydreamSignals = pgTable(
+  'daydream_signals',
+  {
+    /** Namespaced `source:identifier`, stable across restarts and re-discovery. */
+    key: text('key').primaryKey(),
+    /** 'ha' | 'weather' | 'journey' | 'feature' | anything a future source picks. */
+    source: text('source').notNull(),
+    /** Human label, for cards and findings. */
+    label: text('label').notNull(),
+    /** '°C', 'lx', 'min', 'km/h' — null when the source does not say. */
+    unit: text('unit'),
+    /** 'numeric' | 'boolean'. Booleans are stored as 0/1 so one column serves
+     *  both and a daily mean of a boolean is a duty cycle, which is useful. */
+    valueKind: text('value_kind').notNull().default('numeric'),
+    /** HA's own device_class where there is one — 'temperature', 'battery'. */
+    deviceClass: text('device_class'),
+    /**
+     * 'active'   — swept and carded once it has the days for it.
+     * 'ignored'  — John said stop.
+     * 'unusable' — discovered, but the source never produced a usable value.
+     *
+     * Deliberately mirrors daydream_places: a judgement the engine made is
+     * revisable, a mute the owner set is not.
+     */
+    status: text('status').notNull().default('active'),
+    /** Days with at least one observation. The gate for entering a sweep. */
+    observedDays: integer('observed_days').notNull().default(0),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_signals_source_idx').on(t.source),
+    index('daydream_signals_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamSignal = typeof daydreamSignals.$inferSelect;
+
+/**
+ * One signal, one subject, one local day.
+ *
+ * Long and narrow on purpose — this is the half of the design that lets the
+ * feature set grow without a migration. The wide `daydream_day_features` table
+ * stays exactly as it is and its columns are MIRRORED in here as `feature:*`
+ * signals, so there is a single place to correlate from and no flag day.
+ *
+ * Four aggregates rather than one, because a day's worth of a sensor is not one
+ * number and which one matters depends on the question: mean indoor temperature
+ * is a different claim from the coldest it got. `samples` travels with them so a
+ * value derived from one reading is distinguishable from one derived from
+ * twenty-four — the same reason `sources` exists on the feature store.
+ *
+ * A day with no reading has NO ROW. Absent is not zero; that rule is inherited
+ * deliberately, and it is what lets a correlation exclude a day it cannot see
+ * rather than treating an outage as a measurement.
+ */
+export const daydreamObservations = pgTable(
+  'daydream_observations',
+  {
+    id: serial('id').primaryKey(),
+    /** Local day, `YYYY-MM-DD`, same convention as the feature store. */
+    day: date('day').notNull(),
+    /** A person, or 'household' for anything that belongs to the house rather
+     *  than to someone — indoor temperature is nobody's in particular. */
+    subject: text('subject').notNull().default('household'),
+    signalKey: text('signal_key').notNull(),
+    valueMean: doublePrecision('value_mean'),
+    valueMin: doublePrecision('value_min'),
+    valueMax: doublePrecision('value_max'),
+    valueLast: doublePrecision('value_last'),
+    samples: integer('samples').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_observations_key_idx').on(t.day, t.subject, t.signalKey),
+    index('daydream_observations_signal_idx').on(t.signalKey),
+    index('daydream_observations_day_idx').on(t.day),
+  ],
+);
+
+export type DaydreamObservation = typeof daydreamObservations.$inferSelect;
+
+/**
  * One row per local day, per subject — the table that makes a cross-domain
  * correlation computable at all.
  *

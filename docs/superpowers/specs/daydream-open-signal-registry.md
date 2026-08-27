@@ -1,6 +1,6 @@
 # Daydream: an open signal registry
 
-**Status:** in build, 2026-08-27
+**Status:** A–D shipped 2026-08-27; E (feed map + natural-language notes) queued
 **Brief (John, 2026-08-27):** "pondering / daydreaming should not limit itself to a
 subset of attributes and should do so across every attribute or artefact it can
 possibly find, including API connections or capabilities that might be built in
@@ -115,3 +115,25 @@ waiting a year.
 | D4 | Rules `FACT_KEYS` stays closed | auto-promote every signal | a rule buzzes a phone; the existing security boundary is deliberate | n/a — nothing widened |
 | D5 | Keep `daydream_day_features`, mirror it in | migrate and drop it | everything reads it; no flag day | yes |
 | D6 | Coverage gate per signal before it enters the sweep | sweep everything | 400+ signals × BH correction would bury real findings | yes — threshold is a constant |
+| D7 | Suppress pairs at \|r\| ≥ 0.99 automatically | extend the hand-written ENTANGLED list | a hand list cannot enumerate pairs among signals nobody has discovered yet; two Echo sensors already report the same room at 21.8 °C | yes — one constant |
+| D8 | Hypothesis vocabulary (`SWEEP_METRICS`) left closed | hand the model all 400 signal keys | the blind proposer's pre-registration is what makes q meaningful over ~4 tests instead of ~276; a 400-key prompt weakens it | yes — widening later is additive |
+| D9 | Dropped `hermes_sessions` + `hermes_chat_origin` from the LOCAL db | leave them; hand-apply DDL | they made every local `drizzle push` prompt for a rename and would have kept doing so; Hermes is decommissioned and prod never had them. Dumped to `~/hermes-memories-archive-20260827/` first | yes — dump restores them |
+| D10 | Journey ends when the stillness reaches `MIN_DWELL_MINS` | a separate stop-tolerance constant | ties the two halves to one threshold, so a minute is journey time or visit time and never both; a test caught the naive version splitting a trip at every red light | yes |
+| D11 | Route signals only between NAMED places, after 3 days | every place pair | 160 places is 12,720 pairs, and an unnamed pair yields a key no card could render | yes — thresholds are constants |
+
+
+## Phase E — queued (John, 2026-08-27)
+
+Two additions to the feed, both about comprehension rather than measurement:
+
+1. **A map on any thought that concerns a location.** A place question without one
+   is a memory test. The Family tab's on-demand `family_now` action is the
+   precedent — coordinates are fetched by an owner-gated action and never ride
+   the page payload.
+2. **A free-text note on a thought**, which becomes a memory the ponder pack must
+   cite. The closed feedback vocabulary (useful / not that / never) cannot carry
+   nuance, and the nuance is the valuable part: the "do more as a family toward
+   the end of August" musing was a good call, but some of the calendar events
+   behind it are ROLLING REMINDERS, and there is currently no way to say so.
+   Written to `jkai_memories` on the `confirmPlace` precedent, so every part of
+   jkai can read it rather than daydream alone.
