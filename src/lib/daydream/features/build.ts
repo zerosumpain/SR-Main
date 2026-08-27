@@ -423,7 +423,13 @@ export function collapse(b: DayBucket, subject: string) {
 
     trailFixes: b.trail.length || null,
     trailCoverage: coverage,
-    placesVisited: positioned.filter((t) => t.placeId).length || null,
+    // VISITS, not fixes. This counted every fix that carried a place id, so a
+    // day sitting at home recorded 245 "places visited" against 2 distinct
+    // places and 247 fixes — an alias for trailFixes under a name that reads
+    // as something else, and swept against every other feature as though it
+    // were independent. A visit is a contiguous run at one place, which is the
+    // same definition segmentVisits uses.
+    placesVisited: countVisits(positioned),
     distinctPlaces: positioned.length
       ? new Set(positioned.map((t) => t.placeId).filter(Boolean)).size || null
       : null,
@@ -464,4 +470,24 @@ export function collapse(b: DayBucket, subject: string) {
 
     sources,
   };
+}
+
+/**
+ * How many separate visits a day contains — a run of consecutive fixes at one
+ * place, ending when the place changes or the trail leaves a place entirely.
+ *
+ * Deliberately NOT `segmentVisits`: this is a whole-day sequence already
+ * assigned to places by `refreshPlaces`, so the expensive part is done and the
+ * question here is only how many times the answer changed. Returning to the
+ * same place after going elsewhere is two visits; that is the whole point.
+ */
+export function countVisits(rows: Array<{ placeId: string | null }>): number | null {
+  let visits = 0;
+  let prev: string | null = null;
+  for (const r of rows) {
+    const here = r.placeId ?? null;
+    if (here && here !== prev) visits++;
+    prev = here;
+  }
+  return visits || null;
 }

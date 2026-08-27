@@ -4021,6 +4021,16 @@ export const daydreamPlaces = pgTable(
     suggestedAddress: text('suggested_address'),
     suggestedAt: timestamp('suggested_at', { withTimezone: true }),
     visitCount: integer('visit_count').notNull().default(0),
+    /**
+     * On how many separate LOCAL DAYS anyone stayed here.
+     *
+     * Distinct from `visitCount`, which counts person-visits and is a household
+     * aggregate: one family outing to a soft-play with five people in the car
+     * is five visits and one day. Asking "what is this place you keep going to?"
+     * about that is wrong, and eleven of the thirteen places in the naming
+     * queue on 2026-08-27 were exactly it. Repetition is a question about days.
+     */
+    distinctDays: integer('distinct_days').notNull().default(0),
     medianDwellMins: integer('median_dwell_mins').notNull().default(0),
     /** Visit counts by weekday (7) and by local hour (24) — a cheap rhythm
      *  summary, so "usually Tuesday afternoon" costs no query. */
