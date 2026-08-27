@@ -15,6 +15,7 @@ import {
   daydreamDigests,
   daydreamPlaces,
   daydreamThoughts,
+  daydreamTrail,
   heartbeatActions,
   heartbeatPulses,
 } from '$lib/db/schema';
@@ -387,6 +388,318 @@ export async function snoozeThought(thoughtId: string, days: number): Promise<vo
 }
 
 /**
+ * The household, for the Family tab: who is where now (coordinate-free — the
+ * map fetches positions separately, on demand), how fresh each track is, and
+ * the shape of each person's day so far. Today's numbers are derived from the
+ * trail at read time rather than stored — the feature store owns yesterday,
+ * this owns "so far".
+ */
+export async function loadFamily() {
+  const { FAMILY_SUBJECTS } = await import('./types');
+  const { localDayStart } = await import('./budget');
+  const now = new Date();
+  const dayStart = localDayStart(now);
+
+  const members = [] as Array<{
+    subject: string;
+    isHome: boolean | null;
+    placeLabel: string | null;
+    distanceHomeKm: number | null;
+    batteryPct: number | null;
+    ageMins: number | null;
+    lastSeenAt: Date | null;
+    today: { firstOutMins: number | null; minutesOut: number; placesVisited: number; fixes: number };
+  }>;
+
+  for (const f of FAMILY_SUBJECTS) {
+    const [latest] = await db
+      .select({
+        ts: daydreamTrail.ts,
+        isHome: daydreamTrail.isHome,
+        placeId: daydreamTrail.placeId,
+        distanceHomeKm: daydreamTrail.distanceHomeKm,
+        batteryPct: daydreamTrail.batteryPct,
+      })
+      .from(daydreamTrail)
+      .where(and(eq(daydreamTrail.subject, f.subject), isNotNull(daydreamTrail.lat)))
+      .orderBy(desc(daydreamTrail.ts))
+      .limit(1);
+
+    const todayRows = await db
+      .select({
+        ts: daydreamTrail.ts,
+        isHome: daydreamTrail.isHome,
+        placeId: daydreamTrail.placeId,
+        lat: daydreamTrail.lat,
+      })
+      .from(daydreamTrail)
+      .where(and(eq(daydreamTrail.subject, f.subject), gte(daydreamTrail.ts, dayStart)))
+      .orderBy(daydreamTrail.ts);
+
+    const positioned = todayRows.filter((r) => r.lat != null);
+    const outRows = positioned.filter((r) => r.isHome === false);
+    const firstOut = outRows[0] ?? null;
+    const firstOutMins = firstOut
+      ? Math.round((firstOut.ts.getTime() - dayStart.getTime()) / 60_000)
+      : null;
+
+    let placeLabel: string | null = null;
+    if (latest?.placeId) {
+      const [pl] = await db
+        .select({ label: daydreamPlaces.label })
+        .from(daydreamPlaces)
+        .where(eq(daydreamPlaces.id, latest.placeId))
+        .limit(1);
+      placeLabel = pl?.label ?? null;
+    }
+
+    members.push({
+      subject: f.subject,
+      isHome: latest?.isHome ?? null,
+      placeLabel,
+      distanceHomeKm: latest?.distanceHomeKm ?? null,
+      batteryPct: latest?.batteryPct ?? null,
+      ageMins: latest ? Math.round((now.getTime() - latest.ts.getTime()) / 60_000) : null,
+      lastSeenAt: latest?.ts ?? null,
+      today: {
+        firstOutMins,
+        // Each positioned fix stands for one observe interval (2 min).
+        minutesOut: Math.round(outRows.length * 2),
+        placesVisited: new Set(positioned.map((r) => r.placeId).filter(Boolean)).size,
+        fixes: todayRows.length,
+      },
+    });
+  }
+  return { members };
+}
+
+/** Money, in one read: what went out, what is live, what is coming. */
+export async function loadMoney() {
+  const { daydreamSpend, daydreamOffers, intelTimelineEvents } = await import('$lib/db/schema');
+  const { getSetting } = await import('$lib/server/models/settings');
+  const now = new Date();
+  const floor30 = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+  const horizon = new Date(now.getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
+
+  const [rows, offers, renewals, bankEnabled, bankPulse] = await Promise.all([
+    db
+      .select({
+        id: daydreamSpend.id,
+        day: daydreamSpend.day,
+        merchant: daydreamSpend.merchant,
+        amountMinor: daydreamSpend.amountMinor,
+        currency: daydreamSpend.currency,
+        sourceNoteId: daydreamSpend.sourceNoteId,
+      })
+      .from(daydreamSpend)
+      .where(and(eq(daydreamSpend.verified, true), gte(daydreamSpend.day, floor30)))
+      .orderBy(desc(daydreamSpend.day)),
+    db
+      .select({
+        id: daydreamOffers.id,
+        merchant: daydreamOffers.merchant,
+        summary: daydreamOffers.summary,
+        code: daydreamOffers.code,
+        expiresAt: daydreamOffers.expiresAt,
+      })
+      .from(daydreamOffers)
+      .where(eq(daydreamOffers.status, 'active'))
+      .orderBy(sql`${daydreamOffers.expiresAt} asc nulls last`)
+      .limit(20),
+    db
+      .select({
+        id: intelTimelineEvents.id,
+        date: intelTimelineEvents.date,
+        type: intelTimelineEvents.type,
+        title: intelTimelineEvents.title,
+      })
+      .from(intelTimelineEvents)
+      .where(and(gte(intelTimelineEvents.date, today), sql`${intelTimelineEvents.date} <= ${horizon}`))
+      .orderBy(intelTimelineEvents.date)
+      .limit(30),
+    getSetting<boolean>('daydream.bank.enabled'),
+    lastPulseFor('daydream-bank'),
+  ]);
+
+  const byDay = new Map<string, number>();
+  const byMerchant = new Map<string, number>();
+  for (const r of rows) {
+    byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.amountMinor);
+    byMerchant.set(r.merchant, (byMerchant.get(r.merchant) ?? 0) + r.amountMinor);
+  }
+
+  return {
+    totalMinor30d: rows.reduce((a, r) => a + r.amountMinor, 0),
+    rows: rows.slice(0, 40).map((r) => ({
+      ...r,
+      source: r.sourceNoteId.startsWith('truelayer:')
+        ? 'bank'
+        : r.sourceNoteId.startsWith('paypal:')
+          ? 'paypal'
+          : 'receipt',
+    })),
+    byDay: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, minor]) => ({ day, minor })),
+    topMerchants: [...byMerchant.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([merchant, minor]) => ({ merchant, minor })),
+    offers,
+    renewals,
+    bank: {
+      enabled: bankEnabled === true,
+      lastRun: bankPulse,
+    },
+  };
+}
+
+/** Discoveries: the statistics stack, honestly rendered at last. */
+export async function loadDiscoveries() {
+  const { loadBoard } = await import('./hypotheses/store');
+  const { daydreamDigests, daydreamLeads } = await import('$lib/db/schema');
+
+  const [board, digests, leads, sweep] = await Promise.all([
+    loadBoard(60),
+    db
+      .select({
+        day: daydreamDigests.day,
+        summary: daydreamDigests.summary,
+        narrative: daydreamDigests.narrative,
+        verified: daydreamDigests.verified,
+        stats: daydreamDigests.stats,
+      })
+      .from(daydreamDigests)
+      .orderBy(desc(daydreamDigests.day))
+      .limit(14),
+    db
+      .select()
+      .from(daydreamLeads)
+      .orderBy(sql`${daydreamLeads.status} = 'open' desc`, desc(daydreamLeads.score))
+      .limit(20),
+    lastPulseFor('daydream-sweep'),
+  ]);
+
+  return {
+    board,
+    digests,
+    leads: leads.map((l) => ({
+      id: l.id,
+      leadKey: l.leadKey,
+      title: l.title,
+      rationale: l.rationale,
+      metrics: (l.metrics ?? []) as string[],
+      status: l.status,
+      score: l.score,
+      roundsRun: l.roundsRun,
+      barrenRounds: l.barrenRounds,
+      hypothesesSpawned: l.hypothesesSpawned,
+      hypothesesHeld: l.hypothesesHeld,
+    })),
+    sweep,
+  };
+}
+
+/** One heartbeat action's latest pulse, compacted for the page. */
+async function lastPulseFor(name: string) {
+  const [row] = await db
+    .select({
+      ts: heartbeatPulses.ts,
+      outcome: heartbeatPulses.outcome,
+      summary: heartbeatPulses.summary,
+      details: heartbeatPulses.details,
+    })
+    .from(heartbeatPulses)
+    .innerJoin(heartbeatActions, eq(heartbeatActions.id, heartbeatPulses.actionId))
+    .where(eq(heartbeatActions.name, name))
+    .orderBy(desc(heartbeatPulses.ts))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Engine telemetry: every daydream job's health, the ponder engine's own
+ * meter (cards in, musings out, audit drops — the fabrication meter belongs
+ * on the page, not just in pulse JSON), and 30 days of coverage as a series.
+ */
+export async function loadTelemetry() {
+  const { daydreamDayFeatures } = await import('$lib/db/schema');
+  const now = new Date();
+  const floor = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+
+  const actions = await db
+    .select({
+      id: heartbeatActions.id,
+      name: heartbeatActions.name,
+      status: heartbeatActions.status,
+      cadenceSeconds: heartbeatActions.cadenceSeconds,
+      lastRunAt: heartbeatActions.lastRunAt,
+      nextRunAt: heartbeatActions.nextRunAt,
+      consecutiveFailures: heartbeatActions.consecutiveFailures,
+    })
+    .from(heartbeatActions)
+    .where(sql`${heartbeatActions.name} like 'daydream%'`)
+    .orderBy(heartbeatActions.name);
+
+  const jobs = [] as Array<{
+    name: string;
+    status: string;
+    cadenceSeconds: number | null;
+    lastRunAt: Date | null;
+    consecutiveFailures: number;
+    pulse: { ts: Date; outcome: string; summary: string | null } | null;
+  }>;
+  for (const a of actions) {
+    const [pulse] = await db
+      .select({ ts: heartbeatPulses.ts, outcome: heartbeatPulses.outcome, summary: heartbeatPulses.summary })
+      .from(heartbeatPulses)
+      .where(eq(heartbeatPulses.actionId, a.id))
+      .orderBy(desc(heartbeatPulses.ts))
+      .limit(1);
+    jobs.push({
+      name: a.name,
+      status: a.status,
+      cadenceSeconds: a.cadenceSeconds,
+      lastRunAt: a.lastRunAt,
+      consecutiveFailures: a.consecutiveFailures ?? 0,
+      pulse: pulse ?? null,
+    });
+  }
+
+  // The ponder meter: last few real runs (skips excluded — a skip has no meter).
+  const ponderRuns = await db
+    .select({ ts: heartbeatPulses.ts, details: heartbeatPulses.details })
+    .from(heartbeatPulses)
+    .innerJoin(heartbeatActions, eq(heartbeatActions.id, heartbeatPulses.actionId))
+    .where(and(eq(heartbeatActions.name, 'daydream-ponder'), eq(heartbeatPulses.outcome, 'ok')))
+    .orderBy(desc(heartbeatPulses.ts))
+    .limit(6);
+
+  const coverage = await db
+    .select({ day: daydreamDayFeatures.day, coverage: daydreamDayFeatures.trailCoverage })
+    .from(daydreamDayFeatures)
+    .where(gte(daydreamDayFeatures.day, floor))
+    .orderBy(daydreamDayFeatures.day);
+
+  return {
+    jobs,
+    ponderRuns: ponderRuns.map((r) => {
+      const d = (r.details ?? {}) as Record<string, unknown>;
+      const musings = (d.musings ?? {}) as Record<string, unknown>;
+      return {
+        ts: r.ts,
+        cards: typeof d.cards === 'number' ? d.cards : null,
+        proposed: typeof musings.proposed === 'number' ? musings.proposed : null,
+        created: typeof musings.created === 'number' ? musings.created : null,
+        suppressed: typeof musings.suppressed === 'number' ? musings.suppressed : null,
+        dropped: Array.isArray(d.rejected) ? d.rejected.length : null,
+        leads: typeof d.leadsCreated === 'number' ? d.leadsCreated : null,
+      };
+    }),
+    coverage,
+  };
+}
+
+/**
  * Delivery facts the page used to hardcode and let drift: the daily cap read
  * "4" as a literal while deliver.ts owned the real number, and the ask-at
  * threshold was a second copy of MIN_VISITS_TO_ASK. The push-subscriber state
@@ -406,7 +719,7 @@ export async function loadDelivery() {
 
 /** Everything the page needs, in one round of queries. */
 export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery] = await Promise.all([
+  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry] = await Promise.all([
     loadEngineState(),
     loadDetectorRows(),
     loadThreshold(),
@@ -418,6 +731,10 @@ export async function loadLedger() {
     loadLatestDigest(),
     listSteers(),
     loadDelivery(),
+    loadFamily(),
+    loadMoney(),
+    loadDiscoveries(),
+    loadTelemetry(),
   ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery };
+  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry };
 }

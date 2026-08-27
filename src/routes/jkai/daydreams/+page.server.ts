@@ -40,6 +40,10 @@ export const load: PageServerLoad = async () => {
       digest: null,
       steers: [],
       delivery: null,
+      family: { members: [] },
+      money: null,
+      discoveries: null,
+      telemetry: null,
       enabled: true,
       loadError: errMsg(err),
     };
