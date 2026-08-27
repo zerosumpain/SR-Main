@@ -58,6 +58,10 @@ export const FACT_KEYS = [
   'calendarPartial',
   'unnamedPlaceCount',
   'recurringInterestCount',
+  // ── Family ── (added 2026-08-27 with the owner's D1 decision; counts only,
+  // never who or where — a scalar count cannot leak a person or a coordinate)
+  'familyTracked',
+  'familyAtHome',
 ] as const;
 
 export type FactKey = (typeof FACT_KEYS)[number];

@@ -273,6 +273,56 @@ export async function pruneTrail(retentionDays = TRAIL_RETENTION_DAYS): Promise<
  * no GPS, so the caller writes a gap row with the reason instead of an
  * exception disappearing into a pulse summary.
  */
+interface HaEntityState {
+  entity_id?: string;
+  state?: string;
+  attributes?: Record<string, unknown>;
+  last_reported?: string;
+  last_updated?: string;
+  last_changed?: string;
+}
+
+/**
+ * Turn one HA entity state into a fix, or say why it cannot be one. PURE, so
+ * the parsing that decides whether a family member "reported no GPS" is
+ * unit-testable without a Home Assistant.
+ */
+export function fixFromEntityState(
+  state: HaEntityState,
+  entityName: string,
+  now: Date = new Date(),
+): { fix: IncomingFix } | { error: string } {
+  const attrs = state.attributes ?? {};
+  const lat = typeof attrs.latitude === 'number' ? attrs.latitude : null;
+  const lon = typeof attrs.longitude === 'number' ? attrs.longitude : null;
+
+  if (lat == null || lon == null) {
+    return { error: `${entityName} reported no GPS position (state: ${state.state ?? 'unknown'})` };
+  }
+
+  const seenIso =
+    (typeof attrs.last_seen === 'string' ? attrs.last_seen : null) ??
+    state.last_reported ??
+    state.last_updated ??
+    state.last_changed ??
+    null;
+  const seenMs = seenIso ? Date.parse(seenIso) : Number.NaN;
+  const readingAgeS = Number.isFinite(seenMs)
+    ? Math.max(0, Math.round((now.getTime() - seenMs) / 1000))
+    : null;
+
+  return {
+    fix: {
+      lat,
+      lon,
+      accuracyM: typeof attrs.gps_accuracy === 'number' ? attrs.gps_accuracy : null,
+      haState: typeof state.state === 'string' ? state.state : null,
+      batteryPct: typeof attrs.battery_level === 'number' ? Math.round(attrs.battery_level) : null,
+      readingAgeS,
+    },
+  };
+}
+
 export async function pollHomeAssistant(
   personEntity = 'person.john',
 ): Promise<{ fix: IncomingFix } | { error: string }> {
@@ -282,44 +332,49 @@ export async function pollHomeAssistant(
     if (!res.success || !res.data) {
       return { error: `HA unreachable or entity missing: ${res.error ?? 'no data'}` };
     }
-
-    const state = res.data as {
-      state?: string;
-      attributes?: Record<string, unknown>;
-      last_reported?: string;
-      last_updated?: string;
-      last_changed?: string;
-    };
-    const attrs = state.attributes ?? {};
-    const lat = typeof attrs.latitude === 'number' ? attrs.latitude : null;
-    const lon = typeof attrs.longitude === 'number' ? attrs.longitude : null;
-
-    if (lat == null || lon == null) {
-      return { error: `${personEntity} reported no GPS position (state: ${state.state ?? 'unknown'})` };
-    }
-
-    const seenIso =
-      (typeof attrs.last_seen === 'string' ? attrs.last_seen : null) ??
-      state.last_reported ??
-      state.last_updated ??
-      state.last_changed ??
-      null;
-    const seenMs = seenIso ? Date.parse(seenIso) : Number.NaN;
-    const readingAgeS = Number.isFinite(seenMs)
-      ? Math.max(0, Math.round((Date.now() - seenMs) / 1000))
-      : null;
-
-    return {
-      fix: {
-        lat,
-        lon,
-        accuracyM: typeof attrs.gps_accuracy === 'number' ? attrs.gps_accuracy : null,
-        haState: typeof state.state === 'string' ? state.state : null,
-        batteryPct: typeof attrs.battery_level === 'number' ? Math.round(attrs.battery_level) : null,
-        readingAgeS,
-      },
-    };
+    return fixFromEntityState(res.data as HaEntityState, personEntity);
   } catch (err) {
     return { error: errMsg(err) };
   }
+}
+
+/**
+ * Poll every tracked person in ONE Home Assistant round trip.
+ *
+ * `/api/states` returns the whole house (~415 entities) but it is one HTTP
+ * call every two minutes against five `queryState` calls — and more
+ * importantly it is atomic: every member's position is read at the same
+ * instant, so "who was home when" cannot be skewed by the poll order. HA
+ * being unreachable yields the same error for every subject, and the caller
+ * writes one gap row each — five people un-observed is five facts, not one.
+ */
+export async function pollAllSubjects(
+  subjects: ReadonlyArray<{ subject: string; entity: string }>,
+): Promise<Map<string, { fix: IncomingFix } | { error: string }>> {
+  const out = new Map<string, { fix: IncomingFix } | { error: string }>();
+  try {
+    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const res = await getHomeAssistantService().queryAllStates();
+    if (!res.success || !Array.isArray(res.data)) {
+      const error = `HA unreachable: ${res.error ?? 'no data'}`;
+      for (const s of subjects) out.set(s.subject, { error });
+      return out;
+    }
+    const byId = new Map<string, HaEntityState>();
+    for (const row of res.data as HaEntityState[]) {
+      if (row?.entity_id) byId.set(row.entity_id, row);
+    }
+    const now = new Date();
+    for (const s of subjects) {
+      const state = byId.get(s.entity);
+      out.set(
+        s.subject,
+        state ? fixFromEntityState(state, s.entity, now) : { error: `${s.entity} not found in HA` },
+      );
+    }
+  } catch (err) {
+    const error = errMsg(err);
+    for (const s of subjects) out.set(s.subject, { error });
+  }
+  return out;
 }

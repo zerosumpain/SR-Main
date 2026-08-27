@@ -10,8 +10,14 @@
 // `places` category that table already has → record the memory id here so the
 // two can never drift.
 //
-// Five of the eight planned detectors are inert until a place has a name on
-// it, which is why this ships before any of them.
+// Several detectors are inert until a place has a name on it, which is why
+// this ships before any of them.
+//
+// Since 2026-08-27 the trail carries the whole household (owner's D1
+// decision), and this recompute is deliberately subject-blind: a place is a
+// household fact — home is home for everyone — so visitCount and dwell are
+// household aggregates. Per-person rhythms come from the trail itself
+// (subject + place_id), not from this table.
 
 import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';

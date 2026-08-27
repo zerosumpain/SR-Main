@@ -48,6 +48,10 @@ export const REPLAYABLE_FACTS: ReadonlySet<FactKey> = new Set([
   'coverage24h',
   'coverage7d',
   'unnamedPlaceCount',
+  // familyTracked/familyAtHome are deliberately NOT here yet: the replay
+  // rebuilds the owner's snapshot only, so a family rule replays as null →
+  // fires LESS than live → flagged lowerBound, the safe direction for a
+  // noise gate. Replaying the household is work for when a rule earns it.
 ]);
 
 /** More than this in a week is noise, whatever it claims to detect. */
@@ -156,6 +160,9 @@ function snapshotAt(
     interests: [],
     offers: { available: false, items: [] },
     memories: [],
+    // Replay is the owner's world only; a family rule read against this
+    // snapshot sees `available: false` and its facts stay null (lowerBound).
+    family: { available: false, members: [] },
     sources: [{ key: 'replay', status: 'ok', detail: 'trail and places only' }],
   };
 }
