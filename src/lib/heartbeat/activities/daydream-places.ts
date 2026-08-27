@@ -29,14 +29,14 @@ const DEFAULTS: Required<PlacesConfig> = {
  * reclustering is a whole-window recompute that would be wasteful at that
  * cadence and pointless more often than the trail materially changes.
  *
- * Runs long before it produces anything. A place needs three visits of a
- * quarter hour each before it exists at all, so the first fortnight of this
- * action's life is honest, cheap, and completely silent.
+ * Runs long before it produces anything. A place needs a real stay before it
+ * exists at all, so the first stretch of this action's life is honest, cheap,
+ * and completely silent.
  */
 export const daydreamPlacesRefresh: ActivityHandler = {
   name: NAME,
   description:
-    'Reclusters the daydream trail into places hourly, refreshes their visit counts and rhythms, and prunes raw fixes past retention. A place needs 3 visits of 15+ minutes to exist, so this is silent for the first fortnight. No LLM.',
+    'Reclusters the daydream trail into places hourly, refreshes their visit counts and rhythms, and prunes raw fixes past retention. A place needs one stay of 10+ still minutes to exist; a cluster the trail only passes through is retired as transit. No LLM.',
   defaultCadenceSeconds: 3600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
@@ -72,6 +72,10 @@ export const daydreamPlacesRefresh: ActivityHandler = {
       summary:
         `${refresh.fixes} fixes → ${refresh.clusters} clusters; ` +
         `+${refresh.created} places, ${refresh.updated} updated, ${refresh.rejected} below the bar` +
+        // Retirements are named rather than folded into "below the bar": this
+        // is the engine reclassifying somewhere it had previously called a
+        // place, and a count that quietly shrinks is the thing to avoid.
+        (refresh.retired ? `, ${refresh.retired} retired as transit` : '') +
         (reconciled ? `; closed ${reconciled} stale question${reconciled === 1 ? '' : 's'}` : ''),
       details: { ...refresh, pruned, reconciled },
     };
