@@ -303,9 +303,13 @@ export async function backfillPendingEmbeddings(limit = 400): Promise<{
   embedded: number;
   failed: number;
   remaining: number;
+  /** True when the run gave up early because the embedding provider is refusing
+   *  on credit or credentials. Distinguishes "nothing to do" from "could not". */
+  stopped: boolean;
 }> {
-  const out = { scanned: 0, embedded: 0, failed: 0, remaining: 0 };
+  const out = { scanned: 0, embedded: 0, failed: 0, remaining: 0, stopped: false };
   const { embedNote } = await import('./embed');
+  const { isCreditOrAuthFailure } = await import('$lib/jkai/llm-client');
 
   const rows = await db
     .select({ id: intelNotes.id })
@@ -328,7 +332,18 @@ export async function backfillPendingEmbeddings(limit = 400): Promise<{
       await embedNote(row.id);
       out.embedded++;
     } catch (err) {
-      // One unembeddable note must not cost the batch.
+      // A credit or credential refusal will refuse every remaining note too, so
+      // carrying on means 400 futile round trips and 400 identical log lines.
+      // Any OTHER failure is about this note, and the batch continues.
+      if (isCreditOrAuthFailure(err)) {
+        out.stopped = true;
+        out.remaining += rows.slice(0, limit).length - out.scanned;
+        console.warn(
+          `[intel:mail-queue] embedding provider refused — stopping with ${out.embedded} done:`,
+          err instanceof Error ? err.message : err,
+        );
+        break;
+      }
       out.failed++;
       console.warn(`[intel:mail-queue] could not embed ${row.id}:`, err instanceof Error ? err.message : err);
     }

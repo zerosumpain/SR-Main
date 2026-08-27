@@ -140,8 +140,11 @@ export async function indexMail(input: IndexMailInput): Promise<IndexMailResult>
  * nothing else would ever notice. Bounded per call so one request cannot walk
  * the whole corpus.
  */
-export async function backfillMailIndex(limit = 100): Promise<{ scanned: number; indexed: number; failed: number }> {
-  const out = { scanned: 0, indexed: 0, failed: 0 };
+export async function backfillMailIndex(
+  limit = 100,
+): Promise<{ scanned: number; indexed: number; failed: number; stopped: boolean }> {
+  const out = { scanned: 0, indexed: 0, failed: 0, stopped: false };
+  const { isCreditOrAuthFailure } = await import('$lib/jkai/llm-client');
   const indexed = await db.selectDistinct({ noteId: mailEmbeddings.noteId }).from(mailEmbeddings);
   const done = new Set(indexed.map((r) => r.noteId));
 
@@ -167,8 +170,20 @@ export async function backfillMailIndex(limit = 100): Promise<{ scanned: number;
       body: note.rawContent ?? '',
       contentHash: hash,
     });
-    if (result.status === 'indexed') out.indexed++;
-    else if (result.status === 'error') out.failed++;
+    if (result.status === 'indexed') {
+      out.indexed++;
+    } else if (result.status === 'error') {
+      // `indexMail` reports an embedding failure as a reason string rather than
+      // throwing, so the credit case is recognised from that. Same reasoning as
+      // the note backfill: a refusal applies to every remaining thread, and
+      // grinding through them produces nothing but identical log lines.
+      if (isCreditOrAuthFailure({ status: /\b402\b/.test(result.reason) ? 402 : 0 }) || /insufficient credits/i.test(result.reason)) {
+        out.stopped = true;
+        console.warn(`[mail-index] embedding provider refused — stopping with ${out.indexed} indexed: ${result.reason}`);
+        break;
+      }
+      out.failed++;
+    }
   }
   return out;
 }
