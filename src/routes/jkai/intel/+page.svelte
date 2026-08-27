@@ -900,6 +900,15 @@
       <span class="n">{duplicates?.total ?? '—'}</span>
       <span class="l">Duplicates</span>
     </a>
+    <!-- Stage 00, and the only tile that is about what has NOT reached the graph
+         yet. It sits with the others rather than in the loop below because the
+         loop is six stages in a 3-column grid and a seventh cell would leave a
+         row of one — and because the gate happens BEFORE capture, not inside
+         it. `warnAbove` matches the surface definition in workbench.ts. -->
+    <a class="tile" class:warn={(data.intelCounts?.heldMail ?? 0) > 200} href="/jkai/intel/mail">
+      <span class="n">{data.intelCounts?.heldMail ?? '—'}</span>
+      <span class="l">Held mail</span>
+    </a>
     <a class="tile" href="/jkai/intel/review">
       <span class="n">{data.stats.pendingReviewCount}</span>
       <span class="l">To review</span>

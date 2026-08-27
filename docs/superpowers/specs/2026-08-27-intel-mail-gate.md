@@ -171,3 +171,42 @@ Backup: `~/backups/intel-pre-mail-gate-20260827.sql.gz` (111 MB) on the VPS.
 Daydream verified unaffected after the purge: `offers.ts` sees 899 bulk threads
 in its 45-day window, `spend/read.ts` sees all 2,781, `snapshot.ts` sees 2,138
 interest terms, and every body is intact.
+
+## OpenRouter → Codex fallback (added same day)
+
+One OpenRouter key funds every non-Codex model, so running out of credit is a
+simultaneous outage of every OpenRouter-pinned workload — not a degradation.
+Observed live during this rollout: extraction, the doctor, self-improvement and
+the heartbeat's chat continuation all returned `402 Insufficient credits`, and
+mail admission could not run at all.
+
+`getLLMClient` now falls back to Codex (`DEFAULT_CODEX_MODEL_SLUG`), in two
+places because one is not enough:
+
+- **Pre-emptively**, when there is no key or a credit failure was seen in the
+  last 5 minutes. Without this every call during an outage pays a guaranteed
+  failure first.
+- **On the first 402**, by retrying that call on Codex and latching the outage.
+  Nothing can know the credit has run out until OpenRouter says so.
+
+Note the site's chat default was *already* `codex/gpt-5.6-terra`, so chat was
+never affected — what broke was everything pinned to an OpenRouter id.
+
+**Two deliberate refusals**, both in `codexCanStandIn`:
+
+- **Never embeddings.** The bridge translates chat completions and has no
+  embeddings endpoint, so a fallback there replaces a true "out of credit" with
+  a false 404. Embeddings stay on OpenRouter and stay broken during an outage —
+  which is the honest outcome, and the reason `mail_embeddings` cannot be
+  backfilled until the key is topped up.
+- **Never when `codex.enabled` is off.** That flag is set only after a health
+  probe; routing to a bridge that is not running swaps one outage for a more
+  confusing one.
+
+`429` is deliberately NOT treated as an outage — rate limiting clears on its own,
+and latching it would move steady traffic onto a finite Codex quota.
+
+Honest limitation: Codex is text-only, so a retried call carrying image or PDF
+parts will fail on the bridge. That is no worse than the 402 it replaces, but it
+means this covers the text workloads (extraction, doctor, self-improvement,
+admission), not everything.
