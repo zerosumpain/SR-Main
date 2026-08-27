@@ -1,15 +1,142 @@
 <svelte:head><title>Daydreams — JKAI</title></svelte:head>
 <script lang="ts">
   import type { PageData } from './$types';
-  import { invalidateAll } from '$app/navigation';
+  import { invalidateAll, replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { untrack } from 'svelte';
   import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
+  import FamilyMap, { type FamilyPosition } from '$lib/components/jkai/daydream/FamilyMap.svelte';
+  import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
 
   let { data }: { data: PageData } = $props();
 
   type Thought = PageData['thoughts'][number];
   type Place = PageData['places'][number];
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+  // One hub, six rooms. The tab rides the URL (?tab=) so a room can be linked
+  // to, and a notification's ?rate= deep-link lands in the Feed with the
+  // thought already open — the review found the old cue pointed at a row that
+  // might not even render its buttons.
+  const TABS = [
+    { id: 'feed', label: 'Feed' },
+    { id: 'family', label: 'Family' },
+    { id: 'discoveries', label: 'Discoveries' },
+    { id: 'places', label: 'Places' },
+    { id: 'money', label: 'Money' },
+    { id: 'engine', label: 'Engine' },
+  ] as const;
+  type TabId = (typeof TABS)[number]['id'];
+  const initialTab = ((): TabId => {
+    const q = page.url.searchParams.get('tab');
+    return (TABS.some((t) => t.id === q) ? q : 'feed') as TabId;
+  })();
+  let tab = $state<TabId>(initialTab);
+
+  function setTab(next: TabId) {
+    tab = next;
+    const url = new URL(page.url);
+    url.searchParams.set('tab', next);
+    try {
+      replaceState(url, {});
+    } catch {
+      // replaceState throws before hydration settles; the tab still switched.
+    }
+    if (next === 'family' && famPositions == null && !famLoading) void loadFamilyMap();
+  }
+
+  // ── Family map (positions fetched on demand, never in the page payload) ──
+  let famPositions = $state<FamilyPosition[] | null>(null);
+  let famLoading = $state(false);
+  let famError = $state<string | null>(null);
+  async function loadFamilyMap() {
+    famLoading = true;
+    famError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'family_now' }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { positions?: FamilyPosition[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      famPositions = out.positions ?? [];
+    } catch (err) {
+      famError = err instanceof Error ? err.message : String(err);
+      famPositions = null;
+    } finally {
+      famLoading = false;
+    }
+  }
+
+  // ── Kill switch, as a control rather than a banner naming a settings key ──
+  let togglingEnabled = $state(false);
+  async function toggleEnabled() {
+    togglingEnabled = true;
+    try {
+      await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'set_enabled', enabled: !data.enabled }),
+      });
+      await invalidateAll();
+    } finally {
+      togglingEnabled = false;
+    }
+  }
+
+  // ── Formatting helpers for the new rooms ──
+  const money = $derived(data.money);
+  const discoveries = $derived(data.discoveries);
+  const telemetry = $derived(data.telemetry);
+  const familyMembers = $derived(data.family?.members ?? []);
+
+  function pounds(minor: number): string {
+    return `£${(minor / 100).toFixed(2)}`;
+  }
+  function clock(mins: number | null): string {
+    if (mins == null) return '—';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+  function cap(sub: string): string {
+    return sub.charAt(0).toUpperCase() + sub.slice(1);
+  }
+  function cadence(secs: number | null): string {
+    if (!secs) return '—';
+    if (secs % 3600 === 0) return `${secs / 3600}h`;
+    if (secs % 60 === 0) return `${secs / 60}m`;
+    return `${secs}s`;
+  }
+
+  /** Timeline grouping for the feed: Today / Yesterday / weekday-date. */
+  const grouped = $derived.by(() => {
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', weekday: 'short', day: 'numeric', month: 'short',
+    });
+    const dayKey = (d: Date) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    const today = dayKey(new Date());
+    const yesterday = dayKey(new Date(Date.now() - 86_400_000));
+    const groups: Array<{ label: string; items: Thought[] }> = [];
+    for (const t of visible) {
+      const d = new Date(t.createdAt);
+      const key = dayKey(d);
+      const label = key === today ? 'Today' : key === yesterday ? 'Yesterday' : fmt.format(d);
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(t);
+      else groups.push({ label, items: [t] });
+    }
+    return groups;
+  });
+
+  /** A musing wears its theme as a chip; everything else wears its kind. */
+  function kindChip(t: Thought): { text: string; musing: boolean } {
+    if (t.kind.startsWith('musing_')) return { text: t.kind.slice(7), musing: true };
+    if (t.kind.startsWith('intel_')) return { text: `graph · ${t.kind.slice(6)}`, musing: false };
+    return { text: t.kind, musing: false };
+  }
 
   // ── View state ────────────────────────────────────────────────────────────
   // `all` is the default rather than `new`, because on any normal day nothing
@@ -425,6 +552,15 @@
    */
   const rateId = $derived(page.url.searchParams.get('rate'));
 
+  // A notification deep-link should land ON the thought, expanded, not near a
+  // cue line that points at nothing.
+  $effect(() => {
+    const id = rateId;
+    untrack(() => {
+      if (id && expanded !== id) expanded = id;
+    });
+  });
+
   const PLACE_KINDS = ['home', 'school', 'work', 'shop', 'cafe', 'gym', 'other'];
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -587,12 +723,22 @@
       <div class="kicker">JKAI · Daydreaming</div>
       <h1>Daydreams</h1>
       <p class="sub">
-        Everything jkai has noticed on spare cycles — including what it decided
-        <strong>not</strong> to say, and why. Rules do the noticing; a model only ever
-        phrases a finding that a rule already confirmed.
+        Your second brain on spare cycles — watching the household, the diary, the money
+        and its own discoveries, and saying something only when the crossing is worth it.
+        <strong>Every claim cites its evidence; code audits before you see it.</strong>
       </p>
     </div>
     <div class="hdr-links">
+      <button
+        class="power"
+        class:off={!data.enabled}
+        disabled={togglingEnabled}
+        title={data.enabled ? 'Daydreaming is on — click to pause everything' : 'Daydreaming is paused — click to resume'}
+        onclick={toggleEnabled}
+      >
+        <span class="power-dot"></span>
+        {data.enabled ? 'live' : 'paused'}
+      </button>
       <a class="back-link" href="/jkai">JKAI</a>
     </div>
   </header>
@@ -603,118 +749,32 @@
 
   {#if !data.enabled}
     <div class="banner off">
-      Daydreaming is switched off (<code>daydream.enabled</code>). Nothing is being
-      observed or noticed.
+      Daydreaming is paused — nothing is being observed or noticed. The switch above
+      resumes it.
     </div>
   {/if}
 
-  <!-- ── ENGINE STATE ───────────────────────────────────────────────────
-       Leads the page. Everything below is meaningless if the engine has not
-       run, and "quiet" and "not wired up" have to be tellable apart. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Engine</span>
-      <span class="nm-sec-meta">
-        {#if hasRun}last looked {ago(engine.lastDetectAt)}{:else}has not run yet{/if}
-      </span>
-    </div>
-
-    <div class="stat-grid">
-      <div class="stat-tile">
-        <div class="stat-num">{engine.trailSpanDays ?? 0}</div>
-        <div class="stat-label">days of trail</div>
-        <div class="stat-sub">observed {ago(engine.lastObserveAt)}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{pct(engine.coverage?.last24h)}</div>
-        <div class="stat-label">covered, 24h</div>
-        <div class="stat-sub">7d {pct(engine.coverage?.last7d)}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{readyCount}<span class="of">/{detectors.length}</span></div>
-        <div class="stat-label">detectors ready</div>
-        <div class="stat-sub">{mutedCount} muted by you</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{counts.namedPlaces}<span class="of">/{counts.places}</span></div>
-        <div class="stat-label">places named</div>
-        <div class="stat-sub">{counts.unnamedPlaces} still unnamed</div>
-      </div>
-    </div>
-
-    {#if engine.summary}
-      <p class="engine-summary">{engine.summary}</p>
-    {/if}
-
-    {#if engine.pausedActions.length}
-      <p class="warn-line">
-        Not running: {engine.pausedActions.join(', ')}
-      </p>
-    {/if}
-
-    {#if engine.sources.some((s) => s.status === 'failed')}
-      <p class="warn-line">
-        Sources that failed last tick:
-        {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
-      </p>
-    {/if}
-
-    {#if delivery && !delivery.hasPushSubscriber}
-      <!-- The documented root cause of the empty feedback ledger: with nowhere
-           to push, every thought falls back to a chat note whose feedback link
-           is rarely followed, so the learning loop never gets an input. -->
-      <p class="warn-line">
-        No device is subscribed to push — thoughts fall back to chat notes, and without
-        feedback taps the confidence threshold never relaxes.
-      </p>
-    {/if}
-
-    <div class="thought-actions">
-      <button class="row-link" disabled={backfilling} onclick={runBackfill}>
-        {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
+  <nav class="tabs" aria-label="Daydream sections">
+    {#each TABS as t (t.id)}
+      <button class="tab" class:on={tab === t.id} onclick={() => setTab(t.id)}>
+        {t.label}
+        {#if t.id === 'feed' && counts.thoughts7d}
+          <span class="tab-n">{counts.thoughts7d}</span>
+        {:else if t.id === 'places' && counts.unnamedPlaces}
+          <span class="tab-n">{counts.unnamedPlaces}</span>
+        {:else if t.id === 'engine' && proposedRules.length}
+          <span class="tab-n">{proposedRules.length}</span>
+        {/if}
       </button>
-    </div>
-    {#if backfillNote}
-      <p class="sec-lede">{backfillNote}</p>
-    {/if}
-  </section>
+    {/each}
+  </nav>
 
-  <!-- Yesterday, in one card. Quiet days are reported as clearly as busy ones —
-       a digest that only appears when there is news cannot be trusted when it
-       is silent. -->
-  {#if digest}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Yesterday</span>
-        <span class="nm-sec-meta">{digest.day}</span>
-      </div>
-      <p class="digest">{digest.summary}</p>
-      {#if digest.narrative}
-        <p class="narrative" class:unchecked={digest.verified === false}>
-          {digest.narrative}
-          <span class="narr-tag" class:ok={digest.verified === true}>
-            {digest.verified === true ? 'model · checked' : 'model · UNCHECKED'}
-          </span>
-        </p>
-      {/if}
-    </section>
-  {/if}
-
-  <!-- What it has been wondering about. The model picks the questions; code
-       answers them. Everything asked is shown, however it turned out. -->
+  {#if tab === 'feed'}
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">What it wondered</span>
-      <span class="nm-sec-meta">questions, and the answers</span>
+      <span class="sr-label-tight">Steer it</span>
+      <span class="nm-sec-meta">reorders attention · grants no new access</span>
     </div>
-    <p class="sec-lede">
-      The assistant chooses what to investigate before it sees any results, then
-      deterministic statistics answer it. A question that came back empty is
-      still worth reading — and is kept here exactly as long as one that held.
-    </p>
-
-    <!-- Reorders what gets asked. Grants no new access: the proposer still sees
-         only the metric list, and a steer reaches it as quoted preference. -->
     <div class="steer-box">
       <label class="sr-label-tight" for="steer-input">Ask it to look into something</label>
       <div class="steer-row">
@@ -753,76 +813,192 @@
       {/if}
     </div>
 
-    <div class="session-bar">
-      {#if !boardOpen}
-        <button class="session-cta" onclick={openBoard}>Open the board</button>
-      {:else}
-        <button class="row-link" onclick={() => { boardOpen = false; }}>Close</button>
-      {/if}
+  </section>
+
+  <!-- ── THOUGHTS ───────────────────────────────────────────────────────── -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Thoughts</span>
+      <span class="nm-sec-meta">
+        {Object.values(counts.byStatus as Record<string, number>).reduce((a, b) => a + b, 0)} all time ·
+        threshold {data.threshold.value} · {data.threshold.feedbackCount} response{data.threshold.feedbackCount === 1 ? '' : 's'}
+      </span>
     </div>
 
-    {#if boardError}<p class="nm-sec-error">{boardError}</p>{/if}
+    <div class="filters">
+      <button class="filter" class:on={filter === 'all'} onclick={() => (filter = 'all')}>
+        All <span class="n">{thoughts.length}</span>
+      </button>
+      <button class="filter" class:on={filter === 'said'} onclick={() => (filter = 'said')}>
+        Above threshold <span class="n">{said.length}</span>
+      </button>
+      <button class="filter" class:on={filter === 'suppressed'} onclick={() => (filter = 'suppressed')}>
+        Held back <span class="n">{suppressed.length}</span>
+      </button>
+      <button class="filter" class:on={filter === 'ruled'} onclick={() => (filter = 'ruled')}>
+        You ruled on <span class="n">{ruled.length}</span>
+      </button>
+    </div>
 
-    {#if boardOpen}
-      {#if boardLoading}
-        <p class="sec-lede">Loading…</p>
-      {:else if board.length === 0}
-        <p class="sec-lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
-      {:else}
-        <div class="session-list">
-          {#each board as q (q.id)}
-            <div class="hyp" class:held={q.verdict === 'supported'}>
-              <div class="hyp-q">{q.question}</div>
-              <div class="hyp-meta">
-                <span class="mono">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
-                {#if q.lagDays}<span class="sep">·</span><span class="mono">next day</span>{/if}
+    {#if actionError}
+      <p class="warn-line err">{actionError}</p>
+    {/if}
+
+    {#if visible.length === 0}
+      <div class="empty">
+        {#if !hasRun}
+          The detect pass has not run yet.
+        {:else if thoughts.length === 0}
+          Nothing noticed yet. {detectors.length - readyCount} of {detectors.length} detectors are
+          still gathering the history they need — see below for what each is waiting for.
+        {:else}
+          Nothing in this view.
+        {/if}
+      </div>
+    {:else}
+      <div class="rows">
+        {#each grouped as g (g.label)}
+          <div class="tl-day"><span class="tl-day-label">{g.label}</span><span class="tl-day-rule"></span></div>
+          {#each g.items as t (t.id)}
+          <article class="thought st-{t.status}" class:musing={t.kind.startsWith('musing_')}>
+            <div class="thought-hd">
+              <button class="thought-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
+                {headline(t)}
+              </button>
+              {#if isAnswered(t)}
+                <span class="thought-pill answered">answered</span>
+              {:else}
+                <span class="thought-pill">{t.status}</span>
+              {/if}
+            </div>
+
+            <!-- A question about a place that now has a name is finished
+                 business, and saying so stops it reading as still open. The
+                 stored title is kept beneath, because it is what was actually
+                 asked at the time. -->
+            {#if isAnswered(t)}
+              <p class="thought-answered">
+                You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
+                It asked: “{t.title}”
+              </p>
+            {:else}
+              <p class="thought-why">{t.explanation}</p>
+            {/if}
+
+            <div class="thought-meta">
+              {#if kindChip(t).musing}
+                <span class="theme-chip">{kindChip(t).text}</span>
+              {:else}
+                <span class="mono">{kindChip(t).text}</span>
+              {/if}
+              <span class="sep">·</span>
+              <span class="mono">score {t.score}</span>
+              <span class="sep">·</span>
+              <span>{ago(t.createdAt)}</span>
+              {#if !t.placeLabel && t.placeAddress}
                 <span class="sep">·</span>
-                <span class="mono">expected {q.direction}</span>
-                {#if q.retestCount > 0}
-                  <span class="sep">·</span><span class="mono">retested {q.retestCount}×</span>
-                {/if}
-              </div>
-              {#if q.verdict}
-                <div class="hyp-verdict v-{q.verdict}">
-                  <span class="hyp-badge">{VERDICT_LABEL[q.verdict] ?? q.verdict}</span>
-                  <span class="hyp-sum">{q.summary}</span>
+                <span class="place-tag">{t.placeAddress}</span>
+              {/if}
+              {#if !t.placeLabel && t.placeVisits}
+                <span class="sep">·</span>
+                <span class="mono">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
+              {/if}
+              {#if t.suppressedReason}
+                <span class="sep">·</span>
+                <span class="held">held back: {t.suppressedReason}</span>
+              {/if}
+              {#if t.promptTokens + t.completionTokens > 0}
+                <span class="sep">·</span>
+                <span class="mono tok">{t.promptTokens + t.completionTokens} tok</span>
+              {/if}
+              {#if t.feedback}
+                <span class="sep">·</span>
+                <span class="voted">you said {t.feedback.replace('_', ' ')}</span>
+              {/if}
+            </div>
+
+            {#if t.id === rateId}
+              <p class="rate-cue">Opened from a notification — your answer is below.</p>
+            {/if}
+            {#if t.narrative}
+              <!-- The model's phrasing, always shown as the model's. The rule's
+                   own explanation stays directly beneath it, so if this whole
+                   path failed permanently the ledger would still read. -->
+              <p class="narrative" class:unchecked={t.verified === false}>
+                {t.narrative}
+                <span class="narr-tag" class:ok={t.verified === true}>
+                  {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+                </span>
+              </p>
+            {:else if t.narrativeDroppedReason}
+              <!-- A composer that has quietly started refusing everything looks
+                   exactly like a quiet week unless this is on the page. -->
+              <p class="narr-dropped">phrasing dropped — {t.narrativeDroppedReason}</p>
+            {/if}
+
+            {#if expanded === t.id}
+              <div class="thought-detail">
+                <div class="detail-block">
+                  <span class="sr-label-tight">Why that score</span>
+                  <ul class="components">
+                    {#each Object.entries(t.components) as [k, v] (k)}
+                      <li><span class="ck">{k}</span><span class="cv">{v}</span></li>
+                    {/each}
+                  </ul>
                 </div>
-                <!-- Nothing is filtered by verdict when choosing what to
-                     retest, so every answer here is provisional. Saying when it
-                     is next checked is what stops "nothing there" reading as a
-                     closed case. -->
-                {#if q.retestInDays !== null}
-                  <div class="hyp-family mono">
-                    {q.retestInDays === 0 ? 'due to be checked again' : `checked again in ${q.retestInDays}d`}
+                {#if t.evidence.length}
+                  <div class="detail-block">
+                    <span class="sr-label-tight">Evidence</span>
+                    <ul class="evidence">
+                      {#each t.evidence as e, i (i)}
+                        <li><span class="ck">{e.kind}</span><span class="cv">{e.note || e.id}</span></li>
+                      {/each}
+                    </ul>
                   </div>
                 {/if}
-                {#if q.familySize}
-                  <!-- The family size is shown because a q-value cannot be read
-                       without it: q over 4 tests and q over 400 are not the
-                       same number. -->
-                  <div class="hyp-family mono">corrected across {q.familySize} test{q.familySize === 1 ? '' : 's'}</div>
-                {/if}
-              {:else}
-                <div class="hyp-verdict v-untested">
-                  <span class="hyp-badge">not answered yet</span>
-                </div>
-              {/if}
-              <div class="hyp-why">{q.rationale}</div>
-              <div class="hyp-actions">
-                {#if q.feedback}
-                  <span class="voted">you said {q.feedback.replace('_', ' ')}</span>
-                {:else}
-                  <span class="hyp-ask">Worth asking?</span>
-                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
-                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
+                {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
+                  <div class="detail-block">
+                    <span class="sr-label-tight">It suggests</span>
+                    <div class="thought-actions">
+                      {#each t.proposedActions ?? [] as a, i (i)}
+                        <button class="row-link" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
+                          {a.label}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
                 {/if}
               </div>
-            </div>
+            {/if}
+
+            <!-- Rating is offered only on what actually reached him. Asking
+                 "was this useful?" about a thought that was suppressed before
+                 it was ever sent is a question with no answer, and the vote it
+                 collects would train the weights on something he never saw.
+                 Production had verdict buttons on eight such rows. -->
+            {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
+              <div class="thought-actions">
+                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
+                  Useful
+                </button>
+                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>
+                  Not useful
+                </button>
+                <button class="row-link danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
+                  Never this kind
+                </button>
+                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
+                  Snooze a week
+                </button>
+              </div>
+            {/if}
+          </article>
           {/each}
-        </div>
-      {/if}
+        {/each}
+      </div>
     {/if}
   </section>
+
 
   <!-- The sorting deck. Everything about ranking is a random walk until the
        ledger has feedback in it, and at four interruptions a day the 25
@@ -909,57 +1085,273 @@
     </section>
   {/if}
 
+  {/if}
+
+  {#if tab === 'family'}
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Budget</span>
-      <span class="nm-sec-meta">
-        {#if budget}{budget.modelId}{:else}unavailable{/if}
-      </span>
+      <span class="sr-label-tight">The household, now</span>
+      <span class="nm-sec-meta">{familyMembers.filter((m) => m.ageMins != null && m.ageMins <= 60).length}/{familyMembers.length} tracked</span>
     </div>
-
-    {#if !budget}
-      <p class="sec-lede">Could not read the model or the usage meter.</p>
-    {:else if !budget.applies}
-      <p class="sec-lede">
-        Running on <strong>{budget.provider}</strong>, so the subscription caps do not apply —
-        this spend is cash, and nothing here limits it.
-      </p>
-    {:else}
-      <div class="stat-grid">
-        <div class="stat-tile">
-          <div class="stat-num">{budget.spentTodayWeeklyPct}<span class="of">/{budget.dailyCapPct}%</span></div>
-          <div class="stat-label">of weekly, today</div>
-          <div class="stat-sub">paced target {budget.pacedTargetPct}%</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-num">{budget.spentThisWindowPct}<span class="of">/{budget.fiveHourCapPct}%</span></div>
-          <div class="stat-label">of this 5h window</div>
-          <div class="stat-sub">{budget.remainingWindowPct}% left</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-num">{budget.plan.depth}</div>
-          <div class="stat-label">working depth</div>
-          <div class="stat-sub">
-            {budget.plan.maxCandidates} candidate{budget.plan.maxCandidates === 1 ? '' : 's'}{budget.plan.verify ? ', verified' : ''}
+    <div class="fam-grid">
+      {#each familyMembers as m (m.subject)}
+        <div class="fam-card" class:stale={m.ageMins == null || m.ageMins > 60}>
+          <div class="fam-hd">
+            <span class="fam-dot" class:home={m.isHome === true} class:out={m.isHome === false}></span>
+            <span class="fam-name">{cap(m.subject)}</span>
+            {#if m.batteryPct != null && m.batteryPct <= 25}
+              <span class="fam-batt mono">🔋{m.batteryPct}%</span>
+            {/if}
+          </div>
+          <div class="fam-where">
+            {#if m.ageMins == null}
+              not tracked right now
+            {:else if m.isHome}
+              at home
+            {:else if m.placeLabel}
+              at {m.placeLabel}
+            {:else if m.distanceHomeKm != null}
+              out · {m.distanceHomeKm} km from home
+            {:else}
+              out
+            {/if}
+          </div>
+          <div class="fam-meta mono">
+            {#if m.ageMins != null}seen {m.ageMins < 5 ? 'just now' : `${m.ageMins}m ago`}{:else}—{/if}
+          </div>
+          <div class="fam-today">
+            <span class="fam-stat"><b>{clock(m.today.firstOutMins)}</b> first out</span>
+            <span class="fam-stat"><b>{m.today.minutesOut >= 60 ? `${Math.round(m.today.minutesOut / 6) / 10}h` : `${m.today.minutesOut}m`}</b> out today</span>
+            <span class="fam-stat"><b>{m.today.placesVisited}</b> places</span>
           </div>
         </div>
-      </div>
-      {#if budget.blocked}
-        <p class="warn-line">Paused: {budget.blockedReason}</p>
-      {:else if !budget.reachable}
-        <p class="warn-line">
-          Usage meter unreachable — working at minimum depth rather than stopping.
-        </p>
-      {/if}
-      <p class="sec-lede budget-note">
-        Spare budget buys more <strong>thinking</strong>, never more notifications: extra
-        headroom adds a verification pass and more candidates considered. What reaches your
-        phone is capped separately at {delivery?.maxPerDay ?? 4} a day.
-      </p>
-    {/if}
-
+      {/each}
+    </div>
   </section>
 
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">On the map</span>
+      <span class="nm-sec-meta">fetched on demand · never cached in the page</span>
+    </div>
+    {#if famLoading}
+      <p class="sec-lede">Locating everyone…</p>
+    {:else if famError}
+      <p class="nm-sec-error">{famError}</p>
+      <button class="row-link" onclick={loadFamilyMap}>Try again</button>
+    {:else if famPositions && famPositions.length}
+      <FamilyMap positions={famPositions} />
+      <div class="thought-actions">
+        <button class="row-link" onclick={loadFamilyMap}>Refresh positions</button>
+      </div>
+    {:else if famPositions}
+      <p class="sec-lede">Nobody has a recent position.</p>
+    {:else}
+      <button class="session-cta" onclick={loadFamilyMap}>Show the map</button>
+    {/if}
+  </section>
+  {/if}
+
+  {#if tab === 'discoveries'}
+  <!-- Yesterday, in one card. Quiet days are reported as clearly as busy ones —
+       a digest that only appears when there is news cannot be trusted when it
+       is silent. -->
+  {#if digest}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Yesterday</span>
+        <span class="nm-sec-meta">{digest.day}</span>
+      </div>
+      <p class="digest">{digest.summary}</p>
+      {#if digest.narrative}
+        <p class="narrative" class:unchecked={digest.verified === false}>
+          {digest.narrative}
+          <span class="narr-tag" class:ok={digest.verified === true}>
+            {digest.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+          </span>
+        </p>
+      {/if}
+    </section>
+  {/if}
+
+  <!-- What it has been wondering about. The model picks the questions; code
+       answers them. Everything asked is shown, however it turned out. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">What it wondered</span>
+      <span class="nm-sec-meta">questions, and the answers</span>
+    </div>
+    <p class="sec-lede">
+      The assistant chooses what to investigate before it sees any results, then
+      deterministic statistics answer it. A question that came back empty is
+      still worth reading — and is kept here exactly as long as one that held.
+    </p>
+
+    <!-- Reorders what gets asked. Grants no new access: the proposer still sees
+         only the metric list, and a steer reaches it as quoted preference. -->
+    <div class="session-bar">
+      {#if !boardOpen}
+        <button class="session-cta" onclick={openBoard}>Open the board</button>
+      {:else}
+        <button class="row-link" onclick={() => { boardOpen = false; }}>Close</button>
+      {/if}
+    </div>
+
+    {#if boardError}<p class="nm-sec-error">{boardError}</p>{/if}
+
+    {#if boardOpen}
+      {#if boardLoading}
+        <p class="sec-lede">Loading…</p>
+      {:else if board.length === 0}
+        <p class="sec-lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
+      {:else}
+        <div class="session-list">
+          {#each board as q (q.id)}
+            <div class="hyp" class:held={q.verdict === 'supported'}>
+              <div class="hyp-q">{q.question}</div>
+              <div class="hyp-meta">
+                <span class="mono">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
+                {#if q.lagDays}<span class="sep">·</span><span class="mono">next day</span>{/if}
+                <span class="sep">·</span>
+                <span class="mono">expected {q.direction}</span>
+                {#if q.retestCount > 0}
+                  <span class="sep">·</span><span class="mono">retested {q.retestCount}×</span>
+                {/if}
+                {#if q.r != null}
+                  <span class="sep">·</span><span class="mono">r {q.r}</span>
+                {/if}
+                {#if q.qValue != null}
+                  <span class="sep">·</span><span class="mono">q {q.qValue}</span>
+                {/if}
+                {#if q.pairs != null}
+                  <span class="sep">·</span><span class="mono">n {q.pairs}</span>
+                {/if}
+              </div>
+              {#if q.verdict}
+                <div class="hyp-verdict v-{q.verdict}">
+                  <span class="hyp-badge">{VERDICT_LABEL[q.verdict] ?? q.verdict}</span>
+                  <span class="hyp-sum">{q.summary}</span>
+                </div>
+                <!-- Nothing is filtered by verdict when choosing what to
+                     retest, so every answer here is provisional. Saying when it
+                     is next checked is what stops "nothing there" reading as a
+                     closed case. -->
+                {#if q.retestInDays !== null}
+                  <div class="hyp-family mono">
+                    {q.retestInDays === 0 ? 'due to be checked again' : `checked again in ${q.retestInDays}d`}
+                  </div>
+                {/if}
+                {#if q.familySize}
+                  <!-- The family size is shown because a q-value cannot be read
+                       without it: q over 4 tests and q over 400 are not the
+                       same number. -->
+                  <div class="hyp-family mono">corrected across {q.familySize} test{q.familySize === 1 ? '' : 's'}</div>
+                {/if}
+              {:else}
+                <div class="hyp-verdict v-untested">
+                  <span class="hyp-badge">not answered yet</span>
+                </div>
+              {/if}
+              <div class="hyp-why">{q.rationale}</div>
+              <div class="hyp-actions">
+                {#if q.feedback}
+                  <span class="voted">you said {q.feedback.replace('_', ' ')}</span>
+                {:else}
+                  <span class="hyp-ask">Worth asking?</span>
+                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
+                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Lines of enquiry</span>
+      <span class="nm-sec-meta">{(discoveries?.leads ?? []).filter((l) => l.status === 'open').length} open</span>
+    </div>
+    <p class="sec-lede">
+      Longer arcs the ponder engine has decided to pursue. Each earns its keep from the
+      questions inside its metric set — a line that keeps producing nothing is abandoned
+      by arithmetic, not by mood.
+    </p>
+    {#if (discoveries?.leads ?? []).length === 0}
+      <div class="empty">No lines of enquiry yet. The ponder engine opens them when a pattern deserves weeks, not a sentence.</div>
+    {:else}
+      <div class="rows tight">
+        {#each discoveries?.leads ?? [] as l (l.id)}
+          <div class="lead-row" class:closed={l.status !== 'open'}>
+            <div class="lead-main">
+              <span class="lead-title">{l.title}</span>
+              <span class="lead-why">{l.rationale}</span>
+              <span class="lead-metrics mono">{l.metrics.join(' · ')}</span>
+            </div>
+            <div class="lead-state">
+              <span class="det-badge" class:on={l.status === 'open'}>{l.status}</span>
+              <span class="det-votes mono">score {Math.round(l.score * 100) / 100} · {l.roundsRun} rounds · {l.hypothesesHeld}/{l.hypothesesSpawned} held</span>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">The sweep</span>
+      <span class="nm-sec-meta">{discoveries?.sweep ? ago(String(discoveries.sweep.ts)) : 'never run'}</span>
+    </div>
+    {#if discoveries?.sweep}
+      <p class="sec-lede">{discoveries.sweep.summary}</p>
+    {:else}
+      <p class="sec-lede">The daily every-pair sweep has not reported yet.</p>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Digests</span>
+      <span class="nm-sec-meta">{(discoveries?.digests ?? []).length} days</span>
+    </div>
+    {#if (discoveries?.digests ?? []).length === 0}
+      <div class="empty">No digests yet.</div>
+    {:else}
+      <div class="rows tight">
+        {#each discoveries?.digests ?? [] as d (d.day)}
+          <details class="digest-row">
+            <summary>
+              <span class="mono digest-day">{d.day}</span>
+              <span class="digest-sum">{d.summary}</span>
+            </summary>
+            {#if d.narrative}
+              <p class="narrative" class:unchecked={d.verified === false}>
+                {d.narrative}
+                <span class="narr-tag" class:ok={d.verified === true}>
+                  {d.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+                </span>
+              </p>
+            {/if}
+          </details>
+        {/each}
+      </div>
+    {/if}
+  </section>
+  {/if}
+
+  {#if tab === 'places'}
+  {#if !unnamed.length && !quietUnnamed && !named.length}
+    <section class="nm-sec">
+      <div class="nm-sec-hd"><span class="sr-label-tight">Places</span></div>
+      <div class="empty">
+        No places yet. They emerge from the household trail — one stay of ten minutes
+        makes a place, three visits makes a question.
+      </div>
+    </section>
+  {/if}
   <!-- ── UNNAMED PLACES ─────────────────────────────────────────────────
        Placed above the thoughts on purpose. Several detectors are inert until
        a place has a name, so this is the highest-leverage thing on the page
@@ -1137,180 +1529,279 @@
     </section>
   {/if}
 
-  <!-- ── THOUGHTS ───────────────────────────────────────────────────────── -->
+  <!-- ── NAMED PLACES ───────────────────────────────────────────────────── -->
+  {#if named.length}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Places you have named</span>
+        <span class="nm-sec-meta">{named.length}</span>
+      </div>
+      <div class="rows tight">
+        {#each named as p (p.id)}
+          <div class="place-row named">
+            <div class="place-id">
+              <span class="place-label">{p.label}</span>
+              <span class="place-rhythm">{p.kind} · {rhythm(p)}</span>
+            </div>
+            <span class="det-badge" class:on={p.hasMemory}>
+              {p.hasMemory ? 'in memory' : 'not in memory'}
+            </span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+  {/if}
+
+  {#if tab === 'money'}
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Thoughts</span>
-      <span class="nm-sec-meta">
-        threshold {data.threshold.value} · from {data.threshold.feedbackCount} response{data.threshold.feedbackCount === 1 ? '' : 's'}
-      </span>
+      <span class="sr-label-tight">Evidenced spend</span>
+      <span class="nm-sec-meta">receipts{money?.bank.enabled ? ' + bank' : ''} · understates cash</span>
     </div>
-
-    <div class="filters">
-      <button class="filter" class:on={filter === 'all'} onclick={() => (filter = 'all')}>
-        All <span class="n">{thoughts.length}</span>
-      </button>
-      <button class="filter" class:on={filter === 'said'} onclick={() => (filter = 'said')}>
-        Above threshold <span class="n">{said.length}</span>
-      </button>
-      <button class="filter" class:on={filter === 'suppressed'} onclick={() => (filter = 'suppressed')}>
-        Held back <span class="n">{suppressed.length}</span>
-      </button>
-      <button class="filter" class:on={filter === 'ruled'} onclick={() => (filter = 'ruled')}>
-        You ruled on <span class="n">{ruled.length}</span>
-      </button>
-    </div>
-
-    {#if actionError}
-      <p class="warn-line err">{actionError}</p>
-    {/if}
-
-    {#if visible.length === 0}
-      <div class="empty">
-        {#if !hasRun}
-          The detect pass has not run yet.
-        {:else if thoughts.length === 0}
-          Nothing noticed yet. {detectors.length - readyCount} of {detectors.length} detectors are
-          still gathering the history they need — see below for what each is waiting for.
-        {:else}
-          Nothing in this view.
-        {/if}
+    <div class="stat-grid">
+      <div class="stat-tile">
+        <div class="stat-num">{pounds(money?.totalMinor30d ?? 0)}</div>
+        <div class="stat-label">last 30 days</div>
+        <div class="stat-sub">{(money?.rows ?? []).length} verified rows</div>
       </div>
-    {:else}
-      <div class="rows">
-        {#each visible as t (t.id)}
-          <article class="thought st-{t.status}">
-            <div class="thought-hd">
-              <button class="thought-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
-                {headline(t)}
-              </button>
-              {#if isAnswered(t)}
-                <span class="thought-pill answered">answered</span>
-              {:else}
-                <span class="thought-pill">{t.status}</span>
-              {/if}
-            </div>
-
-            <!-- A question about a place that now has a name is finished
-                 business, and saying so stops it reading as still open. The
-                 stored title is kept beneath, because it is what was actually
-                 asked at the time. -->
-            {#if isAnswered(t)}
-              <p class="thought-answered">
-                You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
-                It asked: “{t.title}”
-              </p>
-            {:else}
-              <p class="thought-why">{t.explanation}</p>
-            {/if}
-
-            <div class="thought-meta">
-              <span class="mono">{t.kind}</span>
-              <span class="sep">·</span>
-              <span class="mono">score {t.score}</span>
-              <span class="sep">·</span>
-              <span>{ago(t.createdAt)}</span>
-              {#if !t.placeLabel && t.placeAddress}
-                <span class="sep">·</span>
-                <span class="place-tag">{t.placeAddress}</span>
-              {/if}
-              {#if !t.placeLabel && t.placeVisits}
-                <span class="sep">·</span>
-                <span class="mono">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
-              {/if}
-              {#if t.suppressedReason}
-                <span class="sep">·</span>
-                <span class="held">held back: {t.suppressedReason}</span>
-              {/if}
-              {#if t.promptTokens + t.completionTokens > 0}
-                <span class="sep">·</span>
-                <span class="mono tok">{t.promptTokens + t.completionTokens} tok</span>
-              {/if}
-              {#if t.feedback}
-                <span class="sep">·</span>
-                <span class="voted">you said {t.feedback.replace('_', ' ')}</span>
-              {/if}
-            </div>
-
-            {#if t.id === rateId}
-              <p class="rate-cue">Opened from a notification — your answer is below.</p>
-            {/if}
-            {#if t.narrative}
-              <!-- The model's phrasing, always shown as the model's. The rule's
-                   own explanation stays directly beneath it, so if this whole
-                   path failed permanently the ledger would still read. -->
-              <p class="narrative" class:unchecked={t.verified === false}>
-                {t.narrative}
-                <span class="narr-tag" class:ok={t.verified === true}>
-                  {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
-                </span>
-              </p>
-            {:else if t.narrativeDroppedReason}
-              <!-- A composer that has quietly started refusing everything looks
-                   exactly like a quiet week unless this is on the page. -->
-              <p class="narr-dropped">phrasing dropped — {t.narrativeDroppedReason}</p>
-            {/if}
-
-            {#if expanded === t.id}
-              <div class="thought-detail">
-                <div class="detail-block">
-                  <span class="sr-label-tight">Why that score</span>
-                  <ul class="components">
-                    {#each Object.entries(t.components) as [k, v] (k)}
-                      <li><span class="ck">{k}</span><span class="cv">{v}</span></li>
-                    {/each}
-                  </ul>
-                </div>
-                {#if t.evidence.length}
-                  <div class="detail-block">
-                    <span class="sr-label-tight">Evidence</span>
-                    <ul class="evidence">
-                      {#each t.evidence as e, i (i)}
-                        <li><span class="ck">{e.kind}</span><span class="cv">{e.note || e.id}</span></li>
-                      {/each}
-                    </ul>
-                  </div>
-                {/if}
-                {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
-                  <div class="detail-block">
-                    <span class="sr-label-tight">It suggests</span>
-                    <div class="thought-actions">
-                      {#each t.proposedActions ?? [] as a, i (i)}
-                        <button class="row-link" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
-                          {a.label}
-                        </button>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-
-            <!-- Rating is offered only on what actually reached him. Asking
-                 "was this useful?" about a thought that was suppressed before
-                 it was ever sent is a question with no answer, and the vote it
-                 collects would train the weights on something he never saw.
-                 Production had verdict buttons on eight such rows. -->
-            {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
-              <div class="thought-actions">
-                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
-                  Useful
-                </button>
-                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>
-                  Not useful
-                </button>
-                <button class="row-link danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
-                  Never this kind
-                </button>
-                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
-                  Snooze a week
-                </button>
-              </div>
-            {/if}
-          </article>
+      <div class="stat-tile">
+        <div class="stat-num">{(money?.offers ?? []).length}</div>
+        <div class="stat-label">live offers</div>
+        <div class="stat-sub">from your email</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{(money?.renewals ?? []).length}</div>
+        <div class="stat-label">dated events, 60d</div>
+        <div class="stat-sub">renewals · appointments</div>
+      </div>
+    </div>
+    {#if (money?.byDay ?? []).length >= 2}
+      <div class="chart-block">
+        <Sparkline
+          points={(money?.byDay ?? []).map((d) => ({ label: d.day, value: d.minor / 100 }))}
+          format={(v) => `£${v.toFixed(2)}`}
+          height={64}
+        />
+      </div>
+    {/if}
+    {#if (money?.topMerchants ?? []).length}
+      <div class="merchants">
+        {#each money?.topMerchants ?? [] as m (m.merchant)}
+          <span class="merchant-chip"><b>{pounds(m.minor)}</b> {m.merchant}</span>
         {/each}
       </div>
     {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Recent</span>
+      <span class="nm-sec-meta">newest first</span>
+    </div>
+    {#if (money?.rows ?? []).length === 0}
+      <div class="empty">
+        Nothing verified yet. Receipts land as they arrive by email{money?.bank.enabled ? ' and from the bank overnight' : ''}.
+      </div>
+    {:else}
+      <div class="tablewrap">
+        <table class="tele-table">
+          <thead><tr><th>day</th><th>merchant</th><th>amount</th><th>via</th></tr></thead>
+          <tbody>
+            {#each money?.rows ?? [] as r (r.id)}
+              <tr>
+                <td class="mono">{r.day}</td>
+                <td>{r.merchant}</td>
+                <td class="mono amt">{pounds(r.amountMinor)}</td>
+                <td class="mono">{r.source}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Coming up</span>
+      <span class="nm-sec-meta">from email · next 60 days</span>
+    </div>
+    {#if (money?.renewals ?? []).length === 0}
+      <div class="empty">No dated events found in recent email.</div>
+    {:else}
+      <div class="rows tight">
+        {#each money?.renewals ?? [] as r (r.id)}
+          <div class="renewal-row">
+            <span class="mono renewal-date">{r.date}</span>
+            <span class="renewal-type mono">{r.type}</span>
+            <span class="renewal-title">{r.title}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Offers</span>
+      <span class="nm-sec-meta">expiring first</span>
+    </div>
+    {#if (money?.offers ?? []).length === 0}
+      <div class="empty">No live offers.</div>
+    {:else}
+      <div class="rows tight">
+        {#each money?.offers ?? [] as o (o.id)}
+          <div class="renewal-row">
+            <span class="mono renewal-date">{o.expiresAt ? String(o.expiresAt).slice(0, 10) : 'no expiry'}</span>
+            <span class="renewal-title"><b>{o.merchant}</b> — {o.summary}{o.code ? ` · code ${o.code}` : ''}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Bank rails</span>
+      <span class="nm-sec-meta">{money?.bank.enabled ? 'armed' : 'off'}</span>
+    </div>
+    {#if money?.bank.enabled}
+      <p class="sec-lede">
+        Pulling TrueLayer and PayPal nightly.
+        {#if money?.bank.lastRun}Last run: {money.bank.lastRun.summary}{/if}
+      </p>
+    {:else}
+      <p class="sec-lede">
+        Off by default (your D2 call). Setting <code>daydream.bank.enabled</code> to
+        <code>true</code> starts a nightly debits-only pull into this same table — it
+        fails loudly if the TrueLayer token has gone stale.
+      </p>
+    {/if}
+  </section>
+  {/if}
+
+  {#if tab === 'engine'}
+  <!-- ── ENGINE STATE ───────────────────────────────────────────────────
+       Leads the page. Everything below is meaningless if the engine has not
+       run, and "quiet" and "not wired up" have to be tellable apart. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Engine</span>
+      <span class="nm-sec-meta">
+        {#if hasRun}last looked {ago(engine.lastDetectAt)}{:else}has not run yet{/if}
+      </span>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-tile">
+        <div class="stat-num">{engine.trailSpanDays ?? 0}</div>
+        <div class="stat-label">days of trail</div>
+        <div class="stat-sub">observed {ago(engine.lastObserveAt)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{pct(engine.coverage?.last24h)}</div>
+        <div class="stat-label">covered, 24h</div>
+        <div class="stat-sub">7d {pct(engine.coverage?.last7d)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{readyCount}<span class="of">/{detectors.length}</span></div>
+        <div class="stat-label">detectors ready</div>
+        <div class="stat-sub">{mutedCount} muted by you</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-num">{counts.namedPlaces}<span class="of">/{counts.places}</span></div>
+        <div class="stat-label">places named</div>
+        <div class="stat-sub">{counts.unnamedPlaces} still unnamed</div>
+      </div>
+    </div>
+
+    {#if engine.summary}
+      <p class="engine-summary">{engine.summary}</p>
+    {/if}
+
+    {#if engine.pausedActions.length}
+      <p class="warn-line">
+        Not running: {engine.pausedActions.join(', ')}
+      </p>
+    {/if}
+
+    {#if engine.sources.some((s) => s.status === 'failed')}
+      <p class="warn-line">
+        Sources that failed last tick:
+        {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
+      </p>
+    {/if}
+
+    {#if delivery && !delivery.hasPushSubscriber}
+      <!-- The documented root cause of the empty feedback ledger: with nowhere
+           to push, every thought falls back to a chat note whose feedback link
+           is rarely followed, so the learning loop never gets an input. -->
+      <p class="warn-line">
+        No device is subscribed to push — thoughts fall back to chat notes, and without
+        feedback taps the confidence threshold never relaxes.
+      </p>
+    {/if}
+
+    <div class="thought-actions">
+      <button class="row-link" disabled={backfilling} onclick={runBackfill}>
+        {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
+      </button>
+    </div>
+    {#if backfillNote}
+      <p class="sec-lede">{backfillNote}</p>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Budget</span>
+      <span class="nm-sec-meta">
+        {#if budget}{budget.modelId}{:else}unavailable{/if}
+      </span>
+    </div>
+
+    {#if !budget}
+      <p class="sec-lede">Could not read the model or the usage meter.</p>
+    {:else if !budget.applies}
+      <p class="sec-lede">
+        Running on <strong>{budget.provider}</strong>, so the subscription caps do not apply —
+        this spend is cash, and nothing here limits it.
+      </p>
+    {:else}
+      <div class="stat-grid">
+        <div class="stat-tile">
+          <div class="stat-num">{budget.spentTodayWeeklyPct}<span class="of">/{budget.dailyCapPct}%</span></div>
+          <div class="stat-label">of weekly, today</div>
+          <div class="stat-sub">paced target {budget.pacedTargetPct}%</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-num">{budget.spentThisWindowPct}<span class="of">/{budget.fiveHourCapPct}%</span></div>
+          <div class="stat-label">of this 5h window</div>
+          <div class="stat-sub">{budget.remainingWindowPct}% left</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-num">{budget.plan.depth}</div>
+          <div class="stat-label">working depth</div>
+          <div class="stat-sub">
+            {budget.plan.maxCandidates} candidate{budget.plan.maxCandidates === 1 ? '' : 's'}{budget.plan.verify ? ', verified' : ''}
+          </div>
+        </div>
+      </div>
+      {#if budget.blocked}
+        <p class="warn-line">Paused: {budget.blockedReason}</p>
+      {:else if !budget.reachable}
+        <p class="warn-line">
+          Usage meter unreachable — working at minimum depth rather than stopping.
+        </p>
+      {/if}
+      <p class="sec-lede budget-note">
+        Spare budget buys more <strong>thinking</strong>, never more notifications: extra
+        headroom adds a verification pass and more candidates considered. What reaches your
+        phone is capped separately at {delivery?.maxPerDay ?? 4} a day.
+      </p>
+    {/if}
+
   </section>
 
   <!-- ── MODEL-AUTHORED RULES ───────────────────────────────────────────
@@ -1426,32 +1917,93 @@
     </div>
   </section>
 
-  <!-- ── NAMED PLACES ───────────────────────────────────────────────────── -->
-  {#if named.length}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Places you have named</span>
-        <span class="nm-sec-meta">{named.length}</span>
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Coverage, 30 days</span>
+      <span class="nm-sec-meta">share of each day the trail could see</span>
+    </div>
+    {#if (telemetry?.coverage ?? []).length >= 2}
+      <Sparkline
+        points={(telemetry?.coverage ?? []).map((c) => ({ label: c.day, value: c.coverage }))}
+        max={1}
+        format={(v) => `${Math.round(v * 100)}%`}
+        height={72}
+      />
+    {:else}
+      <p class="sec-lede">Not enough day rows yet.</p>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Ponder telemetry</span>
+      <span class="nm-sec-meta">the fabrication meter lives here</span>
+    </div>
+    {#if (telemetry?.ponderRuns ?? []).length === 0}
+      <p class="sec-lede">No ponder cycles yet.</p>
+    {:else}
+      <div class="tablewrap">
+        <table class="tele-table">
+          <thead>
+            <tr><th>when</th><th>cards in</th><th>musings</th><th>kept</th><th>held</th><th>audit dropped</th><th>leads</th></tr>
+          </thead>
+          <tbody>
+            {#each telemetry?.ponderRuns ?? [] as r (String(r.ts))}
+              <tr>
+                <td class="mono">{ago(String(r.ts))}</td>
+                <td class="mono">{r.cards ?? '—'}</td>
+                <td class="mono">{r.proposed ?? '—'}</td>
+                <td class="mono">{r.created ?? '—'}</td>
+                <td class="mono">{r.suppressed ?? '—'}</td>
+                <td class="mono" class:bad={(r.dropped ?? 0) > 0}>{r.dropped ?? '—'}</td>
+                <td class="mono">{r.leads ?? '—'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
-      <div class="rows tight">
-        {#each named as p (p.id)}
-          <div class="place-row named">
-            <div class="place-id">
-              <span class="place-label">{p.label}</span>
-              <span class="place-rhythm">{p.kind} · {rhythm(p)}</span>
-            </div>
-            <span class="det-badge" class:on={p.hasMemory}>
-              {p.hasMemory ? 'in memory' : 'not in memory'}
-            </span>
-          </div>
-        {/each}
-      </div>
-    </section>
+      <p class="sec-lede">
+        “Audit dropped” counts musings deleted for citing evidence that does not exist.
+        A rising number means the model is reaching; zero means the wide view is holding.
+      </p>
+    {/if}
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Jobs</span>
+      <span class="nm-sec-meta">{(telemetry?.jobs ?? []).length} scheduled</span>
+    </div>
+    <div class="tablewrap">
+      <table class="tele-table">
+        <thead>
+          <tr><th>job</th><th>every</th><th>last outcome</th><th>said</th></tr>
+        </thead>
+        <tbody>
+          {#each telemetry?.jobs ?? [] as j (j.name)}
+            <tr class:jobbad={j.consecutiveFailures > 0 || j.pulse?.outcome === 'error'}>
+              <td class="mono">{j.name.replace('daydream-', '')}</td>
+              <td class="mono">{cadence(j.cadenceSeconds)}</td>
+              <td class="mono">
+                <span class="pulse-dot" class:ok={j.pulse?.outcome === 'ok'} class:skip={j.pulse?.outcome === 'skipped'} class:err={j.pulse?.outcome === 'error'}></span>
+                {j.pulse ? `${j.pulse.outcome} · ${ago(String(j.pulse.ts))}` : 'never'}
+              </td>
+              <td class="job-summary">{j.pulse?.summary ?? '—'}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  </section>
   {/if}
 </div>
 
 <style>
-  .wrap { max-width: 980px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+  /* Explicit width, not auto: inside the jkai shell's horizontal scroll
+     container an auto-width block stretches to its widest descendant (the
+     nowrap tab bar), which put a 640px page in a 390px phone. width:100%
+     pins the page to the scrollport and lets the tab bar scroll itself. */
+  .wrap { max-width: 980px; width: 100%; box-sizing: border-box; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
   .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
   .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
   .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; line-height: 1.05; }
@@ -1712,4 +2264,120 @@
     .det-row { flex-direction: column; }
     .thought-detail { grid-template-columns: 1fr; }
   }
+
+  /* ── Tabs ─────────────────────────────────────────────────────────────── */
+  .tabs {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; gap: 0.25rem; flex-wrap: nowrap; overflow-x: auto;
+    margin: 0 0 1.5rem; padding: 0.4rem 0;
+    background: var(--bg); border-bottom: 1px solid var(--line-strong);
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase;
+    letter-spacing: 0.1em; padding: 0.5rem 0.85rem; border: none; background: none;
+    color: var(--text-muted); cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: color 120ms ease, border-color 120ms ease;
+  }
+  .tab:hover { color: var(--text-primary); }
+  .tab.on { color: var(--text-primary); border-bottom-color: var(--accent); }
+  .tab-n {
+    display: inline-block; min-width: 1.2em; margin-left: 0.4rem; padding: 0 0.3em;
+    background: var(--accent); color: var(--bg); border-radius: 100px;
+    font-size: var(--fs-label-xs); text-align: center; font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Header power toggle ──────────────────────────────────────────────── */
+  .power {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase;
+    letter-spacing: 0.12em; padding: 0.35rem 0.7rem; cursor: pointer;
+    border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-secondary);
+  }
+  .power:hover { border-color: var(--accent); }
+  .power-dot { width: 8px; height: 8px; border-radius: 100px; background: #3a8a56; box-shadow: 0 0 0 3px color-mix(in srgb, #3a8a56 25%, transparent); }
+  .power.off .power-dot { background: var(--text-ghost); box-shadow: none; }
+  .power.off { color: var(--text-ghost); }
+
+  /* ── Feed timeline ────────────────────────────────────────────────────── */
+  .tl-day { display: flex; align-items: center; gap: 0.75rem; margin: 0.6rem 0 0.1rem; }
+  .tl-day:first-child { margin-top: 0; }
+  .tl-day-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); white-space: nowrap; }
+  .tl-day-rule { flex: 1; height: 1px; background: var(--line-strong); opacity: 0.6; }
+  .thought.musing { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 3%, var(--surface-sunken)); }
+  .theme-chip {
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    padding: 0.05rem 0.45rem; border-radius: 100px;
+  }
+
+  /* ── Family ───────────────────────────────────────────────────────────── */
+  .fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.6rem; }
+  .fam-card { border: 1px solid var(--line-strong); background: var(--bg); padding: 0.85rem 0.95rem; transition: border-color 120ms ease; }
+  .fam-card:hover { border-color: var(--accent); }
+  .fam-card.stale { opacity: 0.65; }
+  .fam-hd { display: flex; align-items: center; gap: 0.5rem; }
+  .fam-dot { width: 9px; height: 9px; border-radius: 100px; background: var(--text-ghost); flex: 0 0 auto; }
+  .fam-dot.home { background: #3a8a56; box-shadow: 0 0 0 3px color-mix(in srgb, #3a8a56 20%, transparent); }
+  .fam-dot.out { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  .fam-name { font-family: var(--font-display); font-weight: 900; font-size: 1.05rem; }
+  .fam-batt { margin-left: auto; font-size: var(--fs-label-xs); color: var(--warn, #b0892a); }
+  .fam-where { margin-top: 0.4rem; font-size: var(--fs-body-sm); color: var(--text-secondary); }
+  .fam-meta { margin-top: 0.15rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .fam-today { display: flex; gap: 0.7rem; margin-top: 0.65rem; padding-top: 0.55rem; border-top: 1px solid var(--card-border); flex-wrap: wrap; }
+  .fam-stat { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .fam-stat b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+  /* ── Telemetry & money tables ─────────────────────────────────────────── */
+  .tablewrap { overflow-x: auto; }
+  .tele-table { width: 100%; border-collapse: collapse; font-size: var(--fs-label); }
+  .tele-table th {
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--text-muted); text-align: left; font-weight: 500;
+    padding: 0.35rem 0.9rem 0.35rem 0; border-bottom: 1px solid var(--line-strong);
+  }
+  .tele-table td { padding: 0.45rem 0.9rem 0.45rem 0; border-bottom: 1px solid var(--card-border); vertical-align: top; }
+  .tele-table td.amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tele-table td.bad { color: var(--error, #c44); font-weight: 700; }
+  .tele-table tr.jobbad td { color: var(--error, #c44); }
+  .job-summary { color: var(--text-muted); font-size: var(--fs-label-xs); max-width: 42ch; }
+  .pulse-dot { display: inline-block; width: 7px; height: 7px; border-radius: 100px; background: var(--text-ghost); margin-right: 0.35rem; }
+  .pulse-dot.ok { background: #3a8a56; }
+  .pulse-dot.skip { background: var(--warn, #b0892a); }
+  .pulse-dot.err { background: var(--error, #c44); }
+  .chart-block { margin-top: 1rem; }
+  .merchants { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.9rem; }
+  .merchant-chip {
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
+    border: 1px solid var(--card-border); padding: 0.25rem 0.55rem; background: var(--bg);
+  }
+  .merchant-chip b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+  /* ── Discoveries: leads, digests ──────────────────────────────────────── */
+  .lead-row { display: flex; justify-content: space-between; gap: 1rem; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); background: var(--surface-sunken); padding: 0.75rem 0.95rem; }
+  .lead-row.closed { border-left-color: var(--text-ghost); opacity: 0.7; }
+  .lead-main { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+  .lead-title { font-weight: 700; font-size: var(--fs-body-sm); }
+  .lead-why { font-size: var(--fs-label); color: var(--text-muted); }
+  .lead-metrics { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .lead-state { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; white-space: nowrap; }
+  .digest-row { border: 1px solid var(--card-border); background: var(--bg); }
+  .digest-row summary { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.55rem 0.8rem; cursor: pointer; list-style: none; }
+  .digest-row summary::-webkit-details-marker { display: none; }
+  .digest-row summary:hover { background: var(--surface-sunken); }
+  .digest-day { color: var(--text-ghost); font-size: var(--fs-label-xs); white-space: nowrap; }
+  .digest-sum { font-size: var(--fs-label); color: var(--text-secondary); }
+  .digest-row .narrative { margin: 0 0.8rem 0.7rem; }
+
+  /* ── Money extras ─────────────────────────────────────────────────────── */
+  .renewal-row { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.45rem 0; border-bottom: 1px solid var(--card-border); font-size: var(--fs-label); }
+  .renewal-date { color: var(--text-ghost); font-size: var(--fs-label-xs); white-space: nowrap; }
+  .renewal-type { color: var(--accent); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
+  .renewal-title { color: var(--text-secondary); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tab, .fam-card, .power { transition: none; }
+  }
+
 </style>

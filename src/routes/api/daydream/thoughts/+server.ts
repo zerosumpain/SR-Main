@@ -66,6 +66,47 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'family_now': {
+        // Positions for the Family map, fetched on demand rather than riding
+        // in the page payload — the ledger's standing rule is that a lat/lon
+        // never leaves in bulk; this is one owner-gated read for one render,
+        // the same shape the place-naming map uses.
+        const { db } = await import('$lib/db');
+        const { daydreamTrail } = await import('$lib/db/schema');
+        const { FAMILY_SUBJECTS } = await import('$lib/daydream/types');
+        const { and, desc, eq, isNotNull } = await import('drizzle-orm');
+        const positions: Array<{ subject: string; lat: number; lon: number; isHome: boolean | null; ageMins: number }> = [];
+        for (const f of FAMILY_SUBJECTS) {
+          const [row] = await db
+            .select({ ts: daydreamTrail.ts, lat: daydreamTrail.lat, lon: daydreamTrail.lon, isHome: daydreamTrail.isHome })
+            .from(daydreamTrail)
+            .where(and(eq(daydreamTrail.subject, f.subject), isNotNull(daydreamTrail.lat)))
+            .orderBy(desc(daydreamTrail.ts))
+            .limit(1);
+          if (row?.lat != null && row.lon != null) {
+            positions.push({
+              subject: f.subject,
+              lat: row.lat,
+              lon: row.lon,
+              isHome: row.isHome,
+              ageMins: Math.max(0, Math.round((Date.now() - row.ts.getTime()) / 60_000)),
+            });
+          }
+        }
+        return json({ positions });
+      }
+
+      case 'set_enabled': {
+        // The kill switch, finally a control rather than a banner naming a
+        // settings key. Boolean set explicitly both ways — setSetting(k, null)
+        // cannot unset, and "unset means enabled" is the engine's convention.
+        const { setSetting } = await import('$lib/server/models/settings');
+        const { SETTINGS_ENABLED_KEY } = await import('$lib/daydream/types');
+        const enabled = body.enabled === true;
+        await setSetting(SETTINGS_ENABLED_KEY, enabled);
+        return json({ ok: true, enabled });
+      }
+
       case 'run_action': {
         // One-tap execution of an action a musing proposed. The stored action
         // re-validates through the closed vocabulary before anything runs, so
