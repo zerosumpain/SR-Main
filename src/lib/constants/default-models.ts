@@ -165,6 +165,21 @@ export function isGlmModel(modelId: string): boolean {
   return modelId.startsWith('z-ai/glm') || modelId.startsWith('glm-');
 }
 
+/**
+ * True for an embedding model.
+ *
+ * Load-bearing for provider routing rather than cosmetic: Codex is the site's
+ * fallback when OpenRouter is unusable, and the bridge has no embeddings
+ * endpoint — it translates chat completions and nothing else. So an embedding
+ * request must NEVER be re-routed to Codex; it has to fail with OpenRouter's own
+ * error, which is at least the true one. Falling back would swap a clear
+ * "402 insufficient credits" for a 404 from a bridge that was never asked to do
+ * this, and the next person would debug the wrong thing.
+ */
+export function isEmbeddingModelId(modelId: string): boolean {
+  return /(^|\/)text-embedding|embedding/i.test(modelId);
+}
+
 /** Minimum max_tokens for a reasoning model. Reasoning tokens are billed and
  *  counted as completion tokens, so a tight budget (some call sites ask for 50)
  *  is consumed entirely by thinking and the caller gets an EMPTY string back. */
