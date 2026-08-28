@@ -126,7 +126,7 @@
     line-height: 1.55;
     color: var(--text-secondary);
     margin: 0 0 18px;
-    max-width: 68ch;
+    max-width: 100%;
   }
 
   /* ——— T6 ——— */
@@ -166,7 +166,7 @@
     font-size: var(--fs-body-sm);
     line-height: 1.55;
     color: var(--text-secondary);
-    max-width: 62ch;
+    max-width: 100%;
   }
 
   /* ——— T7 ——— */

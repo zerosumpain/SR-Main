@@ -98,7 +98,7 @@
     font-size: var(--fs-body-lg);
     line-height: 1.55;
     color: var(--text-secondary);
-    max-width: 60ch;
+    max-width: 100%;
     margin: 18px 0 0;
   }
   .fs-status {

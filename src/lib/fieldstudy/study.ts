@@ -31,6 +31,16 @@ export interface Claim {
   text: string;
   confidence: Confidence;
   cites?: SourceRef[];
+  /**
+   * In a T4 ledger: the lenses this claim bites hardest for. The template
+   * re-ranks by it — a tagged claim rises to the top of its column when that
+   * lens is active — and never filters, because a row vanishing when you
+   * change whose eyes you are looking through is how a ledger stops being one.
+   *
+   * A lens nobody tags and no actor row carries is a control that does
+   * nothing, so T4 does not render a button for it.
+   */
+  lenses?: string[];
 }
 
 export interface Prose {

@@ -920,7 +920,14 @@ a {
 @media (max-width: 700px) { .fs-qc { grid-template-columns: 1fr; } .fs-qc dd { padding-left: 0; } }
 
 /* ——— body ——— */
-.fs-body { font-size: var(--fs-body); line-height: 1.68; color: var(--text-secondary); max-width: var(--fs-measure); }
+/* THE WIDTH RULE: body copy fills its column, edge to edge.
+   A paragraph that stops two-thirds of the way across leaves a void beside
+   every line and reads as broken rather than as typeset — measured at 286px
+   of dead space on a 1078px column. The narrow measure is kept only for
+   DISPLAY type (the pull quote, the position statement, the front-matter
+   title), where a short line is obviously deliberate.
+   `--fs-measure` survives for anything that opts back in. */
+.fs-body { font-size: var(--fs-body); line-height: 1.68; color: var(--text-secondary); max-width: 100%; }
 .fs-body b { color: var(--text-primary); }
 .fs-body a { color: var(--accent-ink); }
 .fs-dropcap::first-letter { font-family: var(--fs-serif); font-weight: 600; font-size: 62px; line-height: 0.76; letter-spacing: -0.04em; color: var(--text-primary); float: left; margin: 4px 10px 0 0; }
@@ -968,7 +975,7 @@ a {
 
 /* ——— beat close ——— */
 .fs-close { border-top: 2px solid var(--text-primary); padding-top: 20px; margin-top: 32px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 34px; }
-.fs-sowhat { font-family: var(--fs-serif); font-size: 20px; line-height: 1.5; margin: 9px 0 0; max-width: 54ch; text-wrap: pretty; }
+.fs-sowhat { font-family: var(--fs-serif); font-size: 20px; line-height: 1.5; margin: 9px 0 0; max-width: 100%; text-wrap: pretty; }
 .fs-open { border: 1px solid var(--fs-line-strong); padding: 15px 17px; display: flex; flex-direction: column; gap: 10px; }
 .fs-falsifier { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; color: var(--text-ghost); padding-top: 8px; border-top: 1px dashed rgba(26, 16, 8, 0.2); }
 @media (max-width: 900px) { .fs-close { grid-template-columns: 1fr; gap: 18px; } }
