@@ -4,7 +4,7 @@
 // health-driven defaults (suggestTarget / proposeSession) keep choosing — a
 // request that names no distance must not have one invented for it.
 
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { ORS_PROFILES, type PlannerSport } from './ors';
 

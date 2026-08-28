@@ -28,7 +28,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, generateEmbedding } from './ai';
 import { search } from './tavily';
 import { classifyDomain } from './credibility';
-import { getEmbeddingModel } from './keys';
+import { getEmbeddingModel } from '$lib/llm/keys';
 import { emit, emitLog, emitStats, throwIfStopped, beat } from './worker';
 import { emitArtefact } from './desk-events';
 import { pLimit } from './concurrency';

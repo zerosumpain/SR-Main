@@ -7,9 +7,9 @@ beforeAll(() => {
   process.env.INTEGRATION_CREDENTIALS_KEY = TEST_KEY;
 });
 
-describe('integrations/crypto', () => {
+describe('secrets/crypto', () => {
   it('round-trips a payload', async () => {
-    const { encryptPayload, decryptPayload } = await import('$lib/integrations/crypto');
+    const { encryptPayload, decryptPayload } = await import('$lib/secrets/crypto');
     const plain = JSON.stringify({ username: 'john', password: 'hunter2' });
     const enc = encryptPayload(plain);
     expect(enc).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
@@ -17,7 +17,7 @@ describe('integrations/crypto', () => {
   });
 
   it('detects tampering via auth tag', async () => {
-    const { encryptPayload, decryptPayload } = await import('$lib/integrations/crypto');
+    const { encryptPayload, decryptPayload } = await import('$lib/secrets/crypto');
     const enc = encryptPayload('hello');
     const [iv, tag, ct] = enc.split(':');
     // Flip the last byte of ciphertext.
@@ -27,7 +27,7 @@ describe('integrations/crypto', () => {
   });
 
   it('rejects malformed encrypted strings', async () => {
-    const { decryptPayload } = await import('$lib/integrations/crypto');
+    const { decryptPayload } = await import('$lib/secrets/crypto');
     expect(() => decryptPayload('not-a-real-cipher')).toThrow(/Malformed/);
   });
 
@@ -36,7 +36,7 @@ describe('integrations/crypto', () => {
     process.env.INTEGRATION_CREDENTIALS_KEY = 'tooshort';
     // Re-import to pick up the new env (vitest caches modules).
     await expect(async () => {
-      const mod = await import('$lib/integrations/crypto?bust=' + Date.now());
+      const mod = await import('$lib/secrets/crypto?bust=' + Date.now());
       mod.encryptPayload('x');
     }).rejects.toThrow(/64 hex chars/);
     process.env.INTEGRATION_CREDENTIALS_KEY = original;

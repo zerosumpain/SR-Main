@@ -3,7 +3,7 @@
 import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiMemories } from '$lib/db/schema';
 import { eq, and, isNull, lt, desc, gt, or } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 
 const REVIEW_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes

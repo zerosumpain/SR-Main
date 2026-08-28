@@ -7,7 +7,7 @@
 // tools use.
 
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 import {
   composeHeuristic,
   pickStatementLayout,

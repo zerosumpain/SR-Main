@@ -30,7 +30,7 @@ import {
   openrouterIsDown,
   markOpenrouterDown,
   codexCanStandIn,
-} from '$lib/jkai/llm-client';
+} from '$lib/llm/client';
 import { isEmbeddingModelId } from '$lib/constants/default-models';
 import { getOpenRouterApiKey, isCodexEnabled } from '$lib/server/models/settings';
 

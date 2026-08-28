@@ -74,7 +74,7 @@ export const daydreamWeekly: ActivityHandler = {
     if (!budget.blocked) {
       const before = isCodexModel ? await readQuotaMark() : null;
       try {
-        const { getLLMClient } = await import('$lib/jkai/llm-client');
+        const { getLLMClient } = await import('$lib/llm/client');
         const { client, model: modelId } = await getLLMClient(model);
 
         const res = await client.chat.completions.create({

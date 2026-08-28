@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { loadKeys, saveKeys, getKeysStatus } from '$lib/deepdive/keys';
+import { loadKeys, saveKeys, getKeysStatus } from '$lib/llm/keys';
 
 export const GET: RequestHandler = async () => {
   return json(getKeysStatus());

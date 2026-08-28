@@ -15,7 +15,7 @@ import {
   type ChainFinding,
 } from '$lib/jkai/chain-analysis';
 import { parseJsonLoose } from '$lib/selfimprove/types';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 
 // Read one turn's tool-call chain and say where the calls went. Owner-gated by
 // hooks, like the rest of /api/jkai.
@@ -92,7 +92,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const messages = buildAnalysisMessages(row.prompt ?? '', answer, analysis, candidates);
 
   try {
-    const { getLLMClient } = await import('$lib/jkai/llm-client');
+    const { getLLMClient } = await import('$lib/llm/client');
     const { resolveSelfimproveModel } = await import('$lib/server/models/workload-settings');
     const { client, model } = await getLLMClient(await resolveSelfimproveModel());
     const resp = await withActivity('selfimprove', () =>

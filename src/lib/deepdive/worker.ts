@@ -16,7 +16,7 @@ import { createBudget, NO_BUDGET } from './budget';
 import { runInstant, runScan } from './fast';
 import { runBrief } from './brief';
 import { PHASE_ORDER, resumePhase, startPhaseIndex, type ResearchPhase } from './phase-order';
-import { runWithResearchMeter } from './meter';
+import { runWithResearchMeter } from '$lib/context/research-meter';
 
 // In-memory map of active session emitters
 const activeEmitters = new Map<string, EventEmitter>();

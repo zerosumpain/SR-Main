@@ -5,9 +5,9 @@
 // model is rejected. The blob index is dimension-agnostic, so either is safe;
 // the chosen model + dim are recorded on the collection so query-time matches.
 
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveEmbeddingModel } from '$lib/server/models/workload-settings';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 import { DEFAULT_EMBEDDING_MODEL_ID } from '$lib/constants/default-models';
 import { normalize } from './retrieve';
 

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import OpenAI from 'openai';
-import { installUsageCapture } from '$lib/jkai/usage-capture';
+import { installUsageCapture } from '$lib/llm/usage-capture';
 import { env as dynamicEnv } from '$env/dynamic/private';
 
 const KEYS_PATH = join(process.cwd(), 'keys.json');

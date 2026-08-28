@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { getKeysStatus, loadKeys } from '$lib/deepdive/keys';
+import { getKeysStatus, loadKeys } from '$lib/llm/keys';
 import { getSetting } from '$lib/server/models/settings';
 
 export const load: PageServerLoad = async () => {

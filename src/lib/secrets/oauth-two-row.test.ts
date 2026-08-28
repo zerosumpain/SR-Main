@@ -19,7 +19,7 @@ import { describe, it, expect, vi } from 'vitest';
 // registry.ts imports $lib/db (postgres) at module load — stub it so the pure
 // tables can be imported without a database.
 vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('$lib/integrations/crypto', () => ({
+vi.mock('$lib/secrets/crypto', () => ({
   encryptPayload: (s: string) => `enc:${s}`,
   decryptPayload: (s: string) => s.replace(/^enc:/, ''),
 }));

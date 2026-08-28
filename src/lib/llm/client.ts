@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { getOpenRouterApiKey, getCodexBridgeUrl, isCodexEnabled } from '$lib/server/models/settings';
 import type { ModelContext } from '$lib/server/models/types';
-import { installUsageCapture } from '$lib/jkai/usage-capture';
+import { installUsageCapture } from '$lib/llm/usage-capture';
 import {
   mapLegacyModelId,
   coerceModelContext,

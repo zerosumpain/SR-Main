@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { runAssistant } from '$lib/blog/assistant/runner';
 import { appendMessage, loadHistory } from '$lib/blog/assistant/messages';
 

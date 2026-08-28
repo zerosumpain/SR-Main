@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { intelNotes, intelAlerts } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 
 interface SimilarNote {

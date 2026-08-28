@@ -10,7 +10,7 @@
 import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
 import { and, eq, gte } from 'drizzle-orm';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
@@ -96,8 +96,8 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
         );
       }
       // Lazy imports keep the module light for tests that never reach the gateway.
-      const { getLLMClient } = await import('$lib/jkai/llm-client');
-      const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
+      const { getLLMClient } = await import('$lib/llm/client');
+      const { priceFor, computeCost } = await import('$lib/llm/pricing');
 
       // Still pinned off the chat default — this pipeline writes code that
       // ships unattended, so the model that authors it should not move because

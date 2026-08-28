@@ -1,4 +1,4 @@
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { HealingContext, HealingDiagnosis, NodeDefinition } from '../types';
 

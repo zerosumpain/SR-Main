@@ -11,7 +11,7 @@ vi.mock('$lib/db', () => ({
     insert: () => ({
       // `.returning()` for the attachment write; `.catch()` because the cost
       // ledger's fire-and-forget insert awaits nothing and only attaches a
-      // rejection handler (see $lib/jkai/llm-usage-log).
+      // rejection handler (see $lib/llm/usage-log).
       values: (v: any) => ({
         returning: async () => { inserted.push(v); return [{ ...v, id: 'att-new', createdAt: new Date() }]; },
         catch: () => {},
@@ -35,7 +35,7 @@ vi.mock('$lib/server/models/settings', () => ({
   clearSettingsCache: () => {},
   resolveDefaultModel: async () => ({ provider: 'openrouter', modelId: 'deepseek/deepseek-v4-flash' }),
 }));
-vi.mock('$lib/deepdive/keys', () => ({
+vi.mock('$lib/llm/keys', () => ({
   loadKeys: vi.fn(() => ({ elevenlabsApiKey: 'test-key' })),
 }));
 

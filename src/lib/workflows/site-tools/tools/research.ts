@@ -251,7 +251,7 @@ register({
       ? session.report
       : JSON.stringify(session.report);
 
-    const { getLLMClient } = await import('$lib/jkai/llm-client');
+    const { getLLMClient } = await import('$lib/llm/client');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
     const { client, model } = await getLLMClient(await resolveDefaultModel());
 
@@ -392,7 +392,7 @@ register({
     const instruction = formatInstructions[format];
     if (!instruction) return { success: false, error: `Unknown format: ${format}. Use: blog_draft, build_prompt, workflow_description, or summary` };
 
-    const { getLLMClient } = await import('$lib/jkai/llm-client');
+    const { getLLMClient } = await import('$lib/llm/client');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
     const { client, model } = await getLLMClient(await resolveDefaultModel());
 

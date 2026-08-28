@@ -18,7 +18,7 @@
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
 import { daydreamPlaces, daydreamThoughts, daydreamTrail } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from '../compose';
 import { errMsg } from '../types';
 import { FACT_KEYS, STRING_FACTS, BOOLEAN_FACTS } from './spec';

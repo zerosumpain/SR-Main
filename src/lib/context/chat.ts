@@ -32,7 +32,7 @@
  *
  * ## Why AsyncLocalStorage
  *
- * Same reason as `$lib/jkai/activity-context`, and it is worth restating: the
+ * Same reason as `$lib/context/activity`, and it is worth restating: the
  * LLM call sits several frames below the code that knows which turn it is
  * serving, and those frames are shared with callers that have no turn at all
  * (embeddings, extraction, the nightly pass). Threading a turn id through every

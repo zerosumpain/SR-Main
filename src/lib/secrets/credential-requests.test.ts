@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // credential-requests imports registry.ts for its types AND for
 // classifyBindingChange, and registry.ts pulls in $lib/db at module load.
 vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('$lib/integrations/crypto', () => ({
+vi.mock('$lib/secrets/crypto', () => ({
   encryptPayload: (s: string) => `enc:${s}`,
   decryptPayload: (s: string) => s.replace(/^enc:/, ''),
 }));

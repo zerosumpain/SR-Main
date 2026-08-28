@@ -12,7 +12,7 @@ import { error, json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve } from '../../lib/retrieval.server';
 import { coerceJson } from '../../lib/jsonsafe';

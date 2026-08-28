@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { setSetting } from './settings';
 import { clearCapabilityCache } from './capabilities';
-import { clearPriceCache } from '$lib/jkai/llm-pricing';
+import { clearPriceCache } from '$lib/llm/pricing';
 
 interface OpenRouterRawModel {
   id: string;

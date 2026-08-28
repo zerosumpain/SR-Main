@@ -3,7 +3,7 @@ import {
   withChatContext,
   currentChatContext,
   currentChatSessionId,
-} from '$lib/jkai/chat-context';
+} from '$lib/context/chat';
 
 describe('chat call context', () => {
   it('reports nothing outside a turn', () => {

@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { getSetting } from '$lib/server/models/settings';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { sql } from 'drizzle-orm';

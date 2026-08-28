@@ -12,7 +12,7 @@ vi.mock('$lib/server/models/settings', () => ({
   resolveDefaultModel: vi.fn().mockResolvedValue({ provider: 'zai', modelId: 'glm-4-flash' }),
   getOpenRouterApiKey: vi.fn().mockResolvedValue('test'),
 }));
-vi.mock('$lib/jkai/llm-client', () => ({
+vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn().mockResolvedValue({
     client: { chat: { completions: { create: mockCreate } } },
     model: 'glm-4-flash',
@@ -29,7 +29,7 @@ vi.mock('$lib/workflows/site-tools/registry', () => ({
 }));
 
 import { llmAgentExecutor, runAgentSubCall } from '$lib/workflows/nodes/llm-agent';
-import { executionContext, recordLLMCall } from '$lib/workflows/execution-context';
+import { executionContext, recordLLMCall } from '$lib/context/execution';
 import type { ExecutionContext } from '$lib/workflows/types';
 
 function makeCtx(): ExecutionContext {

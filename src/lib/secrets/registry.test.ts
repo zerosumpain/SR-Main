@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 // helpers can be imported without a database.
 import { vi } from 'vitest';
 vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('$lib/integrations/crypto', () => ({
+vi.mock('$lib/secrets/crypto', () => ({
   encryptPayload: (s: string) => `enc:${s}`,
   decryptPayload: (s: string) => s.replace(/^enc:/, ''),
 }));

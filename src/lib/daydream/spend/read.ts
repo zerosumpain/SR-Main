@@ -8,12 +8,12 @@
 // the model returns a merchant and a claimed amount, and `verifyAmount` refuses
 // the row unless that amount appears verbatim in the source.
 //
-// All model access goes through $lib/jkai/llm-client, never a provider SDK.
+// All model access goes through $lib/llm/client, never a provider SDK.
 
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamSpend, intelNotes } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from '../compose';
 import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from '../types';
 import { shortlist, verifyAmount } from './extract';

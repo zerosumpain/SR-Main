@@ -1,6 +1,6 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { ensureContainerRunning, execInContainer, writeFileInContainer } from '$lib/jkai/sandbox';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 
 export { codeExecuteDef } from './code-execute.def';

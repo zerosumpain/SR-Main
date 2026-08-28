@@ -15,12 +15,12 @@
 //     of saying the same thing — never the only record of what was found. If
 //     this whole file failed permanently, the ledger would still be readable.
 //
-// All model access goes through `$lib/jkai/llm-client`, never a provider SDK.
+// All model access goes through `$lib/llm/client`, never a provider SDK.
 
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, jkaiMemories } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { getSetting } from '$lib/server/models/settings';
 import { resolveDefaultModel } from '$lib/server/models/settings';

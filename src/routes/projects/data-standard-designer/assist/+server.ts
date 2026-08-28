@@ -11,7 +11,7 @@
 
 import { json, error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { IDENTIFIERS, CATALOG } from '../lib/knowledge';
 import { CODELISTS } from '../lib/codelists';

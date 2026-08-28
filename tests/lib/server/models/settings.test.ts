@@ -48,7 +48,7 @@ vi.mock('drizzle-orm', async (importOriginal) => {
   };
 });
 
-vi.mock('$lib/deepdive/keys', () => ({
+vi.mock('$lib/llm/keys', () => ({
   loadKeys: vi.fn(() => ({ openrouterApiKey: 'sk-or-from-keys-json' })),
 }));
 
@@ -60,7 +60,7 @@ import {
   getOpenRouterApiKey,
   clearSettingsCache,
 } from '$lib/server/models/settings';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 
 describe('app_settings helpers', () => {
   beforeEach(() => {

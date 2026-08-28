@@ -17,7 +17,7 @@ import { db } from '$lib/db';
 import { researchSessions, sources, facts } from '$lib/db/schema';
 import { count, eq } from 'drizzle-orm';
 import { rankSources } from '$lib/deepdive/media-type';
-import { runWithResearchMeter } from '$lib/deepdive/meter';
+import { runWithResearchMeter } from '$lib/context/research-meter';
 import {
   driveFileStem,
   ensureResearchFolderPolicy,

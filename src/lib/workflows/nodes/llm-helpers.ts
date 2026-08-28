@@ -1,6 +1,6 @@
 import type OpenAI from 'openai';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import {
   DEFAULT_NODE_MAX_TOKENS,
   LEGACY_GLM_TO_OPENROUTER,
@@ -60,7 +60,7 @@ export async function resolveLLMClient(
  * A positive number wins; anything else (missing, 0, negative, non-numeric)
  * falls back to DEFAULT_NODE_MAX_TOKENS. Deliberately pure — the per-model
  * ceiling is applied downstream by `withProviderCap` in
- * $lib/jkai/usage-capture, so every LLM path gets clamped, not just the four
+ * $lib/llm/usage-capture, so every LLM path gets clamped, not just the four
  * node executors that call this.
  */
 export function resolveMaxTokens(configuredMaxTokens: unknown): number {

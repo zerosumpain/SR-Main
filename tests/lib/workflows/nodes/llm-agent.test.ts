@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Shared mock for OpenRouter client
 const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
 
-vi.mock('$lib/deepdive/keys', () => ({
+vi.mock('$lib/llm/keys', () => ({
   getOpenRouterClient: () => ({
     chat: { completions: { create: mockCreate } },
   }),
@@ -23,7 +23,7 @@ vi.mock('$lib/db', () => ({
   },
 }));
 
-vi.mock('$lib/jkai/llm-client', () => ({
+vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn().mockResolvedValue({
     client: { chat: { completions: { create: mockCreate } } },
     model: 'glm-4-flash',

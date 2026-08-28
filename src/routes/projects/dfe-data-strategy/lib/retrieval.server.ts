@@ -14,7 +14,7 @@ import { STRATEGIES, TIER_META } from './strategies';
 import { POLICY_ENGINE_BRIEF } from './policy';
 import { COMMITMENTS, DOCUMENTS_BY_ID, STATUS_META, ROLE_META } from './commitments';
 import { COMPARATORS } from './comparators';
-import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/deepdive/keys';
+import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/llm/keys';
 
 export interface Chunk {
   id: string;

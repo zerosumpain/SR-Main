@@ -127,7 +127,7 @@ describe('amendSecretValueFields', () => {
     // survived and the untouched fields are still there verbatim.
     const { db } = await import('$lib/db');
     const { apiSecrets } = await import('$lib/db/schema');
-    const { decryptPayload } = await import('$lib/integrations/crypto');
+    const { decryptPayload } = await import('$lib/secrets/crypto');
     const { eq } = await import('drizzle-orm');
     const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, FIELDSET)).limit(1);
     const parsed = JSON.parse(decryptPayload(row.payloadEnc!));

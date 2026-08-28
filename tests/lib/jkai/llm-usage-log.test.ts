@@ -22,7 +22,7 @@ vi.mock('$lib/db', () => ({
 }));
 vi.mock('$lib/db/schema', () => ({ agentActions: {} }));
 
-import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { recordDurableLLMCall } from '$lib/llm/usage-log';
 
 const base = {
   provider: 'codex',

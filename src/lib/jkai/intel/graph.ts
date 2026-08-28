@@ -8,10 +8,10 @@ import {
   intelNotes,
 } from '$lib/db/schema';
 import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { salvageSummaries, type SalvagedSummary } from './summary-salvage';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 import { decayWeight } from './staleness';
 import { canonicalName } from './resolve/match';
 import type {

@@ -18,7 +18,7 @@ import {
   type LLMCallRecord,
   type NodeExecutionContext,
   type UsageRollup,
-} from './execution-context';
+} from '$lib/context/execution';
 import { emitObs } from './observability-bus';
 import {
   acquireRunSlot,

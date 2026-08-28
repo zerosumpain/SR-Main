@@ -73,7 +73,7 @@ function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = 
 
 async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{ markdown: string; llmCalls: number; costUsd: number }> {
   const ctx = await resolveDefaultModel();
-  const { getLLMClient } = await import('$lib/jkai/llm-client');
+  const { getLLMClient } = await import('$lib/llm/client');
   const { client, model } = await getLLMClient(ctx);
 
   // Engagement weighting (👍/👎 votes) — best-effort, '' when no signal.
@@ -104,7 +104,7 @@ async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{
   const tout = resp.usage?.completion_tokens ?? 0;
   let costUsd = 0;
   try {
-    const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
+    const { priceFor, computeCost } = await import('$lib/llm/pricing');
     const price = priceFor('openrouter', resp.model || model);
     if (price) costUsd = computeCost(price, tin, tout);
   } catch {

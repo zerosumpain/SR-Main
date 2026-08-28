@@ -82,6 +82,11 @@ const MODULE_LAYER = {
   datastore: 'platform',
   llm: 'platform',
   routing: 'platform',
+  // The ambient AsyncLocalStorage stores — which workflow run, chat round,
+  // activity or research session this code is executing inside. Platform, not
+  // domain, precisely so the LLM gateway can read them without importing the
+  // features that set them.
+  context: 'platform',
 
   // ui — presentation-layer modules. Nothing below may import these; a feature
   // module that reaches for a Svelte component has put rendering in the wrong
@@ -105,19 +110,13 @@ const rank = (layer) => LAYERS.indexOf(layer);
 // Each line is the debt, not the design. Fix one and delete the line.
 // ---------------------------------------------------------------------------
 const BASELINE_LAYER = [
-  // The LLM gateway lives inside $lib/jkai (llm-client), and $lib/deepdive owns
-  // the API-key registry — so the platform-level llm/secrets/server modules all
-  // have to reach up into a domain module to do their job. The fix is to move
-  // the gateway and the key registry DOWN into the platform layer; until then
-  // these are the shape of that debt.
-  'llm -> jkai',
-  'llm -> deepdive',
+  // Both of these are $lib/workflows/site-tools — the tool registry and the
+  // keyword classifier — which the platform layer reaches up for. site-tools is
+  // a registry of DOMAIN capabilities, so the fix is to invert it: let the
+  // domain register its tools with the platform rather than the platform
+  // importing the catalogue.
   'llm -> workflows',
   'routing -> workflows',
-  'secrets -> deepdive',
-  'secrets -> integrations',
-  'server -> jkai',
-  'server -> deepdive',
 
   // Two feature modules reaching into Svelte components for types. Both want a
   // types file one layer down, not the component tree.
@@ -148,16 +147,16 @@ const BASELINE_CYCLES = [
   'daydream <-> heartbeat',
   'daydream <-> workflows',
   'deepdive <-> jkai',
-  'deepdive <-> llm',
-  'deepdive <-> server',
   'deepdive <-> workflows',
   'file-index <-> jkai',
   'health <-> trails',
   'health <-> workflows',
   'heartbeat <-> workflows',
-  'jkai <-> mail-index',
-  'jkai <-> server',
   'jkai <-> workflows',
+  // Was 'jkai <-> server' before the gateway moved down — the same knot, now
+  // between two platform modules. $lib/llm/client asks server/models which
+  // model to use; server/models/codex-catalogue asks $lib/llm what it cost.
+  'llm <-> server',
   'llm <-> workflows',
   'mcp <-> toolpolicy',
   'models <-> server',

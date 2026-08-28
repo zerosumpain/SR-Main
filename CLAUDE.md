@@ -6,7 +6,7 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 - **Deploy:** merge to `master`; CI builds and deploys. **Never run `scripts/deploy.sh` by hand** — a hand-rolled deploy overwrote the production `.env` with homeserv's, causing a 33-hour outage plus a public `/admin` exposure via `AUTH_BYPASS=1` (2026-07-24).
 - **DB:** PostgreSQL 16 + Drizzle ORM; schema changes → `npx drizzle-kit push`
 - **Auth:** Google OAuth via Auth.js
-- **LLM:** All AI calls via the gateway in `$lib/jkai/llm-client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
+- **LLM:** All AI calls via the gateway in `$lib/llm/client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
 
 ### Two LLM providers
 

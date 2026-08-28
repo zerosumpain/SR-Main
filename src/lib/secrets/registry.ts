@@ -32,7 +32,7 @@ import { randomUUID } from 'crypto';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { apiSecrets, type ApiSecretRow } from '$lib/db/schema';
-import { decryptPayload, encryptPayload } from '$lib/integrations/crypto';
+import { decryptPayload, encryptPayload } from '$lib/secrets/crypto';
 import { getOAuthAccessToken, OAUTH_PROVIDERS } from './oauth-refresh';
 import { normaliseHost, hostMatchesPattern, hostAllowed } from './host-match';
 
@@ -125,14 +125,14 @@ const REF_SOURCES: Record<string, { label: string; resolve: () => Promise<string
   tavily: {
     label: 'Tavily API key (keys.json / env TAVILY_API_KEY)',
     resolve: async () => {
-      const { loadKeys } = await import('$lib/deepdive/keys');
+      const { loadKeys } = await import('$lib/llm/keys');
       return loadKeys().tavilyApiKey;
     },
   },
   elevenlabs: {
     label: 'ElevenLabs API key (keys.json / env ELEVENLABS_API_KEY)',
     resolve: async () => {
-      const { loadKeys } = await import('$lib/deepdive/keys');
+      const { loadKeys } = await import('$lib/llm/keys');
       return loadKeys().elevenlabsApiKey;
     },
   },

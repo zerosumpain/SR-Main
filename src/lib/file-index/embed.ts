@@ -6,7 +6,7 @@
 // no quality/size fallback here (unlike the per-collection RAG, which records a
 // per-collection model and can differ from this one).
 
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { normalize } from '$lib/rag/retrieve';
 
 /** Pinned global model + dim for the @files index. Do not change without a full re-embed. */

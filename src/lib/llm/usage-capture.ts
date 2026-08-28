@@ -2,12 +2,12 @@ import type OpenAI from 'openai';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
-import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workflows/execution-context';
-import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
-import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
-import { currentActivityId } from '$lib/jkai/activity-context';
-import { currentChatContext, noteChatRound } from '$lib/jkai/chat-context';
-import { currentResearchSessionId } from '$lib/deepdive/meter';
+import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/context/execution';
+import { priceFor, computeCost } from '$lib/llm/pricing';
+import { recordDurableLLMCall } from '$lib/llm/usage-log';
+import { currentActivityId } from '$lib/context/activity';
+import { currentChatContext, noteChatRound } from '$lib/context/chat';
+import { currentResearchSessionId } from '$lib/context/research-meter';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
 import type { ModelProvider } from '$lib/server/models/types';
 
@@ -96,7 +96,7 @@ function captureUsage(
     const researchId = currentResearchSessionId();
     // A chat turn is neither a workflow run nor a research session, so before
     // this it recorded with a null session id and could not be counted at all.
-    // See $lib/jkai/chat-context for why the job id is the right key.
+    // See $lib/context/chat for why the job id is the right key.
     const chat = currentChatContext();
     const endedAt = Date.now();
     // A turn is many rounds; the ledger line under the reply has to sum them.
@@ -120,7 +120,7 @@ function captureUsage(
       source: store ? 'workflow' : researchId ? 'research' : chat ? 'jkai-chat' : 'gateway',
       // The workload this call is serving, when it is serving one. Without it
       // every non-workflow, non-research call is indistinguishable in the
-      // ledger — see $lib/jkai/activity-context.
+      // ledger — see $lib/context/activity.
       activity: currentActivityId(),
       sessionId: store?.runId ?? researchId ?? chat?.jobId ?? chat?.conversationId ?? null,
       conversationId: chat?.conversationId ?? null,
@@ -327,7 +327,7 @@ function installEmbeddingCapture(client: OpenAI, provider: ModelProvider): void 
     const researchId = currentResearchSessionId();
     // A chat turn is neither a workflow run nor a research session, so before
     // this it recorded with a null session id and could not be counted at all.
-    // See $lib/jkai/chat-context for why the job id is the right key.
+    // See $lib/context/chat for why the job id is the right key.
     const chat = currentChatContext();
     const endedAt = Date.now();
     recordDurableLLMCall({

@@ -10,7 +10,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { generateEmbedding } from './ai';
-import { getEmbeddingModel } from './keys';
+import { getEmbeddingModel } from '$lib/llm/keys';
 import { toVectorLiteral } from './vector';
 
 export type ResearchSearchHit = {

@@ -12,7 +12,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { standardRegistryEntries, standardRegistrySourceRuns } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 
 export interface Candidate {
