@@ -9,7 +9,7 @@
  * Findings are returned, never thrown. A study with a problem should still
  * render, with the problem visible in a test rather than a blank page.
  */
-import { say, hasPlain, type Study, type Beat } from './study';
+import { say, hasPlain, type Study, type Beat, type Dual } from './study';
 
 export interface Finding {
   /** Where — a beat number, or 'study' for the whole thing. */
@@ -182,6 +182,53 @@ export function validateStudy(study: Study): Finding[] {
     ];
     if (!carriers.some(hasPlain)) {
       add(`beat ${b.no}`, 'no-plain', `${b.name} has no plain-English register anywhere, so the ELI5 control does nothing on it.`);
+    }
+  }
+
+  // ——— The plain register echoing the research one ———
+  // A `plain` that merely reshuffles a few words of the research text is the
+  // ELI5 failure wearing a costume: the control moves, the reader learns
+  // nothing, and the study can claim a depth control it does not really have.
+  // Measured as shared-vocabulary overlap, ignoring markup, so a genuinely
+  // shorter rewrite passes and a light reword does not.
+  //
+  // The threshold is deliberately loose. Short factual lines legitimately
+  // repeat their nouns and numbers — "three suppliers cover four schools in
+  // five" cannot be said without them — and both shipped studies sit at or
+  // under 78%. Anything at 80% or above is a reword, not a translation.
+  const overlap = (a: string, b: string) => {
+    const words = (t: string) =>
+      new Set(t.toLowerCase().replace(/<[^>]*>/g, ' ').split(/\W+/).filter(Boolean));
+    const wa = words(a);
+    const wb = words(b);
+    if (!wa.size || !wb.size) return 0;
+    const shared = [...wa].filter((w) => wb.has(w)).length;
+    return shared / Math.max(wa.size, wb.size);
+  };
+  for (const b of arc) {
+    const fields: [string, Dual | undefined][] = [
+      ['claim', b.claim?.text], ['standfirst', b.standfirst], ['so-what', b.soWhat],
+      ['open question', b.openQuestion?.text],
+      ...(b.marginNotes ?? []).map((m, i) => [`margin note ${i + 1}`, m.text] as [string, Dual]),
+      ...(b.figures ?? []).map((f) => [`figure ${f.no}`, f.caption] as [string, Dual]),
+      ...(b.ledger
+        ? [['balance', b.ledger.balance] as [string, Dual],
+           ...b.ledger.benefits.map((c, i) => [`benefit ${i + 1}`, c.text] as [string, Dual]),
+           ...b.ledger.risks.map((c, i) => [`risk ${i + 1}`, c.text] as [string, Dual])]
+        : []),
+      ...(b.position
+        ? [['statement', b.position.statement] as [string, Dual],
+           ['elaboration', b.position.elaboration] as [string, Dual],
+           ['sinkers', b.position.sinkers] as [string, Dual]]
+        : []),
+    ];
+    for (const [name, v] of fields) {
+      if (!hasPlain(v)) continue;
+      const sim = overlap(say(v, 'research'), say(v, 'plain'));
+      if (sim >= 0.8) {
+        add(`beat ${b.no}`, 'plain-echo',
+          `The plain register of ${name} shares ${Math.round(sim * 100)}% of its words with the research one. That is a reword, not a translation.`);
+      }
     }
   }
 

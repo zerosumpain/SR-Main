@@ -1406,7 +1406,7 @@ export const study: Study = {
         research:
           'I went looking for the thing they had overstated and did not find one. What I found instead is a design whose remaining problems are all in the layer nobody can ship — who audits the auditor, who speaks for the child, and what happens the first time a minister finds a consented feed useful enough to compel.',
         plain:
-          'I went looking for the thing they had oversold and could not find one. What I found instead is a design whose remaining problems all sit in the layer nobody can code: who checks the checkers, who speaks for the child, and what happens the first time a minister finds the whole thing useful enough to make compulsory.',
+          'I came looking for the exaggeration and could not find it. What is left instead are problems nobody can code their way out of: who watches the watchers, who stands up for the child, and what happens the first time a minister decides this is too useful to stay optional.',
       },
       openQuestion: {
         text: {
@@ -1441,7 +1441,7 @@ export const study: Study = {
         research:
           'I have no money and no standing, so this is a recommendation to nobody in particular. It is still the honest end of the argument: having read both, this is what I would ask for.',
         plain:
-          'I have no money and no say, so this is advice to nobody in particular. It is still the honest end of the argument: having read both documents, here is what I would ask for.',
+          'Nobody is asking me, and I am not paying for any of it. But an argument ought to end with what you would actually do, so here is mine.',
       },
       marginNotes: [
         {
@@ -1450,7 +1450,7 @@ export const study: Study = {
             research:
               'I read two documents and four screenshots. I ran nothing, tested nothing and spoke to nobody. This beat is a reader’s recommendation, not an assessment.',
             plain:
-              'I read two documents and four screenshots. I ran nothing, tested nothing and spoke to nobody. This is a reader’s opinion, not an assessment.',
+              'Two files and four pictures, read at my own desk. Nothing was run, nothing measured, nobody interviewed. Treat this as one reader’s opinion.',
           },
         },
       ],
@@ -1548,7 +1548,7 @@ export const study: Study = {
         research:
           'The thing I did not expect to write is that the design is further along than the argument about it. There is a running node access layer with a governance model I would mostly defend, and the open questions left are the ones a document cannot close: an auditor, a family, and a statute. Those were my open questions in February too, against a completely different object. That is either a sign I am asking the right question or a sign I only know one.',
         plain:
-          'What I did not expect to write is that the building is further along than the argument about it. There is working software with a governance model I would mostly defend, and the questions left over are ones no document can close: a checker, a family, and a law. Those were my open questions in February too, about a completely different thing. That is either a sign I am asking the right question or a sign I only know one.',
+          'What surprised me is that the building has gone further than the talking. Working software exists, with rules I would mostly stand behind. What is left are things no document can settle: who checks the checkers, who speaks for the child, and what a future law might force. I was asking those same questions in February about something else entirely — which either means it is the right question or that it is the only one I know.',
       },
       openQuestion: {
         text: {

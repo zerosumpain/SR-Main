@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { study } from './study';
 import { validateStudy, errors, notes } from '$lib/fieldstudy/validate';
-import { arcBeats, beatBySlug } from '$lib/fieldstudy/study';
+import { arcBeats, beatBySlug, say, hasPlain, type Dual } from '$lib/fieldstudy/study';
 
 /**
  * The Data Spine is the REFERENCE field study. If it stops obeying the system,
@@ -88,25 +88,34 @@ describe('data-spine · the reference study', () => {
     ]);
   });
 
-  it('records, without failing on, the beats that have no ELI5 register', () => {
-    // The shell ships a Research / ELI5 control on every page of this study,
-    // and five of its seven beats have nothing to say in plain English — so on
-    // those, the control returns the page the reader already had. That is a
-    // real gap and it is this study's, not the system's: the plain register
-    // only became authorable across every field in the change that added this
-    // test, and writing five beats of ELI5 copy is an editorial job rather
-    // than a mechanical one.
-    //
-    // Pinned at the current count so it cannot quietly grow, and deliberately
-    // NOT an error: failing the build over prose that has not been written yet
-    // would block every unrelated change to this study.
-    const gaps = notes(findings).filter((f) => f.rule === 'no-plain');
-    expect(gaps.map((f) => f.where).sort()).toEqual([
-      'beat 02',
-      'beat 04',
-      'beat 05',
-      'beat 06',
-      'beat 07',
-    ]);
+  it('has a real ELI5 register on every beat', () => {
+    // The shell ships a Research / ELI5 control on every page. Five of the
+    // seven beats used to have nothing to say in plain English — the ledger
+    // and position templates were never even handed the depth — so picking
+    // ELI5 on them returned the page the reader already had.
+    expect(notes(findings).filter((f) => f.rule === 'no-plain')).toEqual([]);
+  });
+
+  it('says something different at plain than at research, everywhere it matters', () => {
+    // A plain register that repeats the research one is the same failure
+    // wearing a costume, so identity is asserted against, not just presence.
+    for (const b of arcBeats(study)) {
+      const fields: [string, Dual | undefined][] = [
+        ['claim', b.claim?.text],
+        ['soWhat', b.soWhat],
+        ['openQuestion', b.openQuestion?.text],
+        ...(b.ledger ? ([['balance', b.ledger.balance]] as [string, Dual][]) : []),
+        ...(b.position
+          ? ([['statement', b.position.statement], ['sinkers', b.position.sinkers]] as [string, Dual][])
+          : []),
+      ];
+      for (const [name, v] of fields) {
+        if (v === undefined) continue;
+        expect(hasPlain(v), `beat ${b.no} ${name} has no plain register`).toBe(true);
+        expect(say(v, 'plain'), `beat ${b.no} ${name} says the same thing at both depths`).not.toBe(
+          say(v, 'research'),
+        );
+      }
+    }
   });
 });

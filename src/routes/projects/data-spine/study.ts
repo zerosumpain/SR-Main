@@ -220,7 +220,12 @@ export const study: Study = {
       minutes: 4,
       question: 'What exactly has been announced, and by whom?',
       claim: {
-        text: '<b>The entire public record of the spine is three quotations.</b> Everything a design would need is still to be decided.',
+        text: {
+          research:
+            '<b>The entire public record of the spine is three quotations.</b> Everything a design would need is still to be decided.',
+          plain:
+            '<b>Everything the government has said about the data spine fits in three quotations.</b> Everything you would need to actually build one is still undecided.',
+        },
         confidence: 'fact',
         cites: [
           1,
@@ -306,9 +311,19 @@ export const study: Study = {
           balance: 'The two accounts do not net off. Capability compounds while trust depletes, and the consultation inherits the balance of both.',
         },
       ],
-      soWhat: 'There is less here than the debate assumes. The argument is not about a system that exists — it is about a paragraph.',
+      soWhat: {
+        research:
+          'There is less here than the debate assumes. The argument is not about a system that exists — it is about a paragraph.',
+        plain:
+          'People are arguing as though something has been built. Nothing has. There is a paragraph, and everything else is still an open question.',
+      },
       openQuestion: {
-        text: 'Has the trust account ever recovered anywhere, after a breach of this kind?',
+        text: {
+          research:
+            'Has the trust account ever recovered anywhere, after a breach of this kind?',
+          plain:
+            'Has public trust ever come back anywhere, after this kind of breach?',
+        },
         falsifier: 'a documented recovery',
       },
     },
@@ -320,13 +335,23 @@ export const study: Study = {
       minutes: 6,
       question: 'What exists today, who holds it, and how do we know?',
       claim: {
-        text: '<b>Three suppliers cover four schools in five</b> — but the twelve that cover the rest are the ones serving nurseries, special schools and alternative provision.',
+        text: {
+          research:
+            '<b>Three suppliers cover four schools in five</b> — but the twelve that cover the rest are the ones serving nurseries, special schools and alternative provision.',
+          plain:
+            '<b>Three companies serve four schools out of every five</b> — but the twelve companies serving the rest are the ones covering nurseries, special schools and alternative provision.',
+        },
         confidence: 'fact',
         cites: [
           11,
         ],
       },
-      standfirst: 'Nobody can design a spine without knowing how many estates it has to reach. So: every supplier, with a real number against it, and the date the number was true.',
+      standfirst: {
+        research:
+          'Nobody can design a spine without knowing how many estates it has to reach. So: every supplier, with a real number against it, and the date the number was true.',
+        plain:
+          'You cannot design this without knowing how many different systems it has to reach. So: every supplier, with a real number next to it, and the date that number was true.',
+      },
       survey: {
         columns: [
           'Supplier',
@@ -426,7 +451,12 @@ export const study: Study = {
           template: 'T8',
           title: 'It has been tried before',
           claim: {
-            text: '<b>Every spine that died was a central store; every one that survived moved questions.</b> The sample is small, but unanimous.',
+            text: {
+              research:
+                '<b>Every spine that died was a central store; every one that survived moved questions.</b> The sample is small, but unanimous.',
+              plain:
+                'Every one of these systems that was scrapped had put the records in one place. Every one that survived left the records alone and sent the questions instead. It is a small set of examples, but they all point the same way.',
+            },
             confidence: 'fact',
           },
           cases: [
@@ -484,9 +514,19 @@ export const study: Study = {
           ],
         },
       ],
-      soWhat: 'The estate is more concentrated than the debate assumes and more fragmented than a designer would like. Both facts constrain the answer, and they pull in opposite directions.',
+      soWhat: {
+        research:
+          'The estate is more concentrated than the debate assumes and more fragmented than a designer would like. Both facts constrain the answer, and they pull in opposite directions.',
+        plain:
+          'The market is more concentrated than people assume, and more scattered than a designer would like. Both things are true, and they pull in opposite directions.',
+      },
       openQuestion: {
-        text: 'Nobody publishes how many of the 22,018 could serve a query today. The department must know; it has not said.',
+        text: {
+          research:
+            'Nobody publishes how many of the 22,018 could serve a query today. The department must know; it has not said.',
+          plain:
+            'How many schools could answer a question right now? Nobody publishes that number, and the people who know it are not saying.',
+        },
         falsifier: 'a published readiness assessment',
       },
     },
@@ -498,7 +538,12 @@ export const study: Study = {
       minutes: 5,
       question: 'If you had to build it, what are the actual options — and which have already been tried?',
       claim: {
-        text: '<b>There are four archetypes, not a spectrum</b> — three have a real precedent, and only one requires copying children\'s records into a new store.',
+        text: {
+          research:
+            '<b>There are four archetypes, not a spectrum</b> — three have a real precedent, and only one requires copying children\'s records into a new store.',
+          plain:
+            '<b>There are four ways to build this, not a sliding scale</b> — three of them are already running somewhere, and only one needs children’s records copied into a new database.',
+        },
         confidence: 'fact',
         cites: [
           14,
@@ -507,7 +552,12 @@ export const study: Study = {
       },
       marginNotes: [
         {
-          text: 'The word does five jobs. Collapsing them into “database” is how the argument gets lost.',
+          text: {
+            research:
+              'The word does five jobs. Collapsing them into “database” is how the argument gets lost.',
+            plain:
+              'The word “spine” is doing five different jobs at once. Squashing them all into “database” is how this argument goes wrong.',
+          },
         },
       ],
       prose: [
@@ -523,13 +573,23 @@ export const study: Study = {
       figures: [
         {
           no: '3.1',
-          caption: 'The four archetypes and their fates. Three are already running in British government; the accent marks the one this study goes on to defend in beat 04.',
+          caption: {
+            research:
+              'The four archetypes and their fates. Three are already running in British government; the accent marks the one this study goes on to defend in beat 04.',
+            plain:
+              'The four ways of building it, and what happened to each. Three already run in British government; the highlighted one is the design this study goes on to argue for. What it cannot show is cost — none of these programmes published a comparable figure.',
+          },
           chart: 'A4',
           unit: 'archetype',
         },
         {
           no: '3.2',
-          caption: 'A schools × local-authority join, modelled. The dropped column is the one that matters: those children exist, and the answer silently excludes them.',
+          caption: {
+            research:
+              'A schools × local-authority join, modelled. The dropped column is the one that matters: those children exist, and the answer silently excludes them.',
+            plain:
+              'What happens when you try to match school records to council records. The dropped column is the one that matters: those children are real, and the answer quietly leaves them out. This is a model, not a measurement — nobody has published the real match rate.',
+          },
           chart: 'A1',
           unit: '% of records',
           cites: [
@@ -543,7 +603,12 @@ export const study: Study = {
           template: 'T6',
           title: 'Anatomy of a spine',
           claim: {
-            text: '<b>Four of the five layers already exist in some form.</b> The one that does not — governance — is the one every objection is actually about.',
+            text: {
+              research:
+                '<b>Four of the five layers already exist in some form.</b> The one that does not — governance — is the one every objection is actually about.',
+              plain:
+                '<b>Four of the five parts already exist in some form.</b> The one that does not — who is allowed to ask, and who checks — is what every objection is actually about.',
+            },
             confidence: 'fact',
           },
           layers: [
@@ -594,9 +659,19 @@ export const study: Study = {
           ],
         },
       ],
-      soWhat: 'Three of the four archetypes are already running somewhere in British government. The choice is available; what is missing is a decision, and the standard that makes it work.',
+      soWhat: {
+        research:
+          'Three of the four archetypes are already running somewhere in British government. The choice is available; what is missing is a decision, and the standard that makes it work.',
+        plain:
+          'Somebody in government is already running three of these four designs, so nothing here has to be invented. What is missing is someone choosing one, and writing down the shared rules that make it work.',
+      },
       openQuestion: {
-        text: 'No lawful shared analytic key exists across schools, local authorities and health. Every join in this study is therefore probabilistic.',
+        text: {
+          research:
+            'No lawful shared analytic key exists across schools, local authorities and health. Every join in this study is therefore probabilistic.',
+          plain:
+            'There is no legal shared reference number linking schools, councils and the NHS. So every match in this study is an educated guess, not a certainty.',
+        },
         falsifier: 'a published resolution standard',
       },
     },
@@ -608,12 +683,27 @@ export const study: Study = {
       minutes: 4,
       question: 'Which archetype, and why that one?',
       claim: {
-        text: '<b>Centralise the trust, not the data.</b>',
+        text: {
+          research:
+            '<b>Centralise the trust, not the data.</b>',
+          plain:
+            '<b>Put the permission system in one place. Leave the records where they are.</b>',
+        },
         confidence: 'hypothesis',
       },
       position: {
-        statement: 'Centralise the trust, not the data.',
-        elaboration: 'Build the identity, permission and audit layers nationally, once, and govern them in public. Leave every pupil record in the estate that generates it. Move questions, not children.',
+        statement: {
+          research:
+            'Centralise the trust, not the data.',
+          plain:
+            'Put the permission system in one place. Leave the records where they are.',
+        },
+        elaboration: {
+          research:
+            'Build the identity, permission and audit layers nationally, once, and govern them in public. Leave every pupil record in the estate that generates it. Move questions, not children.',
+          plain:
+            'Build the who-are-you, who-may-ask and who-looked parts once, nationally, and run them in the open. Leave every pupil record in the school system that created it. Move the questions, not the children.',
+        },
         confidence: 'hypothesis',
         because: [
           {
@@ -649,7 +739,12 @@ export const study: Study = {
           'A transparency dashboard live from the first query',
           'Funding for the long tail\'s query interface',
         ],
-        sinkers: 'If the long tail cannot be brought to a query interface at acceptable cost, federation degrades into a broker pipe with extra steps — and the department will have spent the trust for nothing.',
+        sinkers: {
+          research:
+            'If the long tail cannot be brought to a query interface at acceptable cost, federation degrades into a broker pipe with extra steps — and the department will have spent the trust for nothing.',
+          plain:
+            'If the smaller suppliers cannot be brought up to answering questions at a price anyone will pay, this quietly turns back into a pipe that ships data around with extra steps — and the department will have spent the public’s trust for nothing.',
+        },
         phases: [
           {
             label: 'Phase 1',
@@ -673,9 +768,19 @@ export const study: Study = {
           },
         ],
       },
-      soWhat: 'This is a recommendation the department could adopt in the consultation without new legislation. The expensive part is not the technology — it is publishing a standard and then living by it.',
+      soWhat: {
+        research:
+          'This is a recommendation the department could adopt in the consultation without new legislation. The expensive part is not the technology — it is publishing a standard and then living by it.',
+        plain:
+          'Nothing here needs a new law. The department could say it in the consultation and start. The hard part is not building anything — it is writing the rules down and then sticking to them when that becomes inconvenient.',
+      },
       openQuestion: {
-        text: 'Is there any lawful route to a shared analytic key across schools, local authorities and health?',
+        text: {
+          research:
+            'Is there any lawful route to a shared analytic key across schools, local authorities and health?',
+          plain:
+            'Is there any legal way to have one shared reference number across schools, councils and the NHS?',
+        },
         falsifier: 'a DUAA route nobody has used yet',
       },
     },
@@ -687,7 +792,12 @@ export const study: Study = {
       minutes: 4,
       question: 'Who is better off if this is built, and who is worse off?',
       claim: {
-        text: '<b>Nineteen entries, and the ledger is close to even</b> — because almost every benefit depends on the department also doing something it has not committed to.',
+        text: {
+          research:
+            '<b>Nineteen entries, and the ledger is close to even</b> — because almost every benefit depends on the department also doing something it has not committed to.',
+          plain:
+            '<b>Nineteen entries, and it comes out roughly even</b> — because nearly every benefit depends on the department also doing something it has not promised to do.',
+        },
         confidence: 'hypothesis',
       },
       ledger: {
@@ -708,7 +818,12 @@ export const study: Study = {
             confidence: 'fact',
           },
           {
-            text: 'One transparency dashboard, not 2,385 releases',
+            text: {
+              research:
+                'One transparency dashboard, not 2,385 releases',
+              plain:
+                'One public page showing who got what, instead of 2,385 separate handovers nobody tracks',
+            },
             confidence: 'fact',
           },
           {
@@ -722,7 +837,12 @@ export const study: Study = {
         ],
         risks: [
           {
-            text: 'Function creep beyond education',
+            text: {
+              research:
+                'Function creep beyond education',
+              plain:
+                'The data gets used for things that have nothing to do with schools',
+            },
             confidence: 'contested',
           },
           {
@@ -730,15 +850,30 @@ export const study: Study = {
             confidence: 'hypothesis',
           },
           {
-            text: 'Small suppliers priced out of compliance',
+            text: {
+              research:
+                'Small suppliers priced out of compliance',
+              plain:
+                'The smaller school-software companies cannot afford the rules, and drop out',
+            },
             confidence: 'hypothesis',
           },
           {
-            text: 'Probabilistic joins presented as certainty',
+            text: {
+              research:
+                'Probabilistic joins presented as certainty',
+              plain:
+                'Records matched by educated guesswork, then reported as if they were certain',
+            },
             confidence: 'contested',
           },
         ],
-        balance: 'Read as a parent, the ledger tips negative — not because the benefits are small, but because every one of them is conditional and every risk is structural.',
+        balance: {
+          research:
+            'Read as a parent, the ledger tips negative — not because the benefits are small, but because every one of them is conditional and every risk is structural.',
+          plain:
+            'Read as a parent, this comes out negative — not because the benefits are small, but because every one of them depends on something that has not been promised, while every risk is built into the design.',
+        },
         byActor: [
           {
             actor: 'Parent',
@@ -763,9 +898,19 @@ export const study: Study = {
           },
         ],
       },
-      soWhat: 'The winners are institutional and the losers are individual, which is the shape of every data programme that has failed politically.',
+      soWhat: {
+        research:
+          'The winners are institutional and the losers are individual, which is the shape of every data programme that has failed politically.',
+        plain:
+          'The people who gain are organisations; the people who lose are individuals. That is the shape of every data programme that has failed politically.',
+      },
       openQuestion: {
-        text: 'Nobody has asked parents what they would trade. Every entry on their side of this page is inferred.',
+        text: {
+          research:
+            'Nobody has asked parents what they would trade. Every entry on their side of this page is inferred.',
+          plain:
+            'Nobody has asked parents what they would accept. Everything on their side of this page is my inference, not their answer.',
+        },
         falsifier: 'deliberative research with parents',
       },
     },
@@ -777,7 +922,12 @@ export const study: Study = {
       minutes: 3,
       question: 'What could go wrong, and what would actually stop it?',
       claim: {
-        text: '<b>Every safeguard proposed so far is policy, not law</b> — and policy is what failed the last four times.',
+        text: {
+          research:
+            '<b>Every safeguard proposed so far is policy, not law</b> — and policy is what failed the last four times.',
+          plain:
+            '<b>None of the protections offered so far are legally binding.</b> They are promises a future government can simply drop — which is how the last four attempts came apart.',
+        },
         confidence: 'contested',
       },
       ledger: {
@@ -790,33 +940,73 @@ export const study: Study = {
         activeLens: 'Privacy advocate',
         benefits: [
           {
-            text: 'Query-not-copy is auditable in a way bulk distribution never was',
+            text: {
+              research:
+                'Query-not-copy is auditable in a way bulk distribution never was',
+              plain:
+                'Asking a question leaves a record of who asked; handing over a file never did',
+            },
             confidence: 'fact',
           },
           {
-            text: 'DUAA 2025 provides a lawful basis that does not need new primary legislation',
+            text: {
+              research:
+                'DUAA 2025 provides a lawful basis that does not need new primary legislation',
+              plain:
+                'The 2025 Act already provides the legal basis, so no new law is needed to start',
+            },
             confidence: 'fact',
           },
         ],
         risks: [
           {
-            text: 'The 2016 Home Office memorandum has no statutory bar on repetition',
+            text: {
+              research:
+                'The 2016 Home Office memorandum has no statutory bar on repetition',
+              plain:
+                'Nothing in law stops a repeat of the 2016 deal that shared school data with the Home Office',
+            },
             confidence: 'contested',
           },
           {
-            text: '2,385 NPD distributions remain outside any single audit trail',
+            text: {
+              research:
+                '2,385 NPD distributions remain outside any single audit trail',
+              plain:
+                'The 2,385 handovers of the national pupil database that already happened sit outside any single record of who has what',
+            },
             confidence: 'fact',
           },
           {
-            text: 'Purpose limits held in policy can be changed without Parliament',
+            text: {
+              research:
+                'Purpose limits held in policy can be changed without Parliament',
+              plain:
+                'Limits on what the data may be used for are policy, so a minister can change them without asking Parliament',
+            },
             confidence: 'contested',
           },
         ],
-        balance: 'The architecture can be made trustworthy. The governance, as announced, cannot — because nothing in it is binding on a future minister.',
+        balance: {
+          research:
+            'The architecture can be made trustworthy. The governance, as announced, cannot — because nothing in it is binding on a future minister.',
+          plain:
+            'The design can be made trustworthy. The rules around it, as announced, cannot — because nothing in them binds a future minister.',
+        },
       },
-      soWhat: 'Architecture alone cannot answer the objections. The safeguards have to be the kind that survive a change of government.',
+      soWhat: {
+        research:
+          'Architecture alone cannot answer the objections. The safeguards have to be the kind that survive a change of government.',
+        plain:
+          'The design on its own cannot answer the objections. The protections have to be the kind that survive a change of government.',
+      },
       openQuestion: {
-        text: 'Would statutory purpose limits actually pass, given the Home Office\'s interest in the same data?',
+        text: {
+          research:
+            'Would statutory purpose limits actually pass, given the Home Office\'s interest in the same data?',
+          plain:
+            'Would a law limiting what the data can be used for actually get through, when the Home Office wants the same data?',
+        },
         falsifier: 'a government amendment tabled',
       },
     },
@@ -828,15 +1018,30 @@ export const study: Study = {
       minutes: 2,
       question: 'What would change the picture, and when?',
       claim: {
-        text: '<b>Three things are due before the end of 2026</b>, and one of them decides everything else.',
+        text: {
+          research:
+            '<b>Three things are due before the end of 2026</b>, and one of them decides everything else.',
+          plain:
+            '<b>Three things happen this year, and one of them settles the rest.</b> It is the consultation document, and it may settle it by saying nothing.',
+        },
         confidence: 'fact',
         cites: [
           3,
         ],
       },
       position: {
-        statement: 'Watch the consultation for one word: custody.',
-        elaboration: 'The consultation document will either name an architecture or defer it. If it defers, the broker pipe becomes the spine by default — not by decision.',
+        statement: {
+          research:
+            'Watch the consultation for one word: custody.',
+          plain:
+            'Watch the consultation for one word: who holds the records.',
+        },
+        elaboration: {
+          research:
+            'The consultation document will either name an architecture or defer it. If it defers, the broker pipe becomes the spine by default — not by decision.',
+          plain:
+            'The consultation will either say who holds the records or duck the question. If it ducks it, the existing pipe becomes the spine by default — nobody will have decided that, it will just happen.',
+        },
         confidence: 'hypothesis',
         because: [
           {
@@ -862,7 +1067,12 @@ export const study: Study = {
           'A published resolution standard',
           'A named custodian',
         ],
-        sinkers: 'Deferral. A consultation that does not name a custody model has already chosen the incumbent.',
+        sinkers: {
+          research:
+            'Deferral. A consultation that does not name a custody model has already chosen the incumbent.',
+          plain:
+            'Ducking it. A consultation that does not say who holds the records has already picked whoever holds them now.',
+        },
         phases: [
           {
             label: 'Open',
@@ -881,9 +1091,19 @@ export const study: Study = {
           },
         ],
       },
-      soWhat: 'The decision that matters will be made by whether the consultation document uses the word custody — and it may be made by not using it.',
+      soWhat: {
+        research:
+          'The decision that matters will be made by whether the consultation document uses the word custody — and it may be made by not using it.',
+        plain:
+          'The decision that matters comes down to whether the consultation document uses the word custody — and it may get made by leaving it out.',
+      },
       openQuestion: {
-        text: 'Is the consultation drafted already? If so, none of this analysis reaches it in time.',
+        text: {
+          research:
+            'Is the consultation drafted already? If so, none of this analysis reaches it in time.',
+          plain:
+            'Has the consultation already been written? If it has, none of this reaches it in time.',
+        },
         falsifier: 'a published drafting timetable',
       },
     },
