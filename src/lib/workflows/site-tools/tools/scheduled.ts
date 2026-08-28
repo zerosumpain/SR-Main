@@ -96,10 +96,11 @@ register({
     type: 'object',
     properties: {
       conversation_id: { type: 'string', description: 'Conversation to deliver into. OMIT IT — it defaults to the current chat. Never guess a value.' },
-      name: { type: 'string', description: 'Stable, unique identifier for this callback (e.g. "leave-reminder-1730"). Reusing a name updates the existing callback.' },
+      name: { type: 'string', description: 'DISTINCT identifier for this callback, specific to what it is about (e.g. "claude-renewal-sep-9", not "reminder"). A name already in use by a pending callback is REFUSED — two reminders sharing one name would collapse into one.' },
       text: { type: 'string', description: 'The exact text to post. ≤4000 chars.' },
       fire_at_iso: { type: 'string', description: 'ISO-8601 wall-clock time to fire (e.g. "2026-05-06T17:30:00Z"). Use this OR in_seconds.' },
       in_seconds: { type: 'number', description: 'Fire this many seconds from now. Use this OR fire_at_iso.' },
+      replace_existing: { type: 'boolean', description: 'Only when you mean to MOVE or rewrite the existing callback of this name. Never set it to work around a name clash between two different reminders — pick a distinct name instead.' },
       notify_whatsapp: { type: 'boolean', description: 'Push via WhatsApp as well as posting into the chat. Defaults to TRUE for a WhatsApp conversation — a reminder asked for on WhatsApp has to arrive there.' },
     },
     required: ['name', 'text'],
@@ -131,6 +132,7 @@ register({
       conversationId,
       payload: { text, notifyWhatsApp },
       fireAt,
+      replaceExisting: args.replace_existing === true,
     });
   },
 });
@@ -143,11 +145,12 @@ register({
     type: 'object',
     properties: {
       conversation_id: { type: 'string', description: 'Conversation to notify when the tool fires. OMIT IT — it defaults to the current chat. Never guess a value.' },
-      name: { type: 'string', description: 'Stable, unique identifier for this callback.' },
+      name: { type: 'string', description: 'DISTINCT identifier, specific to what this call is about. A name already in use by a pending callback is REFUSED.' },
       tool_name: { type: 'string', description: 'Name of a registered site-tool (e.g. "ha_call_service", "blog_create_post").' },
       args: { type: 'object', description: 'Args object passed to the tool exactly as if it were called now.' },
       fire_at_iso: { type: 'string', description: 'ISO-8601 wall-clock time. Use this OR in_seconds.' },
       in_seconds: { type: 'number', description: 'Fire this many seconds from now.' },
+      replace_existing: { type: 'boolean', description: 'Only when you mean to MOVE or rewrite the existing callback of this name. Never set it to work around a name clash between two different reminders — pick a distinct name instead.' },
     },
     required: ['name', 'tool_name', 'args'],
   },
@@ -186,6 +189,7 @@ register({
       conversationId,
       payload: { toolName, args: toolArgs },
       fireAt,
+      replaceExisting: args.replace_existing === true,
     });
   },
 });
@@ -198,10 +202,11 @@ register({
     type: 'object',
     properties: {
       conversation_id: { type: 'string', description: 'Conversation to re-engage. OMIT IT — it defaults to the current chat. Never guess a value.' },
-      name: { type: 'string', description: 'Stable, unique identifier.' },
+      name: { type: 'string', description: 'DISTINCT identifier, specific to what this turn is about. A name already in use by a pending callback is REFUSED.' },
       message: { type: 'string', description: 'The synthetic user message that triggers the LLM turn.' },
       fire_at_iso: { type: 'string', description: 'ISO-8601 wall-clock time. Use this OR in_seconds.' },
       in_seconds: { type: 'number', description: 'Fire this many seconds from now.' },
+      replace_existing: { type: 'boolean', description: 'Only when you mean to MOVE or rewrite the existing callback of this name. Never set it to work around a name clash between two different reminders — pick a distinct name instead.' },
     },
     required: ['name', 'message'],
   },
@@ -227,6 +232,7 @@ register({
       conversationId,
       payload: { message },
       fireAt,
+      replaceExisting: args.replace_existing === true,
     });
   },
 });
@@ -301,9 +307,36 @@ async function upsertCallback(opts: {
   conversationId: string | null;
   payload: Record<string, unknown>;
   fireAt: Date;
+  /** Caller states that replacing a still-pending callback of this name is intended. */
+  replaceExisting?: boolean;
 }) {
   const existing = await db.select().from(scheduledCallbacks).where(eq(scheduledCallbacks.name, opts.name)).limit(1);
   if (existing.length > 0) {
+    // `name` is globally unique, and a match used to mean "update" unconditionally.
+    // The name is invented by the model, so two unrelated reminders that happen to
+    // land on the same generic word ("reminder") silently became ONE: the second
+    // overwrote the first's text, time and conversation, and nobody was told the
+    // first had stopped existing. That is the same silent-loss shape as the
+    // conversation-id bug this file was fixed for.
+    //
+    // Both intents are real — "move my 5pm to 6pm" and "a second, different
+    // reminder" — and only the caller knows which. So ask, rather than guess:
+    // a LIVE row is refused unless replace_existing says otherwise. A spent row
+    // (fired/failed/cancelled) cannot fire again, so reusing its name is
+    // unambiguous and still just updates in place.
+    const prior = existing[0] as { status?: string; fireAt?: Date | string };
+    const live = prior.status === 'pending';
+    if (live && !opts.replaceExisting) {
+      const when = prior.fireAt instanceof Date ? prior.fireAt.toISOString() : String(prior.fireAt ?? 'unknown');
+      return {
+        success: false,
+        error:
+          `A callback named "${opts.name}" is already scheduled for ${when}. ` +
+          `Pick a DISTINCT name if this is a separate reminder — reusing one replaces the other, ` +
+          `and the first would never fire. ` +
+          `If you really mean to move or rewrite that same reminder, call again with replace_existing: true.`,
+      };
+    }
     const [row] = await db.update(scheduledCallbacks).set({
       description: opts.description,
       kind: opts.kind,
