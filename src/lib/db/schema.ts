@@ -1455,7 +1455,12 @@ export const jkaiLogs = pgTable('jkai_logs', {
   type: text('type').notNull(),
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  // The build log view reads one build's lines oldest-first and polls while the
+  // build runs. Without this it re-scanned all 21.5k rows (1,034 buffers) per
+  // poll to find the few hundred that belong to the open build.
+  index('jkai_logs_build_idx').on(t.buildId, t.createdAt),
+]);
 
 export type JkaiLog = typeof jkaiLogs.$inferSelect;
 
@@ -1597,7 +1602,16 @@ export const workflowRuns = pgTable('workflow_runs', {
    * paths and only read by the worker. Scheduled runs leave it null ({}).
    */
   inputData: jsonb('input_data'),
-});
+}, (t) => [
+  // 44k rows and, until now, nothing but the primary key. Twenty-two call sites
+  // filter by workflow_id and twenty-three order by started_at, so every one of
+  // them was a sequential scan of the whole table.
+  index('workflow_runs_workflow_idx').on(t.workflowId, t.startedAt),
+  // The hub layout load runs `count(*) FILTER (WHERE status = ...)` on EVERY
+  // /jkai navigation. Measured before this index: 25ms, 1,095 buffers, growing
+  // with every run the engine has ever made.
+  index('workflow_runs_status_idx').on(t.status, t.startedAt),
+]);
 
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type NewWorkflowRun = typeof workflowRuns.$inferInsert;
@@ -1626,7 +1640,16 @@ export const nodeExecutions = pgTable('node_executions', {
   provider: text('provider'),
   model: text('model'),
   priceSnapshot: jsonb('price_snapshot'),
-});
+}, (t) => [
+  // The big one. 356k rows / 2.5GB with only a primary key, read by run-worker,
+  // engine-resume, the canvas run views, the doctor and the monitors — every one
+  // of them by run_id. Measured before this index: a parallel sequential scan of
+  // 26,287 buffers (~205MB of I/O) and 89ms to return two rows.
+  index('node_executions_run_idx').on(t.runId),
+  // "How did this node do recently" — the canvas node inspector and the
+  // recent-executions/latest-execution endpoints.
+  index('node_executions_node_idx').on(t.nodeId, t.startedAt),
+]);
 
 export type NodeExecution = typeof nodeExecutions.$inferSelect;
 export type NewNodeExecution = typeof nodeExecutions.$inferInsert;
@@ -2350,7 +2373,20 @@ export const intelNoteEntities = pgTable('intel_note_entities', {
   entityId: text('entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
   relevance: text('relevance').notNull().default('mentioned'),
   excerpt: text('excerpt'),
-});
+}, (t) => [
+  // This table had NO index at all — not even a primary key, because it has no
+  // id column. Extraction hit it three times per entity per note (an existence
+  // check, then a corroboration UPDATE carrying a correlated COUNT DISTINCT),
+  // and every one of those was a full scan.
+  //
+  // Deliberately NOT unique. The graph code wants a unique (note_id, entity_id)
+  // and says so, but the table carries duplicate pairs from before that check
+  // existed, so declaring it unique here would make `drizzle-kit push` prompt to
+  // truncate and hang the non-interactive release (see the same trap in
+  // `conversations.shareToken`). Dedupe first, then tighten this.
+  index('intel_note_entities_note_idx').on(t.noteId, t.entityId),
+  index('intel_note_entities_entity_idx').on(t.entityId),
+]);
 
 export const intelTimelineEvents = pgTable('intel_timeline_events', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),

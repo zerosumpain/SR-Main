@@ -11,7 +11,7 @@ import {
   nodeExecutions,
   orchestratorChats,
 } from '$lib/db/schema';
-import { desc, eq, asc, and, or, like, inArray, gte } from 'drizzle-orm';
+import { desc, eq, asc, and, like, inArray, gte } from 'drizzle-orm';
 import { formatTimestamp } from '../format-time';
 import { slugify } from '$lib/canvas/slug';
 import { registerCronJob } from '$lib/workflows/scheduler';
@@ -988,7 +988,9 @@ register({
       const nodeRows = await db
         .select({ id: workflowNodes.id, label: workflowNodes.label })
         .from(workflowNodes)
-        .where(or(...nodeIds.map((nid) => eq(workflowNodes.id, nid))));
+        // `inArray`, not a per-id OR chain — same reason as the chat history
+        // loader: one bound array beats N boolean branches for the planner.
+        .where(inArray(workflowNodes.id, [...new Set(nodeIds)]));
       for (const n of nodeRows) nodeMap.set(n.id, n.label);
     }
 

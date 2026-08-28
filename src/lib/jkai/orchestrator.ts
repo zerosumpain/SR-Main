@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
-import { eq, and, desc, asc, isNotNull, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, asc, isNotNull, lt, sql, inArray } from 'drizzle-orm';
 import { checkBudget } from './budget';
 import {
   ensureSandboxRunning,
@@ -578,16 +578,24 @@ class Orchestrator {
    */
   async reclaimFinishedWorkspaces(): Promise<number> {
     const cutoff = new Date(Date.now() - RECLAIM_AFTER_MS);
+    // The age cutoff belongs in the WHERE clause. It used to be a JS `continue`
+    // over every completed or failed build the box had ever run, so the sweep
+    // read a row it was always going to discard for all but a handful of them,
+    // and read more of them every week.
     const finished = await db
-      .select({ id: jkaiBuilds.id, updatedAt: jkaiBuilds.updatedAt })
+      .select({ id: jkaiBuilds.id })
       .from(jkaiBuilds)
-      .where(inArray(jkaiBuilds.status, ['completed', 'failed']));
+      .where(
+        and(
+          inArray(jkaiBuilds.status, ['completed', 'failed']),
+          lt(jkaiBuilds.updatedAt, cutoff),
+        ),
+      );
 
     let freed = 0;
     let count = 0;
     for (const b of finished) {
       if (this.activeBuildId === b.id) continue; // ours, and possibly resuming
-      if (!b.updatedAt || b.updatedAt > cutoff) continue;
       // One build's sandbox failure must not abort the sweep for the rest.
       const bytes = await reclaimWorkspaceDeps(b.id).catch(() => 0);
       if (bytes > 0) {

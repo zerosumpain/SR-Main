@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import {
   readServeJson,
   startProjectServer,
@@ -87,10 +87,15 @@ export async function manageServeConfig(buildId: string): Promise<void> {
   const currentConfig = build?.serveConfig as any;
   const keepExisting = currentConfig?.port === config.port;
   if (!keepExisting) {
-    const allBuilds = await db.select().from(jkaiBuilds);
+    // Two columns of the rows that actually have a serveConfig, not every
+    // column of every build ever made — this only needs the ports.
+    const allBuilds = await db
+      .select({ id: jkaiBuilds.id, serveConfig: jkaiBuilds.serveConfig })
+      .from(jkaiBuilds)
+      .where(isNotNull(jkaiBuilds.serveConfig));
     const takenPorts = new Set(
       allBuilds
-        .filter((b) => b.id !== buildId && b.serveConfig)
+        .filter((b) => b.id !== buildId)
         .map((b) => (b.serveConfig as any)?.port)
         .filter(Boolean),
     );

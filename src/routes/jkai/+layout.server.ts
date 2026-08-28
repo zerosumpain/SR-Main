@@ -31,6 +31,7 @@ export const load: LayoutServerLoad = async () => {
     [workflowCount],
     [liveCount],
     [runningWorkflowRuns],
+    [failedWorkflowRunsToday],
     budgetSetting,
     credits,
     codex,
@@ -48,12 +49,20 @@ export const load: LayoutServerLoad = async () => {
         .select({ count: sql<number>`count(*)::int` })
         .from(workflowSchedules)
         .where(eq(workflowSchedules.enabled, true)),
+      // Two WHERE-d counts, not one `count(*) FILTER (...)` over the whole
+      // table. The filtered form has no WHERE clause, so no index can help it:
+      // it read all 44k runs on EVERY /jkai navigation (20ms, 1,095 buffers) and
+      // grew with every run the engine ever made. Split like this both counts
+      // are index-only scans against `workflow_runs_status_idx` — 3 buffers and
+      // 0.2ms for the pair.
       db
-        .select({
-          running: sql<number>`count(*) FILTER (WHERE ${workflowRuns.status} = 'running')::int`,
-          failed: sql<number>`count(*) FILTER (WHERE ${workflowRuns.status} = 'failed' AND ${workflowRuns.startedAt} >= ${dayStart})::int`,
-        })
-        .from(workflowRuns),
+        .select({ count: sql<number>`count(*)::int` })
+        .from(workflowRuns)
+        .where(eq(workflowRuns.status, 'running')),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(workflowRuns)
+        .where(and(eq(workflowRuns.status, 'failed'), gte(workflowRuns.startedAt, dayStart))),
       getSetting<number>(DAILY_BUDGET_SETTING_KEY),
       // Cached in-process for a minute, so this does not become an OpenRouter
       // round-trip on every hub navigation.
@@ -102,10 +111,10 @@ export const load: LayoutServerLoad = async () => {
       codex,
       /** The model that answers when a thread hasn't pinned one. */
       defaultModelId: defaultModel.modelId,
-      activeRuns: listRunningJobsByConversation().size + (runningWorkflowRuns?.running ?? 0),
+      activeRuns: listRunningJobsByConversation().size + (runningWorkflowRuns?.count ?? 0),
       workflowCount: workflowCount?.count ?? 0,
       workflowLiveCount: liveCount?.count ?? 0,
-      workflowFailedToday: runningWorkflowRuns?.failed ?? 0,
+      workflowFailedToday: failedWorkflowRunsToday?.count ?? 0,
     },
   };
 };

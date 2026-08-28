@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
-import { desc, eq, asc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
 import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
@@ -9,6 +9,10 @@ import { BRIEFINGS_COLLECTION, type BriefingData } from '$lib/briefing/types';
 
 /** How long a briefing counts as "today's" and is worth surfacing on the chat page. */
 const BRIEFING_FRESH_MS = 20 * 60 * 60 * 1000;
+
+/** Most recent WhatsApp messages carried into the page. The panel shows the
+ *  recent end of the thread; the rest is a click away in the thread itself. */
+const WHATSAPP_THREAD_LIMIT = 100;
 
 /**
  * Latest complete briefing, if it is fresh. The digest used to be reachable
@@ -47,19 +51,33 @@ export const load: PageServerLoad = async ({ url }) => {
    */
   const pendingSend = pendingQuestion.length > 0 && url.searchParams.get('send') === '1';
 
-  // Load conversations with preview
-  const convList = await getConversationList();
-
-  // Check for WhatsApp thread (now unified in jkai_conversations + orchestrator_chats)
-  const [latestWaConv] = await db
-    .select({ id: conversations.id, phoneNumber: conversations.whatsappPhoneNumber })
-    .from(conversations)
-    .where(eq(conversations.source, 'whatsapp'))
-    .orderBy(desc(conversations.updatedAt))
-    .limit(1);
+  // These four are independent of each other, so they go out together rather
+  // than in series. The load previously awaited the conversation list, then the
+  // WhatsApp lookup, then its messages, before it even reached the Promise.all
+  // below — four sequential round-trips to build one page.
+  const [convList, [latestWaConv], defaultChatModel, chatAltOpenRouterModel, approvalUi, freshBriefing] =
+    await Promise.all([
+      getConversationList(),
+      // Check for WhatsApp thread (now unified in jkai_conversations + orchestrator_chats)
+      db
+        .select({ id: conversations.id, phoneNumber: conversations.whatsappPhoneNumber })
+        .from(conversations)
+        .where(eq(conversations.source, 'whatsapp'))
+        .orderBy(desc(conversations.updatedAt))
+        .limit(1),
+      resolveDefaultModel(),
+      resolveChatAltOpenRouterModel(),
+      getApprovalUiSettings(),
+      loadFreshBriefing(),
+    ]);
 
   let whatsappThread: { id: string; phoneNumber: string; messages: any[] } | null = null;
   if (latestWaConv?.phoneNumber) {
+    // Newest-first with a LIMIT, then reversed — the same shape the chat history
+    // loader uses, and for the same reason. This had no LIMIT at all: every
+    // message the WhatsApp thread had ever carried was selected in full and
+    // serialised into the page payload on every single /jkai load, to render a
+    // panel that only ever shows the recent end of the conversation.
     const waMessages = await db
       .select({
         id: orchestratorChats.id,
@@ -69,9 +87,14 @@ export const load: PageServerLoad = async ({ url }) => {
       })
       .from(orchestratorChats)
       .where(eq(orchestratorChats.conversationId, latestWaConv.id))
-      .orderBy(asc(orchestratorChats.createdAt));
+      .orderBy(desc(orchestratorChats.createdAt))
+      .limit(WHATSAPP_THREAD_LIMIT);
 
-    whatsappThread = { id: latestWaConv.id, phoneNumber: latestWaConv.phoneNumber, messages: waMessages };
+    whatsappThread = {
+      id: latestWaConv.id,
+      phoneNumber: latestWaConv.phoneNumber,
+      messages: waMessages.reverse(),
+    };
   }
 
   // The four-window spend cycler and the run-count strip that used to live in
@@ -80,13 +103,6 @@ export const load: PageServerLoad = async ({ url }) => {
   // and in the graph rail's footer, and the full breakdown is a click away at
   // /admin/ops/costs. Computing all four windows on every /jkai load was three
   // aggregate queries nothing rendered.
-
-  const [defaultChatModel, chatAltOpenRouterModel, approvalUi, freshBriefing] = await Promise.all([
-    resolveDefaultModel(),
-    resolveChatAltOpenRouterModel(),
-    getApprovalUiSettings(),
-    loadFreshBriefing(),
-  ]);
 
   return {
     pendingQuestion,
