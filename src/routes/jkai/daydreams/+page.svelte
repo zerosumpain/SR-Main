@@ -125,6 +125,9 @@
   const money = $derived(data.money);
   const discoveries = $derived(data.discoveries);
   const telemetry = $derived(data.telemetry);
+  const provenance = $derived(
+    data.provenance ?? { sources: [], minPairs: 0, registered: 0, sweepable: 0 },
+  );
   const familyMembers = $derived(data.family?.members ?? []);
   const familyDetail = $derived((data.family?.detail ?? {}) as Record<string, {
     hypotheses: Array<{ id: string; question: string; verdict: string | null; summary: string | null; r: number | null; qValue: number | null; pairs: number | null }>;
@@ -2283,6 +2286,57 @@
   {/if}
 
   {#if tab === 'engine'}
+  <!-- ── WHAT IS ACTUALLY REACHING THE REASONING ─────────────────────────
+       Thirteen green jobs and 242 registered signals say nothing about
+       whether any of it reaches the part that draws conclusions. On the day
+       this was written, 185 Home Assistant sensors were registered and NONE
+       were in the sweep — they had 2 observed days against a 14-day floor —
+       and nothing on the page said so. Every state below is measured: a
+       "flowing" carries the count that proves it, a "waiting" carries
+       have-vs-need, and a closed path carries the reason it is closed. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">What reaches the reasoning</span>
+      <span class="nm-sec-meta">
+        {provenance.sweepable} of {provenance.registered} signals in the sweep
+      </span>
+    </div>
+    <p class="sec-lede">
+      Registering a source is not the same as using it. A series joins the sweep only
+      once it has {provenance.minPairs} observed days, and the question proposer may only
+      ask about a fixed vocabulary — so a sensor can be recording, correlating and still
+      never be the subject of a question. Nothing here is asserted; each line carries the
+      measurement behind it.
+    </p>
+
+    {#if provenance.sources.length === 0}
+      <div class="empty">Nothing measured yet.</div>
+    {:else}
+      <div class="rows">
+        {#each provenance.sources as src (src.key)}
+          <div class="prov">
+            <div class="prov-hd">
+              <span class="prov-name">{src.label}</span>
+              <span class="mono prov-sum">{src.summary}</span>
+            </div>
+            <p class="prov-blurb">{src.blurb}</p>
+            <div class="prov-links">
+              {#each src.links as l, li (li)}
+                <div class="prov-link">
+                  <span class="prov-state s-{l.state}">
+                    {l.state === 'by_design' ? 'not wired' : l.state}
+                  </span>
+                  <span class="prov-to">{l.to}</span>
+                  <span class="prov-detail">{l.detail}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
   <!-- ── ENGINE STATE ───────────────────────────────────────────────────
        Leads the page. Everything below is meaningless if the engine has not
        run, and "quiet" and "not wired up" have to be tellable apart. -->
@@ -2822,6 +2876,24 @@
   .hyp-why { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 70ch; }
   .hyp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.15rem; }
   .hyp-ask { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  /* Provenance. States are words, never colour alone — "waiting" and
+     "flowing" have to be tellable apart in a screenshot and by anyone who
+     does not see the accent hue. */
+  .prov { border: 1px solid var(--line-strong); padding: 0.7rem 0.85rem; }
+  .prov-hd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+  .prov-name { font-family: var(--font-display); font-weight: 900; font-size: 1rem; color: var(--text-primary); }
+  .prov-sum { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .prov-blurb { margin: 0.2rem 0 0.5rem; font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 74ch; }
+  .prov-links { display: flex; flex-direction: column; gap: 0.3rem; }
+  .prov-link { display: grid; grid-template-columns: 6.5rem 8rem 1fr; gap: 0.6rem; align-items: baseline; font-size: var(--fs-label-xs); }
+  @media (max-width: 700px) { .prov-link { grid-template-columns: 6.5rem 1fr; } }
+  .prov-state { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; text-align: center; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); }
+  .prov-state.s-flowing { color: var(--accent-ink, var(--accent)); border-color: var(--accent-ink, var(--accent)); }
+  .prov-state.s-waiting { color: var(--warn, #b0892a); border-color: var(--warn, #b0892a); }
+  .prov-state.s-stalled { color: var(--error, #c44); border-color: var(--error, #c44); }
+  .prov-to { font-family: var(--font-mono); color: var(--text-secondary); }
+  .prov-detail { color: var(--text-muted); line-height: 1.5; }
+
   .hyp-hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
   /* The name, not a colour: five people need to be told apart at a glance and
      the palette has one accent. A chip reads at any size and in both themes. */

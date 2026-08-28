@@ -46,6 +46,7 @@ export const load: PageServerLoad = async () => {
       money: null,
       discoveries: null,
       telemetry: null,
+      provenance: { sources: [], minPairs: 0, registered: 0, sweepable: 0 },
       enabled: true,
       loadError: errMsg(err),
     };
