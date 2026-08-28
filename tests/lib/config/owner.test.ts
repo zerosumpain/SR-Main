@@ -60,15 +60,41 @@ describe("the owner's number is not in the source tree", () => {
   //
   // Test files are excluded deliberately — several of them assert that this
   // exact number IS detected and redacted, so the real value is the fixture.
+  //
+  // SCOPED TO WHAT GIT WOULD PUBLISH, not to what is on the disk. This used to
+  // be a plain `grep -r` over src and packages, which also read build output:
+  // packages/jkai-run-worker/dist/ is gitignored, is regenerated from bin/, and
+  // legitimately inlines ownerPhone()'s runtime value — so anyone who had built
+  // the worker locally failed this test while CI, on a clean checkout, stayed
+  // green. A security guard that cries wolf on a developer's own disk is one
+  // people learn to skip, which costs more than it protects.
+  //
+  // `--cached --others --exclude-standard` is tracked files PLUS untracked ones
+  // that are not ignored — everything that could reach the public repo, which is
+  // exactly the risk. A new source file with the number in it still fails here
+  // before it is ever committed.
   it('appears in no non-test source file', () => {
-    const hits = execFileSync(
-      'bash',
-      [
-        '-c',
-        `grep -rn "447359228511" src packages --include=*.ts --include=*.svelte --include=*.js 2>/dev/null | grep -v "\\.test\\.ts" || true`,
-      ],
-      { cwd: ROOT, encoding: 'utf8' },
-    ).trim();
+    const files = execFileSync(
+      'git',
+      ['ls-files', '--cached', '--others', '--exclude-standard', 'src', 'packages'],
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
+    )
+      .split('\n')
+      .filter((f) => /\.(ts|svelte|js)$/.test(f) && !/\.test\.ts$/.test(f));
+
+    // The file list is what is most likely to silently become empty — a bad
+    // pathspec, a git that errors — and an empty list passes while checking
+    // nothing, which is the failure this guard exists to prevent.
+    expect(files.length).toBeGreaterThan(500);
+
+    const hits = files
+      .flatMap((f) => {
+        const lines = readFileSync(resolve(ROOT, f), 'utf8').split('\n');
+        return lines
+          .map((line, i) => (line.includes('447359228511') ? `${f}:${i + 1}: ${line.trim()}` : null))
+          .filter(Boolean);
+      })
+      .join('\n');
     expect(hits, `the owner's number must not be hard-coded:\n${hits}`).toBe('');
   });
 
