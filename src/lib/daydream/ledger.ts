@@ -479,7 +479,74 @@ export async function loadFamily() {
       },
     });
   }
-  return { members };
+  // ── Per person: their own questions, findings and suggestions ──────────
+  //
+  // The Family tab was a presence map. Four of the five people in the trail
+  // had a year of history, a feature store and nothing ever asked about them,
+  // because the sweep and the hypothesis proposer both ran for John alone.
+  // Both are per-subject now, so this reads what they produced.
+  //
+  // A suggestion is attributed to a person by its CITATIONS, never by finding
+  // their name in the text: the ponder pack cards each family member as
+  // `{kind:'family', id:<subject>}`, so a musing that used one carries the
+  // reference. Matching on names would file "Katie's usual Tuesday" under
+  // Katie and also under any other thought that happened to mention her.
+  const { loadBoard } = await import('./hypotheses/store');
+  const sweepPulse = await lastPulseFor('daydream-sweep');
+  const sweepBySubject = ((sweepPulse?.details ?? {}) as Record<string, unknown>).perSubject as
+    | Record<string, { testsRun?: number; naiveHits?: number; findings?: unknown[]; errors?: string[] }>
+    | undefined;
+
+  const recentThoughts = await db
+    .select({
+      id: daydreamThoughts.id,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      explanation: daydreamThoughts.explanation,
+      score: daydreamThoughts.score,
+      status: daydreamThoughts.status,
+      evidence: daydreamThoughts.evidence,
+      createdAt: daydreamThoughts.createdAt,
+    })
+    .from(daydreamThoughts)
+    .orderBy(desc(daydreamThoughts.createdAt))
+    .limit(200);
+
+  const detail: Record<string, {
+    hypotheses: Awaited<ReturnType<typeof loadBoard>>;
+    sweep: { testsRun: number; naiveHits: number; findings: unknown[]; errors: string[] } | null;
+    thoughts: Array<{ id: string; kind: string; title: string; score: number; status: string; createdAt: string }>;
+  }> = {};
+
+  for (const f of FAMILY_SUBJECTS) {
+    const sw = sweepBySubject?.[f.subject];
+    detail[f.subject] = {
+      hypotheses: await loadBoard(20, f.subject),
+      sweep: sw
+        ? {
+            testsRun: sw.testsRun ?? 0,
+            naiveHits: sw.naiveHits ?? 0,
+            findings: sw.findings ?? [],
+            errors: sw.errors ?? [],
+          }
+        : null,
+      thoughts: recentThoughts
+        .filter((t) =>
+          (t.evidence ?? []).some((e) => e.kind === 'family' && e.id === f.subject),
+        )
+        .slice(0, 12)
+        .map((t) => ({
+          id: t.id,
+          kind: t.kind,
+          title: t.title,
+          score: t.score,
+          status: t.status,
+          createdAt: t.createdAt.toISOString(),
+        })),
+    };
+  }
+
+  return { members, detail };
 }
 
 /** Money, in one read: what went out, what is live, what is coming. */

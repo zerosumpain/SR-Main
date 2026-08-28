@@ -10,7 +10,7 @@ import { proposeHypotheses } from '$lib/daydream/hypotheses/propose';
 import { saveProposals } from '$lib/daydream/hypotheses/store';
 import { markBatchInfluenced } from '$lib/daydream/hypotheses/steer';
 import { testDueHypotheses } from '$lib/daydream/hypotheses/test';
-import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
+import { FAMILY_SUBJECTS, SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-hypothesise';
@@ -37,11 +37,26 @@ const DEFAULTS: Required<HypothesiseConfig> = { maxProposals: 4, windowDays: 120
  * question becomes answerable, and a supported one can stop holding.
  *
  * Nothing here notifies anybody. It fills a board the owner chooses to look at.
+ *
+ * ── Per person (owner's call, 2026-08-28) ─────────────────────────────────
+ *
+ * Every subject in the trail gets its own questions, its own tests and its own
+ * false-discovery correction. Until now this ran for John alone, so the other
+ * four had a feature store, a year of position history and no questions ever
+ * asked about them.
+ *
+ * The budget is re-read BEFORE EACH SUBJECT, not once at the top. Proposing is
+ * the only half that spends, and five proposals is five model calls; checking
+ * the caps once would let a whole cycle commit before the first one had been
+ * accounted for. Subjects are proposed for in order until the caps bite, and
+ * the ones that missed out are NAMED in the pulse — a silent truncation reads
+ * as "everyone was considered" when four people were not. Testing is
+ * deterministic and free, so it always runs for everybody regardless.
  */
 export const daydreamHypothesise: ActivityHandler = {
   name: NAME,
   description:
-    'Asks the model what is worth investigating about the daily feature store — without showing it any correlations — then answers those questions with deterministic statistics and a false-discovery correction across the batch. Refuted and underpowered are recorded as first-class results. Notifies nobody.',
+    'For each person in the trail, asks the model what is worth investigating about their daily feature store — without showing it any correlations — then answers those questions with deterministic statistics and a false-discovery correction within that subject. The Codex caps are re-checked before each person, and anyone the budget stopped is named. Refuted and underpowered are recorded as first-class results. Notifies nobody.',
   defaultCadenceSeconds: 24 * 3600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
@@ -55,74 +70,109 @@ export const daydreamHypothesise: ActivityHandler = {
     }
 
     const notes: string[] = [];
+    const perSubject: Record<string, unknown> = {};
+    const errors: string[] = [];
+    const budgetSkipped: string[] = [];
     let tokens = 0;
+    let proposed = 0;
+    let tested = 0;
+    let rejected: unknown[] = [];
+    // Load-bearing key: budget.ts reads `details.quota` back to enforce the
+    // caps, so the deltas across every subject are ACCUMULATED into one figure
+    // rather than reported per person and lost.
+    let quota = { ...ZERO_SPEND };
 
     // Proposing calls a model, so it spends against the same Codex caps as the
-    // composer — daydream-hypothesise is in SPENDING_ACTIONS and its quota
-    // delta is written to details.quota below. Testing is deterministic and
-    // free, so a blocked budget skips the proposal half only: questions already
-    // on the board still fall due and still get answered.
+    // composer — daydream-hypothesise is in SPENDING_ACTIONS. Testing is
+    // deterministic and free, so a blocked budget skips the proposal half
+    // only: questions already on the board still fall due and get answered.
     const model = await resolveDaydreamModel();
     const isCodexModel = model.provider === 'codex';
-    const budget = await budgetStatus({ now: new Date(ctx.now), isCodexModel });
-    let quota = { ...ZERO_SPEND };
-    let proposed = 0;
-    let rejected: unknown[] = [];
-    let proposeError: string | null = null;
 
-    if (budget.blocked) {
-      notes.push(`proposing skipped — ${budget.blockedReason}`);
-    } else {
-      // ── Propose, blind ──
-      const before = isCodexModel ? await readQuotaMark() : null;
-      const batch = await proposeHypotheses(cfg.maxProposals);
-      const after = isCodexModel ? await readQuotaMark() : null;
-      quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
+    for (const { subject } of FAMILY_SUBJECTS) {
+      const line: string[] = [];
+      let proposeError: string | null = null;
 
-      tokens = batch.tokens;
-      proposed = batch.proposals.length;
-      rejected = batch.rejected;
-      proposeError = batch.error ?? null;
-      if (batch.error) {
-        notes.push(`proposer failed: ${batch.error}`);
+      // Re-read the caps for EVERY subject. One check at the top would let all
+      // five commit before the first was accounted for.
+      const budget = await budgetStatus({ now: new Date(ctx.now), isCodexModel });
+      if (budget.blocked) {
+        budgetSkipped.push(subject);
+        line.push(`proposing skipped — ${budget.blockedReason}`);
       } else {
-        const saved = await saveProposals(batch.proposals, { tokens: batch.tokens });
-        // Count this batch against every steer that shaped it, so a steer that has
-        // directed a fortnight of questions and produced nothing is visible.
-        await markBatchInfluenced(batch.steerIds);
-        notes.push(`${saved.saved} new question${saved.saved === 1 ? '' : 's'}`);
-        if (saved.duplicates) notes.push(`${saved.duplicates} already asked`);
-        if (batch.rejected.length) notes.push(`${batch.rejected.length} rejected`);
+        const before = isCodexModel ? await readQuotaMark() : null;
+        const batch = await proposeHypotheses(cfg.maxProposals, subject);
+        const after = isCodexModel ? await readQuotaMark() : null;
+        if (isCodexModel) {
+          const delta = attributeSpend(before, after);
+          quota = {
+            weeklyPct: quota.weeklyPct + delta.weeklyPct,
+            fiveHourPct: quota.fiveHourPct + delta.fiveHourPct,
+          };
+        }
+
+        tokens += batch.tokens;
+        proposed += batch.proposals.length;
+        rejected = [...rejected, ...batch.rejected];
+        proposeError = batch.error ?? null;
+        if (batch.error) {
+          line.push(`proposer failed: ${batch.error}`);
+          errors.push(`${subject}: ${batch.error}`);
+        } else {
+          const saved = await saveProposals(batch.proposals, {
+            tokens: batch.tokens,
+            subject,
+          });
+          // Count this batch against every steer that shaped it, so a steer
+          // that has directed a fortnight of questions and produced nothing is
+          // visible.
+          await markBatchInfluenced(batch.steerIds);
+          line.push(`${saved.saved} new`);
+          if (saved.duplicates) line.push(`${saved.duplicates} already asked`);
+          if (batch.rejected.length) line.push(`${batch.rejected.length} rejected`);
+        }
       }
+
+      // ── Test everything due for this subject, corrected within it ──
+      const run = await testDueHypotheses({ windowDays: cfg.windowDays, subject });
+      tested += run.tested;
+      errors.push(...run.errors.map((e) => `${subject}: ${e}`));
+      if (run.tested) {
+        line.push(
+          `tested ${run.tested} (family ${run.familySize}): ` +
+            `${run.supported} held, ${run.refuted} refuted, ` +
+            `${run.wrongDirection} backwards, ${run.underpowered} underpowered`,
+        );
+      }
+
+      perSubject[subject] = { proposeError, ...run };
+      if (line.length) notes.push(`${subject}: ${line.join(', ')}`);
     }
 
-    // ── Test everything due, correcting across the batch ──
-    const run = await testDueHypotheses({ windowDays: cfg.windowDays });
-    if (run.tested) {
-      notes.push(
-        `tested ${run.tested} (family ${run.familySize}): ` +
-          `${run.supported} held, ${run.refuted} refuted, ` +
-          `${run.wrongDirection} backwards, ${run.underpowered} underpowered`,
-      );
+    // Naming who missed out, rather than truncating in silence.
+    if (budgetSkipped.length) {
+      notes.push(`budget stopped proposing for: ${budgetSkipped.join(', ')}`);
     }
 
-    const errors = [...(proposeError ? [proposeError] : []), ...run.errors];
-
-    // A proposer that failed AND nothing to test is a dead cycle worth seeing.
-    if (proposeError && run.tested === 0) {
-      return { outcome: 'error', summary: notes.join('; '), details: { errors, tokens, quota } };
+    // Every subject failed to propose AND nothing anywhere was testable: a
+    // dead cycle, and worth a red pulse.
+    if (errors.length >= FAMILY_SUBJECTS.length && tested === 0 && proposed === 0) {
+      return { outcome: 'error', summary: notes.join(' · '), details: { errors, tokens, quota, perSubject } };
     }
 
     return {
       outcome: 'ok',
-      summary: notes.join('; ') || 'nothing to propose or test',
+      summary: notes.join(' · ') || 'nothing to propose or test',
       details: {
         // Load-bearing: budget.ts reads this key back to enforce the caps.
         quota,
         proposed,
+        tested,
         rejected,
         tokens,
-        ...run,
+        budgetSkipped,
+        errors,
+        perSubject,
       },
     };
   },

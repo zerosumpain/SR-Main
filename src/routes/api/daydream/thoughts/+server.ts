@@ -159,6 +159,27 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, enabled });
       }
 
+      case 'evidence': {
+        // Drill-through. A thought's citations were rendered as `kind` + a
+        // uuid, which is a receipt rather than an explanation — "why did it
+        // say that?" could only be answered by opening a database. Resolved on
+        // demand rather than in the ledger loader: most cards are never
+        // expanded, and this is up to nine queries.
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { db } = await import('$lib/db');
+        const { daydreamThoughts } = await import('$lib/db/schema');
+        const { eq } = await import('drizzle-orm');
+        const [row] = await db
+          .select({ evidence: daydreamThoughts.evidence })
+          .from(daydreamThoughts)
+          .where(eq(daydreamThoughts.id, id))
+          .limit(1);
+        if (!row) return json({ error: 'no such thought' }, { status: 404 });
+        const { resolveEvidence } = await import('$lib/daydream/evidence');
+        return json({ evidence: await resolveEvidence(row.evidence ?? []) });
+      }
+
       // ── The diary filter ────────────────────────────────────────────────
       // Reading the calendar is a live CalDAV round trip, so it is an ACTION
       // and never part of the page load — the ledger loader is deliberately
