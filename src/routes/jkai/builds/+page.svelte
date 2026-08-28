@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BuildsListV2 from '$lib/builds/BuildsListV2.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { listBuilds, putBuild, type BuildCacheRecord } from '$lib/jkai/pwa/db';
 
   let { data } = $props();
@@ -53,6 +54,31 @@
   });
 </script>
 
+<!--
+  The page header lives here, not inside BuildsListV2. It is page chrome, and a
+  list component that renders the page's own title cannot be reused anywhere
+  else — which is also what made $lib/builds (a feature module) import
+  $lib/components. Mirrors /jkai/canvas, which does the same thing.
+
+  Outside the {#key} block deliberately: a cache rehydrate or network refresh
+  re-keys the list, and there is no reason to tear the header down with it.
+-->
+<PageHeader title="Builds">
+  {#snippet meta()}
+    <span class="idx-head-meta">
+      <span>{builds.length} {builds.length === 1 ? 'build' : 'builds'}</span>
+    </span>
+  {/snippet}
+</PageHeader>
+
 {#key renderKey}
   <BuildsListV2 builds={builds as any} lanes={data?.lanes ?? []} />
 {/key}
+
+<style>
+  .idx-head-meta {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+  }
+</style>

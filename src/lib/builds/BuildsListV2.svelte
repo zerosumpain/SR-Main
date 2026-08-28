@@ -1,5 +1,4 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
   import { publishedLink } from './published-link';
   import PromoteModal from './PromoteModal.svelte';
   import type { LaneStat } from './lane-stats';
@@ -240,14 +239,6 @@
 </svelte:head>
 
 <svelte:window onclick={onDocClick} />
-
-<PageHeader title="Builds">
-  {#snippet meta()}
-    <span class="idx-head-meta">
-      <span>{builds.length} {builds.length === 1 ? 'build' : 'builds'}</span>
-    </span>
-  {/snippet}
-</PageHeader>
 
 <div class="wrap">
   <header class="page-hdr">
@@ -591,12 +582,6 @@
     color: var(--text-primary);
     font-family: var(--font-body);
   }
-  .idx-head-meta {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    color: var(--text-muted);
-  }
-
   .hdr-links { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
   .page-hdr {
     display: flex;
