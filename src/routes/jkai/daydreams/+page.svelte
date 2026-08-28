@@ -85,6 +85,31 @@
     }
   }
 
+  // ── Arming the bank rails ────────────────────────────────────────────────
+  // It was a settings key you had to write by hand, which is why it stayed off
+  // for a fortnight after the job shipped. Arming also brings the next run
+  // forward, so a stale token shows up now rather than at 05:00 tomorrow.
+  let bankBusy = $state(false);
+  let bankError = $state<string | null>(null);
+  async function toggleBank() {
+    bankBusy = true;
+    bankError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'set_bank_enabled', enabled: !data.money?.bank.enabled }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { error?: string };
+      if (out.error) throw new Error(out.error);
+      await invalidateAll();
+    } catch (err) {
+      bankError = err instanceof Error ? err.message : String(err);
+    } finally {
+      bankBusy = false;
+    }
+  }
+
   // ── Formatting helpers for the new rooms ──
   const money = $derived(data.money);
   const discoveries = $derived(data.discoveries);
@@ -1818,16 +1843,46 @@
     </div>
     {#if money?.bank.enabled}
       <p class="sec-lede">
-        Pulling TrueLayer and PayPal nightly.
+        Pulling TrueLayer and PayPal nightly, debits only, deduped on the transaction id.
         {#if money?.bank.lastRun}Last run: {money.bank.lastRun.summary}{/if}
       </p>
     {:else}
       <p class="sec-lede">
-        Off by default (your D2 call). Setting <code>daydream.bank.enabled</code> to
-        <code>true</code> starts a nightly debits-only pull into this same table — it
-        fails loudly if the TrueLayer token has gone stale.
+        Off. Arming it starts a nightly debits-only pull into the same table the email
+        receipt reader writes, so everything downstream reads one set of numbers. It
+        fails loudly rather than quietly if the TrueLayer token has gone stale.
       </p>
     {/if}
+
+    <!-- A job that has only ever skipped looks identical to a job that ran and
+         found nothing, unless the page says when it is next due and whether
+         that moment is inside its own window. daydream-bank sat in exactly
+         that state for three days and the only clue was a pulse summary. -->
+    <div class="thought-meta">
+      {#if money?.bank.window}
+        <span class="mono">window {money.bank.window}</span>
+      {/if}
+      {#if money?.bank.nextRunAt}
+        <span class="sep">·</span>
+        <span class="mono">next {new Date(money.bank.nextRunAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })}</span>
+      {/if}
+      {#if money?.bank.willSkip}
+        <span class="sep">·</span>
+        <span class="held">that lands outside the window — it will skip</span>
+      {/if}
+    </div>
+
+    <div class="thought-actions">
+      <button
+        class="row-link"
+        class:danger={money?.bank.enabled}
+        disabled={bankBusy}
+        onclick={toggleBank}
+      >
+        {bankBusy ? 'Saving…' : money?.bank.enabled ? 'Turn the rails off' : 'Arm the rails'}
+      </button>
+      {#if bankError}<span class="held">{bankError}</span>{/if}
+    </div>
   </section>
   {/if}
 

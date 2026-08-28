@@ -6,6 +6,7 @@ import { getHandler } from './registry';
 import { recordPulse, prunePulses } from './audit';
 import { seedDefaultActions } from './seed';
 import { runTargetedAction } from './handlers/targeted';
+import { withinActiveHours, rescheduleAfterWindowSkip } from './schedule';
 import type { HeartbeatAction } from '$lib/db/schema';
 
 // The engine ticks at this cadence. Per-action `cadence_seconds` floors here
@@ -95,14 +96,27 @@ async function runOne(row: HeartbeatAction, now: Date): Promise<void> {
   const nextRunAt = new Date(now.getTime() + row.cadenceSeconds * 1000);
 
   if (!withinActiveHours(row, now)) {
+    // Re-schedule to when the window NEXT OPENS, not to now + cadence.
+    //
+    // The old line kept the run time on a fixed wall-clock phase, so any
+    // action whose cadence divided into a day and whose phase sat outside its
+    // window skipped forever: daydream-bank had never run once, and
+    // daydream-weekly had never sent a letter. See ./schedule.ts for the
+    // measurements. A skip is not a run, and this can only ever move the time
+    // later, so the cadence remains a floor.
+    const retryAt = rescheduleAfterWindowSkip(row, now, nextRunAt);
+
     // No `action` — a skip is neither a success nor a failure, so it must not
     // reset the failure budget of an action that is genuinely broken.
     await recordPulse({
       actionId: row.id,
       actionName: row.name,
-      result: { outcome: 'skipped', summary: 'outside active hours' },
+      result: {
+        outcome: 'skipped',
+        summary: `outside active hours — next window ${retryAt.toISOString()}`,
+      },
       durationMs: Date.now() - startedAt,
-      nextRunAt,
+      nextRunAt: retryAt,
     });
     return;
   }
@@ -139,23 +153,4 @@ async function runOne(row: HeartbeatAction, now: Date): Promise<void> {
     nextRunAt,
     action: { consecutiveFailures: row.consecutiveFailures, cadenceSeconds: row.cadenceSeconds },
   });
-}
-
-function withinActiveHours(row: HeartbeatAction, now: Date): boolean {
-  if (!row.activeHoursStart || !row.activeHoursEnd) return true;
-  const tz = row.activeHoursTz ?? 'UTC';
-  const fmt = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(now);
-  const hh = parts.find((p) => p.type === 'hour')?.value ?? '00';
-  const mm = parts.find((p) => p.type === 'minute')?.value ?? '00';
-  const cur = `${hh}:${mm}`;
-  const start = row.activeHoursStart;
-  const end = row.activeHoursEnd;
-  if (start <= end) return cur >= start && cur < end;
-  return cur >= start || cur < end;
 }
