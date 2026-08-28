@@ -295,7 +295,7 @@
   .fs.share { border-color: rgba(168,112,26,0.55); background: #fdf4e6; }
   .fs.share b { color: #8c5a10; }
 
-  .f-lede { font-size: var(--fs-nav); line-height: 1.55; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 82ch; }
+  .f-lede { font-size: var(--fs-nav); line-height: 1.55; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 100%; }
   .f-lede em { color: var(--accent-ink, #0e5b66); font-style: italic; }
   .f-lede.fast { color: #216b3f; }
 
@@ -318,7 +318,7 @@
   .ru-fill.first { width: 100%; background: #a8701a; }
   .ru-fill.again { width: var(--w); background: var(--accent-ink, #0e5b66); }
   .ru b { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--ink); text-align: right; }
-  .ru-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.8); margin: 10px 0 0; max-width: 82ch; }
+  .ru-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.8); margin: 10px 0 0; max-width: 100%; }
 
   /* ELI5 table */
   .e-tbl { width: 100%; min-width: 700px; border-collapse: collapse; }
@@ -333,7 +333,7 @@
   .e-tbl td.c-t.mach { color: var(--accent-ink, #0e5b66); }
   .e-tbl td.c-t.hum { color: #8c5a10; }
   .e-tbl td { color: rgba(26,16,8,0.84); }
-  .e-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 2px; max-width: 82ch; }
+  .e-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 2px; max-width: 100%; }
 
   .note { font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(26,16,8,0.66); margin: 0; padding: 12px 18px 14px; border-top: 1px solid rgba(26,16,8,0.16); }
 

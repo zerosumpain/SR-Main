@@ -244,8 +244,8 @@
   .os-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
   .os-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; color: var(--accent-ink, #0e5b66); }
   .os-head h4 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(24px, 3.4vw, 38px); line-height: 1.05; margin: 4px 0 6px; color: var(--ink); }
-  .os-strap { font-family: var(--fs-serif); font-size: clamp(15px, 1.8vw, 19px); font-style: italic; line-height: 1.35; color: var(--accent-ink, #0e5b66); margin: 0; max-width: 58ch; }
-  .os-body { font-size: var(--fs-nav); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 84ch; }
+  .os-strap { font-family: var(--fs-serif); font-size: clamp(15px, 1.8vw, 19px); font-style: italic; line-height: 1.35; color: var(--accent-ink, #0e5b66); margin: 0; max-width: 100%; }
+  .os-body { font-size: var(--fs-nav); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 100%; }
 
   .os-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
   .osc { background: #ffffff; border: 1.4px solid rgba(26,16,8,0.35); border-radius: var(--radius-sharp); padding: 12px 14px; }
@@ -261,7 +261,7 @@
   .pt b { display: block; font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--ink); line-height: 1.3; }
   .pt span { display: block; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(26,16,8,0.75); margin-top: 2px; }
 
-  .os-foot { font-size: var(--fs-nav); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 16px 0 0; max-width: 84ch;
+  .os-foot { font-size: var(--fs-nav); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 16px 0 0; max-width: 100%;
     padding-top: 14px; border-top: 1px solid rgba(26,16,8,0.18); }
   .os-foot b { color: var(--ink); }
   .os-foot em { font-style: italic; color: var(--accent-ink, #0e5b66); }
@@ -274,15 +274,15 @@
   .e-tbl tbody th.c-n .real { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 400; letter-spacing: 0.06em; color: rgba(26,16,8,0.5); margin-top: 2px; }
   .e-tbl td { color: rgba(26,16,8,0.84); }
   .e-tbl td.c-x, .e-tbl th.c-x { width: 30%; color: #6d232d; }
-  .e-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 4px; max-width: 82ch; }
+  .e-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 4px; max-width: 100%; }
 
   /* OpenSAFELY Schools */
   .oss { border-top: 1.5px solid rgba(26,16,8,0.4); padding: 18px; background: #ffffff; }
   .oss-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
   .oss-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; color: #216b3f; }
   .oss-head h4 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(22px, 3vw, 34px); line-height: 1.05; margin: 4px 0 6px; color: var(--ink); }
-  .oss-strap { font-family: var(--fs-serif); font-size: clamp(15px, 1.8vw, 19px); font-style: italic; line-height: 1.35; color: #216b3f; margin: 0; max-width: 58ch; }
-  .oss-body { font-size: var(--fs-nav); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 84ch; }
+  .oss-strap { font-family: var(--fs-serif); font-size: clamp(15px, 1.8vw, 19px); font-style: italic; line-height: 1.35; color: #216b3f; margin: 0; max-width: 100%; }
+  .oss-body { font-size: var(--fs-nav); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 100%; }
 
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-bottom: 20px; }
   .fact { border-left: 3px solid #2f7d4f; padding-left: 10px; }
@@ -299,7 +299,7 @@
   .l-tbl td.c-s, .l-tbl th.c-s { width: 34%; color: var(--accent-ink, #0e5b66); }
 
   .oss-caveat { font-size: var(--fs-label); line-height: 1.6; color: #6f460b; background: #fdf4e6; border: 1px solid rgba(168,112,26,0.4);
-    border-radius: var(--radius-sharp); padding: 11px 14px; margin: 18px 0 0; max-width: 90ch; }
+    border-radius: var(--radius-sharp); padding: 11px 14px; margin: 18px 0 0; max-width: 100%; }
   .oss-caveat b { color: #8c5a10; }
 
   @media (max-width: 700px) {

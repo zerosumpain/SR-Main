@@ -261,7 +261,7 @@
   .hero { min-height: calc(88svh - var(--topH, 56px)); display: flex; flex-direction: column; justify-content: center; }
   .hero h1 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(38px, 7.2vw, 92px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 26px; color: var(--ink); }
   .hero h1 em { font-style: italic; color: var(--accent-ink); }
-  .hero-lede { font-size: clamp(16px, 1.7vw, 21px); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 62ch; margin: 0 0 34px; }
+  .hero-lede { font-size: clamp(16px, 1.7vw, 21px); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 100%; margin: 0 0 34px; }
   .hero-stats { display: flex; gap: clamp(20px, 4vw, 56px); flex-wrap: wrap; margin-bottom: 38px; }
   .hs b { display: block; font-family: var(--fs-serif); font-weight: 600; font-size: clamp(30px, 3.6vw, 52px); line-height: 1; color: var(--ink); letter-spacing: -0.02em; }
   .hs span { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
@@ -277,14 +277,14 @@
 
   /* shared slide headline scale */
   h2 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(30px, 4.6vw, 60px); line-height: 1.04; letter-spacing: -0.025em; margin: 0 0 20px; color: var(--ink); }
-  .slide-lede { font-size: clamp(15px, 1.5vw, 19px); line-height: 1.6; color: rgba(28,22,17,0.74); max-width: 72ch; margin: 0 0 34px; }
+  .slide-lede { font-size: clamp(15px, 1.5vw, 19px); line-height: 1.6; color: rgba(28,22,17,0.74); max-width: 100%; margin: 0 0 34px; }
   .slide-lede b { color: var(--ink); }
 
   .grammar { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
   .gr-row { border: 1px solid rgba(28,22,17,0.18); border-top: 3px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 18px 20px; }
   .gr-row b { font-family: var(--fs-serif); font-size: clamp(17px, 1.6vw, 21px); }
   .gr-row p { font-size: var(--fs-label); line-height: 1.6; color: rgba(28,22,17,0.72); margin: 7px 0 0; }
-  .fine { font-size: var(--fs-label); color: rgba(28,22,17,0.58); margin-top: 26px; max-width: 84ch; }
+  .fine { font-size: var(--fs-label); color: rgba(28,22,17,0.58); margin-top: 26px; max-width: 100%; }
   .fine a { color: var(--accent-ink); }
 
   /* SLIDE 4 — inverted band */

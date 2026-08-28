@@ -92,7 +92,7 @@
     gap: 40px;
     align-items: start;
   }
-  .fs-front-title { max-width: 22ch; }
+  .fs-front-title { max-width: 100%; }
   .fs-thesis {
     font-family: var(--fs-serif);
     font-size: var(--fs-body-lg);

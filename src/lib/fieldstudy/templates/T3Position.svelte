@@ -73,7 +73,9 @@
 
 <style>
   .fs-position {
-    max-width: 20ch;
+    /* Fills, like everything else. A display line stopping a third of the
+       way across is the same fault as a paragraph doing it. */
+    max-width: 100%;
     margin-top: 26px;
   }
   .fs-elaboration {

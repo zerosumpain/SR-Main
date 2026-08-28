@@ -159,7 +159,7 @@
   .am { display: flex; flex-direction: column; min-height: 0; height: 100%; }
   .am-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 2px 2px 8px; display: flex; flex-direction: column; gap: 12px; }
   .am-intro { padding: 4px 2px; }
-  .am-lede { margin: 0 0 12px; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.75); max-width: 62ch; }
+  .am-lede { margin: 0 0 12px; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.75); max-width: 100%; }
   .am-suggest { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .sg { text-align: left; font-family: var(--font-body); font-size: var(--fs-label); color: var(--ink); background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-sharp); padding: 7px 11px; cursor: pointer; transition: background 0.12s, border-color 0.12s; }
   .sg:hover { background: var(--accent-ink-tint-12); border-color: var(--accent-ink-tint-35); }

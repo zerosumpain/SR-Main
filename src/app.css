@@ -889,8 +889,11 @@ a {
   --fs-cat-standards: #b4632e;
   --fs-cat-trust: #8a2d3a;
 
-  /* measure */
-  --fs-measure: 72ch;
+  /* NO MEASURE TOKEN. There used to be `--fs-measure: 72ch`, and its only
+     effect was to make every paragraph stop two-thirds of the way across
+     its column. Text fills its column; the column is the measure, and it
+     is set by --fs-margin-col and .fs-route below. Re-adding a ch cap
+     anywhere under .fs-* fails scripts/check-measure.mjs. */
   --fs-margin-col: 178px;
 }
 
@@ -920,13 +923,15 @@ a {
 @media (max-width: 700px) { .fs-qc { grid-template-columns: 1fr; } .fs-qc dd { padding-left: 0; } }
 
 /* ——— body ——— */
-/* THE WIDTH RULE: body copy fills its column, edge to edge.
-   A paragraph that stops two-thirds of the way across leaves a void beside
-   every line and reads as broken rather than as typeset — measured at 286px
-   of dead space on a 1078px column. The narrow measure is kept only for
-   DISPLAY type (the pull quote, the position statement, the front-matter
-   title), where a short line is obviously deliberate.
-   `--fs-measure` survives for anything that opts back in. */
+/* THE WIDTH RULE: text fills its column, edge to edge. No exceptions.
+   A line that stops two-thirds of the way across leaves a void beside itself
+   and reads as broken rather than as typeset — measured at 286px of dead
+   space on a 1078px column. This applies to DISPLAY type too: a headline
+   stopping short is the same fault as a paragraph doing it, not a deliberate
+   contrast.
+   To make a line shorter, narrow the COLUMN — a grid cell, --fs-margin-col,
+   .fs-route — never the text inside it. A `ch` cap under .fs-* is a gate
+   failure, not a judgement call. */
 .fs-body { font-size: var(--fs-body); line-height: 1.68; color: var(--text-secondary); max-width: 100%; }
 .fs-body b { color: var(--text-primary); }
 .fs-body a { color: var(--accent-ink); }
@@ -956,7 +961,7 @@ a {
 .fs-figcaption p { font-family: var(--fs-serif); font-style: italic; font-size: var(--fs-body-sm); line-height: 1.5; color: var(--text-secondary); margin: 0; }
 
 /* ——— pull quote: one per page ——— */
-.fs-pull { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: 20px 0; margin: 28px 0 0; max-width: 44ch; }
+.fs-pull { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: 20px 0; margin: 28px 0 0; max-width: 100%; }
 .fs-pull p { font-family: var(--fs-serif); font-style: italic; font-size: 26px; line-height: 1.35; letter-spacing: -0.015em; margin: 0; text-wrap: pretty; }
 
 /* ——— tables ——— */

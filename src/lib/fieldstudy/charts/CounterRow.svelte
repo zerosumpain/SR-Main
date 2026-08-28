@@ -84,6 +84,6 @@
 
   .cr-foot {
     margin: 0; padding-top: 11px; border-top: 1px solid var(--line-hair);
-    font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-muted); max-width: 78ch;
+    font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-muted); max-width: 100%;
   }
 </style>

@@ -84,9 +84,9 @@
     letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-ghost);
   }
   .rs-rem-val { font-variant-numeric: tabular-nums; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
-  .rs-note { margin: 3px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-muted); max-width: 76ch; }
+  .rs-note { margin: 3px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-muted); max-width: 100%; }
   .rs-foot {
     margin: 2px 0 0; padding-top: 10px; border-top: 1px solid var(--line-hair);
-    font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-muted); max-width: 78ch;
+    font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-muted); max-width: 100%;
   }
 </style>
