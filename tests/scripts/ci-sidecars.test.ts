@@ -95,6 +95,33 @@ describe('ci-deploy-sidecars manifest', () => {
     expect(release).toContain('ci-apply-sidecars.sh');
   });
 
+  it('stages BEFORE it releases, or apply looks for a bundle that does not exist yet', () => {
+    // ci-release.sh ends by running ci-apply-sidecars.sh, and apply only ever
+    // looks for a directory staged for THIS sha. When the staging steps were
+    // moved to AFTER the release step, every deploy printed
+    //   "jkai-wa-worker: nothing staged for <sha> — leaving it as it is"
+    //   "sidecars applied: 0 (skipped: 2)"
+    // eleven seconds before staging that very sha — and then the next run did
+    // the same for its own. Both sidecars ran 2026-08-25 code for three days
+    // while each deploy reported success. Nothing failed; the order was wrong.
+    //
+    // Asserted on the workflow file because that is where the mistake was made:
+    // both scripts were, and remain, individually correct.
+    // Anchored on the `run:` invocation, not any mention — the surrounding
+    // comments name these scripts too, and an indexOf over the whole file
+    // matches a comment 300 lines above the step it describes.
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+    const invocation = (script: string) => ci.indexOf(`run: ./scripts/${script}`);
+    const stageSidecars = invocation('ci-stage-sidecars.sh');
+    const stageBuilder = invocation('ci-stage-builder.sh');
+    const release = invocation('ci-release.sh');
+    expect(stageSidecars, 'ci.yml must run ci-stage-sidecars.sh').toBeGreaterThan(-1);
+    expect(stageBuilder, 'ci.yml must run ci-stage-builder.sh').toBeGreaterThan(-1);
+    expect(release, 'ci.yml must run ci-release.sh').toBeGreaterThan(-1);
+    expect(stageSidecars, 'stage the systemd sidecars before the release applies them').toBeLessThan(release);
+    expect(stageBuilder, 'stage the builder sidecar before the release').toBeLessThan(release);
+  });
+
   it('the stage script never restarts a service — that is the apply half\'s job', () => {
     const stage = readFileSync(SCRIPT, 'utf8');
     expect(stage).not.toMatch(/systemctl (restart|start)\b/);
