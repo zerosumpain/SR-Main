@@ -17,12 +17,65 @@
 //   orchestrator-turn  — re-engage the conversation with a synthetic user
 //                        message; the LLM will respond as if the user wrote it
 
-import { register } from '../registry-internal';
+import { register, type ToolExecContext } from '../registry-internal';
 import { requiredString, optionalString } from '../tool-args';
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { db } from '$lib/db';
-import { scheduledCallbacks } from '$lib/db/schema';
+import { scheduledCallbacks, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+
+/**
+ * Which conversation a callback belongs to — asked of the runtime, not the model.
+ *
+ * `conversation_id` used to be a REQUIRED argument on the reply and
+ * orchestrator-turn tools. Nothing tells a chat its own id, so over WhatsApp on
+ * 2026-08-28 the model answered "Remind me in 3 minutes" by inventing one:
+ * `07767f2e-…`, a row that has never existed. The tool returned success, the
+ * assistant said "Done.", and three minutes later the fire died on the
+ * `orchestrator_chats.conversation_id` foreign key. Nothing surfaced it — a
+ * failed callback tells nobody, so the reminder simply never arrived and the
+ * user had every reason to believe it would.
+ *
+ * Two rules follow. Default from `ctx.conversationId`, which the chat loop has
+ * always known; and CONFIRM the row exists here, where the model can still be
+ * told it got it wrong, rather than at fire time when nobody is listening.
+ */
+async function resolveConversation(
+  args: Record<string, unknown>,
+  ctx: ToolExecContext | undefined,
+  opts: { required: boolean },
+): Promise<
+  | { ok: true; id: string | null; whatsappPhoneNumber: string | null }
+  | { ok: false; error: string }
+> {
+  const explicit = optionalString(args, 'conversation_id');
+  const raw = explicit || ctx?.conversationId || '';
+  if (!raw) {
+    if (!opts.required) return { ok: true, id: null, whatsappPhoneNumber: null };
+    return {
+      ok: false,
+      error:
+        'No conversation to deliver into: none was passed and this caller has no chat context. ' +
+        'Do not invent a conversation_id — a callback pointing at a conversation that does not ' +
+        'exist is accepted here and then fails silently when it fires.',
+    };
+  }
+  const id = normaliseConversationId(raw);
+  const [row] = await db
+    .select({ id: conversations.id, phone: conversations.whatsappPhoneNumber })
+    .from(conversations)
+    .where(eq(conversations.id, id))
+    .limit(1);
+  if (!row) {
+    return {
+      ok: false,
+      error:
+        `No conversation ${id} exists, so a callback delivered there would fail at fire time ` +
+        `with nobody watching. Omit conversation_id and it defaults to the current chat.`,
+    };
+  }
+  return { ok: true, id: row.id, whatsappPhoneNumber: row.phone };
+}
 
 function parseFireAt(args: Record<string, unknown>): Date | null {
   if (typeof args.fire_at_iso === 'string') {
@@ -42,30 +95,34 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      conversation_id: { type: 'string', description: 'The conversation that should receive the reply.' },
+      conversation_id: { type: 'string', description: 'Conversation to deliver into. OMIT IT — it defaults to the current chat. Never guess a value.' },
       name: { type: 'string', description: 'Stable, unique identifier for this callback (e.g. "leave-reminder-1730"). Reusing a name updates the existing callback.' },
       text: { type: 'string', description: 'The exact text to post. ≤4000 chars.' },
       fire_at_iso: { type: 'string', description: 'ISO-8601 wall-clock time to fire (e.g. "2026-05-06T17:30:00Z"). Use this OR in_seconds.' },
       in_seconds: { type: 'number', description: 'Fire this many seconds from now. Use this OR fire_at_iso.' },
-      notify_whatsapp: { type: 'boolean', description: 'Also push via WhatsApp when the conversation has a phone number.' },
+      notify_whatsapp: { type: 'boolean', description: 'Push via WhatsApp as well as posting into the chat. Defaults to TRUE for a WhatsApp conversation — a reminder asked for on WhatsApp has to arrive there.' },
     },
-    required: ['conversation_id', 'name', 'text'],
+    required: ['name', 'text'],
   },
   category: 'System',
   toolset: 'schedule',
-  handler: async (args) => {
+  handler: async (args, ctx) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
     const textArg = requiredString(args, 'text');
     if (!textArg.ok) return { success: false, error: textArg.error };
     const nameArg = requiredString(args, 'name');
     if (!nameArg.ok) return { success: false, error: nameArg.error };
-    const convArg = requiredString(args, 'conversation_id');
-    if (!convArg.ok) return { success: false, error: convArg.error };
+    const conv = await resolveConversation(args, ctx, { required: true });
+    if (!conv.ok) return { success: false, error: conv.error };
     const text = textArg.value.slice(0, 4000);
     const name = nameArg.value;
-    const conversationId = normaliseConversationId(convArg.value);
-    const notifyWhatsApp = !!args.notify_whatsapp;
+    const conversationId = conv.id;
+    // A reply posted into a WhatsApp conversation is invisible unless it is
+    // also pushed: the chat row lands in the DB and the phone stays silent.
+    // So the default follows the conversation, not the model's omission.
+    const notifyWhatsApp =
+      typeof args.notify_whatsapp === 'boolean' ? args.notify_whatsapp : !!conv.whatsappPhoneNumber;
 
     return upsertCallback({
       name,
@@ -85,7 +142,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      conversation_id: { type: 'string', description: 'Conversation to notify when the tool fires (optional).' },
+      conversation_id: { type: 'string', description: 'Conversation to notify when the tool fires. OMIT IT — it defaults to the current chat. Never guess a value.' },
       name: { type: 'string', description: 'Stable, unique identifier for this callback.' },
       tool_name: { type: 'string', description: 'Name of a registered site-tool (e.g. "ha_call_service", "blog_create_post").' },
       args: { type: 'object', description: 'Args object passed to the tool exactly as if it were called now.' },
@@ -96,7 +153,7 @@ register({
   },
   category: 'System',
   toolset: 'schedule',
-  handler: async (args) => {
+  handler: async (args, ctx) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
     const toolNameArg = requiredString(args, 'tool_name');
@@ -115,8 +172,9 @@ register({
       };
     }
     const toolArgs = (args.args as Record<string, unknown>) ?? {};
-    const rawConv = optionalString(args, 'conversation_id');
-    const conversationId = rawConv ? normaliseConversationId(rawConv) : null;
+    const conv = await resolveConversation(args, ctx, { required: false });
+    if (!conv.ok) return { success: false, error: conv.error };
+    const conversationId = conv.id;
     const nameArg = requiredString(args, 'name');
     if (!nameArg.ok) return { success: false, error: nameArg.error };
     const name = nameArg.value;
@@ -139,28 +197,28 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      conversation_id: { type: 'string', description: 'Conversation to re-engage.' },
+      conversation_id: { type: 'string', description: 'Conversation to re-engage. OMIT IT — it defaults to the current chat. Never guess a value.' },
       name: { type: 'string', description: 'Stable, unique identifier.' },
       message: { type: 'string', description: 'The synthetic user message that triggers the LLM turn.' },
       fire_at_iso: { type: 'string', description: 'ISO-8601 wall-clock time. Use this OR in_seconds.' },
       in_seconds: { type: 'number', description: 'Fire this many seconds from now.' },
     },
-    required: ['conversation_id', 'name', 'message'],
+    required: ['name', 'message'],
   },
   category: 'System',
   toolset: 'schedule',
-  handler: async (args) => {
+  handler: async (args, ctx) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
     const messageArg = requiredString(args, 'message');
     if (!messageArg.ok) return { success: false, error: messageArg.error };
     const nameArg = requiredString(args, 'name');
     if (!nameArg.ok) return { success: false, error: nameArg.error };
-    const convArg = requiredString(args, 'conversation_id');
-    if (!convArg.ok) return { success: false, error: convArg.error };
+    const conv = await resolveConversation(args, ctx, { required: true });
+    if (!conv.ok) return { success: false, error: conv.error };
     const message = messageArg.value;
     const name = nameArg.value;
-    const conversationId = normaliseConversationId(convArg.value);
+    const conversationId = conv.id;
 
     return upsertCallback({
       name,
