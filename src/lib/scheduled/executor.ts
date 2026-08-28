@@ -5,6 +5,40 @@ import type { ScheduledCallback } from '$lib/db/schema';
 import type { FireResult, ReplyPayload, ToolPayload, OrchestratorTurnPayload } from './types';
 
 /**
+ * Tell the owner a callback he asked for is not going to arrive.
+ *
+ * A failed callback used to write `status='failed'` and stop. Nothing reads
+ * that column on a schedule, so the only person who could notice was someone
+ * already querying the table. On 2026-08-28 a "remind me in 3 minutes" asked
+ * for over WhatsApp was scheduled against a conversation id the model had
+ * invented; it died on the foreign key at fire time, and the reminder simply
+ * never came. The user had been told "Done." and had no reason to doubt it.
+ *
+ * The scheduling bug is fixed at the tool. This is the backstop for the next
+ * one: a promise that silently evaporates is worse than one that never got
+ * made. Bounded by construction — a callback fires once and is not retried, so
+ * this is at most one message per failure. Never throws; a failed warning must
+ * not mask the failure it is reporting.
+ */
+async function warnOwner(row: ScheduledCallback, error: string): Promise<void> {
+  try {
+    const { ownerPhone } = await import('$lib/config/owner');
+    const to = ownerPhone();
+    if (!to) return;
+    const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
+    const result = await getWhatsAppService().sendMessage(
+      to,
+      `⚠ Scheduled callback "${row.name}" failed and will not arrive: ${error.slice(0, 200)}`,
+    );
+    if (!result.sent) {
+      console.warn(`[scheduled] could not warn about ${row.name}: ${result.error ?? 'unknown error'}`);
+    }
+  } catch (err) {
+    console.error('[scheduled] warnOwner threw:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
  * Execute one scheduled callback. Marks status='fired' on success or
  * 'failed' on error. Returns a FireResult summary so the engine can log
  * cleanly. Each kind handler is intentionally tiny — no shared abstractions
@@ -44,6 +78,7 @@ export async function fireCallback(row: ScheduledCallback): Promise<FireResult> 
       error: msg.slice(0, 500),
       updatedAt: new Date(),
     }).where(eq(scheduledCallbacks.id, row.id));
+    await warnOwner(row, msg);
     return { ok: false, summary: msg.slice(0, 200), error: msg };
   }
 }
