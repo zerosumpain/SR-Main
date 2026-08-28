@@ -19,6 +19,7 @@ import {
   heartbeatActions,
   heartbeatPulses,
 } from '$lib/db/schema';
+import { withinActiveHours as windowOpenAt } from '$lib/heartbeat/schedule';
 import { DETECTORS } from './detectors';
 import { listSteers } from './hypotheses/steer';
 import { kindWeight, tallyFeedback, coldStartThreshold, type FeedbackRow } from './scoring';
@@ -490,7 +491,7 @@ export async function loadMoney() {
   const today = now.toISOString().slice(0, 10);
   const horizon = new Date(now.getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
 
-  const [rows, offers, renewals, bankEnabled, bankPulse] = await Promise.all([
+  const [rows, offers, renewals, bankEnabled, bankPulse, bankAction] = await Promise.all([
     db
       .select({
         id: daydreamSpend.id,
@@ -528,6 +529,20 @@ export async function loadMoney() {
       .limit(30),
     getSetting<boolean>('daydream.bank.enabled'),
     lastPulseFor('daydream-bank'),
+    // When it will next be LOOKED at, not just when it last ran. A job that
+    // has only ever skipped has a last-run time and no story; the next-run
+    // time is the half that says whether it will ever run again.
+    db
+      .select({
+        nextRunAt: heartbeatActions.nextRunAt,
+        activeHoursStart: heartbeatActions.activeHoursStart,
+        activeHoursEnd: heartbeatActions.activeHoursEnd,
+        activeHoursTz: heartbeatActions.activeHoursTz,
+      })
+      .from(heartbeatActions)
+      .where(eq(heartbeatActions.name, 'daydream-bank'))
+      .limit(1)
+      .then((r) => r[0] ?? null),
   ]);
 
   const byDay = new Map<string, number>();
@@ -557,6 +572,17 @@ export async function loadMoney() {
     bank: {
       enabled: bankEnabled === true,
       lastRun: bankPulse,
+      nextRunAt: bankAction?.nextRunAt?.toISOString() ?? null,
+      window:
+        bankAction?.activeHoursStart && bankAction?.activeHoursEnd
+          ? `${bankAction.activeHoursStart}–${bankAction.activeHoursEnd} ${bankAction.activeHoursTz ?? 'UTC'}`
+          : null,
+      /** True when the next scheduled run falls OUTSIDE the window, i.e. the
+       *  job is about to skip again. Before the engine fix this was the
+       *  permanent state of three daydream actions and nothing said so. */
+      willSkip: bankAction?.nextRunAt
+        ? !windowOpenAt(bankAction, bankAction.nextRunAt)
+        : false,
     },
   };
 }

@@ -159,6 +159,33 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, enabled });
       }
 
+      case 'set_bank_enabled': {
+        // Arming the rails was an SQL statement against app_settings, which is
+        // why it stayed off for a fortnight after the job shipped. Same
+        // explicit-both-ways rule as the kill switch above: `unset` means OFF
+        // here (the inverse of the master switch), and setSetting(k, null)
+        // cannot express it.
+        const { setSetting } = await import('$lib/server/models/settings');
+        const { BANK_ENABLED_KEY } = await import('$lib/heartbeat/activities/daydream-bank');
+        const enabled = body.enabled === true;
+        await setSetting(BANK_ENABLED_KEY, enabled);
+
+        // Arming it should not mean waiting until tomorrow's window to find
+        // out whether the token still works. Due it now; the engine re-reads
+        // next_run_at every 30s tick, and the action's own active-hours gate
+        // still applies, so this asks rather than forces.
+        if (enabled) {
+          const { db } = await import('$lib/db');
+          const { heartbeatActions } = await import('$lib/db/schema');
+          const { eq } = await import('drizzle-orm');
+          await db
+            .update(heartbeatActions)
+            .set({ nextRunAt: new Date() })
+            .where(eq(heartbeatActions.name, 'daydream-bank'));
+        }
+        return json({ ok: true, enabled });
+      }
+
       case 'run_action': {
         // One-tap execution of an action a musing proposed. The stored action
         // re-validates through the closed vocabulary before anything runs, so
