@@ -602,19 +602,27 @@ jobs:
       # script itself, and the build it ships was packaged by prebuild. Note
       # this workspace no longer inherits node_modules from prebuild either,
       # since prebuild runs on a different machine.
-      - name: Release
-        run: ./scripts/ci-release.sh
-
-      # Sidecar staging now follows the web release instead of preceding it.
-      # These scripts no longer build anything — they place the bundles that
-      # arrived in the artifact and install the units. A failure here still must
-      # not fail the ship: a stale sidecar is a far smaller problem than a web
-      # release that did not happen.
+      # Staging must PRECEDE the release, because ci-release.sh ends by running
+      # ci-apply-sidecars.sh, and apply only ever looks for a bundle staged for
+      # THIS sha. These two steps used to sit after it — so every deploy applied
+      # nothing ("nothing staged for <sha> — leaving it as it is"), then staged a
+      # bundle the next run would not look for either. jkai-wa-worker and
+      # jkai-codex-bridge ran 2026-08-25 code for three days while each deploy
+      # reported success; the fix that could not reach WhatsApp is what surfaced
+      # it. Ordering is pinned by tests/scripts/ci-sidecars.test.ts.
+      #
+      # They build nothing — the bundles arrived in the release artifact, and
+      # this job has no node_modules. A failure still must not fail the ship: a
+      # stale sidecar is a far smaller problem than a web release that did not
+      # happen, and apply skips whatever has no staged directory.
       - name: Stage the jkai-builder sidecar
         run: ./scripts/ci-stage-builder.sh || echo "::warning::staging the jkai-builder sidecar failed — it will keep running the previous bundle"
 
       - name: Stage the systemd sidecars
         run: ./scripts/ci-stage-sidecars.sh || echo "::warning::staging the systemd sidecars failed — they will keep running the previous bundle"
+
+      - name: Release
+        run: ./scripts/ci-release.sh
 
   risk-tier:
     name: Risk tier
