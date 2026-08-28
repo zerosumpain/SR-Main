@@ -19,7 +19,7 @@ import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/exe
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
-import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
+import { inferToolsets, inferToolsetsForTurn } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
@@ -625,14 +625,26 @@ export async function generalChat(
     buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
   ]);
 
-  // Run the keyword classifier once, up front. Drives both the conditional
-  // scraper playbook below and the toolset auto-activation further down.
-  const inferred = inferToolsets(userMessage);
+  // Run the keyword classifier once, up front, in two widths.
+  //
+  // `inferredNow` is this message alone and gates prompt TEXT — guidance the
+  // model only needs while the subject is live. `inferred` also looks back over
+  // the last couple of user messages and gates TOOLS, which have to survive an
+  // agreement: "build it", "yes" and "go on then" name no subject, so a
+  // current-message-only match unloaded whatever the previous turn had set up.
+  // See inferToolsetsForTurn for the turn that exposed it.
+  const inferredNow = inferToolsets(userMessage);
+  const inferred = inferToolsetsForTurn(
+    userMessage,
+    conversationHistory.filter((h) => h.role === 'user').map((h) => h.content),
+  );
 
   // Stealth-scrape playbook — only injected when the user's message looks
   // scraper-related. Kept out of the always-on prompt so the typical /jkai
-  // turn doesn't pay for ~1KB of guidance it never uses.
-  const scraperSection = inferred.includes('scraper')
+  // turn doesn't pay for ~1KB of guidance it never uses. Deliberately on
+  // `inferredNow`: carried over, one mention of scraping would tax every
+  // later turn in the conversation with guidance it no longer needs.
+  const scraperSection = inferredNow.includes('scraper')
     ? `\n\n--- Web scraping ---\nThe \`stealth-scrape\` node is the pattern for reading live web pages — job boards, listings, prices, schedules, content behind cookie walls. It runs a stealth-patched Playwright on homeserv's residential IP and dispatches through a saved Python script keyed to a stable per-domain \`profile\` (e.g. \`civilservicejobs-gov-uk\`). Scripts have \`page\` (persistent context, cookies retained) and \`vars\` (string dict) in scope and \`return\` a list of dicts.\n\nWhen designing a scrape:\n1. \`scraper_script_list\` first — reuse an existing profile if one matches.\n2. If editing: \`scraper_script_read\` → modify → \`scraper_script_save\` → \`scraper_script_test\` to verify.\n3. If none exists: set \`goal\` + \`searchQuery\` on the \`stealth-scrape\` node — the first run authors and saves a script; subsequent runs replay it.\n\nTypical scrape canvas: \`trigger → (data-store get, stealth-scrape) → merge → transform (diff vs stored URLs) → llm-call (format) → gmail-send / whatsapp → data-store set\`. Keep transforms small (in-process, no sandbox); cap LLM prompts (few hundred chars per description); use \`bodyHtml\` not \`bodyText\` on \`gmail-send\` when output has links or lists.`
     : '';
 

@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, projectVisibility } from '$lib/db/schema';
 import { isNotNull, desc } from 'drizzle-orm';
-import { resolveVisibilityMap, isProjectPublic } from '$lib/projects/visibility';
+import { resolveVisibilityMap, isProjectPublic, isProjectSlug } from '$lib/projects/visibility';
 import { isOwnerEmail } from '$lib/server/access';
 import type { PageServerLoad } from './$types';
 
@@ -38,8 +38,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   const visibility = resolveVisibilityMap(visRows);
 
-  // Attach each build's resolved visibility; hide private builds from the public.
-  const withVis = published.map((p) => ({
+  // A git-target build parks its PR URL / branch ref in `publishedSlug`, so
+  // "has a publishedSlug" is not the same as "is a project". Those rendered
+  // cards linking at /projects/https://github.com/... — drop them here rather
+  // than relying on someone hiding each one by hand after it appears.
+  const projectPublishes = published.filter((p) => isProjectSlug(p.publishedSlug));
+
+  // Attach each build's resolved visibility; hide private builds from the
+  // public. A build with no visibility row is PRIVATE (see $lib/projects/
+  // visibility) — publishing does not put it on the index, the toggle does.
+  const withVis = projectPublishes.map((p) => ({
     ...p,
     isPublic: isProjectPublic(visibility, p.publishedSlug!),
   }));

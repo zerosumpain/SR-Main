@@ -35,7 +35,7 @@ export const META_TOOL_DEFINITIONS = [
     function: {
       name: 'jkai_help',
       description:
-        'See what capabilities and tools are available. Returns all toolsets with their tool names and descriptions, including custom tools. Use this when unsure which toolset to activate.',
+        'See what capabilities and tools are available. Called with no arguments it returns an INDEX of every toolset — name, one-line description, and the tool names it holds — which is the complete list of what exists. Pass `toolset` to get the full descriptions for one of them. Use this when unsure which toolset to activate.',
       parameters: {
         type: 'object',
         properties: {
@@ -134,7 +134,28 @@ export function handleJkaiHelp(args: Record<string, unknown>): {
     return { success: true, data: entry };
   }
 
-  return { success: true, data: manifest };
+  // Unfiltered: an INDEX, not the whole catalogue.
+  //
+  // Returning every tool's full description came to ~58KB against the chat
+  // loop's 32KB tool-result clip, so ~45% of the catalogue — `decks` among it —
+  // was cut off with no way for the model to know what it had lost. A model
+  // that called jkai_help to find the deck builder could not see it and
+  // reported the capability as missing (2026-08-13). Names only is ~9KB.
+  return {
+    success: true,
+    data: {
+      toolsets: manifest.map((m) => ({
+        toolset: m.toolset,
+        description: m.description,
+        tools: m.tools.map((t) => t.name),
+      })),
+      note:
+        'Index only — per-tool descriptions omitted so the whole catalogue fits. ' +
+        'Call jkai_help({ toolset: "<name>" }) for full descriptions of one toolset, ' +
+        'then activate_toolset("<name>") to load it. Every toolset is listed here: ' +
+        'if you cannot see a capability above, it does not exist — do not substitute another.',
+    },
+  };
 }
 
 export async function handleCreateTool(args: Record<string, unknown>): Promise<{

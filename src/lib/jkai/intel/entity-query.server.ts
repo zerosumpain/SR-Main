@@ -11,7 +11,9 @@
 // `.server.ts` suffix is the actual guard — SvelteKit makes importing this from
 // client code a build error, so the boundary cannot quietly regress.
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
-import { intelEntities, intelEntityTypes } from '$lib/db/schema';
+import { intelEntities, intelEntityTypes, intelNotes } from '$lib/db/schema';
+import { alias } from 'drizzle-orm/pg-core';
+import { linksToItem, observedAtSql, sourceHref } from './provenance';
 import {
   escapeLike,
   pageInfo,
@@ -20,6 +22,7 @@ import {
   type EntityRow,
   type EntityPage,
   type PageInfo,
+  type SourceRef,
 } from './entity-query';
 
 function baseConditions(query: EntityQuery): SQL[] {
@@ -65,6 +68,9 @@ const REL_COUNT = sql<number>`(
      or intel_relationships.target_entity_id = intel_entities.id
 )::int`;
 
+/** Aliased so both the first-seen note and the latest one can be selected. */
+const firstSeenNote = alias(intelNotes, 'first_seen_note');
+
 function rowSelection() {
   return {
     id: intelEntities.id,
@@ -85,7 +91,129 @@ function rowSelection() {
     updatedAt: intelEntities.updatedAt,
     noteCount: NOTE_COUNT.as('note_count'),
     relationshipCount: REL_COUNT.as('relationship_count'),
+    // Provenance for the row's origin, joined rather than sub-selected: it is a
+    // plain foreign key. The LATEST source needs the note-link table and is
+    // fetched for the page's rows in one follow-up query instead — see
+    // `attachProvenance`.
+    firstSeenId: firstSeenNote.id,
+    firstSeenTitle: firstSeenNote.title,
+    firstSeenSource: firstSeenNote.source,
+    firstSeenMetadata: firstSeenNote.metadata,
+    firstSeenCreatedAt: firstSeenNote.createdAt,
+    firstSeenObservedAt: observedAtSql(firstSeenNote.observedAt, firstSeenNote.id).as(
+      'first_seen_observed_at',
+    ),
   };
+}
+
+/** A selected note's columns as the `SourceRef` every surface renders. */
+function toSourceRef(row: {
+  id: string | null;
+  title: string | null;
+  source: string | null;
+  metadata: unknown;
+  createdAt: Date | string | null;
+  observedAt: Date | string | null;
+}): SourceRef | null {
+  if (!row.id) return null;
+  const href = sourceHref(row.id, row.metadata);
+  return {
+    noteId: row.id,
+    title: row.title ?? 'Untitled',
+    source: row.source ?? 'unknown',
+    href,
+    direct: linksToItem(href),
+    at: new Date(row.observedAt ?? row.createdAt ?? 0),
+    observed: row.observedAt != null,
+  };
+}
+
+/**
+ * Fold the joined first-seen columns into a `SourceRef`, then attach the latest
+ * source and the count of everything since.
+ *
+ * Two follow-up queries over the page's ids rather than correlated subqueries in
+ * `rowSelection()`: a page is at most 200 rows, and "the newest note asserting
+ * this entity" needs `intel_note_entities`, which is a join the row query does
+ * not otherwise make. Doing it per row would run the same DISTINCT ON 200 times.
+ */
+async function attachProvenance(
+  db: (typeof import('$lib/db'))['db'],
+  rows: Array<Record<string, unknown>>,
+): Promise<EntityRow[]> {
+  const ids = rows.map((r) => String(r.id));
+  if (!ids.length) return [];
+
+  const observed = observedAtSql(sql`n.observed_at`, sql`n.id`);
+  const idList = sql.join(ids.map((i) => sql`${i}`), sql`, `);
+
+  const [latestRes, countRes] = await Promise.all([
+    // DISTINCT ON keeps one row per entity — the first after the ORDER BY, which
+    // is why the ordering repeats the partition key.
+    db.execute(sql`
+      SELECT DISTINCT ON (ne.entity_id)
+             ne.entity_id, n.id, n.title, n.source, n.metadata, n.created_at,
+             ${observed} AS observed_at
+      FROM intel_note_entities ne
+      JOIN intel_notes n ON n.id = ne.note_id
+      WHERE ne.entity_id IN (${idList})
+      ORDER BY ne.entity_id, COALESCE(${observed}, n.created_at) DESC, n.id
+    `),
+    // Everything asserting the entity that is not where it came from. An entity
+    // whose origin never produced a note link counts all of them, which is
+    // correct: none of them is the origin.
+    db.execute(sql`
+      SELECT ne.entity_id, count(*)::int AS later
+      FROM intel_note_entities ne
+      JOIN intel_entities e ON e.id = ne.entity_id
+      WHERE ne.entity_id IN (${idList})
+        AND (e.first_seen_in IS NULL OR ne.note_id <> e.first_seen_in)
+      GROUP BY 1
+    `),
+  ]);
+
+  const latest = new Map<string, SourceRef>();
+  for (const r of latestRes.rows as Array<Record<string, unknown>>) {
+    const ref = toSourceRef({
+      id: r.id == null ? null : String(r.id),
+      title: r.title == null ? null : String(r.title),
+      source: r.source == null ? null : String(r.source),
+      metadata: r.metadata,
+      createdAt: r.created_at as Date | string | null,
+      observedAt: r.observed_at as Date | string | null,
+    });
+    if (ref) latest.set(String(r.entity_id), ref);
+  }
+
+  const laterCounts = new Map<string, number>();
+  for (const r of countRes.rows as Array<Record<string, unknown>>) {
+    laterCounts.set(String(r.entity_id), Number(r.later ?? 0));
+  }
+
+  return rows.map((r) => {
+    const {
+      firstSeenId,
+      firstSeenTitle,
+      firstSeenSource,
+      firstSeenMetadata,
+      firstSeenCreatedAt,
+      firstSeenObservedAt,
+      ...entity
+    } = r;
+    return {
+      ...entity,
+      firstSource: toSourceRef({
+        id: firstSeenId == null ? null : String(firstSeenId),
+        title: firstSeenTitle == null ? null : String(firstSeenTitle),
+        source: firstSeenSource == null ? null : String(firstSeenSource),
+        metadata: firstSeenMetadata,
+        createdAt: firstSeenCreatedAt as Date | string | null,
+        observedAt: firstSeenObservedAt as Date | string | null,
+      }),
+      latestSource: latest.get(String(r.id)) ?? null,
+      laterSourceCount: laterCounts.get(String(r.id)) ?? 0,
+    } as EntityRow;
+  });
 }
 
 /** ORDER BY for everything except `importance`, which needs the graph. */
@@ -155,9 +283,10 @@ export async function queryEntityPage(query: EntityQuery): Promise<EntityPage> {
       .select(rowSelection())
       .from(intelEntities)
       .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
+      .leftJoin(firstSeenNote, eq(firstSeenNote.id, intelEntities.firstSeenIn))
       .where(inArray(intelEntities.id, pageIds));
 
-    const byId = new Map(rows.map((r) => [r.id, r as EntityRow]));
+    const byId = new Map((await attachProvenance(db, rows)).map((r) => [r.id, r]));
     return {
       entities: pageIds.map((id) => byId.get(id)).filter((r): r is EntityRow => Boolean(r)),
       page: info,
@@ -173,14 +302,17 @@ export async function queryEntityPage(query: EntityQuery): Promise<EntityPage> {
 
   const info = pageInfo(count, query);
 
-  const entities = (await db
+  const rows = await db
     .select(rowSelection())
     .from(intelEntities)
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
+    .leftJoin(firstSeenNote, eq(firstSeenNote.id, intelEntities.firstSeenIn))
     .where(where)
     .orderBy(...orderFor(query))
     .limit(info.pageSize)
-    .offset(info.offset)) as EntityRow[];
+    .offset(info.offset);
+
+  const entities = await attachProvenance(db, rows);
 
   return { entities, page: info, typeCounts, lensValues };
 }

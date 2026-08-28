@@ -1,11 +1,20 @@
 <script lang="ts">
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
+  import EvidenceList from '$lib/components/intel/EvidenceList.svelte';
 
   let { data } = $props();
 
   const entity = data.entity;
   const properties = (entity.properties ?? {}) as Record<string, unknown>;
   const propEntries = Object.entries(properties).filter(([, v]) => v != null && v !== '');
+
+  function when(value: string | Date | null): string {
+    if (!value) return '';
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(d.getTime())
+      ? ''
+      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
 </script>
 
 <JkaiPageTitle title="ENTITY" titleHref="/jkai/intel/entities" />
@@ -51,17 +60,58 @@
         </div>
       {/if}
 
+      <!-- Provenance, split in two. "Where did this come from" and "what has
+           happened to it since" are different questions, and a single
+           date-ordered note list answered neither: the origin sat wherever its
+           ingest date happened to put it, and every row linked to the extracted
+           note rather than to the email or document it was extracted from. -->
       <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
-        <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Appears in {data.notes.length} notes</h2>
-        {#each data.notes as note}
-          <a href="/jkai/intel/notes/{note.noteId}" class="block py-2 border-b last:border-0 -mx-2 px-2 rounded hover:opacity-80 transition" style="border-color: var(--line-strong);">
-            <div class="text-sm" style="color: var(--accent);">{note.noteTitle ?? 'Untitled'}</div>
-            <div class="text-xs mt-0.5" style="color: var(--text-ghost);">{new Date(note.noteCreatedAt).toLocaleDateString()} &middot; {note.relevance}</div>
-            {#if note.excerpt}
-              <div class="text-xs mt-1 line-clamp-2" style="color: var(--text-ghost);">{note.excerpt}</div>
-            {/if}
+        <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Origin</h2>
+        {#if data.firstSource}
+          <a
+            href={data.firstSource.href}
+            class="block -mx-2 px-2 py-1.5 rounded hover:opacity-80 transition"
+          >
+            <div class="text-sm" style="color: var(--accent);">{data.firstSource.title}</div>
+            <div class="text-xs mt-0.5 font-mono uppercase tracking-wide" style="color: var(--text-ghost);">
+              {data.firstSource.source}
+              {#if when(data.firstSource.observedAt ?? data.firstSource.createdAt)}
+                &middot;
+                <!-- An ingest date is a weaker claim than an observation date,
+                     and says so, exactly as the evidence list below does. -->
+                <span
+                  class:ingested={!data.firstSource.observedAt}
+                  title={data.firstSource.observedAt
+                    ? 'When this was observed'
+                    : 'When this was ingested — no observation date recorded'}
+                >{when(data.firstSource.observedAt ?? data.firstSource.createdAt)}</span>
+              {/if}
+              &middot; {data.firstSource.direct ? 'the source itself' : 'extracted note'}
+            </div>
           </a>
-        {/each}
+          {#if data.firstSource.excerpt}
+            <blockquote class="text-xs mt-1 pl-2 border-l-2" style="color: var(--text-secondary); border-color: var(--line-strong);">
+              {data.firstSource.excerpt}
+            </blockquote>
+          {/if}
+        {:else}
+          <!-- `first_seen_in` is nullable and older rows predate it. Saying so
+               beats implying the entity has no origin. -->
+          <p class="text-sm" style="color: var(--text-ghost);">Not recorded — this entity predates first-seen tracking.</p>
+        {/if}
+      </div>
+
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
+        {#if data.laterSources.length > 0}
+          <EvidenceList
+            evidence={data.laterSources}
+            term={entity.name}
+            heading="Updated by {data.laterSources.length} later source{data.laterSources.length === 1 ? '' : 's'}"
+          />
+        {:else}
+          <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Updated by</h2>
+          <p class="text-sm" style="color: var(--text-ghost);">Nothing has corroborated this since.</p>
+        {/if}
       </div>
     </div>
 
@@ -101,3 +151,10 @@
     </div>
   </div>
 </div>
+
+<style>
+  .ingested {
+    font-style: italic;
+    opacity: 0.75;
+  }
+</style>

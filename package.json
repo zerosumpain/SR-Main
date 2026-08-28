@@ -111,6 +111,7 @@
     "nodemailer": "^7.0.13",
     "openai": "^6.32.0",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.296",
     "pdfkit": "^0.18.0",
     "pg": "^8.20.0",
     "playwright": "^1.61.1",

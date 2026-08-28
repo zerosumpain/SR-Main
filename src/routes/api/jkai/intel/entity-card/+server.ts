@@ -23,39 +23,10 @@ import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { entityRelevance } from '$lib/jkai/intel/staleness';
 import { UNASSESSED_SCORE } from '$lib/jkai/intel/trust';
 import { acronymsOf } from '$lib/jkai/intel/resolve/match';
+import { observedAtSql, sourceHref } from '$lib/jkai/intel/provenance';
 
 /** Cap on names shipped to the client for mention matching. */
 const MAX_MENTIONS = 1200;
-
-/**
- * Where a note came from, as something clickable.
- *
- * Measured coverage of `intel_notes.metadata` on 2026-08-05, and the three cases
- * are genuinely different — a `sourceUrl` is not by itself a usable link:
- *
- *   email    (1,038)  a real Gmail permalink to the thread. Use it.
- *   research (17)     `/deepdive/<id>`. Use it.
- *   file     (38)     the bare string `/drive` — the ROOT, with no file id, and
- *                     `/drive` has no deep-link parameter. Following it lands
- *                     you in a file browser with no idea which document was
- *                     meant, so the note's own page, which quotes the extracted
- *                     content, is more use.
- *   chat     (192)    `refId` only, and there is no route that opens a thread by
- *                     id. Same fallback.
- *   web      (2)      neither. Same fallback.
- *
- * The rule is therefore "link out only where the URL identifies the actual
- * item". A plausible-looking link that lands somewhere useless is worse than an
- * honest one to the note.
- */
-const ROOT_ONLY_URLS = new Set(['/drive', '/jkai', '/']);
-
-function sourceHref(noteId: string, _source: string, metadata: unknown): string {
-  const meta = (metadata ?? {}) as Record<string, unknown>;
-  const url = meta.sourceUrl == null ? '' : String(meta.sourceUrl).trim();
-  if (url && !ROOT_ONLY_URLS.has(url.replace(/\/+$/, '') || '/')) return url;
-  return `/jkai/intel/notes/${noteId}`;
-}
 
 /**
  * Newest first, by when the evidence was OBSERVED rather than ingested.
@@ -140,43 +111,32 @@ export const GET: RequestHandler = async ({ url }) => {
       excerpt: intelNoteEntities.excerpt,
       metadata: intelNotes.metadata,
       // When the thing in this note was actually OBSERVED, as opposed to when
-      // the row was written. `intel_notes.created_at` is the ingest clock: every
-      // email note lands on the day its sweep ran, so ordering or dating
-      // evidence by it puts an eleven-week-old thread and this morning's on the
-      // same day. The edges derived from a note carry the observed time, so it
-      // is read back from there. Null where a note produced no edges.
-      observedAt: sql<Date | null>`(
-        SELECT MAX(r.last_seen_at) FROM intel_relationships r
-        WHERE r.source_note_id = ${intelNotes.id} AND r.suppressed IS NOT TRUE
-      )`.as('observed_at'),
+      // the row was written — see `observedAtSql`. Null where a note has
+      // neither an observed time nor an edge to carry one.
+      observedAt: observedAtSql(intelNotes.observedAt, intelNotes.id).as('observed_at'),
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
     .where(eq(intelNoteEntities.entityId, id))
-    // By the OBSERVATION clock, falling back to ingest where a note produced no
-    // edges to carry one. Ordering by `created_at` — as this did — sorts by the
-    // night the sweep ran, so the ten most recent pieces of evidence for any
-    // email-heavy entity were "the ten from the last sweep" in arbitrary order,
-    // and a thread from March outranked one from last week if March happened to
-    // be swept later. Same reasoning as the `observed_at` column above.
-    .orderBy(sql`COALESCE((
-      SELECT MAX(r.last_seen_at) FROM intel_relationships r
-      WHERE r.source_note_id = ${intelNotes.id} AND r.suppressed IS NOT TRUE
-    ), ${intelNotes.createdAt}) DESC`)
+    // By the OBSERVATION clock, falling back to ingest where nothing carries
+    // one. Ordering by `created_at` — as this did — sorts by the night the sweep
+    // ran, so the ten most recent pieces of evidence for any email-heavy entity
+    // were "the ten from the last sweep" in arbitrary order, and a thread from
+    // March outranked one from last week if March happened to be swept later.
+    .orderBy(sql`COALESCE(${observedAtSql(intelNotes.observedAt, intelNotes.id)}, ${intelNotes.createdAt}) DESC`)
     .limit(10);
 
   // Evidence per month across ALL of this entity's notes, not the ten fetched
   // for display — the sparkline is meant to show the shape of the whole record.
-  // Dated by observation where the note produced edges, ingest otherwise.
+  // Dated by observation where anything carries one, ingest otherwise.
   const histogramRows = await db.execute(sql`
-    SELECT to_char(date_trunc('month', COALESCE(obs.observed_at, n.created_at)), 'YYYY-MM') AS month,
+    SELECT to_char(
+             date_trunc('month', COALESCE(${observedAtSql(sql`n.observed_at`, sql`n.id`)}, n.created_at)),
+             'YYYY-MM'
+           ) AS month,
            count(*)::int AS count
     FROM intel_note_entities ne
     JOIN intel_notes n ON n.id = ne.note_id
-    LEFT JOIN LATERAL (
-      SELECT MAX(r.last_seen_at) AS observed_at FROM intel_relationships r
-      WHERE r.source_note_id = n.id AND r.suppressed IS NOT TRUE
-    ) obs ON TRUE
     WHERE ne.entity_id = ${id}
     GROUP BY 1 ORDER BY 1
   `);
@@ -290,7 +250,7 @@ export const GET: RequestHandler = async ({ url }) => {
         relevance: n.relevance,
         excerpt: n.excerpt,
         observedAt: n.observedAt ?? null,
-        href: sourceHref(n.id, n.source, n.metadata),
+        href: sourceHref(n.id, n.metadata),
         firstSeen: n.id === firstSeenId,
       })),
       // Appended, so an entity whose only provenance is where it was extracted
@@ -305,7 +265,7 @@ export const GET: RequestHandler = async ({ url }) => {
               relevance: null,
               excerpt: null,
               observedAt: null,
-              href: sourceHref(firstSeen.id, firstSeen.source, firstSeen.metadata),
+              href: sourceHref(firstSeen.id, firstSeen.metadata),
               firstSeen: true,
             },
           ]

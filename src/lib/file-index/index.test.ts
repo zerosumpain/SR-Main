@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sha256Hex } from './hash';
-import { isIndexableMime } from './content';
+import { fileToText, isIndexableMime } from './content';
 
 describe('sha256Hex', () => {
   it('is deterministic and content-sensitive', () => {
@@ -37,5 +37,36 @@ describe('isIndexableMime', () => {
     expect(isIndexableMime('video/mp4', 'movie.mp4')).toBe(false);
     expect(isIndexableMime('application/zip', 'archive.zip')).toBe(false);
     expect(isIndexableMime('application/octet-stream', 'mystery.bin')).toBe(false);
+  });
+});
+
+describe('fileToText outcomes', () => {
+  // A crashed extraction and an empty document used to be the same `null`, and
+  // indexFile retired both permanently. Keeping them distinct is the whole point
+  // of the outcome type: only 'empty' is allowed to stamp the content hash.
+  it('reports a thrown extraction as error, with the code and cause in the reason', async () => {
+    const out = await fileToText(Buffer.from('not a pdf'), 'application/pdf', 'broken.pdf');
+    expect(out.status).toBe('error');
+    if (out.status !== 'error') throw new Error();
+    expect(out.reason).toContain('E_PARSE_FAILED');
+    expect(out.reason).toContain('caused by:');
+  });
+
+  it('reports a document with no text as empty, not error', async () => {
+    const out = await fileToText(Buffer.from('   \n  '), 'text/plain', 'blank.txt');
+    expect(out.status).toBe('empty');
+  });
+
+  it('returns text with a modality when extraction succeeds', async () => {
+    const out = await fileToText(Buffer.from('hello drive'), 'text/plain', 'note.txt');
+    expect(out.status).toBe('text');
+    if (out.status !== 'text') throw new Error();
+    expect(out.content.text).toContain('hello drive');
+    expect(out.content.modality).toBe('text');
+  });
+
+  it('treats an unindexable kind as empty rather than failing', async () => {
+    const out = await fileToText(Buffer.from('PK'), 'application/zip', 'archive.zip');
+    expect(out.status).toBe('empty');
   });
 });
