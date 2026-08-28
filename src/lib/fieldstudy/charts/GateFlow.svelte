@@ -86,6 +86,6 @@
 
   .gf-foot {
     margin: 11px 0 0; font-size: var(--fs-label-xs); line-height: 1.55;
-    color: var(--text-muted); max-width: 78ch;
+    color: var(--text-muted); max-width: 100%;
   }
 </style>

@@ -14,8 +14,8 @@ The study landing page. Once per study.
 
 ```
 kicker            FIELD STUDY №n · ABSTRACT          mono, .22em, accent
-title             the study's question                serif 600, 56px, 22ch
-thesis            one paragraph, 60ch                 serif 400, 21px
+title             the study's question                serif 600, 56px, fills
+thesis            one paragraph, fills                serif 400, 21px
 statusCard        headline + detail + chip            right column, 300px
 findingsLedger    3 rows: label | finding | chip      2px rule above
 whatThisAnswers   3–4 numbered questions              left of a 1px divider
@@ -37,10 +37,10 @@ Prose carries the beat. Two figures at most.
 beatHeader        numeral in margin, name + progress
 questionClaim     ClaimTable
 marginNotes       one aside + cited-here + terms      margin column
-dropCapOpening    .fs-dropcap, single 68–74ch measure
+dropCapOpening    .fs-dropcap, one column, fills it
 body              2–3 further paragraphs
 figure            Fig n.1 in .fs-figure
-pullQuote         one, 44ch, on 2px rules
+pullQuote         one, fills, on 2px rules
 secondMovement    the complication, 1–2 paragraphs
 figure2           Fig n.2 (optional)
 soWhat + openQuestion + pagination
@@ -79,8 +79,8 @@ One recommendation, defended. Once per study.
 
 ```
 beatHeader
-positionDisplay   serif 600, 60px, 20ch — the call itself
-elaboration       one paragraph, 58ch
+positionDisplay   serif 600, 60px, fills — the call itself
+elaboration       one paragraph, fills
 confidenceNote    3px accent left border, states the confidence honestly
 becauseBand       3 cells, full-bleed, background var(--accent-tint-08)
 andNotTheOthers   one row per rejected option: name | why, stated fairly
@@ -204,5 +204,7 @@ describes that case, it is trivia.
 `pagination`. T0 has no questionClaim (the findings ledger does that job); T5
 replaces the close with its limits note.
 
-Figures are numbered `Fig. n.m` with an italic serif caption. Prose is a single
-column at 68–74ch. Radii 0 / 2px / 100px. No shadows inside a page. No emoji.
+Figures are numbered `Fig. n.m` with an italic serif caption. Text is a single
+column and FILLS it — no `ch` cap on anything, display type included; to shorten
+a line, narrow the column. Radii 0 / 2px / 100px. No shadows inside a page. No
+emoji.

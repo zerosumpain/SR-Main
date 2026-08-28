@@ -73,11 +73,13 @@
 
 <style>
   .fs-position {
-    max-width: 20ch;
+    /* Fills, like everything else. A display line stopping a third of the
+       way across is the same fault as a paragraph doing it. */
+    max-width: 100%;
     margin-top: 26px;
   }
   .fs-elaboration {
-    max-width: 58ch;
+    max-width: 100%;
     margin-top: 16px;
   }
   .fs-confidence-note {
@@ -90,12 +92,16 @@
     font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-muted);
-    max-width: 62ch;
+    max-width: 100%;
   }
   /* The one filled accent band in the study. */
   .fs-because {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* Two shared rows — headline, then detail. Without them a two-line
+       headline and a three-line headline start their bodies at different
+       heights, and the three cells read as misaligned. */
+    grid-template-rows: auto auto;
     gap: 1px;
     background: var(--line);
     border: 1px solid var(--line);
@@ -103,6 +109,10 @@
     margin-top: 28px;
   }
   .fs-because > div {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    align-content: start;
     background: var(--accent-tint-08);
     padding: 16px 18px;
     min-width: 0;
@@ -152,7 +162,7 @@
     font-size: var(--fs-label);
     line-height: 1.6;
     color: var(--text-secondary);
-    max-width: 68ch;
+    max-width: 100%;
   }
   .fs-phase-name { display: block; margin-top: 5px; }
   .fs-sinkers {

@@ -21,6 +21,7 @@
     "gate": "npm run gate:public-routes && npm run gate:font-sizes && npm run gate:schema-imports && npm run gate:boundaries && npm run gate:check && npm run gate:test && npm run gate:build",
     "gate:public-routes": "node scripts/check-public-routes.mjs",
     "gate:font-sizes": "node scripts/check-font-sizes.mjs",
+    "gate:measure": "node scripts/check-measure.mjs",
     "gate:boundaries": "node scripts/check-module-boundaries.mjs",
     "gate:schema-imports": "node scripts/check-schema-imports.mjs",
     "gate:check": "npm run gate:sync && npm run gate:check:only",

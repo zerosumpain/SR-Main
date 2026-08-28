@@ -132,7 +132,7 @@
   .qx-stage header { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
   .qx-n { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-content: center; background: var(--ink); color: var(--paper, #f1ead6); border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .qx-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
-  .qx-note { margin: 3px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.65); max-width: 70ch; }
+  .qx-note { margin: 3px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.65); max-width: 100%; }
   .basis { margin-left: auto; flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; padding: 4px 10px; border-radius: var(--radius-sharp); color: #fff; }
   .basis.statutory { background: var(--accent-ink); }
   .basis.voluntary { background: #b0892a; }

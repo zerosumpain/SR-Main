@@ -32,8 +32,8 @@
   .sm { margin: 0 0 18px; }
   .sm-kicker { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.22em;
     text-transform: uppercase; color: var(--ink-soft, rgba(28,22,17,0.62)); margin-bottom: 7px; }
-  .sm-thesis { margin: 0 0 14px; max-width: 78ch; }
-  .sm-ask { border-left: 3px solid var(--accent-ink); background: var(--accent-ink-tint-12); border-radius: var(--radius-sharp); padding: 10px 14px; max-width: 78ch; }
+  .sm-thesis { margin: 0 0 14px; max-width: 100%; }
+  .sm-ask { border-left: 3px solid var(--accent-ink); background: var(--accent-ink-tint-12); border-radius: var(--radius-sharp); padding: 10px 14px; max-width: 100%; }
   .sm-ask-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
   .sm-ask ul { margin: 0; padding-left: 18px; }

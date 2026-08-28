@@ -889,8 +889,11 @@ a {
   --fs-cat-standards: #b4632e;
   --fs-cat-trust: #8a2d3a;
 
-  /* measure */
-  --fs-measure: 72ch;
+  /* NO MEASURE TOKEN. There used to be `--fs-measure: 72ch`, and its only
+     effect was to make every paragraph stop two-thirds of the way across
+     its column. Text fills its column; the column is the measure, and it
+     is set by --fs-margin-col and .fs-route below. Re-adding a ch cap
+     anywhere under .fs-* fails scripts/check-measure.mjs. */
   --fs-margin-col: 178px;
 }
 
@@ -920,7 +923,16 @@ a {
 @media (max-width: 700px) { .fs-qc { grid-template-columns: 1fr; } .fs-qc dd { padding-left: 0; } }
 
 /* ——— body ——— */
-.fs-body { font-size: var(--fs-body); line-height: 1.68; color: var(--text-secondary); max-width: var(--fs-measure); }
+/* THE WIDTH RULE: text fills its column, edge to edge. No exceptions.
+   A line that stops two-thirds of the way across leaves a void beside itself
+   and reads as broken rather than as typeset — measured at 286px of dead
+   space on a 1078px column. This applies to DISPLAY type too: a headline
+   stopping short is the same fault as a paragraph doing it, not a deliberate
+   contrast.
+   To make a line shorter, narrow the COLUMN — a grid cell, --fs-margin-col,
+   .fs-route — never the text inside it. A `ch` cap under .fs-* is a gate
+   failure, not a judgement call. */
+.fs-body { font-size: var(--fs-body); line-height: 1.68; color: var(--text-secondary); max-width: 100%; }
 .fs-body b { color: var(--text-primary); }
 .fs-body a { color: var(--accent-ink); }
 .fs-dropcap::first-letter { font-family: var(--fs-serif); font-weight: 600; font-size: 62px; line-height: 0.76; letter-spacing: -0.04em; color: var(--text-primary); float: left; margin: 4px 10px 0 0; }
@@ -949,7 +961,7 @@ a {
 .fs-figcaption p { font-family: var(--fs-serif); font-style: italic; font-size: var(--fs-body-sm); line-height: 1.5; color: var(--text-secondary); margin: 0; }
 
 /* ——— pull quote: one per page ——— */
-.fs-pull { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: 20px 0; margin: 28px 0 0; max-width: 44ch; }
+.fs-pull { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: 20px 0; margin: 28px 0 0; max-width: 100%; }
 .fs-pull p { font-family: var(--fs-serif); font-style: italic; font-size: 26px; line-height: 1.35; letter-spacing: -0.015em; margin: 0; text-wrap: pretty; }
 
 /* ——— tables ——— */
@@ -968,7 +980,7 @@ a {
 
 /* ——— beat close ——— */
 .fs-close { border-top: 2px solid var(--text-primary); padding-top: 20px; margin-top: 32px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 34px; }
-.fs-sowhat { font-family: var(--fs-serif); font-size: 20px; line-height: 1.5; margin: 9px 0 0; max-width: 54ch; text-wrap: pretty; }
+.fs-sowhat { font-family: var(--fs-serif); font-size: 20px; line-height: 1.5; margin: 9px 0 0; max-width: 100%; text-wrap: pretty; }
 .fs-open { border: 1px solid var(--fs-line-strong); padding: 15px 17px; display: flex; flex-direction: column; gap: 10px; }
 .fs-falsifier { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; color: var(--text-ghost); padding-top: 8px; border-top: 1px dashed rgba(26, 16, 8, 0.2); }
 @media (max-width: 900px) { .fs-close { grid-template-columns: 1fr; gap: 18px; } }

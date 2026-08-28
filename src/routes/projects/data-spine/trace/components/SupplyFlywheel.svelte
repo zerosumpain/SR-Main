@@ -290,7 +290,7 @@
   .e-tbl tr.on th.c-n button { color: var(--ink); }
   .e-tbl td { color: rgba(26,16,8,0.84); }
   .e-tbl td.c-u, .e-tbl th.c-u { width: 28%; color: #216b3f; }
-  .e-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 0; max-width: 84ch; }
+  .e-note { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 0; max-width: 100%; }
 
   /* flywheel */
   .loop { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 4px 18px 18px; align-items: start; }
@@ -322,7 +322,7 @@
 
   /* bargain */
   .bargain { background: #ffffff; border-top: 1.5px solid rgba(26,16,8,0.4); padding: 16px 18px; }
-  .b-lede { font-size: var(--fs-label); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 0 0 14px; max-width: 84ch; }
+  .b-lede { font-size: var(--fs-label); line-height: 1.6; color: rgba(26,16,8,0.84); margin: 0 0 14px; max-width: 100%; }
   .gg-table { display: flex; flex-direction: column; gap: 8px; }
   .ggr { display: grid; grid-template-columns: 1fr 26px 1fr; gap: 8px; align-items: center; }
   .ggc { border: 1.2px solid rgba(26,16,8,0.25); border-radius: var(--radius-sharp); padding: 8px 11px; }
@@ -338,7 +338,7 @@
   /* risks */
   .risks { border-top: 1.5px solid rgba(26,16,8,0.4); padding: 16px 18px 18px; background: var(--error-bg, rgba(196,68,68,0.07)); }
   .r-lab { color: #8a2d3a; }
-  .r-lede { font-size: var(--fs-label); line-height: 1.6; color: #6d232d; margin: 0 0 12px; max-width: 82ch; }
+  .r-lede { font-size: var(--fs-label); line-height: 1.6; color: #6d232d; margin: 0 0 12px; max-width: 100%; }
   .risk { border: 1.2px solid rgba(138,45,58,0.32); border-radius: var(--radius-sharp); background: #ffffff; margin-bottom: 6px; }
   .risk.open { border-color: rgba(138,45,58,0.6); }
   .r-t { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: transparent;

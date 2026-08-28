@@ -29,7 +29,8 @@ Run every line. Answer with the evidence, not "yes".
 - [ ] Categorical hues appear only in a legend and the marks it labels.
 - [ ] Confidence chips are petrol / orange / claret — not categorical hues.
 - [ ] Figures are numbered `Fig. n.m` with an italic serif caption.
-- [ ] Prose is a single column at 68–74ch. No two-column body text.
+- [ ] Text FILLS its column — no `ch` cap on any element. No two-column body
+      text. To shorten a line, narrow the column, never the text.
 - [ ] No emoji anywhere.
 
 ## Instruments

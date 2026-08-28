@@ -273,7 +273,7 @@
   .traffic circle { stroke: #ede4d4; stroke-width: 1.5; }
 
   .caption { display: flex; gap: 18px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; padding: 16px 20px 18px; border-top: 1px solid rgba(26,16,8,0.25); background: #ede4d4; }
-  .cap-text { max-width: 72ch; min-width: 260px; flex: 1 1 380px; }
+  .cap-text { max-width: 100%; min-width: 260px; flex: 1 1 380px; }
   .cap-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.2em; color: var(--accent-ink); }
   .caption h3 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(18px, 2vw, 24px); margin: 4px 0 6px; color: var(--ink); }
   .caption p { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0; }

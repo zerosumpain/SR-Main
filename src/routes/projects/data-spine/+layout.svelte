@@ -116,10 +116,10 @@
 
   .foot { position: relative; z-index: 1; padding: 18px 28px 26px; border-top: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.5); margin-top: 24px; }
   .foot code { background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: var(--radius-sharp); color: var(--ink-soft); font-family: var(--font-mono); }
-  .foot-personal { margin: 0 0 10px; font-size: var(--fs-label); line-height: 1.5; color: var(--ink-soft); max-width: 96ch;
+  .foot-personal { margin: 0 0 10px; font-size: var(--fs-label); line-height: 1.5; color: var(--ink-soft); max-width: 100%;
     padding: 8px 12px; border-left: 3px solid rgba(28,22,17,0.3); background: rgba(28,22,17,0.035); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; }
   .foot-personal b { color: var(--ink); }
-  .foot-disc { margin: 10px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 96ch; }
+  .foot-disc { margin: 10px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 100%; }
   .foot-disc b { color: var(--ink-soft); } .foot-disc a { color: var(--accent-ink); }
   .sources-foot { font-size: var(--fs-label-xs); }
   .sources-foot summary { cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); padding: 4px 0; }

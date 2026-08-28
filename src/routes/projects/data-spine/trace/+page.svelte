@@ -265,12 +265,12 @@
 
   .hero h1 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(36px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 22px; color: var(--ink); }
   .hero h1 em { font-style: italic; color: var(--accent-ink); }
-  .hero-lede { font-size: clamp(16px, 1.7vw, 20px); line-height: 1.55; color: rgba(26,16,8,0.82); max-width: 68ch; margin: 0 0 24px; }
+  .hero-lede { font-size: clamp(16px, 1.7vw, 20px); line-height: 1.55; color: rgba(26,16,8,0.82); max-width: 100%; margin: 0 0 24px; }
   .hero-lede b { color: var(--ink); }
 
   h2 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(27px, 4vw, 50px); line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 16px; color: var(--ink); }
   h2 em { font-style: italic; color: var(--accent-ink); }
-  .slide-lede { font-size: clamp(15px, 1.5vw, 18px); line-height: 1.6; color: rgba(26,16,8,0.82); max-width: 76ch; margin: 0 0 26px; }
+  .slide-lede { font-size: clamp(15px, 1.5vw, 18px); line-height: 1.6; color: rgba(26,16,8,0.82); max-width: 100%; margin: 0 0 26px; }
   .slide-lede b { color: var(--ink); }
   .slide-lede em { font-style: italic; color: var(--accent-ink); }
 

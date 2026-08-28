@@ -99,6 +99,6 @@
     line-height: 1.55;
     color: var(--text-secondary);
     margin: 18px 0 0;
-    max-width: 62ch;
+    max-width: 100%;
   }
 </style>

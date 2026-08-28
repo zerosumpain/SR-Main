@@ -192,7 +192,7 @@
   .lb-head { margin-bottom: 16px; }
   .lb-eyebrow { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.22em; color: var(--accent-ink, #0e5b66); }
   .lb-head h2 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(22px, 2.6vw, 30px); color: var(--ink, #1a1008); margin: 4px 0 8px; }
-  .lb-lead { font-family: var(--font-body); font-size: var(--fs-body-sm); line-height: 1.6; color: rgba(26,16,8,0.82); max-width: 62ch; margin: 0; }
+  .lb-lead { font-family: var(--font-body); font-size: var(--fs-body-sm); line-height: 1.6; color: rgba(26,16,8,0.82); max-width: 100%; margin: 0; }
   .lb-lead em { font-style: italic; color: var(--accent-ink, #0e5b66); font-weight: 600; }
 
   /* filter chips */

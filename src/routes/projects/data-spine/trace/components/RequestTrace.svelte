@@ -550,7 +550,7 @@
   .d-x { color: rgba(26,16,8,0.4); font-size: var(--fs-label-xs); }
   .d-layer { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; letter-spacing: 0.12em; color: var(--ink); }
   .d-actor { font-family: var(--font-body); font-size: var(--fs-label-xs); color: rgba(26,16,8,0.6); margin-left: auto; }
-  .d-say { font-family: var(--fs-serif); font-size: var(--fs-body-sm); line-height: 1.45; color: var(--ink); margin: 0 0 12px; max-width: 88ch; }
+  .d-say { font-family: var(--fs-serif); font-size: var(--fs-body-sm); line-height: 1.45; color: var(--ink); margin: 0 0 12px; max-width: 100%; }
 
   .d-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
   .dc { border-left: 2px solid rgba(26,16,8,0.18); padding-left: 10px; }
