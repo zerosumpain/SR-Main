@@ -1,5 +1,5 @@
 import { ensureCollection, upsertRecord, getRecordByKey } from '$lib/datastore';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { HistoryMessage } from './conversation-history';
 

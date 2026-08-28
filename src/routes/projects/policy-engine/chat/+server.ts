@@ -6,7 +6,7 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve, type Retrieved } from '../lib/retrieval.server';
 

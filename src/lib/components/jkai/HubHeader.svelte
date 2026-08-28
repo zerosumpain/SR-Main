@@ -5,7 +5,7 @@
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
-  import { codexMeter, type CodexUsageView } from '$lib/jkai/usage-meter';
+  import { codexMeter, type CodexUsageView } from '$lib/llm/usage-meter';
 
   let {
     tokensToday,

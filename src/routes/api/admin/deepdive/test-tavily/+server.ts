@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getTavilyKey } from '$lib/deepdive/keys';
+import { getTavilyKey } from '$lib/llm/keys';
 
 export const POST: RequestHandler = async () => {
   try {

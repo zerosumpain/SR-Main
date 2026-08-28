@@ -6,7 +6,7 @@ import {
   deleteSetting,
   clearSettingsCache,
 } from '$lib/server/models/settings';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 import { siteDefaultBlockReason } from '$lib/server/models/capabilities';
 

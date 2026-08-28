@@ -198,7 +198,7 @@ export const REASONING_TOKEN_FLOOR = 3000;
  *
  * 76 of the ~340 catalogued OpenRouter models advertise a completion cap below
  * this (lowest ceiling 16384), which is why `withProviderCap` in
- * $lib/jkai/usage-capture clamps the request back down per model.
+ * $lib/llm/usage-capture clamps the request back down per model.
  */
 export const DEFAULT_NODE_MAX_TOKENS = 25_000;
 

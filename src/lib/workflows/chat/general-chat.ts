@@ -1,6 +1,6 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
-import { withChatContext, emptyChatUsage, type ChatUsageTotals } from '$lib/jkai/chat-context';
+import { withChatContext, emptyChatUsage, type ChatUsageTotals } from '$lib/context/chat';
 import { db } from '$lib/db';
 import {
   homeAssistantConfig,
@@ -11,7 +11,7 @@ import {
   workflowEdges,
 } from '$lib/db/schema';
 import { eq, isNull, desc, sql } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
 import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';

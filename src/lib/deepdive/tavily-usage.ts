@@ -12,7 +12,7 @@
  * merely wanted to mention the number, so every path returns null instead of
  * throwing.
  */
-import { getTavilyKey } from './keys';
+import { getTavilyKey } from '$lib/llm/keys';
 
 export interface TavilyAccountUsage {
   plan: string | null;

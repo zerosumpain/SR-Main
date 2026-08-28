@@ -15,11 +15,11 @@
 // (Gemini on OpenRouter). Best-effort: size-capped and try/catch → null, so a
 // failure just leaves the file filename-searchable rather than breaking indexing.
 
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { resolveVisionModel, resolveAudioModel } from '$lib/server/models/workload-settings';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 import type { ModelContext } from '$lib/server/models/types';
 
 

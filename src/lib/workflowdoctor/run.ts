@@ -17,7 +17,7 @@
 // so a shadow night is never mistaken for a night that chose not to fix.
 
 import { getSetting } from '$lib/server/models/settings';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
 import { isUserActive } from '$lib/selfimprove/run';
 import { releaseAdvisoryLock, tryAdvisoryLock } from '$lib/workflows/leader-lock';
@@ -129,8 +129,8 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
         );
       }
       // Lazy imports keep the module light for tests that never reach the gateway.
-      const { getLLMClient } = await import('$lib/jkai/llm-client');
-      const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
+      const { getLLMClient } = await import('$lib/llm/client');
+      const { priceFor, computeCost } = await import('$lib/llm/pricing');
 
       // Still pinned off the chat default: this pipeline decides what gets
       // written to a live canvas, so a change to the chat default must not

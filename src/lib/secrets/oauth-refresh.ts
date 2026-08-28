@@ -53,7 +53,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { apiSecrets } from '$lib/db/schema';
-import { decryptPayload, encryptPayload } from '$lib/integrations/crypto';
+import { decryptPayload, encryptPayload } from '$lib/secrets/crypto';
 
 /** Seconds of headroom before expiry at which we proactively refresh. */
 const EXPIRY_BUFFER_S = 60;

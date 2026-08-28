@@ -26,9 +26,9 @@ import {
 import { requireConfirmation } from '$lib/workflows/chat/confirmation-gate';
 import { requireSecret, requireSecretUpdate } from '$lib/workflows/chat/secret-gate';
 import { specForRequest } from '$lib/workflows/site-tools/tools/request-credential';
-import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
+import { priceFor, computeCost } from '$lib/llm/pricing';
 import type { TurnStamp } from '$lib/jkai/turn-stamp';
-import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';

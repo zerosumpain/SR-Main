@@ -1,5 +1,5 @@
-import { getTavilyKey } from './keys';
-import { countTavilySearch, countTavilyExtract } from './meter';
+import { getTavilyKey } from '$lib/llm/keys';
+import { countTavilySearch, countTavilyExtract } from '$lib/context/research-meter';
 
 const TAVILY_BASE = 'https://api.tavily.com';
 const TAVILY_TIMEOUT_MS = 15_000;

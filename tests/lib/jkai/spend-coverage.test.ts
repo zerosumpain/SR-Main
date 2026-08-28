@@ -7,18 +7,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type OpenAI from 'openai';
-import { installUsageCapture } from '$lib/jkai/usage-capture';
-import { withActivity, currentActivityId } from '$lib/jkai/activity-context';
+import { installUsageCapture } from '$lib/llm/usage-capture';
+import { withActivity, currentActivityId } from '$lib/context/activity';
 
 const recordDurableLLMCall = vi.fn();
-vi.mock('$lib/jkai/llm-usage-log', () => ({
+vi.mock('$lib/llm/usage-log', () => ({
   recordDurableLLMCall: (...args: unknown[]) => recordDurableLLMCall(...args),
 }));
-vi.mock('$lib/workflows/execution-context', () => ({
+vi.mock('$lib/context/execution', () => ({
   recordLLMCall: vi.fn(),
   executionContext: { getStore: () => undefined },
 }));
-vi.mock('$lib/deepdive/meter', () => ({ currentResearchSessionId: () => null }));
+vi.mock('$lib/context/research-meter', () => ({ currentResearchSessionId: () => null }));
 vi.mock('$lib/db', () => ({ db: { select: () => ({ from: async () => [] }) } }));
 
 /** Fake SDK client with BOTH surfaces the wrapper touches. */

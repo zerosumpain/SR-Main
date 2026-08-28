@@ -144,7 +144,7 @@ export async function backfillMailIndex(
   limit = 100,
 ): Promise<{ scanned: number; indexed: number; failed: number; stopped: boolean }> {
   const out = { scanned: 0, indexed: 0, failed: 0, stopped: false };
-  const { isCreditOrAuthFailure } = await import('$lib/jkai/llm-client');
+  const { isCreditOrAuthFailure } = await import('$lib/llm/client');
   const indexed = await db.selectDistinct({ noteId: mailEmbeddings.noteId }).from(mailEmbeddings);
   const done = new Set(indexed.map((r) => r.noteId));
 

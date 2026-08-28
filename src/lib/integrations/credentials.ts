@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { integrationCredentials } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { encryptPayload, decryptPayload } from './crypto';
+import { encryptPayload, decryptPayload } from '$lib/secrets/crypto';
 import { getIntegrationAdapter } from './registry';
 import type {
   CredentialKind,

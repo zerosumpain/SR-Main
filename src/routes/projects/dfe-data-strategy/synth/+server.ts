@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { extractText, synthesize } from '$lib/jkai/extract';
 import { isOwnerEmail } from '$lib/server/access';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { MATURITY_DIMENSIONS } from '../lib/maturity';
 import { PRESSURES } from '../lib/pressures';

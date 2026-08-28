@@ -198,7 +198,7 @@ export function extractUpstreamValidationError(raw: string): string | null {
 }
 
 /** Codex reports usage with its own field names; the OpenAI shape is what every
- *  caller (including $lib/jkai/usage-capture) reads. */
+ *  caller (including $lib/llm/usage-capture) reads. */
 function toOpenAiUsage(usage: {
   input_tokens: number;
   cached_input_tokens: number;

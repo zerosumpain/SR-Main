@@ -1,5 +1,5 @@
-import { getLLMClient } from '$lib/jkai/llm-client';
-import { withActivity } from '$lib/jkai/activity-context';
+import { getLLMClient } from '$lib/llm/client';
+import { withActivity } from '$lib/context/activity';
 import { db } from '$lib/db';
 import { intelNotes, intelEntities } from '$lib/db/schema';
 import { and, eq, isNull, sql } from 'drizzle-orm';

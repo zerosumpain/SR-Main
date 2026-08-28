@@ -4,7 +4,7 @@ import {
   emptyChatUsage,
   noteChatRound,
   type ChatUsageTotals,
-} from '$lib/jkai/chat-context';
+} from '$lib/context/chat';
 import { readTurnStamp } from '$lib/jkai/turn-stamp';
 
 function round(over: Partial<Parameters<typeof noteChatRound>[0]> = {}) {

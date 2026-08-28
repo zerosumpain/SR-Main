@@ -443,7 +443,7 @@ export const ENDPOINTS: EstateEndpoint[] = [
     exposure: 'public',
     auth: 'app-login',
     note: 'Every LLM call in the estate. Two live keys — the VPS bills its own, so one dashboard never shows the whole spend.',
-    configuredIn: '$lib/jkai/llm-client',
+    configuredIn: '$lib/llm/client',
     probeId: 'openrouter',
   },
   {

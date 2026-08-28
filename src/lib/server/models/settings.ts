@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from './types';
 import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';

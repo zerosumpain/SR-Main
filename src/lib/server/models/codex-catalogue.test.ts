@@ -14,7 +14,7 @@ import {
   unsupportedReason,
   siteDefaultBlockReason,
 } from './capabilities';
-import { priceFor, isSubscriptionProvider } from '$lib/jkai/llm-pricing';
+import { priceFor, isSubscriptionProvider } from '$lib/llm/pricing';
 
 describe('codex model ids', () => {
   it('round-trips slug → id → slug', () => {

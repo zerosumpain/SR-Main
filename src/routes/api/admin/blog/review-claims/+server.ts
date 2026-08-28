@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';

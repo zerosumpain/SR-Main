@@ -22,7 +22,7 @@
 import { and, desc, eq, gte, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamOffers, intelNotes } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from './compose';
 import { errMsg } from './types';
 

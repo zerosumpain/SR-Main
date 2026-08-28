@@ -12,7 +12,7 @@ const {
   extractCredits,
   countTavilySearch,
   EXTRACT_URLS_PER_CREDIT,
-} = await import('./meter');
+} = await import('./research-meter');
 
 describe('Tavily credit arithmetic', () => {
   it('prices a basic search at one credit and an advanced search at two', () => {

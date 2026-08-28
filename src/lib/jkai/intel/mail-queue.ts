@@ -309,7 +309,7 @@ export async function backfillPendingEmbeddings(limit = 400): Promise<{
 }> {
   const out = { scanned: 0, embedded: 0, failed: 0, remaining: 0, stopped: false };
   const { embedNote } = await import('./embed');
-  const { isCreditOrAuthFailure } = await import('$lib/jkai/llm-client');
+  const { isCreditOrAuthFailure } = await import('$lib/llm/client');
 
   const rows = await db
     .select({ id: intelNotes.id })

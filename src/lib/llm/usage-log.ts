@@ -1,4 +1,4 @@
-// src/lib/jkai/llm-usage-log.ts
+// src/lib/llm/usage-log.ts
 //
 // Durable LLM-cost ledger. /admin/ops/costs and /api/agent/costs read the
 // `agent_actions` table (action_type='llm_call'), but historically the ONLY

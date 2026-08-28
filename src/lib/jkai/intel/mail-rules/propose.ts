@@ -17,7 +17,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelNotes } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { MAIL_FACT_KEYS, STRING_MAIL_FACTS, BOOLEAN_MAIL_FACTS } from '../mail-facts';
 import { ownerDecisions } from '../mail-decisions';

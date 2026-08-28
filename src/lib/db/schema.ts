@@ -3056,7 +3056,7 @@ export const integrationCredentials = pgTable('integration_credentials', {
   label: text('label').notNull(),
   kind: text('kind').notNull(), // 'apikey' | 'basic' | 'oauth2'
   // Encrypted JSON: format `${iv-hex}:${tag-hex}:${ciphertext-hex}` produced
-  // by src/lib/integrations/crypto.ts. Shape of the decrypted JSON depends
+  // by src/lib/secrets/crypto.ts. Shape of the decrypted JSON depends
   // on `kind` — see CredentialPayload<K> in src/lib/integrations/types.ts.
   payloadEnc: text('payload_enc').notNull(),
   // Non-secret config (e.g. CalDAV server URL, OAuth callback override).

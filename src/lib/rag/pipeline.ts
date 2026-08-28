@@ -6,7 +6,7 @@ import { db } from '$lib/db';
 import { workflowFiles, ragCollections } from '$lib/db/schema';
 import { readBuffer } from '$lib/file-store/storage';
 import { extractText, kindFromMime } from '$lib/jkai/extract';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { ModelContext } from '$lib/server/models/types';
 import { chunkText } from './chunk';

@@ -92,7 +92,7 @@ export function getChatInputCapabilities(ctx: ModelContext): ModelCapabilities {
 /**
  * Capabilities derived from the live OpenRouter catalogue, warmed into memory.
  *
- * Mirrors the pricing warm-up in `$lib/jkai/llm-pricing` deliberately, for the
+ * Mirrors the pricing warm-up in `$lib/llm/pricing` deliberately, for the
  * same reason: `getModelCapabilities` is called synchronously from request
  * handlers and pickers, so the load is fire-and-forget and the static map
  * answers until it lands.

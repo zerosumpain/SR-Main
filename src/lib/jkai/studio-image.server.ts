@@ -12,7 +12,7 @@
  * the wrong default here, where the picture is the explanation.
  *
  * Gemini's image models draw labelled diagrams competently and cost fractions
- * of a penny. The call goes through $lib/jkai/llm-client like every other LLM
+ * of a penny. The call goes through $lib/llm/client like every other LLM
  * call on the site — no direct provider SDK.
  *
  * WHAT THIS IS FOR
@@ -23,10 +23,10 @@
  * with invented numbers on it. That rule is enforced in the prompt below and
  * stated again in the kit docs.
  */
-import { getLLMClient } from './llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { DEFAULT_IMAGE_MODEL_ID } from '$lib/constants/default-models';
 import { resolveImageModel } from '$lib/server/models/workload-settings';
-import { withActivity } from '$lib/jkai/activity-context';
+import { withActivity } from '$lib/context/activity';
 
 /**
  * Cheap, fast, and good at labelled diagrams. Not the site default — the

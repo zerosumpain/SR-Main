@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';

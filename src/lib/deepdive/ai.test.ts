@@ -15,7 +15,7 @@ const mockFallbackCreate = vi.fn();
 let primaryModel = 'z-ai/glm-5.2';
 let fallbackModel = 'google/gemini-3.1-flash-lite-preview';
 
-vi.mock('$lib/jkai/llm-client', () => ({
+vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn(async () => ({
     client: { chat: { completions: { create: mockPrimaryCreate } } },
     model: primaryModel,
@@ -24,7 +24,7 @@ vi.mock('$lib/jkai/llm-client', () => ({
 vi.mock('$lib/server/models/settings', () => ({
   resolveDefaultModel: vi.fn(async () => ({ provider: 'openrouter', modelId: primaryModel })),
 }));
-vi.mock('./keys', () => ({
+vi.mock('$lib/llm/keys', () => ({
   getOpenRouterClient: () => ({ chat: { completions: { create: mockFallbackCreate } } }),
   getFallbackModel: () => fallbackModel,
   getEmbeddingModel: () => 'openai/text-embedding-3-small',

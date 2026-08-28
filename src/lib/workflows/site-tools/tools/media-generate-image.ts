@@ -7,7 +7,7 @@ import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { checkImageQuota } from '$lib/jkai/media/rate-limits';
-import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import type { JkaiAttachment } from '$lib/db/schema';
 
 /** Resolved per call from the `image-tool` workload rather than read once at

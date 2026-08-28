@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { clampDays } from '$lib/selfimprove/call-efficiency';
 import { getToolAudit } from '$lib/server/tool-audit';
 import { getTools } from '$lib/workflows/site-tools/registry';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 
 // Owner-only (all /api/admin/* is owner-gated by hooks.server.ts). Feeds the

@@ -16,12 +16,12 @@
 // It gets the metric catalogue, how much data exists for each, what it has
 // already asked, and what John thought of previous questions. Nothing else.
 //
-// All model access goes through $lib/jkai/llm-client, never a provider SDK.
+// All model access goes through $lib/llm/client, never a provider SDK.
 
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamDayFeatures, daydreamHypotheses, daydreamLeads } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from '../compose';
 import { SWEEP_METRICS } from '../stats/sweep';
 import { DEFAULT_SUBJECT, errMsg } from '../types';

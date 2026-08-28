@@ -614,7 +614,7 @@ async function probeOAuthSecrets(): Promise<ConnectorReport[]> {
 // ---------------------------------------------------------------------------
 async function probeOpenRouter(): Promise<ConnectorReport> {
   return guard('openrouter', 'OpenRouter (all LLM)', 'AI', 'service', async () => {
-    const { loadKeys } = await import('$lib/deepdive/keys');
+    const { loadKeys } = await import('$lib/llm/keys');
     const key = loadKeys().openrouterApiKey;
     if (!key) {
       return {
@@ -745,7 +745,7 @@ async function probeWhatsApp(): Promise<ConnectorReport> {
 // ---------------------------------------------------------------------------
 async function probeTavily(): Promise<ConnectorReport> {
   return guard('tavily', 'Tavily (research)', 'AI', 'service', async () => {
-    const { loadKeys } = await import('$lib/deepdive/keys');
+    const { loadKeys } = await import('$lib/llm/keys');
     const key = loadKeys().tavilyApiKey;
     return key
       ? { status: 'ok' as ConnectorStatus, detail: 'key present (not test-searched — searches are billed)', live: false }

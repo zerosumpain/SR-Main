@@ -15,7 +15,7 @@
  * to run anywhere.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { getCodexBridgeUrl } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 

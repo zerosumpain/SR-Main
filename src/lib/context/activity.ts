@@ -17,7 +17,7 @@
  * on.
  *
  * The id travels on an AsyncLocalStorage rather than through the call
- * signatures, for the same reason `$lib/deepdive/meter.ts` does it: the LLM call
+ * signatures, for the same reason `$lib/context/research-meter.ts` does it: the LLM call
  * is several frames below the code that knows which role it is serving, and
  * those frames are shared with callers that have no role at all. Outside a
  * wrapped call every function here is a no-op.

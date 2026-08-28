@@ -8,7 +8,7 @@ import { interpolateTemplateStrict } from './template';
 import { resolveLLMClient, resolveMaxTokens } from './llm-helpers';
 import { isDenylistedTool } from './site-tool-denylist';
 import { withNodeTimeout, nodeTimeoutMs } from '../engine-runtime';
-import { executionContext, recordLLMCall, type LLMCallRecord } from '../execution-context';
+import { executionContext, recordLLMCall, type LLMCallRecord } from '$lib/context/execution';
 
 export { llmAgentDef } from './llm-agent.def';
 

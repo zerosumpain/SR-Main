@@ -10,7 +10,7 @@
 // Changing either value requires a full re-embed of that corpus. They are not
 // config.
 
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { normalize } from '$lib/rag/retrieve';
 
 export const MAIL_INDEX_EMBEDDING_MODEL = 'openai/text-embedding-3-small';

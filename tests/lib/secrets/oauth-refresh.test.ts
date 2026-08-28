@@ -36,7 +36,7 @@ vi.mock('$lib/db/schema', () => ({ apiSecrets: { handle: 'handle' } }));
 
 // Identity "encryption" — the real AES-GCM round-trip is covered by the crypto
 // module's own tests; here it would only obscure what the payload contains.
-vi.mock('$lib/integrations/crypto', () => ({
+vi.mock('$lib/secrets/crypto', () => ({
   encryptPayload: (s: string) => s,
   decryptPayload: (s: string) => s,
 }));

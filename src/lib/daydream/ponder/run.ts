@@ -22,7 +22,7 @@ import {
   daydreamObservations,
   daydreamSignals,
 } from '$lib/db/schema';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from '../compose';
 import { buildSnapshot } from '../snapshot';
 import { persistCandidates, type PersistResult } from '../thought-store';

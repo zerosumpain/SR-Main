@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('$lib/jkai/llm-client', () => ({
+vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn(),
 }));
 vi.mock('$lib/server/models/settings', () => ({
@@ -29,7 +29,7 @@ vi.mock('$lib/db/schema', () => ({
 }));
 
 import { extractFromNote } from '$lib/jkai/intel/extract';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 
 const MOCK_EXTRACTION = {
   summary: 'Met with Sarah to discuss platform migration timeline.',
