@@ -20,10 +20,15 @@
     calendar: string | null;
     excluded: boolean;
     hiddenBy?: string | null;
+    /** A note-only rule covering this event: what it MEANS, without hiding it. */
+    noteId?: string | null;
+    note?: string | null;
+    noteScope?: string | null;
   }
 
   export interface BoardExclusion {
     id: string;
+    hidden: boolean;
     scope: string;
     uid: string | null;
     occurrenceStart: string | null;
@@ -170,13 +175,27 @@
     return `${e.uid ?? e.id ?? e.title}|${e.start}`;
   }
 
-  async function exclude(e: BoardEvent, scope: 'series' | 'occurrence' | 'title') {
-    busy = `${eventKey(e)}:${scope}`;
+  /**
+   * `hidden` false saves what the entry MEANS without removing it.
+   *
+   * The reason box previously had no submit of its own — the only way to
+   * record anything was to press one of the Ignore buttons, which also hid the
+   * event. That is wrong for an entry like a PE day: it is not a real time
+   * commitment, but it IS a reminder to put the kit in the bag, and hiding it
+   * would have hidden the reminder too.
+   */
+  async function exclude(
+    e: BoardEvent,
+    scope: 'series' | 'occurrence' | 'title',
+    hidden = true,
+  ) {
+    busy = `${eventKey(e)}:${scope}:${hidden}`;
     actionError = null;
     try {
       const out = await post({
         action: 'exclude_event',
         scope,
+        hidden,
         uid: e.uid ?? '',
         occurrenceStart: e.start,
         title: e.title,
@@ -237,9 +256,10 @@
 </div>
 
 <p class="sec-lede">
-  An ignored event contributes no busy minutes, reaches no prompt, and can be the reason
-  for no suggestion — but it is never deleted from your calendar, and restoring it puts it
-  back everywhere at once. Rolling reminders are what this is for.
+  Two things you can do to an entry. <b>Explain</b> it — what it actually means — and the
+  engine keeps it and reads your words alongside the diary. Or <b>ignore</b> it, and it
+  contributes no busy minutes, reaches no prompt, and is the reason for no suggestion.
+  Neither deletes anything from your calendar, and both undo in one tap.
 </p>
 
 {#if loadError}
@@ -305,13 +325,45 @@
           </button>
         {/if}
       {:else}
+        {#if e.note}
+          <p class="cal-note">You said: “{e.note}”{#if e.noteScope === 'title'} — about anything called this{:else if e.noteScope === 'series'} — about every occurrence{/if}.</p>
+        {/if}
+
         <textarea
           class="note-input"
           rows="2"
           maxlength="280"
-          placeholder="Why? — e.g. “rolling reminder, not a real commitment”. Optional, but it is what changes the next suggestion."
+          placeholder="What is this, really? — e.g. “PE day: a reminder to put the kit in the bag, not a time commitment”."
           bind:value={reason}
         ></textarea>
+
+        <!-- TWO different things, and the difference matters. A note tells the
+             engine what an entry MEANS and leaves it in the diary; ignoring
+             removes it from busy minutes, prompts and suggestions. The box had
+             no submit of its own, so the only way to record anything was to
+             hide the event — the wrong answer for a PE day, which is not a time
+             commitment but IS a reminder to pack the kit. -->
+        <p class="note-hint">Keep it, and tell it what this means:</p>
+        <div class="thought-actions">
+          <button
+            class="row-link"
+            disabled={!!busy || !reason.trim()}
+            onclick={() => exclude(e, e.uid ? 'series' : 'title', false)}
+          >
+            {busy && busy.endsWith(':false') ? 'Saving…' : 'Save this note'}
+          </button>
+          {#if e.uid}
+            <button
+              class="row-link"
+              disabled={!!busy || !reason.trim()}
+              onclick={() => exclude(e, 'title', false)}
+            >
+              Save it for anything called this
+            </button>
+          {/if}
+        </div>
+
+        <p class="note-hint">Or stop it counting as a commitment at all:</p>
         <div class="thought-actions">
           <button class="row-link" disabled={!!busy} onclick={() => exclude(e, 'occurrence')}>
             Ignore this date
@@ -325,11 +377,12 @@
             Ignore anything called this
           </button>
         </div>
-        {#if !e.uid}
-          <p class="note-hint">
-            This entry carries no calendar UID, so it can only be hidden by date or by title.
-          </p>
-        {/if}
+
+        <p class="note-hint">
+          A note leaves the entry where it is and explains it; ignoring removes it from busy
+          minutes, prompts and suggestions. Either way your words are kept and read
+          back.{#if !e.uid} This entry carries no calendar UID, so it can only be matched by date or by title.{/if}
+        </p>
       {/if}
     </div>
   {/if}
@@ -337,20 +390,23 @@
 
 <div class="cal-hidden">
   <div class="nm-sec-hd">
-    <span class="sr-label-tight">Everything you are ignoring</span>
-    <span class="nm-sec-meta">{exclusions.length} rule{exclusions.length === 1 ? '' : 's'}</span>
+    <span class="sr-label-tight">What you have told it about the diary</span>
+    <span class="nm-sec-meta">
+      {exclusions.filter((x) => x.hidden).length} ignored · {exclusions.filter((x) => !x.hidden).length} explained
+    </span>
   </div>
   {#if exclusions.length === 0}
-    <div class="empty">Nothing is hidden. The engine sees the whole diary.</div>
+    <div class="empty">Nothing hidden, nothing explained. The engine sees the whole diary and takes every entry at face value.</div>
   {:else}
     <div class="rows tight">
       {#each exclusions as x (x.id)}
         <div class="excl-row">
+          <span class="mono excl-kind" class:note={!x.hidden}>{x.hidden ? 'ignored' : 'noted'}</span>
           <span class="excl-title">{x.title ?? x.uid ?? x.matchKey}</span>
           <span class="mono excl-scope">{scopeWords(x.scope)}</span>
           {#if x.reason}<span class="excl-reason">“{x.reason}”</span>{/if}
           <button class="row-link" disabled={busy === `restore:${x.id}`} onclick={() => restore(x.id)}>
-            {busy === `restore:${x.id}` ? 'Restoring…' : 'Restore'}
+            {busy === `restore:${x.id}` ? 'Removing…' : x.hidden ? 'Stop ignoring' : 'Forget this note'}
           </button>
         </div>
       {/each}
@@ -409,6 +465,9 @@
   .cal-panel-hd { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; justify-content: space-between; margin-bottom: 0.5rem; font-size: var(--fs-label); }
   .cal-panel-hd .mono { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
+  .cal-note { margin: 0 0 0.6rem; font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); border-left: 2px solid var(--accent); padding-left: 0.6rem; }
+  .excl-kind { flex: none; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); }
+  .excl-kind.note { color: var(--accent); border-color: var(--accent); }
   .cal-hidden { margin-top: 1.4rem; }
   .excl-row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: baseline; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.3rem; }
   .excl-title { color: var(--text-secondary); }

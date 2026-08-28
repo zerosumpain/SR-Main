@@ -204,16 +204,33 @@ export const POST: RequestHandler = async ({ request }) => {
         }
         const { readCalendar } = await import('$lib/daydream/calendar/read');
         const { loadExclusionSet, listExclusions } = await import('$lib/daydream/calendar/store');
+        const { eventKeys } = await import('$lib/daydream/calendar/exclusions');
         const read = await readCalendar({ dateRangeStart: from, dateRangeEnd: to }, await loadExclusionSet());
+        const rules = await listExclusions();
+
+        // Note-only rules do not hide, so their events come back in the
+        // visible half — but the panel still has to show what was said about
+        // them, or the note looks like it was never saved.
+        const notesByKey = new Map(
+          rules.filter((r) => !r.hidden && r.reason).map((r) => [r.matchKey, r]),
+        );
+        const noteFor = (e: { uid: string | null; title: string; start: string }) => {
+          for (const k of eventKeys(e)) {
+            const hit = notesByKey.get(k);
+            if (hit) return { noteId: hit.id, note: hit.reason, noteScope: hit.scope };
+          }
+          return { noteId: null, note: null, noteScope: null };
+        };
+
         return json({
           // Both halves, flagged — the tab shows what is hidden alongside what
           // is not, because a filter you cannot see is a filter you cannot
           // revise.
           events: [
-            ...read.events.map((e) => ({ ...e, excluded: false, hiddenBy: null as string | null })),
-            ...read.hidden.map((e) => ({ ...e, excluded: true })),
+            ...read.events.map((e) => ({ ...e, excluded: false, hiddenBy: null as string | null, ...noteFor(e) })),
+            ...read.hidden.map((e) => ({ ...e, excluded: true, noteId: null, note: null, noteScope: null })),
           ].sort((a, b) => a.start.localeCompare(b.start)),
-          exclusions: await listExclusions(),
+          exclusions: rules,
           truncated: read.truncated,
           partial: read.partial,
           available: read.available,
@@ -226,9 +243,17 @@ export const POST: RequestHandler = async ({ request }) => {
         if (scope !== 'series' && scope !== 'occurrence' && scope !== 'title') {
           return json({ error: 'scope must be series, occurrence or title' }, { status: 400 });
         }
+        // `hidden: false` records what an entry MEANS without removing it —
+        // "PE days are a reminder to take PE kit in, not a time commitment".
+        // Hiding it would have hidden the kit reminder too.
+        const hidden = body.hidden !== false;
+        if (!hidden && !str('reason')) {
+          return json({ error: 'a note needs some words' }, { status: 400 });
+        }
         const { addExclusion } = await import('$lib/daydream/calendar/store');
         const res = await addExclusion({
           scope,
+          hidden,
           uid: str('uid') || null,
           occurrenceStart: str('occurrenceStart') || null,
           title: str('title') || null,
@@ -486,7 +511,8 @@ export const POST: RequestHandler = async ({ request }) => {
       // The propositions board: everything asked, whatever the answer was.
       case 'hypothesis_board': {
         const limit = Math.min(Math.max(Number(body.limit) || 60, 1), 200);
-        return json({ ok: true, board: await loadBoard(limit) });
+        // null = every person; the board is household-wide.
+        return json({ ok: true, board: await loadBoard(limit, null) });
       }
 
       // Rating the QUESTION, not the statistics. He cannot overrule a q-value

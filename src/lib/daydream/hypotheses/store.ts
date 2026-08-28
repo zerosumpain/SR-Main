@@ -64,6 +64,10 @@ export async function saveProposals(
 
 export interface BoardRow {
   id: string;
+  /** Whose question this is. Carried since hypotheses became per-person —
+   *  without it a board spanning the household is five people's questions in
+   *  one undifferentiated list. */
+  subject: string;
   question: string;
   rationale: string;
   metricA: string;
@@ -95,16 +99,29 @@ export interface BoardRow {
  * make this feature look clever and be useless: a board of only its hits cannot
  * be argued with.
  */
-export async function loadBoard(limit = 60, subject = DEFAULT_SUBJECT): Promise<BoardRow[]> {
+/**
+ * The question board.
+ *
+ * `subject` selects one person; passing `null` spans the whole household,
+ * which is what the Discoveries board does now that every person gets their
+ * own questions. Ordering keeps answered questions after open ones and is
+ * otherwise newest-first, so a five-person board still reads as one queue
+ * rather than five interleaved ones.
+ */
+export async function loadBoard(
+  limit = 60,
+  subject: string | null = DEFAULT_SUBJECT,
+): Promise<BoardRow[]> {
   const rows = await db
     .select()
     .from(daydreamHypotheses)
-    .where(eq(daydreamHypotheses.subject, subject))
+    .where(subject === null ? undefined : eq(daydreamHypotheses.subject, subject))
     .orderBy(sql`${daydreamHypotheses.verdict} is not null`, desc(daydreamHypotheses.proposedAt))
     .limit(limit);
 
   return rows.map((r) => ({
     id: r.id,
+    subject: r.subject,
     question: r.question,
     rationale: r.rationale,
     metricA: r.metricA,
