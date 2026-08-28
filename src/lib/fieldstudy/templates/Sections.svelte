@@ -40,7 +40,10 @@
         {#each s.layers ?? [] as l, li (li)}
           <div class="fs-layer" style={l.tag ? `--hue: ${HUE[l.tag]}` : ''}>
             <div class="fs-layer-head">
-              <span class="fs-layer-no">L{l.no}</span>
+              <!-- `no` carries its own label. Both studies author it as "L1",
+                   and the template used to prefix another "L" on top, which is
+                   why the reference study shipped reading LL1 through LL5. -->
+              <span class="fs-layer-no">{l.no}</span>
               <b>{l.name}</b>
               <span class="fs-layer-q">{l.question}</span>
             </div>

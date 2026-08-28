@@ -403,6 +403,44 @@
     </div>
     {/if}
 
+    {#if showCard('spine-in-practice')}
+    <div class="project-card group">
+      <a href="/projects/spine-in-practice" class="absolute inset-0 z-0" aria-label="Open The Spine in Practice"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field study
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Appraisal · Data infrastructure
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        The Spine in Practice
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        While the department's data spine was still one paragraph of a white paper, somebody else built one. Open
+        Education AI's federated node access layer went live in July 2026, with a deck and a self-contained
+        clickthrough demo to prove it. This study reads both artefacts against my own — the technical structure,
+        how the argument is drawn, what it buys, and what it cannot yet do.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          node contract · consent gate · SDC · built vs designed · cited
+        </span>
+        {@render visToggle('spine-in-practice', '/projects/spine-in-practice', 'The Spine in Practice')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('dfe-data-strategy')}
     <div class="project-card group">
       <a href="/projects/dfe-data-strategy" class="absolute inset-0 z-0" aria-label="Open Keystone"></a>

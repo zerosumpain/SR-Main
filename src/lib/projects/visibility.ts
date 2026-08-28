@@ -33,6 +33,7 @@ export const STATIC_PROJECT_KEYS = [
   'terminal-descent',
   'data-standard-designer',
   'data-spine',
+  'spine-in-practice',
   'dfe-data-strategy',
   'dfe-data-estate',
   'policy-engine',
