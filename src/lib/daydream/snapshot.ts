@@ -265,44 +265,41 @@ export async function buildSnapshot(
   // ── Calendar ───────────────────────────────────────────────────────────
   const calendar: DaydreamSnapshot['calendar'] = {
     events: [],
+    hiddenCount: 0,
     partial: false,
     available: false,
   };
   try {
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    const res = await executeTool('apple_calendar_list', {
-      dateRangeStart: 'today',
-      dateRangeEnd: '+1d',
-    });
-    const data = res?.data as
-      | { events?: unknown[]; unavailable?: unknown[] }
-      | undefined;
-    if (res?.success && data) {
+    // One reader, one filter. Every occurrence the owner has excluded is gone
+    // before a detector or a prompt can see it — see calendar/read.ts.
+    const { readCalendar } = await import('./calendar/read');
+    const { loadExclusionSet } = await import('./calendar/store');
+    const read = await readCalendar(
+      { dateRangeStart: 'today', dateRangeEnd: '+1d' },
+      await loadExclusionSet(),
+    );
+    if (read.available) {
       calendar.available = true;
-      // `unavailable` means at least one calendar could not be read. A partial
-      // diary must NEVER be treated as an empty one — that is how "your
-      // afternoon is free" gets said over the top of a meeting.
-      calendar.partial = Array.isArray(data.unavailable) && data.unavailable.length > 0;
-      calendar.events = (Array.isArray(data.events) ? data.events : [])
-        .map((e) => {
-          const ev = e as Record<string, unknown>;
-          const start = typeof ev.start === 'string' ? new Date(ev.start) : null;
-          if (!start || Number.isNaN(start.getTime())) return null;
-          return {
-            title: typeof ev.title === 'string' ? ev.title : '(untitled)',
-            start,
-            end: typeof ev.end === 'string' ? new Date(ev.end) : null,
-            location: typeof ev.location === 'string' ? ev.location : null,
-          } satisfies CalendarEvent;
-        })
-        .filter((e): e is CalendarEvent => e !== null);
+      calendar.partial = read.partial;
+      calendar.hiddenCount = read.hidden.length;
+      calendar.events = read.events.map(
+        (e) =>
+          ({
+            uid: e.uid,
+            title: e.title,
+            start: new Date(e.start),
+            end: e.end ? new Date(e.end) : null,
+            location: e.location,
+          }) satisfies CalendarEvent,
+      );
     }
     sources.push({
       key: 'calendar',
       status: calendar.available ? (calendar.partial ? 'unavailable' : 'ok') : 'failed',
       detail: calendar.partial
         ? 'partial read — treated as unknown, not empty'
-        : `${calendar.events.length} events`,
+        : `${calendar.events.length} events` +
+          (calendar.hiddenCount ? ` (${calendar.hiddenCount} excluded by you)` : ''),
     });
   } catch (err) {
     sources.push({ key: 'calendar', status: 'failed', detail: errMsg(err) });

@@ -31,7 +31,7 @@ const DEFAULTS: Required<IntelBridgeConfig> = { freshDays: 3 };
 export const daydreamIntelBridge: ActivityHandler = {
   name: NAME,
   description:
-    "Bridges the intel graph's nightly rule-based insights (brokers, emerging hubs, surprising links) into the daydream thought ledger, through the same scoring, mute and delivery gates as every other thought. No LLM.",
+    "Runs the intel graph's rule-based insight detectors (brokers, emerging hubs, surprising links) and bridges the strongest into the daydream thought ledger, through the same scoring, mute and delivery gates as every other thought. It computes the findings itself rather than waiting for somebody to open the dashboard, which is what it used to depend on. No LLM.",
   defaultCadenceSeconds: 6 * 3600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
@@ -42,6 +42,38 @@ export const daydreamIntelBridge: ActivityHandler = {
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
     if (enabled === false) {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
+    }
+
+    // ── Make the findings, then bridge them ──────────────────────────────
+    //
+    // The bridge was starving. It reads `new` intel insights from the last few
+    // days — but nothing GENERATES insights on a schedule: they are computed
+    // when somebody opens the intel dashboard, and persisted as a side effect
+    // of that request. On production the newest insight was dated 2026-08-14
+    // and the bridge had reported "0 fresh insights" on every run since, which
+    // reads exactly like a quiet graph and was actually a graph nobody had
+    // looked at.
+    //
+    // So this runs the detectors itself. They are rule-based and free —
+    // `ensureEmbeddings` only reads vectors already in the table, it never
+    // asks a provider for one — so the whole recompute costs CPU and no money,
+    // which is why this action still has no quota to attribute.
+    let generated = 0;
+    let generateError: string | null = null;
+    try {
+      const { getGraphAnalysis, ensureEmbeddings } = await import('$lib/jkai/intel/analytics/load');
+      const { generateInsights } = await import('$lib/jkai/intel/analytics/insights');
+      const { persistInsights } = await import('$lib/jkai/intel/insight-store');
+      const analysis = await getGraphAnalysis();
+      await ensureEmbeddings(analysis);
+      const found = await generateInsights(analysis);
+      generated = found.length;
+      await persistInsights(found, `daydream-intel:${new Date(ctx.now).toISOString()}`);
+    } catch (err) {
+      // A failed recompute must not stop the bridge: there may still be
+      // insights worth carrying from the last time anyone opened the
+      // dashboard. Reported rather than swallowed.
+      generateError = errMsg(err);
     }
 
     try {
@@ -71,8 +103,11 @@ export const daydreamIntelBridge: ActivityHandler = {
       if (candidates.length === 0) {
         return {
           outcome: 'ok',
-          summary: `nothing to bridge (${rows.length} fresh insights, none above the bar)`,
-          details: { considered: rows.length },
+          summary:
+            `${generated} findings computed; nothing to bridge ` +
+            `(${rows.length} fresh, none above the bar)` +
+            (generateError ? ` · recompute failed: ${generateError}` : ''),
+          details: { considered: rows.length, generated, generateError },
         };
       }
 
@@ -84,10 +119,11 @@ export const daydreamIntelBridge: ActivityHandler = {
       return {
         outcome: 'ok',
         summary:
-          `${candidates.length} bridged of ${rows.length} fresh: ` +
+          `${generated} findings computed · ${candidates.length} bridged of ${rows.length} fresh: ` +
           `${persisted.created} new, ${persisted.updated} refreshed, ` +
-          `${persisted.suppressed} below threshold, ${persisted.muted} muted`,
-        details: { considered: rows.length, ...persisted },
+          `${persisted.suppressed} below threshold, ${persisted.muted} muted` +
+          (generateError ? ` · recompute failed: ${generateError}` : ''),
+        details: { considered: rows.length, generated, generateError, ...persisted },
       };
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };

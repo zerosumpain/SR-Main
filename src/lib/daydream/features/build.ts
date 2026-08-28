@@ -137,6 +137,24 @@ export async function buildDayFeatures(
 ): Promise<BuildResult> {
   const windowDays = opts.windowDays ?? DEFAULT_WINDOW_DAYS;
   const subject = opts.subject ?? DEFAULT_SUBJECT;
+
+  /**
+   * Whose health, diary and money these are.
+   *
+   * Whoop, Apple Health, `daydream_spend` and the calendar have NO subject
+   * column — there is one owner and every row belongs to him. The trail is the
+   * only domain that is genuinely per-person. So when this builds a day for
+   * anybody else, those domains are SKIPPED, and their columns stay absent.
+   *
+   * Skipping is the whole point rather than an optimisation: without it, a row
+   * for Katie would carry John's sleep score, John's strain and John's
+   * spending under her name, and every correlation drawn from it would be a
+   * confident statement about the wrong person. Absent is not zero here, so
+   * "no pairs for Katie" is the correct and honest outcome.
+   *
+   * It also stops four redundant CalDAV round trips every six hours.
+   */
+  const isOwner = subject === DEFAULT_SUBJECT;
   const now = opts.now ?? new Date();
   const from = new Date(now.getTime() - windowDays * 86_400_000);
   const result: BuildResult = { ...EMPTY_BUILD, absent: {}, errors: [] };
@@ -152,7 +170,8 @@ export async function buildDayFeatures(
   };
 
   // ── Apple: 470k rows overall, so the window and metric list both matter ──
-  try {
+  // Owner only — see isOwner above.
+  if (isOwner) try {
     const wanted = Object.keys(APPLE_AGGREGATION);
     const rows = await db
       .select({
@@ -195,7 +214,18 @@ export async function buildDayFeatures(
         lat: daydreamTrail.lat,
       })
       .from(daydreamTrail)
-      .where(and(gte(daydreamTrail.ts, from), lte(daydreamTrail.ts, now)));
+      // Subject-filtered. Without this every person's day row was built from
+      // the WHOLE household's fixes — harmless while only `john` was ever
+      // built, and wrong the moment the builder ran for anybody else. The
+      // trail has been per-subject since the family backfill; this read had
+      // not caught up.
+      .where(
+        and(
+          eq(daydreamTrail.subject, subject),
+          gte(daydreamTrail.ts, from),
+          lte(daydreamTrail.ts, now),
+        ),
+      );
     for (const r of rows) {
       bucket(localDay(r.ts)).trail.push({
         ts: r.ts,
@@ -210,8 +240,8 @@ export async function buildDayFeatures(
     result.errors.push(`trail: ${errMsg(err)}`);
   }
 
-  // ── Whoop cycles (strain) ──
-  try {
+  // ── Whoop cycles (strain) ── owner only
+  if (isOwner) try {
     const rows = await db
       .select({ startDateLocal: whoopCycles.startDateLocal, strain: whoopCycles.strain })
       .from(whoopCycles);
@@ -225,8 +255,8 @@ export async function buildDayFeatures(
     result.errors.push(`whoop_cycles: ${errMsg(err)}`);
   }
 
-  // ── Whoop recovery. `created_date` is a unix epoch, not a date. ──
-  try {
+  // ── Whoop recovery. `created_date` is a unix epoch, not a date. ── owner only
+  if (isOwner) try {
     const rows = await db
       .select({
         createdDate: whoopRecovery.createdDate,
@@ -247,8 +277,8 @@ export async function buildDayFeatures(
     result.errors.push(`whoop_recovery: ${errMsg(err)}`);
   }
 
-  // ── Whoop sleep. Durations are MILLISECONDS despite the column names. ──
-  try {
+  // ── Whoop sleep. Durations are MILLISECONDS despite the column names. ── owner only
+  if (isOwner) try {
     const rows = await db
       .select({
         startDateLocal: whoopSleep.startDateLocal,
@@ -315,8 +345,11 @@ export async function buildDayFeatures(
   // key it that way), so this is a plain group-by. When the table is readable,
   // every bucketed day gets at least a zero — "no evidenced spend" is a real
   // observation of the evidence, deliberately unlike the sensor domains.
+  // Owner only: `daydream_spend` has no subject column — every receipt and
+  // bank row is his. Summing them into somebody else's day would invent a
+  // spending habit for a nine-year-old.
   let spendReadable = false;
-  try {
+  if (isOwner) try {
     const rows = await db
       .select({ day: daydreamSpend.day, total: sql<number>`sum(${daydreamSpend.amountMinor})::int` })
       .from(daydreamSpend)
@@ -332,12 +365,18 @@ export async function buildDayFeatures(
   // Unlike the other domains this is a live CalDAV read, not a table. A failed
   // chunk leaves its days ABSENT; a day the diary answered about with no events
   // is a real zero. Truncated or partially-read chunks mark their days partial.
-  try {
-    const cal = await fetchCalendarDays(
-      localDay(from),
-      localDay(now),
-      opts.calendarFetch ?? toolChunkFetch(),
-    );
+  //
+  // Owner only. It is his diary, and running it for all five would also mean
+  // four extra CalDAV walks of the whole window every six hours.
+  if (isOwner) try {
+    // Loaded once for the whole rebuild, not once per chunk — and not at all
+    // when a caller supplied its own fetcher, which is how the tests run.
+    let fetcher = opts.calendarFetch;
+    if (!fetcher) {
+      const { loadExclusionSet } = await import('../calendar/store');
+      fetcher = toolChunkFetch(await loadExclusionSet());
+    }
+    const cal = await fetchCalendarDays(localDay(from), localDay(now), fetcher);
     for (const [day, row] of cal) bucket(day).calendar = row;
   } catch (err) {
     result.errors.push(`calendar: ${errMsg(err)}`);

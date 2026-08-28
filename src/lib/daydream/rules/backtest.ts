@@ -156,7 +156,7 @@ function snapshotAt(
       daysSinceWorkout: null,
       trainingLoad: null,
     },
-    calendar: { events: [], partial: false, available: false },
+    calendar: { events: [], hiddenCount: 0, partial: false, available: false },
     interests: [],
     offers: { available: false, items: [] },
     memories: [],

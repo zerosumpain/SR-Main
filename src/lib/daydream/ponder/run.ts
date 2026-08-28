@@ -205,22 +205,22 @@ async function recentVerdicts(): Promise<PackInputs['verdicts']> {
 /** The 7-day diary. Separate from the snapshot's today-view; one CalDAV call. */
 async function weekAhead(): Promise<PackInputs['weekAhead']> {
   try {
-    const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    const res = await executeTool('apple_calendar_list', {
-      dateRangeStart: '+1d',
-      dateRangeEnd: '+7d',
-    });
-    const data = res?.data as { events?: unknown[] } | undefined;
-    if (!res?.success || !Array.isArray(data?.events)) return [];
-    return data.events.slice(0, 20).map((e) => {
-      const ev = e as Record<string, unknown>;
-      const start = typeof ev.start === 'string' ? ev.start : '';
-      return {
-        title: typeof ev.title === 'string' ? ev.title : '(untitled)',
-        whenText: start.slice(0, 16).replace('T', ' '),
-        location: typeof ev.location === 'string' ? ev.location : null,
-      };
-    });
+    // Through the shared reader, so an excluded event never reaches the pack.
+    // This is the surface that matters most for the rolling-reminder case: a
+    // standing reminder in the week ahead is exactly what the model would
+    // otherwise build "your week is busy" out of.
+    const { readCalendar } = await import('../calendar/read');
+    const { loadExclusionSet } = await import('../calendar/store');
+    const read = await readCalendar(
+      { dateRangeStart: '+1d', dateRangeEnd: '+7d' },
+      await loadExclusionSet(),
+    );
+    if (!read.available) return [];
+    return read.events.slice(0, 20).map((e) => ({
+      title: e.title,
+      whenText: e.start.slice(0, 16).replace('T', ' '),
+      location: e.location,
+    }));
   } catch {
     return [];
   }

@@ -98,7 +98,7 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
       daysSinceWorkout: null,
       trainingLoad: null,
     },
-    calendar: { events: [], partial: false, available: true },
+    calendar: { events: [], hiddenCount: 0, partial: false, available: true },
     interests: [],
     offers: { available: false, items: [] },
     memories: [],
@@ -433,7 +433,7 @@ describe('free_window', () => {
       trail: arrivalTrail(6),
       health: { ...snap().health, daysSinceWorkout: 5 },
       localHour: 12,
-      calendar: { events: [], partial: true, available: true },
+      calendar: { events: [], hiddenCount: 0, partial: true, available: true },
     });
     expect(freeWindow.detect(s)).toEqual([]);
   });
@@ -444,7 +444,8 @@ describe('free_window', () => {
       health: { ...snap().health, daysSinceWorkout: 5 },
       localHour: 12,
       calendar: {
-        events: [{ title: 'Call', start: new Date(NOW.getTime() + 30 * 60_000), end: null, location: null }],
+        events: [{ uid: 'call-uid', title: 'Call', start: new Date(NOW.getTime() + 30 * 60_000), end: null, location: null }],
+        hiddenCount: 0,
         partial: false,
         available: true,
       },

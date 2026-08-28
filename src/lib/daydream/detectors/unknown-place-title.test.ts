@@ -20,7 +20,7 @@ function snap(places: PlaceSummary[]): DaydreamSnapshot {
     current: null, trail: [], trailDays: 30, trailSpanDays: 30,
     places, coverage: { last24h: 1, last7d: 1 },
     health: { lastNightSleep: null, sleepBaseline: null, readiness: null, daysSinceWorkout: null, trainingLoad: null },
-    calendar: { events: [], partial: false, available: true },
+    calendar: { events: [], hiddenCount: 0, partial: false, available: true },
     interests: [], offers: { available: false, items: [] }, memories: [], family: { available: false, members: [] }, emailFacts: { available: false, upcoming: [], recent: [] }, spend: { available: false, recent: [], totalMinor30d: 0 }, sources: [],
   };
 }

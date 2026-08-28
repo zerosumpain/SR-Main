@@ -7,6 +7,16 @@
   import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
   import FamilyMap, { type FamilyPosition } from '$lib/components/jkai/daydream/FamilyMap.svelte';
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
+  import CalendarBoard from '$lib/components/jkai/daydream/CalendarBoard.svelte';
+  import EvidenceList from '$lib/components/jkai/daydream/EvidenceList.svelte';
+  import {
+    familyOf,
+    groupByFamily,
+    groupByLikelihood,
+    kindLabel,
+    likelihoodBand,
+    type GroupStats,
+  } from '$lib/daydream/thought-groups';
 
   let { data }: { data: PageData } = $props();
 
@@ -22,6 +32,7 @@
     { id: 'feed', label: 'Feed' },
     { id: 'family', label: 'Family' },
     { id: 'discoveries', label: 'Discoveries' },
+    { id: 'calendar', label: 'Calendar' },
     { id: 'places', label: 'Places' },
     { id: 'money', label: 'Money' },
     { id: 'engine', label: 'Engine' },
@@ -115,6 +126,15 @@
   const discoveries = $derived(data.discoveries);
   const telemetry = $derived(data.telemetry);
   const familyMembers = $derived(data.family?.members ?? []);
+  const familyDetail = $derived((data.family?.detail ?? {}) as Record<string, {
+    hypotheses: Array<{ id: string; question: string; verdict: string | null; summary: string | null; r: number | null; qValue: number | null; pairs: number | null }>;
+    sweep: { testsRun: number; naiveHits: number; findings: unknown[]; errors: string[] } | null;
+    thoughts: Array<{ id: string; kind: string; title: string; score: number; status: string; createdAt: string }>;
+  }>);
+  let openPerson = $state<string | null>(null);
+  function togglePerson(subject: string) {
+    openPerson = openPerson === subject ? null : subject;
+  }
 
   function pounds(minor: number): string {
     return `£${(minor / 100).toFixed(2)}`;
@@ -135,8 +155,17 @@
     return `${secs}s`;
   }
 
-  /** Timeline grouping for the feed: Today / Yesterday / weekday-date. */
-  const grouped = $derived.by(() => {
+  // ── How the feed is arranged ──────────────────────────────────────────────
+  // It was one flat reverse-chronological list wearing raw kind slugs. Three
+  // arrangements now, because the three questions are different: "what is it
+  // noticing" (type), "how sure was it" (likelihood), "what happened lately"
+  // (day). Type is the default — it is the one that says where the engine
+  // spends its attention.
+  type GroupBy = 'type' | 'likelihood' | 'day';
+  let groupBy = $state<GroupBy>('type');
+
+  /** Timeline grouping: Today / Yesterday / weekday-date. */
+  function groupByDay(items: Thought[]): Array<{ key: string; label: string; blurb: string | null; items: Thought[]; stats: GroupStats | null }> {
     const fmt = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Europe/London', weekday: 'short', day: 'numeric', month: 'short',
     });
@@ -144,17 +173,82 @@
       new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     const today = dayKey(new Date());
     const yesterday = dayKey(new Date(Date.now() - 86_400_000));
-    const groups: Array<{ label: string; items: Thought[] }> = [];
-    for (const t of visible) {
+    const groups: Array<{ key: string; label: string; blurb: string | null; items: Thought[]; stats: GroupStats | null }> = [];
+    for (const t of items) {
       const d = new Date(t.createdAt);
       const key = dayKey(d);
       const label = key === today ? 'Today' : key === yesterday ? 'Yesterday' : fmt.format(d);
       const last = groups[groups.length - 1];
       if (last && last.label === label) last.items.push(t);
-      else groups.push({ label, items: [t] });
+      else groups.push({ key, label, blurb: null, items: [t], stats: null });
     }
     return groups;
+  }
+
+  const grouped = $derived.by(() => {
+    if (groupBy === 'day') return groupByDay(visible);
+    if (groupBy === 'likelihood') {
+      return groupByLikelihood(visible, data.threshold.value).map((g) => ({ ...g, stats: g.stats as GroupStats | null }));
+    }
+    return groupByFamily(visible).map((g) => ({ ...g, stats: g.stats as GroupStats | null }));
   });
+
+  /** Which group headers are collapsed. Keyed by group key. */
+  let collapsed = $state<Record<string, boolean>>({});
+  function toggleGroup(key: string) {
+    collapsed = { ...collapsed, [key]: !collapsed[key] };
+  }
+
+  /**
+   * The root cause, in words.
+   *
+   * `components` is a bag of named numbers the detector wrote, and the page
+   * printed it as a key/value dump. This turns the ones that decide the
+   * outcome into sentences: what produced it, what the raw score was, what the
+   * ledger's opinion of that kind did to it, and whether the result cleared
+   * the bar. Anything not named here still shows in the raw list below, so
+   * nothing is hidden — it is just no longer the only rendering.
+   */
+  function rootCause(t: Thought): string[] {
+    const c = t.components ?? {};
+    const lines: string[] = [];
+    const fam = familyOf(t.kind);
+    lines.push(`${fam.label} · ${kindLabel(t.kind)} — ${fam.blurb}`);
+
+    const raw = typeof c.raw === 'number' ? c.raw : null;
+    const weight = typeof c.kindWeight === 'number' ? c.kindWeight : null;
+    if (raw != null && weight != null) {
+      lines.push(
+        `The detector scored it ${raw.toFixed(2)}. The ledger's opinion of "${kindLabel(t.kind)}" ` +
+        `multiplies that by ${weight.toFixed(2)}` +
+        (weight === 1 ? ' — exactly neutral, meaning no feedback has been collected on this kind yet' : '') +
+        `, giving ${t.score.toFixed(2)}.`,
+      );
+    } else if (raw != null) {
+      lines.push(`The detector scored it ${raw.toFixed(2)}, giving ${t.score.toFixed(2)} after weighting.`);
+    }
+
+    const band = likelihoodBand(t.score, data.threshold.value);
+    lines.push(
+      band.id === 'held'
+        ? `Held back: ${band.meaning}. The bar falls as you rate things — ${data.threshold.feedbackCount} response${data.threshold.feedbackCount === 1 ? '' : 's'} so far.`
+        : `Cleared the bar: ${band.meaning}.`,
+    );
+
+    if (t.suppressedReason === 'feed_only') {
+      lines.push('This kind never pushes by design — it lands here and waits for you, rather than interrupting.');
+    } else if (t.suppressedReason && t.suppressedReason !== 'below_threshold') {
+      lines.push(`Not delivered because of ${t.suppressedReason.replace(/_/g, ' ')}.`);
+    }
+    return lines;
+  }
+
+  /** Components not already narrated above, so the raw bag stays available
+   *  without repeating what the sentences said. */
+  const NARRATED = new Set(['raw', 'kindWeight']);
+  function extraComponents(t: Thought): Array<[string, number]> {
+    return Object.entries(t.components ?? {}).filter(([k]) => !NARRATED.has(k)) as Array<[string, number]>;
+  }
 
   /** A musing wears its theme as a chip; everything else wears its kind. */
   function kindChip(t: Thought): { text: string; musing: boolean } {
@@ -922,6 +1016,14 @@
     </div>
 
     <div class="filters">
+      <span class="filter-label">Arrange by</span>
+      <button class="filter" class:on={groupBy === 'type'} onclick={() => (groupBy = 'type')}>Type</button>
+      <button class="filter" class:on={groupBy === 'likelihood'} onclick={() => (groupBy = 'likelihood')}>Likelihood</button>
+      <button class="filter" class:on={groupBy === 'day'} onclick={() => (groupBy = 'day')}>Day</button>
+    </div>
+
+    <div class="filters">
+      <span class="filter-label">Show</span>
       <button class="filter" class:on={filter === 'all'} onclick={() => (filter = 'all')}>
         All <span class="n">{thoughts.length}</span>
       </button>
@@ -953,9 +1055,34 @@
       </div>
     {:else}
       <div class="rows">
-        {#each grouped as g (g.label)}
-          <div class="tl-day"><span class="tl-day-label">{g.label}</span><span class="tl-day-rule"></span></div>
-          {#each g.items as t (t.id)}
+        {#each grouped as g (g.key)}
+          <!-- A group header that carries its own statistics, so "what is it
+               noticing, how strongly, and how has that landed" is answerable
+               without opening anything. The useful rate is withheld below five
+               votes rather than printed over two — see thought-groups.ts. -->
+          <div class="tl-day">
+            <button class="tl-day-label" onclick={() => toggleGroup(g.key)}>
+              {collapsed[g.key] ? '▸' : '▾'} {g.label}
+              <span class="tl-n">{g.items.length}</span>
+            </button>
+            {#if g.stats}
+              <span class="tl-stats">
+                mean {g.stats.meanScore.toFixed(2)}
+                · {g.stats.delivered} reached you
+                {#if g.stats.held} · {g.stats.held} held{/if}
+                {#if g.stats.usefulRate != null}
+                  · {Math.round(g.stats.usefulRate * 100)}% useful over {g.stats.rated}
+                {:else if g.stats.rated}
+                  · {g.stats.rated} rated
+                {/if}
+              </span>
+            {/if}
+            <span class="tl-day-rule"></span>
+          </div>
+          {#if g.blurb && !collapsed[g.key]}
+            <p class="tl-blurb">{g.blurb}</p>
+          {/if}
+          {#each collapsed[g.key] ? [] : g.items as t (t.id)}
           <article class="thought st-{t.status}" class:musing={t.kind.startsWith('musing_')}>
             <div class="thought-hd">
               <button class="thought-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
@@ -987,6 +1114,13 @@
               {:else}
                 <span class="mono">{kindChip(t).text}</span>
               {/if}
+              <span class="sep">·</span>
+              {#key data.threshold.value}
+                <span class="band band-{likelihoodBand(t.score, data.threshold.value).id}"
+                      title={likelihoodBand(t.score, data.threshold.value).meaning}>
+                  {likelihoodBand(t.score, data.threshold.value).label}
+                </span>
+              {/key}
               <span class="sep">·</span>
               <span class="mono">score {t.score}</span>
               <span class="sep">·</span>
@@ -1035,21 +1169,25 @@
             {#if expanded === t.id}
               <div class="thought-detail">
                 <div class="detail-block">
-                  <span class="sr-label-tight">Why that score</span>
-                  <ul class="components">
-                    {#each Object.entries(t.components) as [k, v] (k)}
-                      <li><span class="ck">{k}</span><span class="cv">{v}</span></li>
-                    {/each}
-                  </ul>
+                  <span class="sr-label-tight">Why this came up</span>
+                  {#each rootCause(t) as line, li (li)}
+                    <p class="cause-line">{line}</p>
+                  {/each}
+                  {#if extraComponents(t).length}
+                    <ul class="components">
+                      {#each extraComponents(t) as [k, v] (k)}
+                        <li><span class="ck">{k}</span><span class="cv">{v}</span></li>
+                      {/each}
+                    </ul>
+                  {/if}
                 </div>
                 {#if t.evidence.length}
                   <div class="detail-block">
-                    <span class="sr-label-tight">Evidence</span>
-                    <ul class="evidence">
-                      {#each t.evidence as e, i (i)}
-                        <li><span class="ck">{e.kind}</span><span class="cv">{e.note || e.id}</span></li>
-                      {/each}
-                    </ul>
+                    <span class="sr-label-tight">What it was looking at</span>
+                    <!-- Resolved on demand: the subject and sender of the
+                         email, the place's rhythm, the transaction — and the
+                         graph entities each source touches. -->
+                    <EvidenceList thoughtId={t.id} count={t.evidence.length} />
                   </div>
                 {/if}
                 {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
@@ -1313,6 +1451,111 @@
       <button class="session-cta" onclick={loadFamilyMap}>Show the map</button>
     {/if}
   </section>
+
+  <!-- ── EACH PERSON'S OWN WORK ────────────────────────────────────────────
+       This tab was a presence map. Four of the five people in the trail have
+       had a year of position history and a feature store since the family
+       backfill, and nothing had ever asked a question about them, because the
+       sweep and the hypothesis proposer both ran for John alone. Both are
+       per-subject now.
+
+       A suggestion is filed under a person by its CITATIONS — the ponder pack
+       cards each member as `family:<subject>` — never by finding their name in
+       the text, which would file every thought that merely mentions them. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Each person</span>
+      <span class="nm-sec-meta">their own questions, findings and suggestions</span>
+    </div>
+
+    {#each familyMembers as m (m.subject)}
+      {@const d = familyDetail[m.subject]}
+      <div class="person">
+        <button class="person-hd" onclick={() => togglePerson(m.subject)}>
+          <span class="person-caret">{openPerson === m.subject ? '▾' : '▸'}</span>
+          <span class="person-name">{cap(m.subject)}</span>
+          <span class="person-counts mono">
+            {d?.hypotheses?.length ?? 0} question{(d?.hypotheses?.length ?? 0) === 1 ? '' : 's'}
+            · {d?.sweep?.findings?.length ?? 0} finding{(d?.sweep?.findings?.length ?? 0) === 1 ? '' : 's'}
+            · {d?.thoughts?.length ?? 0} suggestion{(d?.thoughts?.length ?? 0) === 1 ? '' : 's'}
+          </span>
+        </button>
+
+        {#if openPerson === m.subject}
+          <div class="person-body">
+            <!-- Questions -->
+            <div class="detail-block">
+              <span class="sr-label-tight">Questions asked about {cap(m.subject)}</span>
+              {#if !d?.hypotheses?.length}
+                <p class="cause-line">
+                  Nothing yet. Questions are proposed nightly per person and only once there
+                  are enough days of history to answer them.
+                </p>
+              {:else}
+                <div class="rows tight">
+                  {#each d.hypotheses.slice(0, 8) as h (h.id)}
+                    <div class="hyp-row">
+                      <span class="hyp-q">{h.question}</span>
+                      <span class="mono hyp-verdict v-{h.verdict ?? 'open'}">{h.verdict ?? 'open'}</span>
+                      {#if h.r != null && h.qValue != null}
+                        <span class="mono hyp-stats">r {h.r.toFixed(2)} · q {h.qValue.toFixed(3)} · n {h.pairs ?? '—'}</span>
+                      {/if}
+                    </div>
+                    {#if h.summary}<p class="cause-line">{h.summary}</p>{/if}
+                  {/each}
+                </div>
+              {/if}
+            </div>
+
+            <!-- Statistical findings -->
+            <div class="detail-block">
+              <span class="sr-label-tight">What the sweep found</span>
+              {#if !d?.sweep}
+                <p class="cause-line">The sweep has not run for {cap(m.subject)} yet.</p>
+              {:else}
+                <p class="cause-line">
+                  {d.sweep.testsRun} tests · {d.sweep.naiveHits} would pass an uncorrected p&lt;0.05 ·
+                  <b>{d.sweep.findings.length}</b> survive the false-discovery correction.
+                  {#if d.sweep.errors?.length}<br />{d.sweep.errors[0]}{/if}
+                </p>
+                {#if d.sweep.findings.length}
+                  <div class="rows tight">
+                    {#each d.sweep.findings.slice(0, 6) as f, fi (fi)}
+                      <div class="hyp-row">
+                        <span class="hyp-q">{(f as Record<string, unknown>).a} ↔ {(f as Record<string, unknown>).b}</span>
+                        <span class="mono hyp-stats">
+                          r {Number((f as Record<string, unknown>).r ?? 0).toFixed(2)}
+                          · q {Number((f as Record<string, unknown>).q ?? 0).toFixed(3)}
+                          · n {String((f as Record<string, unknown>).n ?? '—')}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+
+            <!-- Suggestions that cited them -->
+            <div class="detail-block">
+              <span class="sr-label-tight">Suggestions that cited {cap(m.subject)}</span>
+              {#if !d?.thoughts?.length}
+                <p class="cause-line">Nothing has cited {cap(m.subject)} as evidence yet.</p>
+              {:else}
+                <div class="rows tight">
+                  {#each d.thoughts as t (t.id)}
+                    <div class="hyp-row">
+                      <a class="hyp-q link" href="/jkai/daydreams?tab=feed&rate={t.id}">{t.title}</a>
+                      <span class="mono hyp-stats">{kindLabel(t.kind)} · {t.score} · {t.status}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
+    {/each}
+  </section>
   {/if}
 
   {#if tab === 'discoveries'}
@@ -1502,6 +1745,21 @@
         {/each}
       </div>
     {/if}
+  </section>
+  {/if}
+
+  {#if tab === 'calendar'}
+  <!-- ── THE DIARY, AND WHAT THE ENGINE MAY SEE OF IT ──────────────────────
+       Your note in August: "some of those calendar events are rolling
+       reminders". A standing reminder is a real event and a fictional
+       commitment at once, and nothing in the data separates them — so this is
+       the control that does. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Calendar</span>
+      <span class="nm-sec-meta">what daydreaming is allowed to reason about</span>
+    </div>
+    <CalendarBoard onchanged={() => invalidateAll()} />
   </section>
   {/if}
 
@@ -2533,8 +2791,41 @@
   /* ── Feed timeline ────────────────────────────────────────────────────── */
   .tl-day { display: flex; align-items: center; gap: 0.75rem; margin: 0.6rem 0 0.1rem; }
   .tl-day:first-child { margin-top: 0; }
-  .tl-day-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); white-space: nowrap; }
+  .tl-day-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); white-space: nowrap; background: none; border: none; padding: 0; cursor: pointer; }
+  .tl-day-label:hover { color: var(--text-primary); }
+  .tl-n { display: inline-block; margin-left: 0.35rem; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); }
+  .tl-stats { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-blurb { margin: 0 0 0.5rem; font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 72ch; }
   .tl-day-rule { flex: 1; height: 1px; background: var(--line-strong); opacity: 0.6; }
+
+  /* Likelihood, relative to the engine's own moving bar — never a fixed
+     cut-off on the raw score. See thought-groups.ts. */
+  .band { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); }
+  .band-strong { color: var(--accent-ink, var(--accent)); border-color: var(--accent); }
+  .band-likely { color: var(--text-secondary); }
+  .band-marginal { color: var(--text-muted); }
+  .band-held { color: var(--warn, #b0892a); border-color: var(--warn, #b0892a); }
+
+  .person { border: 1px solid var(--line-strong); margin-bottom: 0.5rem; }
+  .person-hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; width: 100%; text-align: left; background: none; border: none; padding: 0.6rem 0.8rem; cursor: pointer; }
+  .person-hd:hover { background: var(--card-bg); }
+  .person-caret { color: var(--text-ghost); }
+  .person-name { font-family: var(--font-display); font-weight: 900; font-size: 1.05rem; color: var(--text-primary); }
+  .person-counts { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .person-body { padding: 0 0.8rem 0.8rem; border-top: 1px solid var(--line-hair); }
+
+  .hyp-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.25rem; }
+  .hyp-q { flex: 1 1 16rem; color: var(--text-secondary); }
+  a.hyp-q.link { color: var(--accent); text-decoration: none; }
+  a.hyp-q.link:hover { text-decoration: underline; }
+  .hyp-stats { color: var(--text-ghost); white-space: nowrap; }
+  .hyp-verdict { text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); }
+  .hyp-verdict.v-supported { color: var(--accent-ink, var(--accent)); border-color: var(--accent); }
+  .hyp-verdict.v-refuted, .hyp-verdict.v-wrong_direction { color: var(--text-muted); }
+  .hyp-verdict.v-open, .hyp-verdict.v-underpowered { color: var(--warn, #b0892a); }
+
+  .cause-line { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-secondary); max-width: 74ch; }
+  .filter-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); align-self: center; margin-right: 0.15rem; }
   .thought.musing { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 3%, var(--surface-sunken)); }
   .theme-chip {
     font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;

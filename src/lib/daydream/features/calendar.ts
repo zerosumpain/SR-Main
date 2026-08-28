@@ -17,6 +17,8 @@
 // lives in one thin function at the bottom.
 
 import { LOCAL_TZ } from '../types';
+import { readCalendar } from '../calendar/read';
+import { ExclusionSet, NO_EXCLUSIONS } from '../calendar/exclusions';
 
 /** One calendar event as the site tool returns it, reduced to what matters. */
 export interface CalendarEventRow {
@@ -247,33 +249,30 @@ export async function fetchCalendarDays(
  * import of the registry boots platform services (WhatsApp included) in any
  * test that touches this module.
  */
-export function toolChunkFetch(): ChunkFetch {
+export function toolChunkFetch(exclusions: ExclusionSet = NO_EXCLUSIONS): ChunkFetch {
   return async (fromDay, toDay) => {
-    try {
-      const { executeTool } = await import('$lib/workflows/site-tools/registry');
-      const res = await executeTool('apple_calendar_list', {
+    // Through the shared reader, so an excluded event contributes no busy
+    // minutes and is not counted as an event. The rule set is passed IN rather
+    // than loaded here: a 250-day rebuild calls this ~25 times, and loading
+    // the same handful of rows on every chunk would be 25 queries for one
+    // answer that cannot change mid-run.
+    const read = await readCalendar(
+      {
         dateRangeStart: fromDay,
         // The range end is exclusive at midnight, so ask through the next day.
         dateRangeEnd: nextDay(toDay),
-      });
-      const data = res?.data as
-        | { events?: unknown[]; truncated?: unknown; unavailable?: unknown[] }
-        | undefined;
-      if (!res?.success || !data) return null;
-      const events: CalendarEventRow[] = [];
-      for (const e of Array.isArray(data.events) ? data.events : []) {
-        const ev = e as Record<string, unknown>;
-        if (typeof ev.start !== 'string') continue;
-        events.push({ start: ev.start, end: typeof ev.end === 'string' ? ev.end : null });
-      }
-      return {
-        events,
-        truncated: data.truncated === true,
-        // A partial read has to say so — silence would read as an empty diary.
-        partial: Array.isArray(data.unavailable) && data.unavailable.length > 0,
-      };
-    } catch {
-      return null;
-    }
+      },
+      exclusions,
+    );
+    // A failed read contributes NOTHING, so its days stay absent in the
+    // feature store rather than reading as a quiet diary. Absent is not zero.
+    if (!read.available) return null;
+    return {
+      events: read.events.map(
+        (e): CalendarEventRow => ({ start: e.start, end: e.end }),
+      ),
+      truncated: read.truncated,
+      partial: read.partial,
+    };
   };
 }

@@ -179,11 +179,20 @@ export async function loadSeries(
   const from = new Date(now.getTime() - windowDays * 86_400_000);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
 
+  // The subject filter was ACCEPTED AND DROPPED. It never bit, because the
+  // feature builder only ever wrote `john` — but the day-feature table is
+  // keyed (subject, day), so the moment a second person had rows this would
+  // have correlated a pooled series carrying two values for every date, with
+  // no error and a plausible-looking r. Latent, and load-bearing the instant
+  // hypotheses became per-person.
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
+
   return db
     .select()
     .from(daydreamDayFeatures)
     .where(
       and(
+        eq(daydreamDayFeatures.subject, subject),
         gte(daydreamDayFeatures.day, iso(from)),
         lte(daydreamDayFeatures.day, iso(now)),
       ),

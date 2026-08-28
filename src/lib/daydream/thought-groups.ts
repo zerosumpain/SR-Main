@@ -1,0 +1,215 @@
+// src/lib/daydream/thought-groups.ts
+//
+// How the feed is organised, and what a group is allowed to claim about itself.
+//
+// The feed was one flat list in reverse-chronological order, with each row
+// wearing its raw `kind` slug — `unknown_place`, `musing_health`,
+// `context_meets_health`. That is the engine's vocabulary, not a reader's, and
+// at 45 thoughts across 8 kinds the list said nothing about what the engine
+// spends its attention on.
+//
+// So: families (what sort of thing is this), likelihood bands (how sure was
+// it), and per-group statistics computed from the ledger rather than asserted.
+//
+// PURE, and separate from the component, because the two things that must not
+// drift are the family a kind belongs to and the arithmetic in a group header.
+// A header that says "68% useful" over four votes is a lie of a specific and
+// familiar kind, and the only defence is a function you can test.
+
+export interface ThoughtFamily {
+  id: string;
+  label: string;
+  /** One line on what produced this family, for the group header. */
+  blurb: string;
+}
+
+export const FAMILIES: Record<string, ThoughtFamily> = {
+  places: {
+    id: 'places',
+    label: 'Places',
+    blurb: 'Somewhere you keep going that has no name yet. Naming one teaches every other detector.',
+  },
+  mail: {
+    id: 'mail',
+    label: 'Mail',
+    blurb: 'Account security, money admin, official post — rules over the subject line and the sender, never a model.',
+  },
+  musings: {
+    id: 'musings',
+    label: 'Musings',
+    blurb: 'Crossings the ponder engine found between domains. The model phrases these; every claim cites a card, or the whole musing is dropped.',
+  },
+  graph: {
+    id: 'graph',
+    label: 'Knowledge graph',
+    blurb: "Findings bridged from the intel graph's own rule-based detectors.",
+  },
+  rules: {
+    id: 'rules',
+    label: 'Your rules',
+    blurb: 'Rules the engine proposed and you approved. Facts are an allow-list of scalars; a rule can never reach a coordinate.',
+  },
+  patterns: {
+    id: 'patterns',
+    label: 'Patterns',
+    blurb: 'Detectors over movement, health and the diary. Each one declares the history it needs and stays silent below it.',
+  },
+};
+
+/**
+ * Which family a kind belongs to.
+ *
+ * Prefix-matched rather than enumerated, because the kind space is open by
+ * design — `musing_<theme>`, `mail_<category>` and `intel_<kind>` all grow
+ * without anyone editing a list, and a family that had to be updated for each
+ * new theme would silently drop them into "other".
+ */
+export function familyOf(kind: string): ThoughtFamily {
+  if (kind.startsWith('musing_')) return FAMILIES.musings;
+  if (kind.startsWith('mail_')) return FAMILIES.mail;
+  if (kind.startsWith('intel_')) return FAMILIES.graph;
+  if (kind.startsWith('rule_') || kind === 'rule_driven') return FAMILIES.rules;
+  // Both spellings: the detector was renamed in August and the old rows stayed.
+  if (kind === 'unknown_place' || kind === 'unknown_frequent_place') return FAMILIES.places;
+  return FAMILIES.patterns;
+}
+
+/** A reader's name for a kind — the family, plus whatever the suffix said. */
+export function kindLabel(kind: string): string {
+  if (kind.startsWith('musing_')) return kind.slice(7).replace(/_/g, ' ');
+  if (kind.startsWith('mail_')) return kind.slice(5).replace(/_/g, ' ');
+  if (kind.startsWith('intel_')) return kind.slice(6).replace(/_/g, ' ');
+  return kind.replace(/_/g, ' ');
+}
+
+export interface LikelihoodBand {
+  id: 'strong' | 'likely' | 'marginal' | 'held';
+  label: string;
+  /** What the band means in terms of the threshold, for a tooltip. */
+  meaning: string;
+}
+
+/**
+ * How confident the engine was, RELATIVE TO ITS OWN BAR.
+ *
+ * Deliberately not fixed cut-offs on the raw score. The threshold is a moving
+ * target — it opens at 0.75 and falls towards 0.45 as feedback accumulates —
+ * so "0.7" means "held back" in a cold start and "comfortably through" later.
+ * A band that ignored that would relabel every historical thought every time
+ * the threshold moved.
+ */
+export function likelihoodBand(score: number, threshold: number): LikelihoodBand {
+  const margin = score - threshold;
+  if (margin < 0) {
+    return { id: 'held', label: 'held back', meaning: `scored ${score.toFixed(2)}, below the ${threshold.toFixed(2)} bar` };
+  }
+  if (margin >= 0.15) {
+    return { id: 'strong', label: 'strong', meaning: `${score.toFixed(2)}, well clear of the ${threshold.toFixed(2)} bar` };
+  }
+  if (margin >= 0.05) {
+    return { id: 'likely', label: 'likely', meaning: `${score.toFixed(2)}, clear of the ${threshold.toFixed(2)} bar` };
+  }
+  return { id: 'marginal', label: 'marginal', meaning: `${score.toFixed(2)}, only just over the ${threshold.toFixed(2)} bar` };
+}
+
+export interface GroupableThought {
+  kind: string;
+  score: number;
+  status: string;
+  feedback: string | null;
+  createdAt: string;
+}
+
+export interface GroupStats {
+  count: number;
+  /** Mean score, for a sense of how strongly this family fires. */
+  meanScore: number;
+  delivered: number;
+  held: number;
+  rated: number;
+  usefulRate: number | null;
+  /** ISO of the most recent member. */
+  latest: string | null;
+}
+
+/**
+ * Statistics for one group.
+ *
+ * `usefulRate` is NULL below MIN_RATED_FOR_RATE rather than a percentage of
+ * two votes. This is the same discipline the hypothesis board follows and the
+ * same reason: a rate printed over a handful of votes reads as a measurement
+ * and is noise, and once it is on a card nobody remembers the denominator.
+ */
+export const MIN_RATED_FOR_RATE = 5;
+
+export function groupStats(items: GroupableThought[]): GroupStats {
+  const count = items.length;
+  if (count === 0) {
+    return { count: 0, meanScore: 0, delivered: 0, held: 0, rated: 0, usefulRate: null, latest: null };
+  }
+  const rated = items.filter((t) => t.feedback);
+  const useful = rated.filter((t) => t.feedback === 'useful').length;
+  return {
+    count,
+    meanScore: items.reduce((a, t) => a + t.score, 0) / count,
+    delivered: items.filter((t) => t.status === 'delivered' || t.status === 'actioned').length,
+    held: items.filter((t) => t.status === 'suppressed').length,
+    rated: rated.length,
+    usefulRate: rated.length >= MIN_RATED_FOR_RATE ? useful / rated.length : null,
+    latest: items.reduce((a, t) => (t.createdAt > a ? t.createdAt : a), items[0].createdAt),
+  };
+}
+
+export interface ThoughtGroup<T extends GroupableThought> {
+  key: string;
+  label: string;
+  blurb: string | null;
+  items: T[];
+  stats: GroupStats;
+}
+
+/** Group by family, biggest first, each group's items newest first. */
+export function groupByFamily<T extends GroupableThought>(items: T[]): ThoughtGroup<T>[] {
+  const buckets = new Map<string, T[]>();
+  for (const t of items) {
+    const f = familyOf(t.kind);
+    const list = buckets.get(f.id) ?? [];
+    list.push(t);
+    buckets.set(f.id, list);
+  }
+  return [...buckets.entries()]
+    .map(([id, list]) => ({
+      key: id,
+      label: FAMILIES[id]?.label ?? id,
+      blurb: FAMILIES[id]?.blurb ?? null,
+      items: list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      stats: groupStats(list),
+    }))
+    .sort((a, b) => b.stats.count - a.stats.count || a.label.localeCompare(b.label));
+}
+
+const BAND_ORDER: LikelihoodBand['id'][] = ['strong', 'likely', 'marginal', 'held'];
+
+/** Group by how sure the engine was, strongest first. */
+export function groupByLikelihood<T extends GroupableThought>(
+  items: T[],
+  threshold: number,
+): ThoughtGroup<T>[] {
+  const buckets = new Map<string, { band: LikelihoodBand; list: T[] }>();
+  for (const t of items) {
+    const band = likelihoodBand(t.score, threshold);
+    const entry = buckets.get(band.id) ?? { band, list: [] };
+    entry.list.push(t);
+    buckets.set(band.id, entry);
+  }
+  return BAND_ORDER.filter((id) => buckets.has(id)).map((id) => {
+    const { band, list } = buckets.get(id)!;
+    return {
+      key: id,
+      label: band.label,
+      blurb: band.meaning,
+      items: list.slice().sort((a, b) => b.score - a.score),
+      stats: groupStats(list),
+    };
+  });
+}

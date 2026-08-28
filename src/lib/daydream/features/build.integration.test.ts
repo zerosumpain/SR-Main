@@ -98,3 +98,48 @@ describe('buildDayFeatures', () => {
     expect(after[0].n).toBe(before[0].n);
   }, 120_000);
 });
+
+/**
+ * Whose data ends up in whose row.
+ *
+ * Whoop, Apple Health, `daydream_spend` and the calendar have no subject
+ * column — there is one owner and every row is his. The trail is the only
+ * genuinely per-person domain. Building a day for anybody else must therefore
+ * leave the owner-only domains ABSENT, or a row for Katie carries John's sleep
+ * score under her name and every correlation drawn from it is a confident
+ * statement about the wrong person.
+ *
+ * This is the test for that, and it is an integration test because the gate
+ * lives inside the query layer it protects.
+ */
+describe('owner-only domains', () => {
+  it('never writes the owner’s health, spend or diary into another subject’s row', async () => {
+    if (!dbReady) return expect(dbReady).toBe(false);
+
+    const res = await buildDayFeatures({ windowDays: 30, subject: 'katie' });
+    // The trail is hers, so there should be something to build from at all.
+    // If there is not, the assertion below is vacuous and worth knowing about.
+    expect(res.days).toBeGreaterThan(0);
+
+    const rows = await db
+      .select()
+      .from(daydreamDayFeatures)
+      .where(sql`${daydreamDayFeatures.subject} = 'katie'`);
+    expect(rows.length).toBeGreaterThan(0);
+
+    for (const r of rows) {
+      const sources = (r.sources ?? {}) as Record<string, string>;
+      for (const domain of ['whoop', 'apple', 'calendar', 'spend']) {
+        if (sources[domain] !== undefined) {
+          expect(sources[domain]).toBe('absent');
+        }
+      }
+      // Belt and braces on the columns themselves: an absent domain that
+      // somehow wrote a value is the failure this exists to catch.
+      expect(r.sleepPerformance).toBeNull();
+      expect(r.strain).toBeNull();
+      expect(r.verifiedSpendMinor).toBeNull();
+      expect(r.calendarEvents).toBeNull();
+    }
+  }, 120_000);
+});

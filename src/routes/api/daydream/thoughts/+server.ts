@@ -159,6 +159,81 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, enabled });
       }
 
+      case 'evidence': {
+        // Drill-through. A thought's citations were rendered as `kind` + a
+        // uuid, which is a receipt rather than an explanation — "why did it
+        // say that?" could only be answered by opening a database. Resolved on
+        // demand rather than in the ledger loader: most cards are never
+        // expanded, and this is up to nine queries.
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { db } = await import('$lib/db');
+        const { daydreamThoughts } = await import('$lib/db/schema');
+        const { eq } = await import('drizzle-orm');
+        const [row] = await db
+          .select({ evidence: daydreamThoughts.evidence })
+          .from(daydreamThoughts)
+          .where(eq(daydreamThoughts.id, id))
+          .limit(1);
+        if (!row) return json({ error: 'no such thought' }, { status: 404 });
+        const { resolveEvidence } = await import('$lib/daydream/evidence');
+        return json({ evidence: await resolveEvidence(row.evidence ?? []) });
+      }
+
+      // ── The diary filter ────────────────────────────────────────────────
+      // Reading the calendar is a live CalDAV round trip, so it is an ACTION
+      // and never part of the page load — the ledger loader is deliberately
+      // free of them, and a month grid on every page view would put one back.
+      case 'calendar_window': {
+        const from = str('from');
+        const to = str('to');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+          return json({ error: 'from and to must be YYYY-MM-DD' }, { status: 400 });
+        }
+        const { readCalendar } = await import('$lib/daydream/calendar/read');
+        const { loadExclusionSet, listExclusions } = await import('$lib/daydream/calendar/store');
+        const read = await readCalendar({ dateRangeStart: from, dateRangeEnd: to }, await loadExclusionSet());
+        return json({
+          // Both halves, flagged — the tab shows what is hidden alongside what
+          // is not, because a filter you cannot see is a filter you cannot
+          // revise.
+          events: [
+            ...read.events.map((e) => ({ ...e, excluded: false, hiddenBy: null as string | null })),
+            ...read.hidden.map((e) => ({ ...e, excluded: true })),
+          ].sort((a, b) => a.start.localeCompare(b.start)),
+          exclusions: await listExclusions(),
+          truncated: read.truncated,
+          partial: read.partial,
+          available: read.available,
+          error: read.error,
+        });
+      }
+
+      case 'exclude_event': {
+        const scope = str('scope');
+        if (scope !== 'series' && scope !== 'occurrence' && scope !== 'title') {
+          return json({ error: 'scope must be series, occurrence or title' }, { status: 400 });
+        }
+        const { addExclusion } = await import('$lib/daydream/calendar/store');
+        const res = await addExclusion({
+          scope,
+          uid: str('uid') || null,
+          occurrenceStart: str('occurrenceStart') || null,
+          title: str('title') || null,
+          calendarName: str('calendarName') || null,
+          reason: str('reason') || null,
+        });
+        if (!res.ok) return json({ error: res.error }, { status: 400 });
+        return json({ ok: true, id: res.id, matchKey: res.matchKey });
+      }
+
+      case 'restore_event': {
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { removeExclusion } = await import('$lib/daydream/calendar/store');
+        return json({ ok: await removeExclusion(id) });
+      }
+
       case 'set_bank_enabled': {
         // Arming the rails was an SQL statement against app_settings, which is
         // why it stayed off for a fortnight after the job shipped. Same
