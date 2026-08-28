@@ -200,7 +200,9 @@ export async function loadSeries(
     .orderBy(daydreamDayFeatures.day) as unknown as Promise<Row[]>;
 }
 
-function column(rows: Row[], key: string): Array<number | null> {
+/** Exported so the drill-through can show the SAME numbers the test used,
+ *  rather than a second reading of the table that might disagree with it. */
+export function column(rows: Row[], key: string): Array<number | null> {
   return rows.map((r) => {
     const v = r[key];
     if (v == null) return null;

@@ -359,6 +359,33 @@
 </div>
 
 <style>
+  /* ── Styles this component was BORROWING from the page ─────────────────
+     Svelte scopes CSS per component, so `.row-link`, `.sec-lede`,
+     `.thought-actions` and the rest — all defined in +page.svelte — reached
+     none of the markup here. The three exclude controls rendered as bare
+     unstyled text rather than as actions, which is exactly how it looked.
+     Defined locally, matching the page's values. */
+  .sec-lede { margin: 0 0 0.9rem; font-size: var(--fs-label); line-height: 1.55; color: var(--text-muted); max-width: 68ch; }
+  .warn-line { margin: 0.6rem 0 0; font-size: var(--fs-label); line-height: 1.5; color: var(--warn, #b0892a); }
+  .warn-line.err { color: var(--error, #c44); }
+  .mono { font-family: var(--font-mono); }
+  .tablewrap { overflow-x: auto; }
+  .rows { display: flex; flex-direction: column; gap: 0.5rem; }
+  .rows.tight { gap: 0.25rem; }
+  .empty { padding: 1.5rem; text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-ghost); font-style: italic; border: 1px dashed var(--line-strong); line-height: 1.6; }
+
+  .nm-sec-hd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+  .nm-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); }
+
+  .row-link { background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); cursor: pointer; }
+  .row-link:hover:not(:disabled) { text-decoration: underline; }
+  .row-link:disabled { opacity: 0.45; cursor: default; }
+  .thought-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
+
+  .note-input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-primary); font-family: var(--font-body); font-size: var(--fs-label-sm, 0.875rem); line-height: 1.5; resize: vertical; }
+  .note-hint { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); color: var(--text-muted); }
+
   .cal-hd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
   .cal-nav { display: flex; align-items: baseline; gap: 0.8rem; }
   .cal-month { font-family: var(--font-display); font-size: 1.15rem; font-weight: 900; color: var(--text-primary); }

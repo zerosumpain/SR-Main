@@ -527,6 +527,41 @@
   // rising with it: somewhere quiet output can land. The steer box is the only
   // owner-authored text the engine has ever read beyond a place name — and it
   // reorders work without granting one byte of new access.
+  // ── Drill-through from a verdict to the days behind it ──────────────────
+  // Fetched on expand: the series is up to 120 rows per question and no card
+  // is opened more than a handful of times.
+  type HypDetail = {
+    metricA: string; metricB: string; lagDays: number; unusedCount: number;
+    days: Array<{ day: string; a: number | null; b: number | null; used: boolean }>;
+  };
+  let hypOpen = $state<string | null>(null);
+  let hypDetail = $state<Record<string, HypDetail>>({});
+  let hypDetailError = $state<Record<string, string>>({});
+
+  async function toggleHypDetail(id: string) {
+    if (hypOpen === id) {
+      hypOpen = null;
+      return;
+    }
+    hypOpen = id;
+    if (hypDetail[id]) return;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'hypothesis_detail', id }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { detail?: HypDetail; error?: string };
+      if (out.error) throw new Error(out.error);
+      if (out.detail) hypDetail = { ...hypDetail, [id]: out.detail };
+    } catch (err) {
+      hypDetailError = {
+        ...hypDetailError,
+        [id]: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   const digest = $derived(data.digest);
   type Steer = { id: string; text: string; status: string; batchesInfluenced: number };
   let steers = $state<Steer[]>([]);
@@ -1494,11 +1529,11 @@
               {:else}
                 <div class="rows tight">
                   {#each d.hypotheses.slice(0, 8) as h (h.id)}
-                    <div class="hyp-row">
-                      <span class="hyp-q">{h.question}</span>
-                      <span class="mono hyp-verdict v-{h.verdict ?? 'open'}">{h.verdict ?? 'open'}</span>
+                    <div class="pq-row">
+                      <span class="pq-q">{h.question}</span>
+                      <span class="mono pq-verdict v-{h.verdict ?? 'open'}">{h.verdict ?? 'open'}</span>
                       {#if h.r != null && h.qValue != null}
-                        <span class="mono hyp-stats">r {h.r.toFixed(2)} · q {h.qValue.toFixed(3)} · n {h.pairs ?? '—'}</span>
+                        <span class="mono pq-stats">r {h.r.toFixed(2)} · q {h.qValue.toFixed(3)} · n {h.pairs ?? '—'}</span>
                       {/if}
                     </div>
                     {#if h.summary}<p class="cause-line">{h.summary}</p>{/if}
@@ -1521,9 +1556,9 @@
                 {#if d.sweep.findings.length}
                   <div class="rows tight">
                     {#each d.sweep.findings.slice(0, 6) as f, fi (fi)}
-                      <div class="hyp-row">
-                        <span class="hyp-q">{(f as Record<string, unknown>).a} ↔ {(f as Record<string, unknown>).b}</span>
-                        <span class="mono hyp-stats">
+                      <div class="pq-row">
+                        <span class="pq-q">{(f as Record<string, unknown>).a} ↔ {(f as Record<string, unknown>).b}</span>
+                        <span class="mono pq-stats">
                           r {Number((f as Record<string, unknown>).r ?? 0).toFixed(2)}
                           · q {Number((f as Record<string, unknown>).q ?? 0).toFixed(3)}
                           · n {String((f as Record<string, unknown>).n ?? '—')}
@@ -1543,9 +1578,9 @@
               {:else}
                 <div class="rows tight">
                   {#each d.thoughts as t (t.id)}
-                    <div class="hyp-row">
-                      <a class="hyp-q link" href="/jkai/daydreams?tab=feed&rate={t.id}">{t.title}</a>
-                      <span class="mono hyp-stats">{kindLabel(t.kind)} · {t.score} · {t.status}</span>
+                    <div class="pq-row">
+                      <a class="pq-q link" href="/jkai/daydreams?tab=feed&rate={t.id}">{t.title}</a>
+                      <span class="mono pq-stats">{kindLabel(t.kind)} · {t.score} · {t.status}</span>
                     </div>
                   {/each}
                 </div>
@@ -1623,11 +1658,14 @@
                 {#if q.retestCount > 0}
                   <span class="sep">·</span><span class="mono">retested {q.retestCount}×</span>
                 {/if}
+                <!-- Rounded. The stored values are raw doubles and the card
+                     was rendering `r -0.11998358323004636`, which reads as
+                     precision the measurement does not have. -->
                 {#if q.r != null}
-                  <span class="sep">·</span><span class="mono">r {q.r}</span>
+                  <span class="sep">·</span><span class="mono">r {q.r.toFixed(2)}</span>
                 {/if}
                 {#if q.qValue != null}
-                  <span class="sep">·</span><span class="mono">q {q.qValue}</span>
+                  <span class="sep">·</span><span class="mono">q {q.qValue.toFixed(3)}</span>
                 {/if}
                 {#if q.pairs != null}
                   <span class="sep">·</span><span class="mono">n {q.pairs}</span>
@@ -1667,7 +1705,52 @@
                   <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
                   <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
                 {/if}
+                <button class="row-link" onclick={() => toggleHypDetail(q.id)}>
+                  {hypOpen === q.id ? 'Hide the days' : 'Show the days behind this'}
+                </button>
               </div>
+
+              {#if hypOpen === q.id}
+                {@const d = hypDetail[q.id]}
+                <div class="hyp-detail">
+                  {#if hypDetailError[q.id]}
+                    <p class="cause-line err">{hypDetailError[q.id]}</p>
+                  {:else if !d}
+                    <p class="cause-line">Reading the days…</p>
+                  {:else}
+                    <p class="cause-line">
+                      {d.days.length} day{d.days.length === 1 ? '' : 's'} in the window,
+                      <b>{d.days.length - d.unusedCount}</b> with both readings present — that
+                      count is the <span class="mono">n</span> above. Pairwise deletion, never
+                      imputation: a day missing either half is dropped rather than filled in.
+                      {#if d.lagDays}<br />Lagged: <span class="mono">{d.metricA}</span> on a day is paired with <span class="mono">{d.metricB}</span> on the next.{/if}
+                    </p>
+                    <div class="tablewrap">
+                      <table class="hyp-days">
+                        <thead>
+                          <tr>
+                            <th>day</th>
+                            <th>{d.metricA}</th>
+                            <th>{d.metricB}{d.lagDays ? ' (next day)' : ''}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each d.days.filter((x) => x.used).slice(-40).reverse() as row (row.day)}
+                            <tr>
+                              <td class="mono">{row.day}</td>
+                              <td class="mono">{row.a}</td>
+                              <td class="mono">{row.b}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                    {#if d.days.length - d.unusedCount > 40}
+                      <p class="note-hint">Most recent 40 of {d.days.length - d.unusedCount} shown.</p>
+                    {/if}
+                  {/if}
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -2684,6 +2767,17 @@
   .hyp-why { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 70ch; }
   .hyp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.15rem; }
   .hyp-ask { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .hyp-detail { margin-top: 0.5rem; border-top: 1px solid var(--line-hair); padding-top: 0.5rem; }
+  .hyp-days { border-collapse: collapse; font-size: var(--fs-label-xs); min-width: 22rem; }
+  .hyp-days th { text-align: left; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); font-weight: 400; padding: 0.15rem 0.9rem 0.15rem 0; border-bottom: 1px solid var(--line-strong); }
+  .hyp-days td { padding: 0.12rem 0.9rem 0.12rem 0; color: var(--text-secondary); border-bottom: 1px solid var(--line-hair); }
+  /* Values right-aligned with tabular figures so the decimal points line up.
+     The numbers themselves are NOT rounded — this is the provenance table, and
+     its job is to show exactly what was correlated. Rounding belongs on the
+     summary statistic above, where 17 decimal places implied a precision the
+     measurement does not have. */
+  .hyp-days td:not(:first-child), .hyp-days th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+  .cause-line.err { color: var(--error, #c44); }
 
   /* The sorting deck */
   .deck-card {
@@ -2814,15 +2908,20 @@
   .person-counts { font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .person-body { padding: 0 0.8rem 0.8rem; border-top: 1px solid var(--line-hair); }
 
-  .hyp-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.25rem; }
-  .hyp-q { flex: 1 1 16rem; color: var(--text-secondary); }
-  a.hyp-q.link { color: var(--accent); text-decoration: none; }
-  a.hyp-q.link:hover { text-decoration: underline; }
-  .hyp-stats { color: var(--text-ghost); white-space: nowrap; }
-  .hyp-verdict { text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); }
-  .hyp-verdict.v-supported { color: var(--accent-ink, var(--accent)); border-color: var(--accent); }
-  .hyp-verdict.v-refuted, .hyp-verdict.v-wrong_direction { color: var(--text-muted); }
-  .hyp-verdict.v-open, .hyp-verdict.v-underpowered { color: var(--warn, #b0892a); }
+  /* Per-person rows in the Family tab. Prefixed `pq-` and NOT `hyp-`: the
+     Discoveries board already owns `.hyp-q` and `.hyp-verdict`, and reusing
+     those names redefined them further down the sheet, which put a border box
+     and uppercase text around every verdict on the board and muted every
+     question. One stylesheet, one namespace per component. */
+  .pq-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.25rem; }
+  .pq-q { flex: 1 1 16rem; color: var(--text-secondary); }
+  a.pq-q.link { color: var(--accent); text-decoration: none; }
+  a.pq-q.link:hover { text-decoration: underline; }
+  .pq-stats { color: var(--text-ghost); white-space: nowrap; }
+  .pq-verdict { text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); }
+  .pq-verdict.v-supported { color: var(--accent-ink, var(--accent)); border-color: var(--accent); }
+  .pq-verdict.v-refuted, .pq-verdict.v-wrong_direction { color: var(--text-muted); }
+  .pq-verdict.v-open, .pq-verdict.v-underpowered { color: var(--warn, #b0892a); }
 
   .cause-line { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-secondary); max-width: 74ch; }
   .filter-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); align-self: center; margin-right: 0.15rem; }
