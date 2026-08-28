@@ -40,7 +40,9 @@ export const load: PageServerLoad = async () => {
       digest: null,
       steers: [],
       delivery: null,
-      family: { members: [] },
+      // `detail` must be present on BOTH branches or the page's union type has
+      // no such property. The per-person Family section reads it.
+      family: { members: [], detail: {} },
       money: null,
       discoveries: null,
       telemetry: null,
