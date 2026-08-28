@@ -159,6 +159,18 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, enabled });
       }
 
+      case 'hypothesis_detail': {
+        // Click-through from a verdict to the days it was computed from. The
+        // board could say "r = -0.12 over 58 days" with no way to see which 58
+        // — a verdict you cannot open is one you have to take on trust.
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { loadHypothesisDetail } = await import('$lib/daydream/hypotheses/detail');
+        const detail = await loadHypothesisDetail(id);
+        if (!detail) return json({ error: 'no such question' }, { status: 404 });
+        return json({ detail });
+      }
+
       case 'evidence': {
         // Drill-through. A thought's citations were rendered as `kind` + a
         // uuid, which is a receipt rather than an explanation — "why did it
