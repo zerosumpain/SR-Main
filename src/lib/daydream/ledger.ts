@@ -21,6 +21,7 @@ import {
 } from '$lib/db/schema';
 import { withinActiveHours as windowOpenAt } from '$lib/heartbeat/schedule';
 import { DETECTORS } from './detectors';
+import { loadProvenance } from './provenance';
 import { listSteers } from './hypotheses/steer';
 import { kindWeight, tallyFeedback, coldStartThreshold, type FeedbackRow } from './scoring';
 import { mutedKinds, loadFeedback } from './thought-store';
@@ -823,7 +824,7 @@ export async function loadDelivery() {
 
 /** Everything the page needs, in one round of queries. */
 export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry] = await Promise.all([
+  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry, provenance] = await Promise.all([
     loadEngineState(),
     loadDetectorRows(),
     loadThreshold(),
@@ -839,6 +840,10 @@ export async function loadLedger() {
     loadMoney(),
     loadDiscoveries(),
     loadTelemetry(),
+    // Whether each source is actually reaching the reasoning, measured. See
+    // provenance.ts — the page could show 242 registered signals and 13 green
+    // jobs while 185 of those signals reached nothing at all.
+    loadProvenance(),
   ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry };
+  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry, provenance };
 }
