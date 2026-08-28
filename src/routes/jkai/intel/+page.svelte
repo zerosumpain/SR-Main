@@ -32,12 +32,8 @@
   import { SURFACES } from '$lib/components/intel/workbench';
   import { entityHover } from '$lib/components/intel/entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
-  import type {
-    InsightData,
-    NetworkPayload,
-    UnlikelyRelation,
-    PredictedLink,
-  } from '$lib/components/intel/types';
+  import type { InsightData, UnlikelyRelation, PredictedLink } from '$lib/components/intel/types';
+import type { NetworkPayload } from '$lib/codegraph/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 

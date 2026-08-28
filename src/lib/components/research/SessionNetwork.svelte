@@ -18,7 +18,7 @@
    */
   import { onMount } from 'svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
-  import type { NetNode, NetEdge } from '$lib/components/intel/types';
+  import type { NetNode, NetEdge } from '$lib/codegraph/types';
 
   let {
     sessionId,

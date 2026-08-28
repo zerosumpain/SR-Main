@@ -24,7 +24,7 @@
  * clustering helper: the question "how should this be grouped" has a different
  * answer for code than it does for people.
  */
-import type { NetNode, NetEdge, NetworkPayload } from '$lib/components/intel/types';
+import type { NetNode, NetEdge, NetworkPayload } from '$lib/codegraph/types';
 
 /** How `community` is assigned — i.e. what the colours mean. */
 export type GroupBy = 'directory' | 'layer' | 'gate' | 'verdict' | 'activity';

@@ -118,10 +118,6 @@ const BASELINE_LAYER = [
   'llm -> workflows',
   'routing -> workflows',
 
-  // Two feature modules reaching into Svelte components for types. Both want a
-  // types file one layer down, not the component tree.
-  'builds -> components',
-  'codegraph -> components',
 ];
 
 // R4 exceptions: API routes reusing a project page's lib. Each of these four is

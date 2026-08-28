@@ -18,7 +18,7 @@
   import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
   import RailSection from '$lib/components/intel/RailSection.svelte';
   import { GROUP_BY, type GroupBy } from '$lib/codegraph/network';
-  import type { NetworkPayload } from '$lib/components/intel/types';
+  import type { NetworkPayload } from '$lib/codegraph/types';
 
   /** 3D is the default, and the choice persists — same key idiom as intel so
    *  the two graphs do not disagree about what "the view" means. */
