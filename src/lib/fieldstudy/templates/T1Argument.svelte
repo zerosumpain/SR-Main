@@ -7,6 +7,7 @@
    */
   import Figure from '../Figure.svelte';
   import PullQuote from '../PullQuote.svelte';
+  import { chartFor } from '../charts';
   import type { Beat } from '../study';
 
   let { beat, depth = 'research' }: { beat: Beat; depth?: 'plain' | 'research' | 'technical' } = $props();
@@ -25,9 +26,19 @@
 {/each}
 
 {#each beat.figures ?? [] as fig (fig.no)}
+  {@const Chart = chartFor(fig.chart)}
   <Figure no={fig.no} caption={fig.caption}>
     {#snippet children()}
-      <div class="fs-figure-slot" data-chart={fig.chart}></div>
+      <!-- A registered chart draws itself; an unregistered id keeps the
+           reserved slot, so a figure whose chart has not been built yet leaves
+           a visible gap under its caption rather than a caption under nothing. -->
+      {#if Chart}
+        <div class="fs-figure-mount" data-chart={fig.chart}>
+          <Chart data={fig.data} unit={fig.unit} />
+        </div>
+      {:else}
+        <div class="fs-figure-slot" data-chart={fig.chart}></div>
+      {/if}
     {/snippet}
   </Figure>
 {/each}
@@ -47,5 +58,16 @@
     min-height: 180px;
     border: 1px dashed var(--line);
     display: flex;
+  }
+  /* A drawn figure gets a solid frame instead of the reserved slot's dashed
+     one: the dash means "nothing mounted here", and it should keep meaning
+     that. */
+  .fs-figure-mount {
+    border: 1px solid var(--line);
+    background: var(--card-bg);
+    display: block;
+    /* Wide figures scroll inside their own frame; the page body never scrolls
+       sideways. */
+    overflow-x: auto;
   }
 </style>
