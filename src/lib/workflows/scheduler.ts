@@ -7,9 +7,45 @@ import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { emitObs } from '$lib/workflows/observability-bus';
 import { cronTimezone } from '$lib/workflows/cron-timezone';
+import { runsService } from './service-role';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
+
+/**
+ * What each active job was registered WITH — `expression|timezone`.
+ *
+ * The reconciler compares against this to notice a schedule whose time was
+ * changed by another process. Without it a reminder re-timed from WhatsApp
+ * would keep firing at the old time, which looks far more like "the change did
+ * not save" than like a scheduling bug.
+ */
+const registeredSignature = new Map<string, string>();
+
+/**
+ * Does THIS process own cron? Set by startScheduler(), which only the
+ * scheduler-role process calls — and then only if it wins the leader lock.
+ *
+ * Registration is in-memory, so it is only ever correct in the owning process.
+ * Every caller used to register unconditionally, which was fine while chat and
+ * the seed routes only ever ran in the web app. WhatsApp chat now runs in
+ * packages/jkai-wa-worker (JKAI_SERVICE_ROLE=whatsapp) — a process deliberately
+ * built NOT to schedule, because "two schedulers on one database means every
+ * cron fires twice". A reminder asked for over WhatsApp would have registered
+ * its cron there: firing from the wrong process, and firing TWICE as soon as
+ * the web process next restarted and picked the row up at boot.
+ *
+ * Seeded from the role so the web process behaves exactly as it always has —
+ * a schedule created through the canvas or a seed route registers on the spot,
+ * without waiting for startScheduler() to resolve. Under the run-worker flag
+ * the role is not enough (two processes can both hold it), so ownership starts
+ * false and is granted only by winning the leader lock.
+ */
+let cronOwner = process.env.JKAI_RUN_WORKER !== '1' && runsService('scheduler');
+
+/** How often the owner re-syncs its cron jobs against the schedules table. */
+const RECONCILE_INTERVAL_MS = 60_000;
+let reconcilerStarted = false;
 
 /** Read-only access to active in-memory cron jobs for diagnostics */
 export function getActiveJobs(): ReadonlyMap<string, Cron> {
@@ -32,6 +68,10 @@ export async function startScheduler(): Promise<void> {
     console.log('[scheduler] Acquired cron leader lock');
   }
 
+  // Before the first DB read, so an API request that lands mid-boot still
+  // registers rather than silently waiting for the reconciler.
+  cronOwner = true;
+
   console.log('[scheduler] Starting cron scheduler...');
   const schedules = await db
     .select()
@@ -53,6 +93,75 @@ export async function startScheduler(): Promise<void> {
     }
   }
   console.log(`[scheduler] Registered ${registered}/${schedules.length} cron jobs`);
+  startScheduleReconciler();
+}
+
+/**
+ * Re-sync the in-memory cron jobs against the schedules table, every minute.
+ *
+ * Registration is process-local, so a schedule written by ANY other process is
+ * invisible here until something reloads it. Until now the only writers were in
+ * this process, so a direct registerCronJob() call was enough. That stopped
+ * being true when WhatsApp chat moved to its own worker: a reminder created
+ * from WhatsApp would sit in the table, enabled, and never run — the same
+ * enabled-but-dormant failure the config.cron/config.expression mismatch caused
+ * above, which is precisely the shape of bug nobody notices until the reminder
+ * they were relying on does not arrive.
+ *
+ * A sweep rather than a cross-process nudge: no new endpoint, no new shared
+ * secret, and it equally covers the run-worker, the seed routes, the workflow
+ * doctor and a row edited by hand in psql. Started from startScheduler(), so it
+ * inherits both the role gate and the leader lock and can never be the second
+ * scheduler it exists to avoid.
+ */
+export function startScheduleReconciler(): void {
+  if (reconcilerStarted) return;
+  reconcilerStarted = true;
+  setInterval(() => {
+    void reconcileSchedules().catch((e) =>
+      console.warn('[scheduler] reconcile failed:', e instanceof Error ? e.message : e),
+    );
+  }, RECONCILE_INTERVAL_MS).unref();
+}
+
+/** One reconcile pass. Exported for tests and for the ops probe. */
+export async function reconcileSchedules(): Promise<{ added: number; removed: number }> {
+  if (!cronOwner) return { added: 0, removed: 0 };
+  const rows = await db
+    .select()
+    .from(workflowSchedules)
+    .where(and(eq(workflowSchedules.type, 'cron'), eq(workflowSchedules.enabled, true)));
+
+  const wanted = new Map(rows.map((r) => [r.id, r] as const));
+  let added = 0;
+  let removed = 0;
+
+  // Gone or disabled elsewhere.
+  for (const scheduleId of [...activeJobs.keys()]) {
+    if (!wanted.has(scheduleId)) {
+      unregisterCronJob(scheduleId);
+      removed++;
+    }
+  }
+  // New here, or re-timed elsewhere.
+  for (const schedule of rows) {
+    if (activeJobs.has(schedule.id) && registeredSignature.get(schedule.id) === scheduleSignature(schedule.config)) {
+      continue;
+    }
+    try {
+      registerCronJob(schedule);
+      added++;
+    } catch (err) {
+      // Same per-row isolation as boot: one invalid cron expression must not
+      // stop the rest of the sweep.
+      console.error(
+        `[scheduler] Reconcile could not register ${schedule.id} (workflow ${schedule.workflowId}):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  if (added || removed) console.log(`[scheduler] Reconciled: +${added} -${removed}`);
+  return { added, removed };
 }
 
 export function stopScheduler(): void {
@@ -60,7 +169,18 @@ export function stopScheduler(): void {
     job.stop();
   }
   activeJobs.clear();
+  registeredSignature.clear();
   console.log('[scheduler] All cron jobs stopped');
+}
+
+/** `expression|timezone` — what a registration is, for change detection. */
+function scheduleSignature(config: unknown): string {
+  const cfg = (config ?? {}) as Record<string, unknown>;
+  const expression =
+    (typeof cfg.expression === 'string' && cfg.expression) ||
+    (typeof cfg.cron === 'string' && cfg.cron) ||
+    '';
+  return `${expression}|${cronTimezone(cfg)}`;
 }
 
 export function registerCronJob(schedule: {
@@ -68,9 +188,22 @@ export function registerCronJob(schedule: {
   workflowId: string;
   config: unknown;
 }): void {
+  // Only the cron owner may hold a live job. Everywhere else the row is written
+  // and the owner's reconciler picks it up within the minute — that is what
+  // makes "create a reminder" work from WhatsApp, which runs in a worker that
+  // must never schedule anything itself. See `cronOwner`.
+  if (!cronOwner) {
+    console.log(
+      `[scheduler] Schedule ${schedule.id} saved but not registered here` +
+        ` (this process does not own cron) — the scheduler will pick it up within a minute.`,
+    );
+    return;
+  }
+
   // Stop existing job for this schedule if any
   activeJobs.get(schedule.id)?.stop();
   activeJobs.delete(schedule.id);
+  registeredSignature.delete(schedule.id);
 
   // Accept both `config.expression` (canonical) and `config.cron`. The
   // workflow_add_schedule / workflow_update_schedule MCP tools historically
@@ -98,12 +231,14 @@ export function registerCronJob(schedule: {
   });
 
   activeJobs.set(schedule.id, job);
+  registeredSignature.set(schedule.id, `${expression}|${timezone}`);
   console.log(`[scheduler] Registered schedule ${schedule.id} (${expression} ${timezone})`);
 }
 
 export function unregisterCronJob(scheduleId: string): void {
   activeJobs.get(scheduleId)?.stop();
   activeJobs.delete(scheduleId);
+  registeredSignature.delete(scheduleId);
 }
 
 async function runScheduledWorkflow(workflowId: string, scheduleId: string): Promise<void> {
