@@ -4620,6 +4620,85 @@ export const daydreamLeads = pgTable(
 export type DaydreamLead = typeof daydreamLeads.$inferSelect;
 
 /**
+ * Calendar entries the owner has told the engine to stop reasoning about.
+ *
+ * The diary is one of the strongest inputs daydreaming has — busy minutes feed
+ * the correlations, the week ahead feeds the ponder pack, a free window feeds a
+ * suggestion — and it is also the input most likely to be wrong ABOUT HIM
+ * rather than wrong in itself. His own words, on a thought in August: "some of
+ * those calendar events are rolling reminders". A standing reminder that has
+ * been in the calendar for two years is a real event and a fictional
+ * commitment, and no amount of parsing can tell the difference. Only he can.
+ *
+ * Three scopes, because "ignore that" means three different things:
+ *   'series'     — every occurrence sharing an iCalendar UID. The rolling
+ *                  reminder case, and the common one.
+ *   'occurrence' — one dated instance of a series. "Not this week."
+ *   'title'      — anything with this normalised title, whatever its UID. For
+ *                  entries recreated from scratch each time, which have a new
+ *                  UID on every occurrence and so cannot be caught by series.
+ *
+ * An exclusion is TOTAL and REVERSIBLE (the owner's call, 2026-08-28): an
+ * excluded event contributes no busy minutes, reaches no prompt, and can be
+ * the reason for no suggestion. Reversible is what makes total safe — the
+ * calendar tab lists what is hidden and restores in one tap, so the diary can
+ * never quietly lie about itself.
+ *
+ * NOT a delete: nothing here touches iCloud. This table is a filter the engine
+ * applies to what it reads, and removing a row restores the event everywhere.
+ */
+export const daydreamCalendarExclusions = pgTable(
+  'daydream_calendar_exclusions',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+
+    /** 'series' | 'occurrence' | 'title' */
+    scope: text('scope').notNull(),
+
+    /** The iCalendar UID. Present for series and occurrence scopes; a
+     *  recurring event shares one UID across every occurrence, which is what
+     *  makes 'series' a single row rather than one per date. */
+    uid: text('uid'),
+
+    /** Which instance, for scope='occurrence'. Stored as the event's own start
+     *  instant, matched to the minute — iCloud re-serialises these and an
+     *  equality test on the raw string does not survive it. */
+    occurrenceStart: timestamp('occurrence_start', { withTimezone: true }),
+
+    /** Case- and space-normalised title, for scope='title'. */
+    titleKey: text('title_key'),
+
+    /** What it was called and where it lived when it was excluded. Display
+     *  only — kept so the list of hidden things is readable a year later,
+     *  when the UID means nothing to anybody. */
+    title: text('title'),
+    calendarName: text('calendar_name'),
+
+    /** The owner's own words. A verdict says something is unwanted; only a
+     *  reason says why, and the reason is the half that changes what the
+     *  engine does next. */
+    reason: text('reason'),
+
+    /** The one value the matcher actually compares, derived from scope + the
+     *  fields above. Stored rather than computed so "already excluded?" is one
+     *  indexed lookup, and so the unique index below can exist at all. */
+    matchKey: text('match_key').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // A NEW table, so a unique index is safe here — the drizzle-kit push hazard
+  // only bites when one is added to a table that already holds rows.
+  (t) => [
+    uniqueIndex('daydream_calendar_exclusions_key_idx').on(t.matchKey),
+    index('daydream_calendar_exclusions_uid_idx').on(t.uid),
+  ],
+);
+
+export type DaydreamCalendarExclusion = typeof daydreamCalendarExclusions.$inferSelect;
+export type NewDaydreamCalendarExclusion = typeof daydreamCalendarExclusions.$inferInsert;
+
+/**
  * One step of thinking, kept.
  *
  * The reviewable trace. Without it "the model explored during idle time" is an

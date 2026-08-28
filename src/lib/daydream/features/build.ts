@@ -333,11 +333,14 @@ export async function buildDayFeatures(
   // chunk leaves its days ABSENT; a day the diary answered about with no events
   // is a real zero. Truncated or partially-read chunks mark their days partial.
   try {
-    const cal = await fetchCalendarDays(
-      localDay(from),
-      localDay(now),
-      opts.calendarFetch ?? toolChunkFetch(),
-    );
+    // Loaded once for the whole rebuild, not once per chunk — and not at all
+    // when a caller supplied its own fetcher, which is how the tests run.
+    let fetcher = opts.calendarFetch;
+    if (!fetcher) {
+      const { loadExclusionSet } = await import('../calendar/store');
+      fetcher = toolChunkFetch(await loadExclusionSet());
+    }
+    const cal = await fetchCalendarDays(localDay(from), localDay(now), fetcher);
     for (const [day, row] of cal) bucket(day).calendar = row;
   } catch (err) {
     result.errors.push(`calendar: ${errMsg(err)}`);

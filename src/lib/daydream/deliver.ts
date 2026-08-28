@@ -100,6 +100,29 @@ export async function readRateState(now: Date): Promise<RateState> {
  * `channel: 'silent'` and the reason, and it appears on the ledger page under
  * "held back". Nothing noticed is ever lost, it just does not buzz.
  */
+/**
+ * Kinds that are never pushed, however well they score.
+ *
+ * The owner's call on the mail lanes (2026-08-28): an account-recovery mail he
+ * did not ask for is time-critical and earns a buzz; a price rise and a tax
+ * code do not. Expressing that as a routing rule rather than as a score means
+ * a quiet week cannot accidentally promote a renewal notice into an
+ * interruption just because nothing else was competing for the slot.
+ *
+ * These still become thoughts, still appear in the feed, and still collect
+ * feedback. `feed_only` is a destination, not a suppression, and the page
+ * renders it as one.
+ */
+export const FEED_ONLY_KINDS: ReadonlyArray<string> = [
+  'mail_money_admin',
+  'mail_official',
+  'mail_unusual',
+];
+
+export function isFeedOnly(kind: string): boolean {
+  return FEED_ONLY_KINDS.includes(kind);
+}
+
 export function chooseChannel(
   thought: { kind: string; score: number },
   state: RateState,
@@ -109,6 +132,12 @@ export function chooseChannel(
 
   if (thought.score < threshold) {
     return { channel: 'silent', suppressedReason: `below_threshold (${thought.score} < ${threshold})` };
+  }
+
+  // Checked before the interruption budget, not after: a feed-only thought
+  // must not consume a slot it was never going to use.
+  if (isFeedOnly(thought.kind)) {
+    return { channel: 'silent', suppressedReason: 'feed_only' };
   }
 
   const hour = localHour(now);

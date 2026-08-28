@@ -57,6 +57,9 @@ export interface PlaceSummary {
 }
 
 export interface CalendarEvent {
+  /** iCalendar UID — the series identity. Carried so a card can offer "ignore
+   *  this one" without a second round trip to the calendar. */
+  uid: string | null;
   title: string;
   start: Date;
   end: Date | null;
@@ -145,6 +148,10 @@ export interface DaydreamSnapshot {
 
   calendar: {
     events: CalendarEvent[];
+    /** How many occurrences an owner exclusion removed from the list above.
+     *  On the snapshot rather than inferred, because a filtered diary and an
+     *  empty one look identical and mean opposite things. */
+    hiddenCount: number;
     /** True when at least one calendar could not be read. A partial diary must
      *  never be treated as an empty one — that is how "your afternoon is free"
      *  gets said over the top of a meeting. */

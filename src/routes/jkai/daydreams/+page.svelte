@@ -7,6 +7,7 @@
   import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
   import FamilyMap, { type FamilyPosition } from '$lib/components/jkai/daydream/FamilyMap.svelte';
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
+  import CalendarBoard from '$lib/components/jkai/daydream/CalendarBoard.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -22,6 +23,7 @@
     { id: 'feed', label: 'Feed' },
     { id: 'family', label: 'Family' },
     { id: 'discoveries', label: 'Discoveries' },
+    { id: 'calendar', label: 'Calendar' },
     { id: 'places', label: 'Places' },
     { id: 'money', label: 'Money' },
     { id: 'engine', label: 'Engine' },
@@ -1502,6 +1504,21 @@
         {/each}
       </div>
     {/if}
+  </section>
+  {/if}
+
+  {#if tab === 'calendar'}
+  <!-- ── THE DIARY, AND WHAT THE ENGINE MAY SEE OF IT ──────────────────────
+       Your note in August: "some of those calendar events are rolling
+       reminders". A standing reminder is a real event and a fictional
+       commitment at once, and nothing in the data separates them — so this is
+       the control that does. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Calendar</span>
+      <span class="nm-sec-meta">what daydreaming is allowed to reason about</span>
+    </div>
+    <CalendarBoard onchanged={() => invalidateAll()} />
   </section>
   {/if}
 

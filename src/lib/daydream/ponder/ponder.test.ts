@@ -36,7 +36,7 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
       daysSinceWorkout: 4,
       trainingLoad: null,
     },
-    calendar: { events: [], partial: false, available: true },
+    calendar: { events: [], hiddenCount: 0, partial: false, available: true },
     interests: [],
     offers: { available: true, items: [] },
     memories: [{ id: 'm1', category: 'people', content: 'Jemima swims on Tuesdays.' }],
