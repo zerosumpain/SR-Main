@@ -73,18 +73,40 @@ describe('data-spine · the reference study', () => {
     }
   });
 
-  it('surfaces the two places the fixed arc and the template rules disagree', () => {
-    // Both are in the system's own reference expression of this study, and
-    // both are real: the arc puts two WEIGHING beats side by side (05 who
-    // wins, 06 trust & safeguards), and its closing beat (07 what happens
-    // next) is shaped like a position even though T3 is "once per study".
+  it('surfaces the places the fixed arc and the template rules disagree', () => {
+    // Two of these are the arc's own tensions, and both are real: it puts two
+    // WEIGHING beats side by side (05 who wins, 06 trust & safeguards), and
+    // its closing beat (07 what happens next) is shaped like a position even
+    // though T3 is "once per study".
     //
     // Pinned rather than tolerated. If either is resolved — by the rules
     // bending or by the content changing — this test says so on the next run
     // instead of the tension quietly persisting.
-    expect(notes(findings).map((f) => `${f.rule}: ${f.message}`)).toEqual([
+    expect(notes(findings).filter((f) => f.rule !== 'no-plain').map((f) => `${f.rule}: ${f.message}`)).toEqual([
       'position-twice: T3 appears more than once. A study makes one recommendation.',
       'rhythm: Beats 05 and 06 are both T4. Only T1 may repeat consecutively.',
+    ]);
+  });
+
+  it('records, without failing on, the beats that have no ELI5 register', () => {
+    // The shell ships a Research / ELI5 control on every page of this study,
+    // and five of its seven beats have nothing to say in plain English — so on
+    // those, the control returns the page the reader already had. That is a
+    // real gap and it is this study's, not the system's: the plain register
+    // only became authorable across every field in the change that added this
+    // test, and writing five beats of ELI5 copy is an editorial job rather
+    // than a mechanical one.
+    //
+    // Pinned at the current count so it cannot quietly grow, and deliberately
+    // NOT an error: failing the build over prose that has not been written yet
+    // would block every unrelated change to this study.
+    const gaps = notes(findings).filter((f) => f.rule === 'no-plain');
+    expect(gaps.map((f) => f.where).sort()).toEqual([
+      'beat 02',
+      'beat 04',
+      'beat 05',
+      'beat 06',
+      'beat 07',
     ]);
   });
 });

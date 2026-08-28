@@ -10,9 +10,9 @@
    * enforces that; the eye enforces it too, which is why they sit side by side.
    */
   import ConfidenceChip from '../ConfidenceChip.svelte';
-  import type { Beat, Claim } from '../study';
+  import { say, type Beat, type Claim, type Depth } from '../study';
 
-  let { beat }: { beat: Beat } = $props();
+  let { beat, depth = 'research' }: { beat: Beat; depth?: Depth } = $props();
   const l = $derived(beat.ledger);
 
   /**
@@ -72,10 +72,10 @@
     <section class="fs-col fs-col--benefit">
       <h3 class="fs-margin-label">Better off <span class="fs-count">{l.benefits.length}</span></h3>
       <ol>
-        {#each ranked(l.benefits) as b, i (b.text)}
+        {#each ranked(l.benefits) as b, i (say(b.text))}
           <li class:lens-hit={active && b.lenses?.includes(active)}>
             <span class="fs-n">{String(i + 1).padStart(2, '0')}</span>
-            <span class="fs-t">{b.text}</span>
+            <span class="fs-t">{say(b.text, depth)}</span>
             <ConfidenceChip level={b.confidence} />
           </li>
         {/each}
@@ -84,10 +84,10 @@
     <section class="fs-col fs-col--risk">
       <h3 class="fs-margin-label">Worse off <span class="fs-count">{l.risks.length}</span></h3>
       <ol>
-        {#each ranked(l.risks) as r, i (r.text)}
+        {#each ranked(l.risks) as r, i (say(r.text))}
           <li class:lens-hit={active && r.lenses?.includes(active)}>
             <span class="fs-n">{String(i + 1).padStart(2, '0')}</span>
-            <span class="fs-t">{r.text}</span>
+            <span class="fs-t">{say(r.text, depth)}</span>
             <ConfidenceChip level={r.confidence} />
           </li>
         {/each}
@@ -95,7 +95,7 @@
     </section>
   </div>
 
-  <p class="fs-balance">{l.balance}</p>
+  <p class="fs-balance">{say(l.balance, depth)}</p>
 
   {#if l.byActor?.length}
     <div class="fs-table-scroll">

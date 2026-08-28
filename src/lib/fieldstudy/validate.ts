@@ -9,7 +9,7 @@
  * Findings are returned, never thrown. A study with a problem should still
  * render, with the problem visible in a test rather than a blank page.
  */
-import type { Study, Beat } from './study';
+import { say, hasPlain, type Study, type Beat } from './study';
 
 export interface Finding {
   /** Where — a beat number, or 'study' for the whole thing. */
@@ -130,11 +130,16 @@ export function validateStudy(study: Study): Finding[] {
       if (!b.position.rejected.length) {
         add(at, 'no-alternatives', 'A position with no named alternatives is not defended, it is asserted.');
       }
-      if (!b.position.sinkers.length) {
+      if (!say(b.position.sinkers).length) {
         add(at, 'no-sinkers', 'A position must say what would sink it.');
       }
-      if (b.position.statement.length > 90) {
-        add(at, 'statement-long', `The call itself is ${b.position.statement.length} characters; the slot is 90.`);
+      // Both registers have to fit the slot — an ELI5 rewrite that overflows
+      // is the same bug as a research one that does.
+      for (const d of ['research', 'plain'] as const) {
+        const line = say(b.position.statement, d);
+        if (line.length > 90) {
+          add(at, 'statement-long', `The call itself is ${line.length} characters at ${d}; the slot is 90.`);
+        }
       }
     }
 
@@ -158,6 +163,25 @@ export function validateStudy(study: Study): Finding[] {
       if (s.template === 'T7' && (s.threads?.length ?? 0) < 2) {
         add(at, 'one-thread', 'A chronicle runs two named threads. One undifferentiated thread is a Wikipedia table.');
       }
+    }
+  }
+
+  // ——— Depth ———
+  // The shell ships a Research / ELI5 control on every page. A beat with no
+  // plain register anywhere hands a reader who asked for plain English exactly
+  // the page they already had. Reported rather than enforced: the rule arrived
+  // after both studies shipped, and failing a build over prose that has simply
+  // not been written yet is the wrong lever.
+  for (const b of arc) {
+    const carriers = [
+      b.standfirst, b.soWhat, b.claim?.text, b.openQuestion?.text,
+      ...(b.prose ?? []).map((p) => (p.plain ? { research: p.research, plain: p.plain } : p.research)),
+      ...(b.figures ?? []).map((f) => f.caption),
+      ...(b.ledger ? [b.ledger.balance, ...b.ledger.benefits.map((c) => c.text), ...b.ledger.risks.map((c) => c.text)] : []),
+      ...(b.position ? [b.position.statement, b.position.elaboration, b.position.sinkers] : []),
+    ];
+    if (!carriers.some(hasPlain)) {
+      add(`beat ${b.no}`, 'no-plain', `${b.name} has no plain-English register anywhere, so the ELI5 control does nothing on it.`);
     }
   }
 
@@ -198,7 +222,7 @@ export function validateStudy(study: Study): Finding[] {
  * because the honest answer is that the arc and the rules disagree here and
  * that is a decision for the system's author, not for a validator.
  */
-export const NOTE_RULES = ['rhythm', 'position-twice'] as const;
+export const NOTE_RULES = ['rhythm', 'position-twice', 'no-plain'] as const;
 
 /** Findings that should fail a build — everything except the arc's own tensions. */
 export function errors(findings: Finding[]): Finding[] {
