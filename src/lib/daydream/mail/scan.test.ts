@@ -266,3 +266,41 @@ describe('the freshness gate', () => {
     expect(CANDIDATE_MAX_AGE_DAYS).toBeLessThanOrEqual(7);
   });
 });
+
+describe('counting senders', () => {
+  // Only 1,837 of 2,906 production email notes carry a senderDomain. The first
+  // live run said "8 emails from 3 senders" while the burst gate had counted
+  // six, because the display collapsed every anonymous mail into one
+  // "unidentified sender" and the gate had not. The two must agree.
+  const anonymousCluster = [
+    row('Security alert', '2026-08-27', null),
+    row('Your account recovery request', '2026-08-27', null),
+    row('New sign-in to your account', '2026-08-27', null),
+    row('Unrecognized device signed in to your account', '2026-08-27', 'microsoft.com'),
+  ];
+
+  it('does not collapse unidentified senders into one', () => {
+    const [c] = buildMailCandidates(findMailHits(anonymousCluster, NOBODY));
+    expect(c.components.senders).toBe(4);
+    expect(c.title).toContain('4 senders');
+  });
+
+  it('says how many named no sender, rather than implying they were all known', () => {
+    const [c] = buildMailCandidates(findMailHits(anonymousCluster, NOBODY));
+    expect(c.components.unnamedSenders).toBe(3);
+    expect(c.explanation).toContain('Microsoft');
+    expect(c.explanation).toContain('3 that named no sender');
+  });
+
+  it('is honest when nothing in the group named a sender at all', () => {
+    const [c] = buildMailCandidates(findMailHits(anonymousCluster.slice(0, 3), NOBODY));
+    expect(c.explanation).toContain('none of which named a sender');
+  });
+
+  it('agrees with the burst gate', () => {
+    // If the display count were lower than BURST_MIN_SENDERS, a card would
+    // claim fewer senders than the rule that admitted it required.
+    const [c] = buildMailCandidates(findMailHits(anonymousCluster, NOBODY));
+    expect(Number(c.components.senders)).toBeGreaterThanOrEqual(2);
+  });
+});

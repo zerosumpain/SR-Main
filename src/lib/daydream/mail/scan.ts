@@ -162,10 +162,40 @@ export function groupBursts(hits: MailHit[]): MailHit[][] {
   return groups;
 }
 
+/**
+ * Sender identity, for counting.
+ *
+ * Only 1,837 of the 2,906 email notes on production carry a `senderDomain`, so
+ * a great many are anonymous. Two mails with no domain are probably two
+ * different senders — collapsing them into one would make a burst harder to
+ * detect than it should be — so each falls back to its own note id.
+ *
+ * The DISPLAY must use this same identity or the card contradicts the gate:
+ * the first live run said "8 emails from 3 senders" while the burst test had
+ * counted six, because the display collapsed every anonymous mail into one
+ * "unidentified sender" and the gate had not.
+ */
+function senderKey(h: MailHit): string {
+  return (h.row.senderDomain ?? h.row.noteId).toLowerCase();
+}
+
 function isBurst(group: MailHit[]): boolean {
   if (group.length < BURST_MIN_MAILS) return false;
-  const senders = new Set(group.map((h) => (h.row.senderDomain ?? h.row.noteId).toLowerCase()));
-  return senders.size >= BURST_MIN_SENDERS;
+  return new Set(group.map(senderKey)).size >= BURST_MIN_SENDERS;
+}
+
+/** Named brands in a group, and how many senders could not be named. Both are
+ *  reported: "3 senders" when two of them are anonymous is a worse answer than
+ *  saying so. */
+function describeSenders(group: MailHit[]): { count: number; named: string[]; unnamed: number } {
+  const named = new Set<string>();
+  let unnamed = 0;
+  for (const h of group) {
+    const brand = senderBrand(h.row.senderDomain);
+    if (brand) named.add(brand);
+    else unnamed++;
+  }
+  return { count: new Set(group.map(senderKey)).size, named: [...named], unnamed };
 }
 
 /** A stable day key for a burst's anchor, so a burst that grows updates the
@@ -198,7 +228,7 @@ export function buildMailCandidates(
     if (now.getTime() - newest > maxAgeMs) continue;
 
     if (isBurst(group)) {
-      const senders = [...new Set(group.map((h) => who(h.row)))];
+      const senders = describeSenders(group);
       const first = group[0].row.observedAt;
       const last = group[group.length - 1].row.observedAt;
       const hours = Math.max(1, Math.round((last.getTime() - first.getTime()) / 3_600_000));
@@ -208,14 +238,18 @@ export function buildMailCandidates(
         kind,
         title:
           category === 'security'
-            ? `${group.length} account-security emails from ${senders.length} senders in ${hours}h`
-            : `${group.length} ${titleCase(category)} emails from ${senders.length} senders in ${hours}h`,
+            ? `${group.length} account-security emails from ${senders.count} senders in ${hours}h`
+            : `${group.length} ${titleCase(category)} emails from ${senders.count} senders in ${hours}h`,
         // Rule-generated and complete on its own: if the composer never ran,
         // this sentence would still say what happened and why it was noticed.
         explanation:
           `Between ${dayKey(first)} and ${dayKey(last)}, ${group.length} emails matched the ` +
-          `${titleCase(category)} rules from ${senders.length} different senders ` +
-          `(${senders.slice(0, 5).join(', ')}). ` +
+          `${titleCase(category)} rules from ${senders.count} different senders` +
+          (senders.named.length
+            ? ` (${senders.named.slice(0, 5).join(', ')}` +
+              (senders.unnamed ? `, and ${senders.unnamed} that named no sender)` : ')')
+            : ` (none of which named a sender)`) +
+          '. ' +
           `The strongest was "${best.row.subject}" from ${who(best.row)}, matching ${best.matched.join(', ')}. ` +
           `A single one of these is routine; several from unrelated senders at once is not.`,
         // A cluster is worth more than its best member: the coincidence is the
@@ -223,7 +257,8 @@ export function buildMailCandidates(
         rawScore: Math.min(BURST_CEILING, rawScoreFor(best.score, best.novelty) + 0.1),
         components: {
           mails: group.length,
-          senders: senders.length,
+          senders: senders.count,
+          unnamedSenders: senders.unnamed,
           hours,
           topSignalScore: best.score,
           burst: 1,
