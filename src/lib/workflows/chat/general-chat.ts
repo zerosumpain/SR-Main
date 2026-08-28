@@ -319,6 +319,8 @@ interface RunToolContext {
   onProgress?: (text: string) => void;
   onStreamEvent?: (event: JobEvent) => void;
   conversationId?: string | null;
+  /** The canvas this chat is scoped to — null on the hub, WhatsApp, sub-agents. */
+  workflowId?: string | null;
   parentJobId?: string | null;
   modelContext?: ModelContext;
   subagentDepth?: number;
@@ -329,7 +331,7 @@ async function runSingleToolCall(
   toolCall: any,
   ctx: RunToolContext,
 ): Promise<{ toolMessage: { role: 'tool'; tool_call_id: string; content: string } }> {
-  const { activeTools, activatedToolsets, haEntityCount, loadHaEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
+  const { activeTools, activatedToolsets, haEntityCount, loadHaEntities, onToolProgress, onProgress, onStreamEvent, conversationId, workflowId } = ctx;
   const fnName: string = toolCall.function.name;
   let fnArgs: Record<string, unknown>;
   try {
@@ -445,6 +447,7 @@ async function runSingleToolCall(
       ? {
           jobId,
           conversationId: conversationId ?? undefined,
+          workflowId: workflowId ?? null,
           emit: (text: string) => {
             const trimmed = text.trim().slice(0, 200);
             if (!trimmed) return;
@@ -452,7 +455,9 @@ async function runSingleToolCall(
             onStreamEvent?.({ type: 'status', text: trimmed });
           },
         }
-      : (conversationId ? { conversationId, emit: () => {} } : undefined);
+      : (conversationId || workflowId
+          ? { conversationId: conversationId ?? undefined, workflowId: workflowId ?? null, emit: () => {} }
+          : undefined);
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
     if (isDestructive(fnName)) {
       if (!jobId) {
@@ -1517,6 +1522,7 @@ async function runGeneralChat(
         onProgress,
         onStreamEvent: options.onStreamEvent,
         conversationId: options.conversationId,
+        workflowId: options.workflowId ?? null,
         parentJobId: options.jobId ?? null,
         modelContext: options.modelContext,
         subagentDepth: options.subagentDepth ?? 0,

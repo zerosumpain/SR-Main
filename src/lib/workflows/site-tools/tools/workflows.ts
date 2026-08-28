@@ -82,6 +82,43 @@ function refuseCredentialConfig(fields: string[]): { success: false; error: stri
 }
 
 /**
+ * Which canvas — if any — this chat is scoped to.
+ *
+ * Two callers, two conventions. The in-process chat loop states it outright as
+ * `ctx.workflowId` (null on the /jkai hub, on WhatsApp, in a sub-agent). MCP
+ * has no such field: a canvas_chat session sets chat_id = the workflow id, and
+ * the dispatcher threads chat_id through as `conversationId`.
+ *
+ * That second convention used to be read as "conversationId looks like a UUID,
+ * therefore we are on a canvas". It held only while Hermes owned chat, because
+ * Hermes gave the general hub a synthetic non-UUID chat id. Hermes was removed
+ * on 2026-08-24; since then every chat passes a real `jkai_conversations.id`,
+ * which is `gen_random_uuid()::text`. So the test matched EVERY chat:
+ * workflow_build_from_spec refused to build anywhere, and workflow_generate
+ * quietly aimed at a canvas whose id was really a conversation id. On
+ * 2026-08-28 that told the owner over WhatsApp that his chat was "pinned to a
+ * workflow that no longer exists" — the id in that message was his conversation.
+ *
+ * So: trust the explicit field, and where only the MCP convention is available,
+ * CONFIRM the row exists rather than trusting its shape. A conversation id can
+ * never collide with a workflow id, so the wrong answer is now impossible
+ * rather than merely unlikely.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function canvasScope(ctx?: { workflowId?: string | null; conversationId?: string }): Promise<string | null> {
+  if (typeof ctx?.workflowId === 'string' && ctx.workflowId.trim()) return ctx.workflowId.trim();
+  const chatId = ctx?.conversationId;
+  if (!chatId || !UUID_RE.test(chatId)) return null;
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(eq(workflows.id, chatId))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
  * Which nodes in this workflow have upstreams that overwrite each other.
  *
  * The engine merges fan-in flat, so two branches emitting the same keys silently
@@ -479,15 +516,13 @@ register({
 
     // Refuse when called from a canvas chat — the user is on an existing
     // canvas and wants nodes added to *that* canvas, not a brand-new one.
-    // The MCP layer threads the inbound chat_id as `conversationId`; for
-    // canvas_chat sessions set chat_id = the canvas's workflow_id
-    // (a UUID), so a UUID-shaped conversationId is the "we're on a canvas"
-    // signal. jkai-general sessions get synthetic non-UUID ids.
-    if (ctx?.conversationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ctx.conversationId)) {
+    // See canvasScope(): this is a confirmed canvas, not a guess at one.
+    const openCanvas = await canvasScope(ctx);
+    if (openCanvas) {
       return {
         success: false,
         error:
-          `workflow_build_from_spec creates a NEW canvas — but this chat is already on workflow ${ctx.conversationId}. ` +
+          `workflow_build_from_spec creates a NEW canvas — but this chat is already on workflow ${openCanvas}. ` +
           `To add nodes to the current canvas, use workflow_add_node + workflow_add_edge (per the design-first flow). ` +
           `Only call workflow_build_from_spec from the general /jkai chat hub (which has no workflow scope).`,
       };
@@ -2276,15 +2311,16 @@ register({
     const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
     if (!prompt) return { success: false, error: '`prompt` (string) is required.' };
 
-    // If a canvas chat threads its workflow_id through as conversationId, and
-    // the caller didn't pass an explicit workflowId, default to modifying the
-    // current canvas — same UUID-shaped signal workflow_build_from_spec uses.
-    const isUuid = (v: unknown): v is string =>
-      typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    // When the chat is already open on a canvas and the caller named no
+    // workflow, default to modifying that canvas — same confirmed signal
+    // workflow_build_from_spec refuses on. A null scope means the hub (or
+    // WhatsApp), where generate is expected to CREATE, so it must stay null:
+    // passing a conversation id here is what made generate aim at a canvas
+    // that never existed.
     let workflowId: string | null =
       typeof args.workflowId === 'string' && args.workflowId.trim()
         ? args.workflowId.trim()
-        : (isUuid(ctx?.conversationId) ? (ctx!.conversationId as string) : null);
+        : await canvasScope(ctx);
 
     // Lazy-import the rich generator + persistence helpers. Matches the rest of
     // this file (orchestrator deps are always lazily imported to avoid circular
@@ -2368,6 +2404,30 @@ register({
           }
           return createdRow.id;
         });
+
+        // A cron trigger is not a schedule. This path wrote `workflows.trigger`
+        // and a trigger node and stopped there, so a canvas generated with
+        // "every morning at 9" was born dormant: correct on screen, correct in
+        // the trigger column, and never once run. workflow_build_from_spec has
+        // always written the row; only this path did not, which is why the gap
+        // survived — the canvases John built by spec all fired.
+        const genTrigger = deriveTriggerShape(
+          workflow.trigger as { type: string; config?: Record<string, unknown> } | undefined,
+        );
+        if (genTrigger.scheduleRow) {
+          const [sch] = await db
+            .insert(workflowSchedules)
+            .values({
+              workflowId,
+              type: genTrigger.scheduleRow.type,
+              config: genTrigger.scheduleRow.config,
+              enabled: true,
+            })
+            .returning();
+          if (genTrigger.scheduleRow.type === 'cron') {
+            registerCronJob({ id: sch.id, workflowId, config: sch.config });
+          }
+        }
       }
     } catch (dbErr: unknown) {
       const msg = dbErr instanceof Error ? dbErr.message : 'Unknown DB error';

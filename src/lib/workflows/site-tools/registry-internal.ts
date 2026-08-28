@@ -14,6 +14,21 @@ export interface ToolExecContext {
   jobId?: string;
   conversationId?: string;
   /**
+   * The canvas this chat is scoped to, or null/absent on an unscoped chat (the
+   * /jkai hub, WhatsApp, a sub-agent, the follow-up queue). Set by the chat
+   * loop, which already knows — it is the same value the canvas page posts.
+   *
+   * This field exists because the answer used to be GUESSED from the shape of
+   * `conversationId`: Hermes gave the general hub a synthetic non-UUID chat id
+   * and a canvas chat a chat_id equal to the workflow id, so "UUID-shaped means
+   * canvas" held. Hermes was removed on 2026-08-24 and every chat now passes a
+   * real `jkai_conversations.id` — `gen_random_uuid()::text` — so the guess was
+   * true for EVERY chat, and workflow_build_from_spec refused to create a
+   * canvas anywhere, telling the owner his chat was pinned to a workflow that
+   * did not exist. Ask, do not infer.
+   */
+  workflowId?: string | null;
+  /**
    * The tool-step bus key for this call — `workflow_id` on a canvas chat,
    * otherwise the chat id. Distinct from `conversationId`, which is always the
    * chat id: on a canvas chat the two differ, and the bus (SSE subscribers,
