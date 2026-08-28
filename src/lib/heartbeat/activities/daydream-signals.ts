@@ -3,6 +3,7 @@ import { harvestHomeAssistant } from '$lib/daydream/signals/ha';
 import { buildJourneySignals } from '$lib/daydream/signals/journeys';
 import { mirrorFeatures } from '$lib/daydream/signals/mirror';
 import { backfillWeather } from '$lib/daydream/signals/weather';
+import { buildGraphSignals } from '$lib/daydream/signals/graph';
 import { recordObservations, refreshSignalStats } from '$lib/daydream/signals/registry';
 import { localDay } from '$lib/daydream/features/build';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
@@ -19,6 +20,10 @@ interface SignalsConfig {
   harvestHa?: boolean;
   /** How far back to re-derive journeys. Bounded by trail retention anyway. */
   journeyWindowDays?: number;
+  /** How far back to recompute the graph's daily activity. The source rows
+   *  carry their own timestamps, so this is a cheap grouped count and the
+   *  series arrive already old enough to be swept. */
+  graphWindowDays?: number;
   /** Trailing days of weather to (re)fetch each run. Small by default: the
    *  archive does not revise itself, so re-pulling a year nightly would be a
    *  free service being leaned on for nothing. Backfill runs separately. */
@@ -30,6 +35,7 @@ const DEFAULTS: Required<SignalsConfig> = {
   harvestHa: true,
   journeyWindowDays: 30,
   weatherDays: 7,
+  graphWindowDays: 120,
 };
 
 /**
@@ -56,7 +62,7 @@ const DEFAULTS: Required<SignalsConfig> = {
 export const daydreamSignalsRefresh: ActivityHandler = {
   name: NAME,
   description:
-    'Discovers every measurable series daydream can reach — every Home Assistant entity state and numeric attribute, plus the feature store republished as signals — registers anything new, and folds this hour\'s readings into today. Nothing here names an entity, so a device that starts answering starts being pondered with no deploy. No LLM.',
+    'Discovers every measurable series daydream can reach — every Home Assistant entity state and numeric attribute, the feature store, journeys, weather and the knowledge graph\'s daily activity, republished as signals — registers anything new, and folds this hour\'s readings into today. Nothing here names an entity, so a device that starts answering starts being pondered with no deploy. No LLM.',
   defaultCadenceSeconds: 3600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
@@ -117,6 +123,18 @@ export const daydreamSignalsRefresh: ActivityHandler = {
       // Reported, never fatal — a free third-party API being unreachable is not
       // a reason to fail the action that also discovers the house.
       if (weather.errors.length) notes.push(`weather errors: ${weather.errors.length}`);
+    }
+
+    // ── the knowledge graph's daily activity ─────────────────────────────
+    // Rates, never cumulative totals: a monotonic series rank-correlates with
+    // everything that trends, and the sweep's default is Spearman. See
+    // signals/graph.ts. NOT added to SWEEP_METRICS — the registry feeds the
+    // sweep, the proposer's vocabulary stays fixed.
+    if (cfg.graphWindowDays > 0) {
+      const graph = await buildGraphSignals({ windowDays: cfg.graphWindowDays });
+      notes.push(`graph: ${graph.signals} signals over ${graph.days} days`);
+      details.graph = graph;
+      if (graph.errors.length) notes.push(`graph errors: ${graph.errors.length}`);
     }
 
     const refreshed = await refreshSignalStats();

@@ -77,8 +77,6 @@ export const STALE_DAYS = 3;
  *  without a reason reads as an oversight, and every one of these is a
  *  decision somebody made on purpose. */
 const BY_DESIGN = {
-  graphToSweep:
-    'The sweep correlates daily numeric series. The graph is entities and edges, not a number per day, so there is nothing to correlate.',
   graphToHypotheses:
     'The proposer is shown a fixed vocabulary and never the correlations — that blind pre-registration is what makes a q-value mean anything over ~4 tests instead of ~276. Widening it to the graph would void the correction.',
   mailToHypotheses:
@@ -297,14 +295,30 @@ export async function loadProvenance(): Promise<{
     ),
 
     // ── The graph ──
+    // Its daily ACTIVITY is now a registry source like any other (see
+    // signals/graph.ts), so observations and the sweep are measured here
+    // rather than declared closed. Only the proposer's vocabulary stays shut.
     {
       key: 'intel',
       label: 'Intelligence graph',
-      blurb: 'Entities, edges and the nightly rule-based insight detectors.',
-      summary: `${insightCount} findings stored · ${bridgedCount} became thoughts`,
+      blurb:
+        'Entities, edges and the nightly rule-based insight detectors. Its daily activity — what was added, admitted and found — is published as signals.',
+      summary:
+        `${insightCount} findings stored · ${bridgedCount} became thoughts · ` +
+        `${(bySource.get('graph')?.sweepable ?? 0)} of ${(bySource.get('graph')?.active ?? 0)} series in the sweep`,
       links: [
-        { to: 'Observations', state: 'by_design', detail: BY_DESIGN.graphToSweep },
-        { to: 'Sweep', state: 'by_design', detail: BY_DESIGN.graphToSweep },
+        assessLink({
+          to: 'Observations',
+          have: bySource.get('graph')?.active ?? 0,
+          flowingDetail: `${bySource.get('graph')?.active ?? 0} daily series — entities and edges added, notes admitted, findings raised.`,
+        }),
+        assessLink({
+          to: 'Sweep',
+          have: bySource.get('graph')?.sweepable ?? 0,
+          need: (bySource.get('graph')?.registered ?? 0) > 0 && (bySource.get('graph')?.sweepable ?? 0) === 0 ? 1 : undefined,
+          flowingDetail: `${bySource.get('graph')?.sweepable ?? 0} have the ${MIN_PAIRS} days a correlation needs. Rates only — a cumulative total would correlate with anything that trends.`,
+          waitingDetail: `Registered, and the best has ${bySource.get('graph')?.bestDays ?? 0} of the ${MIN_PAIRS} days a correlation needs.`,
+        }),
         { to: 'Hypotheses', state: 'by_design', detail: BY_DESIGN.graphToHypotheses },
         assessLink({
           to: 'Thoughts',
