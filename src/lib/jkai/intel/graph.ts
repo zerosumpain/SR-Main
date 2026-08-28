@@ -612,12 +612,24 @@ export async function persistExtraction(
 
   // Corroboration: how many distinct notes independently assert each entity.
   // Drives the trust score and the thin-evidence detector.
-  for (const entityId of entityIdMap.values()) {
+  //
+  // One statement for the whole extraction, not one per entity. This was a
+  // round-trip each — and each carried a correlated COUNT DISTINCT over a table
+  // that had no index at all, so a note naming fifteen entities meant fifteen
+  // full scans of intel_note_entities.
+  const entityIds = [...entityIdMap.values()];
+  if (entityIds.length) {
     await db.execute(sql`
-      UPDATE intel_entities SET
-        corroboration = (SELECT count(DISTINCT note_id)::int FROM intel_note_entities WHERE entity_id = ${entityId}),
+      UPDATE intel_entities e SET
+        corroboration = c.n,
         last_corroborated_at = now()
-      WHERE id = ${entityId}
+      FROM (
+        SELECT entity_id, count(DISTINCT note_id)::int AS n
+        FROM intel_note_entities
+        WHERE entity_id = ANY(${sql.param(entityIds)})
+        GROUP BY entity_id
+      ) c
+      WHERE e.id = c.entity_id
     `);
   }
 
@@ -738,7 +750,6 @@ export async function persistExtraction(
   }
 
   // Update summaries for affected entities (async, non-blocking)
-  const entityIds = [...entityIdMap.values()];
   updateEntitySummaries(entityIds).catch((err) => {
     console.error('[intel] Summary update failed:', err);
   });

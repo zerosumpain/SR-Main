@@ -3,15 +3,17 @@ import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { getBuildList } from '$lib/jkai/queries';
 import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { ModelContext } from '$lib/server/models/types';
 
 export const GET: RequestHandler = async () => {
-  const builds = await db.select().from(jkaiBuilds).orderBy(desc(jkaiBuilds.createdAt));
-  return json(builds);
+  // Shared list projection — see `getBuildList`. The canvas builder panel polls
+  // this on a timer, so the full row went over the wire every few seconds to
+  // find the one or two builds that are still running.
+  return json(await getBuildList());
 };
 
 export const POST: RequestHandler = async ({ request }) => {

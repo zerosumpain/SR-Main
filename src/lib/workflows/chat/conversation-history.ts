@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
-import { eq, asc, desc, or } from 'drizzle-orm';
+import { eq, desc, inArray } from 'drizzle-orm';
 import { getChatHistory } from '$lib/workflows/orchestrator';
 import type { JkaiAttachment } from '$lib/db/schema';
 
@@ -33,10 +33,13 @@ const HISTORY_FETCH_LIMIT = 200;
 async function loadAttachmentsFor(messageIds: string[]): Promise<Map<string, JkaiAttachment[]>> {
   const byMsg = new Map<string, JkaiAttachment[]>();
   if (messageIds.length === 0) return byMsg;
+  // `inArray`, not `or(...ids.map(eq))`. The window is 200 messages, so the OR
+  // form handed Postgres a 200-branch boolean expression to plan on every single
+  // chat turn; `= ANY($1)` is one parameter and one index probe.
   const atts = await db
     .select()
     .from(jkaiAttachments)
-    .where(or(...messageIds.map((id) => eq(jkaiAttachments.messageId, id)))!);
+    .where(inArray(jkaiAttachments.messageId, messageIds));
   for (const a of atts) {
     if (!a.messageId) continue;
     const arr = byMsg.get(a.messageId) ?? [];
