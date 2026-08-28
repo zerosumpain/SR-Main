@@ -3,7 +3,7 @@
   import { COMMITMENTS, DOCUMENTS_BY_ID, THEME_META, STATUS_META, ROLE_META } from '../../lib/commitments';
   import { ORG_BY_ID } from '../../lib/orgs';
   import { CAPABILITY_BY_ID } from '../../lib/capabilities';
-  import { PRESSURES_BY_ID } from '../../lib/pressures';
+  import { PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
   import { app } from '../../lib/appState.svelte';
   import { author } from '../../lib/author/authorState.svelte';
   import { markdownToHtml } from '../../lib/author/serialize';

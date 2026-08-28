@@ -5,8 +5,8 @@
 // fix, stop() when cruise ends (which finalises stats and persists, discarding
 // trivial/stationary "cruises"). All IndexedDB access is browser-only and
 // fail-soft — a missing/blocked IDB never throws into the UI.
-import { haversine } from './geo';
-import type { Boat } from './types';
+import { haversine } from '$lib/broads-pilot/geo';
+import type { Boat } from '$lib/broads-pilot/types';
 
 export interface TrackPoint { lat: number; lng: number; t: number; speed: number | null }
 export interface CruiseLog {

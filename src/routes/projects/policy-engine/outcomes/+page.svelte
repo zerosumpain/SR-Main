@@ -6,9 +6,9 @@
   import CompareReadout from '../components/CompareReadout.svelte';
   import MeasurementPopover from '../components/MeasurementPopover.svelte';
   import { MEASUREMENT } from '../lib/measurement';
-  import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from '../lib/params';
+  import { HISTORY, BASE_YEAR, BASELINE, TARGETS } from '$lib/policy-engine/params';
   import { chartSummary } from '../lib/summaries';
-  import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '../lib/levers';
+  import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
 
   // the handful of sliders that most move each chart — a hint pointing the user at the drawer
   const KEY_LEVERS: Record<string, string[]> = {

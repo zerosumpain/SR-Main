@@ -3,7 +3,7 @@
   import { STATUS_META } from '../../lib/commitments';
   import { CAPABILITY_AREAS } from '../../lib/capabilities';
   import CommitList from './CommitList.svelte';
-  import type { Commitment } from '../../lib/types';
+  import type { Commitment } from '$lib/dfe-data-strategy/types';
 
   // what the ledger demands of the strategy: commitments per capability area,
   // stacked by how hard they bind (sequential single-hue ramp, dark = binding)

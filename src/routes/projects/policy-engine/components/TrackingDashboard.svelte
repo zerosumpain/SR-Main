@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TrackedIndicator, TrackStatus, FreshnessState } from '../lib/tracking/types';
+  import type { TrackedIndicator, TrackStatus, FreshnessState } from '$lib/policy-engine/tracking/types';
 
   let { tracked }: { tracked: TrackedIndicator[] } = $props();
 

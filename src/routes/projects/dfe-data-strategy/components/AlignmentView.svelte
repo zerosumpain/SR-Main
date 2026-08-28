@@ -2,7 +2,7 @@
   import { app } from '../lib/appState.svelte';
   import { CAPABILITY_AREAS } from '../lib/capabilities';
   import { pct } from '../lib/format';
-  import type { Origin } from '../lib/types';
+  import type { Origin } from '$lib/dfe-data-strategy/types';
 
   const a = $derived(app.align);
   const b = $derived(app.alignB);

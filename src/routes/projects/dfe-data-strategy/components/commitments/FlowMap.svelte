@@ -2,7 +2,7 @@
   import { ledger } from '../../lib/commitmentsFilter.svelte';
   import { ORGS, ORG_BY_ID, ORG_GROUP_META } from '../../lib/orgs';
   import CommitList from './CommitList.svelte';
-  import type { Commitment } from '../../lib/types';
+  import type { Commitment } from '$lib/dfe-data-strategy/types';
 
   // the new connections between partners: every flow the filtered commitments create,
   // department-centred radial layout, edge weight = number of commitments behind the flow

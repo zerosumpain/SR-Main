@@ -11,8 +11,8 @@ import { extractText, synthesize } from '$lib/jkai/extract';
 import { isOwnerEmail } from '$lib/server/access';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import { MATURITY_DIMENSIONS } from '../lib/maturity';
-import { PRESSURES } from '../lib/pressures';
+import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
+import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
 import { POSTURE_AXES } from '../lib/postures';
 import { CAPABILITY_AREAS } from '../lib/capabilities';
 

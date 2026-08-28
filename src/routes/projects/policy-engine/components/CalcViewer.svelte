@@ -7,7 +7,7 @@
   import { Tween } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
   import { app } from '../lib/appState.svelte';
-  import { runSim } from '../lib/engine';
+  import { runSim } from '$lib/policy-engine/engine';
   import LeverSlider from './LeverSlider.svelte';
   import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
   import { fmt, signed } from '../lib/chartkit';

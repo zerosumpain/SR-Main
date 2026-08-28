@@ -87,7 +87,7 @@ register({
   toolset: 'site-signals',
   handler: async () => {
     const { loadTrackedIndicators } = await import(
-      '../../../../routes/projects/policy-engine/lib/tracking/ingest.server'
+      '$lib/policy-engine/tracking/ingest.server'
     );
     const indicators = await loadTrackedIndicators();
     const compact = indicators.map((i) => ({

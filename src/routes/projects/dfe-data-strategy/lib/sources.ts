@@ -3,7 +3,7 @@
 // the commitments-ledger documents (2026-07-02 sweep) are appended automatically so
 // the footer's "every input is research-backed" promise stays true.
 
-import type { SourceRef } from './types';
+import type { SourceRef } from '$lib/dfe-data-strategy/types';
 import { DOCUMENTS } from './commitments';
 
 export const SOURCES: SourceRef[] = [

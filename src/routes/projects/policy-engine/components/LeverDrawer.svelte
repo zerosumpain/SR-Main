@@ -4,7 +4,7 @@
   import AgeIdentification from './AgeIdentification.svelte';
   import ScenarioBar from './ScenarioBar.svelte';
   import SavedScenarios from './SavedScenarios.svelte';
-  import { LEVERS, policyLevers, LEVER_ELI5_NAME } from '../lib/levers';
+  import { LEVERS, policyLevers, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
   import { downloadJSON } from '../lib/scenarios';
   const rname = (id: string, label: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? label : label);
 

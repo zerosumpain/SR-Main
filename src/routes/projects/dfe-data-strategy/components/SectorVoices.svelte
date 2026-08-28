@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SECTOR_VOICES, VOICE_GROUP_META, STANCE_META, type VoiceGroup, type Stance } from '../lib/sectorVoices';
+  import { SECTOR_VOICES, VOICE_GROUP_META, STANCE_META, type VoiceGroup, type Stance } from '$lib/dfe-data-strategy/sectorVoices';
 
   let stanceFilter = $state<'all' | Stance>('all');
 

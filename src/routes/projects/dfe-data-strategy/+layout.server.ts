@@ -1,7 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
-import { getIntelSnapshot } from './lib/intel.server';
+import { getIntelSnapshot } from '$lib/dfe-data-strategy/intel.server';
 import type { IntelLayoutData } from './lib/intelTargets';
 
 // The public landscape is gated by the per-project visibility toggle (public by default).

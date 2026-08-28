@@ -5,7 +5,7 @@
   // (in-page + localStorage), never written to any shared conversation store.
   import { onMount } from 'svelte';
   import { app } from '../lib/appState.svelte';
-  import { LEVERS_BY_ID } from '../lib/levers';
+  import { LEVERS_BY_ID } from '$lib/policy-engine/levers';
   import { OUTCOMES_BY_ID, SCORECARD_IDS } from '../lib/outcomes';
   import { fmt } from '../lib/chartkit';
 

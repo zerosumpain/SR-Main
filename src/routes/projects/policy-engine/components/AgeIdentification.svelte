@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { LeverState } from '../lib/types';
-  import { AGE_BANDS, LEVERS_BY_ID, ageBandCostBn, ageIdTotals } from '../lib/levers';
-  import { AGEID } from '../lib/params';
+  import type { LeverState } from '$lib/policy-engine/types';
+  import { AGE_BANDS, LEVERS_BY_ID, ageBandCostBn, ageIdTotals } from '$lib/policy-engine/levers';
+  import { AGEID } from '$lib/policy-engine/params';
 
   interface Props {
     levers: LeverState;

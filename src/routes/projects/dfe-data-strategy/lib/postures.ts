@@ -4,7 +4,7 @@
 // (the rightLabel), applied symmetrically toward −1 (the leftLabel) by the engine.
 // Weights are modest (±0.05…0.25) and documented in params.ts.
 
-import type { PostureAxis } from './types';
+import type { PostureAxis } from '$lib/dfe-data-strategy/types';
 
 export const POSTURE_AXES: PostureAxis[] = [
   {

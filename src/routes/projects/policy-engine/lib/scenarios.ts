@@ -1,8 +1,8 @@
 // scenarios.ts — preset policy packages + scenario store (localStorage, import/export).
 // Mirrors the data-convergence store pattern. Self-contained.
 
-import type { LeverState, Scenario, ScenarioStore } from './types';
-import { baselineLevers, policyLevers, LEVERS } from './levers';
+import type { LeverState, Scenario, ScenarioStore } from '$lib/policy-engine/types';
+import { baselineLevers, policyLevers, LEVERS } from '$lib/policy-engine/levers';
 import { milburnPackageLevers } from './directions';
 
 const STORAGE_KEY = 'whitehall-model-v1';

@@ -16,7 +16,7 @@
   // which is not one of the three allowed radii.
   import ConfidenceChip from '$lib/fieldstudy/ConfidenceChip.svelte';
   import { toConfidence } from '$lib/fieldstudy/types';
-  import type { ConfidenceLevel } from '../lib/types';
+  import type { ConfidenceLevel } from '$lib/policy-engine/types';
 
   interface Props {
     level: ConfidenceLevel;

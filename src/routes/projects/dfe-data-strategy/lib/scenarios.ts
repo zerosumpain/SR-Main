@@ -5,8 +5,8 @@
 import { defaultState } from './engine';
 import { CAPABILITY_IDS } from './capabilities';
 import { POSTURE_IDS } from './postures';
-import { MATURITY_DIMENSIONS } from './maturity';
-import type { StrategyState } from './types';
+import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
+import type { StrategyState } from '$lib/dfe-data-strategy/types';
 
 export interface Preset {
   name: string;

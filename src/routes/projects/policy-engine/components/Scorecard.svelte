@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { YearResult } from '../lib/types';
+  import type { YearResult } from '$lib/policy-engine/types';
   import { OUTCOMES_BY_ID, SCORECARD_IDS, OUTCOME_ELI5, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
-  import { fmtNum } from '../lib/format';
+  import { fmtNum } from '$lib/policy-engine/format';
   import { app } from '../lib/appState.svelte';
   const meaning = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5[id] ?? '' : OUTCOMES_BY_ID[id]?.blurb ?? '');
   const lbl = (id: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? OUTCOMES_BY_ID[id]?.label : OUTCOMES_BY_ID[id]?.label);

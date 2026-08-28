@@ -4,11 +4,11 @@
   // a per-region detail card. Everything responds live to the levers — especially place_investment
   // and the two 2026 area missions (Mission North East, Mission Coastal). Self-contained.
 
-  import type { YearResult } from '../lib/types';
+  import type { YearResult } from '$lib/policy-engine/types';
   import { regionalise, regionalSnapshot, type RegionSnapshot, REGIONS_BY_CODE } from '../lib/regions';
-  import { baselineLevers } from '../lib/levers';
-  import type { LeverState } from '../lib/types';
-  import { fmtNum } from '../lib/format';
+  import { baselineLevers } from '$lib/policy-engine/levers';
+  import type { LeverState } from '$lib/policy-engine/types';
+  import { fmtNum } from '$lib/policy-engine/format';
 
   interface Props {
     sim: YearResult[]; baseSim: YearResult[]; levers: LeverState; horizon: number;

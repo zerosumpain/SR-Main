@@ -12,8 +12,8 @@
 // YFF toolkit; Milburn 8-in-10 health-segment stickiness]
 // Shares & relative risks come from triage.ts (same synthetic cohort). Self-contained.
 
-import type { Band } from './params';
-import { band } from './params';
+import type { Band } from '$lib/policy-engine/params';
+import { band } from '$lib/policy-engine/params';
 import { STRATA, residualRR, COHORT_SIZE, COHORT_BASE_RATE } from './triage';
 import { mulberry32, triangular } from './montecarlo';
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { FRAMEWORKS } from '../lib/frameworks';
-  import type { Framework } from '../lib/types';
+  import { FRAMEWORKS } from '$lib/dfe-data-strategy/frameworks';
+  import type { Framework } from '$lib/dfe-data-strategy/types';
 
   const W = 720, H = 400, L = 30, R = 30, T = 40, B = 40;
   const w = (f: Framework) => f.weight ?? 0.5;

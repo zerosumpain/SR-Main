@@ -13,8 +13,8 @@ import { clamp, saturate } from './format';
 import { PARAMS } from './params';
 import { CAPABILITY_IDS, CAPABILITY_BY_ID } from './capabilities';
 import { POSTURE_AXES } from './postures';
-import { PRESSURES, PRESSURES_BY_ID } from './pressures';
-import { MATURITY_DIMENSIONS } from './maturity';
+import { PRESSURES, PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
+import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
 import type {
   AlignmentResult,
   CoverageTraceTerm,
@@ -22,7 +22,7 @@ import type {
   Origin,
   StrategyState,
   Tension,
-} from './types';
+} from '$lib/dfe-data-strategy/types';
 
 const N = CAPABILITY_IDS.length;
 const ORIGINS: Origin[] = ['cross-government', 'dfe-policy', 'partners'];

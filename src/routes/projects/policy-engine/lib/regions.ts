@@ -16,9 +16,9 @@
 //     Hastings' KS4 gap actually WIDENED) — so closure is modelled SMALL, slow and capped, and
 //     flagged as an assumption.
 
-import type { YearResult } from './types';
-import { LEVERS_BY_ID } from './levers';
-import { GAP_TO_LEVEL } from './params';
+import type { YearResult } from '$lib/policy-engine/types';
+import { LEVERS_BY_ID } from '$lib/policy-engine/levers';
+import { GAP_TO_LEVEL } from '$lib/policy-engine/params';
 
 export interface RegionDef {
   code: string;

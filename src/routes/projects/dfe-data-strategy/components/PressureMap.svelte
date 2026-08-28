@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { PRESSURES } from '../lib/pressures';
+  import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
   import { app } from '../lib/appState.svelte';
-  import type { Origin } from '../lib/types';
+  import type { Origin } from '$lib/dfe-data-strategy/types';
 
   const ORIGIN_COL: Record<Origin, string> = { 'cross-government': '#2f6155', 'dfe-policy': '#8a2d3a', partners: '#2f6f97' };
   const ORIGIN_LABEL: Record<Origin, string> = { 'cross-government': 'Cross-government', 'dfe-policy': 'The department policy', partners: 'Partners' };

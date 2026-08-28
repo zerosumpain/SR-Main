@@ -124,12 +124,10 @@ const BASELINE_LAYER = [
 // an /api/<slug> endpoint importing src/routes/projects/<slug>/lib — the study
 // page and its endpoint were built as one unit. The shared code belongs in
 // src/lib/<slug>, where the layer rules above would apply to it.
-const BASELINE_ROUTE_CROSS = [
-  'api/broads-pilot -> projects',
-  'api/data-standard-designer -> projects',
-  'api/dfe-data-strategy -> projects',
-  'api/policy-engine -> projects',
-];
+// None. Four /api/<slug> endpoints used to import their study page's lib/
+// directory; the shared halves now live in $lib/<slug>/ where the layer rules
+// apply to them, and page-only state stayed beside the page.
+const BASELINE_ROUTE_CROSS = [];
 
 // Mutual imports between two lib modules, alphabetical, ' <-> ' separated.
 // Twenty pairs is the tangle this linter exists to stop growing.
@@ -304,18 +302,31 @@ for (const [key, info] of edges) {
   const [fromKind, fromName] = splitOnce(fromRaw);
   const [toKind, toName] = splitOnce(toRaw);
 
-  // R1–R3: layering. Only lib modules are layered; :lib-root is a grab-bag of
-  // loose files and is exempt until it is emptied.
-  if (fromKind === 'lib' && toKind === 'lib') {
-    libEdge.set(`${fromName}|${toName}`, info);
-    const fl = layerOf(fromName);
-    const tl = layerOf(toName);
+  // R1–R3: layering. :lib-root is a grab-bag of loose files and is exempt until
+  // it is emptied.
+  //
+  // Routes count as the TOP layer here, which is what makes `$lib` importing a
+  // route a violation. That direction went unchecked until 2026-08-28 and it is
+  // the worst one available: a shared library that depends on a page cannot be
+  // reused, cannot be tested without the route tree, and quietly makes a page
+  // load-bearing for everything downstream of it. It was live —
+  // $lib/workflows/site-tools/tools/site-signals.ts reached four levels up into
+  // src/routes/projects/policy-engine for a tracking module.
+  if ((fromKind === 'lib' || fromKind === 'route') && (toKind === 'lib' || toKind === 'route')) {
+    if (fromKind === 'lib' && toKind === 'lib') libEdge.set(`${fromName}|${toName}`, info);
+    const fl = fromKind === 'route' ? 'routes' : layerOf(fromName);
+    const tl = toKind === 'route' ? 'routes' : layerOf(toName);
+    // route -> route is R4's business, not the layer rule's (both are `routes`,
+    // so the rank check would never fire on them anyway).
     if (rank(tl) > rank(fl)) {
-      const label = `${fromName} -> ${toName}`;
+      const label = `${fromName} -> ${toKind === 'route' ? `routes/${toName}` : toName}`;
       if (LAYER_EXCEPTIONS.includes(label)) usedLayerBaseline.add(label);
       else
         violations.push({
-          rule: `${fl} may not import ${tl}`,
+          rule:
+            toKind === 'route'
+              ? `${fl} may not import a ROUTE — move the shared code into src/lib`
+              : `${fl} may not import ${tl}`,
           label,
           info,
         });

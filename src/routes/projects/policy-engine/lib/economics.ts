@@ -12,8 +12,8 @@
 //    NOT separately add a NEET wage-scar (the engine already routes attainment → NEET).
 //  • The per-grade/per-SD constant comes from 2002–2005 GCSE cohorts; future labour markets may differ.
 
-import type { YearResult } from './types';
-import { POP } from './params';
+import type { YearResult } from '$lib/policy-engine/types';
+import { POP } from '$lib/policy-engine/params';
 
 const M = 1e6;
 

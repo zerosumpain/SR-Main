@@ -2,7 +2,7 @@
 // The route's visibility guard + headers are handled by +layout.server.ts; here we only
 // add the tracked indicators (cheap DB read) with a short shared-cache window.
 
-import { loadTrackedIndicators } from '../lib/tracking/ingest.server';
+import { loadTrackedIndicators } from '$lib/policy-engine/tracking/ingest.server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ setHeaders, parent }) => {

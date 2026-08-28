@@ -1,6 +1,6 @@
 // Loads the bundled datasets from static/broads-pilot/*.json once and caches
 // them. The service worker precaches these, so the planner works offline.
-import type { Datasets, WaterGraph, Restrictions, Broad, Mooring, Poi, MooringPois, Boat, TideTable, Meta } from './types';
+import type { Datasets, WaterGraph, Restrictions, Broad, Mooring, Poi, MooringPois, Boat, TideTable, Meta } from '$lib/broads-pilot/types';
 
 let cache: Datasets | null = null;
 let inflight: Promise<Datasets> | null = null;

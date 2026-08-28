@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { THEMES, THEMES_BY_ID, themesForRoute } from './themes';
 import { ANALYSES_BY_ID } from './evidence';
 import { CONTRADICTIONS_BY_ID } from './contradictions';
-import { LEVERS_BY_ID } from './levers';
+import { LEVERS_BY_ID } from '$lib/policy-engine/levers';
 
 describe('participation-by-design theme', () => {
   it('exists as the 5th theme and recurs on /neet', () => {

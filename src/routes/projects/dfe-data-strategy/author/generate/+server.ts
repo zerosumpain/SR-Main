@@ -15,7 +15,7 @@ import { isOwnerEmail } from '$lib/server/access';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve } from '../../lib/retrieval.server';
-import { coerceJson } from '../../lib/jsonsafe';
+import { coerceJson } from '$lib/dfe-data-strategy/jsonsafe';
 import { TEMPLATE_BY_ID } from '../../lib/author/templates';
 import { MUST_ANSWER, DOCUMENTS_BY_ID } from '../../lib/commitments';
 import {

@@ -6,9 +6,9 @@
 // solution to a knapsack-style allocation; it is near-optimal for the smooth, diminishing-
 // returns response surface this engine produces.
 
-import type { LeverState } from './types';
-import { runSim } from './engine';
-import { LEVERS_BY_ID, GROUP_META, baselineLevers } from './levers';
+import type { LeverState } from '$lib/policy-engine/types';
+import { runSim } from '$lib/policy-engine/engine';
+import { LEVERS_BY_ID, GROUP_META, baselineLevers } from '$lib/policy-engine/levers';
 
 // Gap-relevant, costable levers the optimiser may spend on (excludes the age-ID bands,
 // handled separately, and levers with no material gap channel).

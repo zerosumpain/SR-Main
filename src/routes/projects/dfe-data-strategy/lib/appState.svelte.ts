@@ -14,8 +14,8 @@ import {
   sameStance,
   stateFromPreset,
 } from './scenarios';
-import type { Origin, StrategyState } from './types';
-import type { PolicyDraft } from './policy';
+import type { Origin, StrategyState } from '$lib/dfe-data-strategy/types';
+import type { PolicyDraft } from '$lib/dfe-data-strategy/policy';
 
 /** What a "draft policies" suggester was opened for. */
 export interface SuggestTarget {

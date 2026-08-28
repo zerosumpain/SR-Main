@@ -1,9 +1,9 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { PRESSURES_BY_ORIGIN } from '../lib/pressures';
+  import { PRESSURES_BY_ORIGIN } from '$lib/dfe-data-strategy/pressures';
   import { CAPABILITY_BY_ID } from '../lib/capabilities';
   import ConfidenceBadge from './ConfidenceBadge.svelte';
-  import type { Origin } from '../lib/types';
+  import type { Origin } from '$lib/dfe-data-strategy/types';
 
   const COLS: { id: Origin; label: string; blurb: string; color: string }[] = [
     { id: 'cross-government', label: 'From across government', blurb: 'What the centre and the wider system expect of every department’s data.', color: '#2f6155' },

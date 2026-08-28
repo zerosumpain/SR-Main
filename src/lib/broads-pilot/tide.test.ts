@@ -9,7 +9,7 @@ import {
   bridgeLowWaters,
   breydonCrossings,
 } from './tide';
-import type { TideTable } from './types';
+import type { TideTable } from '$lib/broads-pilot/types';
 
 describe('nextSlackWindows', () => {
   const lw = new Date('2026-06-21T06:00:00Z');

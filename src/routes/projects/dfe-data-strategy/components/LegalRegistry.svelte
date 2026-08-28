@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { LEGISLATION, LEGAL_LAYER_META } from '../lib/legislation';
-  import type { LegalLayer } from '../lib/types';
+  import { LEGISLATION, LEGAL_LAYER_META } from '$lib/dfe-data-strategy/legislation';
+  import type { LegalLayer } from '$lib/dfe-data-strategy/types';
 
   const LAYERS: LegalLayer[] = ['protection-basis', 'legal-gateway', 'governance'];
   const byLayer = (l: LegalLayer) => LEGISLATION.filter((x) => x.layer === l);

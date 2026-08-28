@@ -7,8 +7,8 @@
 
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { runIngest, loadTrackedIndicators } from '../../../projects/policy-engine/lib/tracking/ingest.server';
-import type { TrackGroup } from '../../../projects/policy-engine/lib/tracking/types';
+import { runIngest, loadTrackedIndicators } from '$lib/policy-engine/tracking/ingest.server';
+import type { TrackGroup } from '$lib/policy-engine/tracking/types';
 import type { RequestHandler } from './$types';
 
 const GROUPS: TrackGroup[] = ['ees', 'neet', 'context', 'annual'];

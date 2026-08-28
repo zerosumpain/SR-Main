@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { Considerations } from '../lib/policy';
-  import { PRESSURES_BY_ID } from '../lib/pressures';
-  import { LEGISLATION_BY_ID } from '../lib/legislation';
-  import { STRATEGIES } from '../lib/strategies';
+  import type { Considerations } from '$lib/dfe-data-strategy/policy';
+  import { PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
+  import { LEGISLATION_BY_ID } from '$lib/dfe-data-strategy/legislation';
+  import { STRATEGIES } from '$lib/dfe-data-strategy/strategies';
 
   let { c }: { c: Considerations } = $props();
   let open = $state(false);

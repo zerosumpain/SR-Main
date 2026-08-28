@@ -1,7 +1,7 @@
 // Free-text feature search over the bundled datasets: bridges, the lock,
 // moorings/boatyards and POIs. Bare graph nodes (broads/staithes) are excluded —
 // they are not a Selection kind and so cannot open the detail drawer. Pure.
-import type { Datasets, MooringTier, PoiKind } from './types';
+import type { Datasets, MooringTier, PoiKind } from '$lib/broads-pilot/types';
 
 export interface SearchEntry {
   /** matches the appState Selection union, so a pick can call app.select() */

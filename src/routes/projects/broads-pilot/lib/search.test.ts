@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildSearchIndex, searchIndex } from './search';
-import type { Datasets, Mooring, Poi, Bridge, Lock } from './types';
+import type { Datasets, Mooring, Poi, Bridge, Lock } from '$lib/broads-pilot/types';
 
 const bridge = (id: string, name: string, river = 'Bure'): Bridge => ({
   id, name, river, clearance_ahw_m: 3, clearance_band_m: [3, 3.2],

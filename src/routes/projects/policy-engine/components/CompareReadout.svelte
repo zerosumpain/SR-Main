@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { YearResult } from '../lib/types';
+  import type { YearResult } from '$lib/policy-engine/types';
   import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
-  import { fmtNum } from '../lib/format';
+  import { fmtNum } from '$lib/policy-engine/format';
   import { app } from '../lib/appState.svelte';
   const lbl = (id: string, label: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? label : label);
 

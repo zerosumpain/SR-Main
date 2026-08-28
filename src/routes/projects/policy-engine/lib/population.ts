@@ -16,8 +16,8 @@
 //    per cohort, so only they carry a cumulative tally (labelled child-cohort-years).
 //  • Sign is keyed to OUTCOMES_BY_ID[id].goodIfUp, so "fewer NEET"/"fewer in poverty" read as good.
 
-import type { YearResult } from './types';
-import { POP } from './params';
+import type { YearResult } from '$lib/policy-engine/types';
+import { POP } from '$lib/policy-engine/params';
 import { OUTCOMES_BY_ID } from './outcomes';
 
 const M = 1e6;

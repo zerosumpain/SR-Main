@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SECTOR_THEMES, SECTOR_VOICES, VOICE_GROUP_META, STANCE_META, type Stance } from '../lib/sectorVoices';
+  import { SECTOR_THEMES, SECTOR_VOICES, VOICE_GROUP_META, STANCE_META, type Stance } from '$lib/dfe-data-strategy/sectorVoices';
 
   // The interactive landing for /sector: pick a debate, hear what each voice
   // actually says about it. Voices are tagged to themes in the data, so the

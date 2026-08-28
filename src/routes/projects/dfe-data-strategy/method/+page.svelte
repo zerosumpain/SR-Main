@@ -2,8 +2,8 @@
   import { PARAMS, PARAM_NOTES } from '../lib/params';
   import { CAPABILITY_AREAS } from '../lib/capabilities';
   import { POSTURE_AXES } from '../lib/postures';
-  import { MATURITY_DIMENSIONS } from '../lib/maturity';
-  import { PRESSURES } from '../lib/pressures';
+  import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
+  import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
   import { SOURCES } from '../lib/sources';
   import { COMMITMENTS, DOCUMENTS } from '../lib/commitments';
   import { COMPARATORS } from '../lib/comparators';
