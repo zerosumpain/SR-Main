@@ -77,7 +77,7 @@
     align-items: baseline; gap: 10px;
     padding: 7px 0; border-bottom: 1px solid var(--line-hair);
   }
-  .bs-glyph { font-size: 11px; line-height: 1.4; }
+  .bs-glyph { font-size: var(--fs-label-xs); line-height: 1.4; }
   .bs-name { font-size: var(--fs-label); font-weight: 500; color: var(--text-primary); }
   .bs-state {
     font-family: var(--font-mono); font-size: var(--fs-label-xs);

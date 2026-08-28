@@ -202,6 +202,13 @@
 /projects/policy-engine/regions
 /projects/policy-engine/send
 /projects/policy-engine/themes
+/projects/spine-in-practice
+/projects/spine-in-practice/benefits
+/projects/spine-in-practice/built
+/projects/spine-in-practice/limits
+/projects/spine-in-practice/next
+/projects/spine-in-practice/representation
+/projects/spine-in-practice/structure
 /releases
 /rss.xml
 /sitemap.xml

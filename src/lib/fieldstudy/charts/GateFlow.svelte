@@ -74,7 +74,7 @@
     font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary);
   }
-  .gf-glyph { font-size: 12px; }
+  .gf-glyph { font-size: var(--fs-label-xs); }
 
   [data-verdict='pass'] .gf-glyph { color: var(--success); }
   [data-verdict='hold'] .gf-glyph { color: var(--warn); }
