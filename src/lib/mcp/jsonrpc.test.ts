@@ -16,7 +16,7 @@ afterAll(() => {
 });
 
 beforeAll(() => {
-  process.env.HERMES_BRIDGE_SECRET = SECRET;
+  process.env.SERVICE_BRIDGE_SECRET = SECRET;
 });
 
 beforeEach(() => {
@@ -34,7 +34,7 @@ describe('mcp/jsonrpc', () => {
   });
 
   it('responds to initialize without auth and echoes a compatible protocolVersion', async () => {
-    // This is the exact shape Hermes' MCP client probes with first; previously
+    // This is the exact shape an MCP client probes with first; previously
     // got rejected with 403 because the route required an Authorization header.
     const { response } = await dispatchJsonRpc(
       {
@@ -44,7 +44,7 @@ describe('mcp/jsonrpc', () => {
         params: {
           protocolVersion: '2025-11-25',
           capabilities: {},
-          clientInfo: { name: 'hermes-test', version: '0.0.0' },
+          clientInfo: { name: 'mcp-test-client', version: '0.0.0' },
         },
       },
       { authBearer: "" },
@@ -122,7 +122,7 @@ describe('mcp/jsonrpc', () => {
     expect(err.error.message).toMatch(/bearer/i);
   });
 
-  it('executes tools/call when bearer matches HERMES_BRIDGE_SECRET', async () => {
+  it('executes tools/call when bearer matches SERVICE_BRIDGE_SECRET', async () => {
     const { response } = await dispatchJsonRpc(
       {
         jsonrpc: '2.0',
@@ -144,7 +144,7 @@ describe('mcp/jsonrpc', () => {
   });
 
   it('publishes started + completed tool-step events to the bus on a successful tools/call', async () => {
-    // The Hermes branch of /api/workflows/orchestrator/chat subscribes to
+    // The chat route subscribes to
     // this bus to surface tool-step events into the canvas SSE stream.
     // Carry-over #1 from Phase 1 acceptance log.
     const events: ToolStepEvent[] = [];
@@ -193,7 +193,7 @@ describe('mcp/jsonrpc', () => {
 
   it('exposes the full tool registry to MCP callers (no SvelteKit-side toolset gate)', async () => {
     // Phase 1.5: skill-system-based constraint, not SvelteKit-side gating.
-    // Hermes' active skill restricts which tools the agent considers; the
+    // A client's active skill restricts which tools the agent considers; the
     // MCP server is permissive.
     const { response } = await dispatchJsonRpc(
       {
@@ -213,7 +213,7 @@ describe('mcp/jsonrpc', () => {
   });
 
   it('tools/list returns the full registry (not just workflows)', async () => {
-    // Phase 1.5: tools/list must reflect the full registry. Hermes skills do
+    // Phase 1.5: tools/list must reflect the full registry. Client skills do
     // the filtering; the MCP server is permissive. Catches regressions of the
     // server.ts listMcpTools() widening (getTools() vs getToolsByToolset('workflows')).
     const { response } = await dispatchJsonRpc(

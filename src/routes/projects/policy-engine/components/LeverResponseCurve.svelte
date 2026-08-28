@@ -6,8 +6,8 @@
   // Reads the real engine (runSim), so it is consistent with every other surface.
   import LeverSlider from './LeverSlider.svelte';
   import { app } from '../lib/appState.svelte';
-  import { runSim } from '../lib/engine';
-  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '../lib/levers';
+  import { runSim } from '$lib/policy-engine/engine';
+  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
   import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
   import { linScale, niceTicks, extent, polyline, fmt } from '../lib/chartkit';
 

@@ -8,6 +8,10 @@
     { href: '/projects', label: 'Projects' },
     { href: '/decks', label: 'Decks' },
     { href: '/blog', label: 'Writing' },
+    // One hub. /health is the landing for anonymous visitors and the full
+    // consolidated dashboard once signed in; activities, segments, the planner
+    // and the recorder are its owner-only children. A second nav cell under it
+    // could never deactivate, because isActive() is a prefix match.
     { href: '/health', label: 'Health' },
     { href: '/live', label: 'Live' },
     { href: '/jkai', label: 'jkai' },

@@ -3,8 +3,8 @@
 // Records the ordered chain of tool calls a single jkai turn made, so it can be
 // stored once per turn and re-read later by the trace viewer (/jkai/trace/<id>).
 //
-// WHY THIS EXISTS. On the live Hermes engine the chain is not persisted anywhere:
-// `handleWithHermes` writes five metadata keys onto the assistant row and none of
+// WHY THIS EXISTS. The chain used not to be persisted anywhere: the chat route
+// wrote five metadata keys onto the assistant row and none of
 // them is `toolSteps`, and `job.toolSteps` — the field the retired in-process
 // ReAct loop used — is never written on that branch. The chain therefore lives
 // only in the browser tab that watched the turn happen, and vanishes on reload.
@@ -79,7 +79,7 @@ export interface TraceStep {
    *  the tool returned an object. */
   resultJsonString?: boolean;
   /** The result is a string that opens like JSON but does not parse — i.e. it
-   *  was cut off before it ever reached us. Hermes previews native tool results
+   *  was cut off before it ever reached us. Native tool results are previewed
    *  at 600 chars (`adapter.py` `_preview_tool_value`), so this is the normal
    *  state of a large `web_extract`. Flagged because an unexplained half-object
    *  reads as a broken tool rather than an upstream preview limit. */
@@ -297,7 +297,7 @@ function safeByteLength(v: unknown): number {
 
 /**
  * Several tools hand back their payload as a JSON *string* rather than an
- * object — Hermes' `web_extract` is the common one. Parse it before capping,
+ * object — `web_extract` is the common one. Parse it before capping,
  * never after: capping a 22 KB JSON string truncates it mid-structure, and what
  * is left is neither valid JSON nor readable text. Parsing first means the caps
  * apply to the real shape, the viewer can table-ify it, and the truncation
@@ -546,7 +546,7 @@ interface PendingStep extends TraceStep {
  */
 /**
  * The error text of a result that declares its own failure, or undefined if it
- * does not declare one. Looks through a JSON-string payload, because Hermes'
+ * does not declare one. Looks through a JSON-string payload, because some
  * own tools return their envelope pre-serialised.
  *
  * Only an explicit `success: false` counts. A result that merely carries an
@@ -644,7 +644,7 @@ export function createTraceRecorder(opts: { now?: () => number } = {}): TraceRec
       if (!step) return;
     }
     // A tool that reports its own failure inside the payload is a failure,
-    // whatever the transport said. Hermes' native tools (patch, write_file, …)
+    // whatever the transport said. Native tools (patch, write_file, …)
     // hand back a JSON *string* carrying `{"success": false, "error": …}` on a
     // successful round-trip, so the event arrives as `done`. On 2026-08-08 that
     // recorded a `patch` that had matched nothing as "Done — patch", and the

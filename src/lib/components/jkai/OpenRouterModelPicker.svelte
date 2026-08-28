@@ -213,7 +213,7 @@
    *  from $lib/server. */
   interface WorkloadRow {
     id: string;
-    scope: 'site' | 'hermes';
+    scope: 'site';
     label: string;
     blurb: string;
     key: string;
@@ -222,16 +222,13 @@
     catalogue: 'tools' | 'image-out' | 'none';
     setModelId: string | null;
     effectiveModelId: string;
-    source: 'pinned' | 'code' | 'default' | 'hermes';
+    source: 'pinned' | 'code' | 'default';
     divergesFromDefault: boolean;
   }
 
   interface WorkloadPicture {
     siteDefaultModelId: string;
     site: WorkloadRow[];
-    hermes: WorkloadRow[];
-    hermesError: string | null;
-    hermesManageable: boolean;
   }
 
   let target = $state<Target>('chat');
@@ -256,7 +253,7 @@
 
   const divergingCount = $derived(
     workloads
-      ? [...workloads.site, ...workloads.hermes].filter((w) => w.divergesFromDefault).length
+      ? workloads.site.filter((w) => w.divergesFromDefault).length
       : 0,
   );
 
@@ -267,14 +264,13 @@
     pinned: 'pinned',
     code: 'code default',
     default: 'site default',
-    hermes: 'engine config',
   };
 
   /** The workload the list is currently choosing a model FOR, if any. */
   const activeWorkload = $derived.by(() => {
     const id = workloadIdOf(target);
     if (!id || !workloads) return null;
-    return [...workloads.site, ...workloads.hermes].find((w) => w.id === id) ?? null;
+    return workloads.site.find((w) => w.id === id) ?? null;
   });
 
   const visibleCodexRows = $derived.by(() => {
@@ -328,11 +324,6 @@
       // serve a call — a model you can pick but that always fails is worse
       // than one that isn't offered.
       //
-      // Slightly conservative for the `chat` target: chat turns go through
-      // Hermes' own native Codex provider, not this bridge, so chat could in
-      // principle work while the bridge is down. Erring toward hiding is the
-      // safe direction — the alternative is offering a model that fails for
-      // every other target — and in practice both are enabled together.
       if (data.enabled && data.health?.ok) codexRows = data.rows;
     } catch {
       // A dead bridge just means no Codex group; the picker still works.
@@ -392,9 +383,8 @@
     untrack(() => load());
   });
 
-  // Workloads are fetched the first time that tab is shown, then reused: the
-  // reads shell out to the Hermes CLI, and every later change refreshes the
-  // picture from its own POST response.
+  // Workloads are fetched the first time that tab is shown, then reused: every
+  // later change refreshes the picture from its own POST response.
   $effect(() => {
     if (tab !== 'workloads' || workloadsLoaded) return;
     untrack(() => loadWorkloads());
@@ -497,7 +487,7 @@
     if (t === 'site') return picture?.siteDefaultModelId ?? defaultModelId;
     const workloadId = workloadIdOf(t);
     if (workloadId) {
-      const all = workloads ? [...workloads.site, ...workloads.hermes] : [];
+      const all = workloads ? workloads.site : [];
       return all.find((w) => w.id === workloadId)?.effectiveModelId ?? null;
     }
     return profileInfo(t)?.effectiveModelId ?? null;
@@ -506,7 +496,7 @@
   function targetLabel(t: Target): string {
     const workloadId = workloadIdOf(t);
     if (workloadId) {
-      const all = workloads ? [...workloads.site, ...workloads.hermes] : [];
+      const all = workloads ? workloads.site : [];
       return all.find((w) => w.id === workloadId)?.label ?? workloadId;
     }
     return TARGETS.find((x) => x.id === t)?.label ?? t;
@@ -518,10 +508,9 @@
   /**
    * Load what every LLM role is running.
    *
-   * Lazy — only when the Workloads tab is first opened. The Hermes half shells
-   * out to `hermes config get` on homeserv (proxied from the VPS), which costs
-   * roughly a second; making the modal pay that on every open, to populate a tab
-   * most visits never look at, would be a poor trade.
+   * Lazy — only when the Workloads tab is first opened: making the modal pay
+   * for it on every open, to populate a tab most visits never look at, would be
+   * a poor trade.
    */
   async function loadWorkloads() {
     if (workloadsLoading) return;
@@ -561,9 +550,7 @@
         return;
       }
       workloads = body;
-      const row = [...(body.site ?? []), ...(body.hermes ?? [])].find(
-        (w: WorkloadRow) => w.id === id,
-      );
+      const row = (body.site ?? []).find((w: WorkloadRow) => w.id === id);
       flash(
         modelId
           ? `${row?.label ?? id} → ${shortName(modelId)}`
@@ -642,11 +629,7 @@
     if (target === 'site') return 'The default every LLM task on the site uses: chats, deep research, workflow nodes, project pages, briefings.';
     const w = activeWorkload;
     if (w) {
-      const applies =
-        w.scope === 'hermes'
-          ? 'Writes the engine\'s own config and restarts it — takes a few seconds.'
-          : 'Applies immediately.';
-      return `${w.blurb} ${applies}`;
+      return `${w.blurb} Applies immediately.`;
     }
     const info = profileInfo(target);
     if (!info) return `Pins the ${targetLabel(target)} profile, overriding the nightly auto-selection.`;
@@ -930,7 +913,7 @@
         {:else if !workloads}
           <p class="wl-empty">Could not load workloads.</p>
         {:else}
-          {#each [{ title: 'Site', rows: workloads.site }, { title: 'Engine (Hermes)', rows: workloads.hermes }] as group (group.title)}
+          {#each [{ title: 'Site', rows: workloads.site }] as group (group.title)}
             {#if group.rows.length}
               <div class="wl-group">{group.title}</div>
               {#each group.rows as w (w.id)}
@@ -990,15 +973,6 @@
               {/each}
             {/if}
           {/each}
-
-          {#if workloads.hermesError}
-            <div class="wl-group">Engine (Hermes)</div>
-            <p class="wl-empty">
-              Could not read the engine's config: {workloads.hermesError}
-              <br />Its roles — engine default, delegation, fallback and the auxiliary models — are
-              set in <code>~/.hermes-jkai/config.yaml</code> and are NOT covered by the site default.
-            </p>
-          {/if}
         {/if}
       </div>
     {:else}
@@ -1128,9 +1102,9 @@
              stale count under a table of roles reads as a count OF the roles. -->
         <span class="foot-info">
           {#if workloadsLoading}
-            reading engine config…
+            reading roles…
           {:else if workloads}
-            {divergingCount} of {workloads.site.length + workloads.hermes.length} roles differ from the site default
+            {divergingCount} of {workloads.site.length} roles differ from the site default
           {/if}
         </span>
       {:else}

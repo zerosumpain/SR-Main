@@ -1,9 +1,9 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { clampDays } from '$lib/server/hermes-sessions';
-import { rToolAudit } from '$lib/server/hermes-remote';
+import { clampDays } from '$lib/selfimprove/call-efficiency';
+import { getToolAudit } from '$lib/server/tool-audit';
 import { getTools } from '$lib/workflows/site-tools/registry';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 
 // Owner-only (all /api/admin/* is owner-gated by hooks.server.ts). Feeds the
@@ -13,11 +13,11 @@ export const POST: RequestHandler = async ({ request }) => {
   const body = (await request.json().catch(() => ({}))) as { days?: number };
   const days = clampDays(body?.days);
 
-  const audit = await rToolAudit(days).catch(() => null);
-  if (!audit) throw error(503, 'Tool-usage data unavailable (Hermes store unreachable).');
+  const audit = await getToolAudit(days).catch(() => null);
+  if (!audit) throw error(503, 'Tool-usage data unavailable.');
 
   const registered = getTools().map((t) => t.name);
-  const called = new Set([...audit.tools, ...audit.jkaiTools].map((t) => t.tool));
+  const called = new Set(audit.tools.map((t) => t.tool));
   const neverUsed = registered.filter((n) => !called.has(n));
 
   const summary = {
@@ -26,7 +26,6 @@ export const POST: RequestHandler = async ({ request }) => {
     distinctToolsCalled: audit.uniqueTools,
     registeredToolCount: registered.length,
     topTools: audit.tools.slice(0, 20),
-    resolvedJkaiSubTools: audit.jkaiTools.slice(0, 20),
     callsPerDay: audit.perDay,
     callsByHour: audit.byHour,
     neverUsedCount: neverUsed.length,

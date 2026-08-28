@@ -1,8 +1,8 @@
+import { ownerPhone } from '$lib/config/owner';
 import { getJob, getStreamSubscriberCount, registerEventHook, type JobEvent } from './job-store';
 import { isUserPresent } from './presence';
 import { getWhatsAppService } from '$lib/workflows/whatsapp/service';
 
-const OWNER_PHONE = '+447359228511';
 const SITE_URL = 'https://strangeramblings.com';
 const GRACE_MS = 15_000;
 // A *finished* reply (done/error) only earns a WhatsApp ping if it actually
@@ -61,12 +61,11 @@ function buildWaiterMessage(label: string, body: string, conversationId: string 
 async function sendWa(text: string): Promise<void> {
   try {
     const wa = getWhatsAppService();
-    const state = wa.getState();
-    if (state.status !== 'connected') {
-      console.warn('[wa-escalation] WhatsApp not connected — skipping ping');
-      return;
-    }
-    const result = await wa.sendMessage(OWNER_PHONE, text);
+    // No `state.status` gate. In delegated mode that value is set ONCE by a probe
+    // at boot and never re-probed, so any VPS restart during an outage — a CI
+    // deploy counts — pinned this channel off permanently, even after homeserv
+    // came back. Attempt the send and report what actually happened.
+    const result = await wa.sendMessage(ownerPhone() ?? '', text);
     if (!result.sent) console.error(`[wa-escalation] send failed: ${result.error}`);
   } catch (err) {
     console.error('[wa-escalation] send threw:', err);

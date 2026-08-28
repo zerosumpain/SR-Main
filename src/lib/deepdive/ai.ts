@@ -1,6 +1,6 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from './keys';
-import { getLLMClient, getGroundedCodexClient } from '$lib/jkai/llm-client';
+import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from '$lib/llm/keys';
+import { getLLMClient, getGroundedCodexClient } from '$lib/llm/client';
 import { readCitations, type Citation } from './grounding';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import {

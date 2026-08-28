@@ -19,22 +19,23 @@
 </script>
 
 <svelte:head>
-  <title>Somewhere to put anything · The Engine Room</title>
+  <title>Datastore · The Engine Room</title>
   <meta name="description" content="A schema-free store built to be written to unattended: an actor on every call, permissions resolved on the row, a query language with no concatenation in it, and an expiry date." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Somewhere to put anything"
+    title="Datastore"
     line="A typed table is exactly right when you know the shape, and a millstone when you do not. Everything else lands here. Dropping the schema was the easy half; every rule that makes it safe to write to at 3am unsupervised is bolted on the outside."
-    lineEli5="A drawer for anything that does not deserve its own database table, with rules about who can see each thing and when it quietly disappears." />
+    lineEli5="A drawer for anything that does not deserve its own database table. The drawer was the easy part — the value is the rules around it: who may see each thing, who may change it, and when it quietly expires." />
 
   <Instrument
     kicker="The instrument"
     title="Who may do what, and which rule decided"
     tone={TONE}
     reading="Pick a record and a principal. Each action resolves on its own."
+    readingEli5="Pick a record and someone asking to use it. Reading, writing and deleting each get decided separately."
     takeaway={PER_ACTION.body}>
     <PermissionBench />
   </Instrument>
@@ -43,7 +44,8 @@
     kicker="The chain"
     title="Three places an answer can come from"
     tone={TONE}
-    reading="Nearest wins, and anything absent from it falls to the next one for that action alone.">
+    reading="Nearest wins, and anything absent from it falls to the next one for that action alone."
+    readingEli5="The nearest rule wins; anything it does not mention falls through to the next one.">
     <ol class="chain">
       {#each PRECEDENCE as p, i (p.id)}
         <li><span class="c-n">{i + 1}</span><b>{p.label}</b><span>{p.what}</span></li>
@@ -61,7 +63,9 @@
     title="A filter language with no string concatenation in it"
     tone={TONE}
     reading="Pick a rule."
-    takeaway="One language across a workflow node, an agent toolset and the admin screens. None of them has to learn SQL, and — rather more to the point — none of them gets to invent a dialect of its own at three in the morning.">
+    readingEli5="Pick a rule to see what it prevents."
+    takeaway="One language across a workflow node, an agent toolset and the admin screens. None of them has to learn SQL, and — rather more to the point — none of them gets to invent a dialect of its own at three in the morning."
+    takeawayEli5="Everything that queries this store — workflows, the assistant, the admin screens — speaks the same small, safe language. Nobody has to learn SQL, and nothing gets to invent its own dialect at three in the morning.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Query safety rules">
         {#each QUERY_SAFETY as q, i (q.k)}
@@ -88,6 +92,7 @@
     title="Three ways a record can end"
     tone={TONE}
     reading="Pick one."
+    readingEli5="Pick a way for a record to end."
     takeaway={REAPER.body}>
     <div class="strip">
       <div class="chips" role="group" aria-label="Expiry modes">

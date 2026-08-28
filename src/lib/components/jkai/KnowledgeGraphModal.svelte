@@ -1,12 +1,10 @@
 <script lang="ts">
   import type { ThreadGraph, ThreadGraphNode, ThreadNodeKind } from '$lib/jkai/thread-graph';
-  import {
-    MODAL_LAYOUT,
-    placeNodes,
-    drawEdges,
-    canvasHeight,
-  } from '$lib/jkai/graph-layout';
+  import { MODAL_RADIAL, placeNodes, drawEdges, visibleEdges, entityIdOf } from '$lib/jkai/graph-layout';
   import { nodeStyle, edgeStyle, legendFor } from '$lib/jkai/graph-colors';
+  import EntityCard from '$lib/components/intel/EntityCard.svelte';
+  import { commission } from '$lib/jkai/intel/entity-card-store';
+  import { goto } from '$app/navigation';
 
   let {
     graph,
@@ -24,6 +22,19 @@
     graph.nodes.find((n) => n.id === selectedId) ?? graph.nodes[0] ?? null,
   );
 
+  /**
+   * A concept node IS an intel entity, so the panel beside the graph can be the
+   * same card /jkai/intel and the chat hover cards use — trust, centrality,
+   * evidence with sources, timeline and neighbours from the WHOLE graph rather
+   * than only what this thread happened to mention.
+   *
+   * That is the point of the change: the panel used to repeat the name, summary
+   * and relations the rail had already shown, so opening it was a bigger copy of
+   * what you were looking at. Non-concept nodes — a model, a file, a canvas —
+   * have no entity behind them and keep the plain panel.
+   */
+  const selectedEntityId = $derived(selected ? entityIdOf(selected) : null);
+
   const GLYPH: Record<ThreadNodeKind, string> = {
     concept: '◆',
     model: '◆',
@@ -34,11 +45,14 @@
     run: '▲',
   };
 
-  const legend = $derived(legendFor(graph.nodes, graph.edges));
-  const placed = $derived(placeNodes(graph.nodes, MODAL_LAYOUT));
-  const edges = $derived(drawEdges(graph.edges, placed, MODAL_LAYOUT, selected?.id ?? null));
-  const height = $derived(canvasHeight(graph.nodes.length, MODAL_LAYOUT, 420));
-  const width = 900;
+  const placed = $derived(placeNodes(graph.nodes, MODAL_RADIAL));
+  const edges = $derived(
+    drawEdges(visibleEdges(graph.edges, selected?.id ?? null), placed, selected?.id ?? null),
+  );
+  const legend = $derived(legendFor(placed, edges));
+  const width = MODAL_RADIAL.width;
+  const height = MODAL_RADIAL.height;
+  const undrawn = $derived(Math.max(0, graph.nodes.length - placed.length));
 
   const relations = $derived.by(() => {
     if (!selected) return [];
@@ -59,6 +73,37 @@
   const drillLabel = $derived(
     selected?.kind === 'concept' ? 'open in intel →' : selected?.href ? 'open →' : null,
   );
+
+  let busy = $state(false);
+
+  /**
+   * A neighbour clicked inside the card. If this thread also mentions it, move
+   * the graph's selection — staying put would make the click look broken. If it
+   * does not, the entity exists only in the wider graph, so the honest response
+   * is to leave for the page that holds it.
+   */
+  function focusEntity(entityId: string): void {
+    const node = graph.nodes.find((n) => entityIdOf(n) === entityId);
+    if (node) {
+      onSelect(node.id);
+      return;
+    }
+    void goto(`/jkai/intel/entities/${entityId}`);
+  }
+
+  async function onCommission(kind: string, payload: string, entityIds: string[]): Promise<void> {
+    if (busy) return;
+    busy = true;
+    try {
+      const result = await commission(kind, payload, entityIds);
+      onClose();
+      await goto(result.url);
+    } catch (err) {
+      console.error('[intel] commission failed:', err);
+    } finally {
+      busy = false;
+    }
+  }
 
   // Portal to <body>: a modal nested inside the rail would be clipped by the
   // rail's overflow and trapped under the hub header's stacking context.
@@ -95,6 +140,7 @@
           {graph.nodes.length}
           {graph.nodes.length === 1 ? 'node' : 'nodes'} / {graph.edges.length}
           {graph.edges.length === 1 ? 'edge' : 'edges'}
+          {#if undrawn > 0}<span class="gm-undrawn"> · {undrawn} not drawn</span>{/if}
         </span>
       </div>
       <div class="gm-hd-right">
@@ -121,10 +167,15 @@
               />
             {/each}
           </svg>
-          {#each edges.filter((e) => e.active) as e, i (`l${i}`)}
+          <!-- Typed edges only. Labelling every active edge meant eight copies of
+               "MENTIONED WITH" stacked over each other and over the chips, all
+               saying what the dashed line and the legend already say. A named
+               relationship is the only one whose verb carries information. -->
+          {#each edges.filter((e) => e.active && e.typed) as e, i (`l${i}`)}
             <span
               class="gm-edge-label"
               style="left: {(e.x1 + e.x2) / 2}px; top: {(e.y1 + e.y2) / 2}px;"
+              title={e.verb}
             >{e.verb}</span>
           {/each}
           {#each placed as node (node.id)}
@@ -133,9 +184,9 @@
               type="button"
               class="gm-node"
               class:selected={node.id === selected?.id}
-              style="left: {node.x}px; top: {node.y}px; --n-color: {s.color}; --n-fill: {s.fill};"
+              style="left: {node.x}px; top: {node.y}px; width: {node.w}px; height: {node.h}px; --n-color: {s.color}; --n-fill: {s.fill};"
               onclick={() => onSelect(node.id)}
-              title={s.hint}
+              title="{node.name} — {s.hint}"
             >
               <span class="gm-glyph" aria-hidden="true">{GLYPH[node.kind]}</span>
               <span class="gm-label">{node.name}</span>
@@ -153,36 +204,68 @@
               {row.label}
             </span>
           {/each}
+          <span class="lg-row lg-note">co-occurrence is drawn only for the selected node</span>
         </div>
       </div>
 
       {#if selected}
         <aside class="gm-side">
-          <div class="gm-type">{selected.type}</div>
-          <div class="gm-name">{selected.name}</div>
-          {#if selected.note}<p class="gm-note">{selected.note}</p>{/if}
-          {#if drillLabel && selected.href}
-            <a class="gm-drill" href={selected.href}>{drillLabel}</a>
-          {/if}
-
-          <div class="gm-rel-hd">Relations</div>
-          {#if relations.length === 0}
-            <p class="gm-note">Nothing else in this thread connects to it yet.</p>
-          {:else}
-            <div class="gm-rels">
-              {#each relations as r, i (i)}
-                <div class="gm-rel">
-                  <button type="button" class="gm-rel-main" onclick={() => onSelect(r.target.id)}>
-                    <span class="gm-verb">{r.verb}</span>
-                    <span class="gm-target">{r.target.name}</span>
-                    <span class="gm-where">{r.target.type}</span>
-                  </button>
-                  {#if r.target.href}
-                    <a class="gm-rel-drill" href={r.target.href} aria-label="Open {r.target.name}">↗</a>
-                  {/if}
+          {#if selectedEntityId}
+            <!-- Everything the knowledge base holds on it, not just this thread's
+                 slice. Keyed so switching node remounts rather than re-running
+                 the card's own fetch effect against stale rendered state. -->
+            {#key selectedEntityId}
+              <EntityCard
+                entityId={selectedEntityId}
+                onFocus={focusEntity}
+                onCommission={onCommission}
+              />
+            {/key}
+            <div class="gm-thread-rels">
+              <div class="gm-rel-hd">In this thread</div>
+              {#if relations.length === 0}
+                <p class="gm-note">Nothing else in this thread connects to it yet.</p>
+              {:else}
+                <div class="gm-rels">
+                  {#each relations as r, i (i)}
+                    <div class="gm-rel">
+                      <button type="button" class="gm-rel-main" onclick={() => onSelect(r.target.id)}>
+                        <span class="gm-verb">{r.verb}</span>
+                        <span class="gm-target">{r.target.name}</span>
+                        <span class="gm-where">{r.target.type}</span>
+                      </button>
+                    </div>
+                  {/each}
                 </div>
-              {/each}
+              {/if}
             </div>
+          {:else}
+            <div class="gm-type">{selected.type}</div>
+            <div class="gm-name">{selected.name}</div>
+            {#if selected.note}<p class="gm-note">{selected.note}</p>{/if}
+            {#if drillLabel && selected.href}
+              <a class="gm-drill" href={selected.href}>{drillLabel}</a>
+            {/if}
+
+            <div class="gm-rel-hd">Relations</div>
+            {#if relations.length === 0}
+              <p class="gm-note">Nothing else in this thread connects to it yet.</p>
+            {:else}
+              <div class="gm-rels">
+                {#each relations as r, i (i)}
+                  <div class="gm-rel">
+                    <button type="button" class="gm-rel-main" onclick={() => onSelect(r.target.id)}>
+                      <span class="gm-verb">{r.verb}</span>
+                      <span class="gm-target">{r.target.name}</span>
+                      <span class="gm-where">{r.target.type}</span>
+                    </button>
+                    {#if r.target.href}
+                      <a class="gm-rel-drill" href={r.target.href} aria-label="Open {r.target.name}">↗</a>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
         </aside>
       {/if}
@@ -204,7 +287,7 @@
   .gm-panel {
     display: flex;
     flex-direction: column;
-    width: min(1240px, 100%);
+    width: min(1320px, 100%);
     max-height: 100%;
     /* Opaque — --card-bg is a 7% tint and would let the thread show through. */
     background: var(--surface-elevated);
@@ -245,6 +328,9 @@
     text-transform: uppercase;
     color: var(--text-ghost);
   }
+  .gm-undrawn {
+    color: var(--accent);
+  }
   .gm-chip {
     display: inline-flex;
     align-items: center;
@@ -276,7 +362,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 5px 14px;
-    padding: 8px 10px 2px;
+    padding: 8px 10px 12px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
@@ -288,6 +374,9 @@
     align-items: center;
     gap: 5px;
     white-space: nowrap;
+  }
+  .lg-note {
+    color: rgba(26, 16, 8, 0.4);
   }
   .lg-swatch {
     width: 8px;
@@ -320,8 +409,14 @@
     left: 0;
     top: 0;
   }
+  /* Bounded: `intel_relationships.label` is model-written and one of them ran to
+     "PRODUCES THE WORD DELTA AS THE RESPONSE", which laid a 400px line of text
+     straight across two chips. Full text on hover. */
   .gm-edge-label {
     position: absolute;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     transform: translate(-50%, -50%);
     padding: 1px 4px;
     background: var(--bg);
@@ -339,8 +434,8 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    max-width: 200px;
-    padding: 6px 10px;
+    padding: 0 10px;
+    overflow: hidden;
     /* Per-node provenance colour — see $lib/jkai/graph-colors. */
     background: var(--n-fill, var(--bg));
     border: 1px solid var(--n-color, rgba(26, 16, 8, 0.3));
@@ -356,6 +451,7 @@
     border: 2px solid var(--n-color);
   }
   .gm-glyph {
+    flex: none;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     line-height: 1;
@@ -365,6 +461,7 @@
     color: rgba(255, 255, 255, 0.8);
   }
   .gm-label {
+    min-width: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     font-weight: 500;
@@ -379,10 +476,13 @@
 
   .gm-side {
     flex: none;
-    width: 320px;
+    width: 400px;
     padding: 16px;
     border-left: 1px solid var(--line-hair);
     overflow-y: auto;
+  }
+  .gm-thread-rels {
+    margin-top: 18px;
   }
   .gm-type {
     font-family: var(--font-mono);
@@ -438,6 +538,9 @@
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--text-ghost);
+  }
+  .gm-thread-rels .gm-rel-hd {
+    margin-top: 0;
   }
   .gm-rels {
     display: flex;

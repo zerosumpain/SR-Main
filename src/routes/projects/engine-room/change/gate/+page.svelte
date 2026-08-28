@@ -47,7 +47,7 @@
 </script>
 
 <svelte:head>
-  <title>The gate · The Engine Room</title>
+  <title>Verification · The Engine Room</title>
   <meta
     name="description"
     content="{FORBIDDEN.length} deny-list patterns and a smoke test stand between code an AI wrote overnight and a live runtime." />
@@ -56,16 +56,18 @@
 <section class="pe-route wide">
   <LeafHead
     part="change"
-    title="The gate"
+    title="Verification"
     line="Tools the night shift writes go live with nobody in the loop, which is a sentence that ought to worry you. A scan of {FORBIDDEN.length} patterns and a smoke test are the entire reason it does not."
-    lineEli5="The system writes new abilities for itself while nobody is watching. These are the checks standing between a bad one and my server." />
+    lineEli5="The system writes new abilities for itself overnight and switches them on with nobody in the loop. These checks are the entire reason that is not as alarming as it sounds." />
 
   <Instrument
     kicker="The instrument"
     title="Run the gate on {CANDIDATES.length} handlers"
     tone={TONE}
     reading="Pick a handler the engine might have authored. Two checks, in order — the scan reads raw source before compilation."
-    takeaway="Both are absolute. A clean scan, and every smoke case passing — every one, not most, not nearly all. Source that trips the scan is turned away before anything compiles it.">
+    readingEli5="Pick a handler the overnight engine might have written. Two checks run in order — the scan reads the raw text before anything compiles it."
+    takeaway="Both are absolute. A clean scan, and every smoke case passing — every one, not most, not nearly all. Source that trips the scan is turned away before anything compiles it."
+    takeawayEli5="Both checks are absolute: a clean scan, and every test case passing — every one, not most. Code that trips the scan is turned away before it is ever built.">
     <VerifyGate />
   </Instrument>
 
@@ -74,7 +76,9 @@
     title="What the {FORBIDDEN.length} patterns are defending"
     tone={TONE}
     reading="Each pattern grouped by what a handler would reach if it got through. Pick a group."
-    takeaway="Blunt entirely on purpose. A bare process catches environment access, exit and argv in one swing, and the price is occasionally refusing something perfectly innocent. I can live with that.">
+    readingEli5="Each banned pattern, grouped by what code would reach if it slipped through. Pick a group."
+    takeaway="Blunt entirely on purpose. A bare process catches environment access, exit and argv in one swing, and the price is occasionally refusing something perfectly innocent. I can live with that."
+    takeawayEli5="Blunt entirely on purpose: one broad pattern catches a whole family of tricks in a single swing, at the price of occasionally refusing something innocent. A refused tool costs a retry; a leaked secret costs rather more.">
     <StackBar {segments} unit=" patterns" selected={group} onselect={(l) => (group = l)} />
 
     <ul class="pats" aria-live="polite">

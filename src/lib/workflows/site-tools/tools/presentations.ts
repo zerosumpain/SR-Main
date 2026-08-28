@@ -1,7 +1,7 @@
 // sr. decks — build a presentation from an explicit spec. The deck twin of
 // workflow_build_from_spec: the LLM designs the deck IN CHAT first (outline,
 // per-slide blocks), gets a yes, then persists it here. Zero LLM calls inside
-// the tool — Hermes is the author, this is the persister.
+// the tool — the model is the author, this is the persister.
 // Spec: docs/superpowers/specs/2026-07-11-decks-presentation-capability.md
 
 import { register } from '../registry-internal';

@@ -34,11 +34,18 @@ export async function resolveRouting(
 
   const ctx = await resolveModelForProfile(profile);
   if (input.conversationId) {
-    try {
-      await recordRoutingDecision({ conversationId: input.conversationId, profile, modelId: ctx.modelId });
-    } catch {
+    // Fire-and-forget. This is a datastore write sitting on the first-message
+    // critical path — the client blocks on the resolve response before it can
+    // POST the user's turn, and nothing in that response depends on the write
+    // having landed. Its own `.catch` keeps the rejection from surfacing as an
+    // unhandled promise.
+    void recordRoutingDecision({
+      conversationId: input.conversationId,
+      profile,
+      modelId: ctx.modelId,
+    }).catch(() => {
       /* recording is best-effort — never fail the resolve */
-    }
+    });
   }
   return {
     ...base,

@@ -2,9 +2,9 @@
 // travel time (an isochrone read — "how far in 1h, 2h…") and a DASH pattern by
 // the reach's speed limit. Colour and dash are orthogonal signals on one line.
 // Pure, dependency-free (timing reuses the engine's edgeTimeS).
-import type { GraphEdge, LatLng } from './types';
-import { edgeTimeS } from './router';
-import { haversine, projectToSegment } from './geo';
+import type { GraphEdge, LatLng } from '$lib/broads-pilot/types';
+import { edgeTimeS } from '$lib/broads-pilot/router';
+import { haversine, projectToSegment } from '$lib/broads-pilot/geo';
 
 export interface StyledEdge {
   edge: GraphEdge;

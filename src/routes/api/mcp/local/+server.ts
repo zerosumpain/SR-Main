@@ -1,21 +1,20 @@
 // MCP Streamable HTTP transport endpoint — host-local tool dispatch.
 //
 // This file used to live at `/api/mcp/+server.ts` and serve as the single
-// MCP endpoint Hermes connects to. Phase 3 of the Hermes multi-origin
-// routing work (docs/superpowers/plans/2026-05-14-hermes-multi-origin-routing.md)
+// Host-local MCP dispatcher.
 // relocated the actual tool-dispatch code here so the path at `/api/mcp`
 // could be repurposed as a routing proxy that decides — based on the
-// chat_id Hermes injects via `params._meta` — whether to dispatch locally
+// chat_id a client may inject via `params._meta` — whether to dispatch locally
 // (here) or forward to the VPS-side equivalent.
 //
-// Hermes' MCP client (Python `mcp` SDK ≥ 1.24) speaks JSON-RPC 2.0 over the
+// An MCP client (e.g. the Python `mcp` SDK ≥ 1.24) speaks JSON-RPC 2.0 over the
 // Streamable HTTP transport per the MCP spec (2025-03-26). The wire-format
 // logic lives in $lib/mcp/jsonrpc; this file maps Request → dispatchJsonRpc.
 //
 // Auth model:
 //   - initialize, ping, notifications/*                → unauthenticated
 //   - tools/list, tools/call                           → Authorization: Bearer
-//                                                        <HERMES_BRIDGE_SECRET>
+//                                                        <SERVICE_BRIDGE_SECRET>
 // tools/list was opened up historically and closed again 2026-07-25: this route
 // bypasses the Auth.js gate as service-to-service traffic, so an open catalogue
 // meant anyone who could POST here could enumerate every tool and its schema.

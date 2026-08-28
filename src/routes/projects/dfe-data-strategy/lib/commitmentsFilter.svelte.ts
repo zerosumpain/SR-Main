@@ -5,7 +5,7 @@
 // Documents and themes are MULTI-select (empty selection = everything).
 
 import { COMMITMENTS } from './commitments';
-import type { Commitment, CommitmentStatus, CommitmentTheme, DfeRole } from './types';
+import type { Commitment, CommitmentStatus, CommitmentTheme, DfeRole } from '$lib/dfe-data-strategy/types';
 
 export type Lens = 'shelf' | 'timeline' | 'flow' | 'demand';
 

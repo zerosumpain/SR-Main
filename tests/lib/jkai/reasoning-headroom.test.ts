@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type OpenAI from 'openai';
-import { installUsageCapture } from '$lib/jkai/usage-capture';
+import { installUsageCapture } from '$lib/llm/usage-capture';
 import {
   DEFAULT_NODE_MAX_TOKENS,
   isReasoningModel,
@@ -9,8 +9,8 @@ import {
 
 // The durable-ledger + workflow-rollup side effects are irrelevant here; stub
 // them so the test only exercises the request-shaping path.
-vi.mock('$lib/jkai/llm-usage-log', () => ({ recordDurableLLMCall: vi.fn() }));
-vi.mock('$lib/workflows/execution-context', () => ({
+vi.mock('$lib/llm/usage-log', () => ({ recordDurableLLMCall: vi.fn() }));
+vi.mock('$lib/context/execution', () => ({
   recordLLMCall: vi.fn(),
   executionContext: { getStore: () => undefined },
 }));

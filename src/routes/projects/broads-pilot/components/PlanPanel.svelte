@@ -4,8 +4,8 @@
   // add-to-itinerary / clear actions.
   import { app } from '../lib/appState.svelte';
   import { fmtDist, fmtTime, fmtMoney, fmtClearance } from '../lib/format';
-  import { breydonAdvice, breydonCrossings, fmtTideTime } from '../lib/tide';
-  import type { Verdict } from '../lib/types';
+  import { breydonAdvice, breydonCrossings, fmtTideTime } from '$lib/broads-pilot/tide';
+  import type { Verdict } from '$lib/broads-pilot/types';
 
   // Real slack-water crossing windows for the planner date (Gorleston-based).
   const breydonWindows = $derived(breydonCrossings(app.data?.tides ?? null, app.date));

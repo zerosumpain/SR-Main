@@ -29,11 +29,13 @@ export const POST: RequestHandler = async ({ request }) => {
   const file = form.get('file');
   const conversationId = form.get('conversationId') as string | null;
   const sourceField = (form.get('source') as string | null) || 'web';
-  // Hermes plugin uploads agent-produced screenshots / image-gen output with
+  // An agent uploads produced screenshots / image-gen output with
   // `source=generated` so the chat UI can label them and rate-limits in
   // `$lib/jkai/media/rate-limits` keep tracking them. Anything else falls back
   // to `web` (the original user-upload semantics).
-  const source = ALLOWED_SOURCES.has(sourceField) ? sourceField : 'web';
+  const source: 'web' | 'generated' = ALLOWED_SOURCES.has(sourceField)
+    ? (sourceField as 'web' | 'generated')
+    : 'web';
   if (!(file instanceof File)) throw error(400, 'file is required');
   if (file.size === 0) throw error(400, 'file is empty');
 
@@ -72,12 +74,19 @@ export const POST: RequestHandler = async ({ request }) => {
     metadata: null,
   }).returning();
 
-  // Mirror genuine user uploads (not agent-generated output) into /drive under a
-  // `jkai/` folder and embed them, so chat attachments are browsable in /drive
-  // and searchable via @files. Best-effort — never blocks or fails the upload.
-  if (source === 'web') {
-    void mirrorJkaiAttachmentToDrive({ buf, originalName: file.name, mimeType: mime });
-  }
+  // Mirror everything the chat touches into /drive under `jkai/<chat title>/`
+  // and embed it, so chat files are browsable in /drive and searchable via
+  // @files. Agent-generated output (screenshots, write_document results) is
+  // included: it is as much a file "in the chat" as an upload, and leaving it
+  // out meant the only copy lived in the jkai media store.
+  // Best-effort — never blocks or fails the upload.
+  void mirrorJkaiAttachmentToDrive({
+    buf,
+    originalName: file.name,
+    mimeType: mime,
+    conversationId,
+    source,
+  });
 
   return json(row);
 };

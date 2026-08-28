@@ -1,9 +1,9 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { PRESSURES } from '../lib/pressures';
+  import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
   import { CAPABILITY_BY_ID } from '../lib/capabilities';
   import { pct } from '../lib/format';
-  import type { Origin } from '../lib/types';
+  import type { Origin } from '$lib/dfe-data-strategy/types';
 
   const FILTERS: { id: 'all' | Origin; label: string }[] = [
     { id: 'all', label: 'All' },

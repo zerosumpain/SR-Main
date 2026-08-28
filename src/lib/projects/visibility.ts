@@ -40,6 +40,7 @@ export const STATIC_PROJECT_KEYS = [
   'brass-and-rails',
   'archetype',
   'data-convergence',
+  'bathroom',
   'pulse',
 ] as const;
 

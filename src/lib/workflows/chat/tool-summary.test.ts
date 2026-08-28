@@ -5,11 +5,11 @@ import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
  * Regression cover for the "web_search always says 0 results" bug.
  *
  * Two stacked defects, both real:
- *  1. Hermes' `web_search` puts its rows under `data.web` (see
+ *  1. `web_search` puts its rows under `data.web` (see
  *     tools/web_tools.py::web_search_tool) — a key `countOf()` didn't know, so
  *     even a fully parsed result counted 0.
  *  2. The jkai adapter previews tool results to 600 chars, so the JSON *string*
- *     Hermes returns arrived cut mid-object and `unwrap()` flattened it to `{}`.
+ *     results arrived cut mid-object and `unwrap()` flattened it to `{}`.
  *     The adapter now sends a compact `{count, web:[…]}` object instead.
  */
 const row = (i: number) => ({
@@ -35,7 +35,7 @@ describe('summarizeToolResult — web_search', () => {
     expect(out).toContain('top: whitescarcave.co.uk');
   });
 
-  it('counts rows under Hermes’ data.web key when the object arrives whole', () => {
+  it('counts rows under the data.web key when the object arrives whole', () => {
     const out = summarize({ success: true, data: { web: [row(1), row(2), row(3)] } });
     expect(out).toContain('3 results');
   });
@@ -64,13 +64,13 @@ describe('summarizeToolResult — web_search', () => {
  * Regression cover for `web_extract` reading "Done — web extract".
  *
  * Same root cause as the web_search bug above, arriving from the other side:
- * Hermes previews native tool results at 600 chars, so a `web_extract` result is
+ * Native tool results are previewed at 600 chars, so a `web_extract` result is
  * a JSON string cut mid-object that `unwrap()` flattens to `{}`. With no count
  * and no title, the summariser fell through to the generic default — even though
  * the ARGUMENTS name the page exactly.
  *
  * The second trap is the argument shape: `urls` arrives as a JSON *string*
- * containing an array once it has been through Hermes' arg preview, not as an
+ * containing an array once it has been through the arg preview, not as an
  * array. Reading only the array form leaves nothing to say.
  */
 const extract = (args: Record<string, unknown>, result: unknown, status: 'done' | 'error' = 'done') =>
@@ -129,7 +129,7 @@ describe('summarizeToolResult — web_extract', () => {
 /**
  * The adapter-side fix: `_compact_web_extract` reduces the result to
  * `{count, results:[{title,url}]}` BEFORE the 600-char preview, mirroring what
- * `_compact_web_search` already did. Hermes sends args on `started` but not on
+ * `_compact_web_search` already did. Args arrive on `started` but not on
  * `completed`, so on the finished card the URL has to come from the result.
  */
 describe('summarizeToolResult — web_extract, compacted by the adapter', () => {
@@ -172,11 +172,11 @@ describe('summarizeRunningTool — web_extract', () => {
 });
 
 /**
- * Hermes' own tools were all rendering as "Done — <tool>".
+ * The native tools were all rendering as "Done — <tool>".
  *
  * Two reasons, both structural rather than per-tool: the existing file cases are
  * named for the SITE tools (`file_read`/`file_list`/`file_search`) and never
- * matched Hermes' `read_file`/`write_file`/`search_files`; and every Hermes
+ * matched `read_file`/`write_file`/`search_files`; and every native
  * result is preview-capped at 600 chars, so there is nothing parseable to
  * summarise from. These read the arguments instead — which reach a finished card
  * only because the frame adapter carries them over from the `started` frame.
@@ -184,7 +184,7 @@ describe('summarizeRunningTool — web_extract', () => {
 const native = (tool: string, args: Record<string, unknown>, result: unknown = 'clipped output…') =>
   summarizeToolResult({ tool, toolCallId: 'tc-n', args, result, status: 'done' });
 
-describe('summarizeToolResult — Hermes native tools', () => {
+describe('summarizeToolResult — native agent tools', () => {
   it('names the command a terminal call ran', () => {
     expect(native('terminal', { command: 'npm run gate' })).toBe('Ran `npm run gate`');
   });
@@ -261,7 +261,7 @@ describe('summarizeToolResult — Hermes native tools', () => {
     }
   });
 
-  it('never leaves a busy Hermes tool on the generic default', () => {
+  it('never leaves a busy native tool on the generic default', () => {
     const busiest = [
       'terminal', 'browser_navigate', 'browser_console', 'search_files', 'read_file',
       'execute_code', 'browser_snapshot', 'browser_click', 'skill_view', 'session_search',
@@ -274,7 +274,7 @@ describe('summarizeToolResult — Hermes native tools', () => {
   });
 });
 
-describe('summarizeRunningTool — Hermes native tools', () => {
+describe('summarizeRunningTool — native agent tools', () => {
   it('does not echo raw arguments into the running line', () => {
     expect(summarizeRunningTool('terminal', { command: 'npm run gate', timeout: 60 })).toBe('running `npm run gate`');
     expect(summarizeRunningTool('browser_click', { ref: 'e81' })).toBe('clicking e81');

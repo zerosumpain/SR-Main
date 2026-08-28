@@ -4,7 +4,7 @@
 // workbench tensions. Everything editable by the writer; nothing invented at runtime.
 
 import { MUST_ANSWER, DOCUMENTS_BY_ID } from '../commitments';
-import type { Tension } from '../types';
+import type { Tension } from '$lib/dfe-data-strategy/types';
 import type { CoverageResult } from './coverage';
 import type { Milestone, Risk } from './authorState.svelte';
 

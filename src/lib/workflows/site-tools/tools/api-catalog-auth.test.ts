@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // apis.ts reaches the datastore at module scope; registry.ts reaches postgres.
 // Stub both so this stays a pure test of the binding rules.
 vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('$lib/integrations/crypto', () => ({
+vi.mock('$lib/secrets/crypto', () => ({
   encryptPayload: (s: string) => `enc:${s}`,
   decryptPayload: (s: string) => s.replace(/^enc:/, ''),
 }));

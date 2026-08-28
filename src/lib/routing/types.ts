@@ -1,17 +1,26 @@
 // Query-Adaptive Model Routing — shared constants + types. Mirrors the
 // briefing/self-improve harness (cron/tz, kill switch, datastore collections,
-// OWNER_PHONE). See docs/superpowers/specs/2026-07-20-query-adaptive-model-routing-design.md
+// the owner's phone, now $lib/config/owner). See
+// docs/superpowers/specs/2026-07-20-query-adaptive-model-routing-design.md
+import { ownerPhone } from '$lib/config/owner';
 import type { ModelContext } from '$lib/server/models/types';
 
-/** The four query profiles the router chooses a model for. */
-export type ModelProfile = 'general' | 'tool' | 'rag' | 'agentic';
-export const PROFILES: ModelProfile[] = ['general', 'tool', 'rag', 'agentic'];
+/** The profiles the router chooses a model for.
+ *
+ * The first four are QUERY profiles — `classifyQuery` picks one per chat turn.
+ * `vision` is not: nothing classifies into it, and it is selected for the same
+ * way purely so image captioning and scanned-PDF OCR get a cost-aware pick
+ * instead of a hard-coded constant. Its pool is filtered to models that
+ * actually accept image input. */
+export type ModelProfile = 'general' | 'tool' | 'rag' | 'agentic' | 'vision';
+export const PROFILES: ModelProfile[] = ['general', 'tool', 'rag', 'agentic', 'vision'];
 
 export const PROFILE_LABEL: Record<ModelProfile, string> = {
   general: 'General chat',
   tool: 'Tool-heavy',
   rag: 'RAG / retrieval',
   agentic: 'Agentic / delegation',
+  vision: 'Vision / OCR',
 };
 
 export const PROFILE_BLURB: Record<ModelProfile, string> = {
@@ -19,6 +28,8 @@ export const PROFILE_BLURB: Record<ModelProfile, string> = {
   tool: 'Queries that fan out to actions (home, email, scraping, data). Tool-use quality first.',
   rag: 'Retrieval answers (@files / @knowledge / @research). Optimised for tokens/sec.',
   agentic: 'Multi-step delegation and builds. Reasoning quality first.',
+  vision:
+    'Image captions and scanned-PDF OCR for the file index. Not query-classified — used by the indexer. Pool restricted to models that accept image input.',
 };
 
 // ── app_settings keys ────────────────────────────────────────────────────────
@@ -32,7 +43,6 @@ export const RUNS_COLLECTION = 'model-routing-runs'; // one record per nightly/m
 export const EVENTS_COLLECTION = 'model-routing-events'; // one record per conversation routing decision
 
 export const SYSTEM_ACTOR = 'system';
-export const OWNER_PHONE = '+447359228511';
 
 export const CRON_EXPR = '0 4 * * *'; // 04:00 daily — after self-improve (03:30), before the morning briefing (06:30)
 export const CRON_TZ = 'Europe/London';
@@ -92,11 +102,16 @@ export const DEFAULT_CONFIG: RoutingConfig = {
     tool: { quality: 0.35, price: 0.45, speed: 0.2 },
     rag: { quality: 0.25, price: 0.4, speed: 0.35 },
     agentic: { quality: 0.4, price: 0.45, speed: 0.15 },
+    // Quality carries more than `rag` because a misread transcript is not a
+    // worse answer, it is a WRONG one that gets embedded and fed to the intel
+    // graph as the contents of the document. Price still leads, since this runs
+    // over every image and scan in the Drive.
+    vision: { quality: 0.35, price: 0.45, speed: 0.2 },
   },
   // Fractions of the catalogue's best agentic index (≈54 today → general ≈32,
   // tool ≈35, rag ≈27, agentic ≈41). Agentic is highest because multi-step
   // delegation with a weak model burns more tokens retrying than it saves.
-  qualityFloorFrac: { general: 0.6, tool: 0.65, rag: 0.5, agentic: 0.75 },
+  qualityFloorFrac: { general: 0.6, tool: 0.65, rag: 0.5, agentic: 0.75, vision: 0.55 },
   priceCeilingPerM: 15,
   minContext: 32_000,
   successBiasK: 0.2,

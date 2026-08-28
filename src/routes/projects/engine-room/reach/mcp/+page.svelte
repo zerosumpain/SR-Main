@@ -39,23 +39,25 @@
 </script>
 
 <svelte:head>
-  <title>One doorway · The Engine Room</title>
+  <title>MCP · The Engine Room</title>
   <meta name="description" content="How outside tools connect over one open protocol, and where the check on a destructive call actually sits." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="One doorway"
+    title="MCP"
     line="One open protocol carries every tool to every caller. Which means the check on a dangerous call has to live in the doorway, because trusting four separate callers to each remember is not a plan."
-    lineEli5="Outside apps plug into the same tools the assistant uses. The safety check lives in the socket, not in each plug." />
+    lineEli5="Outside apps can plug into the same tools the assistant uses. The safety check lives in the socket rather than in each plug — so a new plug cannot forget to bring one." />
 
   <Instrument
     kicker="The gate"
     title="Four ways in, one check"
     tone={TONE}
     reading="Pick who is calling, what kind of call it is, and whether anyone is there to answer."
-    takeaway="Change the caller all you like; the verdict does not budge. The gate sits at the boundary every route has to cross rather than inside any one of them, which is the only arrangement a new caller cannot turn up and quietly bypass.">
+    readingEli5="Pick who is calling, what kind of call it is, and whether anyone is around to approve it."
+    takeaway="Change the caller all you like; the verdict does not budge. The gate sits at the boundary every route has to cross rather than inside any one of them, which is the only arrangement a new caller cannot turn up and quietly bypass."
+    takeawayEli5="Change the caller all you like — the verdict does not budge. The check sits in the one doorway every route passes through, which is the only arrangement a new arrival cannot quietly bypass.">
     <CallGate />
   </Instrument>
 
@@ -80,7 +82,9 @@
     title="What a deploy does to a call in flight"
     tone={TONE}
     reading="Forty calls across three deliberate restarts, placed twice: straight at the endpoint, then through a process that holds a call for up to three minutes rather than failing it."
-    takeaway="A component whose entire job is surviving the main application’s restarts really must not go down with it. So it has no dependencies on the thing it is outliving, and it is supervised separately.">
+    readingEli5="Forty calls made during three deliberate restarts — first aimed straight at the endpoint, then through a doorway that holds each call until the restart finishes."
+    takeaway="A component whose entire job is surviving the main application’s restarts really must not go down with it. So it has no dependencies on the thing it is outliving, and it is supervised separately."
+    takeawayEli5="A part whose whole job is surviving the main app's restarts must not go down with it — so it shares nothing with the thing it outlives, and runs separately. Every held call got through; more than half of the direct ones did not.">
     <Bars items={AVAIL} unit=" of 40" max={40} tone={TONE} grouped={false} height={30} />
   </Instrument>
 

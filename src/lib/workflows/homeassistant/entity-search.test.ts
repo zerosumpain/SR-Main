@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_LIMIT,
   MAX_LIMIT,
-  matchesQuery,
+  matchesQuery, expandTerm,
   resolveEntityId,
   scoreEntity,
   searchEntities,
@@ -157,5 +157,48 @@ describe('helpers', () => {
     const named = { entity_id: 'binary_sensor.front_door', domain: 'binary_sensor', friendly_name: 'Front Door', area_name: null, state: 'off' };
     const buried = { entity_id: 'sensor.outdoor_temperature', domain: 'sensor', friendly_name: 'Outdoor Temperature', area_name: null, state: '17' };
     expect(scoreEntity(named, 'door')).toBeGreaterThan(scoreEntity(buried, 'door'));
+  });
+});
+
+describe('synonyms — what a person calls a thing vs what HA calls it', () => {
+  // The case that motivated this: John's sensors are `john_s_echo_temperature`,
+  // and asking about "the alexa temperature" returned NOTHING. A fair question,
+  // zero results, and the model then reported no temperature data existed.
+  const echoSensor = 'sensor.john_s_echo_temperature john’s echo temperature study';
+
+  it('finds an echo device when the user says alexa', () => {
+    expect(matchesQuery(echoSensor, 'alexa temperature')).toBe(true);
+  });
+
+  it('and the reverse — finds it when they say echo', () => {
+    expect(matchesQuery(echoSensor, 'echo temperature')).toBe(true);
+  });
+
+  it('still requires EVERY term to match — synonyms widen a term, not the query', () => {
+    // If synonyms leaked across terms this would match every sensor in the house.
+    expect(matchesQuery(echoSensor, 'alexa humidity')).toBe(false);
+    expect(matchesQuery('light.kitchen_ceiling kitchen ceiling kitchen', 'alexa light')).toBe(false);
+  });
+
+  it('handles everyday shortenings', () => {
+    expect(matchesQuery(echoSensor, 'temp')).toBe(true);
+    expect(matchesQuery('media_player.lounge_tv living room tv', 'telly')).toBe(true);
+    // "living room" is one place, not two words to AND — see PHRASE_SYNONYMS.
+    expect(matchesQuery('light.lounge_lamp lounge lamp lounge', 'living room light')).toBe(true);
+    expect(matchesQuery('light.lounge_lamp lounge lamp lounge', 'sitting room lamp')).toBe(true);
+  });
+
+  it('handles rooms as actually spoken', () => {
+    expect(matchesQuery('sensor.bathroom_humidity bathroom humidity bathroom', 'loo humidity')).toBe(true);
+    expect(matchesQuery('sensor.outdoor_temp outdoor temperature garden', 'outside temp')).toBe(true);
+  });
+
+  it('leaves an unknown word exactly as it was', () => {
+    expect(matchesQuery(echoSensor, 'wibble')).toBe(false);
+    expect(expandTerm('wibble')).toEqual(['wibble']);
+  });
+
+  it('does not make an empty query match nothing', () => {
+    expect(matchesQuery(echoSensor, '')).toBe(true);
   });
 });

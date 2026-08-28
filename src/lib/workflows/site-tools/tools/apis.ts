@@ -877,6 +877,7 @@ export async function setCatalogAuth(
 export async function handleApiSecretsList(): Promise<ToolResult> {
   try {
     const { listSecrets } = await import('$lib/secrets/registry');
+    const { describeInjection } = await import('$lib/secrets/credential-requests');
     const secrets = await listSecrets();
     return {
       success: true,
@@ -888,10 +889,9 @@ export async function handleApiSecretsList(): Promise<ToolResult> {
           label: s.label,
           allowedHosts: s.allowedHosts,
           allowedPathPrefixes: s.allowedPathPrefixes,
-          injection:
-            s.injection.kind === 'bearer' || s.injection.kind === 'none'
-              ? s.injection.kind
-              : `${s.injection.kind}:${s.injection.name}`,
+          // Plain words, so a credential that sends one field of a set reads as
+          // exactly that rather than as an opaque kind name.
+          injection: describeInjection(s.injection),
           // A store-only row holds a credential SET for one server module to
           // read; it is never attached to a request, so `api_call` cannot use it.
           storeOnly: s.injection.kind === 'none',

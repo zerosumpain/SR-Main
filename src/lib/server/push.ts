@@ -8,6 +8,18 @@ export interface PushPayload {
 	body: string;
 	url?: string;
 	data?: Record<string, unknown>;
+	/**
+	 * Buttons rendered on the notification itself.
+	 *
+	 * Read by src/service-worker.ts at the TOP LEVEL of the payload, not from
+	 * `data` — the worker parses the whole JSON body as one object. Nesting
+	 * these under `data` makes them silently vanish, which looks exactly like a
+	 * platform that does not support notification actions.
+	 */
+	actions?: Array<{ action: string; title: string }>;
+	/** POSTed `{ ...actionPayload, verdict: <action> }` when a button is tapped. */
+	actionEndpoint?: string;
+	actionPayload?: Record<string, unknown>;
 }
 
 let configured = false;

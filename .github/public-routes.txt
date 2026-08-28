@@ -1,7 +1,9 @@
 # Anonymously-reachable routes — GENERATED, do not hand-edit.
 #
 # Every route here can be reached WITHOUT a session, because it sits under a
-# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts.
+# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts —
+# or, for the page routes in HOOK_EXACT_BYPASSES, because that exact path is
+# public while everything beneath it is not.
 # Being listed is not a bug — but each line should be a deliberate decision,
 # and several self-gate internally (requireProjectPublic, requireDeckVisible,
 # validateAgentKey, assertScraperServiceRequest, bridge tokens).
@@ -9,15 +11,6 @@
 # If CI fails on this file: a route was added under a public prefix. Confirm it
 # is MEANT to be anonymous — and if it self-gates, that the gate is actually
 # called — then run `npm run gate:public-routes -- --write` and commit.
-/api/admin/hermes/callefficiency
-/api/admin/hermes/cron
-/api/admin/hermes/models
-/api/admin/hermes/service
-/api/admin/hermes/sessions
-/api/admin/hermes/sessions/[id]
-/api/admin/hermes/status
-/api/admin/hermes/telemetry
-/api/admin/hermes/toolaudit
 /api/admin/security
 /api/agent/actions
 /api/agent/activity
@@ -37,17 +30,21 @@
 /api/claude-changelog/session/[id]
 /api/data-standard-designer/ingest
 /api/data-standard-designer/seed-workflows
+/api/daydream/backfill
+/api/daydream/observe
 /api/deepdive/index-sources
 /api/deepdive/reindex-facts
 /api/dfe-data-strategy/intel
 /api/dfe-data-strategy/seed-workflows
+/api/file-shares/[token]/download
 /api/health/apple/ingest
 /api/health/workflow-engine
+/api/jkai/codegraph/ingest
+/api/jkai/codegraph/query
 /api/jkai/cors/[...url]
 /api/jkai/intel/backfill
 /api/jkai/intel/clusters/recalculate
 /api/jkai/intel/source-facets
-/api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
 /api/jkai/studio
 /api/jkai/studio/image
@@ -63,7 +60,6 @@
 /api/policy-engine/seed-workflows
 /api/releases/ingest
 /api/releases/summarise
-/api/route-exports/[token]/download
 /api/scraper/interactive
 /api/scraper/interactive/[id]
 /api/scraper/node
@@ -71,6 +67,7 @@
 /api/scraper/script
 /api/space-lander/scores
 /api/space-lander/session
+/api/trails/segments
 /api/whatsapp/inbound
 /auth-error
 /blog
@@ -84,6 +81,7 @@
 /decks/[slug]/edit
 /decks/[slug]/print
 /decks/[slug]/track
+/health
 /heart
 /heart/1
 /heart/2
@@ -92,6 +90,14 @@
 /projects
 /projects/[slug]/[...path]
 /projects/archetype/llm
+/projects/bathroom
+/projects/bathroom/brief
+/projects/bathroom/ideas
+/projects/bathroom/money
+/projects/bathroom/planner
+/projects/bathroom/programme
+/projects/bathroom/signoff
+/projects/bathroom/trades
 /projects/broads-pilot
 /projects/broads-pilot/method
 /projects/data-convergence
@@ -145,6 +151,7 @@
 /projects/engine-room/ask
 /projects/engine-room/change
 /projects/engine-room/change/gate
+/projects/engine-room/change/lessons
 /projects/engine-room/change/limits
 /projects/engine-room/change/nights
 /projects/engine-room/change/shipping
@@ -168,6 +175,7 @@
 /projects/engine-room/reach/keys
 /projects/engine-room/reach/mcp
 /projects/engine-room/reach/tools
+/projects/engine-room/reach/trails
 /projects/engine-room/reach/workflows
 /projects/engine-room/turn
 /projects/engine-room/turn/cost
@@ -175,6 +183,7 @@
 /projects/engine-room/turn/routing
 /projects/engine-room/turn/stream
 /projects/engine-room/turn/trace
+/projects/family-life360-history
 /projects/jkai
 /projects/jkai/[slug]/[...path]
 /projects/policy-engine

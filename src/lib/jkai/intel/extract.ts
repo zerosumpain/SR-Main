@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
 import { eq, isNull, sql } from 'drizzle-orm';
@@ -275,7 +276,9 @@ export async function extractFromNote(
   let lastRaw = '';
   let lastDiag = '';
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const response = await createExtraction();
+    // Tagged so the ledger attributes this spend to the extraction role
+    // rather than the anonymous 'gateway' bucket — see $lib/context/activity.
+    const response = await withActivity('extraction', createExtraction);
     const choice = response.choices[0];
     lastRaw = choice?.message?.content ?? '';
     lastDiag = `attempt=${attempt} finish=${choice?.finish_reason} provider=${

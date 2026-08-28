@@ -91,7 +91,7 @@ describe('createTraceRecorder', () => {
   });
 
   it('treats a self-declared failure as an error even when the event says done', () => {
-    // Hermes' own tools return their envelope pre-serialised, so a `patch` that
+    // Some native tools return their envelope pre-serialised, so a `patch` that
     // matched nothing still arrives as a completed round-trip. On 2026-08-08
     // that logged as "Done — patch" and the turn under-reported its errors.
     const rec = createTraceRecorder({ now: fakeClock() });
@@ -337,7 +337,7 @@ describe('coerceJsonString', () => {
   });
 
   it('flags a JSON string that was cut off upstream rather than dropping it', () => {
-    // Exactly what Hermes' 600-char native-tool preview produces.
+    // Exactly what a 600-char native-tool preview produces.
     const out = coerceJsonString('{"results": [{"url": "https://example.com", "content": "half a sen');
     expect(out.wasJsonString).toBe(false);
     expect(out.clipped).toBe(true);

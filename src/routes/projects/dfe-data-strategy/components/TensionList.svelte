@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { LEGISLATION_BY_ID } from '../lib/legislation';
+  import { LEGISLATION_BY_ID } from '$lib/dfe-data-strategy/legislation';
   const tensions = $derived(app.align.tensions);
   const COL = { high: '#b1455e', medium: '#b4632e', low: '#9a7b1f' };
 </script>

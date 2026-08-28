@@ -1,19 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { coerceOwnerPublish, needsHermesReconnect, MAX_PROMOTIONS } from './publish-input';
+import { coerceOwnerPublish, needsMcpReconnect, MAX_PROMOTIONS } from './publish-input';
 import { ESSENTIAL_TOOL_NAMES } from '$lib/mcp/essentials';
 
 const registered = new Set(['ha_render_template', 'ha_query_state', 'workflow_inspect', 'build_inspect', 'gmail_search', 'gmail_get_message', 'blog_list']);
 
 describe('owner-authored policy publish', () => {
+  // The exemplars here must be tools that are STILL extended. `ha_query_state`,
+  // `gmail_search` and `workflow_inspect` were promoted into
+  // ESSENTIAL_TOOL_NAMES on 2026-08-20 (the measured first-turn hot set), and
+  // an already-essential name is correctly rejected as a no-op — so using one
+  // as a stand-in tests the wrong thing.
   it('accepts a promotion set and marks it owner-authored', () => {
     const r = coerceOwnerPublish(
-      { rationale: 'Trial promoting the four most-invoked extended tools.', promoteToEssential: ['ha_render_template', 'ha_query_state'] },
+      { rationale: 'Trial promoting the four most-invoked extended tools.', promoteToEssential: ['ha_render_template', 'build_inspect'] },
       registered,
     );
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.input.createdBy).toBe('owner');
-    expect(r.input.promoteToEssential).toEqual(['ha_render_template', 'ha_query_state']);
+    expect(r.input.promoteToEssential).toEqual(['ha_render_template', 'build_inspect']);
   });
 
   it('rejects a name the registry does not know, rather than dropping it', () => {
@@ -35,8 +40,8 @@ describe('owner-authored policy publish', () => {
   });
 
   it('deduplicates and caps the promotion set', () => {
-    const dup = coerceOwnerPublish({ rationale: 'x', promoteToEssential: ['gmail_search', 'gmail_search'] }, registered);
-    expect(dup.ok && dup.input.promoteToEssential).toEqual(['gmail_search']);
+    const dup = coerceOwnerPublish({ rationale: 'x', promoteToEssential: ['gmail_get_message', 'gmail_get_message'] }, registered);
+    expect(dup.ok && dup.input.promoteToEssential).toEqual(['gmail_get_message']);
 
     const many = Array.from({ length: MAX_PROMOTIONS + 1 }, (_, i) => `tool_${i}`);
     const over = coerceOwnerPublish({ rationale: 'x', promoteToEssential: many }, new Set(many));
@@ -77,13 +82,13 @@ describe('owner-authored policy publish', () => {
 
 describe('which changes need the gateway to reconnect', () => {
   it('flags promotions and global guidance, which live only in the manifest', () => {
-    expect(needsHermesReconnect({ promoteToEssential: ['gmail_search'], globalGuidance: [] })).toBe(true);
-    expect(needsHermesReconnect({ promoteToEssential: [], globalGuidance: ['never loop'] })).toBe(true);
+    expect(needsMcpReconnect({ promoteToEssential: ['gmail_search'], globalGuidance: [] })).toBe(true);
+    expect(needsMcpReconnect({ promoteToEssential: [], globalGuidance: ['never loop'] })).toBe(true);
   });
 
   it('does not flag a plain description override, which is applied per call', () => {
     // `dispatchMetaTool` runs `describeWithPolicy` on every list/schema, so an
     // extended tool's rewritten description is live without a restart.
-    expect(needsHermesReconnect({ promoteToEssential: [], globalGuidance: [] })).toBe(false);
+    expect(needsMcpReconnect({ promoteToEssential: [], globalGuidance: [] })).toBe(false);
   });
 });

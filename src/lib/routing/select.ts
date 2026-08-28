@@ -55,6 +55,12 @@ export async function selectModels(config: RoutingConfig): Promise<SelectionResu
       openWeightBonus: config.openWeightBonus,
       openWeightsOnly: config.openWeightsOnly,
       successFor: successForProfile(successIndex, profile),
+      // The vision pool is a different shape: it must read pictures, and it
+      // never calls a tool. Requiring tool support here would discard most of
+      // the image-capable catalogue to no purpose.
+      requireImageInput: profile === 'vision',
+      requireFileInput: profile === 'vision',
+      requireTools: profile !== 'vision',
     });
     candidateCounts[profile] = poolSize;
     if (!winner) continue;

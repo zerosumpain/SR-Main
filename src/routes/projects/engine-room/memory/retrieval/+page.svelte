@@ -36,23 +36,25 @@
 </script>
 
 <svelte:head>
-  <title>Finding things · The Engine Room</title>
+  <title>Retrieval · The Engine Room</title>
   <meta name="description" content="How a document becomes searchable chunks, why there are two embedding indexes rather than one, and what comes back." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Finding things"
+    title="Retrieval"
     line="Keeping a document and finding it again are two entirely different problems, and only one of them is easy. A document gets cut, embedded and permission-filtered long before a prompt lays eyes on it."
-    lineEli5="Saving a document is easy. Pulling out the one right paragraph eight months later is the hard part." />
+    lineEli5="Saving a document is the easy half. The hard half is pulling out the one right paragraph months later — so every document is cut up, indexed and permission-checked long before any question is asked of it." />
 
   <Instrument
     kicker="The instrument"
     title="Cutting a document into chunks"
     tone={TONE}
     reading="This section's own notes, cut at the live setting. Drag a dial, or turn the nudge off."
-    takeaway="Two guards against chopping a fact in half: 150 characters repeated across every cut, and the split shuffled back to the end of a sentence. Cut mid-clause and you get a chunk confidently asserting the opposite of what was written.">
+    readingEli5="This page's own notes, cut up exactly as the live system would cut them. Drag a dial and watch where the cuts fall."
+    takeaway="Two guards against chopping a fact in half: 150 characters repeated across every cut, and the split shuffled back to the end of a sentence. Cut mid-clause and you get a chunk confidently asserting the opposite of what was written."
+    takeawayEli5="Two guards stop a fact being chopped in half: each cut overlaps the last by 150 characters, and cuts are nudged back to the end of a sentence. Without them, half a sentence can end up confidently saying the opposite of what was written.">
     <Chunker />
   </Instrument>
 
@@ -61,7 +63,9 @@
     title="Different jobs, different budgets"
     tone={TONE}
     reading="Two separate indexes, kept apart on purpose rather than one big shared space."
-    takeaway="The dearer embedding only gets used where somebody deliberately picked a collection. Everywhere else makes do, and nobody has ever noticed.">
+    readingEli5="Two separate search indexes, kept apart on purpose rather than merged into one."
+    takeaway="The dearer embedding only gets used where somebody deliberately picked a collection. Everywhere else makes do, and nobody has ever noticed."
+    takeawayEli5="The dearer, more detailed index is saved for when someone deliberately picks a set of documents to ask about. Everything else uses the cheaper one — a saving nobody has ever noticed in use, which is the best kind.">
     <Bars items={INDEXES} unit=" dims" tone={TONE} />
     <p class="foot">Both discard anything below a minimum similarity rather than padding the list out.</p>
   </Instrument>
@@ -70,7 +74,8 @@
     kicker="The rest of the rig"
     title="The other decisions"
     tone={TONE}
-    reading="Pick one.">
+    reading="Pick one."
+    readingEli5="Pick one for the reasoning behind it.">
     <div class="kvs">
       {#each REST as r, i (r.k)}
         <button class="kv" class:on={pick === i} aria-pressed={pick === i} onclick={() => (pick = i)}>

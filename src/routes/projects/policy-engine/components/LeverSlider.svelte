@@ -4,7 +4,7 @@
   // and supports the app.highlightLever "jump to + flash" primitive. Reuses the slider idiom
   // from AgeIdentification so every lever-driven chart speaks the same visual language.
   import { app } from '../lib/appState.svelte';
-  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '../lib/levers';
+  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
 
   interface Props {
     id: string;

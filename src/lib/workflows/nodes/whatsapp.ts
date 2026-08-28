@@ -70,10 +70,10 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 /**
  * Resolve the configured media reference to a local-disk attachment the
- * WhatsApp service can send. A `mediaPath` is used directly (the Hermes bridge
+ * WhatsApp service can send. A `mediaPath` is used directly (the bridge
  * `/send-media` reads the absolute path). A `mediaUrl` is downloaded to a temp
  * file first and cleaned up afterwards. Media therefore requires the delegated
- * (Hermes bridge) mode, which reads a filesystem path.
+ * (delegated) mode, which reads a filesystem path.
  */
 async function resolveMedia(
   mediaPath: string,
@@ -151,11 +151,22 @@ export const whatsappExecutor: NodeExecutor = {
     // (already-formatted) message doubles as the caption.
     if (hasMedia && !caption && message) caption = message;
 
+    // A node with no recipient cannot ever deliver. Reporting that as a completed
+    // run is the same lie this node used to tell about failed sends. No production
+    // node has an empty `to`, so nothing legitimate depends on the old behaviour.
     if (!to) {
-      return { output: { sent: false, error: 'No recipient (to) configured' }, rowCount: 1 };
+      throw new Error('WhatsApp node has no recipient (to) configured');
     }
+    // Having nothing to say IS legitimate: `message` is template-interpolated, so
+    // a node with static content configured can still resolve to empty when
+    // upstream produced no items. That is a deliberate skip, not a failure — flag
+    // it as one rather than throwing and breaking a workflow that is behaving.
     if (!message && !hasMedia) {
-      return { output: { sent: false, error: 'No message content or media configured' }, rowCount: 1 };
+      return {
+        output: { sent: false, skipped: true, reason: 'no content to send', to },
+        rowCount: 1,
+        logs: ['[whatsapp] nothing to send — message and media both interpolated empty'],
+      };
     }
 
     // DRY RUN — send-free across EVERY path (text, media, suppression).
@@ -182,12 +193,21 @@ export const whatsappExecutor: NodeExecutor = {
       const { att, cleanup } = await resolveMedia(mediaPath, mediaUrl, context.abortSignal);
       try {
         const result = await service.sendAttachment(to, att, caption || undefined);
+        // Same rule as the text path: a send that did not send is a failure.
+        // Worth knowing when this first fires — VPS-originated media sends post a
+        // `filePath` that does not exist on the bridge's filesystem, so they have
+        // never worked from production. No production node configures media, so
+        // nothing regresses; this just stops the next one failing silently.
+        if (!result.sent) {
+          throw new Error(`WhatsApp media send failed: ${result.error ?? 'unknown error'}`);
+        }
         return {
           output: {
-            sent: result.sent,
+            sent: true,
             messageId: result.messageId || null,
-            error: result.error || null,
+            error: null,
             media: true,
+            skipped: false,
           },
           rowCount: 1,
         };
@@ -212,7 +232,8 @@ export const whatsappExecutor: NodeExecutor = {
       );
       if (duplicate) {
         return {
-          output: { sent: false, suppressed: true, to },
+          // Deliberate, not a failure: this is the suppression window doing its job.
+          output: { sent: false, suppressed: true, skipped: true, to },
           rowCount: 1,
           logs: [`[whatsapp] suppressed duplicate message within ${suppressWindowMins}m window`],
         };
@@ -243,14 +264,33 @@ export const whatsappExecutor: NodeExecutor = {
       await appendAtomic(workflowId, SENT_HASHES_KEY, [{ h: hash, ts: Date.now() }], SENT_HASHES_MAX);
     }
 
+    // A send that did not send is a FAILED node, not a completed one.
+    //
+    // This used to return `sent: false` with the error in the payload, which the
+    // engine recorded as `node_status=completed, run_status=completed`. The
+    // production DB held 12 such rows reading `WhatsApp bridge unreachable` — every
+    // one of them a workflow whose entire purpose was to deliver a message,
+    // reporting success while delivering nothing.
+    //
+    // Throwing is also what makes the `dedupe` node correct: with
+    // `recordMode: 'downstream-success'` the seen-record is only committed when
+    // the downstream chain succeeds, so a failed send now leaves the items
+    // unmarked and they retry. Swallowing the error marked them delivered.
+    if (!allSent) {
+      throw new Error(
+        `WhatsApp send failed after ${messageIds.length}/${chunks.length} chunk(s): ${firstError ?? 'unknown error'}`,
+      );
+    }
+
     return {
       output: {
-        sent: allSent,
+        sent: true,
         messageId: messageIds[0] ?? null,
         messageIds,
         chunks: chunks.length,
-        error: firstError,
+        error: null,
         suppressed: false,
+        skipped: false,
       },
       rowCount: 1,
     };
@@ -266,6 +306,7 @@ export const whatsappExecutor: NodeExecutor = {
       properties: {
         sent: { type: 'boolean' },
         suppressed: { type: 'boolean', description: 'true when the send was skipped by the duplicate-suppression window' },
+        skipped: { type: 'boolean', description: 'true when the node deliberately sent nothing (suppressed duplicate, or no content after interpolation). A genuine delivery failure throws instead.' },
         messageId: { type: 'string' },
         messageIds: { type: 'array', description: 'One id per chunk when the message was split' },
         chunks: { type: 'number' },

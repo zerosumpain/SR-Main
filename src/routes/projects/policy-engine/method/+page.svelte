@@ -4,7 +4,7 @@
   import Scorecard from '../components/Scorecard.svelte';
   import CostPanel from '../components/CostPanel.svelte';
   import Sensitivity from '../components/Sensitivity.svelte';
-  import { LEVERS, GROUP_META, GROUP_ORDER, LEVER_META, DRIVE_LABEL, LEVER_ELI5_NAME } from '../lib/levers';
+  import { LEVERS, GROUP_META, GROUP_ORDER, LEVER_META, DRIVE_LABEL, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
 
   const confLabel: Record<string, string> = { high: 'well-evidenced', medium: 'moderate', low: 'weak', assumption: 'assumption' };
   const lname = (id: string, label: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? label : label);

@@ -31,9 +31,21 @@
   // The knowledge-graph rail collapses behind a header toggle below 1280px.
   let graphRailOpen = $state(true);
   let sidebarOpen = $state(false);
-  // Desktop sidebar collapsed to an icon rail (persisted across visits).
-  let sidebarCollapsed = $state(false);
-  const SIDEBAR_COLLAPSED_KEY = 'jkai.sidebarCollapsed';
+  /**
+   * Desktop sidebar collapsed to an icon rail. Collapsed is the DEFAULT now that
+   * the tab strip carries the working set: the rail is the library, and opening
+   * onto a 236px list of threads you are not in costs the conversation the width.
+   * An explicit choice still wins and still persists — see onMount.
+   */
+  let sidebarCollapsed = $state(true);
+  /**
+   * Deliberately a NEW key. Anyone who had ever used the old toggle has a stored
+   * `'0'`, and that would beat the new default forever — the flip would ship and
+   * appear to have done nothing on exactly the browsers that had used the
+   * feature. Bumping the key resets everyone to the default once; the next
+   * explicit choice persists as before.
+   */
+  const SIDEBAR_COLLAPSED_KEY = 'jkai.sidebarCollapsed.v2';
   function toggleSidebarCollapsed() {
     sidebarCollapsed = !sidebarCollapsed;
     try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
@@ -52,9 +64,12 @@
    */
   interface PaneData {
     messages: any[];
-    conversation: { modelProvider?: string; modelId?: string } | null;
+    conversation: { modelProvider?: string; modelId?: string; thinkingLevel?: string | null } | null;
     modelCaps: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     contextLength: number | null;
+    /** Whether the pinned model takes a reasoning instruction — gates the
+     *  composer's thinking chip. */
+    supportsThinking: boolean;
     activeBuild: { id: string; status: string } | null;
   }
   let panes = $state<Record<string, PaneData>>({});
@@ -99,7 +114,13 @@
   );
 
   onMount(() => {
-    try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { /* ignore */ }
+    // Absent key means "never expressed a preference", which is NOT the same as
+    // "wants it expanded" — reading it as `=== '1'` would silently override the
+    // collapsed default for every visitor who has never touched the toggle.
+    try {
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (stored !== null) sidebarCollapsed = stored === '1';
+    } catch { /* ignore */ }
     let resumed = false;
     /**
      * `?new=1` forces a fresh conversation, skipping BOTH resume paths below.
@@ -275,7 +296,7 @@
       if (!res.ok) {
         // Render it anyway: an empty thread with a working composer beats a
         // permanently blank column, and the history returns on the next open.
-        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, activeBuild: null };
+        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null };
         return;
       }
       const body = await res.json();
@@ -284,10 +305,11 @@
         conversation: body.conversation || null,
         modelCaps: body.modelCapabilities || null,
         contextLength: body.modelContextLength ?? null,
+        supportsThinking: body.modelSupportsThinking === true,
         activeBuild: body.activeBuild || null,
       };
     } catch {
-      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, activeBuild: null };
+      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null };
     } finally {
       loadingPanes.delete(id);
     }
@@ -325,6 +347,7 @@
           conversation: conv,
           modelCaps: null,
           contextLength: null,
+          supportsThinking: conv.modelSupportsThinking === true,
           activeBuild: null,
         };
         openTab(conv.id);
@@ -429,7 +452,7 @@
     setTabActivity(id, id === openTabs.activeId ? 'idle' : 'reply');
   }
 
-  function handleModelChange(id: string, ctx: ModelContext) {
+  function handleModelChange(id: string, ctx: ModelContext, supportsThinking?: boolean) {
     const pane = panes[id];
     if (!pane) return;
     pane.conversation = {
@@ -437,6 +460,9 @@
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
     };
+    // Undefined means the switch reported nothing (an older response shape) —
+    // leave the chip as it was rather than guessing it away.
+    if (supportsThinking !== undefined) pane.supportsThinking = supportsThinking;
   }
 </script>
 
@@ -452,7 +478,6 @@
       {whatsappThread}
       activeConversationId={activeId}
       onSelect={selectConversation}
-      onNew={createConversation}
       onWhatsAppSelect={selectWhatsApp}
       onDelete={deleteConversation}
       onRename={renameConversation}
@@ -472,12 +497,14 @@
 
   <!-- Conversation column -->
   <div class="chat-slot">
-    {#if data.freshBriefing}
-      <div class="briefing-slot">
-        <BriefingCard briefing={data.freshBriefing} />
-      </div>
-    {/if}
-
+    <!--
+      The strip comes FIRST, before the briefing. It is chrome and belongs
+      against the bottom of the hub header; the briefing is content in the
+      conversation column. The other way round, a briefing pushed the tab bar
+      down by its whole height — and, worse, by 12px even when there was no
+      card to see, because BriefingCard renders nothing once dismissed while
+      the slot kept its padding.
+    -->
     <ConversationTabs
       tabs={tabViews}
       activeId={activeId}
@@ -488,6 +515,12 @@
       onNew={createConversation}
       onCycle={cycleTab}
     />
+
+    {#if data.freshBriefing}
+      <div class="briefing-slot">
+        <BriefingCard briefing={data.freshBriefing} />
+      </div>
+    {/if}
 
     <!--
       One mounted pane per open tab, hidden rather than destroyed when it is not
@@ -507,19 +540,20 @@
             initialDraft={tab.id === activeId ? data.pendingQuestion : ''}
             conversation={pane.conversation}
             modelContextLength={pane.contextLength}
+            modelSupportsThinking={pane.supportsThinking}
             modelCapabilities={pane.modelCaps}
             defaultChatModelId={data.defaultChatModel.modelId}
             altOpenRouterModel={data.chatAltOpenRouterModel}
             messageCount={pane.messages.length}
             approvalUi={data.approvalUi}
-            hermesEnabled={data.hermesEnabled}
             activeBuild={pane.activeBuild}
             active={tab.id === activeId}
             onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}
             onToggleThreadRail={() => (sidebarOpen = !sidebarOpen)}
             onToggleGraphRail={() => (graphRailOpen = !graphRailOpen)}
             {graphRailOpen}
-            onmodelchange={(ctx: ModelContext) => handleModelChange(tab.id, ctx)}
+            onmodelchange={(ctx: ModelContext, supportsThinking?: boolean) =>
+              handleModelChange(tab.id, ctx, supportsThinking)}
           />
         </div>
       {/if}
@@ -600,8 +634,23 @@
     letter-spacing: var(--tracking-label);
     color: var(--text-muted);
   }
+  /* Padded only when it actually holds a card. `BriefingCard` renders nothing
+     once dismissed — and starts dismissed, to avoid an SSR flash — so an
+     unconditional padding put a 12px band of background under the hub header on
+     every load of a day that had a briefing. `:has` failing open costs nothing:
+     the fallback is no padding, which is the state we want anyway.
+
+     `:global(*)` is load-bearing, not decoration. Written `:has(> *)`, Svelte
+     scopes the inner `*` too, finds nothing in this component's own markup that
+     could match it — the only child is a COMPONENT, whose root carries a
+     different hash — and prunes the whole rule as unused. It compiles away to
+     nothing and a briefing then sits flush against the tab strip. That is a
+     `css_unused_selector` warning, not an error, so nothing in the gate stops
+     it. */
   .briefing-slot {
     flex: none;
+  }
+  .briefing-slot:has(> :global(*)) {
     padding: 12px 20px 0;
   }
   .graph-slot {
@@ -668,7 +717,7 @@
       z-index: 35;
       background: rgba(26, 16, 8, 0.2);
     }
-    .briefing-slot {
+    .briefing-slot:has(> :global(*)) {
       padding: 10px 16px 0;
     }
   }

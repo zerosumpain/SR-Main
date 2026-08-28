@@ -18,8 +18,8 @@
 import type OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { resolveLLMClient } from '$lib/workflows/nodes/llm-helpers';
-import { getLLMClient } from '$lib/jkai/llm-client';
-import { getFallbackModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/llm/client';
+import { getFallbackModel } from '$lib/llm/keys';
 import {
   pLimit,
   withRetry,

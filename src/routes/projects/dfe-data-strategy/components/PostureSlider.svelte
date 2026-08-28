@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import type { PostureAxis } from '../lib/types';
+  import type { PostureAxis } from '$lib/dfe-data-strategy/types';
 
   let { axis }: { axis: PostureAxis } = $props();
   const v = $derived(app.state.postures[axis.id] ?? 0);

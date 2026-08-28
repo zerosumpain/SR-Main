@@ -7,7 +7,7 @@
 
 /**
  * An actor is the principal a datastore call is made on behalf of. Concrete
- * forms: `owner` (admin UI / John), `jkai` (chat + Hermes), `system`
+ * forms: `owner` (admin UI / John), `jkai` (chat), `system`
  * (engines / reapers / nightly loop), `workflow:<id>` (a specific workflow run).
  * In permission lists the wildcards `workflow:*` (any workflow) and `*` (any
  * authenticated principal) are also valid entries.

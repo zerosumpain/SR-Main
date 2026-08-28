@@ -276,7 +276,7 @@ const chatDef: NodeDefinition = {
   label: 'Chat',
   category: 'trigger',
   description:
-    'Conversational chat node. Unwired → acts as the canvas orchestrator panel (no role in execution). Wired → backed by Hermes (jkai-general). Trigger mode: user typing flows downstream as the LLM reply. Receiver mode: upstream output is the prompt; the reply is shown in the panel.',
+    'Conversational chat node. Unwired → acts as the canvas orchestrator panel (no role in execution). Wiring it is not supported — use `llm-call` for a prompt→completion step.',
   configSchema: {
     type: 'object',
     properties: {

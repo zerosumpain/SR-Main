@@ -5,8 +5,8 @@ import { extractReasoningDelta } from './reasoning-delta';
  * Cover for "the Reasoning panel is empty on the in-process loop".
  *
  * The collapsible Reasoning panel is fed by `{type:'thinking'}` JobEvents. Until
- * now the only producer was the Hermes frame adapter ($lib/jkai/sse-adapter),
- * so bypassing Hermes (jkai.chat.hermes_enabled=false) left the panel with no
+ * now the only producer was the gateway's frame adapter, so retiring it left
+ * the panel with no
  * input at all: general-chat's streaming loop read `delta.content` and
  * `delta.tool_calls` and dropped reasoning on the floor.
  *

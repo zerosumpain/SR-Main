@@ -72,11 +72,78 @@ export const resolveSelfimproveModel = () => resolveById('selfimprove');
 /** The workflow doctor's diagnosis calls. */
 export const resolveDoctorModel = () => resolveById('doctor');
 
-/** Image captioning / OCR for the file index. Must accept image input. */
-export const resolveVisionModel = () => resolveById('vision');
+/**
+ * Image captioning / OCR for the file index. Must accept image input.
+ *
+ * Order of precedence: an explicit pin in `jkai.vision.model` wins, then the
+ * nightly router's `vision` assignment, then the hard-coded fallback.
+ *
+ * The router is consulted because this runs over every image and every scanned
+ * PDF in the Drive, so the right model is "cheapest that reads the page
+ * properly" — a judgement the cost-aware selector already makes nightly against
+ * the live catalogue, and one a constant in the source cannot make at all. That
+ * constant was `openai/gpt-4o-mini` for months, which refused one document in
+ * three.
+ *
+ * `selectModels` filters the vision pool to models that declare image input, so
+ * the assignment cannot be a text-only model. Everything still falls back to the
+ * constant if the nightly run has never produced an assignment, or if reading it
+ * fails — this is on the indexing path and must not throw.
+ */
+export async function resolveVisionModel(): Promise<ModelContext> {
+  const def = SITE_WORKLOADS.find((w) => w.id === 'vision')!;
+  const pinned = await getSetting<{ provider?: string; modelId?: string } | null>(def.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
 
-/** Image GENERATION for the studio and the canvas image tool. */
+  try {
+    const { isRoutingEnabled, loadAssignments, loadOverrides } = await import('$lib/routing/events');
+    // The kill switch means "stop letting the router choose", everywhere — not
+    // just in chat. With it off, the constant answers.
+    if (await isRoutingEnabled()) {
+      // Overrides before assignments, matching resolveModelForProfile. The
+      // routing admin page lists every profile in PROFILES, so `vision` is now
+      // pinnable there; reading only the nightly assignment would accept the pin
+      // in the UI and then quietly ignore it.
+      const pin = (await loadOverrides()).vision;
+      if (pin?.modelId) return coerceModelContext({ modelId: pin.modelId });
+      const assigned = (await loadAssignments()).vision;
+      if (assigned?.modelId) return coerceModelContext({ modelId: assigned.modelId });
+    }
+  } catch (err) {
+    console.warn(`[models] vision routing lookup failed (${(err as Error).message}); using the fallback`);
+  }
+  return coerceModelContext({ modelId: def.fallbackModelId! });
+}
+
+/** Image GENERATION for the studio explainer images (chat-completions). */
 export const resolveImageModel = () => resolveById('image');
+
+/**
+ * The `generate_image` tool's FLUX model (/images/generations).
+ *
+ * Precedence: an explicit pin, then the legacy `JKAI_IMAGE_MODEL` env var, then
+ * the constant. The env var is honoured HERE rather than in the constants module
+ * because that module is client-importable — and it sits below the pin so that
+ * setting the model from the page beats a stale variable in a `.env` nobody has
+ * looked at since it was written.
+ */
+export async function resolveImageToolModel(): Promise<ModelContext> {
+  const def = SITE_WORKLOADS.find((w) => w.id === 'image-tool')!;
+  const pinned = await getSetting<{ modelId?: string } | null>(def.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  const fromEnv = envModelFor(def);
+  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
+  return coerceModelContext({ modelId: def.fallbackModelId! });
+}
+
+/** A role's legacy env-var model, when it declares one and it is set. Server
+ *  only — `$lib/models/workloads` is client-importable and must not read
+ *  `process.env`, so the registry declares the NAME and this reads the value. */
+function envModelFor(def: WorkloadDef): string | null {
+  if (!def.envKey) return null;
+  const v = process.env[def.envKey];
+  return v && v.trim() ? v.trim() : null;
+}
 
 /** RAG / file embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const resolveEmbeddingModel = () => resolveById('embeddings');
@@ -89,6 +156,7 @@ export const resolveArtDirectorModel = () => resolveById('art-director');
 
 function sourceFor(def: WorkloadDef, set: string | null): WorkloadSource {
   if (set) return 'pinned';
+  if (envModelFor(def)) return 'env';
   return def.fallbackModelId ? 'code' : 'default';
 }
 
@@ -103,8 +171,11 @@ export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
 
   return SITE_WORKLOADS.map((def, i) => {
     const setModelId = stored[i];
+    // Same order as `resolveImageToolModel`: pin, then the legacy env var, then
+    // the code fallback. Reading them in different orders is how the page ends
+    // up naming a model nothing is running.
     const effectiveModelId =
-      setModelId ?? def.fallbackModelId ?? siteDefault.modelId;
+      setModelId ?? envModelFor(def) ?? def.fallbackModelId ?? siteDefault.modelId;
     return {
       id: def.id,
       scope: def.scope,

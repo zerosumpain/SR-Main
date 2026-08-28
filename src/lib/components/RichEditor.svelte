@@ -1,10 +1,14 @@
 <script lang="ts">
+  import VoicePanel from './VoicePanel.svelte';
+  import type { VoiceCard } from '$lib/voice/types';
   import { onMount, onDestroy } from 'svelte';
   import { Editor } from '@tiptap/core';
   import StarterKit from '@tiptap/starter-kit';
   import Image from '@tiptap/extension-image';
   import Link from '@tiptap/extension-link';
   import Placeholder from '@tiptap/extension-placeholder';
+  import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style';
+  import { Figure, ProjectEmbed } from '$lib/blog/tiptap-extras';
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
   import { SuggestionDecorations, suggestionPluginKey } from '$lib/blog/assistant/suggestion-decorations';
   import type { ProseProposal } from '$lib/blog/assistant/proposal';
@@ -19,6 +23,7 @@
     api = $bindable<RichEditorApi | undefined>(),
     onProposalAccepted,
     onProposalRejected,
+    voiceCard = null,
   }: {
     content?: string;
     onSave?: (html: string) => Promise<void>;
@@ -29,6 +34,8 @@
      *  saw before the accept. Use as the rollback target. */
     onProposalAccepted?: (id: string, finalText: string, htmlBeforeAccept: string) => void;
     onProposalRejected?: (id: string) => void;
+    /** Passed through from the page loader. Null simply hides the Voice panel. */
+    voiceCard?: VoiceCard | null;
   } = $props();
 
   let host: HTMLDivElement | undefined = $state();
@@ -49,9 +56,14 @@
     return `${Math.max(1, Math.ceil(words / 200))} min read`;
   }
 
+  // Recomputed alongside the readability scores, from the same plain text, so
+  // the Voice panel never disagrees with the strip above it about the document.
+  let plainForVoice = $state('');
+
   function recomputeScores() {
     const text = editor?.getText() ?? '';
     scores = readability(text);
+    plainForVoice = text;
   }
 
   function getHTML(): string {
@@ -450,6 +462,11 @@
         Image.configure({ inline: false, allowBase64: false }),
         Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
         Placeholder.configure({ placeholder: 'Write your post… paste images directly into the body.' }),
+        TextStyle,
+        FontFamily,
+        FontSize,
+        Figure,
+        ProjectEmbed,
         SuggestionDecorations,
       ],
       content: content || '',
@@ -556,13 +573,15 @@
   }
   const noop = () => {};
   // Reactive derivations referencing editor must read state through getters.
-  let activeMap = $state({ bold: false, italic: false, strike: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false });
+  let activeMap = $state({ bold: false, italic: false, strike: false, underline: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false, image: false, figure: false, fontFamily: '', fontSize: '' });
   function refreshActive() {
     if (!editor) return;
+    const textStyle = editor.getAttributes('textStyle');
     activeMap = {
       bold: editor.isActive('bold'),
       italic: editor.isActive('italic'),
       strike: editor.isActive('strike'),
+      underline: editor.isActive('underline'),
       h2: editor.isActive('heading', { level: 2 }),
       h3: editor.isActive('heading', { level: 3 }),
       ul: editor.isActive('bulletList'),
@@ -570,7 +589,50 @@
       quote: editor.isActive('blockquote'),
       code: editor.isActive('codeBlock'),
       link: editor.isActive('link'),
+      image: editor.isActive('image'),
+      figure: editor.isActive('figure'),
+      fontFamily: (textStyle.fontFamily as string | undefined) ?? '',
+      fontSize: (textStyle.fontSize as string | undefined) ?? '',
     };
+  }
+
+  function applyFontFamily(v: string) {
+    if (!editor) return;
+    if (v) editor.chain().focus().setFontFamily(v).run();
+    else editor.chain().focus().unsetFontFamily().run();
+    refreshActive();
+  }
+
+  function applyFontSize(v: string) {
+    if (!editor) return;
+    if (v) editor.chain().focus().setFontSize(v).run();
+    else editor.chain().focus().unsetFontSize().run();
+    refreshActive();
+  }
+
+  function toggleCaption() {
+    if (!editor) return;
+    if (activeMap.figure) editor.chain().focus().figureToImage().run();
+    else editor.chain().focus().imageToFigure().run();
+  }
+
+  function embedProject() {
+    if (!editor) return;
+    const input = window.prompt('Project to embed — a /projects/<slug> path or full URL', '/projects/');
+    if (!input) return;
+    let path = input.trim();
+    try {
+      if (/^https?:\/\//i.test(path)) path = new URL(path).pathname;
+    } catch {
+      // keep as typed; the check below rejects anything unusable
+    }
+    if (!/^\/projects\/[a-z0-9][a-z0-9-]*/i.test(path)) {
+      window.alert('Embeds must point at a /projects/<slug> page.');
+      return;
+    }
+    const slug = path.split('/')[2];
+    const title = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    editor.chain().focus().setProjectEmbed({ src: path, title }).run();
   }
   $effect(() => {
     if (!editor) return;
@@ -591,6 +653,7 @@
     <div class="toolbar-left">
       <button class="tool-btn" class:active={activeMap.bold} onclick={() => editor?.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)"><b>B</b></button>
       <button class="tool-btn" class:active={activeMap.italic} onclick={() => editor?.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)"><i>I</i></button>
+      <button class="tool-btn" class:active={activeMap.underline} onclick={() => editor?.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)"><u>U</u></button>
       <button class="tool-btn" class:active={activeMap.strike} onclick={() => editor?.chain().focus().toggleStrike().run()} title="Strikethrough (Ctrl+Shift+X)"><s>S</s></button>
       <span class="tool-divider"></span>
       <button class="tool-btn" class:active={activeMap.h2} onclick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2">H2</button>
@@ -602,7 +665,23 @@
       <button class="tool-btn" class:active={activeMap.code} onclick={() => editor?.chain().focus().toggleCodeBlock().run()} title="Code block">&lt;/&gt;</button>
       <span class="tool-divider"></span>
       <button class="tool-btn" class:active={activeMap.link} onclick={setLink} title="Link (Ctrl+K)">Link</button>
-      <button class="tool-btn" onclick={pickImage} disabled={!uploadImage} title="Upload image">Image</button>
+      <button class="tool-btn" onclick={pickImage} disabled={!uploadImage} title="Upload image (or paste/drop a screenshot straight into the body)">Image</button>
+      <button class="tool-btn" class:active={activeMap.figure} onclick={toggleCaption} disabled={!activeMap.image && !activeMap.figure} title={activeMap.figure ? 'Remove the caption (back to a plain image)' : 'Add a caption to the selected image'}>Caption</button>
+      <button class="tool-btn" onclick={embedProject} title="Embed a /projects page into the post">Embed</button>
+      <span class="tool-divider"></span>
+      <select class="tool-select" title="Font — site fonts only" value={activeMap.fontFamily} onchange={(e) => applyFontFamily(e.currentTarget.value)}>
+        <option value="">Font</option>
+        <option value="var(--font-sans)">Sans</option>
+        <option value="var(--font-mono)">Mono</option>
+        <option value="var(--font-display)">Display</option>
+        <option value="var(--font-brand)">Brand</option>
+      </select>
+      <select class="tool-select" title="Text size" value={activeMap.fontSize} onchange={(e) => applyFontSize(e.currentTarget.value)}>
+        <option value="">Size</option>
+        <option value="0.875em">Small</option>
+        <option value="1.15em">Large</option>
+        <option value="1.35em">XL</option>
+      </select>
     </div>
   </div>
 
@@ -615,6 +694,10 @@
       <span class="r-audience">{scores.audience}</span>
       <span class="r-meta">{scores.sentences} sentences · {(scores.words / Math.max(1, scores.sentences)).toFixed(1)} words/sentence</span>
     </div>
+  {/if}
+
+  {#if voiceCard}
+    <VoicePanel text={plainForVoice} card={voiceCard} />
   {/if}
 
   <div class="status-bar">
@@ -668,6 +751,14 @@
   .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .tool-btn.active { background: var(--accent-tint-14); color: var(--accent); }
   .tool-divider { width: 1px; height: 16px; background: var(--card-border); margin: 0 4px; }
+  .tool-select {
+    height: 28px; padding: 0 4px;
+    border: 1px solid var(--line-strong); border-radius: 4px;
+    background: transparent; color: var(--text-secondary);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    cursor: pointer;
+  }
+  .tool-select:hover { background: var(--accent-tint-08); color: var(--text-primary); }
   .rich-host { min-height: 480px; padding: 16px 22px; overflow-y: auto; }
 
   .rich-host :global(.ProseMirror) { outline: none; min-height: 460px; line-height: 1.7; color: var(--text-secondary); font-size: 1rem; }
@@ -696,9 +787,33 @@
     border-left: 3px solid var(--accent); padding-left: 1.1em; margin: 1.3em 0;
     font-style: italic; color: var(--text-muted);
   }
+  /* Tailwind's preflight strips list markers globally — restore them here. */
   .rich-host :global(ul), .rich-host :global(ol) { padding-left: 1.4em; margin-bottom: 1.1em; }
+  .rich-host :global(ul) { list-style: disc; }
+  .rich-host :global(ul ul) { list-style: circle; }
+  .rich-host :global(ol) { list-style: decimal; }
   .rich-host :global(li) { margin-bottom: 0.4em; }
+  .rich-host :global(li::marker) { color: var(--accent); }
+  .rich-host :global(ol > li::marker) { font-family: var(--font-mono); }
   .rich-host :global(img) { max-width: 100%; margin: 1.2em 0; }
+
+  .rich-host :global(figure) { margin: 1.4em 0; }
+  .rich-host :global(figure img) { margin: 0; border: 1px solid var(--card-border); }
+  .rich-host :global(figcaption) {
+    margin-top: 0.5em; font-family: var(--font-mono); font-size: max(0.8125rem, var(--fs-label-xs));
+    color: var(--text-muted);
+  }
+  .rich-host :global(figure.project-embed) { border: 2px solid var(--line-strong); background: var(--card-bg); }
+  .rich-host :global(figure.project-embed iframe) {
+    display: block; width: 100%; aspect-ratio: 16 / 10; border: 0;
+    /* Inert while editing — clicks select the node instead of the embedded page. */
+    pointer-events: none;
+  }
+  .rich-host :global(figure.project-embed figcaption) {
+    margin: 0; padding: 6px 10px; border-top: 1px solid var(--line-strong);
+    font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .rich-host :global(.ProseMirror-selectednode) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .status-bar {
     display: flex; align-items: center; justify-content: space-between;

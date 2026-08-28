@@ -2,7 +2,7 @@
  * OpenAI-compatible HTTP face over the Codex CLI.
  *
  * Speaks just enough of /v1 for the site's existing `openai` SDK clients (and
- * Hermes' `base_url` setting) to treat the ChatGPT Pro subscription as though
+ * a `base_url` setting) to treat the ChatGPT Pro subscription as though
  * it were another provider:
  *
  *   GET  /health              liveness + whether `codex login` has been done
@@ -19,8 +19,9 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODELS, DEFAULT_CODEX_MODEL_SLUG, toCodexSlug } from '$lib/server/models/codex-catalogue';
-import { runOnce, runStreamed, type CapturedToolCall } from './codex-runner';
+import { runOnce, runStreamed, activeTransport, type CapturedToolCall } from './codex-runner';
 import { toAnnotations, type CapturedSearch } from './web-search';
+import type { ChatMessage } from './messages';
 import {
   registerTools,
   unregisterTools,
@@ -153,9 +154,14 @@ function selfBaseUrl(): string {
 /** Captured MCP dispatches → the OpenAI `tool_calls` shape. Arguments are
  *  stringified because that is what the wire format specifies, and every SDK
  *  consumer JSON.parses them. */
+let callSeq = 0;
 function toOpenAiToolCalls(calls: CapturedToolCall[]) {
-  return calls.map((c, i) => ({
-    id: `call_codex_${i}_${c.name}`.slice(0, 64),
+  return calls.map((c) => ({
+    // Prefer the provider's own id. The synthesised fallback is monotonic
+    // rather than index-based: `call_codex_0_<name>` repeats on every round, and
+    // a conversation replayed with two identically-named calls cannot pair each
+    // `function_call` with its output.
+    id: (c.id || `call_codex_${callSeq++}_${c.name}`).slice(0, 64),
     type: 'function' as const,
     function: {
       name: c.name,
@@ -192,7 +198,7 @@ export function extractUpstreamValidationError(raw: string): string | null {
 }
 
 /** Codex reports usage with its own field names; the OpenAI shape is what every
- *  caller (including $lib/jkai/usage-capture) reads. */
+ *  caller (including $lib/llm/usage-capture) reads. */
 function toOpenAiUsage(usage: {
   input_tokens: number;
   cached_input_tokens: number;
@@ -246,8 +252,13 @@ async function handleChatCompletions(
   // `tool_calls` for the caller to run, per the chat-completions contract.
   const wantsTools =
     Array.isArray(body.tools) && body.tools.length > 0 && body.tool_choice !== 'none';
-  const registration = wantsTools ? registerTools(body.tools as OpenAiTool[]) : null;
+  // The per-request MCP server exists ONLY because the SDK has no `tools`
+  // parameter. The Responses transport takes function schemas natively, so on
+  // that path the whole hop — register, publish, serve, deregister — is skipped.
+  const useMcpTools = wantsTools && activeTransport() === 'sdk';
+  const registration = useMcpTools ? registerTools(body.tools as OpenAiTool[]) : null;
   const toolServerUrl = registration ? `${selfBaseUrl()}${registration.path}` : undefined;
+  const structured = { messages: messages as ChatMessage[], tools: wantsTools ? body.tools : undefined };
   let prompt = messagesToPrompt(messages);
   const outputSchema = extractOutputSchema(body.response_format);
   if (!outputSchema && wantsBareJson(body.response_format)) {
@@ -310,6 +321,7 @@ async function handleChatCompletions(
           signal: controller.signal,
           toolServerUrl,
           webSearch: opts.webSearch,
+          ...structured,
         })) {
           if (chunk.done) {
             const calls = chunk.toolCalls?.length ? toOpenAiToolCalls(chunk.toolCalls) : null;
@@ -350,6 +362,7 @@ async function handleChatCompletions(
         signal: controller.signal,
         toolServerUrl,
         webSearch: opts.webSearch,
+        ...structured,
       }),
     );
     const calls = result.toolCalls?.length ? toOpenAiToolCalls(result.toolCalls) : null;
@@ -419,6 +432,7 @@ export function createBridgeServer() {
           authMode: login.mode,
           codexVersion: version,
           models: CODEX_MODELS.length,
+          transport: activeTransport(),
           active,
           queued: queue.length,
         });

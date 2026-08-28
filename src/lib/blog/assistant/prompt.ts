@@ -1,6 +1,8 @@
 import type { PostSnapshot } from './tools';
 import { segmentBody, renderForPrompt } from './segment';
 import type { ChatMessage } from './messages';
+import { voiceBlock } from '$lib/voice/block';
+import { parseResolution, preferencePairs } from './resolution';
 
 const MAX_BODY_CHARS = 60_000;
 
@@ -19,9 +21,14 @@ export function buildSystemPrompt(post: PostSnapshot, history: ChatMessage[] = [
 
   const autoMode = ctx.autoReview === true;
 
+  // The voice used to be three retyped adjectives here. One of them was wrong:
+  // "short sentences are fine" survived for months against a corpus whose median
+  // sentence is 19 words. It comes from the Voice Card now.
+  const voice = voiceBlock('public-prose', { exemplars: 2 });
+
   return `You are an editorial assistant for the strangeramblings.com blog. You ONLY ever propose changes — the user reviews and accepts each one in their margin. You never apply changes silently.
 
-Voice: warm, slightly brutalist, British English (-ise, not -ize). Short sentences are fine. Avoid corporate-speak. Match the author's existing tone — see the style cues below.
+${voice}
 
 How prose changes work — READ CAREFULLY:
 - The post body is presented to you as one indexed sentence per line:
@@ -31,7 +38,7 @@ How prose changes work — READ CAREFULLY:
 - The server resolves the indices to the exact sentence boundaries — you NEVER pick character offsets, NEVER pick a "find string". You just pick which sentence to change, and provide the full replacement.
 - Always rewrite a complete sentence, not a fragment. If a single sentence is too long and needs splitting, propose a multi-sentence \`newText\` (the server treats it as one rewrite). The replacement may contain multiple sentences if the original had run-on prose.
 - \`newText\` is plain prose. NO HTML tags, no markdown, no <s>, <em>, <p>, etc. Just the visible text a reader would see.
-- Match the author's voice exactly. Don't sand off the brutalism, the British spellings, or the dry humour.
+- Match the author's voice exactly, as described above. Do not tidy his grammar, shorten his sentences, or sand off the looseness — those are the voice, not defects in it.
 - Always include a one-sentence \`reason\` so the user understands why.
 
 ${autoMode
@@ -63,32 +70,59 @@ ${body}
 }
 
 /**
- * Distil the user's recent accept/reject history into a few lines the LLM
- * can use to converge on their taste over time.
+ * Distil the author's own accept/reject decisions into cues the model can
+ * actually learn from.
+ *
+ * This function existed for months and never once produced a real cue: nothing
+ * wrote `proposal_resolved` rows except the meta-field path, rejections were
+ * discarded entirely, and prod held 37 proposals against 0 resolutions. Both
+ * halves are fixed now (PR #370 records them, #371 mounted the UI that fires),
+ * so the cues below are finally reachable.
+ *
+ * The ordering is deliberate. A rejection says more than an acceptance —
+ * tolerating a suggestion is not the same as wanting it — and an acceptance the
+ * author rewrote first says most of all, because it is a direct before/after in
+ * his own hand. Those go first and in full; the tally is a footnote.
  */
 function buildStyleCues(history: ChatMessage[]): string {
-  // Pull the most-recent resolved proposals.
   const resolutions = history
     .filter((h) => h.role === 'proposal_resolved')
-    .slice(-12)
-    .map((h) => {
-      try {
-        const parsed = JSON.parse(h.content) as { id: string; status: 'accepted' | 'rejected' };
-        return parsed;
-      } catch {
-        return null;
-      }
-    })
-    .filter((x): x is { id: string; status: 'accepted' | 'rejected' } => !!x);
+    .slice(-20)
+    .map((h) => parseResolution(h.content))
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (resolutions.length === 0) {
-    return 'Style cues: (no prior decisions yet — observe the existing post body and infer voice.)';
+    return 'Style cues: no decisions on this post yet — take the voice from the body and the examples above.';
+  }
+
+  const lines: string[] = ['Style cues — what this author did with your last suggestions:'];
+
+  // Edited acceptances first: the model proposed X, he shipped Y.
+  for (const r of preferencePairs(resolutions).slice(-6)) {
+    if (r.edited && r.suggested && r.final) {
+      lines.push(
+        `- You proposed ${JSON.stringify(clip(r.suggested))}; he changed it to ${JSON.stringify(clip(r.final))} before accepting. That gap is the correction — apply it.`,
+      );
+    } else if (r.status === 'rejected' && r.suggested) {
+      lines.push(
+        `- He REJECTED ${JSON.stringify(clip(r.suggested))}${r.original ? `, keeping ${JSON.stringify(clip(r.original))}` : ''}. Do not propose that kind of change again.`,
+      );
+    }
   }
 
   const accepted = resolutions.filter((r) => r.status === 'accepted').length;
-  const rejected = resolutions.filter((r) => r.status === 'rejected').length;
-  // We don't have the proposal bodies here without an extra join; we surface
-  // counts only for now. The runner can be extended later to attach the
-  // resolved proposals' originals/suggestions for richer cues.
-  return `Style cues: in this post the author has accepted ${accepted} suggestion(s) and rejected ${rejected}. If your acceptance rate has been low, you're likely overshooting — propose smaller, more conservative changes that stay in the author's voice.`;
+  const rejected = resolutions.length - accepted;
+  lines.push(
+    `- Running tally on this post: ${accepted} accepted, ${rejected} rejected.` +
+      (rejected > accepted
+        ? ' You are overshooting — propose fewer, smaller changes.'
+        : ''),
+  );
+
+  return lines.join('\n');
+}
+
+/** Keep a cue readable. The signal is in the shape of the change, not its tail. */
+function clip(s: string, max = 160): string {
+  return s.length > max ? `${s.slice(0, max)}…` : s;
 }

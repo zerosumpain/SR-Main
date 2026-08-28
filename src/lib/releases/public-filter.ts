@@ -23,6 +23,7 @@
  * Pure by design so it can be unit-tested without a database — the caller
  * supplies the project-visibility map (see $lib/projects/visibility).
  */
+import { defaultsPublic } from '$lib/projects/visibility';
 
 import type { ReleaseItemKind } from './types';
 
@@ -94,7 +95,7 @@ const INFRA_RE =
  *
  * Naming a variable is not leaking its value, but it does tell a reader exactly
  * which levers exist and what to go looking for (`CURATE_WORKSPACE_DIR`,
- * `PUBLIC_SITE_URL`, `JKAI_HERMES_CANVAS_CHAT`). Needs two segments so ordinary
+ * `PUBLIC_SITE_URL`, `SERVICE_BRIDGE_SECRET`). Needs two segments so ordinary
  * shouty prose and acronyms ("SSR", "API", "UK") do not match.
  */
 const ENV_VAR_RE = /\b[A-Z][A-Z0-9]{1,}(_[A-Z0-9]+)+\b/;
@@ -134,7 +135,7 @@ const API_PATH_RE = /\/api\//i;
  */
 const PII_RE = new RegExp(
   [
-    // +44 7359 228511, +447359228511, (0)7359-228511 …
+    // +44 7700 900123, +447700900123, (0)7700-900123 …
     '\\+\\d[\\d\\s()-]{7,}\\d',
     // UK mobile/landline in national form
     '\\b0?7\\d{3}[\\s-]?\\d{6}\\b',
@@ -189,7 +190,11 @@ export function isSurfacePublic(surface: string, visibility: Record<string, bool
     // compound-interest-calculator). An exact miss must not read as "public" —
     // fail CLOSED here and require a positive match, the opposite of
     // isProjectPublic's site-wide default.
-    if (visibility[key] === false) return false;
+    //
+    // With no row at all, defer to the key's own default: a hand-built page is
+    // public, an AI build's slug is not. Naming a build the site 404s would
+    // advertise a page nobody can open.
+    if (!(visibility[key] ?? defaultsPublic(key))) return false;
     return !Object.keys(visibility).some(
       (k) => visibility[k] === false && (k.startsWith(key) || key.startsWith(k)),
     );
@@ -251,7 +256,7 @@ function isPrivateSurface(surface: string, visibility: Record<string, boolean>):
   if (PRIVATE_SURFACE_RE.test(s) || INFRA_RE.test(s) || ENV_VAR_RE.test(s)) return true;
   const key = projectKeyOf(s);
   if (key === null) return false;
-  if (visibility[key] === false) return true;
+  if (!(visibility[key] ?? defaultsPublic(key))) return true;
   return Object.keys(visibility).some(
     (k) => visibility[k] === false && (k.startsWith(key) || key.startsWith(k)),
   );

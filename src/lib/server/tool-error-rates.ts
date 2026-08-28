@@ -2,7 +2,7 @@
 //
 // Per-tool error rates for /admin/ops/tool-usage, read from `jkai_tool_traces`.
 //
-// WHY A SECOND SOURCE. The rest of that page is built on the Hermes SQLite
+// WHY A SECOND SOURCE. The rest of that page was once built on a SQLite
 // session store, which cannot answer this question: tool results are stored
 // tag-wrapped in `messages.content`, so there is no field to test for failure —
 // which is why error rates were deliberately left off the page when it was built

@@ -98,23 +98,25 @@
 </script>
 
 <svelte:head>
-  <title>The cost of being able · The Engine Room</title>
+  <title>Tools · The Engine Room</title>
   <meta name="description" content="Every tool a model can call is described to it on every turn. What that costs, and the dispatcher that stops it." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="The cost of being able"
+    title="Tools"
     line="Every tool a model may call is described to it in full, on every single turn, before you have typed a word. Capability is billed as prompt whether you use it or not."
-    lineEli5="The AI is told about every button it could press, every time you message it. That list is not free, and it is long." />
+    lineEli5="The AI is told about every button it could press, on every message you send — and it is charged for the telling. This page is about keeping that list short without losing any of the buttons." />
 
   <Instrument
     kicker="The switch"
     title="Send all 155, or send 21"
     tone={TONE}
     reading="The fill is to scale against the full catalogue. Flip it."
-    takeaway="Identical capabilities either way. One of them charges you for all 155 on every message you send, up to and including “hi”.">
+    readingEli5="The fill is drawn to scale against the full catalogue. Flip the switch."
+    takeaway="Identical capabilities either way. One of them charges you for all 155 on every message you send, up to and including “hi”."
+    takeawayEli5="Both settings can do exactly the same things. One of them bills you for all 155 descriptions on every message you send, up to and including “hi”.">
     <ManifestBudget />
   </Instrument>
 
@@ -123,7 +125,9 @@
     title="Where a median prompt goes"
     tone={TONE}
     reading="Both bars share one scale. Percentages are of that prompt."
-    takeaway="Sent in full, the tool list goes from {servedSharePct}% of the prompt to {fullSharePct}%.">
+    readingEli5="Both bars share one scale. Press a block to see what it is."
+    takeaway="Sent in full, the tool list goes from {servedSharePct}% of the prompt to {fullSharePct}%."
+    takeawayEli5="Sent in full, the tool list swells from {servedSharePct}% of a message's cost to {fullSharePct}%. Trimming it pays for itself on every single message.">
     <div class="rows">
       {#each ROWS as r (r.id)}
         <div class="row" style="--w:{(r.total / FULL_PROMPT) * 100}%">
@@ -145,7 +149,9 @@
     title="What each tier costs"
     tone={TONE}
     reading="Length is the count. The note is the cost per turn."
-    takeaway="The longest bar is the free one, which is not how any of this normally works. Nothing has been deleted — it is all still there, just not shouted about up front.">
+    readingEli5="Bar length is how many tools; the note is what they cost on every message."
+    takeaway="The longest bar is the free one, which is not how any of this normally works. Nothing has been deleted — it is all still there, just not shouted about up front."
+    takeawayEli5="The longest bar is the free one: most tools cost nothing until asked for. Nothing has been deleted — it is all still there, just not announced up front on every message.">
     <Bars items={TIER_BARS} tone={TONE} grouped={false} height={24} />
     <p class="gap"><b>{MANIFEST.invokeShare}% of dispatcher calls</b> go straight to invoke; browsing is rare.</p>
   </Instrument>
@@ -154,7 +160,8 @@
     kicker="Lessons"
     title="Five things that only ever show up in production"
     tone={TONE}
-    reading="Pick one.">
+    reading="Pick one."
+    readingEli5="Pick a lesson.">
     <div class="tags">
       {#each LESSONS as l (l.title)}
         <button class="tag" class:on={lesson === l.title} aria-pressed={lesson === l.title}

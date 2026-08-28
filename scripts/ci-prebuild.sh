@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Stage a finished build as a release directory on the VPS.
+# Verify a finished build and stamp its provenance, on the machine that built it.
+#
+# Placing it on the VPS is ci-stage-release.sh's job. The split exists because
+# the extraction check below imports the BUILT server chunks, which import from
+# node_modules — and since the build moved to porkserv the release job has none.
+# Running it there failed with "Cannot find package 'marked'".
 #
 # Runs in the `prebuild` job, which deliberately does NOT depend on the gate:
 # building is ~160s of work nobody is waiting on, and it can happen while the
@@ -10,12 +15,18 @@
 # Expects: cwd = repo root, `npm ci` and `npm run build` already done.
 set -euo pipefail
 
-VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
 SHA="$(git rev-parse HEAD)"
-RELEASE_DIR="$VPS_DIR/releases/$SHA"
 
 [ -d build ] || { echo "no build/ directory — did the build step run?" >&2; exit 1; }
 [ -f build/handler.js ] || { echo "build/handler.js missing — the adapter did not package a server bundle. Is SR_GATE_STUB_ADAPTER set? It must never be set here." >&2; exit 1; }
+
+# Some faults exist only after bundling and are invisible to every unit test —
+# pdf.js losing its worker file took every PDF in production down for four days
+# while the gate stayed green. This runs the BUILT extractor over a real PDF.
+# Here rather than in the gate because the gate stubs out adapter-node, so it has
+# no server bundle to check; failing here means `release` never runs.
+echo "==> Checking document extraction in the built bundle..."
+node scripts/check-built-extract.mjs
 
 echo "==> Stamping deploy provenance into build/.deploy-sha..."
 {
@@ -28,15 +39,4 @@ echo "==> Stamping deploy provenance into build/.deploy-sha..."
 } > build/.deploy-sha
 cat build/.deploy-sha
 
-# Copy to .partial and rename. A release directory either exists complete or
-# does not exist — a half-copied one must never be mistaken for shippable, and
-# ci-release.sh's only precondition is that the directory is there.
-echo "==> Staging release $SHA..."
-mkdir -p "$VPS_DIR/releases"
-rm -rf "$RELEASE_DIR.partial"
-rsync -a build/ "$RELEASE_DIR.partial/"
-rm -rf "$RELEASE_DIR"
-mv -T "$RELEASE_DIR.partial" "$RELEASE_DIR"
-
-echo "==> Staged $(du -sh "$RELEASE_DIR" | cut -f1) at $RELEASE_DIR"
-echo "==> Not live yet — ci-release.sh flips the symlink once the gate is green."
+echo "==> Build verified and stamped. ci-stage-release.sh places it on the VPS."

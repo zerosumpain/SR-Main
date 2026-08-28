@@ -5,7 +5,7 @@
   import SectorVoices from '../components/SectorVoices.svelte';
   import VoiceThemeExplorer from '../components/VoiceThemeExplorer.svelte';
   import Reveal from '../components/Reveal.svelte';
-  import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND, VOICE_GROUP_META } from '../lib/sectorVoices';
+  import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND, VOICE_GROUP_META } from '$lib/dfe-data-strategy/sectorVoices';
 
   const BG_LABEL: Record<string, string> = {
     schoolsweek: 'Schools Week',

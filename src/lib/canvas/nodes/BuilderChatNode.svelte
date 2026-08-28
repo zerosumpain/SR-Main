@@ -16,6 +16,7 @@
    * persisted on this node's config.
    */
   import { onDestroy, untrack } from 'svelte';
+  import { publishedLink } from '$lib/builds/published-link';
 
   type ChatConfig = {
     prompt?: string;
@@ -349,7 +350,8 @@
   const statusLabel = $derived(snapshot?.status ?? (buildId ? '…' : 'no build'));
   const previewLink = $derived.by(() => {
     if (!snapshot) return null;
-    if (snapshot.publishedSlug) return `/projects/${snapshot.publishedSlug}/`;
+    const published = publishedLink(snapshot.publishedSlug);
+    if (published) return published.href;
     if (snapshot.serveConfig) return `/api/jkai/proxy/${snapshot.id}/`;
     return null;
   });

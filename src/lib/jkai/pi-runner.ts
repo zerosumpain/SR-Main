@@ -39,9 +39,13 @@ export const BASE_PI_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', '
 export function buildToolAllowlist(bridgedToolNames?: readonly string[]): string {
   const seen = new Set<string>(BASE_PI_TOOLS);
   for (const name of bridgedToolNames ?? []) {
-    // Commas would split one name into two bogus entries; whitespace would
-    // never match a registered tool. Skip rather than mangle.
-    if (typeof name === 'string' && name && !/[\s,]/.test(name)) seen.add(name);
+    // Allow-list the charset rather than deny-listing separators. These names
+    // are not all internal: `custom_tools` rows are registered into the same
+    // registry with LLM-supplied names and no character validation at the
+    // insert, and this value goes into a shell command line. A comma would
+    // split one name into two bogus entries and whitespace would never match
+    // a registered tool, but a quote or a semicolon is a different problem.
+    if (typeof name === 'string' && /^[A-Za-z0-9_.-]+$/.test(name)) seen.add(name);
   }
   return [...seen].join(',');
 }
@@ -243,7 +247,7 @@ export interface PiInvocation {
  * CLI's own instructions on every single call. For chat that is a rounding
  * error; for an agent making hundreds of tool calls per iteration it is the
  * difference between slow and unusable. Pi talks the Codex Responses API
- * directly — the same route Hermes uses for chat, with real function tools.
+ * directly — the same route chat uses, with real function tools.
  *
  * That route authenticates from pi's OWN ChatGPT OAuth in
  * `~/.pi/agent/auth.json` (`pi`, then `/login`), which is a separate login
@@ -439,7 +443,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
-    '--tools', buildToolAllowlist(opts.bridgedToolNames),
+    // Quoted like every other interpolated value here; it was the only one
+    // that was not, and its contents are partly LLM-authored.
+    '--tools', sh(buildToolAllowlist(opts.bridgedToolNames)),
   ];
   if (opts.extensions && opts.extensions.length > 0) {
     for (const e of opts.extensions) {

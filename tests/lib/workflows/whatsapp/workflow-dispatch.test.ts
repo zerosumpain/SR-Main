@@ -14,10 +14,10 @@ vi.mock('$lib/db/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({ eq: vi.fn() }));
 
-// OWNER_PHONE is read at module load for the owner-digit comparison. Stub it so
+// The owner's number drives the owner-digit comparison. Stub it so
 // the real approval-notify import chain (db, run-notifications, tokens) stays
 // out of this unit test.
-vi.mock('$lib/workflows/whatsapp/approval-notify', () => ({ OWNER_PHONE: '+447359228511' }));
+vi.mock('$lib/workflows/whatsapp/approval-notify', () => ({ getOwnerPhone: () => '+447359228511' }));
 
 const mockEngineExecute = vi.fn().mockResolvedValue({ status: 'completed', output: {}, error: null });
 vi.mock('$lib/workflows', () => ({ engine: { execute: (...a: unknown[]) => mockEngineExecute(...a) } }));

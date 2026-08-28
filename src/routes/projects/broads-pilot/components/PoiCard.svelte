@@ -6,7 +6,7 @@
   import { app } from '../lib/appState.svelte';
   import { getRating, type Rating } from '../lib/ratings';
   import { fmtDist, fmtTime } from '../lib/format';
-  import type { Poi, PoiKind } from '../lib/types';
+  import type { Poi, PoiKind } from '$lib/broads-pilot/types';
 
   const KIND_LABEL: Record<PoiKind, string> = {
     pub: 'Pub',

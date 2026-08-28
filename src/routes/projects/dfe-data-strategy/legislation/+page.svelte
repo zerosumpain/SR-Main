@@ -4,7 +4,7 @@
   import NextStep from '../components/NextStep.svelte';
   import IntelInline from '../components/IntelInline.svelte';
   import LegalRegistry from '../components/LegalRegistry.svelte';
-  import { LEGISLATION } from '../lib/legislation';
+  import { LEGISLATION } from '$lib/dfe-data-strategy/legislation';
 </script>
 
 <svelte:head><title>Legal foundations & gateways — Keystone</title></svelte:head>

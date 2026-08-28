@@ -12,7 +12,7 @@ import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiAttachments } from '$lib/db/schema';
 import { saveBuffer } from '$lib/jkai/media/storage';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { checkTtsQuota } from '$lib/jkai/media/rate-limits';
 import { isLocalTtsAvailable, synthesizeLocally } from '$lib/jkai/media/tts-local';
 import type { JkaiAttachment } from '$lib/db/schema';

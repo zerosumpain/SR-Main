@@ -22,6 +22,7 @@
   import ClusterPicker from '$lib/components/intel/ClusterPicker.svelte';
   import type { ClusterRoster } from '$lib/components/intel/cluster-types';
   import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
+  import RecencySlicer from '$lib/components/intel/RecencySlicer.svelte';
   import RailSection from '$lib/components/intel/RailSection.svelte';
   import GmailSweepPanel from '$lib/components/intel/GmailSweepPanel.svelte';
   import SweepHistoryPanel from '$lib/components/intel/SweepHistoryPanel.svelte';
@@ -31,12 +32,8 @@
   import { SURFACES } from '$lib/components/intel/workbench';
   import { entityHover } from '$lib/components/intel/entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
-  import type {
-    InsightData,
-    NetworkPayload,
-    UnlikelyRelation,
-    PredictedLink,
-  } from '$lib/components/intel/types';
+  import type { InsightData, UnlikelyRelation, PredictedLink } from '$lib/components/intel/types';
+import type { NetworkPayload } from '$lib/codegraph/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
@@ -78,6 +75,14 @@
   let activeSources = $state<string[]>([]);
   /** Entity ids the view is pinned to. Empty = the whole graph. */
   let pinnedIds = $state<string[]>([]);
+
+  // The recency window. Both null = no window, which is the opening state and
+  // the whole graph. `clock` is meaningful only while a window is set, but it
+  // is kept across clearing so toggling All → 7d does not silently reset which
+  // timestamp the last window was measured on.
+  let since = $state<number | null>(null);
+  let until = $state<number | null>(null);
+  let clock = $state<'added' | 'updated'>('updated');
   let entityPick = $state('');
 
   // Plain handle, never $state — a timer read and cleared by the same helper is
@@ -330,6 +335,9 @@
     }
   }
 
+  /** True while a recency window is narrowing the view. */
+  const windowActive = $derived(since !== null || until !== null);
+
   const query = $derived.by(() => {
     const p = new URLSearchParams();
     if (typeId) p.set('typeId', typeId);
@@ -346,6 +354,11 @@
     if (activeCategories.length) p.set('categories', activeCategories.join(','));
     if (activeSources.length) p.set('sources', activeSources.join(','));
     if (pinnedIds.length) p.set('entities', pinnedIds.join(','));
+    if (since !== null) p.set('since', String(since));
+    if (until !== null) p.set('until', String(until));
+    // Only sent when it can change the answer, so the URL stays readable and an
+    // unfiltered request is byte-identical to what it was before this existed.
+    if (since !== null || until !== null) p.set('clock', clock);
     return p.toString();
   });
 
@@ -744,7 +757,28 @@
   /** What the graphs light up: the live search when there is one, else the
    *  server's keyword hits. Two sources, one prop — never both at once, or a
    *  stale keyword would keep glowing under a new search. */
-  const highlightIds = $derived(liveSearch.trim() ? liveMatches : (network?.matched ?? []));
+  /** Node ids the recency window admitted on their own clock. */
+  const recentNodeIds = $derived(
+    (network?.nodes ?? []).filter((n) => n.recent).map((n) => n.id),
+  );
+
+  /**
+   * What the graph draws solid, everything else being context.
+   *
+   * One channel, three sources, in priority order: a live in-canvas search, the
+   * server's keyword hits, then — when a recency window is on and no keyword is
+   * — the nodes the window itself admitted. Reusing `matchedIds` rather than
+   * adding a second highlight prop is deliberate: the semantics are identical
+   * ("these are the hits, the rest came along for context"), and two competing
+   * highlight channels into the same renderer is how a node ends up solid for
+   * one reason and faint for another in the same frame.
+   */
+  const highlightIds = $derived(
+    liveSearch.trim()
+      ? liveMatches
+      : (network?.matched?.length ? network.matched : recentNodeIds),
+  );
+
 
   const reachByKey = $derived(
     new Map((network?.communities ?? []).map((c) => [c.key ?? `#${c.id}`, c.reach ?? c.size])),
@@ -862,6 +896,15 @@
       <span class="n">{duplicates?.total ?? '—'}</span>
       <span class="l">Duplicates</span>
     </a>
+    <!-- Stage 00, and the only tile that is about what has NOT reached the graph
+         yet. It sits with the others rather than in the loop below because the
+         loop is six stages in a 3-column grid and a seventh cell would leave a
+         row of one — and because the gate happens BEFORE capture, not inside
+         it. `warnAbove` matches the surface definition in workbench.ts. -->
+    <a class="tile" class:warn={(data.intelCounts?.heldMail ?? 0) > 200} href="/jkai/intel/mail">
+      <span class="n">{data.intelCounts?.heldMail ?? '—'}</span>
+      <span class="l">Held mail</span>
+    </a>
     <a class="tile" href="/jkai/intel/review">
       <span class="n">{data.stats.pendingReviewCount}</span>
       <span class="l">To review</span>
@@ -927,6 +970,25 @@
             shown solid; the rest is the surrounding neighbourhood.
           </p>
         {/if}
+      </RailSection>
+
+      <RailSection title="Recency" badge={windowActive ? (network?.stats.recentNodes ?? 0) : null}>
+        <!-- Sits above Sources because it is the filter most often reached for
+             first: "what happened since yesterday" is a narrower and more
+             useful opening question than "which channel said it". -->
+        <RecencySlicer
+          activity={network?.activity ?? null}
+          {clock}
+          {since}
+          {until}
+          recentNodes={network?.stats.recentNodes ?? 0}
+          recentEdges={network?.stats.recentEdges ?? 0}
+          onChange={(next) => {
+            since = next.since;
+            until = next.until;
+            clock = next.clock;
+          }}
+        />
       </RailSection>
 
       <RailSection title="Sources" badge={sourceFilterCount || null}>

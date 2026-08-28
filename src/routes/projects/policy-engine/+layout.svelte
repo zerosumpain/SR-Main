@@ -3,7 +3,7 @@
   import { page } from '$app/stores';
   import { replaceState } from '$app/navigation';
   import { app } from './lib/appState.svelte';
-  import { policyLevers } from './lib/levers';
+  import { policyLevers } from '$lib/policy-engine/levers';
   import { encodeLevers, decodeLevers, tokenFromHash, loadSaved, persistSaved } from './lib/scenarios';
   import { REGION_OPTIONS } from './lib/regions';
   import { SOURCES } from './lib/sources';

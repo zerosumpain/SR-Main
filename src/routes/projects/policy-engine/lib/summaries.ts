@@ -2,7 +2,7 @@
 // what the metric does in the current scenario (to the selected horizon) and the
 // research-grounded cause of its variability. Self-contained.
 
-import type { YearResult } from './types';
+import type { YearResult } from '$lib/policy-engine/types';
 import { OUTCOMES_BY_ID } from './outcomes';
 
 // Why each outcome moves — the dominant levers / mechanism behind its variability.

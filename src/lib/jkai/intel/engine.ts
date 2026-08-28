@@ -169,15 +169,95 @@ export async function runIntelSweep(
         const sweep = await ingestGmailThreads({ mode: 'rolling' });
         return {
           threads: sweep.threads,
+          // Under the gate this is the number that means something: threads
+          // captured and waiting at /jkai/intel/mail. `extracted` is 0 by design
+          // on a gated night, and a stage line of nothing but zeros reads as a
+          // broken sweep rather than a working one.
+          held: sweep.held,
           extracted: sweep.extracted,
           entities: sweep.entities,
           links: sweep.edges,
           deferred: sweep.deferred,
           failed: sweep.failed,
+          // The three the run log used to leave out, and the omission is how a
+          // 54%-wasted budget looked like a healthy "ok" every night for weeks.
+          //
+          // `extracted` alone cannot tell you whether a low number means a
+          // quiet mailbox or a budget being burned on threads that can never
+          // succeed. `budgetLeft > 0` says the sweep ran out of work;
+          // `budgetLeft === 0` with a low `extracted` says it ran out of budget
+          // and the difference went somewhere — which is the question.
+          unchanged: sweep.unchanged,
+          skipped: sweep.skipped,
+          budgetLeft: sweep.budgetLeft,
         };
       }, batch),
     );
   }
+
+  // The owner's approved rules, immediately after the sweep that captured the
+  // mail they act on. A rule that ran before the sweep would be a night behind
+  // for ever, always deciding about yesterday's post.
+  //
+  // Unconditional: with no active rule this is a single datastore read that
+  // returns `ran: false`, which is the normal state until the owner approves
+  // one. Reporting it as a stage anyway means "no rules are on" is visible in
+  // the run log rather than being indistinguishable from "the stage is broken".
+  stages.push(
+    await runStage('mail-rules', async () => {
+      const { applyMailRules } = await import('./mail-rules/apply');
+      const applied = await applyMailRules();
+      return {
+        activeRules: applied.activeRules,
+        scanned: applied.scanned,
+        admitted: applied.admitted,
+        rejected: applied.rejected,
+        deferred: applied.deferred,
+        failed: applied.failed,
+      };
+    }, batch),
+  );
+
+  // Catch up on embeddings that an outage left behind.
+  //
+  // Embeddings are the ONE thing that cannot fall back to Codex — the bridge has
+  // no such endpoint and there is nothing upstream to call, so while the
+  // OpenRouter key is out of credit every vector write on the site fails. That
+  // is survivable (extraction falls back, admission still works, entities still
+  // land) but it is only survivable because of this stage: without something
+  // that goes back for the misses, an outage leaves a permanently half-embedded
+  // corpus and the gap is invisible until a search quietly returns nothing.
+  //
+  // Both backfills stop early when the provider is still refusing, so a night
+  // during an outage costs one call rather than several hundred.
+  stages.push(
+    await runStage('embeddings', async () => {
+      const [{ backfillPendingEmbeddings }, { backfillMailIndex }, { backfillEntityEmbeddings }] =
+        await Promise.all([
+          import('./mail-queue'),
+          import('$lib/mail-index/store'),
+          import('./embed'),
+        ]);
+      const notes = await backfillPendingEmbeddings();
+      const passages = await backfillMailIndex();
+      // Entities too. #515 wired the two mail backfills and left this one out,
+      // which showed up immediately: 135 entities carried no vector after the
+      // outage, and an unembedded entity cannot be matched against — so the next
+      // extraction forks a duplicate rather than binding to it (see extract.ts,
+      // which filters candidates on `embedding IS NOT NULL`).
+      const entities = await backfillEntityEmbeddings();
+      return {
+        notesEmbedded: notes.embedded,
+        notesRemaining: notes.remaining,
+        threadsIndexed: passages.indexed,
+        entitiesEmbedded: entities.embedded,
+        entitiesRemaining: entities.remaining,
+        // Reported as a number because the run log stores numbers. 1 means the
+        // provider was still refusing, which is why the other figures are low.
+        providerRefused: notes.stopped || passages.stopped ? 1 : 0,
+      };
+    }, batch),
+  );
 
   // Resolution BEFORE scoring, and after mail: the night's new entities are
   // exactly the ones most likely to duplicate something, and confidence,

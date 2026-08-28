@@ -14,14 +14,16 @@
   let askOpen = $state(false);
   let topH = $state(0);
 
+  // Key is versioned: v1 auto-saved the old 'research' default for everyone who ever
+  // visited, so honouring it would silently keep the old default for returning readers.
   onMount(() => {
     try {
-      const n = localStorage.getItem('er-narrative');
+      const n = localStorage.getItem('er-narrative-2');
       if (n === 'research' || n === 'eli5') app.narrative = n;
     } catch { /* ignore */ }
     app.mounted = true;
   });
-  $effect(() => { if (app.mounted) { try { localStorage.setItem('er-narrative', app.narrative); } catch { /* ignore */ } } });
+  $effect(() => { if (app.mounted) { try { localStorage.setItem('er-narrative-2', app.narrative); } catch { /* ignore */ } } });
 </script>
 
 <svelte:head>
@@ -55,7 +57,7 @@
     <p class="foot-disc">The Engine Room · <code>/projects/engine-room</code> · a walkthrough of the architecture behind this site.
       <b>Deliberately incomplete:</b> credentials, keys, personal data, addresses and anything else that would be unsafe to publish are
       omitted by design. What is here is the <i>how</i> and the <i>why</i> — the mechanisms, the trade-offs, and the reasoning that put each one where it is.
-      Every figure was counted from the source on 5 August 2026. Companion studies:
+      Every figure was counted from the source — most on 5 August 2026, the newest pages on 17 August 2026. Companion studies:
       <a href="/projects/data-spine">The Data Spine</a> · <a href="/projects/policy-engine">The Policy Engine</a> · <a href="/projects/dfe-data-strategy">Keystone</a>.
       Built with Claude Code.</p>
   </footer>

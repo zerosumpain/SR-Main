@@ -13,7 +13,7 @@
 import { db } from '$lib/db';
 import { researchSessions, facts, sources, jkaiBuilds } from '$lib/db/schema';
 import { eq, and, ne, inArray } from 'drizzle-orm';
-import { getLLMClient } from './llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { emitLog } from './log-emitter';
 import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';

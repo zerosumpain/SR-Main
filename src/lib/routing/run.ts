@@ -2,6 +2,7 @@
 // assignments + run → WhatsApp confirm. Mirrors briefing/run.ts (single-flight
 // guard, best-effort notify, never throws into the caller). Kill switch honoured.
 import { randomUUID } from 'crypto';
+import { ownerPhone } from '$lib/config/owner';
 import { refreshOpenRouterCatalogue } from '$lib/server/models/openrouter-catalogue';
 import { selectModels } from './select';
 import {
@@ -13,7 +14,6 @@ import {
   persistRun,
 } from './events';
 import {
-  OWNER_PHONE,
   PROFILES,
   PROFILE_LABEL,
   errMsg,
@@ -39,7 +39,7 @@ function buildWhatsapp(a: RoutingAssignments): string {
 async function notify(a: RoutingAssignments): Promise<boolean> {
   try {
     const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    await executeTool('whatsapp_send', { to: OWNER_PHONE, message: buildWhatsapp(a) });
+    await executeTool('whatsapp_send', { to: ownerPhone() ?? '', message: buildWhatsapp(a) });
     return true;
   } catch (err) {
     console.error('[routing] whatsapp notify failed:', errMsg(err));

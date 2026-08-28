@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getLLMClient } from './llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { listWorkspaceFiles } from './sandbox';
 import { emitLog, emitLive } from './log-emitter';

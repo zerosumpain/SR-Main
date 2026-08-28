@@ -5,10 +5,10 @@
 // Everything else the engine does (build a tool, repair a tool, register an
 // API) adds capability. This measures the cost of USING it, and is the only
 // metric a nightly run is graded against. The measurement itself lives in
-// $lib/server/hermes-sessions (`getCallEfficiency`) because the turn data is in
-// homeserv's Hermes SQLite; this module owns the engine-side concerns —
-// snapshotting, persistence for the ledger, and deciding whether a live policy
-// change earned its place or must be rolled back.
+// `./call-efficiency` (`getCallEfficiency`), reading this app's own
+// `jkai_tool_traces`; this module owns the engine-side concerns — snapshotting,
+// persistence for the ledger, and deciding whether a live policy change earned
+// its place or must be rolled back.
 //
 // The headline number is the CHAT segment. Agentic turns (browser, terminal,
 // delegation) are measured and reported but never optimised against: their step
@@ -16,7 +16,7 @@
 // thorough work (owner decision, 2026-07-29).
 
 import { upsertRecord } from '$lib/datastore';
-import type { CallEfficiency } from '$lib/server/hermes-sessions';
+import { getCallEfficiency, type CallEfficiency } from './call-efficiency';
 import {
   getActivePolicy,
   revertPolicyTo,
@@ -28,12 +28,11 @@ import { COLLECTIONS, SYSTEM_ACTOR, TRIAL, asData, errMsg, type RunAction } from
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Read the metric. Returns null (never throws) when Hermes is unreachable —
- *  a missing measurement must skip the phase, not fail the run. */
+/** Read the metric. Returns null (never throws) when the query fails — a
+ *  missing measurement must skip the phase, not fail the run. */
 export async function measureEfficiency(days: number = TRIAL.windowDays): Promise<CallEfficiency | null> {
   try {
-    const { rCallEfficiency } = await import('$lib/server/hermes-remote');
-    return await rCallEfficiency(days);
+    return await getCallEfficiency(days);
   } catch (err) {
     console.error('[selfimprove] call-efficiency measurement failed:', errMsg(err));
     return null;
@@ -85,6 +84,21 @@ export type TrialDecision =
   | { kind: 'kept'; version: number; before: number; after: number }
   | { kind: 'reverted'; version: number; revertedTo: number; before: number; after: number };
 
+/**
+ * Did the measurement source receive anything after `startedAt`?
+ *
+ * Exported for the test: this predicate is the whole staleness guard, and the
+ * failure it prevents is silent by nature. Unparseable or missing timestamps
+ * answer false — a source that cannot prove it is fresh is treated as stale.
+ */
+export function isFresherThan(newestTurnAt: string | null | undefined, startedAt: string): boolean {
+  if (!newestTurnAt) return false;
+  const newest = Date.parse(newestTurnAt);
+  const started = Date.parse(startedAt);
+  if (Number.isNaN(newest) || Number.isNaN(started)) return false;
+  return newest > started;
+}
+
 /** Is this trial old enough / big enough to judge? */
 export function trialIsDecidable(
   turnsObserved: number,
@@ -126,6 +140,30 @@ export async function assessActiveTrial(): Promise<{ decision: TrialDecision; ac
 
   const since = await measureEfficiency(windowDays);
   if (!since) {
+    return { decision: { kind: 'none' }, actions };
+  }
+
+  // Refuse to grade a trial against evidence older than the trial.
+  //
+  // `windowDays` is ceil(ageDays), so the window always opens at or before the
+  // trial started — which is correct while data is still arriving, and lethal
+  // once it stops. The old session store froze on 2026-08-24; every query over
+  // it still returned rows, so v16 was on course to be KEPT on 9 turns dated
+  // the day BEFORE its trial opened, with a verdict reading "-29% over 9
+  // turns". A plausible verdict is worse than an absurd one — nobody checks it.
+  //
+  // Guarding on `turnsObserved === 0` would not have caught this: there were
+  // turns, they were simply the wrong ones. Freshness of the SOURCE is the
+  // thing to assert. Null means the store is empty or too old to report it;
+  // both are stale.
+  if (!isFresherThan(since.newestTurnAt, policy.trial.startedAt)) {
+    actions.push({
+      kind: 'measurement_stale',
+      detail:
+        `Trial on v${policy.version} not assessed: measurement source last received data ` +
+        `${since.newestTurnAt ?? 'never'}, which is not after the trial started ` +
+        `${policy.trial.startedAt}. Grading would use turns older than the change.`,
+    });
     return { decision: { kind: 'none' }, actions };
   }
 

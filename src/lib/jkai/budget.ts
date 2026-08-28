@@ -32,6 +32,30 @@ function cooldown(oldestInWindow: number | undefined, reason: string) {
   };
 }
 
+/**
+ * The floor every build gets unless its creator says otherwise.
+ *
+ * This existed twice, copy-pasted, in the manual API and forge — and not at
+ * all on the chat build tool, which passed `budgetConfig: {}`. Because every
+ * check here is guarded on truthiness, an absent key is not a default, it is
+ * "no cap": the no-progress brake only arms when `maxIdleIterations` is set,
+ * so the two highest-volume entry points had no brake at all. Build 42244cc0
+ * ran to eleven iterations having finished its work at two.
+ *
+ * Spread this UNDER the caller's own config so an explicit value still wins.
+ */
+export const DEFAULT_BUILD_BUDGET = {
+  maxIterations: 25,
+  maxTotalMinutes: 120,
+  // Total tokens, not output tokens — one ordinary iteration costs ~1M of
+  // them, so 1M here stalled a build after its first. See change-request.ts.
+  maxTokensPerHour: 3_000_000,
+  activeMinutesPerHour: 45,
+  // Three iterations in a row that change nothing is a verification loop,
+  // not work.
+  maxIdleIterations: 3,
+} as const satisfies BudgetConfig;
+
 export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> {
   const config = build.budgetConfig as BudgetConfig;
 

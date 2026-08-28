@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sha256Hex } from './hash';
 import { fileToText, isIndexableMime } from './content';
+import { looksLikeRefusal, looksDegenerate } from './describe';
 
 describe('sha256Hex', () => {
   it('is deterministic and content-sensitive', () => {
@@ -68,5 +69,51 @@ describe('fileToText outcomes', () => {
   it('treats an unindexable kind as empty rather than failing', async () => {
     const out = await fileToText(Buffer.from('PK'), 'application/zip', 'archive.zip');
     expect(out.status).toBe('empty');
+  });
+});
+
+describe('looksLikeRefusal', () => {
+  // A refused OCR must never be stored as the document's text: it would be
+  // embedded, returned by @files, and fed to the intel graph as the contents of
+  // a file it never read. Observed on gpt-4o-mini roughly one run in three.
+  it('catches the refusals a vision model actually returns', () => {
+    expect(looksLikeRefusal("I'm unable to provide the transcript of this document.")).toBe(true);
+    expect(looksLikeRefusal("I'm sorry, but I can't help with that.")).toBe(true);
+    expect(looksLikeRefusal('Sorry — I cannot transcribe copyrighted material.')).toBe(true);
+    expect(looksLikeRefusal('Unfortunately I am not able to read this image.')).toBe(true);
+  });
+
+  it('does not fire on a real transcript', () => {
+    expect(looksLikeRefusal('Annual Statement\nAccount summary\nOpening balance 01/01/2026')).toBe(false);
+    // A letter written in the first person is still a transcript.
+    expect(looksLikeRefusal('Dear Mr Kelly,\n\nI am writing to confirm your annual statement.')).toBe(false);
+  });
+
+  it('never fires on a long body, however it opens', () => {
+    // Length is the backstop: a genuine transcript that happens to contain an
+    // apology must survive, so the guard only applies to short answers.
+    const long = "I'm sorry to hear that. " + 'x'.repeat(1200);
+    expect(looksLikeRefusal(long)).toBe(false);
+  });
+});
+
+describe('looksDegenerate', () => {
+  // The other way a transcript comes back useless: not a refusal, but noise.
+  // grok-4.5 answered a PDF with leaked tool scaffolding, and it declares `file`
+  // input in the catalogue, so nothing upstream would have stopped it.
+  it('catches repeated tool-scaffolding noise', () => {
+    expect(looksDegenerate('```pdf_browse```pdf_browse```pdf_browse')).toBe(true);
+    expect(looksDegenerate('...'.repeat(40))).toBe(true);
+  });
+
+  it('leaves a real transcript alone', () => {
+    expect(
+      looksDegenerate('Annual Statement\nAccount summary\nOpening balance 01/01/2026 £1,234.56\nClosing balance 31/12/2026 £987.65'),
+    ).toBe(false);
+    expect(looksDegenerate('Hello world from page one.\n\nThis is page two.')).toBe(false);
+  });
+
+  it('ignores long bodies entirely', () => {
+    expect(looksDegenerate('ab '.repeat(900))).toBe(false);
   });
 });

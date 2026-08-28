@@ -130,7 +130,7 @@
           value={toValue}
           oninput={(e) => setTo((e.currentTarget as HTMLTextAreaElement).value)}
         ></textarea>
-        <span class="wa-hint">Templates: <code>{`{{input.field}}`}</code>. Resolved value must be E.164 (e.g. <code>+447359228511</code>).</span>
+        <span class="wa-hint">Templates: <code>{`{{input.field}}`}</code>. Resolved value must be E.164 (e.g. <code>+447700900123</code>).</span>
       </label>
     {/if}
   </section>
@@ -218,7 +218,7 @@
         value={mediaPathValue}
         oninput={(e) => set('mediaPath', (e.currentTarget as HTMLTextAreaElement).value)}
       ></textarea>
-      <span class="wa-hint">Local file to send. Requires the Hermes bridge.</span>
+      <span class="wa-hint">Local file to send. Requires the WhatsApp worker.</span>
     </label>
     <label class="wa-field">
       <span class="wa-label">Media URL</span>

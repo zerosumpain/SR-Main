@@ -17,9 +17,17 @@ const PUBLIC_PATHS = [
   '/api/jkai/proxy',
   '/api/jkai/cors',
   '/api/live-walk',
-  // A high-entropy per-file capability validates inside its handler; the drive
-  // itself remains owner-gated.
-  '/api/route-exports',
+  // The daydream trail's push ingest — a Home Assistant automation posts GPS
+  // changes here with a shared secret (DAYDREAM_INGEST_SECRET), exactly as
+  // /api/live-walk works. Listed as the EXACT path, never as '/api/daydream':
+  // the match here is a prefix, and the thoughts and feedback endpoints that
+  // live under that tree are owner-only.
+  '/api/daydream/observe',
+  // One hashed 256-bit capability per shared drive file, resolved in
+  // $lib/file-shares; the drive itself stays owner-gated. Expired, revoked and
+  // unknown tokens all 404 alike. This is a PREFIX — check-public-routes.mjs
+  // is what stops a new sibling route becoming anonymous unnoticed.
+  '/api/file-shares',
   // Read-only public serving of blog post images — referenced by <img src> on the
   // public /blog pages, so it must be reachable by anonymous readers. The UPLOAD
   // endpoint (/api/admin/blog/upload-image) stays owner-gated; this serves only
@@ -73,16 +81,10 @@ const PUBLIC_PATHS = [
   '/api/scraper/run',
   '/api/scraper/interactive',
   '/api/scraper/node',
-  // VPS→homeserv proxy for the Hermes admin pages (session inspector, telemetry,
-  // cron). Auth is enforced per-handler via a mandatory HERMES_BRIDGE_SECRET
-  // Bearer (assertHermesServiceRequest) — not Google OAuth, because the caller
-  // is the VPS reaching homeserv over Tailscale. Dropping the cookie gate here
-  // does NOT make the data public; the bearer is the real gate.
-  '/api/admin/hermes',
   // Same shape, opposite direction: the security panel reads the PEER host's
   // sshd/fail2ban posture, and each host can only read its own. The cookie gate
   // is dropped so the bearer can be the gate — and the handler still refuses
-  // anything without either a valid HERMES_BRIDGE_SECRET or an owner session,
+  // anything without either a valid SERVICE_BRIDGE_SECRET or an owner session,
   // so this does not make posture public. The one mutating action (unban) is
   // owner-session ONLY and rejects the bearer outright.
   '/api/admin/security',

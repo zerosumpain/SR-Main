@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
+import { serviceBridgeSecret } from '$lib/config/service-secret';
 import { isOwnerEmail } from '$lib/server/access';
 import { localPosture, unbanIp } from '$lib/server/security-posture';
 
@@ -8,7 +9,7 @@ import { localPosture, unbanIp } from '$lib/server/security-posture';
  * Security posture for THIS host, plus the one mutating action the panel has.
  *
  * GET is readable by a signed-in owner, or by the peer host presenting
- * HERMES_BRIDGE_SECRET — the security page shows homeserv and the VPS side by
+ * the shared service secret — the security page shows homeserv and the VPS side by
  * side, and each host can only read its own sshd/fail2ban state.
  *
  * POST (unban) is owner-session ONLY, never the bridge secret. Reading posture
@@ -28,10 +29,10 @@ async function requireOwner(locals: App.Locals): Promise<Response | null> {
 }
 
 function hasBridgeSecret(request: Request): boolean {
-  // `$env/dynamic/private`, not process.env — the .env file is loaded by
+  // Read through the accessor, not process.env — the .env file is loaded by
   // SvelteKit, so a raw process.env read is empty in dev and the peer card
   // silently never authenticates.
-  const expected = env.HERMES_BRIDGE_SECRET;
+  const expected = serviceBridgeSecret();
   if (!expected) return false;
   const got = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   // Length check first so a mismatched length can't be distinguished by timing

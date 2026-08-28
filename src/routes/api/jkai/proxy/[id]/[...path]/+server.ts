@@ -12,7 +12,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 // window don't all fan out to startProjectServer (which is expensive).
 const reviving = new Set<string>();
 
-// Static MIME map for register_hermes_build's typical outputs (HTML/CSS/JS +
+// Static MIME map for register_chat_build's typical outputs (HTML/CSS/JS +
 // a few images/fonts). Anything not listed falls back to octet-stream — the
 // browser handles it fine for download but won't render. Expand on demand.
 const STATIC_MIME: Record<string, string> = {
@@ -39,7 +39,7 @@ const STATIC_MIME: Record<string, string> = {
 
 /** Serve a kind:'static' build directly from /home/jkai/workspace/<id>/live/.
  *
- * register_hermes_build writes files into this directory at registration time
+ * register_chat_build writes files into this directory at registration time
  * (no dev server, no proxy needed). Without this branch the request bounces
  * through proxyToSandbox(0,…) → fake 502 → fake "Waking preview" page →
  * infinite refresh, because there's no startCommand to revive.
@@ -167,11 +167,11 @@ const handler: RequestHandler = async ({ params, request }) => {
   // Base href ensures all relative URLs in the proxied app resolve through the proxy
   const baseHref = `/api/jkai/proxy/${params.id}/`;
 
-  // Static-kind builds (e.g. register_hermes_build output: a single index.html
+  // Static-kind builds (e.g. register_chat_build output: a single index.html
   // app, no dev server) have port=0 / startCommand=null. The proxy path below
   // would 502 and bounce into the "Waking preview" infinite refresh loop.
   // Serve the files directly from the live/ workspace instead — that's the
-  // version register_hermes_build wrote and the same version publishBuild
+  // version register_chat_build wrote and the same version publishBuild
   // would copy to /projects/<slug>/. When HOST_MODE=1 (VPS prod), workspace
   // files live on the host fs and are readable by this node process.
   if (config.kind === 'static') {

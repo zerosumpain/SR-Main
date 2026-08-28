@@ -1,28 +1,17 @@
 // Prompt workbench model — one place that answers "which prompt actually runs
 // where, and what is in it right now".
 //
-// Two independent stacks feed jkai, and until this existed the UI showed only
-// the second while claiming to be the first:
-//
-//   chat    → Hermes runtime on homeserv (~/.hermes-jkai/*.md). Shapes every
-//             /jkai reply, WhatsApp reply, and delegated agent turn whenever
-//             JKAI_HERMES_CANVAS_CHAT=1 (it is, on both hosts).
-//   builder → this repo's data/prompts/*.md, compiled into prompt_cache and
-//             prepended to the canvas workflow generator's system prompt
-//             (generateWorkflow / modifyWorkflow) and the dormant in-process
-//             general-chat fallback.
+// One stack now: this repo's `data/prompts/*.md`, compiled into `prompt_cache`.
+// It shapes every /jkai and WhatsApp reply as well as canvas workflow
+// generation. There used to be a second — an external runtime's own `.md` files
+// on homeserv — and the page's whole reason for existing was that the UI showed
+// one while claiming to be the other. With that runtime gone there is nothing left to
+// confuse it with.
 import { getPromptFiles, savePromptFile, syncPrompts, compilePromptFiles } from '$lib/workflows/prompts/loader';
-import {
-  listHermesPrompts,
-  saveHermesPrompt,
-  hermesPromptsReachable,
-  isHermesPromptFile,
-  type PromptFileEntry,
-} from './hermes-store';
+import type { PromptFileEntry } from '$lib/workflows/prompts/loader';
 import { ensureCollection, queryRecords, upsertRecord } from '$lib/datastore';
-import { env } from '$env/dynamic/private';
 
-export type StackId = 'chat' | 'builder';
+export type StackId = 'builder';
 
 export interface PromptStack {
   id: StackId;
@@ -56,56 +45,18 @@ export function stackTokens(files: PromptFileEntry[]): number {
   return files.reduce((n, f) => n + approxTokens(f.content), 0);
 }
 
-function chatIsLive(): boolean {
-  // $env/dynamic/private, not process.env — the flag lives in .env and only the
-  // dynamic module sees it in dev.
-  return env.JKAI_HERMES_CANVAS_CHAT === '1';
-}
-
-/** Both stacks with their current contents. Never throws — a stack that can't be read reports `error`. */
+/** Every stack with its current contents. Never throws — a stack that can't be read reports `error`. */
 export async function loadStacks(): Promise<PromptStack[]> {
-  const hermesLive = chatIsLive();
-
-  let hermesFiles: PromptFileEntry[] = [];
-  let hermesError: string | undefined;
-  try {
-    hermesFiles = hermesPromptsReachable()
-      ? await listHermesPrompts()
-      : [];
-    if (!hermesPromptsReachable()) {
-      hermesError = 'Hermes runs on homeserv and this host has no route to it (set HOMESERV_SITE_URL).';
-    }
-  } catch (err) {
-    hermesError = err instanceof Error ? err.message : 'could not read the Hermes prompt stack';
-  }
-
-  const builderFiles = getPromptFiles();
-
   return [
-    {
-      id: 'chat',
-      label: 'Chat personality',
-      runtime: 'Hermes runtime (homeserv)',
-      surfaces: ['/jkai chat', 'WhatsApp', 'delegated agents', '/jkai/builds'],
-      live: hermesLive,
-      editable: !hermesError,
-      note: hermesLive
-        ? 'Live. Every /jkai reply is composed from these files. Hermes also appends its skills and tool schemas at runtime, which are not shown here.'
-        : 'Not currently live — JKAI_HERMES_CANVAS_CHAT is off on this host, so chat falls back to the in-process loop below.',
-      files: hermesFiles,
-      error: hermesError,
-    },
     {
       id: 'builder',
       label: 'Canvas builder',
       runtime: 'In-process orchestrator (this app)',
-      surfaces: ['/jkai/canvas workflow generation', 'workflow modification', 'general-chat fallback'],
+      surfaces: ['/jkai chat', 'WhatsApp', 'delegated agents', '/jkai/canvas workflow generation', 'workflow modification'],
       live: true,
       editable: true,
-      note: hermesLive
-        ? 'Live for canvas workflow generation only. These files are prepended to the workflow generator system prompt — they do NOT shape /jkai chat replies while Hermes is on.'
-        : 'Live for canvas workflow generation and, with Hermes off, for chat replies too.',
-      files: builderFiles,
+      note: 'Live, and this is the stack that answers chat. #437 merged the chat soul in here, so these files shape every /jkai and WhatsApp reply as well as canvas generation.',
+      files: getPromptFiles(),
     },
   ];
 }
@@ -114,27 +65,13 @@ export async function loadStacks(): Promise<PromptStack[]> {
  * The assembled prompt for a stack — what the files add up to before the
  * runtime appends its own scaffolding.
  */
-export async function resolveStack(id: StackId): Promise<{ text: string; approxTokens: number; caveat: string }> {
-  if (id === 'builder') {
-    const { compiled } = compilePromptFiles();
-    return {
-      text: compiled,
-      approxTokens: approxTokens(compiled),
-      caveat:
-        'Files joined with "---" separators, then prepended to the workflow-generator system prompt (tool schemas, node catalogue and workspace grounding are added after this).',
-    };
-  }
-
-  const files = await listHermesPrompts();
-  const text = files
-    .filter((f) => f.content.trim())
-    .map((f) => `# ── ${f.name} ──\n\n${f.content.trim()}`)
-    .join('\n\n');
+export async function resolveStack(_id: StackId): Promise<{ text: string; approxTokens: number; caveat: string }> {
+  const { compiled } = compilePromptFiles();
   return {
-    text,
-    approxTokens: approxTokens(text),
+    text: compiled,
+    approxTokens: approxTokens(compiled),
     caveat:
-      'The parts Hermes composes from. Hermes adds the active skill, tool schemas and conversation memory on top at request time, so the live prompt is larger than this.',
+      'Files joined with "---" separators, then prepended to the workflow-generator system prompt (tool schemas, node catalogue and workspace grounding are added after this).',
   };
 }
 
@@ -168,22 +105,19 @@ export async function savePrompt(stack: StackId, file: string, content: string):
   const stacks = await loadStacks();
   const target = stacks.find((s) => s.id === stack);
   if (!target) throw new Error(`unknown stack: ${stack}`);
-  if (!target.editable) throw new Error(target.error ?? `${stack} prompts are not editable from this host`);
+  if (!target.editable) {
+    throw new Error(target.error ?? `${stack} prompts are not editable from this host`);
+  }
 
   const previous = target.files.find((f) => f.name === file);
   if (!previous) throw new Error(`unknown prompt file: ${file}`);
 
   await snapshot({ stack, file, content: previous.content, savedAt: new Date().toISOString(), approxTokens: approxTokens(previous.content) });
 
-  if (stack === 'chat') {
-    if (!isHermesPromptFile(file)) throw new Error(`unknown prompt file: ${file}`);
-    await saveHermesPrompt(file, content);
-  } else {
-    savePromptFile(file, content);
-    // The orchestrator reads the compiled prompt from prompt_cache, not from
-    // disk — without this re-sync the edit would not take effect.
-    await syncPrompts();
-  }
+  savePromptFile(file, content);
+  // The orchestrator reads the compiled prompt from prompt_cache, not from
+  // disk — without this re-sync the edit would not take effect.
+  await syncPrompts();
 }
 
 async function snapshot(v: PromptVersion): Promise<void> {

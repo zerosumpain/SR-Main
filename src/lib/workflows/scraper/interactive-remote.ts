@@ -62,6 +62,8 @@ export async function startRemoteInteractiveSession(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ profile, url }),
+    // Session start/stop return immediately; bound them so a dark host cannot hang.
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -87,5 +89,7 @@ export async function stopRemoteInteractiveSession(sessionId: string): Promise<v
   await fetch(`${baseUrl}/api/scraper/interactive/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
     headers: authHeaders(),
+    // Session start/stop return immediately; bound them so a dark host cannot hang.
+    signal: AbortSignal.timeout(30_000),
   }).catch(() => { /* idempotent */ });
 }

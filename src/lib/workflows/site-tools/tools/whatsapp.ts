@@ -7,7 +7,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      to: { type: 'string', description: 'Phone number with country code (e.g. "+447359228511")' },
+      to: { type: 'string', description: 'Phone number with country code (e.g. "+447700900123")' },
       message: { type: 'string', description: 'Message text to send' },
     },
     required: ['to', 'message'],

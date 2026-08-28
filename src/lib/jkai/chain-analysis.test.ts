@@ -76,7 +76,7 @@ describe('ladders are a different shape from repeats', () => {
 });
 
 describe('the 2026-08-15 calendar turn', () => {
-  // Replayed from the Hermes session store, session 20260815_075854_5d8bd7c2:
+  // Replayed from a recorded session, 20260815_075854_5d8bd7c2:
   // "check my family apple calendar, what dates are in for 'date day' with
   // katie and john" — ten calls, and it answered nothing.
   const cal = '/calendars/family-calendar/';

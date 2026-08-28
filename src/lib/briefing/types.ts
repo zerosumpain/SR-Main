@@ -20,7 +20,6 @@ export const CRON_TZ = 'Europe/London';
 export const BRIEFING_WORKFLOW_NAME = 'canvas:morning-briefing';
 
 export const SYSTEM_ACTOR = 'system';
-export const OWNER_PHONE = '+447359228511';
 
 // `workflow:*` is required because the briefing is written by the
 // canvas:morning-briefing workflow, whose datastore actor is `workflow:<id>`.

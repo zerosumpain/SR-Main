@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { readBuffer } from '$lib/file-store/storage';
+import { downloadHeaders } from '$lib/file-serving';
 import { basename } from 'node:path';
 
 export const GET: RequestHandler = async ({ params, url }) => {
@@ -19,18 +20,17 @@ export const GET: RequestHandler = async ({ params, url }) => {
     throw err;
   }
 
-  const inline = url.searchParams.get('inline') === '1';
-  const safeName = basename(row.name).replace(/"/g, '');
-  const dispo = `${inline ? 'inline' : 'attachment'}; filename="${safeName}"`;
-
-  // Buffer -> Uint8Array for Response body
+  // `inline` is a REQUEST, not a decision: downloadHeaders downgrades it to an
+  // attachment unless the stored type is one that cannot carry script. The
+  // stored type is the uploader's `file.type` (see api/files/upload), so it is
+  // not trustworthy input.
   const body = new Uint8Array(buf);
   return new Response(body, {
-    headers: {
-      'content-type': row.mimeType || 'application/octet-stream',
-      'content-length': String(buf.byteLength),
-      'content-disposition': dispo,
-      'cache-control': 'private, no-store',
-    },
+    headers: downloadHeaders({
+      mimeType: row.mimeType,
+      sizeBytes: buf.byteLength,
+      filename: basename(row.name),
+      inline: url.searchParams.get('inline') === '1',
+    }),
   });
 };

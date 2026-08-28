@@ -14,7 +14,7 @@ type VersionReview = {
   latestVersion: string | null; releaseUrl: string | null; releaseDate: string | null; benefits: string[];
   implications: { restart: string; migration: string; breakingChanges: string }; recommendation: 'upgrade now' | 'review first' | 'defer' | 'unavailable'; reason: string; confidence: 'high' | 'medium' | 'low'; unavailable?: string;
 };
-const SCOPES = ['all', 'home_assistant', 'production_app', 'homeserv', 'pi_runner', 'hermes'] as const;
+const SCOPES = ['all', 'home_assistant', 'production_app', 'homeserv', 'pi_runner'] as const;
 const RELEASES: Record<string, { capability: string; url: string }> = {
   home_assistant_core: { capability: 'Home Assistant Core', url: 'https://api.github.com/repos/home-assistant/core/releases/latest' },
   home_assistant_os: { capability: 'Home Assistant OS', url: 'https://api.github.com/repos/home-assistant/operating-system/releases/latest' },
@@ -88,7 +88,7 @@ export const infrastructureStatusExecutor: NodeExecutor = {
     const collectors: Collector[] = []; const versionReviews: VersionReview[] = [];
     if (scope === 'all' || scope === 'home_assistant') { const homeAssistant = await collectHomeAssistant(); collectors.push(homeAssistant.collector); versionReviews.push(...homeAssistant.reviews); }
     if (scope === 'all' || scope === 'production_app') { collectors.push(...await collectProduction()); versionReviews.push(unavailableReview('strangeramblings production application', 'No bounded version collector configured')); }
-    for (const absent of ['homeserv', 'pi_runner', 'hermes'] as const) if (scope === 'all' || scope === absent) { collectors.push(unavailable(absent, `${absent} server integration`, 'No bounded server-side collector is configured.')); versionReviews.push(unavailableReview(absent === 'pi_runner' ? 'Pi runner(s)' : absent === 'homeserv' ? 'homeserv operating system and core service runtime' : 'Hermes runtime', `${absent} server integration`)); }
+    for (const absent of ['homeserv', 'pi_runner'] as const) if (scope === 'all' || scope === absent) { collectors.push(unavailable(absent, `${absent} server integration`, 'No bounded server-side collector is configured.')); versionReviews.push(unavailableReview(absent === 'pi_runner' ? 'Pi runner(s)' : 'homeserv operating system and core service runtime', `${absent} server integration`)); }
     const findings = findingsFromCollectors(collectors);
     const report = { auditedAt: new Date().toISOString(), readOnly: true, scope, collectors, findings, versionReviews, updateCandidates: versionReviews.filter((entry) => entry.recommendation === 'review first') };
     if (!context.dryRun && context.workflowId) { const limit = Math.max(1, Math.min(52, Number(config.historyLimit) || 12)); await appendAtomic(context.workflowId, 'infrastructure-audit-history', [report], limit); }

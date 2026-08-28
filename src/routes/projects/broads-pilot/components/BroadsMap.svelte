@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { app } from '../lib/appState.svelte';
-  import { bridgeVerdict, edgeVerdict } from '../lib/passability';
+  import { bridgeVerdict, edgeVerdict } from '$lib/broads-pilot/passability';
   import { styleRoute, bandColor, speedDash, PASSED_COLOR } from '../lib/route-style';
-  import type { Verdict, LatLng } from '../lib/types';
+  import type { Verdict, LatLng } from '$lib/broads-pilot/types';
 
   // Home view: the Richardsons hire base at Stalham — the default start and the
   // point the locked map pins to. Matches the `staithe-stalham` origin node.

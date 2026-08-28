@@ -3,9 +3,11 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
-import { getModelCapabilities } from '$lib/server/models/capabilities';
+import { getChatInputCapabilities, modelSupportsThinking } from '$lib/server/models/capabilities';
+import { setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
+import { isThinkingLevel } from '$lib/models/thinking';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const [conv] = await db
@@ -58,7 +60,10 @@ export const GET: RequestHandler = async ({ params }) => {
 	// still carry provider 'zai' + a bare GLM id — coerce to an OpenRouter
 	// context so old conversations render (and price) as openrouter.
 	const pinnedModel = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
-	const modelCaps = getModelCapabilities(pinnedModel);
+	// What the CHAT can accept, not what the model can: images, PDFs and audio
+	// are pre-analysed into text for a model that cannot read them natively, so
+	// the composer must not grey them out.
+	const modelCaps = getChatInputCapabilities(pinnedModel);
 
 	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;
 	const [activeBuild] = await db
@@ -113,6 +118,11 @@ export const GET: RequestHandler = async ({ params }) => {
 		messages: messagesWithAttachments,
 		modelCapabilities: modelCaps,
 		modelContextLength: catalogue?.contextLength ?? null,
+		// Whether the composer shows a thinking-level chip at all. Read off the
+		// same catalogue row as the context window rather than a hand-kept list,
+		// so it tracks the nightly refresh; false for a model the catalogue has
+		// never heard of, which is the honest answer.
+		modelSupportsThinking: await modelSupportsThinking(pinnedModel),
 		activeBuild: activeBuild ?? null,
 	});
 };
@@ -132,8 +142,39 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	// Rename / pin / share — allowed at any time (unlike the model change,
 	// these are not locked after the first message).
-	if ('title' in body || 'pinned' in body || 'shareVisibility' in body) {
-		const set: Partial<{ title: string | null; pinned: boolean; shareVisibility: string; shareToken: string }> = {};
+	if (
+		'title' in body ||
+		'pinned' in body ||
+		'shareVisibility' in body ||
+		'intelEnabled' in body ||
+		'thinkingLevel' in body
+	) {
+		const set: Partial<{
+			title: string | null;
+			pinned: boolean;
+			shareVisibility: string;
+			shareToken: string;
+			intelEnabled: boolean;
+			thinkingLevel: string | null;
+		}> = {};
+		if ('intelEnabled' in body) set.intelEnabled = !!body.intelEnabled;
+		// Thinking level is deliberately NOT locked with the model: it does not
+		// touch price_snapshot, and the turn that came back thin is the moment
+		// you want to turn it up. Anything that is not a known level reads as
+		// "back to the provider default" rather than 400ing — the picker's
+		// "auto" option sends exactly that.
+		if ('thinkingLevel' in body) {
+			const level = isThinkingLevel(body.thinkingLevel) ? body.thinkingLevel : null;
+			set.thinkingLevel = level;
+			// Last pick wins for the next NEW thread. Best-effort: failing to
+			// remember a preference must not fail the change the user just made.
+			await setDefaultThinkingLevel(level).catch((err) =>
+				console.warn(
+					'[conversations] could not persist default thinking level:',
+					err instanceof Error ? err.message : err,
+				),
+			);
+		}
 		if ('title' in body) {
 			const t = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
 			set.title = t.length > 0 ? t : null;
@@ -171,12 +212,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	const { modelProvider, modelId } = body;
 
-	// Codex is a valid provider for a conversation. Chat turns run on Hermes,
-	// which reaches Codex through its own native openai-codex profile (the
-	// Responses API, where tool-calling works) rather than through our
-	// jkai-codex-bridge — so the bridge's inability to take caller-supplied
-	// tool schemas does not constrain chat. This validator predated the second
-	// provider and rejected every Codex pick with a 400 the UI swallowed
+	// Codex is a valid provider for a conversation. This validator predated the
+	// second provider and rejected every Codex pick with a 400 the UI swallowed
 	// silently, which looked like "the picker doesn't work".
 	if (modelProvider !== 'openrouter' && modelProvider !== 'codex') {
 		throw error(400, 'modelProvider must be openrouter or codex');
@@ -208,5 +245,11 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		.where(eq(conversations.id, params.id))
 		.returning();
 
-	return json(updated);
+	// The new model may not take a reasoning instruction at all, so the answer
+	// travels back with the switch — otherwise the composer would keep offering
+	// a thinking chip for the model it just stopped using, until a reload.
+	return json({
+		...updated,
+		modelSupportsThinking: await modelSupportsThinking({ provider: modelProvider, modelId }),
+	});
 };

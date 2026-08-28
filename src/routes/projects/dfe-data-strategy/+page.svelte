@@ -1,9 +1,9 @@
 <script lang="ts">
   import { app } from './lib/appState.svelte';
-  import { PRESSURES } from './lib/pressures';
+  import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
   import { COMMITMENTS, DOCUMENTS, MUST_ANSWER } from './lib/commitments';
-  import { STRATEGIES } from './lib/strategies';
-  import { SECTOR_VOICES } from './lib/sectorVoices';
+  import { STRATEGIES } from '$lib/dfe-data-strategy/strategies';
+  import { SECTOR_VOICES } from '$lib/dfe-data-strategy/sectorVoices';
   import { SECTION_TEMPLATES } from './lib/author/templates';
   import type { PageData } from './$types';
 

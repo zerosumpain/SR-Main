@@ -9,6 +9,7 @@
 import { db } from '$lib/db';
 import { whoopCycles, stravaActivities } from '$lib/db/schema';
 import { and, gte, lte, desc } from 'drizzle-orm';
+import { realStrain } from './whoop';
 import type { TrainingLoadResponse } from './types';
 
 // ==========================================
@@ -121,7 +122,7 @@ export async function getTrainingLoad(): Promise<TrainingLoadResponse> {
 	// Whoop cycles: use strain directly
 	for (const cycle of cycles) {
 		const dateKey = cycle.startDateLocal.slice(0, 10); // YYYY-MM-DD
-		const strain = cycle.strain;
+		const strain = realStrain(cycle.strain);
 		// Accumulate in case of multiple cycles per day
 		loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + strain);
 	}

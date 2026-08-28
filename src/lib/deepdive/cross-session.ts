@@ -8,7 +8,7 @@ import {
 import { eq, and, sql, ne } from 'drizzle-orm';
 import { generateEmbedding } from './ai';
 import { toVectorLiteral } from './vector';
-import { loadKeys } from './keys';
+import { loadKeys } from '$lib/llm/keys';
 import { emitLog } from './worker';
 
 function normalise(text: string): string {

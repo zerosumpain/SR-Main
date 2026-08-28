@@ -3,7 +3,7 @@
 // When a tool mutates a workflow (adds a node, an edge, changes config) and the
 // canvas page is open, we want the canvas to re-fetch and animate the change.
 // The canvas already does this on its own actions via invalidateAll(); for
-// external mutations driven by Hermes / a site-tool / a scheduled job, this
+// external mutations driven by chat / a site-tool / a scheduled job, this
 // bus broadcasts the event and the canvas's SSE consumer triggers an
 // invalidate.
 //

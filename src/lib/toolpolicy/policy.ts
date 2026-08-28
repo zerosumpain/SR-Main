@@ -51,7 +51,7 @@ export const TOOL_POLICY_PERMISSIONS: PermissionSet = {
 };
 
 /** How long a resolved policy is reused before re-reading the datastore.
- *  `tools/list` runs on every Hermes turn, so this must not be a DB hit each
+ *  `tools/list` runs on every client connect, so this must not be a DB hit each
  *  time; 60s is short enough that a revert takes effect within a turn or two,
  *  and `invalidateToolPolicyCache()` makes it immediate in-process. */
 const CACHE_TTL_MS = 60_000;

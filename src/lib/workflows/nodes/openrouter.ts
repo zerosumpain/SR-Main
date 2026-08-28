@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { interpolateTemplateStrict } from './template';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
 import { resolveMaxTokens } from './llm-helpers';

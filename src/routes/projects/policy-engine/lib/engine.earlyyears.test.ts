@@ -3,9 +3,9 @@
 // PARITY-SAFE (2025 reproduces the baseline exactly) and respond to the right levers.
 
 import { describe, it, expect } from 'vitest';
-import { runSim } from './engine';
-import { baselineLevers, LEVERS_BY_ID } from './levers';
-import { BASELINE } from './params';
+import { runSim } from '$lib/policy-engine/engine';
+import { baselineLevers, LEVERS_BY_ID } from '$lib/policy-engine/levers';
+import { BASELINE } from '$lib/policy-engine/params';
 
 const at = (years: ReturnType<typeof runSim>['years'], y: number) => years.find((r) => r.year === y)!;
 const maxed = (base: Record<string, number>, id: string) => ({ ...base, [id]: LEVERS_BY_ID[id].max });

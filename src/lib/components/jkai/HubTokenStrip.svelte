@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
-  import type { CodexMeter } from '$lib/jkai/usage-meter';
+  import type { CodexMeter } from '$lib/llm/usage-meter';
 
   let {
     tokensToday,

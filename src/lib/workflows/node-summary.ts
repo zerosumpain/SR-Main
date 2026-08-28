@@ -49,7 +49,7 @@ const summarizers: Record<string, (cfg: Cfg) => NodeSummary> = {
     };
   },
   'whatsapp': (c) => {
-    const to = s(c.to ?? c.recipient ?? c.phone, '+447359228511');
+    const to = s(c.to ?? c.recipient ?? c.phone, '+447700900123');
     const msg = s(c.message ?? c.text, '<message templated from upstream>');
     return {
       line: `Send WhatsApp to ${to}: ${truncate(msg, 60)}`,

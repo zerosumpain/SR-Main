@@ -9,6 +9,7 @@
  */
 
 import type { NodeDefinition, NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import { interpolateTemplate } from './template';
 import { db } from '$lib/db';
 import { jkaiBuilds, workflows } from '$lib/db/schema';
@@ -17,6 +18,7 @@ import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { ModelContext } from '$lib/server/models/types';
+import { publishedLink } from '$lib/builds/published-link';
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'paused']);
 
@@ -111,7 +113,9 @@ export const builderChatExecutor: NodeExecutor = {
 
     const priceSnapshot = await snapshotPrice(ctx);
 
-    const budgetConfig: Record<string, number> = {};
+    // Start from the shared floor so an unconfigured canvas node still gets
+    // the caps — notably the idle brake. Every explicit value below wins.
+    const budgetConfig: Record<string, number> = { ...DEFAULT_BUILD_BUDGET };
     const maxIterations = pickNumber(config.maxIterations);
     if (maxIterations !== undefined) budgetConfig.maxIterations = maxIterations;
     const maxTotalMinutes = pickNumber(config.maxTotalMinutes);
@@ -346,7 +350,7 @@ export const buildViewExecutor: NodeExecutor = {
       if (wf?.name) workflowName = wf.name.replace(/^canvas:/, '');
     }
     const previewUrl = row.publishedSlug
-      ? `/projects/${row.publishedSlug}/`
+      ? (publishedLink(row.publishedSlug)?.href ?? null)
       : row.serveConfig
         ? `/api/jkai/proxy/${row.id}/`
         : null;

@@ -12,7 +12,7 @@ export const whatsappDef: NodeDefinition = {
       message: { type: 'string', description: 'Message text. Supports {{input.field}} templates.' },
       formatMarkdown: { type: 'boolean', description: 'Translate Markdown (**bold**, ## headings, [links](url), - bullets) into WhatsApp formatting before sending. Default true.' },
       maxChunks: { type: 'number', description: 'Messages over 4096 chars are split on paragraph boundaries into sequential sends; beyond this many chunks the rest is dropped with a "… (truncated)" tail. Default 3. 0 = no cap.' },
-      mediaPath: { type: 'string', description: 'Absolute path to a local file to send as an attachment (image/audio/video/document). Requires the Hermes bridge. Supports {{input.field}}.' },
+      mediaPath: { type: 'string', description: 'Absolute path to a local file to send as an attachment (image/audio/video/document). Requires the WhatsApp worker. Supports {{input.field}}.' },
       mediaUrl: { type: 'string', description: 'URL of a file to download and send as an attachment. Supports {{input.field}}.' },
       caption: { type: 'string', description: 'Caption for the media attachment. Falls back to the message text. Supports {{input.field}}.' },
       suppressDuplicateWindowMins: { type: 'number', description: 'Last-line-of-defence idempotency: skip the send if an identical message was already sent to this recipient within this many minutes (hash-based). Default 0 = off. The dedupe node upstream remains the primary pattern.' },
@@ -39,7 +39,7 @@ export const whatsappDef: NodeDefinition = {
       key: 'to',
       label: 'Recipient Phone Number',
       type: 'template-textarea',
-      placeholder: '+447359228511 or {{input.phone}}',
+      placeholder: '+447700900123 or {{input.phone}}',
       description: 'Phone number in E.164 format (include country code). Supports {{input.field}} templates.',
     },
     {
@@ -77,7 +77,7 @@ export const whatsappDef: NodeDefinition = {
       label: 'Media file path',
       type: 'template-textarea',
       placeholder: '/path/to/file.png or {{input.filePath}}',
-      description: 'Local file to send as an attachment. Requires the Hermes bridge.',
+      description: 'Local file to send as an attachment. Requires the WhatsApp worker.',
       section: 'MEDIA',
       advancedOnly: true,
     },
@@ -102,7 +102,7 @@ export const whatsappDef: NodeDefinition = {
   ],
   llmDescription: `Send a WhatsApp message to a phone number. Use when a workflow needs to notify someone via WhatsApp.
 
-The \`to\` field must be an E.164 phone number (e.g. "+447359228511"). \`to\`, \`message\`, \`caption\`, \`mediaPath\` and \`mediaUrl\` all support \`{{input.field}}\` templates.
+The \`to\` field must be an E.164 phone number (e.g. "+447700900123"). \`to\`, \`message\`, \`caption\`, \`mediaPath\` and \`mediaUrl\` all support \`{{input.field}}\` templates.
 
 Behaviour:
 - \`formatMarkdown\` (default true) converts Markdown to WhatsApp formatting (**bold** → *bold*, ## headings → bold lines, [text](url) → "text (url)", "- " bullets → "•").
@@ -112,11 +112,11 @@ Behaviour:
 
 Downstream nodes read \`input.sent\`, \`input.messageId\`, \`input.messageIds\` (one per chunk), \`input.chunks\`, or \`input.error\`.
 
-Requires an active WhatsApp connection (Hermes bridge).`,
+Requires an active WhatsApp connection (the WhatsApp worker).`,
   llmExamples: [
-    { to: '+447359228511', message: 'Daily report: {{input.summary}}' },
+    { to: '+447700900123', message: 'Daily report: {{input.summary}}' },
     { to: '{{input.phone}}', message: '## Headlines\n{{input.digest}}', formatMarkdown: true },
-    { to: '+447359228511', message: 'Daily news for {{today}}', suppressDuplicateWindowMins: 1440 },
-    { to: '+447359228511', mediaUrl: '{{input.chartUrl}}', caption: 'This week: {{input.title}}' },
+    { to: '+447700900123', message: 'Daily news for {{today}}', suppressDuplicateWindowMins: 1440 },
+    { to: '+447700900123', mediaUrl: '{{input.chartUrl}}', caption: 'This week: {{input.title}}' },
   ],
 };

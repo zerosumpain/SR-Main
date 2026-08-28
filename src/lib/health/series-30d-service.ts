@@ -1,4 +1,5 @@
 import { db } from '$lib/db';
+import { realStrain } from '$lib/health/whoop';
 import {
   whoopRecovery,
   whoopSleep,
@@ -67,16 +68,36 @@ export type HealthSeriesData = {
     sleepDelta: number;
   };
   syncedAgoSeconds: number;
+  /**
+   * Where the numbers above came from.
+   *
+   * Two of them are not always measurements, and until now nothing in the
+   * returned type said so — which matters most on /health, a PUBLIC page:
+   *
+   *  * `seriesIsMock` — with no real day in the window the WHOLE 30-day series
+   *    (and the workouts, and the rings) is replaced by a deterministic fake so
+   *    the page still renders during cold start. Plausible, and indistinguishable
+   *    from real without this flag.
+   *  * `correlationsAreIllustrative` — when nothing correlates, four hard-coded
+   *    example findings stand in, complete with r values and sample sizes.
+   *
+   * Callers must not present either as a measurement. The hub hides the
+   * illustrative correlations outright and labels a mock series.
+   */
+  provenance: {
+    seriesIsMock: boolean;
+    correlationsAreIllustrative: boolean;
+  };
 };
 
 const DAYS = 30;
 
-// Whoop strain is a 0–21 score. Some historical rows landed in the DB at
-// strain × 100 (legacy sync path). Detect either form and return the real
-// 0–21 value rounded to 1dp.
+// Rounding wrapper over the one canonical fix in $lib/health/whoop. This used
+// to carry its own copy of the `> 22 ? /100` rule, and so did
+// correlations-service — three implementations of one correction, which is how
+// a reader ends up without it. Only the 1dp rounding is local to this file.
 function normaliseStrain(raw: number): number {
-  const v = raw > 22 ? raw / 100 : raw;
-  return +v.toFixed(1);
+  return +realStrain(raw).toFixed(1);
 }
 
 function isoDate(unix: number): string {
@@ -556,7 +577,8 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
   if (!hasRealData && workouts.length === 0) workouts = buildMockWorkouts();
 
   let correlations = await getCorrelations();
-  if (correlations.length === 0) correlations = STATIC_CORRELATIONS;
+  const correlationsAreIllustrative = correlations.length === 0;
+  if (correlationsAreIllustrative) correlations = STATIC_CORRELATIONS;
 
   // Activity rings (today only). Apple Activity metrics (active_energy /
   // apple_exercise_time / apple_stand_hour) aren't being ingested yet, so
@@ -666,5 +688,6 @@ export async function getHealthSeries30d(): Promise<HealthSeriesData> {
     rhrBaseline,
     todayDeltas,
     syncedAgoSeconds,
+    provenance: { seriesIsMock: !hasRealData, correlationsAreIllustrative },
   };
 }

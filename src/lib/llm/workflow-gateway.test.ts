@@ -18,16 +18,16 @@ vi.mock('$lib/workflows/nodes/llm-helpers', () => ({
     provider: 'openrouter',
   })),
 }));
-vi.mock('$lib/jkai/llm-client', () => ({
+vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn(async () => {
     if (!fallbackAvailable) throw new Error('OpenRouter API key not configured');
     return { client: { chat: { completions: { create: mockFallbackCreate } } }, model: fallbackModel };
   }),
 }));
-vi.mock('$lib/deepdive/keys', () => ({ getFallbackModel: () => fallbackModel }));
+vi.mock('$lib/llm/keys', () => ({ getFallbackModel: () => fallbackModel }));
 
 import { resilientChatCompletion } from './workflow-gateway';
-import * as llmClient from '$lib/jkai/llm-client';
+import * as llmClient from '$lib/llm/client';
 const getLLMClientMock = llmClient.getLLMClient as unknown as MockInstance;
 
 vi.useFakeTimers();

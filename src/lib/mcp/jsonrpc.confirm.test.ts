@@ -2,8 +2,8 @@
 //
 // Before this, `tools/call` → executeTool ran destructive tools with no human
 // gate: the in-repo `requireConfirmation` only ever ran inside general-chat.ts,
-// which JKAI_HERMES_CANVAS_CHAT=1 bypasses. These tests pin the gate to the
-// dispatcher so it cannot silently regress to Hermes-behaviour-only again.
+// which the MCP path bypasses. These tests pin the gate to the dispatcher so
+// it cannot silently regress to client-behaviour-only again.
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { dispatchJsonRpc } from './jsonrpc';
@@ -16,7 +16,7 @@ import {
 const SECRET = 'mcp-confirm-test-secret-32-bytes-long-please-thanks';
 
 beforeAll(() => {
-  process.env.HERMES_BRIDGE_SECRET = SECRET;
+  process.env.SERVICE_BRIDGE_SECRET = SECRET;
 });
 
 beforeEach(() => {
@@ -43,7 +43,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
 
 describe('mcp/jsonrpc destructive confirmation gate', () => {
   it('denies a destructive tool when no confirmer is attached (fail closed)', async () => {
-    // No registerToolConfirmer call — this is the Hermes-cron / WhatsApp /
+    // No registerToolConfirmer call — this is the scheduled / WhatsApp /
     // external-MCP-client case. Default policy must be deny.
     const { response } = await callTool('workflow_delete', {
       workflow_id: 'wf-unattended',

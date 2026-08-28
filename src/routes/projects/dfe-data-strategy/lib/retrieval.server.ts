@@ -3,18 +3,18 @@
 // postures) plus a few overview chunks. BM25 + domain-synonym expansion. No external calls,
 // no embeddings. Bound to this project; uploaded artefacts are NEVER added here.
 
-import { PRESSURES } from './pressures';
-import { FRAMEWORKS, STRATEGY_THEMES } from './frameworks';
-import { LEGISLATION, LEGAL_LAYER_META } from './legislation';
-import { MATURITY_DIMENSIONS } from './maturity';
+import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
+import { FRAMEWORKS, STRATEGY_THEMES } from '$lib/dfe-data-strategy/frameworks';
+import { LEGISLATION, LEGAL_LAYER_META } from '$lib/dfe-data-strategy/legislation';
+import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
 import { CAPABILITY_AREAS } from './capabilities';
 import { POSTURE_AXES } from './postures';
-import { SECTOR_VOICES, SECTOR_THEMES } from './sectorVoices';
-import { STRATEGIES, TIER_META } from './strategies';
-import { POLICY_ENGINE_BRIEF } from './policy';
+import { SECTOR_VOICES, SECTOR_THEMES } from '$lib/dfe-data-strategy/sectorVoices';
+import { STRATEGIES, TIER_META } from '$lib/dfe-data-strategy/strategies';
+import { POLICY_ENGINE_BRIEF } from '$lib/dfe-data-strategy/policy';
 import { COMMITMENTS, DOCUMENTS_BY_ID, STATUS_META, ROLE_META } from './commitments';
 import { COMPARATORS } from './comparators';
-import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/deepdive/keys';
+import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/llm/keys';
 
 export interface Chunk {
   id: string;

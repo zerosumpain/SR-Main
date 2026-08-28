@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { PRESSURES_BY_ID } from '../lib/pressures';
+  import { PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
   const focus = $derived(app.align.focus);
 </script>
 

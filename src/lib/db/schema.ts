@@ -5,6 +5,8 @@ import {
   timestamp,
   integer,
   bigint,
+  check,
+  date,
   doublePrecision,
   boolean,
   uniqueIndex,
@@ -40,12 +42,28 @@ export const blogPosts = pgTable('blog_posts', {
   coverImageUrl: text('cover_image_url'),
   coverImageAlt: text('cover_image_alt'),
   contentFormat: text('content_format').default('html').notNull(),
+  // Who actually wrote the prose. Load-bearing for the voice system: only
+  // 'human' posts may seed the Voice Card or supply exemplars. Feeding
+  // generated text back into the corpus is model collapse in miniature —
+  // with a corpus this small a handful of generated posts would outweigh
+  // the real ones inside a month. Default 'unknown' so untagged rows are
+  // excluded rather than silently trusted.
+  authorship: text('authorship').notNull().default('unknown'),
   previewToken: text('preview_token').$defaultFn(() => crypto.randomUUID()),
   status: text('status').notNull().default('draft'),
   publishedAt: timestamp('published_at'),
   createdAt: timestamp('created_at'),
   updatedAt: timestamp('updated_at'),
 });
+
+// The authorship vocabulary lives in $lib/blog/authorship — both so the admin UI
+// can import it without pulling this file into the client bundle, and because
+// THIS FILE MUST HAVE NO $lib IMPORTS AT ALL. ci-release.sh rsyncs schema.ts to
+// the VPS on its own and runs drizzle-kit push against it; any $lib import it
+// carries resolves to nothing there and fails the schema push with
+// MODULE_NOT_FOUND, silently leaving production a column behind. (Seen for real
+// on 2026-08-19 — this file briefly re-exported the vocabulary as a
+// convenience and the `authorship` column never reached prod.)
 
 export const blogPostTags = pgTable('blog_post_tags', {
   id: serial('id').primaryKey(),
@@ -255,6 +273,23 @@ export const whoopCycles = pgTable('whoop_cycles', {
   timezone: text('timezone').notNull(),
 
   // Core metrics
+  /**
+   * WHOOP's 0-21 day strain.
+   *
+   * Guarded by a CHECK, because for four months something wrote this column at
+   * strain x 100 and nothing noticed. 51 rows held values from 145 to 2033 on a
+   * scale that stops at 21, written between 2026-04-27 and 2026-08-24,
+   * interleaved with correct rows from the sync in this repo — so no date
+   * separates them and no flag on the row says which is which. The writer was
+   * never in this repository's history and is no longer present on either
+   * machine; it stopped of its own accord, which is the worst way for a bug to
+   * end because nothing was learned and nothing prevents its return.
+   *
+   * The constraint is the prevention. A scaled write now fails loudly at the
+   * database, naming itself, instead of silently poisoning every average that
+   * reads this column. Readers still normalise via `realStrain()` for the sake
+   * of anything that slipped in before this existed.
+   */
   strain: doublePrecision('strain').notNull(),
   kilojoule: doublePrecision('kilojoule').notNull(),
   averageHeartrate: integer('average_heartrate').notNull(),
@@ -262,7 +297,11 @@ export const whoopCycles = pgTable('whoop_cycles', {
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
-});
+}, (t) => [
+  // The prevention, at the only layer every writer must pass through. An app
+  // fix cannot help here: the writer that did this was never in this codebase.
+  check('whoop_cycles_strain_scale', sql`${t.strain} >= 0 and ${t.strain} <= 21`),
+]);
 
 export type WhoopCycleRecord = typeof whoopCycles.$inferSelect;
 
@@ -333,6 +372,275 @@ export const appleHealthMetrics = pgTable(
 
 export type AppleHealthMetricRecord = typeof appleHealthMetrics.$inferSelect;
 export type NewAppleHealthMetric = typeof appleHealthMetrics.$inferInsert;
+
+// ==========================================
+// Trails — Activities, Tracks, Series
+// ==========================================
+// Source-agnostic workout records for /trails. Written by the Apple Health
+// (Health Auto Export) workout ingest; `source` leaves room to union in the
+// dormant strava_activities / whoop_workouts rows later without a migration.
+//
+// UNITS: these tables store real SI units in doublePrecision — metres,
+// seconds, kilojoules, bpm. They deliberately do NOT follow the `value * 100`
+// integer convention used by apple_health_metrics above. That convention has
+// already produced values wrong by 100× on steps and strain, which read as
+// display bugs and were not. Convert at the edge, never in storage.
+
+export const activities = pgTable(
+  'activities',
+  {
+    id: text('id').primaryKey(), // `${source}:${externalId}`
+    source: text('source').notNull(), // 'apple' | 'strava' | 'whoop' | 'manual'
+    externalId: text('external_id').notNull(),
+
+    name: text('name').notNull(),
+    // Normalised: run | trail_run | ride | mtb | walk | hike | swim | other
+    activityType: text('activity_type').notNull(),
+    rawType: text('raw_type'), // the source's own label, kept verbatim
+
+    startDate: integer('start_date').notNull(), // unix seconds
+    endDate: integer('end_date').notNull(),
+    startDateLocal: text('start_date_local').notNull(), // ISO string for display
+    timezone: text('timezone'),
+
+    distanceM: doublePrecision('distance_m'),
+    durationS: integer('duration_s').notNull(),
+    activeDurationS: integer('active_duration_s'),
+    elevationGainM: doublePrecision('elevation_gain_m'),
+    elevationLossM: doublePrecision('elevation_loss_m'),
+
+    avgHeartrate: integer('avg_heartrate'),
+    maxHeartrate: integer('max_heartrate'),
+
+    activeEnergyKj: doublePrecision('active_energy_kj'),
+    totalEnergyKj: doublePrecision('total_energy_kj'),
+    avgPaceSPerKm: doublePrecision('avg_pace_s_per_km'),
+    avgCadence: doublePrecision('avg_cadence'),
+
+    hasTrack: boolean('has_track').notNull().default(false),
+    // Everything the source sent that we don't model, verbatim.
+    metadata: jsonb('metadata'),
+
+    // Owner corrections. `activityType` above keeps holding what the SOURCE said,
+    // because ingest upserts it on every sync — an in-place edit would be
+    // clobbered the next time the phone posted. Readers take
+    // `typeOverride ?? activityType` via effectiveType() in trails/activity-meta.
+    typeOverride: text('type_override'),
+    // A bad recording (a drive logged as a ride, a lost fix) drops out of segment
+    // matching without being deleted. The rebuild skips these outright.
+    excludedFromSegments: boolean('excluded_from_segments').notNull().default(false),
+
+    syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [
+    uniqueIndex('activities_source_external_idx').on(t.source, t.externalId),
+    index('activities_start_idx').on(t.startDate),
+    index('activities_type_idx').on(t.activityType),
+  ],
+);
+
+export type ActivityRecord = typeof activities.$inferSelect;
+export type NewActivity = typeof activities.$inferInsert;
+
+// The GPS trace. One row per activity; coordinates are decimated on write.
+export const activityTracks = pgTable(
+  'activity_tracks',
+  {
+    id: serial('id').primaryKey(),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    // [[lng, lat, elevationM | null, secondsFromStart], ...]
+    coordinates: jsonb('coordinates').notNull(),
+    pointCount: integer('point_count').notNull(),
+    bounds: jsonb('bounds').notNull(), // { n, s, e, w }
+    polyline: text('polyline'), // encoded, for cheap list rendering
+    distanceM: doublePrecision('distance_m'),
+  },
+  (t) => [uniqueIndex('activity_tracks_activity_idx').on(t.activityId)],
+);
+
+export type ActivityTrackRecord = typeof activityTracks.$inferSelect;
+export type NewActivityTrack = typeof activityTracks.$inferInsert;
+
+// Per-workout time series. One row per metric, samples inline as jsonb —
+// a 1 Hz hour of heart rate is 3,600 points that are only ever read whole.
+export const activitySeries = pgTable(
+  'activity_series',
+  {
+    id: serial('id').primaryKey(),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    metric: text('metric').notNull(), // heart_rate | speed | cadence | altitude | power
+    units: text('units').notNull(),
+    sampleCount: integer('sample_count').notNull(),
+    samples: jsonb('samples').notNull(), // [[secondsFromStart, value], ...]
+  },
+  (t) => [uniqueIndex('activity_series_activity_metric_idx').on(t.activityId, t.metric)],
+);
+
+export type ActivitySeriesRecord = typeof activitySeries.$inferSelect;
+export type NewActivitySeries = typeof activitySeries.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Intra-route segments: stretches of ground covered more than once.
+//
+// Discovered by comparing the GPS traces of same-type activities against each
+// other (see $lib/trails/segments). A segment is DIRECTIONAL — the same path
+// walked back the other way is a different segment, because a climb and its
+// descent are not comparable efforts. Laps within one activity each count as
+// their own effort; that is the point of the exercise.
+//
+// Same unit convention as `activities` above: real SI in doublePrecision.
+export const activitySegments = pgTable(
+  'activity_segments',
+  {
+    id: serial('id').primaryKey(),
+    // what3words-style triple, e.g. "heron.copper.stile". Stable across
+    // rebuilds: reconciliation hands a recomputed segment the name of the
+    // stored one it replaces, so a 30 m shift in geometry never renames a
+    // place you have learned.
+    name: text('name').notNull(),
+    activityType: text('activity_type').notNull(),
+
+    distanceM: doublePrecision('distance_m').notNull(),
+    elevationGainM: doublePrecision('elevation_gain_m').notNull().default(0),
+    elevationLossM: doublePrecision('elevation_loss_m').notNull().default(0),
+
+    // [[lng, lat, elevationM | null, metresFromSegmentStart], ...]
+    // The fourth slot is DISTANCE, not seconds: a segment has no clock of its
+    // own. Deliberately the same arity as activity_tracks.coordinates so the
+    // map components render it unchanged.
+    coordinates: jsonb('coordinates').notNull(),
+    pointCount: integer('point_count').notNull(),
+    bounds: jsonb('bounds').notNull(), // { n, s, e, w }
+    polyline: text('polyline'), // encoded, for thumbnails
+
+    effortCount: integer('effort_count').notNull().default(0),
+    firstEffortAt: integer('first_effort_at'), // unix seconds
+    lastEffortAt: integer('last_effort_at'),
+
+    updatedAt: integer('updated_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [
+    uniqueIndex('activity_segments_name_idx').on(t.name),
+    index('activity_segments_type_idx').on(t.activityType),
+  ],
+);
+
+export type ActivitySegmentRecord = typeof activitySegments.$inferSelect;
+export type NewActivitySegment = typeof activitySegments.$inferInsert;
+
+// One traversal of one segment. `startS`/`endS` are seconds from the start of
+// the ACTIVITY — the same clock as activity_series, so a heart-rate window is
+// a straight filter with no re-basing.
+export const activitySegmentEfforts = pgTable(
+  'activity_segment_efforts',
+  {
+    id: serial('id').primaryKey(),
+    segmentId: integer('segment_id')
+      .notNull()
+      .references(() => activitySegments.id, { onDelete: 'cascade' }),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+
+    startS: doublePrecision('start_s').notNull(),
+    endS: doublePrecision('end_s').notNull(),
+    durationS: doublePrecision('duration_s').notNull(),
+    // The distance this effort actually covered, not the segment's canonical
+    // length. Pace is computed from this one so nothing is overstated.
+    distanceM: doublePrecision('distance_m').notNull(),
+    speedMps: doublePrecision('speed_mps').notNull(),
+    paceSPerKm: doublePrecision('pace_s_per_km').notNull(),
+
+    avgHeartrate: doublePrecision('avg_heartrate'),
+    maxHeartrate: integer('max_heartrate'),
+    elevationGainM: doublePrecision('elevation_gain_m'),
+
+    // Pace-at-HR, both directions of the same idea:
+    // efficiency factor = metres/min per bpm (higher is better),
+    // beats per km    = heartbeats spent per km (lower is better).
+    efficiencyFactor: doublePrecision('efficiency_factor'),
+    beatsPerKm: doublePrecision('beats_per_km'),
+
+    // Absolute clock, for ordering a leaderboard without joining activities.
+    startedAt: integer('started_at').notNull(),
+    // Which lap this was, when one activity covers a segment more than once.
+    lapIndex: integer('lap_index').notNull().default(1),
+  },
+  (t) => [
+    uniqueIndex('activity_segment_efforts_unique_idx').on(t.segmentId, t.activityId, t.lapIndex),
+    index('activity_segment_efforts_segment_idx').on(t.segmentId),
+    index('activity_segment_efforts_activity_idx').on(t.activityId),
+  ],
+);
+
+export type ActivitySegmentEffortRecord = typeof activitySegmentEfforts.$inferSelect;
+export type NewActivitySegmentEffort = typeof activitySegmentEfforts.$inferInsert;
+
+// A route you intend to run, as opposed to one you have run. Kept apart from
+// `activities` because the two answer different questions and have different
+// lifecycles — a plan can be discarded, re-planned, or run many times.
+//
+// A recording made in the field does NOT land here: it becomes a row in
+// `activities` with source='recorded', so it sits alongside the Apple ones on
+// /health/activities instead of in a parallel world.
+export const plannedRoutes = pgTable(
+  'planned_routes',
+  {
+    id: text('id').primaryKey(), // uuid
+    name: text('name').notNull(),
+    sport: text('sport').notNull(), // run | trail_run | ride | mtb | hike | walk
+    source: text('source').notNull().default('planned'), // 'planned' | 'imported'
+
+    coordinates: jsonb('coordinates').notNull(), // [[lng, lat, ele|null], ...]
+    bounds: jsonb('bounds').notNull(),
+    polyline: text('polyline'),
+
+    distanceM: doublePrecision('distance_m').notNull(),
+    ascentM: doublePrecision('ascent_m'),
+    descentM: doublePrecision('descent_m'),
+    durationS: integer('duration_s'), // the router's estimate
+
+    /** 0..1 from the loop-quality scorer. Null for an imported GPX. */
+    score: doublePrecision('score'),
+    /** Full RouteScore — overlap, spurs, terrain, profile, notes. */
+    scoreBreakdown: jsonb('score_breakdown'),
+    targetDistanceM: doublePrecision('target_distance_m'),
+
+    notes: text('notes'),
+    createdAt: integer('created_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [index('planned_routes_created_idx').on(t.createdAt), index('planned_routes_sport_idx').on(t.sport)],
+);
+
+export type PlannedRouteRecord = typeof plannedRoutes.$inferSelect;
+export type NewPlannedRoute = typeof plannedRoutes.$inferInsert;
+
+// Points of interest hung off a planned route — parking, water, a gate that
+// sticks. Ported from JKAImaps, where they lived in IndexedDB and could not be
+// seen from anywhere else.
+export const routeWaypoints = pgTable(
+  'route_waypoints',
+  {
+    id: text('id').primaryKey(),
+    routeId: text('route_id')
+      .notNull()
+      .references(() => plannedRoutes.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    icon: text('icon').notNull().default('custom'), // parking | water | viewpoint | pub | shelter | gate | custom
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    note: text('note'),
+    createdAt: integer('created_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [index('route_waypoints_route_idx').on(t.routeId)],
+);
+
+export type RouteWaypointRecord = typeof routeWaypoints.$inferSelect;
+export type NewRouteWaypoint = typeof routeWaypoints.$inferInsert;
 
 // ==========================================
 // Biome Config
@@ -698,6 +1006,17 @@ export const agentActions = pgTable('agent_actions', {
   durationMs: integer('duration_ms'),
   tokensInput: integer('tokens_input'),
   tokensOutput: integer('tokens_output'),
+  /** Input tokens served from the provider's prompt cache. Billed at a fraction
+   *  of the normal input rate, so the ratio of this to `tokens_input` is the
+   *  cheapest cost lever there is — and it was captured per workflow node and
+   *  then thrown away at the ledger boundary, which is why /admin/ops/costs
+   *  could not say whether caching was working. */
+  cacheReadTokens: integer('cache_read_tokens'),
+  /** Output tokens spent thinking before the first visible character. Billed as
+   *  output. Tracked separately because a reasoning model that answers in ten
+   *  words can still bill three thousand tokens, and that is invisible in a
+   *  completion-token total. */
+  reasoningTokens: integer('reasoning_tokens'),
   costUsd: doublePrecision('cost_usd'),
   provider: text('provider'),
   model: text('model'),
@@ -709,6 +1028,10 @@ export const agentActions = pgTable('agent_actions', {
   // while a research run is live, and the table grows with every LLM call the
   // whole site makes. Unindexed that is a sequential scan per poll.
   sessionIdx: index('agent_actions_session_idx').on(t.sessionId),
+  // Every panel on /admin/ops/costs filters this table by a date window, and
+  // the table grows with every LLM call the whole site makes. Without this the
+  // costs page is a fistful of sequential scans on each load.
+  createdAtIdx: index('agent_actions_created_at_idx').on(t.createdAt),
 }));
 
 export type AgentAction = typeof agentActions.$inferSelect;
@@ -761,6 +1084,16 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   title: text('title'),
   prompt: text('prompt').notNull(),
   status: text('status').notNull().default('pending'),
+  // Why the build stopped, as distinct from `status`. `completed` is claimed
+  // by three endings that are not the same thing: the builder delivered, it
+  // ran out of budget, or someone stopped it — plus chat registrations that
+  // file `completed` before a file exists. Counting them together reported 61%
+  // success where 43% was delivered. A separate nullable column rather than new
+  // statuses, because ten consumers read `status === 'completed'` to mean
+  // "terminal" and a new status would render a capped build as still running.
+  // 'delivered' | 'budget_cap' | 'stopped_by_user' | 'registered' — see
+  // $lib/builds/build-status.ts. Null on rows written before this existed.
+  outcome: text('outcome'),
   budgetConfig: jsonb('budget_config').notNull().default(sql`'{}'::jsonb`),
   tokensUsed: integer('tokens_used').notNull().default(0),
   // The split, kept rather than collapsed. recordBuildUsage receives prompt
@@ -775,6 +1108,26 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   activeMinutesUsed: doublePrecision('active_minutes_used').notNull().default(0),
   serveConfig: jsonb('serve_config'),
   publishedSlug: text('published_slug'),
+  /**
+   * The `/projects` address this build CREATED IN THE REPO, as opposed to
+   * `publishedSlug`, which is wherever its sandbox app was copied to — or, on
+   * a git-target build, the PR url.
+   *
+   * Two columns because a change request has both and they are not the same
+   * thing. It opens a PR (recorded in `publishedSlug`) that may also add
+   * `src/routes/projects/<slug>/+page.svelte`, and that page is a real route
+   * the moment the PR merges. Until this column existed nothing connected the
+   * two: `isProjectSlug` filtered the build off the index because its
+   * `publishedSlug` was a URL, and `getAllowedProjectKeys` would not permit a
+   * visibility toggle on the new address either. A page could ship, deploy and
+   * be reachable with no way to give it a card.
+   *
+   * Null on every app build and on any change request that added no page.
+   * Setting it does NOT publish: like an AI build's slug, an address with no
+   * `project_visibility` row is PRIVATE (see $lib/projects/visibility), so the
+   * card appears for the owner and the toggle is what makes it public.
+   */
+  projectSlug: text('project_slug'),
   // How the build presents itself on /projects once promoted. All three are
   // null for a build published before this existed, and the card falls back to
   // `title` and `prompt` exactly as it always did — which is the reason to
@@ -806,7 +1159,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
   enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
   planStatus: text('plan_status').notNull().default('approved'),
-  origin: text('origin', { enum: ['manual', 'hermes', 'forge', 'studio'] }).notNull().default('manual'),
+  origin: text('origin', { enum: ['manual', 'chat', 'hermes', 'forge', 'studio'] }).notNull().default('manual'),
   // Git-target mode (Brass & Rails Forge). NULL for every normal build —
   // when null the builder behaves byte-identically to before (same workspace,
   // same publish). When set, the build clones a git repo, branches, runs the
@@ -1350,6 +1703,22 @@ export const conversations = pgTable('jkai_conversations', {
   // is the unguessable link id, minted when first shared, kept on unshare.
   shareToken: text('share_token').unique(),
   shareVisibility: text('share_visibility').notNull().default('private'),
+  // Whether this thread's entities and relationships are added to /jkai/intel.
+  // On by default — the graph rail and the entity links in replies both depend
+  // on it. Turning it off stops FUTURE extraction only; whatever the thread has
+  // already contributed stays, and is removed separately (see the rail's
+  // "forget what this thread added").
+  intelEnabled: boolean('intel_enabled').notNull().default(true),
+  // How hard the model is told to think on this thread's turns — one of
+  // THINKING_LEVELS in $lib/models/thinking, which also maps it onto each
+  // provider's request field. NULL means "whatever the provider does by
+  // default", which is what every thread did before the control existed.
+  //
+  // Unlike model_id this is NOT locked after the first message: the model is
+  // frozen because price_snapshot and the cost ledger are pinned to it, and a
+  // thinking level changes neither. Mid-thread is exactly when you want it —
+  // the answer that came back thin is the reason to turn it up.
+  thinkingLevel: text('thinking_level'),
 });
 
 export type Conversation = typeof conversations.$inferSelect;
@@ -1367,7 +1736,15 @@ export const orchestratorChats = pgTable('orchestrator_chats', {
   content: text('content').notNull(),
   metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  // The history loader reads a conversation newest-first with a LIMIT, on every
+  // turn. Before this the table had only its primary key, so that read was a
+  // scan of the whole table filtered down — fine at 3,064 rows and not fine
+  // later. Declared HERE rather than added by hand because `drizzle push`
+  // drops any index it cannot see in this file.
+  index('orchestrator_chats_conversation_idx').on(t.conversationId, t.createdAt),
+  index('orchestrator_chats_workflow_idx').on(t.workflowId, t.createdAt),
+]);
 
 export type OrchestratorChat = typeof orchestratorChats.$inferSelect;
 export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
@@ -1377,10 +1754,10 @@ export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
 // ==========================================
 //
 // The ordered chain of tool calls a single chat turn made, recorded server-side
-// in `handleWithHermes` and rendered by /jkai/trace/[traceId].
+// by the chat route and rendered by /jkai/trace/[traceId].
 //
 // This table exists because the chain is otherwise not durable anywhere: the
-// Hermes branch never writes `orchestrator_chats.metadata.toolSteps` (only the
+// Some turns never write `orchestrator_chats.metadata.toolSteps` (only the
 // retired in-process loop did), so tool activity lives in the watching browser
 // tab and dies on reload. Keeping it here rather than back in message metadata
 // is deliberate — the conversation loader selects `metadata` for every message
@@ -1738,9 +2115,47 @@ export const intelNotes = pgTable('intel_notes', {
    * time rather than the sender-written `Date` header.
    */
   observedAt: timestamp('observed_at', { withTimezone: true }),
+  /**
+   * Whether this note's content is allowed into the entity graph.
+   *
+   * A note and the graph rows read out of it used to be the same decision: if
+   * something was ingested, it was extracted. That was tolerable while the
+   * corpus was hand-written notes and Drive uploads, and it stopped being
+   * tolerable when the rolling Gmail sweep started reading the whole mailbox —
+   * 2,781 of 3,116 notes came from email, 67% of live entities were asserted by
+   * an email note alone, and the single most common relationship type in the
+   * graph became `offers` (1,368 edges) because marketing mail is mostly
+   * offers. The graph was answering "what is being sold to me" when it was
+   * asked "who do I work with".
+   *
+   * So the two decisions are now separate. The note is the CORPUS — it is
+   * always stored, and daydream's voucher, receipt and interest readers scan it
+   * exactly as before. This column is the GRAPH GATE.
+   *
+   *   'admitted' — extracted, and its entities and edges are in the graph.
+   *   'pending'  — stored and searchable, never extracted. Costs no LLM call.
+   *   'rejected' — refused by the owner. Never extracted, never re-queued.
+   *
+   * Defaulted to 'admitted' so every non-email source behaves precisely as it
+   * did: only the Gmail sweep writes 'pending', and only because it was asked
+   * to. Nothing here is a general-purpose moderation queue.
+   */
+  graphState: text('graph_state').notNull().default('admitted'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // Same reasoning as `intel_entities_embedding_hnsw_idx` — this is the second
+  // vector query `buildKnowledgeContext` runs on every chat turn. Smaller table
+  // (1,821 embedded notes) so it costs ~21ms today, but it is the same Seq Scan
+  // and it grows the same way.
+  byEmbedding: index('intel_notes_embedding_hnsw_idx').using(
+    'hnsw',
+    sql`${t.embedding} vector_cosine_ops`,
+  ),
+  // The mail queue's every read is "pending email notes, newest first", and the
+  // graph's every read is now "admitted only". Both are this index.
+  byGraphState: index('intel_notes_graph_state_idx').on(t.graphState, t.source),
+}));
 
 export type IntelNote = typeof intelNotes.$inferSelect;
 export type NewIntelNote = typeof intelNotes.$inferInsert;
@@ -1797,6 +2212,37 @@ export const intelEntities = pgTable(
     byWatched: index('intel_entities_watched_idx').on(t.watched),
     byUpdated: index('intel_entities_updated_idx').on(t.updatedAt),
     byCanonical: index('intel_entities_canonical_idx').on(t.canonicalName),
+    // Cosine-distance ANN index for the `<=>` lookup `buildKnowledgeContext`
+    // runs on EVERY chat turn. Without it that query is a Seq Scan over every
+    // embedded entity: measured 2026-08-24 on production at 187ms / 13,313
+    // rows / 14,170 buffers read, and it grows with the graph. It sits on the
+    // critical path before the first LLM call, so it is latency the user feels.
+    // Measured on a production-scale copy: 61.5ms → 0.65ms.
+    //
+    // Three things to know before touching this:
+    //
+    // 1. Written as raw SQL rather than `t.embedding.op('vector_cosine_ops')`
+    //    because `vector` here is a `customType`, which has no `.op()`. The
+    //    opclass must match the operator the query uses (`<=>` = cosine); an
+    //    l2_ops index would be built happily and then never chosen.
+    //
+    // 2. **drizzle-kit 0.31 cannot round-trip an hnsw index**, so `push` DROPS
+    //    AND RECREATES both of these every time it runs — verified by OID, and
+    //    it is specific to hnsw (the plain btree indexes beside it are stable).
+    //    That costs ~5.4s per index at 13k rows and the release step allows
+    //    180s, so it is tolerated, not fixed. It is NOT fixable by leaving the
+    //    index out of this file and creating it by hand either: `push`
+    //    reconciles, so an index it cannot see is an index it deletes.
+    //
+    // 3. HNSW is APPROXIMATE. The query post-filters on `merged_into_id IS
+    //    NULL` (407 of 13,720 rows, 3%) against a default `ef_search` of 40 for
+    //    a LIMIT of 8, so it will not run short in practice — but it is a
+    //    ranked shortlist for a prompt section, already cut at distance < 0.6,
+    //    and exact top-8 was never the requirement.
+    byEmbedding: index('intel_entities_embedding_hnsw_idx').using(
+      'hnsw',
+      sql`${t.embedding} vector_cosine_ops`,
+    ),
   }),
 );
 
@@ -2305,27 +2751,39 @@ export const workflowFiles = pgTable(
 export type WorkflowFile = typeof workflowFiles.$inferSelect;
 export type NewWorkflowFile = typeof workflowFiles.$inferInsert;
 
-// A high-entropy bearer capability scoped to exactly one generated route file.
-// Raw tokens are returned once for WhatsApp delivery; only their hash persists.
-export const routeExportTokens = pgTable(
-  'route_export_token',
+// One high-entropy capability, one drive file. Replaced `route_export_token`,
+// the GPX-only ancestor dropped in #311 — that table's `expires_at` was
+// nullable and never written, so every link it minted was a permanent,
+// unlisted, unkillable anonymous URL.
+//
+// The two columns that stop that recurring:
+//   - `expiresAt` is NOT NULL, so a share cannot be created without a lifetime.
+//   - `createdBy` records whether the owner or an agent minted it, so the
+//     revocation list on /drive can be read at a glance.
+export const fileShareTokens = pgTable(
+  'file_share_token',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
     fileId: text('file_id').notNull().references(() => workflowFiles.id, { onDelete: 'cascade' }),
     tokenHash: text('token_hash').notNull(),
+    /** Free text shown in the owner's share list, e.g. "WhatsApp to Dad". */
+    label: text('label'),
+    /** An owner email, or an agent tag such as `route-export`. */
+    createdBy: text('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     useCount: integer('use_count').notNull().default(0),
   },
   (t) => ({
-    byTokenHash: uniqueIndex('route_export_token_hash_idx').on(t.tokenHash),
-    byFile: index('route_export_token_file_idx').on(t.fileId),
+    byTokenHash: uniqueIndex('file_share_token_hash_idx').on(t.tokenHash),
+    byFile: index('file_share_token_file_idx').on(t.fileId),
+    byExpiry: index('file_share_token_expires_idx').on(t.expiresAt),
   }),
 );
 
-export type RouteExportToken = typeof routeExportTokens.$inferSelect;
+export type FileShareToken = typeof fileShareTokens.$inferSelect;
 
 export type WorkflowFilePermissions = {
   read: boolean;
@@ -2352,7 +2810,7 @@ export const fileEmbeddings = pgTable(
     contentHash: text('content_hash').notNull(),     // hash of the bytes this chunk was embedded from
     chunkOrd: integer('chunk_ord').notNull(),         // 0-based ordinal within the file
     source: text('source').notNull(),                 // file name at embed time (display/citation)
-    modality: text('modality').notNull(),             // 'text' | 'image' | 'audio' — how the text was derived
+    modality: text('modality').notNull(),             // 'text' | 'image' | 'audio' | 'ocr' — how the text was derived
     text: text('text').notNull(),                     // the chunk text that was embedded
     charStart: integer('char_start').notNull(),
     charEnd: integer('char_end').notNull(),
@@ -2369,6 +2827,66 @@ export const fileEmbeddings = pgTable(
 
 export type FileEmbedding = typeof fileEmbeddings.$inferSelect;
 export type NewFileEmbedding = typeof fileEmbeddings.$inferInsert;
+
+// One row per chunk of an ADMITTED email — the body, and any attachment whose
+// text was read. Deliberately a sibling of `file_embeddings` rather than more
+// rows inside it: that table's `file_id` is a real foreign key into
+// `workflow_files` with a cascade on it, and an email is not a Drive file.
+//
+// Same vector space as the @files index on purpose (text-embedding-3-small,
+// 1536-dim, unit-normalized at write time), so a single query can be ranked
+// across both corpora without re-embedding. The attachment BYTES are not here —
+// they are saved into /drive on admission and indexed by $lib/file-index like
+// any other upload, which is why an attachment is searchable, previewable and
+// citable without this module knowing what a PDF is.
+//
+// Only admitted mail is embedded. A pending note is stored and readable but
+// costs nothing, which is the whole point of the gate.
+export const mailEmbeddings = pgTable(
+  'mail_embeddings',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    noteId: text('note_id')
+      .notNull()
+      .references(() => intelNotes.id, { onDelete: 'cascade' }),
+    /** The note's `metadata.contentHash` when this chunk was embedded. A thread
+     *  that gains a reply changes it, which is what makes re-indexing cheap. */
+    contentHash: text('content_hash').notNull(),
+    chunkOrd: integer('chunk_ord').notNull(),
+    /** Thread subject at embed time — the citation label. */
+    source: text('source').notNull(),
+    /** 'body' | 'attachment'. Kept so a search can say where a passage came
+     *  from; "it was in the covering note" and "it was on page 9 of the PDF"
+     *  are different claims about the same thread. */
+    part: text('part').notNull().default('body'),
+    /** Attachment filename for an `attachment` chunk; null for the body. */
+    filename: text('filename'),
+    text: text('text').notNull(),
+    charStart: integer('char_start').notNull(),
+    charEnd: integer('char_end').notNull(),
+    embeddingModel: text('embedding_model').notNull(),
+    embeddingDim: integer('embedding_dim').notNull(),
+    embedding: vector('embedding').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byNote: index('mail_embeddings_note_idx').on(t.noteId),
+    // Plain, not unique. A unique index on a populated table breaks
+    // non-interactive `drizzle-kit push` (reference_drizzle_unique_push_gotcha),
+    // and re-indexing deletes a note's rows before inserting anyway, so there is
+    // nothing for uniqueness to protect.
+    byNoteChunk: index('mail_embeddings_note_chunk_idx').on(t.noteId, t.chunkOrd),
+    // Same reasoning as the notes/entities HNSW indexes: without it every search
+    // is a Seq Scan over the whole corpus.
+    byEmbedding: index('mail_embeddings_embedding_hnsw_idx').using(
+      'hnsw',
+      sql`${t.embedding} vector_cosine_ops`,
+    ),
+  }),
+);
+
+export type MailEmbedding = typeof mailEmbeddings.$inferSelect;
+export type NewMailEmbedding = typeof mailEmbeddings.$inferInsert;
 
 // One row per provisioned WebDAV mount credential. The mount client uses
 // HTTP Basic Auth — username is informational (we use the label), password
@@ -2538,7 +3056,7 @@ export const integrationCredentials = pgTable('integration_credentials', {
   label: text('label').notNull(),
   kind: text('kind').notNull(), // 'apikey' | 'basic' | 'oauth2'
   // Encrypted JSON: format `${iv-hex}:${tag-hex}:${ciphertext-hex}` produced
-  // by src/lib/integrations/crypto.ts. Shape of the decrypted JSON depends
+  // by src/lib/secrets/crypto.ts. Shape of the decrypted JSON depends
   // on `kind` — see CredentialPayload<K> in src/lib/integrations/types.ts.
   payloadEnc: text('payload_enc').notNull(),
   // Non-secret config (e.g. CalDAV server URL, OAuth callback override).
@@ -2624,38 +3142,6 @@ export const apiSecrets = pgTable('api_secrets', {
 }));
 
 export type ApiSecretRow = typeof apiSecrets.$inferSelect;
-
-// ── Hermes sessions ──────────────────────────────────────────────────────
-
-export const hermesSessions = pgTable('hermes_sessions', {
-  id: serial('id').primaryKey(),
-  hermesSessionId: text('hermes_session_id').notNull(),
-  kind: text('kind', { enum: ['build', 'canvas_chat', 'manual'] }).notNull(),
-  kindId: text('kind_id').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  closedAt: timestamp('closed_at', { withTimezone: true }),
-}, (t) => ({
-  uniqueByKind: uniqueIndex('hermes_sessions_kind_kind_id_idx').on(t.kind, t.kindId).where(sql`closed_at IS NULL`),
-}));
-
-export type HermesSessionRow = typeof hermesSessions.$inferSelect;
-
-// ── Hermes chat origin ───────────────────────────────────────────────────
-// Records which SvelteKit host a given chat_id originated on so the
-// homeserv-side `/api/mcp` routing proxy can forward tool calls back to
-// the correct backend. Written on inbound by the jkai_platform plugin
-// (Phase 3 of docs/superpowers/plans/2026-05-14-hermes-multi-origin-routing.md);
-// read by `/api/mcp/+server.ts`.
-
-export const hermesChatOrigin = pgTable('hermes_chat_origin', {
-  chatId: text('chat_id').primaryKey(),
-  origin: text('origin', { enum: ['vps', 'homeserv'] }).notNull(),
-  mcpUrl: text('mcp_url').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
-export type HermesChatOriginRow = typeof hermesChatOrigin.$inferSelect;
 
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -3136,3 +3622,1307 @@ export const datastoreAuditLog = pgTable(
 
 export type DatastoreAuditLogRow = typeof datastoreAuditLog.$inferSelect;
 export type NewDatastoreAuditLogRow = typeof datastoreAuditLog.$inferInsert;
+
+// ==========================================
+// Codegraph — the build-history knowledge graph
+// ==========================================
+//
+// A SECOND graph, deliberately separate from `intel_*`. Intel is about the
+// world (people, organisations, documents). This is about THIS CODEBASE and
+// what building it has already taught us, and its only job is to put the right
+// context in front of a pi build at the moment that build needs it.
+//
+// WHY THE NODES ARE FILES AND GATES, NOT SESSIONS
+//
+// Sessions end and their transcripts are deleted — 54 of 150 production
+// sessions already have no `.jsonl` on disk. `src/lib/jkai/executor.ts`, by
+// contrast, appears across the whole corpus and will be edited again next week.
+// Code identity is the only durable key here, so files and gates are the nodes
+// and the history (episodes, lessons) hangs off them.
+//
+// WHY RETRIEVAL IS NOT KEYED ON THE PROMPT
+//
+// 29% of John's real prompts are 25 characters or fewer. "crack on" embeds to
+// nothing, so prose similarity cannot be the entry point. The two keys that
+// ARE sharp are both extracted deterministically with regex and zero LLM calls:
+//   1. the FILE SET a build is about to touch, and
+//   2. the FINGERPRINT of the gate error it just hit — which orchestrator.ts
+//      has already appended to the previous iteration's evaluation.
+//
+// WHY EVERY UNIT CARRIES AN OUTCOME
+//
+// 17.1% of merged PRs were themselves repairs of an earlier merge, so "it
+// merged" is not "it was right". Ranking multiplies by a verdict tier, meaning
+// retrieval returns what demonstrably worked rather than what merely reads
+// similarly. Standard RAG has no notion of whether its chunk was ever correct.
+
+/**
+ * A durable thing in the codebase: a file, a directory, a gate, a route, a
+ * table. `canonicalPath` is repo-relative and is the identity — never an
+ * absolute path, because the same file is `/home/john/...` on homeserv and
+ * `/home/jkai/workspace/<id>/dev/...` inside a build sandbox.
+ */
+export const codegraphNodes = pgTable(
+  'codegraph_nodes',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** 'file' | 'dir' | 'gate' | 'route' | 'table' | 'tool' | 'skill' */
+    kind: text('kind').notNull().default('file'),
+    /** Repo-relative path, or the gate name for kind='gate'. Identity. */
+    canonicalPath: text('canonical_path').notNull(),
+    /** Which repo this belongs to — staleness resolves against THIS tree only. */
+    repo: text('repo').notNull().default('SR-Main'),
+    displayName: text('display_name'),
+    /** Template-generated, never LLM-written. See the fabrication memory. */
+    summary: text('summary'),
+    embedding: vector('embedding'),
+    /**
+     * What KIND of file this is — 'api-endpoint', 'site-tool', 'test', … — a
+     * pure function of the path (see codegraph/family.ts), stamped server-side
+     * at ingest so no caller can disagree about it.
+     *
+     * Null is meaningful: a file with no family has no siblings, and a
+     * catch-all would make every unclassified file a precedent for every other.
+     */
+    family: text('family'),
+    episodeCount: integer('episode_count').notNull().default(0),
+    lessonCount: integer('lesson_count').notNull().default(0),
+    /**
+     * Does this path still exist at git HEAD? A node whose file was deleted
+     * cannot teach anything actionable. Refreshed by the sweep, and NEVER
+     * trusted when the sentinel self-test fails — see codegraph/liveness.ts.
+     */
+    existsOnHead: boolean('exists_on_head').notNull().default(true),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    /** Tombstone, mirroring intel's merge model. Never a magic string. */
+    mergedIntoId: text('merged_into_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('codegraph_nodes_repo_path_idx').on(t.repo, t.canonicalPath),
+    index('codegraph_nodes_kind_idx').on(t.kind),
+    index('codegraph_nodes_merged_idx').on(t.mergedIntoId),
+  ],
+);
+export type CodegraphNode = typeof codegraphNodes.$inferSelect;
+export type NewCodegraphNode = typeof codegraphNodes.$inferInsert;
+
+/**
+ * A relation between two nodes. `co_change` is measured (they were edited in
+ * the same session), `needs_context` is asserted (reading one required reading
+ * the other). `weight` is the observation count, so a one-off pairing ranks
+ * below a habit.
+ */
+export const codegraphEdges = pgTable(
+  'codegraph_edges',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    targetId: text('target_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    /**
+     * 'imports'       — STATIC: this file imports that one. Exact, directional,
+     *                   and available without any session history. The strongest
+     *                   linkage in a codebase and the one the first cut missed
+     *                   entirely, which is why half the graph was isolated.
+     * 'tests'         — STATIC: a test file and its subject.
+     * 'co_change'     — BEHAVIOURAL: edited in the same session. Symmetric, so
+     *                   the pair is stored sorted to avoid two rows per pair.
+     * 'needs_context' — BEHAVIOURAL: read before the other was edited.
+     * 'gated_by' | 'fixed_by' — reserved.
+     */
+    kind: text('kind').notNull(),
+    weight: integer('weight').notNull().default(1),
+    /** Suppressed by a human in review — filtered by the one loader, not deleted. */
+    suppressed: boolean('suppressed').notNull().default(false),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('codegraph_edges_triple_idx').on(t.sourceId, t.targetId, t.kind),
+    index('codegraph_edges_source_idx').on(t.sourceId),
+    index('codegraph_edges_target_idx').on(t.targetId),
+  ],
+);
+export type CodegraphEdge = typeof codegraphEdges.$inferSelect;
+export type NewCodegraphEdge = typeof codegraphEdges.$inferInsert;
+
+/**
+ * One recorded piece of work: something was attempted against some files, a
+ * gate said something about it, and it either held or it did not.
+ *
+ * `fingerprint` is the hot lane — a normalised, ANSI-stripped error key such as
+ * `tsc:TS2345` or `vitest:AssertionError`. Measured: agents almost never re-run
+ * a byte-identical command (1 exact-command repeat across 25 sessions), so the
+ * key must be the error class, not the command. Plain btree, sub-10ms.
+ */
+export const codegraphEpisodes = pgTable(
+  'codegraph_episodes',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    repo: text('repo').notNull().default('SR-Main'),
+    /**
+     * Natural key, so re-ingesting the same transcript updates rather than
+     * duplicates. Its absence was a real bug: nodes and lessons had natural
+     * keys and episodes did not, so the first re-run of the backfill took the
+     * corpus from 83 episodes to 166 — and a daily refresh cron would have
+     * doubled it every night while every count on every surface kept rising.
+     * Derived by the caller from (sourceId, fingerprint, files, occurredAt).
+     */
+    dedupeKey: text('dedupe_key'),
+    /** Claude Code session id, or a jkai build id — provenance, not identity. */
+    sourceKind: text('source_kind').notNull().default('session'),
+    sourceId: text('source_id'),
+    title: text('title'),
+    /** What went wrong, verbatim-ish and trimmed. Never LLM-written. */
+    problem: text('problem'),
+    /** What was changed. Template-assembled from the recorded edits. */
+    resolution: text('resolution'),
+    /** How we know it worked — the command whose exit code changed. */
+    verification: text('verification'),
+    /** Normalised error key, e.g. 'tsc:TS2345'. Null when not gate-derived. */
+    fingerprint: text('fingerprint'),
+    /** 'svelte-check' | 'vitest' | 'build' | 'lint' | null */
+    gate: text('gate'),
+    /**
+     * verified > landed > unverified > repaired > abandoned.
+     * Ranking multiplies by this: 'merged' is not 'correct'.
+     */
+    verdict: text('verdict').notNull().default('unverified'),
+    filesTouched: jsonb('files_touched').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    prNumber: integer('pr_number'),
+    embedding: vector('embedding'),
+    /** How often this episode has been SERVED, and how often it preceded a pass. */
+    servedCount: integer('served_count').notNull().default(0),
+    helpfulCount: integer('helpful_count').notNull().default(0),
+    unhelpfulCount: integer('unhelpful_count').notNull().default(0),
+    lastServedAt: timestamp('last_served_at', { withTimezone: true }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+    retiredReason: text('retired_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Plain unique, NOT partial. Postgres already treats NULLs as distinct in a
+    // unique index, so rows minted before this column existed coexist happily
+    // without a predicate — and a PARTIAL index cannot serve as an ON CONFLICT
+    // arbiter unless the statement repeats its exact WHERE clause, which made
+    // every episode insert fail with a 500 the moment it shipped. The predicate
+    // bought nothing and cost the whole ingest.
+    uniqueIndex('codegraph_episodes_dedupe_idx').on(t.dedupeKey),
+    index('codegraph_episodes_fingerprint_idx').on(t.fingerprint),
+    index('codegraph_episodes_verdict_idx').on(t.verdict),
+    index('codegraph_episodes_gate_idx').on(t.gate),
+    index('codegraph_episodes_occurred_idx').on(t.occurredAt),
+    index('codegraph_episodes_retired_idx').on(t.retiredAt),
+  ],
+);
+export type CodegraphEpisode = typeof codegraphEpisodes.$inferSelect;
+export type NewCodegraphEpisode = typeof codegraphEpisodes.$inferInsert;
+
+/**
+ * A durable rule about this codebase — "a new `scripts/` file needs its own
+ * rsync line in ci-release.sh or it silently never ships".
+ *
+ * Seeded VERBATIM from the 272 hand-written `~/.claude/.../memory/*.md` notes,
+ * which are the highest-quality knowledge body in the estate (median 2,919 B,
+ * already claim-plus-consequence, 117 citing concrete `src/` paths) and which
+ * jkai could not previously read a single byte of. No distillation pass: the
+ * text is already better than anything an LLM would write over it, and
+ * rewriting recorded facts is how fabrication gets in.
+ */
+export const codegraphLessons = pgTable(
+  'codegraph_lessons',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    repo: text('repo').notNull().default('SR-Main'),
+    slug: text('slug'),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    /** 'memory-note' | 'session' | 'build' | 'manual' */
+    origin: text('origin').notNull().default('memory-note'),
+    originRef: text('origin_ref'),
+    /** Repo-relative paths this lesson names. Drives staleness AND retrieval. */
+    citedPaths: jsonb('cited_paths').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    embedding: vector('embedding'),
+    servedCount: integer('served_count').notNull().default(0),
+    /**
+     * Outcome evidence — the input to `relevance.ts`.
+     *
+     * `helpful` and `unhelpful` are resolved MECHANICALLY from what the build
+     * did next (did the fingerprint that triggered the retrieval recur?), never
+     * by a model's judgement. A wrong "helpful" is indistinguishable from a real
+     * one afterwards and would poison the ranking permanently, so an
+     * unresolvable serve is left uncounted rather than guessed at — which is
+     * why `served` is deliberately larger than `helpful + unhelpful`.
+     */
+    helpfulCount: integer('helpful_count').notNull().default(0),
+    unhelpfulCount: integer('unhelpful_count').notNull().default(0),
+    lastServedAt: timestamp('last_served_at', { withTimezone: true }),
+    /**
+     * Forgetting, three distinct states — conflating them is what makes a
+     * "forget" button destructive:
+     *   retiredAt   — no longer true, keep for provenance, never served
+     *   supersededById — a REAL id, never a magic string (forget_memory's
+     *                    literal 'forgotten' left 23 dangling rows)
+     *   staleAt     — every path it cites is gone from its OWN repo
+     */
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+    retiredReason: text('retired_reason'),
+    supersededById: text('superseded_by_id'),
+    staleAt: timestamp('stale_at', { withTimezone: true }),
+    observedAt: timestamp('observed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('codegraph_lessons_repo_slug_idx').on(t.repo, t.slug),
+    index('codegraph_lessons_retired_idx').on(t.retiredAt),
+    index('codegraph_lessons_stale_idx').on(t.staleAt),
+    index('codegraph_lessons_origin_idx').on(t.origin),
+  ],
+);
+export type CodegraphLesson = typeof codegraphLessons.$inferSelect;
+export type NewCodegraphLesson = typeof codegraphLessons.$inferInsert;
+
+/**
+ * Which lessons attach to which nodes. Composite PK, deliberately: the sibling
+ * `intel_note_entities` shipped without one and silently accumulated duplicate
+ * links until a repair run removed them.
+ */
+export const codegraphNodeLessons = pgTable(
+  'codegraph_node_lessons',
+  {
+    nodeId: text('node_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    lessonId: text('lesson_id')
+      .notNull()
+      .references(() => codegraphLessons.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.nodeId, t.lessonId] }),
+    index('codegraph_node_lessons_lesson_idx').on(t.lessonId),
+  ],
+);
+
+/** Same, for episodes. */
+export const codegraphNodeEpisodes = pgTable(
+  'codegraph_node_episodes',
+  {
+    nodeId: text('node_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    episodeId: text('episode_id')
+      .notNull()
+      .references(() => codegraphEpisodes.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.nodeId, t.episodeId] }),
+    index('codegraph_node_episodes_episode_idx').on(t.episodeId),
+  ],
+);
+
+/**
+ * Every serve, logged. This table is the whole reason we will be able to answer
+ * "is it working?" honestly.
+ *
+ * The precedent is painful and exact: the builder's site-tool bridge logged
+ * "Tool bridge OK — 167 site tools" for sixty days while every one of 5,214
+ * production tool actions was a pi built-in and not one was a bridged call.
+ * Self-reported health proved nothing; only SQL over recorded actions did. So
+ * the retrieval path records what it served, to which build and iteration,
+ * joinable to `jkai_iterations` — including the serves that returned NOTHING,
+ * because a system that only logs its hits cannot be shown to be idle.
+ */
+export const codegraphQueries = pgTable(
+  'codegraph_queries',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** 'push' | 'pull' | 'chat' — which channel asked. */
+    channel: text('channel').notNull(),
+    buildId: text('build_id'),
+    iterationId: text('iteration_id'),
+    /** The CGQL actually executed, verbatim, so a bad serve is reproducible. */
+    query: text('query').notNull(),
+    /** 'served' | 'empty' | 'failed' — empty and failed are NOT the same. */
+    outcome: text('outcome').notNull(),
+    episodeIds: jsonb('episode_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    lessonIds: jsonb('lesson_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    charsServed: integer('chars_served').notNull().default(0),
+    durationMs: integer('duration_ms'),
+    errorMessage: text('error_message'),
+    /**
+     * The fingerprints that CAUSED this retrieval. Kept so the serve can be
+     * resolved later: if they recur in the next iteration's gate, what was
+     * served did not address them.
+     */
+    servedFor: jsonb('served_for').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** 'helpful' | 'unhelpful' | null while still unresolved. */
+    resolution: text('resolution'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('codegraph_queries_build_idx').on(t.buildId),
+    index('codegraph_queries_resolution_idx').on(t.resolution),
+    index('codegraph_queries_channel_idx').on(t.channel),
+    index('codegraph_queries_outcome_idx').on(t.outcome),
+    index('codegraph_queries_created_idx').on(t.createdAt),
+  ],
+);
+export type CodegraphQuery = typeof codegraphQueries.$inferSelect;
+export type NewCodegraphQuery = typeof codegraphQueries.$inferInsert;
+
+// ── Daydreaming ──────────────────────────────────────────────────────────────
+//
+// A background state in which jkai looks at what it already knows — where you
+// are, where you have been, how you slept, what is in your inbox and calendar —
+// and asks whether anything is worth saying. Most ticks it says nothing.
+//
+// Three tables, and the split between them is the design:
+//
+//   daydream_trail   the sensor record. High volume, narrow, pruned.
+//   daydream_places  what the trail's repeated stops MEAN. Named by you.
+//   daydream_thoughts what was noticed, what was said, and how it landed.
+//
+// The detectors that read these are deliberately RULE-BASED (same argument as
+// intel_insights above): a rule that fires on a measurable condition can be
+// trusted, explained and tested. The model's job is phrasing a confirmed
+// finding, never deciding there is one.
+
+/**
+ * One observation of where the subject was — or one record of having looked
+ * and failed.
+ *
+ * **A gap is a row, not an absence of rows.** The push writer only fires on
+ * GPS change, so standing still produces no pushes; if silence meant "no data"
+ * the trail could not tell stillness from a dead sensor, and every "you have
+ * not left the house in three days" would be a coin flip. So the poll floor
+ * writes `source: 'poll'` when it gets a fix and `source: 'gap'` when it looked
+ * and could not — and coverage over a window is then computable rather than
+ * assumed. Home Assistant runs on homeserv while the site runs on the VPS, so
+ * "could not" is a real, recurring state, not a theoretical one.
+ */
+export const daydreamTrail = pgTable(
+  'daydream_trail',
+  {
+    id: serial('id').primaryKey(),
+    /**
+     * When the fix was OBSERVED. Distinct from `createdAt`, which is when the
+     * row was written — a queued push can land minutes late, and everything
+     * time-weighted has to read this one. Same lesson as intel_notes.observedAt.
+     */
+    ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
+    /** Whose fix. 'john' today; the column exists so a second subject never
+     *  means a second table. The whole household writes trail rows since 2026-08-27 (owner's D1 decision). */
+    subject: text('subject').notNull().default('john'),
+    /** 'push' | 'poll' | 'gap' — see the note above. */
+    source: text('source').notNull(),
+    lat: doublePrecision('lat'),
+    lon: doublePrecision('lon'),
+    accuracyM: doublePrecision('accuracy_m'),
+    /** Home Assistant's own state string ('home', 'not_home', a zone name).
+     *  HA's zone logic is authoritative for "am I home"; the radius check is
+     *  only a fallback, exactly as the location-context node has it. */
+    haState: text('ha_state'),
+    isHome: boolean('is_home'),
+    distanceHomeKm: doublePrecision('distance_home_km'),
+    /** Derived from the PREVIOUS fix. Null when there is no usable previous
+     *  fix, when the gap is too long to mean anything, or when the implied
+     *  speed is physically absurd (a GPS jump, not a journey). */
+    speedKmh: doublePrecision('speed_kmh'),
+    /** 'still' | 'walking' | 'active' | 'vehicle' | 'rail' | 'unknown'.
+     *  Deliberately coarse: GPS speed cannot separate running from cycling, so
+     *  it does not pretend to. Advisory only — never stated to you as fact. */
+    mode: text('mode').notNull().default('unknown'),
+    placeId: text('place_id'),
+    batteryPct: integer('battery_pct'),
+    /** Age of the underlying HA reading at write time. A fresh row carrying a
+     *  two-hour-old reading is not a fresh observation. */
+    readingAgeS: integer('reading_age_s'),
+    /** Why a gap row exists — the error, verbatim, so a silent trail is
+     *  diagnosable after the fact rather than merely noticeable. */
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_trail_ts_idx').on(t.ts),
+    index('daydream_trail_subject_ts_idx').on(t.subject, t.ts),
+    index('daydream_trail_place_idx').on(t.placeId),
+    index('daydream_trail_source_idx').on(t.source),
+  ],
+);
+
+export type DaydreamTrailRow = typeof daydreamTrail.$inferSelect;
+export type NewDaydreamTrailRow = typeof daydreamTrail.$inferInsert;
+
+/**
+ * A place the trail keeps returning to.
+ *
+ * Clusters are cheap; MEANING is not. A centroid with four visits is a fact
+ * about coordinates and says nothing useful — it becomes useful the moment it
+ * has a name, and the only reliable source of that name is you. So the whole
+ * point of this table is `source: 'confirmed'`: an unnamed frequent place
+ * raises a question, your answer is written to jkai_memories under the
+ * existing `places` category, and the memory id is recorded here so the two
+ * can never drift apart.
+ */
+export const daydreamPlaces = pgTable(
+  'daydream_places',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    lat: doublePrecision('lat').notNull(),
+    lon: doublePrecision('lon').notNull(),
+    /** Derived from member spread, floored at the clustering radius. */
+    radiusM: doublePrecision('radius_m').notNull(),
+    /** Null until named. A null label is the trigger for asking. */
+    label: text('label'),
+    /** 'home' | 'school' | 'work' | 'shop' | 'cafe' | 'gym' | 'other' | 'unknown' */
+    kind: text('kind').notNull().default('unknown'),
+    /**
+     * 'confirmed' — you said so. Quotable back to you as fact.
+     * 'geocoded'  — Nominatim reverse lookup. Good for a street, weak for a shop.
+     * 'inferred'  — pattern only. Never stated as fact, only ever as a question.
+     */
+    source: text('source').notNull().default('inferred'),
+    /** The jkai_memories row written when you confirmed this place. */
+    memoryId: text('memory_id'),
+    /**
+     * What the reverse geocoder thinks this place is called, precomputed so the
+     * naming form opens already filled in.
+     *
+     * Deliberately NOT `label`. Writing a guess into `label` would collapse the
+     * confirmed > geocoded > inferred ladder above: everything downstream treats
+     * a non-null label as "the owner said so", and seven detectors gate on
+     * exactly that. A suggestion is scaffolding for a human answer, never a
+     * substitute for one, so it lives in its own columns and only a tap ever
+     * promotes it into `label`.
+     */
+    suggestedLabel: text('suggested_label'),
+    suggestedKind: text('suggested_kind'),
+    suggestedAddress: text('suggested_address'),
+    suggestedAt: timestamp('suggested_at', { withTimezone: true }),
+    visitCount: integer('visit_count').notNull().default(0),
+    /**
+     * On how many separate LOCAL DAYS anyone stayed here.
+     *
+     * Distinct from `visitCount`, which counts person-visits and is a household
+     * aggregate: one family outing to a soft-play with five people in the car
+     * is five visits and one day. Asking "what is this place you keep going to?"
+     * about that is wrong, and eleven of the thirteen places in the naming
+     * queue on 2026-08-27 were exactly it. Repetition is a question about days.
+     */
+    distinctDays: integer('distinct_days').notNull().default(0),
+    medianDwellMins: integer('median_dwell_mins').notNull().default(0),
+    /** Visit counts by weekday (7) and by local hour (24) — a cheap rhythm
+     *  summary, so "usually Tuesday afternoon" costs no query. */
+    dayHistogram: jsonb('day_histogram').$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    hourHistogram: jsonb('hour_histogram').$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    /**
+     * 'active' | 'ignored' | 'merged' | 'transit'.
+     *
+     * `ignored` is you saying "stop asking about this one" — a place-level mute
+     * that survives re-clustering, which a dismissed thought alone would not.
+     *
+     * `transit` is the ENGINE saying it: a cluster the trail passes through
+     * rather than stops at. Kept distinct from `ignored` on purpose — one is
+     * your decision and permanent, the other is a judgement about the evidence
+     * and is revised the moment somebody actually spends ten still minutes
+     * there. Before the stillness rule (2026-08-27) these were indistinguishable
+     * from destinations and made up half the table.
+     */
+    status: text('status').notNull().default('active'),
+    mergedIntoId: text('merged_into_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_places_status_idx').on(t.status),
+    index('daydream_places_kind_idx').on(t.kind),
+    index('daydream_places_label_idx').on(t.label),
+  ],
+);
+
+/**
+ * Every series daydream has ever discovered, whatever produced it.
+ *
+ * The feature store below is a wide table of hand-written columns, which means
+ * the set of things daydream can notice is fixed at the moment somebody last
+ * edited `features/build.ts`. Home Assistant alone exposes 415 entities
+ * carrying 427 numeric attributes across 263 of them; daydream read five.
+ * `sensor.john_s_echo_temperature` has been reporting the indoor temperature
+ * all along and nothing ever looked at it.
+ *
+ * So: discovery registers, nothing hand-writes. A source enumerates what it can
+ * see, calls `registerSignal` for anything new, and from then on that series is
+ * swept, carded and ponderable with no code change anywhere. That includes
+ * sources that do not exist yet — a future connector, or a tool the
+ * self-improvement loop writes itself, joins by calling the same function.
+ *
+ * `key` is namespaced by source so two sources can never collide:
+ * `ha:sensor.john_s_echo_temperature`, `ha:weather.forecast_home#humidity`,
+ * `weather:temperature_2m`, `journey:minutes_moving`, `feature:hrvMs`.
+ *
+ * Registering is NOT the same as trusting. A signal enters the sweep only once
+ * it has enough observed days to clear `MIN_PAIRS`, which is why a newly
+ * discovered sensor is silent for a fortnight rather than immediately
+ * contributing noise to a false-discovery correction.
+ */
+export const daydreamSignals = pgTable(
+  'daydream_signals',
+  {
+    /** Namespaced `source:identifier`, stable across restarts and re-discovery. */
+    key: text('key').primaryKey(),
+    /** 'ha' | 'weather' | 'journey' | 'feature' | anything a future source picks. */
+    source: text('source').notNull(),
+    /** Human label, for cards and findings. */
+    label: text('label').notNull(),
+    /** '°C', 'lx', 'min', 'km/h' — null when the source does not say. */
+    unit: text('unit'),
+    /** 'numeric' | 'boolean'. Booleans are stored as 0/1 so one column serves
+     *  both and a daily mean of a boolean is a duty cycle, which is useful. */
+    valueKind: text('value_kind').notNull().default('numeric'),
+    /** HA's own device_class where there is one — 'temperature', 'battery'. */
+    deviceClass: text('device_class'),
+    /**
+     * 'active'   — swept and carded once it has the days for it.
+     * 'ignored'  — John said stop.
+     * 'unusable' — discovered, but the source never produced a usable value.
+     *
+     * Deliberately mirrors daydream_places: a judgement the engine made is
+     * revisable, a mute the owner set is not.
+     */
+    status: text('status').notNull().default('active'),
+    /** Days with at least one observation. The gate for entering a sweep. */
+    observedDays: integer('observed_days').notNull().default(0),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_signals_source_idx').on(t.source),
+    index('daydream_signals_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamSignal = typeof daydreamSignals.$inferSelect;
+
+/**
+ * One signal, one subject, one local day.
+ *
+ * Long and narrow on purpose — this is the half of the design that lets the
+ * feature set grow without a migration. The wide `daydream_day_features` table
+ * stays exactly as it is and its columns are MIRRORED in here as `feature:*`
+ * signals, so there is a single place to correlate from and no flag day.
+ *
+ * Four aggregates rather than one, because a day's worth of a sensor is not one
+ * number and which one matters depends on the question: mean indoor temperature
+ * is a different claim from the coldest it got. `samples` travels with them so a
+ * value derived from one reading is distinguishable from one derived from
+ * twenty-four — the same reason `sources` exists on the feature store.
+ *
+ * A day with no reading has NO ROW. Absent is not zero; that rule is inherited
+ * deliberately, and it is what lets a correlation exclude a day it cannot see
+ * rather than treating an outage as a measurement.
+ */
+export const daydreamObservations = pgTable(
+  'daydream_observations',
+  {
+    id: serial('id').primaryKey(),
+    /** Local day, `YYYY-MM-DD`, same convention as the feature store. */
+    day: date('day').notNull(),
+    /** A person, or 'household' for anything that belongs to the house rather
+     *  than to someone — indoor temperature is nobody's in particular. */
+    subject: text('subject').notNull().default('household'),
+    signalKey: text('signal_key').notNull(),
+    valueMean: doublePrecision('value_mean'),
+    valueMin: doublePrecision('value_min'),
+    valueMax: doublePrecision('value_max'),
+    valueLast: doublePrecision('value_last'),
+    samples: integer('samples').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_observations_key_idx').on(t.day, t.subject, t.signalKey),
+    index('daydream_observations_signal_idx').on(t.signalKey),
+    index('daydream_observations_day_idx').on(t.day),
+  ],
+);
+
+export type DaydreamObservation = typeof daydreamObservations.$inferSelect;
+
+/**
+ * One row per local day, per subject — the table that makes a cross-domain
+ * correlation computable at all.
+ *
+ * Nothing in this database previously put health, movement and activity on a
+ * common key. 472,072 Apple rows, 1,138 activities and 9,313 trail fixes exist,
+ * in four different time formats (a x100 integer with an offset string, a unix
+ * epoch, an ISO string with a Z, and a timestamptz) and two different scaling
+ * conventions — one of which, strain, is applied inconsistently within its own
+ * column. Asking "does poor sleep track shop visits?" was not gated, it was
+ * unanswerable.
+ *
+ * Two rules govern every column here:
+ *
+ *   EVERY FEATURE IS NULLABLE. A day with no reading stores null, never zero.
+ *   Zero is a measurement; absent is not. Conflating them is how "you took no
+ *   steps on Sunday" gets said about a day the phone was flat, and it is the
+ *   single fastest way to manufacture a correlation out of an outage.
+ *
+ *   COVERAGE TRAVELS WITH THE NUMBERS. `sources` records, per domain, whether
+ *   that day was actually observed. A statistical test can then exclude a day
+ *   it cannot see rather than treating it as a data point.
+ *
+ * Derived and disposable: every value is recomputed from the source tables, so
+ * this can be dropped and rebuilt. It is a cache with opinions, not a record.
+ */
+export const daydreamDayFeatures = pgTable(
+  'daydream_day_features',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** LOCAL calendar day (Europe/London), never UTC. A rhythm is a local fact
+     *  and a UTC day boundary puts half of every evening on the wrong date. */
+    day: date('day').notNull(),
+
+    // ── Movement, from the trail. No coordinates, ever. ──
+    trailFixes: integer('trail_fixes'),
+    trailCoverage: doublePrecision('trail_coverage'),
+    placesVisited: integer('places_visited'),
+    distinctPlaces: integer('distinct_places'),
+    minutesAtHome: integer('minutes_at_home'),
+    minutesOut: integer('minutes_out'),
+    firstOutAtMins: integer('first_out_at_mins'),
+    lastHomeAtMins: integer('last_home_at_mins'),
+
+    // ── Health. Normalised in features/normalise.ts, never inline. ──
+    steps: integer('steps'),
+    activeEnergyKj: doublePrecision('active_energy_kj'),
+    meanHeartRate: doublePrecision('mean_heart_rate'),
+    hrvMs: doublePrecision('hrv_ms'),
+    restingHeartRate: doublePrecision('resting_heart_rate'),
+    recoveryScore: doublePrecision('recovery_score'),
+    strain: doublePrecision('strain'),
+    sleepMinutes: doublePrecision('sleep_minutes'),
+    sleepPerformance: doublePrecision('sleep_performance'),
+    sleepEfficiency: doublePrecision('sleep_efficiency'),
+    disturbanceCount: integer('disturbance_count'),
+
+    // ── Deliberate activity. ──
+    workouts: integer('workouts'),
+    activeMinutes: doublePrecision('active_minutes'),
+    activityDistanceM: doublePrecision('activity_distance_m'),
+
+    // ── Diary. ──
+    calendarEvents: integer('calendar_events'),
+    calendarBusyMinutes: integer('calendar_busy_minutes'),
+
+    /** Spend EVIDENCED that day — verified email receipts plus the bank rails
+     *  when armed. Minor units. A zero is a true statement about evidence, not
+     *  about spending; an unreadable spend table leaves the day null. Added
+     *  2026-08-27 by manual ALTER (drizzle push is unsafe while two unrelated
+     *  table drops are pending). */
+    verifiedSpendMinor: integer('verified_spend_minor'),
+
+    /**
+     * Per-domain observation state: 'ok' | 'partial' | 'absent'.
+     *
+     * The difference between "he did not go out" and "we could not see" — which
+     * is the entire reason the coverage gate exists elsewhere in this feature,
+     * and would be thrown away by a bare feature vector.
+     */
+    sources: jsonb('sources').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_day_features_subject_day_idx').on(t.subject, t.day),
+    index('daydream_day_features_day_idx').on(t.day),
+  ],
+);
+
+/**
+ * Questions the assistant decided were worth asking, and what the data said.
+ *
+ * The point of the table is the rows nobody would keep. `refuted`,
+ * `wrong_direction` and `underpowered` are stored exactly as durably as
+ * `supported`, because a system that keeps only its hits looks prescient and is
+ * unfalsifiable. "I checked whether shop visits track poor sleep; they do not,
+ * r = 0.06" is a useful thing to read, and until this table existed there was
+ * nowhere in this codebase for it to live.
+ *
+ * `proposedAt` is recorded separately from `testedAt` and always precedes it.
+ * That ordering is the pre-registration guarantee: the model proposed this
+ * claim without seeing a p-value, so the correction applies over the handful it
+ * asked for rather than the several hundred an exhaustive sweep runs. A row
+ * where the two are equal, or where the verdict was written by anything other
+ * than `judge()`, has lost that property.
+ */
+export const daydreamHypotheses = pgTable(
+  'daydream_hypotheses',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** Stable identity, so the same question is not asked twice. */
+    hypothesisKey: text('hypothesis_key').notNull(),
+
+    metricA: text('metric_a').notNull(),
+    metricB: text('metric_b').notNull(),
+    lagDays: integer('lag_days').notNull().default(0),
+    /** 'positive' | 'negative' | 'either' — stated BEFORE the test, so a
+     *  contradicting result is a refutation rather than a shrug. */
+    direction: text('direction').notNull(),
+
+    /** The model's words. Never rendered as fact, only as a question asked. */
+    question: text('question').notNull(),
+    rationale: text('rationale').notNull(),
+
+    /** 'supported' | 'refuted' | 'wrong_direction' | 'underpowered' | null. */
+    verdict: text('verdict'),
+    /** Deterministic, from judge(). A model never writes this. */
+    summary: text('summary'),
+    r: doublePrecision('r'),
+    pValue: doublePrecision('p_value'),
+    qValue: doublePrecision('q_value'),
+    pairs: integer('pairs'),
+    /** m — how many tests the correction ran over. Without it the q-value on
+     *  this row cannot be interpreted, or audited later. */
+    familySize: integer('family_size'),
+    fdr: doublePrecision('fdr'),
+
+    /** Model tokens spent proposing. Codex reports no price, so this is the
+     *  only honest cost figure. */
+    proposalTokens: integer('proposal_tokens').notNull().default(0),
+
+    proposedAt: timestamp('proposed_at', { withTimezone: true }).notNull().defaultNow(),
+    testedAt: timestamp('tested_at', { withTimezone: true }),
+    /** Retested periodically as the window fills — an underpowered question
+     *  becomes answerable, and a supported one can stop holding. */
+    lastRetestedAt: timestamp('last_retested_at', { withTimezone: true }),
+    retestCount: integer('retest_count').notNull().default(0),
+
+    /** Owner verdict on the QUESTION, not the statistics: was this worth
+     *  asking? That is the signal that shapes what gets proposed next. */
+    feedback: text('feedback'),
+    feedbackAt: timestamp('feedback_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('daydream_hypotheses_subject_key_idx').on(t.subject, t.hypothesisKey),
+    index('daydream_hypotheses_verdict_idx').on(t.verdict),
+    index('daydream_hypotheses_proposed_idx').on(t.proposedAt),
+  ],
+);
+
+/**
+ * Things John has asked it to look into.
+ *
+ * The only owner-authored text this engine could previously read was a place
+ * name. There was no way to say "look at what I'm spending at weekends", and
+ * so no way for his priorities to reach a system whose entire job is deciding
+ * what he'd find interesting.
+ *
+ * A steer REORDERS work. It grants no new access whatsoever: the proposer still
+ * sees only the metric catalogue, and a steer becomes at most a sentence of
+ * emphasis in its prompt. That boundary is deliberate and load-bearing — free
+ * text from a chat box that could widen what a model may read is an injection
+ * surface, and this one cannot, by construction.
+ */
+export const daydreamSteers = pgTable(
+  'daydream_steers',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** What he typed, verbatim. Rendered back to him; never executed. */
+    text: text('text').notNull(),
+    /** 'active' | 'done' | 'dropped'. */
+    status: text('status').notNull().default('active'),
+    /** How many proposal batches have been run under this steer, so one that
+     *  has shaped a fortnight of questions and produced nothing is visible. */
+    batchesInfluenced: integer('batches_influenced').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('daydream_steers_status_idx').on(t.status)],
+);
+
+export type DaydreamSteer = typeof daydreamSteers.$inferSelect;
+
+/**
+ * One card a morning: everything it thought yesterday, including the quiet parts.
+ *
+ * This is what decouples THINKING volume from TALKING volume. `budget.ts`
+ * already declares that spare budget buys thinking and never talking, but that
+ * was aspirational: a fifty-fold rise in thinking produced fifty times more
+ * rows nobody read, because the only way anything reached him was an
+ * interruption capped at four a day.
+ *
+ * A digest is not an interruption. It is a place for quiet output to land, and
+ * it reports the nothing as well as the something — a morning that says "18
+ * tests, nothing survived, 3 questions still short of data" is an honest and
+ * useful morning, and a digest that only appears when there is news is a digest
+ * that cannot be trusted when it is silent.
+ */
+export const daydreamDigests = pgTable(
+  'daydream_digests',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** Local day the digest covers. */
+    day: date('day').notNull(),
+    /** Deterministic summary, assembled from counts. Always present. */
+    summary: text('summary').notNull(),
+    /** Optional model phrasing over the same counts. Never the only record. */
+    narrative: text('narrative'),
+    /** Did anything check the narrative? Same three states as a thought. */
+    verified: boolean('verified'),
+    /** Every number the summary quotes, so none of them is unexplained. */
+    stats: jsonb('stats').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_digests_subject_day_idx').on(t.subject, t.day),
+    index('daydream_digests_day_idx').on(t.day),
+  ],
+);
+
+/**
+ * Money actually spent, as far as the mailbox can tell.
+ *
+ * This table is deliberately narrow, and the reason is worth stating because
+ * the obvious version of this feature is a trap. 605 email notes contain a
+ * currency amount — and an audit of them found the overwhelming majority are
+ * ADVERTISED prices, not payments: "Price reduced by £34.30", "Luxury Escapes
+ * From £879pp", "Up to 12 months at 0%". A spend series built from "emails
+ * mentioning money" would track how much marketing John receives, and it would
+ * correlate beautifully with things, and every word of it would be false.
+ *
+ * So only genuinely receipt-shaped mail is admitted, and the extracted amount
+ * must appear verbatim in the source text before the row is written. At the
+ * time of building that is 34 messages over eight weeks — about four a week.
+ *
+ * That density is why `daydream_spend` is NOT wired into the sweep metrics.
+ * Four points a week is nulls on most days, and every question asked of it
+ * would come back underpowered at best and spurious at worst. It accumulates
+ * first and earns its way in later; `spendDensity()` reports how close it is,
+ * so the decision is a number on a page rather than an opinion.
+ *
+ * It will always understate. No cash, no card-present spend without an emailed
+ * receipt, and nothing from a merchant who does not email. Anything reading
+ * this table must say so.
+ */
+export const daydreamSpend = pgTable(
+  'daydream_spend',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** The intel_notes row this came from. The provenance, and the dedupe key. */
+    sourceNoteId: text('source_note_id').notNull(),
+    merchant: text('merchant').notNull(),
+    /** Minor units (pence), integer — never a float. Money in floating point is
+     *  a rounding error waiting to be summed. */
+    amountMinor: integer('amount_minor').notNull(),
+    currency: text('currency').notNull().default('GBP'),
+    /** LOCAL day of the purchase, for joining against day features later. */
+    day: date('day').notNull(),
+    /** The exact substring the amount was read from. Stored so a wrong figure
+     *  can be traced to the text that produced it rather than argued about. */
+    evidence: text('evidence').notNull(),
+    /** Did the amount actually appear in the source? Written by code, never by
+     *  a model. A false here means the row is quarantined, not quoted. */
+    verified: boolean('verified').notNull().default(false),
+    extractedAt: timestamp('extracted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_spend_note_idx').on(t.sourceNoteId),
+    index('daydream_spend_day_idx').on(t.day),
+    index('daydream_spend_merchant_idx').on(t.merchant),
+  ],
+);
+
+/**
+ * A durable queue of things the assistant is still chewing on.
+ *
+ * The difference from a hypothesis: a hypothesis is one testable claim,
+ * proposed and answered in a single tick and then finished. A LEAD is a line of
+ * enquiry that outlives a tick — "sleep and going out seem tangled up, work out
+ * how" — which spawns hypotheses, accumulates evidence across days, and is
+ * eventually either paid off or abandoned.
+ *
+ * `score` is what makes a frontier rather than a list. It is recomputed from
+ * the lead's own results — how many of its hypotheses held, how many came back
+ * empty — so effort follows what is paying off, and a line that has produced
+ * nothing for several rounds falls to the bottom on its own arithmetic rather
+ * than on a constant somebody chose.
+ *
+ * NOTE ON THE THRESHOLDS: `abandonAfterBarrenRounds` and the score weights are
+ * deliberately stored per-row and left at conservative defaults rather than
+ * tuned. The whole point of this table is to stop constants deciding what is
+ * interesting, and tuning them before the hypothesis engine has produced a
+ * month of real verdicts would be inventing exactly the numbers this feature
+ * exists to replace. They are set from measured behaviour, not guessed.
+ */
+export const daydreamLeads = pgTable(
+  'daydream_leads',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    subject: text('subject').notNull().default('john'),
+    /** Stable identity so the same line of enquiry is not opened twice. */
+    leadKey: text('lead_key').notNull(),
+    /** What it is trying to find out, in John's terms. */
+    title: text('title').notNull(),
+    /** The model's reasoning for opening it. Never rendered as fact. */
+    rationale: text('rationale').notNull(),
+    /** Metric names this lead is allowed to range over — its own allow-list,
+     *  narrower than the global one, so a lead cannot quietly become a sweep. */
+    metrics: jsonb('metrics').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+
+    /** 'open' | 'paid_off' | 'abandoned' | 'parked'. */
+    status: text('status').notNull().default('open'),
+    /** Recomputed each round from this lead's own results. */
+    score: doublePrecision('score').notNull().default(0.5),
+    /** Every input to `score`, named. Never show an unexplained number. */
+    scoreComponents: jsonb('score_components').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+
+    roundsRun: integer('rounds_run').notNull().default(0),
+    /** Consecutive rounds that produced no supported hypothesis. */
+    barrenRounds: integer('barren_rounds').notNull().default(0),
+    hypothesesSpawned: integer('hypotheses_spawned').notNull().default(0),
+    hypothesesHeld: integer('hypotheses_held').notNull().default(0),
+
+    /** Per-row so it can be tuned from evidence later without a migration. */
+    abandonAfterBarrenRounds: integer('abandon_after_barren_rounds').notNull().default(4),
+
+    /** Owner steer that opened this, when one did. */
+    steerId: text('steer_id'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    lastRoundAt: timestamp('last_round_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('daydream_leads_subject_key_idx').on(t.subject, t.leadKey),
+    index('daydream_leads_status_score_idx').on(t.status, t.score),
+  ],
+);
+
+export type DaydreamLead = typeof daydreamLeads.$inferSelect;
+
+/**
+ * One step of thinking, kept.
+ *
+ * The reviewable trace. Without it "the model explored during idle time" is an
+ * unfalsifiable claim and a token bill; with it there is a record of what it
+ * looked at, what it decided, and what that cost — which is the only way an
+ * exploration loop can be audited rather than trusted.
+ *
+ * Deliberately append-only and pruned by age, not by interest. Keeping only
+ * the steps that led somewhere would make the trace agree with the conclusion.
+ */
+export const daydreamLeadSteps = pgTable(
+  'daydream_lead_steps',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    leadId: text('lead_id').notNull(),
+    round: integer('round').notNull(),
+    /** 'plan' | 'spawn' | 'read' | 'judge' | 'prune'. */
+    kind: text('kind').notNull(),
+    /** What happened, in one deterministic line. */
+    note: text('note').notNull(),
+    /** Structured detail — hypothesis ids, verdicts, the numbers behind a
+     *  pruning decision. */
+    detail: jsonb('detail').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    tokens: integer('tokens').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_lead_steps_lead_idx').on(t.leadId, t.round),
+    index('daydream_lead_steps_created_idx').on(t.createdAt),
+  ],
+);
+
+export type DaydreamLeadStep = typeof daydreamLeadSteps.$inferSelect;
+
+export type DaydreamSpend = typeof daydreamSpend.$inferSelect;
+
+export type DaydreamDigest = typeof daydreamDigests.$inferSelect;
+
+export type DaydreamHypothesis = typeof daydreamHypotheses.$inferSelect;
+export type NewDaydreamHypothesis = typeof daydreamHypotheses.$inferInsert;
+
+export type DaydreamDayFeature = typeof daydreamDayFeatures.$inferSelect;
+export type NewDaydreamDayFeature = typeof daydreamDayFeatures.$inferInsert;
+
+export type DaydreamPlace = typeof daydreamPlaces.$inferSelect;
+export type NewDaydreamPlace = typeof daydreamPlaces.$inferInsert;
+
+/**
+ * One daydream: what was noticed, what was said about it, and how it landed.
+ *
+ * Modelled on intel_insights, for the same reason that table exists — a
+ * finding that is recomputed per request cannot be dismissed, cannot be
+ * snoozed, and has no yesterday to compare against. `dedupeKey` is the
+ * identity that survives recomputation.
+ *
+ * Rows land here whether or not they were ever delivered, INCLUDING the ones
+ * suppressed by rate limits or a learned weight, with the reason. A ledger
+ * that only records what got through cannot answer the one question worth
+ * asking of this feature: is it any good?
+ */
+export const daydreamThoughts = pgTable(
+  'daydream_thoughts',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    /** Deterministic, rule-generated. Always present, even when the model
+     *  never ran — so a thought is explainable without an LLM call. */
+    explanation: text('explanation').notNull(),
+    /** Optional model phrasing, applied to survivors only. Never required. */
+    narrative: text('narrative'),
+    /**
+     * Did the verify pass actually rule on `narrative`?
+     *
+     * Three states, and the third is the one that matters. `null` means no
+     * model prose exists. `true` means a second pass checked every claim
+     * against the FACTS block and let it through. `false` means prose exists
+     * that NOTHING checked — which already happens today, because
+     * DEPTH_PLANS.minimal sets verify:false and compose returns early with the
+     * narrative populated. Until this column existed there was no way to tell
+     * the two apart on the page, so unchecked prose read exactly like checked
+     * prose. The headline promotion gates on `true`, never on "narrative is
+     * non-null".
+     */
+    verified: boolean('verified'),
+    /** Why the phrasing was thrown away, when it was — "no usable evidence",
+     *  "verify failed: …", or the model's own SKIP. Rendered on the ledger, so
+     *  a composer that has started refusing everything is visible rather than
+     *  looking like a quiet week. */
+    narrativeDroppedReason: text('narrative_dropped_reason'),
+    /**
+     * What the phrasing actually cost, in tokens.
+     *
+     * Tokens rather than only money, because the daydream model is pinned to
+     * Codex, where price is NULL on every row — a pounds-only meter reads
+     * 0.000000 whatever the work was, which is exactly the state this feature
+     * shipped in. `costUsd` below stays, and stays honest at zero for a model
+     * that bills nothing; these are the numbers that move.
+     */
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    score: doublePrecision('score').notNull().default(0),
+    /** Every component of `score`. Rule: never show an unexplained number. */
+    components: jsonb('components').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    /** Typed references to what this rests on — trail ids, place ids, email
+     *  ids, memory ids, calendar uids. The composer may fetch ONLY these. */
+    evidence: jsonb('evidence').$type<Array<{ kind: string; id: string; note?: string }>>().notNull().default(sql`'[]'::jsonb`),
+    placeId: text('place_id'),
+    dedupeKey: text('dedupe_key').notNull(),
+    /** new | delivered | seen | dismissed | actioned | snoozed | suppressed */
+    status: text('status').notNull().default('new'),
+    /** Why it never went out: 'below_threshold', 'rate_limited',
+     *  'quiet_hours', 'kind_muted', 'evidence_unverified'. */
+    suppressedReason: text('suppressed_reason'),
+    snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
+    proposedActions: jsonb('proposed_actions')
+      .$type<Array<{ kind: string; label: string; payload: string }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** 'push' | 'chat' | 'silent' — one channel per thought, never two. */
+    channel: text('channel'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+    /** 'useful' | 'not_useful' | 'never_kind'. `never_kind` is an immediate,
+     *  absolute mute — not a down-weight. With push as the default channel it
+     *  is the escape hatch, so no statistics stand between you and silence. */
+    feedback: text('feedback'),
+    /**
+     * Where the verdict came from. 'explicit' | 'triage' | 'action'.
+     *
+     * The reason this column exists rather than a second boolean: `confirmPlace`
+     * has always refused to record naming a place as feedback, on the correct
+     * grounds that quietly manufacturing an upvote would inflate a kind's score
+     * with something the owner never said. But that left the strongest evidence
+     * the feature has ever produced — he named five places, which is the exact
+     * act the whole thing exists to elicit — recorded nowhere at all, while the
+     * threshold sat pinned at its ceiling waiting for 25 responses it had no way
+     * to get.
+     *
+     * Both concerns are real, and they are answerable at once by keeping the
+     * provenance instead of throwing the signal away. An action counts, at a
+     * discount, and says on the page that it was inferred rather than said.
+     */
+    feedbackSource: text('feedback_source'),
+    /**
+     * What John said about this one, in his own words.
+     *
+     * The feedback vocabulary is a closed phrase list — useful, not that, never
+     * — which is right for a verdict and useless for a reason. The reason is
+     * the valuable part: "good call, but some of those calendar events are
+     * rolling reminders" is a correction no thumbs-down could carry, and
+     * without somewhere to put it the only options were to accept a flawed
+     * suggestion or mute the whole kind.
+     *
+     * Also written to `jkai_memories` so the rest of jkai can read it, on the
+     * same argument `confirmPlace` makes: the useful place for something the
+     * owner typed is the store everything already reads, not one feature's
+     * private column. This column is the display copy and the link.
+     */
+    note: text('note'),
+    noteMemoryId: text('note_memory_id'),
+    noteAt: timestamp('note_at', { withTimezone: true }),
+    feedbackNote: text('feedback_note'),
+    /**
+     * How many detect ticks have re-proposed this exact thing.
+     *
+     * `persistCandidates` updates a suppressed row in place every ten minutes,
+     * which is right — a candidate is one standing proposal, not 144 a day —
+     * but it meant the page could not tell a thing noticed once from a thing
+     * that has been almost-said forty times and never cleared the bar. That
+     * distinction is the whole basis for deciding what to triage first.
+     */
+    recurrenceCount: integer('recurrence_count').notNull().default(1),
+    feedbackAt: timestamp('feedback_at', { withTimezone: true }),
+    runId: text('run_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_thoughts_dedupe_idx').on(t.dedupeKey),
+    index('daydream_thoughts_status_idx').on(t.status),
+    index('daydream_thoughts_kind_idx').on(t.kind),
+    index('daydream_thoughts_created_idx').on(t.createdAt),
+    index('daydream_thoughts_feedback_idx').on(t.feedback),
+  ],
+);
+
+export type DaydreamThought = typeof daydreamThoughts.$inferSelect;
+export type NewDaydreamThought = typeof daydreamThoughts.$inferInsert;
+
+/**
+ * Offers extracted from bulk email, so "you have a voucher for this shop" is a
+ * fact rather than a guess.
+ *
+ * Two-stage by design. A free, rule-based filter over subject lines picks the
+ * shortlist — 1,073 bulk emails in ninety days is far too many to hand a model,
+ * and most of them are newsletters. Only the shortlist is extracted, and that
+ * extraction spends against the same Codex caps as everything else here.
+ *
+ * `expiresAt` is the column that matters most. An EXPIRED voucher is worse than
+ * no voucher: it sends you into a shop for nothing. Null means the email did
+ * not state a date, which is a different thing from "does not expire" and is
+ * scored lower rather than assumed generous.
+ */
+export const daydreamOffers = pgTable(
+  'daydream_offers',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** The BRAND, as a person would say it — "Sports Direct", not
+     *  "email.sportsdirect.com". It has to match a place label to be useful. */
+    merchant: text('merchant').notNull(),
+    /** One line, as it would be read back. */
+    summary: text('summary').notNull(),
+    /** Discount code, when the email carried one. */
+    code: text('code'),
+    /** Null when the email stated no date — NOT a synonym for "no expiry". */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /** 'high' | 'medium' | 'low' — the extractor's own confidence. Anything
+     *  below high is never used to interrupt, only to fill the page. */
+    confidence: text('confidence').notNull().default('medium'),
+    /** The intel note this came from, so a thought can cite it. */
+    noteId: text('note_id'),
+    /** Deep link back to the message in Gmail. */
+    sourceUrl: text('source_url'),
+    senderDomain: text('sender_domain'),
+    /** merchant + code + expiry day. Stops the same voucher landing twice when
+     *  a merchant re-sends it, which they all do. */
+    dedupeKey: text('dedupe_key').notNull(),
+    /** 'active' | 'expired' | 'dismissed' */
+    status: text('status').notNull().default('active'),
+    observedAt: timestamp('observed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_offers_dedupe_idx').on(t.dedupeKey),
+    index('daydream_offers_status_idx').on(t.status),
+    index('daydream_offers_merchant_idx').on(t.merchant),
+    index('daydream_offers_expires_idx').on(t.expiresAt),
+  ],
+);
+
+export type DaydreamOffer = typeof daydreamOffers.$inferSelect;
+export type NewDaydreamOffer = typeof daydreamOffers.$inferInsert;
+
+/**
+ * Rules a model proposed, and what happened to them.
+ *
+ * The mesh between rules-driven and model-driven: the model authors the RULE,
+ * deterministic code evaluates it. `spec` is a validated expression tree over a
+ * fixed allow-list of scalar facts — never code, never `eval`, and never able
+ * to name anything the fact extractor did not put in front of it.
+ *
+ * Nothing here fires until `status = 'active'`, and only the owner moves a rule
+ * there. A proposal that survives validation and backtesting is still only a
+ * proposal; the self-improvement engine auto-enables what it builds, and that
+ * is defensible for a tool nobody is interrupted by. This one buzzes a phone.
+ */
+export const daydreamRules = pgTable(
+  'daydream_rules',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** Becomes the thought `kind`, so it is also the mute key and the weight key. */
+    kind: text('kind').notNull(),
+    /** The validated RuleSpec. See $lib/daydream/rules/spec.ts. */
+    spec: jsonb('spec').$type<Record<string, unknown>>().notNull(),
+    /** 'proposed' | 'active' | 'rejected' | 'deprecated' */
+    status: text('status').notNull().default('proposed'),
+    /** Why the model proposed it, in its own words. Shown to the owner when
+     *  approving; never shown to the composer, which must work from evidence. */
+    rationale: text('rationale').notNull().default(''),
+    /** 'new' | 'tweak' | 'deprecate' — what the model was doing. */
+    proposalKind: text('proposal_kind').notNull().default('new'),
+    /** For a tweak or a deprecation, the rule it is about. */
+    supersedesId: text('supersedes_id'),
+
+    // ── Backtest ──
+    /** How many times it would have fired over the replayed window. */
+    backtestFires: integer('backtest_fires'),
+    backtestDays: integer('backtest_days'),
+    /**
+     * True when the replay could not reconstruct every fact the rule uses, so
+     * the firing count is a LOWER BOUND. Such a rule can never be auto-anything
+     * — an under-estimate is the dangerous direction for a noise check.
+     */
+    backtestLowerBound: boolean('backtest_lower_bound').notNull().default(false),
+    backtestNote: text('backtest_note'),
+
+    // ── Outcome, once live ──
+    firedCount: integer('fired_count').notNull().default(0),
+    usefulCount: integer('useful_count').notNull().default(0),
+    notUsefulCount: integer('not_useful_count').notNull().default(0),
+
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decidedBy: text('decided_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_rules_kind_idx').on(t.kind),
+    index('daydream_rules_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamRule = typeof daydreamRules.$inferSelect;
+export type NewDaydreamRule = typeof daydreamRules.$inferInsert;

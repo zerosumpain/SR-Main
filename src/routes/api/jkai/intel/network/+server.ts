@@ -5,7 +5,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { hopNeighbourhood, components } from '$lib/jkai/intel/analytics/model';
-import { applyGraphFilter, parseCsv } from '$lib/jkai/intel/analytics/filter';
+import {
+  applyGraphFilter,
+  parseCsv,
+  nodeTimeUnder,
+  edgeTimeUnder,
+  type GraphClock,
+} from '$lib/jkai/intel/analytics/filter';
 import { reconcileFromAnalysis } from '$lib/jkai/intel/cluster-store';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { db } from '$lib/db';
@@ -30,6 +36,18 @@ export const GET: RequestHandler = async ({ url }) => {
   const sourceFilter = parseCsv(url.searchParams.get('sources'));
   const entityFilter = parseCsv(url.searchParams.get('entities'));
   const qHopsParam = url.searchParams.get('qHops');
+
+  // The recency window. Epoch ms, both open-ended by default.
+  //
+  // `since` is accepted as an absolute instant rather than a "last N days"
+  // count deliberately: the client already has to render exact dates for the
+  // custom range, and a server that re-derives "7 days ago" from its own clock
+  // would disagree with the label the user is looking at whenever a request
+  // crosses midnight.
+  const since = numberParam(url.searchParams.get('since'));
+  const until = numberParam(url.searchParams.get('until'));
+  const clock: GraphClock = url.searchParams.get('clock') === 'added' ? 'added' : 'updated';
+  const windowed = since !== null || until !== null;
 
   const analysis = await getGraphAnalysis();
   const { index, centrality, community } = analysis;
@@ -72,7 +90,17 @@ export const GET: RequestHandler = async ({ url }) => {
     categories: categoryFilter,
     sources: sourceFilter,
     entityIds: entityFilter,
+    since,
+    until,
+    clock,
   });
+
+  // Nodes and edges the window itself admitted, as opposed to the ones dragged
+  // in as endpoints of a recent edge. Sets, because the node loop below is over
+  // hundreds of ids and `Array.includes` inside it is the shape that turned a
+  // hop lookup into 600 full-graph traversals here once already.
+  const recentNodes = new Set(filtered.recentNodes);
+  const recentEdges = new Set(filtered.recentEdges);
 
   // Everything the filter admitted, BEFORE the payload is trimmed to the most
   // central 600. Cluster reach and the filtered counts are both computed from
@@ -93,6 +121,7 @@ export const GET: RequestHandler = async ({ url }) => {
     !!communityFilter ||
     !!q ||
     minDegree > 1 ||
+    windowed ||
     categoryFilter.length > 0 ||
     sourceFilter.length > 0 ||
     entityFilter.length > 0;
@@ -142,6 +171,12 @@ export const GET: RequestHandler = async ({ url }) => {
       categories: n.categories,
       sources: n.sources,
       aliases: n.aliases,
+      // Inside the recency window on its OWN clock, as opposed to having been
+      // pulled in as the endpoint of a recent edge. False for everything when
+      // no window is set. Kept distinct for the same reason `matched` is: a
+      // view that draws the context exactly like the hits cannot show you what
+      // you asked for.
+      recent: recentNodes.has(n.id),
       // How current this entity's evidence is, so the renderers can fade stale
       // material. Computed here rather than client-side so both the 2D and 3D
       // views agree and neither needs to know the decay curve.
@@ -181,6 +216,7 @@ export const GET: RequestHandler = async ({ url }) => {
       weight: e.weight,
       sourceKind: e.sourceKind,
       recency: Number(recencyOf(e.lastSeenAt, now).toFixed(3)),
+      recent: recentEdges.has(e.id),
       // An edge whose ends sit in different clusters is the interesting kind.
       crossCommunity: community.membership.get(e.source) !== community.membership.get(e.target),
     }));
@@ -204,6 +240,54 @@ export const GET: RequestHandler = async ({ url }) => {
       .from(intelCategories)
       .orderBy(intelCategories.name),
   ]);
+
+  // The activity histogram behind the slicer, in whole UTC days.
+  //
+  // Computed over the WHOLE index and every edge, never over `keep` — exactly
+  // the rule the source picker follows a few lines below, and for the same
+  // reason. A histogram built from the filtered selection would redraw itself
+  // every time the window moved, so dragging the window left would flatten the
+  // bars you were dragging towards. A timeline that reacts to its own brush
+  // cannot be used to aim.
+  //
+  // Bucketed by UTC day and returned as epoch ms, not as a formatted date. The
+  // viewer is in Europe/London and the server is not; whose "day" a bar belongs
+  // to is the client's question, and answering it here would be the local-day
+  // ≠ UTC-day trap in a place nobody would look for it.
+  const ACTIVITY_DAYS = 90;
+  const dayStart = Math.floor(now / 86_400_000) * 86_400_000;
+  const from = dayStart - (ACTIVITY_DAYS - 1) * 86_400_000;
+  const buckets = new Map<number, { nodes: number; edges: number }>();
+  for (let t = from; t <= dayStart; t += 86_400_000) buckets.set(t, { nodes: 0, edges: 0 });
+
+  let olderNodes = 0;
+  let olderEdges = 0;
+  const bucketFor = (t: number) => Math.floor(t / 86_400_000) * 86_400_000;
+  for (const id of index.ids) {
+    const n = index.byId.get(id);
+    if (!n) continue;
+    const t = nodeTimeUnder(n, clock);
+    if (!t) continue;
+    const b = buckets.get(bucketFor(t));
+    if (b) b.nodes++;
+    else if (t < from) olderNodes++;
+  }
+  for (const e of analysis.snapshot.edges) {
+    const t = edgeTimeUnder(e, clock);
+    if (!t) continue;
+    const b = buckets.get(bucketFor(t));
+    if (b) b.edges++;
+    else if (t < from) olderEdges++;
+  }
+  const activity = {
+    from,
+    to: dayStart,
+    days: [...buckets.entries()].map(([t, c]) => ({ t, nodes: c.nodes, edges: c.edges })),
+    // Everything off the left-hand end, so the slicer can say how much history
+    // it is not drawing rather than implying the graph starts 90 days ago.
+    olderNodes,
+    olderEdges,
+  };
 
   const comps = components(index);
 
@@ -284,7 +368,18 @@ export const GET: RequestHandler = async ({ url }) => {
         (e) => selected.has(e.source) && selected.has(e.target),
       ).length,
       selectedCommunities: clusterReach.length,
+      // What the WINDOW itself admitted, before endpoint expansion. Reported so
+      // "7 days" can honestly say "14 entities and 3 connections", rather than
+      // quoting a selection two thirds of which is context.
+      recentNodes: filtered.recentNodes.length,
+      recentEdges: filtered.recentEdges.length,
     },
+    // The clock the window was measured on, echoed back. The client picks it,
+    // but a payload that does not say which clock produced these numbers is one
+    // screenshot away from being unreadable.
+    clock,
+    window: { since, until },
+    activity,
     // Clusters the filter actually reaches, largest reach first.
     //
     // `size` stays the cluster's TRUE size and `reach` says how much of it is
@@ -316,3 +411,16 @@ export const GET: RequestHandler = async ({ url }) => {
       })),
   });
 };
+
+/**
+ * A finite epoch-ms query parameter, or null.
+ *
+ * Null rather than 0 for anything unparseable: 0 is a real instant (1970) and
+ * `since=0` would read as "everything since the epoch", which is the opposite
+ * of the "no window" that a malformed parameter should mean.
+ */
+function numberParam(raw: string | null): number | null {
+  if (raw === null || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}

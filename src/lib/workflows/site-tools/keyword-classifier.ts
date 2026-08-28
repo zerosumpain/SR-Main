@@ -38,6 +38,9 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   // and `paid` carry the intent without that.
   { toolset: 'apis', pattern: /\bapis?\b|data\s+sources?|live\s+data|current\s+(?:figures?|stats?|numbers?|data|values?)|latest\s+(?:figures?|stats?|numbers?|data)|external\s+data|fetch\s+(?:live|current)\s+data|\bpaypal\b|\btruelayer\b|\bopen\s+banking\b|\btransactions?\b|\breceipts?\b|\binvoices?\b|\brefunds?\b|\bsubscriptions?\b|\bdirect\s+debits?\b|\bstatements?\b|\bbilling\b|\bpayments?\b|\bpaid\s+(?:for|to|by|via|through)\b|\bcharged?\s+(?:me|to|for)\b/i },
   { toolset: 'knowledge', pattern: /@?knowledge|search\s+(?:everything|all\s+(?:my|the)\s+(?:stores?|sources?|knowledge))|across\s+(?:my\s+)?(?:files,?\s*research|everything)|unified\s+(?:search|recall)/i },
+  { toolset: 'discovery', pattern: /\bwhat (?:tools?|can you)\b|\bis there a tool\b|\bskill\b|\bplaybook\b|\bhow do i\b.*\bhere\b/i },
+  { toolset: 'browser', pattern: /\bbrowser\b|\bconsole (?:log|error)s?\b|\bopen the (?:page|site)\b|\brender(?:s|ed|ing)?\b.*\bpage\b|\bclick\b|\bscreenshot\b|\bjavascript error/i },
+  { toolset: 'recall', pattern: /\bwhat did (?:we|you|i) (?:say|decide|discuss)\b|\blast time\b|\bearlier (?:conversation|chat)\b|\bremember that\b|\bdo you remember\b|\bpreviously\b/i },
   { toolset: 'agents', pattern: /\bdelegate\b|\bagent\s+team\b|\bspecialists?\b|ask\s+the\s+(?:researcher|analyst|writer|reviewer)|team\s+memory/i },
   { toolset: 'monitors', pattern: /\bmonitors?\b|watch\s+(?:for|this|that|the)|tell\s+me\s+when|alert\s+me\s+(?:when|if)|keep\s+an\s+eye\s+on/i },
   // The entity graph. Distinct from `knowledge` above: that one loads
@@ -48,6 +51,18 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   // Without an entry here the whole toolset was unreachable unless the model
   // thought to call activate_toolset('intel-graph') off its own bat.
   { toolset: 'intel-graph', pattern: /knowledge\s*graph|entity\s*graph|\bentities\b|\bdossiers?\b|connect(?:ed|ion)s?\s+(?:between|to)|\brelationships?\b|\bpath\b[^.]*\bbetween\b|\bunlikely\s+(?:relation|connection)/i },
+  // The BUILD-history graph, distinct from the entity graph above: that one is
+  // about the world, this one is about this codebase. Deliberately keyed on
+  // repo/change language ("why does X work that way", "has this broken
+  // before", a bare src/... path) rather than on the word "graph", which
+  // belongs to intel. Without a row here the toolset is unreachable unless the
+  // model thinks to call activate_toolset('codegraph') unprompted — the exact
+  // reason intel-graph needed its own entry.
+  {
+    toolset: 'codegraph',
+    pattern:
+      /\bcodegraph\b|build\s+history|past\s+builds?|(?:why|how)\s+(?:is|does|do|did)\s+.{0,40}\b(?:work|done|built|written)\b|has\s+(?:this|that|it)\s+(?:ever\s+)?(?:broken|failed)\s+before|previous(?:ly)?\s+(?:fixed|broke|failed)|what\s+changed\s+.{0,30}\b(?:last\s+time|before)\b|\b(?:src|scripts|packages)\/[\w.\-/]+\.(?:ts|svelte|mjs|js|sql)\b|precedents?\s+for/i,
+  },
   { toolset: 'decks', pattern: DECK_PATTERN },
   { toolset: 'presentations', pattern: DECK_PATTERN },
   { toolset: 'capabilities', pattern: /what\s+can\s+you\s+do|what\s+are\s+you\s+(?:able|capable)|your\s+capabilit|\bcapabilit(?:y|ies)\b/i },

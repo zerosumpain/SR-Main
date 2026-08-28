@@ -120,11 +120,82 @@ export function matchesTerm(haystack: string, term: string): boolean {
  * (`binary_sensor` + `door`), which under OR would return every binary sensor
  * in the house and answer nothing. AND is what makes a second word useful.
  */
+/**
+ * What a person calls a thing, versus what Home Assistant calls it.
+ *
+ * Entities are named after the device model; people say the brand, the room, or
+ * whatever they have always called it. Asking for "the alexa temperature" found
+ * NOTHING here, because the sensors are `sensor.john_s_echo_temperature` — a
+ * fair question returning zero results, and the model then reported there was no
+ * temperature data at all.
+ *
+ * Synonyms apply WITHIN a term, never between terms. "alexa temperature" still
+ * requires something matching alexa/echo AND something matching temperature —
+ * loosening that to OR would return every sensor in the house and answer
+ * nothing, which is the reason `matchesQuery` is AND in the first place.
+ *
+ * Entries are symmetric on purpose: whichever word the person happens to use,
+ * the other one is found.
+ */
+const TERM_SYNONYMS: Record<string, readonly string[]> = {
+  // Brand vs model
+  alexa: ['echo', 'dot'], echo: ['alexa'], dot: ['echo', 'alexa'],
+  ring: ['doorbell'], doorbell: ['ring'],
+  hue: ['light'], tado: ['thermostat', 'heating'],
+  // Rooms, as actually spoken
+  lounge: ['living', 'livingroom'], living: ['lounge'],
+  loo: ['bathroom', 'toilet'], toilet: ['bathroom', 'loo'], bathroom: ['loo', 'toilet'],
+  bedroom: ['bed'], hallway: ['hall'], hall: ['hallway'],
+  kitchen: ['kitchen'], garden: ['outdoor', 'outside'],
+  outdoor: ['outside', 'garden'], outside: ['outdoor', 'garden'],
+  upstairs: ['upstairs'], downstairs: ['downstairs'],
+  // Everyday shortenings
+  temp: ['temperature'], temperature: ['temp'],
+  telly: ['tv', 'television'], tv: ['telly', 'television'], television: ['tv', 'telly'],
+  lamp: ['light'], lights: ['light'], light: ['lamp'],
+  heating: ['thermostat', 'radiator', 'tado'], thermostat: ['heating', 'tado'],
+  hoover: ['vacuum'], vacuum: ['hoover'],
+  telephone: ['phone'], phone: ['mobile'],
+};
+
+/** A term and everything it might also be called. */
+export function expandTerm(term: string): string[] {
+  const t = term.toLowerCase();
+  const syn = TERM_SYNONYMS[t];
+  return syn ? [t, ...syn] : [t];
+}
+
+/**
+ * Multi-word names, collapsed before the query is split.
+ *
+ * Term-level synonyms cannot help here: "living room light" splits into three
+ * terms and AND then requires "room", which appears in no entity id. People say
+ * "living room", so the phrase is rewritten to the single word the house
+ * actually uses.
+ */
+const PHRASE_SYNONYMS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bliving\s+room\b/g, 'lounge'],
+  [/\bsitting\s+room\b/g, 'lounge'],
+  [/\bdining\s+room\b/g, 'dining'],
+  [/\butility\s+room\b/g, 'utility'],
+  [/\bfront\s+door\b/g, 'front door'],
+  [/\bback\s+garden\b/g, 'garden'],
+  [/\bair\s+con(?:ditioning)?\b/g, 'climate'],
+  [/\bcentral\s+heating\b/g, 'heating'],
+];
+
+function applyPhrases(query: string): string {
+  let q = query.toLowerCase();
+  for (const [re, to] of PHRASE_SYNONYMS) q = q.replace(re, to);
+  return q;
+}
+
 export function matchesQuery(haystack: string, query: string): boolean {
-  const terms = query.toLowerCase().split(/[^a-z0-9_.]+/).filter(Boolean);
+  const terms = applyPhrases(query).split(/[^a-z0-9_.]+/).filter(Boolean);
   if (!terms.length) return true;
   const hay = haystack.toLowerCase();
-  return terms.every((t) => matchesTerm(hay, t));
+  // AND between terms, OR within a term's synonyms.
+  return terms.every((t) => expandTerm(t).some((v) => matchesTerm(hay, v)));
 }
 
 /**

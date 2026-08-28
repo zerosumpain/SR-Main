@@ -58,3 +58,6 @@ scraper-scripts/
 test-results/
 playwright-report/
 .playwright/
+
+# Voice corpus exports — unpublished drafts + private chat turns. See docs/voice-corpus.md
+corpus.json

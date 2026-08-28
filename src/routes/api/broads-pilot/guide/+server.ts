@@ -9,13 +9,13 @@ import type { RequestHandler } from './$types';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { jsonCompletion } from '$lib/deepdive/ai';
-import { route as computeRoute, reachable as computeReachable } from '../../../projects/broads-pilot/lib/router';
-import { bridgeVerdict } from '../../../projects/broads-pilot/lib/passability';
-import { routeFuel } from '../../../projects/broads-pilot/lib/fuel';
-import { daylightHours } from '../../../projects/broads-pilot/lib/daylight';
-import { haversine } from '../../../projects/broads-pilot/lib/geo';
-import { breydonAdvice } from '../../../projects/broads-pilot/lib/tide';
-import type { WaterGraph, Restrictions, Mooring, Poi, Boat, MooringPois } from '../../../projects/broads-pilot/lib/types';
+import { route as computeRoute, reachable as computeReachable } from '$lib/broads-pilot/router';
+import { bridgeVerdict } from '$lib/broads-pilot/passability';
+import { routeFuel } from '$lib/broads-pilot/fuel';
+import { daylightHours } from '$lib/broads-pilot/daylight';
+import { haversine } from '$lib/broads-pilot/geo';
+import { breydonAdvice } from '$lib/broads-pilot/tide';
+import type { WaterGraph, Restrictions, Mooring, Poi, Boat, MooringPois } from '$lib/broads-pilot/types';
 
 // ---- server-side dataset load (read the bundled JSON directly) ----
 // In dev the files live under static/; in the built adapter-node server they're

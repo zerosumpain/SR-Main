@@ -6,10 +6,12 @@
 # this list from the source and fails if it has drifted, so a new filesystem-
 # coupled test cannot be added without landing here too.
 #
+src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts
+src/lib/jkai/sandbox.contained-lane.test.ts
 src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
 src/lib/projects/registry-cards.test.ts
@@ -19,6 +21,8 @@ src/lib/workflows/site-tools/tools/publish-page.test.ts
 src/routes/projects/broads-pilot/lib/yarmouth.test.ts
 tests/extract/docx.test.ts
 tests/extract/pdf.test.ts
+tests/extract/scanned-pdf.test.ts
+tests/lib/config/owner.test.ts
 tests/lib/jkai/media/storage.test.ts
 tests/lib/node-builder/codegen/definition.test.ts
 tests/lib/node-builder/codegen/docs.test.ts
@@ -27,8 +31,19 @@ tests/lib/node-builder/codegen/index-patch.test.ts
 tests/lib/node-builder/codegen/panel.test.ts
 tests/lib/node-builder/codegen/registry-patch.test.ts
 tests/lib/node-builder/codegen/write-files.test.ts
+tests/lib/workflows/chat/destructive-gate-unattended.test.ts
+tests/lib/workflows/chat/prompt-cache-order.test.ts
+tests/lib/workflows/chat/thinking-level-wiring.test.ts
+tests/lib/workflows/delegation-rule.test.ts
 tests/lib/workflows/orchestrator/dynamic-nodes.test.ts
 tests/lib/workflows/registry-parity.test.ts
 tests/lib/workflows/site-tools/node-builder.test.ts
+tests/routes/admin-stale-stamps.test.ts
+tests/routes/chat-trace-link.test.ts
+tests/routes/model-picker-gating.test.ts
+tests/scripts/check-module-boundaries.test.ts
+tests/scripts/ci-release-shape.test.ts
+tests/scripts/ci-sidecars.test.ts
 tests/scripts/gate-level.test.ts
 tests/scripts/select-tests.test.ts
+tests/skills/tool-names-exist.test.ts

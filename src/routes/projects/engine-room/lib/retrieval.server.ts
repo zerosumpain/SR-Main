@@ -50,12 +50,24 @@ import {
   ALARMS, THRESHOLDS as WATCH_T, BOTH_KINDS, ANCHOR, SNAPSHOT,
   LENS, LENS_RULES, LENS_FILTERS, STANDING, WATCH_LESSON,
 } from './watch';
+import {
+  KEYS_NOTE, EVIDENCE as MEM_EVIDENCE, CHANNELS as MEM_CHANNELS, CORPUS as MEM_CORPUS,
+  LATENCY as MEM_LATENCY, HYGIENE as MEM_HYGIENE, FEEDBACK as MEM_FEEDBACK, BASELINE as MEM_BASELINE,
+  RELEVANCE as MEM_RELEVANCE, RESOLUTION as MEM_RESOLUTION, ANATOMY as MEM_ANATOMY,
+  EDGE_KINDS as MEM_EDGE_KINDS, DEDUPE as MEM_DEDUPE, CGQL as MEM_CGQL,
+  FINGERPRINT as MEM_FINGERPRINT, PROOF as MEM_PROOF, GRAPH_SURFACES as MEM_SURFACES,
+} from './lessons';
+import {
+  TILE, PAD_STORY, BANDS as TRAIL_BANDS, SPORT_LABEL, NAISMITH,
+  PLANNER as TRAIL_PLANNER, GUARDS as TRAIL_GUARDS, WHY_PRIVATE, PWA,
+} from './trails';
 
 export type SourceType =
   | 'overview' | 'trace' | 'models' | 'chat' | 'tools'
   | 'memory' | 'research' | 'automation' | 'building' | 'shipping' | 'guardrails'
   | 'channels' | 'trust' | 'drive' | 'decks' | 'feeds' | 'ground'
-  | 'keys' | 'store' | 'house' | 'watch' | 'tour' | 'city';
+  | 'keys' | 'store' | 'house' | 'watch' | 'tour' | 'city'
+  | 'lessons' | 'trails';
 
 export interface Chunk {
   id: string;
@@ -147,8 +159,8 @@ function buildChunks(): Chunk[] {
     text: `At 04:00 the catalogue is re-scored for four profiles: general, tool use, retrieval and agentic. Of ${CATALOGUE.total} catalogued models, ${CATALOGUE.toolCapable} can call tools and ${CATALOGUE.rated} carry a quality index; ${CATALOGUE.eligible} survive eligibility, narrowing to between ${CATALOGUE.pools.agentic} and ${CATALOGUE.pools.rag} real candidates per profile. Policy: ${POLICY.map((p) => `${p.k} ${p.v} — ${p.why}`).join(' ')} Observed success feeds back as the lower bound of a 95% confidence interval, so one lucky answer cannot leapfrog a proven model. Unknown prices record null rather than zero, because a fabricated zero silently understates spend.` });
 
   // ---- conversation ----
-  add({ id: 'hermes', sourceKey: 'engine', sourceType: 'chat', title: 'An external agent runtime behind the chat', url: `${B}/turn/stream`,
-    text: 'Chat replies are not generated in the site process. A dedicated agent runtime owns the conversation, its tools and its session state, and the site translates its outbound frames into the event vocabulary the existing interface already spoke — fourteen frame kinds in, twenty event variants out. Both engines can therefore drive the same interface and the switch is a flag. The cost is that the site can no longer instrument the model call directly, so cost, throughput and liveness are reconstructed from the frame stream.' });
+  add({ id: 'external-runtime', sourceKey: 'engine', sourceType: 'chat', title: 'The agent runtime that used to sit behind the chat', url: `${B}/turn/stream`,
+    text: 'For a year chat replies were not generated in the site process at all. A dedicated agent runtime owned the conversation, its tools and its session state, and the site translated its outbound frames into the event vocabulary the interface already spoke — fourteen frame kinds in, twenty event variants out. The switch between engines was a flag, which is what made it removable. The cost was that the site could not instrument the model call directly: cost, throughput and liveness all had to be reconstructed from the frame stream. That is why it was retired — the reply now happens here, and the numbers are measured rather than inferred.' });
   add({ id: 'segments', sourceKey: 'frames', sourceType: 'chat', title: 'One reply, many message segments', url: `${B}/turn/stream`,
     text: 'The runtime opens a fresh message id at every tool boundary, so one reply arrives as a chain of segments, and it interleaves its own status bubbles on the same text channel, re-editing them in place. A flat accumulator treats a non-prefix edit as a whole-string replace, so a progress line overwrote a finished answer both on screen and in the database. The fix keeps text per segment in arrival order, so a replace can only rewrite the segment it names — and it is source-agnostic, holding for any future misbehaving frame rather than detecting this one.' });
   add({ id: 'accidental-invariant', sourceKey: 'frames', sourceType: 'chat', title: 'The accidental invariant', url: `${B}/turn/stream`,
@@ -329,7 +341,7 @@ function buildChunks(): Chunk[] {
 
   // ---- ground: storage ----
   for (const s of STORES)
-    add({ id: `store-${s.id}`, sourceKey: 'storage', sourceType: 'ground', title: `Where the bytes live: ${s.label}`, url: `${B}/ground/storage`,
+    add({ id: `store-${s.id}`, sourceKey: 'storage', sourceType: 'ground', title: `Storage: ${s.label}`, url: `${B}/ground/storage`,
       text: `Holds: ${s.holds} Why here: ${s.why} What losing it costs: ${s.loss}` });
   add({ id: 'store-index', sourceKey: 'storage', sourceType: 'ground', title: BIG_INDEX.title, url: `${B}/ground/storage`, text: BIG_INDEX.body });
   add({ id: 'store-failures', sourceKey: 'recovery', sourceType: 'ground', title: 'What survives what', url: `${B}/ground/storage`,
@@ -377,6 +389,46 @@ function buildChunks(): Chunk[] {
   add({ id: 'watch-lens', sourceKey: 'lenses', sourceType: 'watch', title: LENS.title, url: `${B}/memory/watch`,
     text: `${LENS.body} ${LENS_RULES.map((r) => `${r.k}: ${r.why}`).join(' ')} A lens filters ${LENS_FILTERS.map((f) => `${f.k} (${f.v})`).join(', ')}. ${STANDING.body} ${WATCH_LESSON.body}` });
 
+  // ---- the build's memory (change/lessons) ----
+  add({ id: 'lessons-what', sourceKey: 'build-memory', sourceType: 'lessons', title: "The build's memory: what it is and why", url: `${B}/change/lessons`,
+    text: `A second knowledge graph, separate from the entity graph: it holds what building this system has already taught it. Nodes are files and gates because those persist while chat transcripts get deleted; episodes (verified fail-fix-pass chains) and curated lessons hang off them. It was built because the builder historically took ${MEM_BASELINE.iterationsPerBuild} iterations per completed build with ${MEM_BASELINE.failingPct}% of builds failing, and each iteration spent much of its time rediscovering the codebase. Counted 17 August 2026.` });
+  add({ id: 'lessons-keys', sourceKey: 'build-memory', sourceType: 'lessons', title: KEYS_NOTE.title, url: `${B}/change/lessons`, text: KEYS_NOTE.body });
+  add({ id: 'lessons-evidence', sourceKey: 'build-memory', sourceType: 'lessons', title: 'The measured facts that shaped the build memory', url: `${B}/change/lessons`,
+    text: MEM_EVIDENCE.map((e) => `${e.k} (${e.v}): ${e.why}`).join(' ') });
+  add({ id: 'lessons-channels', sourceKey: 'build-memory', sourceType: 'lessons', title: 'How the build memory is delivered', url: `${B}/change/lessons`,
+    text: `${MEM_CHANNELS.map((c) => `${c.k} (${c.v}): ${c.why}`).join(' ')} Against the alternative: a static codebase digest described 60 of 3,359 files, under two per cent, because a fixed briefing cannot know which files the next build will need. The graph answers per build, keyed to the files actually in hand.` });
+  add({ id: 'lessons-corpus', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What the build memory holds, and how fast it answers', url: `${B}/change/lessons`,
+    text: `Counted 17 August 2026: ${MEM_CORPUS.nodes.toLocaleString('en-GB')} nodes (files and gates, ${MEM_CORPUS.nodesAtHead.toLocaleString('en-GB')} still existing — deleted files are flagged, not dropped), ${MEM_CORPUS.edges.toLocaleString('en-GB')} edges, ${MEM_CORPUS.episodes} verified episodes, ${MEM_CORPUS.lessons} lessons of which ${MEM_CORPUS.staleLessons} are flagged stale, all in ${MEM_CORPUS.dbGrowthMb} MB of database growth. Measured latency: ${MEM_LATENCY.map((l) => `${l.k} ${l.v} — ${l.why}`).join(' ')}` });
+  add({ id: 'lessons-hygiene', sourceKey: 'build-memory', sourceType: 'lessons', title: 'Forgetting, staleness and honest metrics in the build memory', url: `${B}/change/lessons`,
+    text: MEM_HYGIENE.map((h) => `${h.k} (${h.v}): ${h.why}`).join(' ') });
+  add({ id: 'lessons-feedback', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What one helpful serve is worth', url: `${B}/change/lessons`,
+    text: `${MEM_FEEDBACK.note} The baseline the graph exists to beat: ${MEM_BASELINE.iterationsPerBuild} iterations per completed build (${MEM_BASELINE.last30Days} over the thirty days to 17 August 2026), with ${MEM_BASELINE.failingPct}% of builds failing. Whether it moves those numbers is not yet knowable, and the page says "too early to tell" rather than guessing.` });
+  add({ id: 'lessons-anatomy', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What codegraph is made of', url: `${B}/change/lessons`,
+    text: `${MEM_ANATOMY.map((a) => `${a.k} (${a.v}): ${a.why}`).join(' ')} The five edge kinds: ${MEM_EDGE_KINDS.map((e) => `${e.k} — ${e.why}`).join('; ')}. ${MEM_DEDUPE.body}` });
+  add({ id: 'lessons-cgql', sourceKey: 'build-memory', sourceType: 'lessons', title: 'CGQL, the codegraph query language', url: `${B}/change/lessons`,
+    text: `A five-verb, non-Turing pipeline: ${MEM_CGQL.grammar.map((g) => `${g.k} (${g.v}) — ${g.why}`).join(' ')} ${MEM_CGQL.security} ${MEM_CGQL.topic}` });
+  add({ id: 'lessons-fingerprint', sourceKey: 'build-memory', sourceType: 'lessons', title: 'How a gate failure becomes a retrieval fingerprint', url: `${B}/change/lessons`,
+    text: `A failed check's raw output is reduced to a stable error-class fingerprint by regular expression — no model call. Three measured findings shaped it: ${MEM_FINGERPRINT.map((f) => `${f.k} (${f.v}) — ${f.why}`).join(' ')}` });
+  add({ id: 'lessons-ranking', sourceKey: 'build-memory', sourceType: 'lessons', title: 'The relevance arithmetic: what deserves the prompt budget', url: `${B}/change/lessons`,
+    text: `Relevance is a product of computed terms: a Wilson lower bound over a lesson's helped/didn't-help record (neutral prior ${MEM_RELEVANCE.neutralPrior} when unproven, floor ${MEM_RELEVANCE.outcomeFloor} so failure demotes rather than deletes), an age decay with half-life ${MEM_RELEVANCE.halfLifeDays} days and floor ${MEM_RELEVANCE.recencyFloor} because old is not wrong, and a stale weight of ${MEM_RELEVANCE.staleWeight}. The balance shifts with evidence: at ${MEM_RELEVANCE.evidenceHalfWeight} resolved outcomes recency and outcome carry equal weight, and the corpus-level readout refuses to claim outcome-based ranking below ${MEM_RELEVANCE.evidenceMaturity} resolved serves. Serve outcomes are resolved mechanically from the next gate run, never by a model: ${MEM_RESOLUTION.map((r) => `${r.k} → ${r.v}`).join('; ')}.` });
+  add({ id: 'lessons-proof', sourceKey: 'build-memory', sourceType: 'lessons', title: 'Codegraph proven on two instrumented builds', url: `${B}/change/lessons`,
+    text: MEM_PROOF.body });
+  add({ id: 'lessons-surfaces', sourceKey: 'build-memory', sourceType: 'lessons', title: 'Where codegraph can be inspected', url: `${B}/change/lessons`,
+    text: MEM_SURFACES.map((s) => `${s.k}: ${s.why}`).join(' ') });
+
+  // ---- the outdoors (reach/trails) ----
+  add({ id: 'trails-what', sourceKey: 'trails', sourceType: 'trails', title: 'Trails: the route planner and offline maps', url: `${B}/reach/trails`,
+    text: `${PWA.body} Workouts arrive from the wearable with their GPS tracks; a router draws candidate loops over real mapped paths and the site's own scorer ranks them.` });
+  add({ id: 'trails-tiles', sourceKey: 'trails', sourceType: 'trails', title: 'What an offline map costs to download', url: `${B}/reach/trails`,
+    text: `Map tiles for a route are fetched at every zoom level from ${TILE.minZoom} to ${TILE.maxZoom}, padded by ${TILE.pad} whole tiles on each side, at a planning figure of ${Math.round(TILE.bytesPerTile / 1000)} KB per tile — a sample of real tiles averaged about ${TILE.measuredKb} KB, where an earlier estimate had assumed ${TILE.assumedKb}. ${PAD_STORY.body} Tiles are fetched one at a time, never as a parallel burst, because the tile service is volunteer-run and its policy asks for no bulk downloading.` });
+  add({ id: 'trails-difficulty', sourceKey: 'trails', sourceType: 'trails', title: 'Grading a route by climb: equivalent kilometres', url: `${B}/reach/trails`,
+    text: `${NAISMITH.body} The live bands (upper bounds of easy, moderate and hard, in equivalent km): ${Object.entries(TRAIL_BANDS).map(([s, b]) => `${SPORT_LABEL[s] ?? s} ${b.join('/')}`).join('; ')}.` });
+  add({ id: 'trails-planner', sourceKey: 'trails', sourceType: 'trails', title: 'Who draws a route and who ranks it', url: `${B}/reach/trails`,
+    text: TRAIL_PLANNER.map((p) => `${p.k} (${p.v}): ${p.why}`).join(' ') });
+  add({ id: 'trails-guards', sourceKey: 'trails', sourceType: 'trails', title: 'The rules that keep the route planner honest', url: `${B}/reach/trails`,
+    text: TRAIL_GUARDS.map((g) => `${g.k} (${g.v}): ${g.why}`).join(' ') });
+  add({ id: 'trails-private', sourceKey: 'trails', sourceType: 'trails', title: WHY_PRIVATE.title, url: `${B}/reach/trails`, text: WHY_PRIVATE.body });
+
   return out;
 }
 
@@ -417,7 +469,7 @@ const GROUPS: string[][] = [
   ['tool', 'tools', 'toolkit', 'manifest', 'function', 'capability', 'capabilities', 'mcp', 'protocol'],
   ['build', 'builder', 'builds', 'sandbox', 'container', 'publish', 'app', 'application', 'code', 'writes'],
   ['improve', 'improvement', 'nightly', 'overnight', 'night', 'autonomous', 'autonomy', 'itself', 'repair', 'self'],
-  ['chat', 'conversation', 'assistant', 'turn', 'message', 'reply', 'stream', 'streaming', 'hermes', 'agent'],
+  ['chat', 'conversation', 'assistant', 'turn', 'message', 'reply', 'stream', 'streaming', 'agent'],
   ['bug', 'bugs', 'failure', 'failures', 'incident', 'broke', 'broken', 'wrong', 'mistake', 'mistakes', 'hazard', 'scar', 'fail', 'failed'],
   ['fabricate', 'fabrication', 'hallucinate', 'hallucination', 'invent', 'invented', 'provenance', 'source', 'sources', 'citation', 'cite', 'trust'],
   ['prompt', 'prompts', 'context', 'instruction', 'instructions', 'prefill', 'window'],
@@ -452,6 +504,11 @@ const GROUPS: string[][] = [
   ['watchlist', 'watch', 'watched', 'alarm', 'alarms', 'alert', 'alerts', 'changed', 'change', 'moved', 'diff', 'snapshot', 'threshold', 'thresholds', 'insight', 'insights'],
   ['lens', 'lenses', 'view', 'views', 'perspective', 'saved', 'filter', 'filters', 'professional', 'personal'],
   ['broker', 'bridge', 'centrality', 'cluster', 'community', 'louvain', 'degree', 'neighbour', 'neighbours', 'influence'],
+  // Added with the build's-memory and trails pages. Same rule: every word a reader might
+  // type gets its own entry, because expansion is per-term.
+  ['lesson', 'lessons', 'episode', 'episodes', 'codegraph', 'history', 'learned', 'learning', 'learns', 'remembered', 'fingerprint', 'iteration', 'iterations', 'rediscovery', 'digest', 'briefing', 'recall', 'forgetting', 'forget', 'retire', 'retired', 'tombstone'],
+  ['cgql', 'query', 'queries', 'grammar', 'seed', 'hops', 'verdict', 'wilson', 'ranking', 'ranked', 'relevance', 'atrophy', 'demoted', 'served', 'serve', 'serves', 'helpful', 'unhelpful', 'unresolved', 'dedupe', 'backfill', 'stale'],
+  ['trail', 'trails', 'route', 'routes', 'map', 'maps', 'offline', 'tile', 'tiles', 'gps', 'hike', 'hiking', 'walk', 'walking', 'running', 'ride', 'riding', 'cycling', 'outdoors', 'outdoor', 'signal', 'download', 'downloaded', 'downloads', 'naismith', 'climb', 'ascent', 'elevation', 'difficulty', 'planner', 'loop', 'loops', 'pwa', 'installed', 'app'],
 ];
 
 // Every term in a group expands to every other term in that group.

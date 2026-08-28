@@ -12,7 +12,7 @@ import { sourceChunks, sources, facts, globalEntities, type NewSourceChunk, type
 import { chunkText } from '$lib/rag/chunk';
 import { generateEmbeddings } from './ai';
 import { extractContent } from './extract-content';
-import { loadKeys, getEmbeddingModel } from './keys';
+import { loadKeys, getEmbeddingModel } from '$lib/llm/keys';
 
 // Cap the content we chunk per source. phase 2 already slices fetched content to
 // ~10k chars; this is a hard ceiling for any other caller (e.g. backfill).

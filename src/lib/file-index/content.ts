@@ -10,9 +10,15 @@
 // which is unreachable through this repo's gateway. Video is deferred.
 
 import { extractText, kindFromMime, ExtractError } from '$lib/jkai/extract';
-import { describeImage, transcribeAudioBestEffort } from './describe';
+import { describeImage, describePdfBestEffort, transcribeAudioBestEffort } from './describe';
 
-export type Modality = 'text' | 'image' | 'audio';
+/**
+ * How a chunk's text was derived. 'ocr' is a PDF that had no text layer and was
+ * read by a vision model — kept distinct from 'text' because the two have very
+ * different reliability, and from 'image' because the file is a document, not a
+ * picture. Consumers treat unknown values as documents, so this is additive.
+ */
+export type Modality = 'text' | 'image' | 'audio' | 'ocr';
 export type FileContent = { text: string; modality: Modality };
 
 /**
@@ -26,7 +32,7 @@ export type FileContent = { text: string; modality: Modality };
  */
 export type ContentOutcome =
   | { status: 'text'; content: FileContent }
-  | { status: 'empty' }
+  | { status: 'empty'; reason?: string }
   | { status: 'error'; reason: string };
 
 /** Keep a reason short enough to store and read at a glance. */
@@ -86,7 +92,15 @@ export async function fileToText(
     if (kind && TEXT_KINDS.has(kind)) {
       const res = await extractText(buf, mimeType, filename);
       const text = res.text?.trim();
-      return text ? { status: 'text', content: { text, modality: 'text' } } : { status: 'empty' };
+      if (text) return { status: 'text', content: { text, modality: 'text' } };
+      // A PDF that parsed cleanly but yielded nothing is a scan — pixels with no
+      // text layer. pdf.js has done all it can; the pixels still say something.
+      if (kind === 'pdf') {
+        const ocr = await describePdfBestEffort(buf, filename);
+        if (ocr) return { status: 'text', content: { text: ocr, modality: 'ocr' } };
+        return { status: 'empty', reason: 'no text layer, and reading the page images produced nothing' };
+      }
+      return { status: 'empty' };
     }
     return { status: 'empty' };
   } catch (err) {

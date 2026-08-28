@@ -5,6 +5,10 @@
   import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
   import RichEditor from '$lib/components/RichEditor.svelte';
   import ClaimReviewPanel from '$lib/components/ClaimReviewPanel.svelte';
+  import BlogAssistantWidget from '$lib/components/BlogAssistantWidget.svelte';
+  import BlogAssistantMarginCallouts from '$lib/components/BlogAssistantMarginCallouts.svelte';
+  import { createProposalStore } from '$lib/blog/assistant/proposal-store';
+  import type { Proposal, MetaProposal, ProseProposal } from '$lib/blog/assistant/proposal';
   import { Marked } from 'marked';
   import type { RichEditorApi } from '$lib/components/rich-editor-api';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
@@ -35,6 +39,226 @@
   let isMarkdown = $derived(contentFormat === 'markdown');
   let converting = $state(false);
   let richApi = $state<RichEditorApi | undefined>();
+
+  // ---------------------------------------------------------------------
+  // Blog assistant. Restored 2026-08-19 — commit 708ab5a9 deleted the mount
+  // on 2026-05-07 while resolving a stash-pop conflict, and the later admin
+  // consolidation moved this page with it already gone. See
+  // docs/plans/2026-08-19-writing-voice-system.md.
+  // ---------------------------------------------------------------------
+
+  const proposalStore = createProposalStore();
+  let proposalTick = $state(0); // bump to force re-render of derived lists
+  let editorContainer = $state<HTMLDivElement | undefined>();
+  let widgetSendMessage = $state<((text: string) => Promise<void>) | undefined>();
+
+  /**
+   * Durably record what happened to a proposal. This is the point of the
+   * exercise: until now accept/reject decisions existed only in the browser
+   * tab and died on reload, which is why prod holds proposals and no
+   * resolutions at all. Rejections and edited acceptances are the strongest
+   * statements of prose taste available.
+   */
+  async function recordResolution(payload: {
+    proposalId: string;
+    status: 'accepted' | 'rejected';
+    kind: 'prose' | 'meta';
+    field?: string;
+    original?: string;
+    suggested?: string;
+    final?: string;
+    reason?: string;
+  }) {
+    try {
+      await fetch(`/api/admin/blog/${data.post.id}/resolve-proposal?token=${adminToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // The edit itself already happened. A lost audit row must not surface
+      // to the author as a failure.
+    }
+  }
+
+  const asText = (v: unknown): string | undefined =>
+    v === null || v === undefined ? undefined : typeof v === 'string' ? v : JSON.stringify(v);
+
+  // Always-on idle review. After 12s of no edits, ask the server for at most
+  // two unobtrusive suggestions; rate-limit to one scan per 30s.
+  let autoReviewEnabled = $state<boolean>(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('blog-assistant-auto') !== 'off'
+      : true,
+  );
+  function setAutoReview(v: boolean) {
+    autoReviewEnabled = v;
+    try { localStorage.setItem('blog-assistant-auto', v ? 'on' : 'off'); } catch { /* ignore */ }
+    if (!v && idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  }
+
+  // Plain `let`, never $state — these are internal handles, and an effect that
+  // both read and wrote them would loop (svelte5-pitfalls §1).
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastAutoScanAt = 0;
+  // Deliberately a one-time snapshot of the loaded length — svelte will warn
+  // that this "only captures the initial value of data", which is the point.
+  // Without it, a single typo on a freshly-loaded post trips a scan at once.
+  let lastScanLen = data.post.content.length;
+  let autoScanInflight = false;
+
+  const IDLE_DELAY_MS = 12_000;
+  const AUTO_COOLDOWN_MS = 30_000;
+  const MAX_PENDING_BEFORE_SKIP = 6;
+  // Skip auto-review when fewer than this many characters have changed since
+  // the last scan. Single-typo fixes shouldn't burn an LLM call.
+  const MIN_DELTA_CHARS = 80;
+
+  function scheduleAutoScan() {
+    if (!autoReviewEnabled) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(runAutoScan, IDLE_DELAY_MS);
+  }
+
+  async function runAutoScan() {
+    idleTimer = null;
+    if (autoScanInflight || !autoReviewEnabled) return;
+    if (Date.now() - lastAutoScanAt < AUTO_COOLDOWN_MS) return;
+    const pendingNow = proposalStore.list().filter((p) => p.status === 'pending');
+    if (pendingNow.length >= MAX_PENDING_BEFORE_SKIP) return;
+    if (Math.abs(content.length - lastScanLen) < MIN_DELTA_CHARS) return;
+    autoScanInflight = true;
+    lastAutoScanAt = Date.now();
+    lastScanLen = content.length;
+    try {
+      const pendingHints = pendingNow.map((p) => (p.kind === 'prose' ? p.original : `${p.field}`));
+      const r = await fetch(`/api/admin/blog/${data.post.id}/assistant/auto-review?token=${adminToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pending: pendingHints }),
+      });
+      if (!r.ok) return;
+      const body = await r.json();
+      const fresh = (body?.proposals ?? []) as Proposal[];
+      for (const p of fresh) {
+        proposalStore.add(p);
+        if (p.kind === 'prose' && richApi) richApi.applyProposal(p);
+      }
+      if (fresh.length > 0) proposalTick++;
+    } catch { /* silent — this is a background scan */ }
+    finally { autoScanInflight = false; }
+  }
+
+  async function acceptMetaProposal(p: MetaProposal) {
+    proposalStore.resolve(p.id, 'accepted');
+    proposalTick++;
+    // apply-proposal records its own resolution, so no recordResolution here.
+    const res = await fetch(`/api/admin/blog/${data.post.id}/apply-proposal?token=${adminToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        proposalId: p.id,
+        field: p.field,
+        value: p.suggestedValue,
+        suggested: p.suggestedValue,
+        reason: p.reason,
+      }),
+    });
+    if (!res.ok) return;
+    const body = await res.json();
+    if (!body.post) return;
+    if (p.field === 'title') title = body.post.title;
+    if (p.field === 'excerpt') excerpt = body.post.excerpt;
+    if (p.field === 'slug') slug = body.post.slug;
+    if (p.field === 'tags') tags = (body.post.tags as string[]).join(', ');
+    if (p.field === 'status') status = body.post.status;
+    data.post = body.post;
+    window.dispatchEvent(new CustomEvent('jkai:revisions-changed'));
+  }
+
+  function rejectMetaProposal(p: MetaProposal) {
+    proposalStore.resolve(p.id, 'rejected');
+    proposalTick++;
+    void recordResolution({
+      proposalId: p.id,
+      status: 'rejected',
+      kind: 'meta',
+      field: p.field,
+      original: asText(p.currentValue),
+      suggested: asText(p.suggestedValue),
+      reason: p.reason,
+    });
+  }
+
+  async function regenerate(p: Proposal, note: string) {
+    proposalStore.resolve(p.id, 'rejected');
+    proposalTick++;
+    // A regenerate is a rejection with John's own words attached — the single
+    // most explicit statement of taste the editor can produce. Record the note.
+    void recordResolution({
+      proposalId: p.id,
+      status: 'rejected',
+      kind: p.kind,
+      field: p.kind === 'meta' ? p.field : undefined,
+      original: p.kind === 'prose' ? p.original : asText(p.currentValue),
+      suggested: p.kind === 'prose' ? p.suggested : asText(p.suggestedValue),
+      reason: note,
+    });
+    const summary = p.kind === 'prose'
+      ? `the prose change at "${p.original.slice(0, 40)}…"`
+      : `the ${p.field} change to ${JSON.stringify(p.suggestedValue).slice(0, 40)}`;
+    await widgetSendMessage?.(`I rejected ${summary}. Try a different version: ${note}`);
+  }
+
+  function onProposalArrived(p: Proposal) {
+    proposalTick++;
+    if (p.kind === 'prose' && richApi) richApi.applyProposal(p);
+  }
+
+  let proseProposals = $derived(
+    proposalTick >= 0 ? proposalStore.list().filter((p): p is ProseProposal => p.kind === 'prose') : [],
+  );
+
+  function acceptProse(p: ProseProposal, modifiedText?: string) {
+    if (!richApi) return;
+    // Recording happens in RichEditor's onProposalAccepted callback below —
+    // one place, so every accept path is captured exactly once.
+    richApi.acceptProposal(p.id, modifiedText);
+    proposalStore.resolve(p.id, 'accepted');
+    proposalTick++;
+  }
+
+  function rejectProse(p: ProseProposal) {
+    if (!richApi) return;
+    richApi.rejectProposal(p.id);
+    proposalStore.resolve(p.id, 'rejected');
+    proposalTick++;
+  }
+
+  // After a rollback, update the editor + form fields from the returned post.
+  $effect(() => {
+    const handler = (ev: Event) => {
+      const post = (ev as CustomEvent).detail?.post;
+      if (!post) return;
+      title = post.title ?? title;
+      slug = post.slug ?? slug;
+      excerpt = post.excerpt ?? excerpt;
+      tags = Array.isArray(post.tags) ? (post.tags as string[]).join(', ') : tags;
+      coverImageUrl = post.coverImageUrl ?? coverImageUrl;
+      status = post.status ?? status;
+      if (typeof post.content === 'string') {
+        content = post.content;
+        data.post.content = post.content;
+        // Props don't reactively swap content — push it in, then clear any
+        // orphan suggestion marks left behind by the replaced document.
+        richApi?.setContent?.(post.content);
+        richApi?.clearAllSuggestions?.();
+      }
+      data.post = post;
+    };
+    window.addEventListener('jkai:post-rolled-back', handler);
+    return () => window.removeEventListener('jkai:post-rolled-back', handler);
+  });
 
   let dirty = $derived(
     title !== data.post.title ||
@@ -88,6 +312,7 @@
   async function saveContent(newContent: string) {
     content = newContent;
     await save();
+    scheduleAutoScan();
   }
 
   async function uploadImage(file: File): Promise<string> {
@@ -337,9 +562,64 @@
       {/if}
     </div>
     {#if isMarkdown}
-      <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} />
+      <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} voiceCard={data.voiceCard} />
     {:else}
-      <RichEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} bind:api={richApi} />
+      <div bind:this={editorContainer} class="editor-host">
+        <RichEditor
+          {content}
+          onSave={saveContent}
+          onAutoSave={saveContent}
+          {uploadImage}
+          voiceCard={data.voiceCard}
+          bind:api={richApi}
+          onProposalAccepted={(id, finalText, preAcceptHtml) => {
+            proposalStore.resolve(id, 'accepted');
+            proposalTick++;
+            const p = proposalStore.get(id);
+            void recordResolution({
+              proposalId: id,
+              status: 'accepted',
+              kind: 'prose',
+              original: p?.kind === 'prose' ? p.original : undefined,
+              suggested: p?.kind === 'prose' ? p.suggested : undefined,
+              final: finalText,
+              reason: p?.reason,
+            });
+            // Capture a revision so the author can roll this change back.
+            void fetch(`/api/admin/blog/${data.post.id}/revisions?token=${adminToken}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                proposalId: id,
+                field: 'content',
+                previousValue: preAcceptHtml,
+                reason: 'assistant accepted: content',
+              }),
+            }).catch(() => undefined);
+            window.dispatchEvent(new CustomEvent('jkai:revisions-changed'));
+          }}
+          onProposalRejected={(id) => {
+            const p = proposalStore.get(id);
+            proposalStore.resolve(id, 'rejected');
+            proposalTick++;
+            void recordResolution({
+              proposalId: id,
+              status: 'rejected',
+              kind: 'prose',
+              original: p?.kind === 'prose' ? p.original : undefined,
+              suggested: p?.kind === 'prose' ? p.suggested : undefined,
+              reason: p?.reason,
+            });
+          }}
+        />
+        <BlogAssistantMarginCallouts
+          proposals={proseProposals}
+          editorEl={editorContainer}
+          onAccept={(p, modifiedText) => acceptProse(p, modifiedText)}
+          onReject={(p) => rejectProse(p)}
+          onRegenerate={(p, note) => regenerate(p, note)}
+        />
+      </div>
     {/if}
   </section>
 
@@ -358,9 +638,26 @@
     </button>
   </div>
 
+  <BlogAssistantWidget
+    postId={data.post.id}
+    {adminToken}
+    history={data.history ?? []}
+    {proposalStore}
+    {autoReviewEnabled}
+    onSetAutoReview={setAutoReview}
+    {onProposalArrived}
+    onAcceptMeta={acceptMetaProposal}
+    onRejectMeta={rejectMetaProposal}
+    onRegenerate={regenerate}
+    onClear={() => { richApi?.clearAllSuggestions?.(); proposalTick++; }}
+    bind:sendMessage={widgetSendMessage}
+  />
+
 </PageWrap>
 
 <style>
+  .editor-host { position: relative; }
+
   .saved-flag {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -390,57 +687,5 @@
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
   }
-  .content-area { min-height: 480px; line-height: 1.6; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .bottom-row { display: flex; justify-content: flex-start; padding: 0.5rem 0 1.5rem; }
-
-  .prose :global(h1),
-  .prose :global(h2),
-  .prose :global(h3) {
-    font-family: var(--font-display);
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: -0.01em;
-    color: var(--text-primary);
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-  }
-  .prose :global(h2) { font-size: 1.5rem; }
-  .prose :global(h3) { font-size: 1.25rem; }
-  .prose :global(p) {
-    margin-bottom: 1.25em;
-    line-height: 1.8;
-    font-size: 1rem;
-    color: var(--text-secondary);
-  }
-  .prose :global(a) {
-    color: var(--accent);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-  .prose :global(code) {
-    font-family: var(--font-mono);
-    font-size: max(0.875em, var(--fs-label-xs));
-    padding: 0.2em 0.5em;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-  }
-  .prose :global(pre) {
-    padding: 1.25em 1.5em;
-    overflow-x: auto;
-    margin: 1.5em 0;
-    font-size: 0.875rem;
-    background: var(--card-bg);
-    border: 2px solid var(--card-border);
-  }
-  .prose :global(pre code) { padding: 0; background: none; border: none; }
-  .prose :global(blockquote) {
-    border-left: 3px solid var(--accent);
-    padding-left: 1.25em;
-    margin: 1.5em 0;
-    font-style: italic;
-    color: var(--text-muted);
-  }
-  .prose :global(ul), .prose :global(ol) { padding-left: 1.5em; margin-bottom: 1.25em; }
-  .prose :global(li) { margin-bottom: 0.5em; line-height: 1.8; color: var(--text-secondary); }
-  .prose :global(img) { max-width: 100%; margin: 1.5em 0; }
 </style>

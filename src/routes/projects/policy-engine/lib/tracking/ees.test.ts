@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildEesQuery, extractEesValue, refYearFromTimePeriod, refPeriodLabel } from './ees.server';
-import type { EesFetch } from './types';
+import { buildEesQuery, extractEesValue, refYearFromTimePeriod, refPeriodLabel } from '$lib/policy-engine/tracking/ees.server';
+import type { EesFetch } from '$lib/policy-engine/tracking/types';
 
 const a8Total: EesFetch = {
   kind: 'ees',

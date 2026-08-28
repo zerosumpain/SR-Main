@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('$lib/jkai/llm-client', () => ({
+vi.mock('$lib/llm/client', () => ({
   getLLMClient: vi.fn().mockResolvedValue({
     client: {
       embeddings: {

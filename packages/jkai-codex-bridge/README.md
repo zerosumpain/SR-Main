@@ -16,9 +16,9 @@ own client locally. This sidecar does that and puts a `/v1/chat/completions`
 face on it, which buys two things a direct SDK import inside SvelteKit would
 not:
 
-1. **No call site changes.** `$lib/jkai/llm-client` swaps a base URL and all
+1. **No call site changes.** `$lib/llm/client` swaps a base URL and all
    ~160 call sites are unchanged.
-2. **Hermes can use it too.** Hermes is a separate Python runtime; it reaches
+2. **Any OpenAI-compatible client can use it.** A separate runtime reaches
    providers by `base_url`. Pointing it at this port is a config edit, and it is
    the only route by which the /jkai *chat* turn can use Codex at all.
 

@@ -4,6 +4,7 @@
 // refresh, a HEAD on an API, a freshness check against the table the data
 // actually lands in. Where a live call is not affordable (a paid search API) the
 // probe says so via `live: false` rather than implying it verified something.
+import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import type { ConnectorReport, ConnectorStatus, ConnectorTier } from './types';
 
 const TIMEOUT_MS = 8000;
@@ -613,7 +614,7 @@ async function probeOAuthSecrets(): Promise<ConnectorReport[]> {
 // ---------------------------------------------------------------------------
 async function probeOpenRouter(): Promise<ConnectorReport> {
   return guard('openrouter', 'OpenRouter (all LLM)', 'AI', 'service', async () => {
-    const { loadKeys } = await import('$lib/deepdive/keys');
+    const { loadKeys } = await import('$lib/llm/keys');
     const key = loadKeys().openrouterApiKey;
     if (!key) {
       return {
@@ -654,27 +655,88 @@ async function probeOpenRouter(): Promise<ConnectorReport> {
 // WhatsApp — the delivery channel for the briefing and every alert, including
 // the alert that would tell you this is down.
 // ---------------------------------------------------------------------------
+const WHATSAPP_FIX_PAGE = '/admin/connections/whatsapp';
+/** `Reconnect` only when there is something to reconnect — a primary button on
+ *  a healthy row trains you to ignore the primary button. */
+function whatsappActions(broken: boolean): ConnectorReport['actions'] {
+  return [
+    {
+      kind: 'link',
+      target: WHATSAPP_FIX_PAGE,
+      label: broken ? 'Reconnect' : 'Bridge panel',
+      primary: broken,
+    },
+  ];
+}
+
 async function probeWhatsApp(): Promise<ConnectorReport> {
   return guard('whatsapp', 'WhatsApp', 'Messaging', 'service', async () => {
-    const bridge = process.env.WHATSAPP_HERMES_BRIDGE_URL;
+    const bridge = whatsappBridgeUrl();
     if (!bridge) {
       return {
         status: 'unconfigured' as ConnectorStatus,
-        detail: 'WHATSAPP_HERMES_BRIDGE_URL not set — sends run through the in-process client',
+        detail: 'WHATSAPP_BRIDGE_URL not set — sends run through the in-process client',
         live: false,
+        // Pairing lives here: the page polls the worker's /qr. Before the
+        // session moved onto the worker there was nowhere on the site to scan
+        // a QR, which is fine until the day you need to.
+        fixUrl: '/admin/connections/whatsapp',
       };
     }
     const base = bridge.replace(/\/+$/, '').replace(/\/send$/, '');
     const res = await fetchWithTimeout(`${base}/health`).catch(() => null);
+
+    // Ask the process that owns the session, and nothing else.
+    //
+    // This used to fall back to `rWhatsAppStatus()` on homeserv and render
+    // The old diagnosis — "Session is paired, but the gateway is failed"
+    // — with the hint "Restart the bridge from the WhatsApp panel". The session
+    // has not lived there since 2026-08-24; it belongs to
+    // packages/jkai-wa-worker on the VPS. So on the one page you open during an
+    // outage, this pointed at a gateway with no bearing on the fault, and the
+    // restart it recommended has never fixed a logged-out session anyway.
+    const IMPACT = 'Alerts, the morning briefing and every WhatsApp reply are undeliverable.';
     if (!res || !res.ok) {
       return {
         status: 'broken' as ConnectorStatus,
-        detail: `Hermes bridge ${base} unreachable${res ? ` (${res.status})` : ''} — alerts and the briefing cannot be delivered`,
+        detail: `WhatsApp worker ${base} unreachable${res ? ` (${res.status})` : ''} — nothing owns the session`,
         live: true,
-        fixHint: 'Restart jkai-hermes on homeserv',
+        impact: IMPACT,
+        fixHint: 'The worker process is down — check jkai-wa-worker on the VPS',
+        actions: whatsappActions(true),
+        fixUrl: WHATSAPP_FIX_PAGE,
       };
     }
-    return { status: 'ok' as ConnectorStatus, detail: `bridge ${base} reachable`, live: true };
+
+    // A reachable worker still answers 200 while logged out, so `res.ok` alone
+    // was reporting a dead session as healthy. The state is in the body.
+    const health = (await res.json().catch(() => null)) as
+      | { status?: string; connectedNumber?: string | null }
+      | null;
+    const waStatus = health?.status ?? 'unknown';
+    if (waStatus !== 'connected') {
+      const needsScan = waStatus === 'qr_pending' || waStatus === 'disconnected';
+      return {
+        status: (waStatus === 'connecting' ? 'degraded' : 'broken') as ConnectorStatus,
+        detail: `WhatsApp worker is reachable but the session is ${waStatus}`,
+        live: true,
+        impact: IMPACT,
+        fixHint: needsScan
+          ? 'Scan a QR to re-link the account — a restart will not fix this'
+          : 'The worker is still connecting; give it a moment before re-pairing',
+        actions: whatsappActions(needsScan),
+        fixUrl: WHATSAPP_FIX_PAGE,
+      };
+    }
+    return {
+      status: 'ok' as ConnectorStatus,
+      // Deliberately not naming `connectedNumber` — the account number does not
+      // belong in a rendered string, even an admin-only one.
+      detail: `worker ${base} connected`,
+      live: true,
+      actions: whatsappActions(false),
+      fixUrl: WHATSAPP_FIX_PAGE,
+    };
   });
 }
 
@@ -683,7 +745,7 @@ async function probeWhatsApp(): Promise<ConnectorReport> {
 // ---------------------------------------------------------------------------
 async function probeTavily(): Promise<ConnectorReport> {
   return guard('tavily', 'Tavily (research)', 'AI', 'service', async () => {
-    const { loadKeys } = await import('$lib/deepdive/keys');
+    const { loadKeys } = await import('$lib/llm/keys');
     const key = loadKeys().tavilyApiKey;
     return key
       ? { status: 'ok' as ConnectorStatus, detail: 'key present (not test-searched — searches are billed)', live: false }

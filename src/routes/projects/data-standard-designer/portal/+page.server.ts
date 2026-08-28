@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { getRegistrySnapshot } from '../lib/discovery.server';
+import { getRegistrySnapshot } from '$lib/data-standard-designer/discovery.server';
 
 // Loads the discovered-standards registry for the portal. Tolerant: if the
 // table doesn't exist yet (pre-first-ingest) or the DB hiccups, render an

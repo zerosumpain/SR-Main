@@ -25,6 +25,19 @@ const MAX_FILES = 60;
 const MAX_FILE_BYTES = 200_000;
 const MAX_SUMMARY_BYTES = 8_000;
 
+/**
+ * The cap when the precedent channel is also spending budget.
+ *
+ * Two exemplars are ~4.8 KB, and total prompt context was already ~19 KB. That
+ * has to come OUT of the digest rather than on top of it, and the digest is
+ * where it is cheapest: it is ordered by modification time, so its tail is the
+ * least relevant thing in the prompt — a signature index of the 40th
+ * most-recently-touched file, for a task that touches three. The head, which
+ * carries the [NEW]/[CHANGED] annotations for what the last iteration did, is
+ * untouched.
+ */
+const MAX_SUMMARY_BYTES_WITH_PRECEDENT = 4_500;
+
 interface FileEntry { path: string; size: number; mtime: number }
 
 /** Tiny extractor for "what's in this file" — not a real parser, just a
@@ -195,7 +208,12 @@ async function summariseDiff(currentPath: string, snapshotPath: string): Promise
  *  Designed to be called every iteration before pi spawns. Cost: a few ms
  *  of disk I/O on a typical project. Returns a single markdown block to
  *  inject into the prompt. */
-export async function buildCodebaseDigest(buildId: string, files: FileEntry[]): Promise<string> {
+export async function buildCodebaseDigest(
+  buildId: string,
+  files: FileEntry[],
+  opts: { sharingBudgetWithPrecedent?: boolean } = {},
+): Promise<string> {
+  const budget = opts.sharingBudgetWithPrecedent ? MAX_SUMMARY_BYTES_WITH_PRECEDENT : MAX_SUMMARY_BYTES;
   if (files.length === 0) {
     return '## Codebase Digest\nEmpty workspace — fresh build.';
   }
@@ -259,8 +277,8 @@ export async function buildCodebaseDigest(buildId: string, files: FileEntry[]): 
       const prefix = tag ? `${tag} ` : '';
       lines.push(`- ${prefix}${summary}${diffTag}`);
       totalBytes += summary.length + tag.length + diffTag.length;
-      if (totalBytes > MAX_SUMMARY_BYTES) {
-        lines.push(`- … (${candidates.length - lines.length + 2} more files truncated to keep the digest under 8 KB)`);
+      if (totalBytes > budget) {
+        lines.push(`- … (${candidates.length - lines.length + 2} more files truncated to keep the digest under ${Math.round(budget / 1000)} KB)`);
         break;
       }
     } catch { /* skip unreadable */ }

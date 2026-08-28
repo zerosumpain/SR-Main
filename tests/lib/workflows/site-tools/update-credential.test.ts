@@ -132,7 +132,7 @@ describe('it can only change what already exists', () => {
   it('is not marked destructive — the modal is the human gate', async () => {
     const mod = await import('$lib/workflows/site-tools/tools/update-credential');
     // Same reasoning as request_credential: the 240s destructive banner stacked
-    // in front of the 180s form wait would exceed Hermes' 300s read timeout.
+    // in front of the 180s form wait would exceed a 300s read timeout.
     expect((mod.default as { destructive?: boolean }).destructive).toBe(false);
   });
 });

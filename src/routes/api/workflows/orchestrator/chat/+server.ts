@@ -12,14 +12,11 @@ import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOl
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
-import { resolveDefaultModel, isHermesChatEnabled } from '$lib/server/models/settings';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext } from '$lib/constants/default-models';
-import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
+import { getChatInputCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
-import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
-import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
-import { createHermesTextAccumulator, frameBelongsToTurn, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
-import { ensureModelPinned, modelPinTurnId } from '$lib/jkai/hermes-model-pin';
 import {
   subscribeToolSteps,
   registerToolConfirmer,
@@ -29,1182 +26,17 @@ import {
 import { requireConfirmation } from '$lib/workflows/chat/confirmation-gate';
 import { requireSecret, requireSecretUpdate } from '$lib/workflows/chat/secret-gate';
 import { specForRequest } from '$lib/workflows/site-tools/tools/request-credential';
-import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
-import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { priceFor, computeCost } from '$lib/llm/pricing';
+import type { TurnStamp } from '$lib/jkai/turn-stamp';
+import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 
-/** How long to wait for a model re-pin's turn to finish before sending anyway. A
- *  `/model` ack is a sub-second round trip; this is generous enough to cover a
- *  loaded gateway and short enough that a lost frame does not strand the turn. */
-const PIN_WAIT_MS = 12_000;
-
 const MAX_MESSAGE_LEN = 20_000;
 
-// Tools the SvelteKit MCP server dispatches itself (the site-tools registry
-// plus the `jkai_extended` meta-dispatcher). Every one of these also publishes
-// to the in-process tool-step bus when Hermes calls it, so we suppress the
-// duplicate Hermes `tool` SSE frame for them (see the frame handler in
-// handleWithHermes). Hermes built-ins / skills / other MCP servers aren't in
-// here, so their frames still render.
-const isBusServedTool = (toolName: string): boolean => {
-  // Hermes namespaces MCP tools as `mcp_<server>_<tool>` (e.g.
-  // `mcp_jkai_jkai_extended`). Strip that before the registry check so the
-  // prefixed name is recognised as bus-served and its duplicate Hermes `tool`
-  // frame is dropped — otherwise every jkai call renders twice (a raw-blob
-  // Hermes card alongside the richer bus card).
-  const bare = toolName.replace(/^mcp_[^_]+_/, '');
-  return bare === JKAI_EXTENDED_TOOL.name || isRegisteredTool(bare) || toolName === JKAI_EXTENDED_TOOL.name || isRegisteredTool(toolName);
-};
-
-// jkai domain skills a user may pin from the composer (general chat only). When
-// pinned, the turn is sent as kind='skill' with the name in kindId so the Hermes
-// adapter loads it directly, skipping jkai-general's LLM routing turn. Validated
-// here AND allowlisted again adapter-side. MUST match _PICKABLE_SKILLS in
-// ~/.hermes-jkai/extensions/jkai_platform/adapter.py.
-const PICKABLE_SKILLS = new Set([
-  'jkai-blog', 'jkai-gmail', 'jkai-health', 'jkai-research', 'jkai-scheduled',
-  'jkai-scraper', 'jkai-home-assistant', 'jkai-files', 'jkai-utility', 'jkai-node-builder',
-]);
-
-// Which engine answers chat. When on, it's proxied through the Hermes gateway
-// via HermesClient + JkaiPlatformAdapter; when off, the legacy generalChat /
-// ReAct loop runs here in-process (every site toolset, no terminal/file/
-// browser tools).
-//
-// `JKAI_HERMES_CANVAS_CHAT` is now only the DEFAULT — the live value comes from
-// the `jkai.chat.hermes_enabled` setting, flipped from /admin/ops/engine, so
-// switching engines doesn't need an env edit and a redeploy. Resolved per
-// request rather than at module load, or the toggle wouldn't take effect until
-// a restart.
-const HERMES_ENV_DEFAULT = env.JKAI_HERMES_CANVAS_CHAT === '1';
-const HERMES_URL = env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790';
-const HERMES_SECRET = env.HERMES_BRIDGE_SECRET ?? '';
-
-// Per-host origin metadata. Hermes runs on homeserv only; when the VPS
-// forwards chats it must tell Hermes "I'm VPS — when you make tool calls,
-// route them back to https://strangeramblings.com/api/mcp/local". The
-// homeserv-local SvelteKit defaults to its own loopback MCP endpoint.
-const HERMES_ORIGIN = (env.JKAI_HERMES_ORIGIN as 'vps' | 'homeserv') ?? 'homeserv';
-const HERMES_MCP_URL = env.JKAI_HERMES_MCP_URL ?? 'http://127.0.0.1:5173/api/mcp/local';
-
-export const POST: RequestHandler = async (event) => {
-  // A settings-read failure must not take chat down — fall back to the env
-  // default, which is what this line did before the toggle existed.
-  const useHermes = await isHermesChatEnabled(HERMES_ENV_DEFAULT).catch(() => HERMES_ENV_DEFAULT);
-  if (useHermes) {
-    return handleWithHermes(event);
-  }
-  return handleWithLoop(event);
-};
-
-// ---------------------------------------------------------------------------
-// Hermes branch (flag ON)
-// ---------------------------------------------------------------------------
-
-/**
- * Map the Hermes platform-adapter outbound frame shape (send / replace /
- * finalize) to the legacy SSE event shape the canvas UI already consumes
- * (`{ type: 'token', delta }` + a terminating `{ type: 'done' }`).
- *
- * The canvas UI subscribes via `/api/workflows/orchestrator/chat/stream`
- * which speaks the legacy `JobEvent` shape — so this proxy mints a fresh
- * `jobId`, fires `publishJobEvent(jobId, {type:'token', delta:...})` for
- * every send/replace frame, and ends with `{type:'done'}` on `finalize`.
- *
- * Frame semantics:
- *   - send:     a brand-new bubble. Treat content as a delta.
- *   - replace:  an edit to an existing bubble. We replay the new content as
- *               a delta — the consumer concatenates deltas, so a replace
- *               appends the latest copy. (Task 14 may swap this to a proper
- *               diff once acceptance testing demands it.)
- *   - finalize: terminal frame. Emit a 'done' with the final content under
- *               `result.message`.
- */
-/** Shape of a media attachment carried on an SSE media frame
- * (`image`/`audio`/`video`/`pdf`/`document`). Mirrors the
- * `Message['attachments']` element shape ChatArea.svelte consumes on `done`. */
-type AssistantAttachment = {
-  id: string;
-  kind: 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'text';
-  mimeType: string;
-  originalName: string | null;
-  sizeBytes: number;
-  source: 'web' | 'whatsapp' | 'generated';
-};
-
-// adaptFrameToCanvasSse: see $lib/jkai/sse-adapter.ts. Extracted so
-// the frame→JobEvent mapping is unit-testable without standing up a
-// SvelteKit request context.
-
-/**
- * Put a gateway status bubble somewhere other than the assistant bubble.
- *
- * One-shot notices (queued behind a running turn, interrupted, inactivity
- * timeout) are worth a permanent line, so they take the `status` channel. The
- * recurring elapsed-time filler is not: the job publishes its own heartbeat
- * every 5s with a truer elapsed time, so the only new information in the
- * gateway's version is what it says it is busy with — fold that into the
- * heartbeat's summary (same idiom as the tool-step subscriber below) and drop
- * the rest.
- */
-function publishStatusFrame(jobId: string, job: OrchestratorJob, status: HermesStatusFrame): void {
-  // A status frame is proof of life even though it never reaches the bubble.
-  // Rerouting the recurring filler off the text channel removed the only thing
-  // that was resetting the idle watchdog during a silent stretch that is NOT a
-  // tool call or a delegation — an OpenRouter 429 backoff loop, a long provider
-  // prefill on a huge context — so the job would be reaped at IDLE_TIMEOUT_MS
-  // and the real answer lost. Set it on the job directly: a `heartbeat`
-  // JobEvent would not do it, publishJobEvent deliberately skips lastEventAt
-  // for that type so an informational tick can't mask a genuinely stuck job.
-  job.lastEventAt = Date.now();
-  if (status.kind === 'notice') {
-    publishJobEvent(jobId, { type: 'status', text: status.text });
-    return;
-  }
-  if (status.detail) job.currentStep = status.detail.slice(0, 140);
-}
-
-function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null {
-  // Any frame that carries a media attachment row qualifies — gating on
-  // `frame.attachment` rather than `frame.kind === 'image'` is what lets
-  // audio / video / pdf / document frames flow through alongside the
-  // original image path without enumerating every kind here.
-  const att = frame.attachment;
-  if (!att || typeof att.id !== 'string') return null;
-  return {
-    id: att.id,
-    kind: att.kind,
-    mimeType: att.mimeType,
-    originalName: att.originalName ?? null,
-    sizeBytes: att.sizeBytes,
-    source: att.source,
-  };
-}
-
-async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promise<Response> {
-  const { request } = reqEvent;
-  let body: {
-    message?: string;
-    workflowId?: string;
-    conversationId?: string;
-    chatNodeId?: string;
-    silent?: boolean;
-    pinnedSkill?: string;
-    /** Entity ids named with @entity in the composer. */
-    intelEntityIds?: string[];
-  };
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, { status: 400 });
-  }
-  const { message, workflowId, conversationId, chatNodeId, silent, pinnedSkill, intelEntityIds } = body;
-  if (!message || typeof message !== 'string') {
-    return json({ error: 'message is required' }, { status: 400 });
-  }
-  if (message.length > MAX_MESSAGE_LEN) {
-    return json({ error: `message too long (max ${MAX_MESSAGE_LEN} chars)` }, { status: 400 });
-  }
-  if (!HERMES_SECRET) {
-    return json({ error: 'HERMES_BRIDGE_SECRET not configured' }, { status: 500 });
-  }
-
-  const client = new HermesClient({
-    baseUrl: HERMES_URL,
-    bridgeSecret: HERMES_SECRET,
-    defaultOrigin: HERMES_ORIGIN,
-    defaultMcpUrl: HERMES_MCP_URL,
-  });
-
-  // One probe, three uses: the model re-pin needs the boot id, the stream loop
-  // needs to know whether this gateway's turn stamps can be trusted, and the
-  // supersede decision below needs to know how it treats an overlapping message.
-  // Probed here rather than in the Hermes branch because the answer changes
-  // whether we cancel the in-flight job at all.
-  const health = await client.health();
-  // Only a gateway that stamps frames at EXECUTION can be read strictly. An older
-  // one stamped on arrival, where a message landing mid-turn took the running
-  // turn's id, so its tags separate nothing and its untagged frames have to be
-  // accepted — dropping them would leave the chat streaming nothing at all until
-  // the gateway was restarted.
-  const strictTurnFrames = health?.turnTagging === 'execution';
-  // `queue` runs each message as its own turn, in order. Anything else folds the
-  // new message into the RUNNING turn.
-  const gatewayQueues = health?.busyInputMode === 'queue';
-
-  // Supersede any in-flight job on the same scope BEFORE we start the new one —
-  // UNLESS the gateway queues, in which case the turn ahead of us is going to run
-  // to completion and answer its own question. Cancelling it there would tear
-  // down the subscriber for an answer that is still coming, and the frames would
-  // be drained by this job and rendered as the reply to a question they do not
-  // answer. Measured: the continuation of a "count to 200" landed under "reply
-  // with BRAVO".
-  //
-  // Where the gateway does interrupt, keep the ids. A second message does not
-  // start a second run there — the running one is redirected (or the text merged
-  // into it) and keeps the FIRST turn's stamp, so this job has to adopt what it
-  // superseded or it rejects the very output that is answering it.
-  const supersededTurnIds =
-    !gatewayQueues && (workflowId || conversationId)
-      ? cancelForScope({ workflowId, conversationId }, 'Superseded by new request')
-      : [];
-  // Turns whose output belongs to this one. Seeded with what we just superseded
-  // and added to below if a model re-pin is in flight; both are cases where the
-  // gateway folds two requests into a single run keeping the FIRST turn's id.
-  const inheritedTurnIds: string[] = [...supersededTurnIds];
-  // Whoever is still answering ahead of us, when the gateway queues.
-  const queuedBehindJobId =
-    gatewayQueues && conversationId ? getRunningJobIdForConversation(conversationId) : null;
-  cleanOldJobs();
-
-  // chatId = the workflow we're chatting against (or a synthetic id when no
-  // workflow context yet). sessionId names the per-user/per-workflow tab.
-  const chatId = workflowId ?? `chat_${conversationId ?? chatNodeId ?? Date.now()}`;
-  const userKey = conversationId ?? chatNodeId ?? 'anon';
-  const sessionId = `sess_${userKey}_${chatId}`;
-
-  // Pinned-skill override (general chat only): when the user pins a jkai domain
-  // in the composer, force kind='skill' so the Hermes adapter loads that skill
-  // directly (name in kindId), skipping jkai-general's LLM routing turn. Ignored
-  // in canvas context (jkai-canvas owns that) and validated against the
-  // allowlist. For 'skill', kindId carries the skill name rather than chatId —
-  // safe because the inbound verifier checks the token scope against the request
-  // body (they agree by construction) and tool/MCP routing keys on chat_id.
-  const pinnedSkillName =
-    !workflowId && typeof pinnedSkill === 'string' && PICKABLE_SKILLS.has(pinnedSkill)
-      ? pinnedSkill
-      : null;
-  const kind = workflowId
-    ? ('canvas_chat' as const)
-    : pinnedSkillName
-      ? ('skill' as const)
-      : ('manual' as const);
-  const kindId = pinnedSkillName ?? chatId;
-
-  // @entity grounding. The composer sends the ids it resolved, and the subgraph
-  // is attached HERE rather than left to the model's recall — naming an entity
-  // should mean the turn actually starts from what the graph holds about it.
-  // Prepended to the outbound message only; the persisted user bubble stays
-  // exactly what was typed.
-  let outbound = message;
-  if (Array.isArray(intelEntityIds) && intelEntityIds.length) {
-    try {
-      const { buildEntityGrounding } = await import('$lib/jkai/intel/context');
-      const grounding = await buildEntityGrounding(intelEntityIds.slice(0, 5));
-      if (grounding) outbound = `${grounding}\n\n---\n\n${message}`;
-    } catch (err) {
-      // Grounding is an enhancement; a failure must not cost the user their turn.
-      console.warn('[intel] entity grounding failed:', err instanceof Error ? err.message : err);
-    }
-  }
-
-  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
-  const { abortController } = job;
-
-  if (queuedBehindJobId) {
-    // Exempt from the idle watchdog until its own turn starts: a queued turn is
-    // silent for exactly as long as the one ahead of it runs, which the 4-min
-    // idle limit reads as stuck. Also tell the client, so a composer that has
-    // just accepted a second message shows why nothing is happening yet.
-    markJobQueued(jobId, queuedBehindJobId);
-    publishJobEvent(jobId, {
-      type: 'status',
-      text: '⏳ Queued — waiting for the current answer to finish.',
-    });
-  }
-
-  // Wall-clock for the turn, stamped onto the assistant message so every reply
-  // carries its own latency alongside its token count and price.
-  const turnStartedAt = Date.now();
-
-  // Persist the user message before kicking off Hermes so canvas reload
-  // mid-conversation restores the just-sent bubble. Mirrors legacy
-  // handleWithLoop persistence (issue #1 from the cross-cutting review).
-  // Schema cols: workflowId, conversationId, role, content, metadata (jsonb).
-  //
-  // `silent: true` skips this insert. It's set by UI affordances that send
-  // a slash command on the user's behalf (e.g. the in-chat Approve / Deny
-  // buttons) — the command must reach Hermes but should not clutter the
-  // visible history with `/approve` bubbles the user never typed.
-  const userMetadata = chatNodeId ? { chatNodeId } : undefined;
-  if (!silent && conversationId) {
-    await db.insert(orchestratorChats).values({
-      conversationId,
-      workflowId: workflowId ?? null,
-      role: 'user',
-      content: message,
-      metadata: userMetadata,
-    });
-  } else if (!silent && workflowId) {
-    await db.insert(orchestratorChats).values({
-      workflowId,
-      role: 'user',
-      content: message,
-      metadata: userMetadata,
-    });
-  }
-
-
-  // Attachments produced by site-tools (e.g. write_document) during this
-  // turn. Hoisted here so the tool-step subscriber (below) and the stream
-  // pump (async IIFE) can both access it. The pump folds these into the
-  // final `done` event's `result.attachments` so MessageAttachments renders
-  // them inline.
-  const turnAttachments: AssistantAttachment[] = [];
-
-  // The turn's tool-call chain, recorded for /jkai/trace/<jobId>. Same lifecycle
-  // as turnAttachments below it: accumulated while the stream runs, written once
-  // when the turn ends. It exists because nothing else durably records the chain
-  // on this branch — see $lib/jkai/tool-trace for the full why.
-  const traceRecorder = createTraceRecorder();
-
-  /** Publish a JobEvent to the SSE stream AND record it in the turn's trace.
-   *  Used at the tool/sub-agent emission sites; plain `publishJobEvent` stays
-   *  correct everywhere else, since the recorder ignores non-tool events. */
-  const emitTraced = (ev: JobEvent) => {
-    traceRecorder.observe(ev);
-    publishJobEvent(jobId, ev);
-  };
-  // @files (file_search) hits promoted onto this turn so the chat UI can render
-  // clickable "sources" chips. Mirrors turnAttachments: collected from the
-  // file_search tool result, emitted on `done`, and persisted in the assistant
-  // message metadata so they survive a reload. (Tool steps themselves are not
-  // persisted on the Hermes branch, so scraping toolSteps client-side is unreliable.)
-  type FileRef = {
-    fileId: string; source: string; modality: string; score: number;
-    chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
-  };
-  const turnFileRefs: FileRef[] = [];
-  const seenFileRefs = new Set<string>();
-  // @research (research_search) hits promoted onto this turn, mirroring
-  // turnFileRefs. Each cites a fact from a deep-dive research session, with its
-  // session topic + web source, so the chat UI can render clickable "sources"
-  // chips linking to the source URL or the /deepdive session.
-  type ResearchRef = {
-    factId: string; sourceId: string | null; sessionId: string; sessionTopic: string;
-    sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
-    score: number; passage: string;
-  };
-  const turnResearchRefs: ResearchRef[] = [];
-  const seenResearchRefs = new Set<string>();
-  // Workflow chips: when a builder tool creates/updates a canvas this turn,
-  // attach a deep-link chip to the reply (mirrors turnFileRefs' lifecycle).
-  type WorkflowRef = { workflowId: string; slug: string; name: string; url: string };
-  const turnWorkflowRefs: WorkflowRef[] = [];
-  const seenWorkflowRefs = new Set<string>();
-
-  // Per-turn LLM usage captured from the Hermes finalize frame's
-  // `metadata.usage`. Populated inside the stream pump; consumed after
-  // assistant-message persistence to accumulate onto the conversation row.
-  let turnUsage: {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_read_tokens?: number;
-    cost_usd?: number;
-    model?: string | null;
-    provider?: string | null;
-  } | null = null;
-
-  // The priced form of the above, stamped onto the assistant message and handed
-  // to the client on `done` so the per-turn cost line appears the moment the
-  // reply lands rather than only after a reload.
-  type TurnStamp = {
-    model: string;
-    provider: string;
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number | null;
-    costUsd: number;
-    latencyMs: number;
-  };
-  let turnStamp: TurnStamp | null = null;
-
-  /** Price the captured turn against the conversation's own model. Hermes
-   *  reports token counts but its cost estimate is unreliable for models its
-   *  pricing tables don't cover (it returns 0), so our table wins and Hermes's
-   *  number is only the fallback. */
-  async function priceTurn(): Promise<TurnStamp | null> {
-    if (!turnUsage) return null;
-    const inputTokens = Math.max(0, Math.round(turnUsage.input_tokens ?? 0));
-    const outputTokens = Math.max(0, Math.round(turnUsage.output_tokens ?? 0));
-    if (inputTokens === 0 && outputTokens === 0) return null;
-
-    let provider = 'openrouter';
-    let model = 'z-ai/glm-5.2';
-    let costUsd = 0;
-    try {
-      if (conversationId) {
-        const [conv] = await db
-          .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
-          .from(conversations)
-          .where(eq(conversations.id, conversationId))
-          .limit(1);
-        if (conv) {
-          provider = conv.provider;
-          model = conv.modelId;
-        }
-      }
-      const pricing = priceFor(provider, model);
-      costUsd = pricing
-        ? computeCost(pricing, inputTokens, outputTokens)
-        : Math.max(0, turnUsage.cost_usd ?? 0);
-    } catch (err) {
-      console.error('[hermes-chat] failed to price turn:', err instanceof Error ? err.message : err);
-      costUsd = Math.max(0, turnUsage.cost_usd ?? 0);
-    }
-
-    return {
-      model: turnUsage.model ?? model,
-      provider: turnUsage.provider ?? provider,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens: turnUsage.cache_read_tokens ?? null,
-      costUsd,
-      latencyMs: Date.now() - turnStartedAt,
-    };
-  }
-
-  /** True once the trace row exists, so the assistant metadata can point at it. */
-  let tracePersisted = false;
-
-  /**
-   * The small form of the chain, written to the assistant message so a reloaded
-   * thread can rebuild its step cards — plus the build pills, inline artifacts
-   * and `promote_ephemeral_tool` addressing that all read the same field.
-   *
-   * Computed even if the trace INSERT fails: the message write is the more
-   * important of the two, and the cards should not disappear because a
-   * diagnostic row could not be stored.
-   */
-  let compactSteps: CompactToolStep[] = [];
-
-  /**
-   * Write the turn's tool-call chain. Called immediately BEFORE `done` is
-   * published, never after: the client renders the "open trace" link the moment
-   * it sees `done`, so a row written afterwards would give it a window in which
-   * the link 404s.
-   *
-   * Idempotent (there are two `done` sites — a normal finalize and the
-   * stream-ended-without-finalize fallback) and never fatal: a trace is a
-   * diagnostic, and losing one must not cost the user their reply.
-   */
-  async function persistToolTrace(): Promise<string | null> {
-    if (tracePersisted) return jobId;
-    if (!traceRecorder.hasSteps()) return null;
-    if (!conversationId && !workflowId) return null;
-    tracePersisted = true;
-    const trace = traceRecorder.snapshot();
-    compactSteps = compactStepsForMessage(trace);
-    try {
-      await db
-        .insert(jkaiToolTraces)
-        .values({
-          id: jobId,
-          conversationId: conversationId ?? null,
-          workflowId: workflowId ?? null,
-          prompt: (message ?? '').slice(0, 500),
-          model: turnStamp?.model ?? null,
-          provider: turnStamp?.provider ?? null,
-          costUsd: turnStamp?.costUsd ?? null,
-          stepCount: trace.stepCount,
-          errorCount: trace.errorCount,
-          durationMs: trace.durationMs,
-          steps: trace,
-        })
-        .onConflictDoNothing();
-      return jobId;
-    } catch (err) {
-      console.error('[hermes-chat] failed to persist tool trace:', err instanceof Error ? err.message : err);
-      tracePersisted = false;
-      return null;
-    }
-  }
-
-  // Subscribe to tool-step events for this chat. The MCP dispatcher publishes
-  // a started/completed/failed event for every tools/call carrying a
-  // matching workflow_id argument (= chatId for general /jkai chats, or the
-  // canvas workflowId for canvas chats). We forward them as legacy
-  // `tool_start` / `tool_result` JobEvents so the canvas UI's panel works
-  // identically on the Hermes branch.
-  // Additionally, when a site-tool result contains inline attachments (e.g.
-  // write_document returns `{ attachments: [row] }`), we promote those into
-  // `turnAttachments` so the chat UI renders a download link.
-  const toolStepKey = chatId; // Hermes sends kindId (= chatId) as workflow_id
-
-  // Destructive-tool gate. The MCP dispatcher raises a confirmation request for
-  // any tool flagged `destructive` in the registry; it knows only `busKey`
-  // (= chatId), not `jobId`, so this is where the two are joined. Delegates to
-  // the existing `requireConfirmation` → `confirm` JobEvent → ConfirmBanner →
-  // `confirm_ack` waiter chain, unchanged. Unregistered in the same cleanup
-  // block as the tool-step subscription, or a stale confirmer would answer for
-  // a job that has already finished.
-  //
-  // Registered LAZILY, because there is one confirmer per busKey and it would
-  // otherwise be stolen from the turn ahead of us: with the gateway queueing we
-  // no longer supersede, so a queued turn coexists with a running one and used to
-  // overwrite its confirmer the moment it was created. `registerConfirmer` is
-  // called once this turn is actually ours (below, inside the pump).
-  let unregisterConfirmer: () => void = () => {};
-  const registerConfirmer = () => {
-    unregisterConfirmer = registerToolConfirmer(toolStepKey, async (req) => {
-      if (abortController.signal.aborted) {
-        return { approved: false, reason: 'the turn was cancelled' };
-      }
-      const approved = await requireConfirmation(jobId, req.prompt, req.args, { destructive: true });
-      return { approved, reason: approved ? undefined : 'the user declined it' };
-    });
-  };
-  // Credential-request gate. Same join as the confirmer above (busKey -> jobId),
-  // for `request_credential`. The value never passes through here: this only
-  // opens the form and reports the outcome. See secret-gate.ts.
-  const unregisterSecretRequester = registerSecretRequester(toolStepKey, async (req) => {
-    if (abortController.signal.aborted) return { status: 'declined' };
-    // An update re-reads the row and authors its own write here, server-side —
-    // the tool passed only the handle, the kind of change, and a proposed delta.
-    if (req.update) return requireSecretUpdate(jobId, req.update, req.reason);
-    const spec = specForRequest({ provider: req.provider, custom: req.custom });
-    if (!spec) return { status: 'declined' };
-    return requireSecret(jobId, spec, req.reason);
-  });
-  const unsubscribeToolSteps = subscribeToolSteps(toolStepKey, (e: ToolStepEvent) => {
-    // The bus is keyed by CHAT, not by job. While this turn is still queued the
-    // traffic on it belongs to the turn ahead of us, and rendering it here would
-    // fill this reply with another one's tool calls.
-    if (job.queuedBehind) return;
-    if (abortController.signal.aborted) return;
-    if (e.phase === 'started') {
-      emitTraced({
-        type: 'tool_start',
-        tool: e.tool,
-        args: e.args ?? {},
-        toolCallId: e.stepId,
-        summary: e.summary,
-      });
-      return;
-    }
-    if (e.phase === 'progress') {
-      // Long-running tools (workflow_create + generateWorkflow's internal loop)
-      // emit free-text progress chunks via ctx.emit. The MCP dispatcher routes
-      // them onto the bus as `progress` events; surface them as `status` so the
-      // chat UI's existing status-bubble path renders them inline.
-      if (e.summary) {
-        publishJobEvent(jobId, { type: 'status', text: e.summary });
-      }
-      return;
-    }
-    // completed | failed → tool_result
-    emitTraced({
-      type: 'tool_result',
-      tool: e.tool,
-      result: e.phase === 'failed' ? { error: e.error ?? 'unknown error' } : (e.result ?? e.resultPreview ?? null),
-      status: e.phase === 'failed' ? 'error' : 'done',
-      toolCallId: e.stepId,
-      summary: e.summary,
-    });
-    // Promote inline attachments from site-tool results into turnAttachments
-    // so the chat UI renders download links. write_document (and similar)
-    // site-tools save to DB and return { attachments: [row] } in their tool
-    // result — but unlike adapter-emitted media frames, those never go
-    // through the SSE OutboundFrame path. We bridge that gap here.
-    if (e.phase === 'completed' && e.result && typeof e.result === 'object') {
-      const result = e.result as Record<string, unknown>;
-      const atts = result.attachments;
-      if (Array.isArray(atts)) {
-        for (const a of atts) {
-          if (a && typeof a === 'object' && typeof (a as Record<string, unknown>).id === 'string') {
-            const row = a as Record<string, unknown>;
-            turnAttachments.push({
-              id: String(row.id),
-              kind: (String(row.kind ?? 'text') as AssistantAttachment['kind']),
-              mimeType: String(row.mimeType ?? 'application/octet-stream'),
-              originalName: row.originalName != null ? String(row.originalName) : null,
-              sizeBytes: typeof row.sizeBytes === 'number' ? row.sizeBytes : 0,
-              source: (String(row.source ?? 'generated') as AssistantAttachment['source']),
-            });
-          }
-        }
-      }
-
-      // Promote @files (file_search) hits into turnFileRefs for clickable "sources".
-      // On prod, file_search is invoked via the jkai_extended meta-tool. The
-      // COMPLETED bus event does NOT carry `args` (only `started` does), so we
-      // can't gate on args.name here — instead detect file_search by tool name +
-      // the distinctive result shape (data.hits of {fileId, source, passage}).
-      // The per-hit validation below rejects any other jkai_extended result.
-      const maybeFileSearch = e.tool === 'file_search' || e.tool === 'jkai_extended';
-      if (maybeFileSearch && result.success) {
-        const data = (result.data ?? {}) as Record<string, unknown>;
-        const hits = data.hits;
-        if (Array.isArray(hits)) {
-          for (const raw of hits) {
-            const h = raw as Record<string, unknown>;
-            if (!h || typeof h.fileId !== 'string' || typeof h.source !== 'string') continue;
-            const key = h.fileId + ':' + (typeof h.chunkOrd === 'number' ? h.chunkOrd : '');
-            if (seenFileRefs.has(key) || turnFileRefs.length >= 12) continue;
-            seenFileRefs.add(key);
-            turnFileRefs.push({
-              fileId: h.fileId,
-              source: h.source,
-              modality: typeof h.modality === 'string' ? h.modality : 'text',
-              score: typeof h.score === 'number' ? h.score : 0,
-              chunkOrd: typeof h.chunkOrd === 'number' ? h.chunkOrd : undefined,
-              charStart: typeof h.charStart === 'number' ? h.charStart : undefined,
-              charEnd: typeof h.charEnd === 'number' ? h.charEnd : undefined,
-              passage: typeof h.passage === 'string' ? h.passage.slice(0, 800) : '',
-            });
-          }
-        }
-      }
-
-      // Promote @research (research_search) hits into turnResearchRefs. Same
-      // shape/rationale as file_search above: on prod the tool is invoked via
-      // jkai_extended, whose COMPLETED event carries no args, so detect by the
-      // distinctive hit shape (factId + sessionId). The two promotions coexist
-      // on a jkai_extended result — each validates its own key so they can't
-      // cross-contaminate (file hits have fileId, research hits have factId).
-      const maybeResearchSearch = e.tool === 'research_search' || e.tool === 'jkai_extended';
-      if (maybeResearchSearch && result.success) {
-        const data = (result.data ?? {}) as Record<string, unknown>;
-        const hits = data.hits;
-        if (Array.isArray(hits)) {
-          for (const raw of hits) {
-            const h = raw as Record<string, unknown>;
-            if (!h || typeof h.factId !== 'string' || typeof h.sessionId !== 'string') continue;
-            if (seenResearchRefs.has(h.factId) || turnResearchRefs.length >= 12) continue;
-            seenResearchRefs.add(h.factId);
-            turnResearchRefs.push({
-              factId: h.factId,
-              sourceId: typeof h.sourceId === 'string' ? h.sourceId : null,
-              sessionId: h.sessionId,
-              sessionTopic: typeof h.sessionTopic === 'string' ? h.sessionTopic : '',
-              sourceTitle: typeof h.sourceTitle === 'string' ? h.sourceTitle : null,
-              sourceUrl: typeof h.sourceUrl === 'string' ? h.sourceUrl : null,
-              domain: typeof h.domain === 'string' ? h.domain : null,
-              score: typeof h.score === 'number' ? h.score : 0,
-              passage: typeof h.passage === 'string' ? h.passage.slice(0, 800) : '',
-            });
-          }
-        }
-      }
-
-      // Promote @knowledge (knowledge_search) hits into the SAME file/research
-      // ref arrays so they inherit the existing clickable-source chips + inline
-      // citations + viewers. A knowledge hit's identity lives under `ref` (not
-      // top-level), so the two branches above skip it — we unwrap it here and
-      // route file/research-backed hits to their viewer. memory/datastore hits
-      // have no viewer, so they stay inline-only (no chip).
-      const maybeKnowledge = e.tool === 'knowledge_search' || e.tool === 'jkai_extended';
-      if (maybeKnowledge && result.success) {
-        const data = (result.data ?? {}) as Record<string, unknown>;
-        const hits = data.hits;
-        if (Array.isArray(hits)) {
-          for (const raw of hits) {
-            const h = raw as Record<string, unknown>;
-            const ref = (h?.ref ?? {}) as Record<string, unknown>;
-            const passage = typeof h?.passage === 'string' ? h.passage.slice(0, 800) : '';
-            const score = typeof h?.score === 'number' ? h.score : 0;
-            if (h?.source === 'files' && typeof ref.fileId === 'string' && typeof ref.source === 'string') {
-              const key = ref.fileId + ':' + (typeof ref.chunkOrd === 'number' ? ref.chunkOrd : '');
-              if (seenFileRefs.has(key) || turnFileRefs.length >= 12) continue;
-              seenFileRefs.add(key);
-              turnFileRefs.push({
-                fileId: ref.fileId,
-                source: ref.source,
-                modality: typeof ref.modality === 'string' ? ref.modality : 'text',
-                score,
-                chunkOrd: typeof ref.chunkOrd === 'number' ? ref.chunkOrd : undefined,
-                charStart: typeof ref.charStart === 'number' ? ref.charStart : undefined,
-                charEnd: typeof ref.charEnd === 'number' ? ref.charEnd : undefined,
-                passage,
-              });
-            } else if (h?.source === 'research' && typeof ref.factId === 'string' && typeof ref.sessionId === 'string') {
-              if (seenResearchRefs.has(ref.factId) || turnResearchRefs.length >= 12) continue;
-              seenResearchRefs.add(ref.factId);
-              turnResearchRefs.push({
-                factId: ref.factId,
-                sourceId: null,
-                sessionId: ref.sessionId,
-                sessionTopic: typeof h.title === 'string' ? h.title : '',
-                sourceTitle: typeof ref.sourceTitle === 'string' ? ref.sourceTitle : null,
-                sourceUrl: typeof ref.sourceUrl === 'string' ? ref.sourceUrl : null,
-                domain: null,
-                score,
-                passage,
-              });
-            }
-          }
-        }
-      }
-
-      // Promote workflow-builder successes into turnWorkflowRefs so the reply
-      // carries a deep-link chip to the created/updated canvas. The builder
-      // tools' success payloads all include workflowId + slug + url (see
-      // tools/workflows.ts `data`); monitor_create returns the marker shape.
-      const isBuilderTool =
-        e.tool === 'workflow_build_from_spec' || e.tool === 'workflow_create' || e.tool === 'monitor_create';
-      if (isBuilderTool && result.success) {
-        const data = (result.data ?? {}) as Record<string, unknown>;
-        // monitor_create nests the marker under `monitor`; builders are flat.
-        const src = (data.workflowId ? data : (data.monitor ?? {})) as Record<string, unknown>;
-        const workflowId = typeof src.workflowId === 'string' ? src.workflowId : null;
-        const slug = typeof src.slug === 'string' ? src.slug : null;
-        if (workflowId && slug && !seenWorkflowRefs.has(workflowId) && turnWorkflowRefs.length < 6) {
-          seenWorkflowRefs.add(workflowId);
-          turnWorkflowRefs.push({
-            workflowId,
-            slug,
-            name:
-              typeof src.name === 'string' && src.name
-                ? src.name
-                : typeof src.description === 'string' && src.description
-                  ? src.description.slice(0, 60)
-                  : slug,
-            url: `/jkai/canvas/${slug}`,
-          });
-        }
-      }
-    }
-  });
-
-  // Fire-and-forget: pump Hermes frames into the legacy SSE buffer keyed by
-  // jobId. The canvas UI then reads them off `/chat/stream?jobId=...` exactly
-  // as it always has.
-  (async () => {
-    console.log(`[hermes-chat] Job ${jobId} started — workflowId=${workflowId ?? 'none'} chatId=${chatId} message="${message.slice(0, 100)}"`);
-    if (queuedBehindJobId) {
-      // Hold until the turn ahead of us has finished. The gateway queues, so it
-      // will answer that one in full first; sending now would put two turns in
-      // flight on one chat, and the tool-step bus keys its confirmer and its
-      // listeners by chat on the documented assumption that there is only ever
-      // one. `cancelForScope` used to guarantee that by killing the first turn —
-      // which is exactly what we stopped doing, because it threw away an answer
-      // that was still coming.
-      console.log(`[hermes-chat] Job ${jobId} queued behind ${queuedBehindJobId}`);
-      await whenJobSettles(queuedBehindJobId);
-      clearJobQueued(jobId);
-      if (abortController.signal.aborted) {
-        console.log(`[hermes-chat] Job ${jobId} was cancelled while queued`);
-        return;
-      }
-    }
-    registerConfirmer();
-    // Set when `ensureModelPinned` actually pushed a `/model` turn, which this
-    // message must not race. Cleared by sending, below.
-    let awaitingPinTurn = false;
-    let userTurnSent = false;
-    let pinWaitTimer: ReturnType<typeof setTimeout> | null = null;
-    // `kind` / `kindId` were resolved above (they gate the auth scope + the
-    // adapter's skill selection): 'canvas_chat' → jkai-canvas, 'skill' → the
-    // pinned jkai-* domain (carried in kindId), 'manual' → jkai-general routing.
-    try {
-      // Re-assert the chat's model if Hermes has restarted since we last set
-      // it. The `/model` command is pushed once, when the user picks it, and a
-      // rebuilt agent falls back to config.yaml's default — so a restart
-      // silently moves the conversation onto a different model while every
-      // surface still reports the chosen one. No-op unless the boot id changed.
-      if (conversationId) {
-        try {
-          const [conv] = await db
-            .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
-            .from(conversations)
-            .where(eq(conversations.id, conversationId))
-            .limit(1);
-          if (conv?.modelId) {
-            const rePinned = await ensureModelPinned({
-              client,
-              chatId,
-              sessionId,
-              kind,
-              kindId,
-              health,
-              model: coerceModelContext({ provider: conv.provider, modelId: conv.modelId }),
-            });
-            // A re-pin is a turn of its OWN, so this message must not be sent
-            // until it has finished. Racing it was the cause of two separate
-            // faults: under `interrupt` the user's message redirected the re-pin's
-            // run, so the answer came out under the re-pin's turn id with its
-            // "Model switched to ..." notice riding along; under `queue` the
-            // gateway dropped the user's message outright, which made every first
-            // message of every conversation vanish. Sending is deferred to the
-            // stream loop below, which waits for the re-pin's own terminator.
-            awaitingPinTurn = rePinned;
-          }
-        } catch (err) {
-          console.error('[hermes-chat] model re-pin check failed:', err);
-        }
-      }
-
-      const sendUserTurn = async (reason: string) => {
-        if (userTurnSent) return;
-        if (abortController.signal.aborted) return;
-        userTurnSent = true;
-        if (pinWaitTimer) { clearTimeout(pinWaitTimer); pinWaitTimer = null; }
-        console.log(`[hermes-chat] Job ${jobId} sending user turn (${reason})`);
-        await client.sendMessage({
-          chatId,
-          text: message,
-          kind,
-          kindId,
-          sessionId,
-          // Tags every frame this turn emits, so the loop below can tell them
-          // from a superseded turn's leftovers in the shared per-chat queue.
-          turnId: jobId,
-        });
-      };
-
-      if (!awaitingPinTurn) {
-        await sendUserTurn('no re-pin in flight');
-      } else {
-        // Backstop. If the re-pin's terminator never arrives — a gateway hiccup,
-        // a frame lost to a reconnect — send anyway rather than leave the turn
-        // unanswered. A wrong model beats no reply, which is the same trade
-        // `ensureModelPinned` itself makes. Only in THIS case do we inherit the
-        // re-pin's turn, because only here can the two still overlap.
-        pinWaitTimer = setTimeout(() => {
-          console.warn(`[hermes-chat] Job ${jobId}: re-pin turn did not finish within ${PIN_WAIT_MS}ms — sending anyway`);
-          inheritedTurnIds.push(modelPinTurnId(chatId));
-          void sendUserTurn('re-pin wait timed out').catch((err) => {
-            console.error('[hermes-chat] deferred send failed:', err);
-          });
-        }, PIN_WAIT_MS);
-      }
-
-      // NOTE: turnAttachments is hoisted above (outer scope) so both the
-      // tool-step subscriber and this stream pump can contribute to it.
-
-      // One assistant reply arrives as MANY Hermes message ids (the stream
-      // consumer opens a fresh one at every tool boundary), and the gateway
-      // interleaves its own status bubbles — the long-running notifier, the
-      // busy-ack, the home-channel onboarding notice — on the SAME text
-      // channel. The accumulator keeps the text per message id so a `replace`
-      // can only ever rewrite the segment it names; before it, a re-edited
-      // side-channel message replaced the whole answer on screen AND in the
-      // persisted row. See $lib/jkai/hermes-frames.
-      const textAcc = createHermesTextAccumulator();
-      // Log the first foreign frame only. A superseded turn's leftovers are
-      // mostly token deltas — one line each would bury the useful signal.
-      let foreignFrames = 0;
-      // Whether this turn has streamed any answer text yet. It decides whether an
-      // inherited turn's `finalize` ends this one: before we have said anything
-      // that terminator belongs to a different request (the model re-pin's), and
-      // after, it is the only ending a redirected run will ever produce. See
-      // frameBelongsToTurn.
-      let streamedContent = false;
-
-      for await (const frame of client.openStream({
-        chatId,
-        kind,
-        kindId,
-        sessionId,
-      }, { signal: abortController.signal })) {
-        if (abortController.signal.aborted) break;
-        // Pre-phase: a model re-pin is still running and this turn has not been
-        // sent yet. Everything on the wire belongs to the re-pin — including its
-        // "Model switched to ..." notice, which is a settings dump and not an
-        // answer to anything — so it is dropped, and its terminator is the signal
-        // to send. One subscriber throughout: opening a second one to watch for it
-        // would POP frames out of the shared per-chat queue.
-        if (!userTurnSent) {
-          const stamp = frame.metadata?.['turn_id'];
-          if (frame.kind === 'finalize' && stamp === modelPinTurnId(chatId)) {
-            await sendUserTurn('re-pin turn finished');
-          }
-          continue;
-        }
-        // Frames left in the queue by a turn whose consumer detached are not
-        // ours: rendering them would answer this message with the previous
-        // one's reply, and taking their `finalize` would end this turn before
-        // it started. See frameBelongsToTurn for why untagged frames pass.
-        if (!frameBelongsToTurn(frame, jobId, {
-          strict: strictTurnFrames,
-          inherited: inheritedTurnIds,
-          acceptInheritedEnd: streamedContent,
-        })) {
-          if (foreignFrames++ === 0) {
-            console.warn(`[hermes-chat] Job ${jobId} is dropping frames left by turn ${String(frame.metadata?.['turn_id'] ?? 'untagged')} (first: ${frame.kind}, strict=${strictTurnFrames})`);
-          }
-          continue;
-        }
-        // Its own turn has started — normal watchdog limits apply from here.
-        clearJobQueued(jobId);
-        if (frame.kind === 'send' || frame.kind === 'replace') {
-          const update = textAcc.accept(frame);
-          if (update.kind === 'status') {
-            publishStatusFrame(jobId, job, update.status);
-          } else if (update.kind !== 'ignore') {
-            // `partialResponse` is the recomputed body, not a running `+=` —
-            // it is what gets persisted, so it has to match what the bubble
-            // shows exactly.
-            job.partialResponse = update.text;
-            streamedContent = true;
-            publishJobEvent(
-              jobId,
-              update.kind === 'append'
-                ? { type: 'token', delta: update.delta }
-                : { type: 'replace_bubble', content: update.text },
-            );
-          }
-          continue;
-        }
-        // Surface Hermes tool-call frames onto the tool-step panel. Hermes
-        // core fires send_tool for EVERY agent tool call (gateway/run.py wires
-        // the tool_start/complete callbacks with no MCP gating), so this is a
-        // SECOND source of telemetry that OVERLAPS the in-process tool-step bus
-        // (subscribed above) for any tool routing back through THIS SvelteKit
-        // MCP server. The bus is the richer source (full untruncated result →
-        // inline artifacts + attachment promotion, plus mid-call progress), so
-        // `adaptToolFrameToJobEvents(frame, isBusServedTool)` drops the
-        // duplicate frame for bus-served tools and keeps it only for Hermes
-        // built-ins / skills / other MCP servers. It also returns [] for any
-        // non-tool or malformed frame, so this is a no-op for text/media frames
-        // and can never crash the stream.
-        // Live delegate_task child activity → sub-agent visualizer JobEvents.
-        // These also naturally reset the job's idle watchdog (defence in depth
-        // alongside the activeDelegations tracking in job-store).
-        if (frame.kind === 'subagent') {
-          for (const ev of adaptSubagentFrameToJobEvents(frame)) emitTraced(ev);
-          continue;
-        }
-        if (frame.kind === 'tool') {
-          for (const ev of adaptToolFrameToJobEvents(frame, isBusServedTool)) {
-            // Mirror the bus subscriber: promote inline attachments returned
-            // by a tool (e.g. write_document → { attachments: [row] }) into
-            // turnAttachments so the chat UI renders download links.
-            if (ev.type === 'tool_result' && ev.status === 'done' && ev.result && typeof ev.result === 'object') {
-              const atts = (ev.result as Record<string, unknown>).attachments;
-              if (Array.isArray(atts)) {
-                for (const a of atts) {
-                  if (a && typeof a === 'object' && typeof (a as Record<string, unknown>).id === 'string') {
-                    const row = a as Record<string, unknown>;
-                    turnAttachments.push({
-                      id: String(row.id),
-                      kind: String(row.kind ?? 'text') as AssistantAttachment['kind'],
-                      mimeType: String(row.mimeType ?? 'application/octet-stream'),
-                      originalName: row.originalName != null ? String(row.originalName) : null,
-                      sizeBytes: typeof row.sizeBytes === 'number' ? row.sizeBytes : 0,
-                      source: String(row.source ?? 'generated') as AssistantAttachment['source'],
-                    });
-                  }
-                }
-              }
-            }
-            emitTraced(ev);
-          }
-          continue;
-        }
-        // Try every frame — `extractAttachmentFromFrame` returns null when
-        // `frame.attachment` is absent, so the `finalize` frame is a no-op
-        // here, while image / audio / video / pdf / document frames contribute
-        // their attachment row to `turnAttachments`. (send / replace never
-        // reach this far — the accumulator above handles them.)
-        const att = extractAttachmentFromFrame(frame);
-        if (att) turnAttachments.push(att);
-        for (const ev of adaptFrameToCanvasSse(frame)) publishJobEvent(jobId, ev);
-        if (frame.kind === 'finalize') {
-          // Capture per-turn LLM usage from the adapter's synthetic finalize
-          // frame so we can accrue it onto the conversation row below.
-          const rawUsage = (frame.metadata as Record<string, unknown> | undefined)?.['usage'];
-          if (rawUsage && typeof rawUsage === 'object') {
-            const ru = rawUsage as Record<string, unknown>;
-            turnUsage = {
-              input_tokens: typeof ru['input_tokens'] === 'number' ? ru['input_tokens'] : undefined,
-              output_tokens: typeof ru['output_tokens'] === 'number' ? ru['output_tokens'] : undefined,
-              cache_read_tokens: typeof ru['cache_read_tokens'] === 'number' ? ru['cache_read_tokens'] : undefined,
-              cost_usd: typeof ru['cost_usd'] === 'number' ? ru['cost_usd'] : undefined,
-              model: ru['model'] != null ? String(ru['model']) : null,
-              provider: ru['provider'] != null ? String(ru['provider']) : null,
-            };
-          }
-
-          turnStamp = await priceTurn();
-
-          // Use the accumulated partialResponse as the final message
-          // because the adapter's finalize content is intentionally empty
-          // (delivery already happened via prior `send` frames).
-          job.status = 'done';
-          const finalMessage = frame.content || job.partialResponse || '';
-          job.result = {
-            success: true,
-            workflow: null,
-            message: finalMessage,
-            attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
-            fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
-            researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
-            workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
-            // Hand the client the provider's own completion-token count (which
-            // includes reasoning and tool-call tokens) so the /jkai tok/s meter
-            // can settle its streamed chars/4 estimate against a real number —
-            // plus the priced stamp the reply renders beneath itself.
-            usage: turnStamp
-              ? { outputTokens: turnStamp.outputTokens, stamp: turnStamp }
-              : turnUsage?.output_tokens != null
-                ? { outputTokens: turnUsage.output_tokens }
-                : undefined,
-          };
-          // Before `done`, so the trace link the client renders on this event
-          // always resolves. See persistToolTrace.
-          const finalizeTraceId = await persistToolTrace();
-          if (finalizeTraceId) (job.result as Record<string, unknown>).traceId = finalizeTraceId;
-          publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
-          break;
-        }
-      }
-
-      if (job.status !== 'done') {
-        // Stream ended without a finalize (timeout, server hang-up, etc.).
-        // Surface what we got so the UI can render it.
-        job.status = 'done';
-        job.result = {
-          success: true,
-          workflow: null,
-          message: job.partialResponse || '',
-          attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
-          fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
-          researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
-          workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
-        };
-        const fallbackTraceId = await persistToolTrace();
-        if (fallbackTraceId) (job.result as Record<string, unknown>).traceId = fallbackTraceId;
-        publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
-      }
-
-      // Persist the assistant reply so canvas reload restores history.
-      // Mirrors legacy handleWithLoop. Tool steps aren't tracked on the
-      // Hermes branch (yet), so we only record chatNodeId in metadata when
-      // present.
-      const finalText =
-        (job.result && typeof (job.result as Record<string, unknown>).message === 'string'
-          ? ((job.result as Record<string, unknown>).message as string)
-          : '') || job.partialResponse || '';
-      const shouldPersist =
-        (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0 || turnResearchRefs.length > 0 || turnWorkflowRefs.length > 0) && (conversationId || workflowId);
-      if (shouldPersist) {
-        // A turn that finished without a finalize frame (timeout, hang-up) never
-        // reached priceTurn() — price it here so even a truncated reply carries
-        // its stamp.
-        if (!turnStamp) turnStamp = await priceTurn();
-
-        try {
-          const assistantMeta: Record<string, unknown> = {};
-          if (chatNodeId) assistantMeta.chatNodeId = chatNodeId;
-          // The per-turn ledger the redesign renders beneath every reply. A turn
-          // whose cost only exists as a delta on the conversation total can't be
-          // shown where it sits.
-          if (turnStamp) assistantMeta.usage = turnStamp;
-          if (turnAttachments.length > 0) {
-            assistantMeta.attachments = turnAttachments.map((a) => a.id);
-          }
-          if (turnFileRefs.length > 0) {
-            assistantMeta.fileRefs = turnFileRefs;
-          }
-          if (turnResearchRefs.length > 0) {
-            assistantMeta.researchRefs = turnResearchRefs;
-          }
-          if (turnWorkflowRefs.length > 0) {
-            assistantMeta.workflowRefs = turnWorkflowRefs;
-          }
-          // Pointer to the turn's FULL chain in jkai_tool_traces.
-          if (tracePersisted) assistantMeta.traceId = jobId;
-          // The compact chain, so a reloaded thread rebuilds its step cards,
-          // build pills and inline artifacts instead of showing nothing. The
-          // full chain stays in jkai_tool_traces: this field is read for every
-          // message in the thread on every conversation load, so it carries a
-          // glance, not the payload. See compactStepsForMessage.
-          if (compactSteps.length > 0) assistantMeta.toolSteps = compactSteps;
-          const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
-          const [insertedAssistant] = await db.insert(orchestratorChats).values({
-            conversationId: conversationId ?? null,
-            workflowId: workflowId ?? null,
-            role: 'assistant',
-            content: finalText,
-            metadata: assistantMetadata,
-          }).returning({ id: orchestratorChats.id });
-          // Back-fill messageId on the attachments uploaded by the plugin so
-          // the conversation-reload endpoint joins them onto this message.
-          if (insertedAssistant && turnAttachments.length > 0) {
-            await db.update(jkaiAttachments)
-              .set({ messageId: insertedAssistant.id, conversationId: conversationId ?? null })
-              .where(inArray(jkaiAttachments.id, turnAttachments.map((a) => a.id)));
-          }
-          // Same back-fill for the trace: it was written before `done` (so the
-          // link never 404s), which is necessarily before this row existed.
-          if (insertedAssistant && tracePersisted) {
-            await db.update(jkaiToolTraces)
-              .set({ messageId: insertedAssistant.id })
-              .where(eq(jkaiToolTraces.id, jobId));
-          }
-        } catch (persistErr) {
-          console.error('[hermes-chat] failed to persist assistant message:', persistErr instanceof Error ? persistErr.message : persistErr);
-        }
-
-        // Accrue per-turn LLM cost onto the conversation row. This is a
-        // best-effort atomic increment — a failure here must not surface to
-        // the user or break message persistence, hence its own try/catch.
-        try {
-          if (conversationId && turnStamp) {
-            const dIn = turnStamp.inputTokens;
-            const dOut = turnStamp.outputTokens;
-            const dCost = turnStamp.costUsd;
-            if (dIn > 0 || dOut > 0 || dCost > 0) {
-              await db
-                .update(conversations)
-                .set({
-                  promptTokens: sql`${conversations.promptTokens} + ${dIn}`,
-                  completionTokens: sql`${conversations.completionTokens} + ${dOut}`,
-                  costUsd: sql`${conversations.costUsd} + ${dCost.toFixed(6)}`,
-                })
-                .where(eq(conversations.id, conversationId));
-              // Also land this Hermes turn in the durable cost ledger so
-              // /admin/ops/costs reflects /jkai chat spend. Hermes runs outside
-              // the SvelteKit gateway, so installUsageCapture never sees it.
-              recordDurableLLMCall({
-                provider: turnStamp.provider,
-                model: turnStamp.model,
-                tokensInput: dIn,
-                tokensOutput: dOut,
-                costUsd: dCost,
-                source: 'jkai-chat',
-                sessionId: conversationId,
-              });
-            }
-          }
-        } catch (usageErr) {
-          console.error('[hermes-chat] failed to accrue usage onto conversation:', usageErr instanceof Error ? usageErr.message : usageErr);
-        }
-
-        // Grow the thread's knowledge graph. Cadenced and fire-and-forget — the
-        // reply has already been delivered by this point.
-        if (conversationId) {
-          void maybeExtractThreadConcepts(conversationId, null).catch(() => {});
-        }
-      }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[hermes-chat] Job failed:', errorMessage);
-      job.status = 'error';
-      job.error = errorMessage;
-      job.result = { success: false, error: errorMessage };
-      publishJobEvent(jobId, { type: 'error', message: errorMessage });
-    } finally {
-      // Drop the bus subscription so the listener Set doesn't leak across
-      // jobs — the bus would otherwise keep a reference to this closure for
-      // the lifetime of the process. The confirmer must go with it: left
-      // attached, it would answer destructive prompts against a finished job
-      // whose waiters can never resolve, hanging the call until the 240s
-      // budget expires.
-      unsubscribeToolSteps();
-      unregisterConfirmer();
-      unregisterSecretRequester();
-      // A cancelled turn must not have its deferred send fire afterwards.
-      if (pinWaitTimer) { clearTimeout(pinWaitTimer); pinWaitTimer = null; }
-    }
-  })();
-
-  return json({ jobId });
-}
+export const POST: RequestHandler = async (event) => handleWithLoop(event);
 
 // ---------------------------------------------------------------------------
 // Legacy branch (flag OFF) — unchanged behaviour, body lifted into a helper.
@@ -1212,10 +44,15 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
 
 async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds } = body as {
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds, silent } = body as {
     message: string;
     workflowId?: string;
     mode?: string;
+    /** Do not persist a user bubble for this turn — it is machinery, not
+     *  conversation. This was once unread, so a silent `/model` push showed up
+     *  in the thread as if the user had typed it. Nothing sends one now; this
+     *  is the second lock on that door. */
+    silent?: boolean;
     currentNodes?: any;
     currentEdges?: any;
     conversationId?: string;
@@ -1288,10 +125,22 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
       if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
     }
-    const caps = getModelCapabilities(ctx);
+    // Ask what this LANE can accept, not what the model can read. The composer
+    // is served `getChatInputCapabilities` (see /api/jkai/conversations/[id]),
+    // so gating here on the raw model truth meant the UI offered an upload it
+    // then rejected with a 400 — on `codex/*`, which is TEXT_ONLY and the
+    // pinned default, that is every image and every PDF. #427 built the
+    // pre-analysis lane precisely so those work, and it lives downstream of
+    // this guard in `generalChat`.
+    //
+    // Video still fails here, correctly — it has no extraction path.
+    const caps = getChatInputCapabilities(ctx);
     for (const a of attachmentRows) {
       if (!canAcceptKind(caps, a.kind)) {
-        return json({ error: `model ${ctx.modelId} cannot accept ${a.kind}` }, { status: 400 });
+        return json(
+          { error: `${a.kind} attachments are not supported on this chat engine` },
+          { status: 400 },
+        );
       }
     }
   }
@@ -1321,12 +170,29 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     }
   }
 
-  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
+  // Queue behind a turn that is still answering, rather than running alongside it.
+  //
+  // This did not always queue — so a second message sent while the
+  // first was still working started a CONCURRENT turn against the same
+  // conversation. Both then streamed into the same thread and both appended to
+  // history, which is how an answer arrives interleaved with the one before it.
+  //
+  // There is no gateway to ask here, so the loop always queues: it is its own
+  // executor, and two of its turns on one conversation are never wanted.
+  const queuedBehindJobId = conversationId ? getRunningJobIdForConversation(conversationId) : null;
+
+  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId, engine: 'loop' });
   const { abortController } = job;
 
-  // Durable copy of this turn's tool chain, for /jkai/trace/<id>. The Hermes
-  // branch has recorded one since the cutover; this branch did not, so
-  // bypassing Hermes silently turned the trace viewer off. `job.toolSteps`
+  if (queuedBehindJobId) {
+    markJobQueued(jobId, queuedBehindJobId);
+    // Tell the user why nothing is happening yet — silence here reads as a hang.
+    publishJobEvent(jobId, { type: 'status', text: 'Queued — finishing the previous message first' });
+  }
+
+  // Durable copy of this turn's tool chain, for /jkai/trace/<id>. This was
+  // once unrecorded here, which silently turned the trace viewer off for every
+  // turn this path served. `job.toolSteps`
   // still feeds the live tool cards and survives a reload in message metadata,
   // but it carries no server-side timestamps — durations and ordering only
   // exist here. Same recorder, fed the same JobEvents.
@@ -1334,6 +200,15 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
 
   // Run the orchestrator in the background
   (async () => {
+    if (queuedBehindJobId) {
+      // Awaited here rather than before the response so the client still gets its
+      // jobId straight away and can render a queued turn.
+      console.log(`[orchestrator] Job ${jobId} queued behind ${queuedBehindJobId}`);
+      await whenJobSettles(queuedBehindJobId);
+      clearJobQueued(jobId);
+      // The user may have cancelled while we waited; do not start a dead turn.
+      if (abortController.signal.aborted) return;
+    }
     console.log(`[orchestrator] Job ${jobId} started — kind=${contextKind} workflowId=${workflowId ?? 'none'} conversationId=${conversationId ?? 'none'} message: "${message.slice(0, 100)}"`);
 
     function onProgress(text: string) {
@@ -1453,11 +328,15 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         const userMetadata = chatNodeId ? { chatNodeId } : undefined;
         let insertedUserMsg: { id: string } | null = null;
         if (conversationId) {
-          const [m] = await db.insert(orchestratorChats).values({ conversationId, workflowId: workflowId ?? null, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
-          insertedUserMsg = m;
+          if (!silent) {
+            const [m] = await db.insert(orchestratorChats).values({ conversationId, workflowId: workflowId ?? null, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
+            insertedUserMsg = m;
+          }
         } else if (workflowId) {
-          const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
-          insertedUserMsg = m;
+          if (!silent) {
+            const [m] = await db.insert(orchestratorChats).values({ workflowId, role: 'user', content: message, metadata: userMetadata }).returning({ id: orchestratorChats.id });
+            insertedUserMsg = m;
+          }
         }
 
         if (insertedUserMsg && attachmentRows.length > 0) {
@@ -1470,7 +349,9 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // Workflow-context chats (workflowId present) use the builder model; general /jkai chats use the chat model.
         let modelContext: ModelContext = await resolveDefaultModel();
         let priceSnapshot: PriceSnapshot | null = null;
-        console.log(`[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId} (kind=${contextKind})`);
+        // The thread's own thinking level. Null for a thread that predates the
+        // control, or one left on "auto" — both mean "send no reasoning field".
+        let thinkingLevel: ThinkingLevel | null = null;
         // Resolved model is internal info (provider:modelId) — kept out of the
         // user-visible stream. Re-enable as a debug status if you need it back.
         if (conversationId) {
@@ -1485,10 +366,24 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
               modelId: conv.modelId,
             });
             priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
+            thinkingLevel = isThinkingLevel(conv.thinkingLevel) ? conv.thinkingLevel : null;
           }
         }
+        // Logged AFTER the thread's pin is applied, not before: this line used
+        // to print the site default on every turn regardless of what the thread
+        // was actually pinned to, which is the opposite of useful when the
+        // question is "which model answered".
+        console.log(
+          `[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId}` +
+            ` thinking=${thinkingLevel ?? 'auto'} (kind=${contextKind})`,
+        );
 
-        const { response: responseText } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
+        // Wall-clock for the whole turn, all rounds and tools included — the
+        // number the reader actually waited. Stamped here rather than at job
+        // creation so a spell queued behind another turn is not billed to this
+        // one's latency.
+        const turnStartedAt = Date.now();
+        const { response: responseText, usage: turnUsage } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
           workflowId,
           conversationId,
           jobId,
@@ -1524,6 +419,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
             publishJobEvent(jobId, event);
           },
           modelContext,
+          thinkingLevel,
           priceSnapshot,
           useIntelContext: useIntelContext !== false,
         });
@@ -1551,13 +447,52 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           };
           return extractEphemeralSidecar(stored);
         });
-        // Durable tool-chain copy for /jkai/trace/<id>, mirroring
-        // persistToolTrace on the Hermes branch. Best-effort throughout: a
-        // trace is a diagnostic and must never cost the user their reply.
-        // Keyed by jobId like the Hermes one, so the two branches cannot
-        // collide and a re-run is idempotent. `costUsd` stays null — there is
-        // no per-turn stamp to read it from on this branch, and a wrong number
-        // is worse than an absent one.
+        // Durable tool-chain copy for /jkai/trace/<id>. Best-effort
+        // throughout: a trace is a diagnostic and must never cost the user
+        // their reply. Keyed by jobId, so a re-run is idempotent and two
+        // writers cannot collide. `costUsd` comes from the turn
+        // stamp now; it stays null when the turn produced no usage at all,
+        // because an absent number beats a wrong one.
+        // Price the turn against the model that answered it.
+        //
+        // The loop never wrote `metadata.usage`, so four surfaces went blank at
+        // the cutover: the per-reply MODEL/TOK/LATENCY/£ line, the thread token
+        // count, the thread cost, and the context strip. Prod on 08-24: 12
+        // assistant turns, 0 carrying usage, against 7/7 and 3/3 on the two
+        // days before.
+        //
+        // Priced from `priceFor(provider, model)` rather than the conversation's
+        // stored `price_snapshot`, which is null on every recent row because it
+        // is only written by the model-switch PATCH — unreachable while the
+        // picker is hidden (PR 8). Waiting for that would have left these rows
+        // at zero even after the picker came back. The provider's own reported
+        // figure still wins where it exists: a per-token table cannot see a
+        // per-request fee.
+        //
+        // `priceFor` returns null for anything that is not OpenRouter, so a
+        // Codex turn prices at 0 — which is the truth. It spends quota, not
+        // cash. The UI declines to render a £ for it rather than claiming free.
+        const turnStamp: TurnStamp | null = (() => {
+          if (turnUsage.rounds === 0) return null;
+          if (turnUsage.inputTokens === 0 && turnUsage.outputTokens === 0) return null;
+          const provider = turnUsage.provider ?? modelContext.provider;
+          const model = turnUsage.model ?? modelContext.modelId;
+          const pricing = priceFor(provider, model);
+          const costUsd =
+            turnUsage.reportedCostUsd ??
+            (pricing ? computeCost(pricing, turnUsage.inputTokens, turnUsage.outputTokens) : 0);
+          return {
+            model,
+            provider,
+            inputTokens: turnUsage.inputTokens,
+            outputTokens: turnUsage.outputTokens,
+            cacheReadTokens: turnUsage.cacheReadTokens || null,
+            costUsd,
+            latencyMs: Date.now() - turnStartedAt,
+            rounds: turnUsage.rounds,
+          };
+        })();
+
         let traceId: string | null = null;
         if (traceRecorder.hasSteps() && (conversationId || workflowId)) {
           try {
@@ -1570,8 +505,8 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
                 workflowId: workflowId ?? null,
                 prompt: (message ?? '').slice(0, 500),
                 model: modelContext.modelId,
-                provider: modelContext.provider,
-                costUsd: null,
+                provider: turnStamp?.provider ?? modelContext.provider,
+                costUsd: turnStamp?.costUsd ?? null,
                 stepCount: trace.stepCount,
                 errorCount: trace.errorCount,
                 durationMs: trace.durationMs,
@@ -1588,6 +523,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         if (cleanedToolSteps.length > 0) assistantMetaParts.toolSteps = cleanedToolSteps;
         if (traceId) assistantMetaParts.traceId = traceId;
         if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;
+        if (turnStamp) assistantMetaParts.usage = turnStamp;
         const assistantMetadata = Object.keys(assistantMetaParts).length > 0 ? assistantMetaParts : undefined;
         let assistantMsgId: string | null = null;
         if (conversationId) {
@@ -1643,7 +579,68 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           ? await db.select().from(jkaiAttachments).where(eq(jkaiAttachments.messageId, assistantMsgId))
           : [];
 
-        job.result = { success: true, workflow: null, message: responseText, attachments: assistantAttachments };
+        // Link the trace to the message it explains. The trace row is written
+        // before this insert (so the link never 404s), which is necessarily
+        // before the row it points at exists. `/jkai/trace/<id>` and the analyse
+        // endpoint both fall back to a lookup by `messageId`, so leaving it null
+        // makes that fallback dead on every loop-served turn.
+        if (assistantMsgId && traceId) {
+          try {
+            await db.update(jkaiToolTraces)
+              .set({ messageId: assistantMsgId })
+              .where(eq(jkaiToolTraces.id, traceId));
+          } catch (err) {
+            // A diagnostic link is never worth losing the user's reply over.
+            console.warn('[general-chat] failed to link trace to message:', err instanceof Error ? err.message : err);
+          }
+        }
+
+        // Accrue the turn onto the thread. Best-effort and in its own
+        // try/catch, for the same reason as the trace write above: a rollup
+        // failure must never cost the user their reply.
+        //
+        // `recordConversationUsage` is deliberately not used — it prices from
+        // the stored `price_snapshot`, which is null on every recent row, so it
+        // would add a real token count and a zero cost. The stamp has already
+        // priced the turn properly.
+        if (conversationId && turnStamp) {
+          const dIn = turnStamp.inputTokens;
+          const dOut = turnStamp.outputTokens;
+          const dCost = turnStamp.costUsd;
+          if (dIn > 0 || dOut > 0 || dCost > 0) {
+            try {
+              await db
+                .update(conversations)
+                .set({
+                  promptTokens: sql`${conversations.promptTokens} + ${dIn}`,
+                  completionTokens: sql`${conversations.completionTokens} + ${dOut}`,
+                  costUsd: sql`${conversations.costUsd} + ${dCost.toFixed(6)}`,
+                })
+                .where(eq(conversations.id, conversationId));
+            } catch (usageErr) {
+              console.error(
+                '[general-chat] failed to accrue usage onto conversation:',
+                usageErr instanceof Error ? usageErr.message : usageErr,
+              );
+            }
+          }
+        }
+
+        job.result = {
+          success: true,
+          workflow: null,
+          message: responseText,
+          attachments: assistantAttachments,
+          // The `analyse` link on a finished turn reads `result.traceId` LIVE and
+          // `metadata.traceId` on reload. This branch set only the second, so the
+          // button was missing while you watched the turn finish and then
+          // appeared if you reloaded — which is exactly how it was reported.
+          ...(traceId ? { traceId } : {}),
+          // The client renders the ledger line from the live `done` payload and
+          // from `metadata.usage` on reload. Both, or the line appears only
+          // after a refresh.
+          ...(turnStamp ? { usage: turnStamp } : {}),
+        };
       }
 
       job.status = 'done';
@@ -1735,72 +732,6 @@ export const DELETE: RequestHandler = async ({ url }) => {
   return json({ error: job ? 'Job not running' : 'Job not found' }, { status: job ? 400 : 404 });
 };
 
-/**
- * Deliver clarify answers to a Hermes turn that is blocked on the gateway's
- * clarify primitive. Rebuilds the chat/session identity from the job scope with
- * the same formula `handleWithHermes` used to create it, then posts the answer
- * as a normal message — which the gateway's clarify text-intercept consumes
- * instead of treating as a new turn.
- */
-async function forwardClarifyToHermes(
-  jobId: string,
-  job: NonNullable<ReturnType<typeof getJob>>,
-  answers: Record<string, string>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!HERMES_SECRET) return { ok: false, error: 'HERMES_BRIDGE_SECRET not configured' };
-
-  const workflowId = job.scope.workflowId ?? undefined;
-  const conversationId = job.scope.conversationId ?? undefined;
-  const chatNodeId = job.scope.chatNodeId ?? undefined;
-  // handleWithHermes falls back to Date.now() when it has no stable id; that is
-  // unreconstructable here, so bail rather than post into the wrong session.
-  if (!workflowId && !conversationId && !chatNodeId) {
-    return { ok: false, error: 'cannot resolve the Hermes session for this job' };
-  }
-  const chatId = workflowId ?? `chat_${conversationId ?? chatNodeId}`;
-  const userKey = conversationId ?? chatNodeId ?? 'anon';
-  const sessionId = `sess_${userKey}_${chatId}`;
-
-  // One answer per card today; join defensively if that ever changes.
-  let text = Object.values(answers)
-    .map((a) => String(a ?? '').trim())
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-  if (!text) return { ok: false, error: 'no answer text to forward' };
-  // The gateway deliberately ignores replies beginning with `/` so a slash
-  // command still reaches the agent rather than answering the clarify. An
-  // answer that happens to start with `/` would silently do nothing, so shift
-  // it behind a zero-width space.
-  if (text.startsWith('/')) text = `​${text}`;
-
-  try {
-    const client = new HermesClient({
-      baseUrl: HERMES_URL,
-      bridgeSecret: HERMES_SECRET,
-      defaultOrigin: HERMES_ORIGIN,
-      defaultMcpUrl: HERMES_MCP_URL,
-    });
-    await client.sendMessage({
-      chatId,
-      kind: workflowId ? 'canvas_chat' : 'manual',
-      kindId: chatId,
-      sessionId,
-      text,
-      // A clarify answer RESUMES the turn that asked the question rather than
-      // starting a new one, so the continuation belongs to that job — which is
-      // still streaming and waiting for it. Tagging it with a fresh id would
-      // make the original job reject its own resumed output.
-      turnId: jobId,
-    });
-    return { ok: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'unknown error';
-    console.warn(`[hermes-chat] clarify forward failed for job ${jobId}: ${message}`);
-    return { ok: false, error: `failed to deliver the answer to Hermes: ${message}` };
-  }
-}
-
 // PATCH: resolve a pending user-input waiter (plan_ack / confirm_ack / clarify_ack).
 // The orchestrator coroutine registers waiters via createWaiter(jobId, key) and
 // suspends until the user sends their decision through this endpoint.
@@ -1858,19 +789,6 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
 
   const ok = respondToWaiter(jobId, key, payload);
   if (!ok) {
-    // On the Hermes branch a `clarify` blocks inside the Python gateway's
-    // clarify primitive, not in a job-store waiter — so there is nothing here
-    // to resolve. The gateway instead intercepts the next non-slash text
-    // message in the session (gateway/run.py:6938-6962), so forward the answers
-    // as an ordinary silent message. Mirrors the approval card, whose buttons
-    // send `/approve` back through the normal inbound path.
-    const hermesLive = await isHermesChatEnabled(HERMES_ENV_DEFAULT).catch(() => HERMES_ENV_DEFAULT);
-    if (hermesLive && typed.type === 'clarify_ack') {
-      const forwarded = await forwardClarifyToHermes(jobId, job, typed.answers);
-      if (!forwarded.ok) return json({ error: forwarded.error }, { status: 502 });
-      publishJobEvent(jobId, typed as JobEvent);
-      return json({ ok: true });
-    }
     return json({ error: 'no waiter registered for that key' }, { status: 404 });
   }
 

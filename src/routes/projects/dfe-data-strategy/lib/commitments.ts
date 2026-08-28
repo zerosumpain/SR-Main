@@ -6,7 +6,7 @@
 // methodology documented on the method page. GENERATED from the research sweep —
 // edit deliberately, and keep every record's sourceUrls + confidence honest.
 
-import type { Commitment, CommitmentStatus, CommitmentTheme, DfeRole, PolicyDocument } from './types';
+import type { Commitment, CommitmentStatus, CommitmentTheme, DfeRole, PolicyDocument } from '$lib/dfe-data-strategy/types';
 
 // Colors validated (dataviz six-checks, light surface) 2026-07-02: lightness band,
 // chroma floor, adjacent-pair CVD (with glyph/gap/label secondary encoding), contrast.

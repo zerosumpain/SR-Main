@@ -100,5 +100,11 @@ export interface StatsResponse {
     value: number;
     unit: string;
     date: string;
+    /**
+     * A pre-formatted readout, where `value` + `unit` cannot say it on their
+     * own. A pace is the case that forced it: 5.41 min/km is 5:25, and every
+     * other pace on the site is written in the clock form.
+     */
+    display?: string;
   }>;
 }

@@ -50,8 +50,12 @@
 
 <!-- A cell strip, the same idea as the site nav: one grid of hairline-divided
      cells, and the current one cut out of it — page ground behind it with a 2px
-     accent seam on its bottom edge. The strip sits on --surface-rail so that
-     cut-out reads as depth rather than as a filled highlight. -->
+     accent seam on its bottom edge.
+     The strip's own ground is --bg, the thread's ground, and the CELLS carry
+     --surface-rail. It used to be the other way round, which put a band of rail
+     colour identical to the hub header directly under it: header and strip
+     merged into one 88px block, and the empty run between the last tab and `+`
+     read as a background gap rather than as the top of the conversation. -->
 <div class="tab-strip" role="tablist" aria-label="Open conversations">
   <div class="strip-row">
     <div class="cells">
@@ -87,7 +91,10 @@
     </div>
 
     <!-- Outside `.cells`, so a full strip cannot scroll the way to a new thread
-         out of reach. -->
+         out of reach. `.cells` is `flex: 0 1 auto`, so this sits immediately
+         after the last tab while there is room and pins to the right edge once
+         the tabs overflow. It is the only way to start a thread now — the two
+         `+` buttons on the thread rail are gone. -->
     <button
       type="button"
       class="cell-new"
@@ -116,7 +123,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: var(--surface-rail);
+    background: var(--bg);
     border-bottom: 1px solid var(--line-strong);
   }
   .strip-row {
@@ -129,7 +136,10 @@
     display: flex;
     align-items: stretch;
     min-width: 0;
-    flex: 1;
+    /* Shrink to the tabs rather than filling the row, so `+` abuts the last tab
+       instead of floating at the far end of an empty band. Still shrinkable, so
+       a full strip scrolls its cells and leaves `+` pinned right. */
+    flex: 0 1 auto;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -142,6 +152,7 @@
     display: flex;
     align-items: stretch;
     flex: none;
+    background: var(--surface-rail);
     /* Bounded, not `auto`: a long thread title in an auto track pushes every
        other tab off the strip, and `minmax(0, 1fr)` would collapse the short
        ones to nothing. */
@@ -153,9 +164,10 @@
     border-left: 1px solid var(--line-hair);
   }
   .cell:hover {
-    background: var(--accent-tint-04);
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface-rail));
   }
-  /* Cut out of the strip: page ground behind it, accent seam on the bottom. */
+  /* Cut out of the strip: page ground behind it, accent seam on the bottom —
+     the current tab is continuous with the thread underneath it. */
   .cell.current {
     background: var(--bg);
     box-shadow: inset 0 -2px 0 var(--accent);
@@ -247,25 +259,26 @@
     color: var(--status-fail);
   }
 
+  /* The one way to start a thread, so it is the one filled control on the strip
+     rather than another hairline cell. */
   .cell-new {
     flex: none;
     width: 40px;
-    background: transparent;
+    background: var(--accent);
     border: none;
-    border-left: 1px solid var(--line-hair);
-    border-right: 1px solid var(--line-hair);
     cursor: pointer;
     font-family: var(--font-mono);
     font-size: var(--fs-body);
-    color: var(--text-muted);
-    transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+    line-height: 1;
+    color: #fff;
+    transition: background 0.2s var(--ease-out);
   }
   .cell-new:hover:not(:disabled) {
-    color: var(--accent);
-    background: var(--accent-tint-04);
+    background: var(--accent-hover);
   }
   .cell-new:disabled {
-    opacity: 0.35;
+    background: var(--line-strong);
+    color: var(--surface-rail);
     cursor: not-allowed;
   }
 

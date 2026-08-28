@@ -3,7 +3,7 @@
   // mediators → outcomes, with the key annotated edges (lag, strongest lever, weak
   // link, double-edged reform, 2028 cliff). Click any node or edge to inspect the
   // relationship — its mechanism, evidence, live value and the levers behind it.
-  import { GROUP_META, LEVERS_BY_ID } from '../lib/levers';
+  import { GROUP_META, LEVERS_BY_ID } from '$lib/policy-engine/levers';
   import { OUTCOMES_BY_ID } from '../lib/outcomes';
   import { app } from '../lib/appState.svelte';
   import { fmt, signed } from '../lib/chartkit';

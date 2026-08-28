@@ -6,7 +6,7 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 - **Deploy:** merge to `master`; CI builds and deploys. **Never run `scripts/deploy.sh` by hand** — a hand-rolled deploy overwrote the production `.env` with homeserv's, causing a 33-hour outage plus a public `/admin` exposure via `AUTH_BYPASS=1` (2026-07-24).
 - **DB:** PostgreSQL 16 + Drizzle ORM; schema changes → `npx drizzle-kit push`
 - **Auth:** Google OAuth via Auth.js
-- **LLM:** All AI calls via the gateway in `$lib/jkai/llm-client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
+- **LLM:** All AI calls via the gateway in `$lib/llm/client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
 
 ### Two LLM providers
 
@@ -24,19 +24,34 @@ Rules worth knowing before touching this:
   is the single decider; persisted state often carries a bare model string with
   no provider at all. Never hardcode `provider: 'openrouter'` when writing a
   model setting — pass the id through `coerceModelContext`.
-- **Codex does tool-calling** — the bridge publishes caller schemas as a
-  per-request MCP server and returns `tool_calls` (it never executes them).
-  **Embeddings are the one real gap**; those stay on OpenRouter. Check
+- **Codex does tool-calling** — the bridge passes caller schemas straight to the
+  Responses API's `tools` param and returns `tool_calls` (it never executes
+  them). **Embeddings are the one real gap**; those stay on OpenRouter. Check
   `getProviderFeatures()` rather than assuming either way.
-- **Codex is slower per tool call** (~10 s first call, ~3 s follow-ups, vs
-  ~1–2 s on OpenRouter) because each turn starts a fresh Codex process. It is a
-  legitimate site default; just know a long builder chain will crawl.
-- **Codex is text-only.** Anything sending images/audio/PDF must check
+- **The bridge talks the raw Responses API, not `@openai/codex-sdk`** (changed
+  2026-08-24). The SDK drove the `codex` CLI's app-server, which injected its own
+  agent scaffolding into every call: measured **12,040 prompt tokens and ~6.9s**
+  for "reply ok", against **26 tokens and 1.4s** on the raw API. It also could
+  not stream — one block per turn — which is why chat felt slower after the
+  gateway was retired (it had used this same raw transport). Rollback without a
+  deploy: set `CODEX_BRIDGE_TRANSPORT=sdk` and restart the service.
+- **Codex still costs a round trip per tool call**, but ~1.4s, not ~10s. A long
+  builder chain is no longer the crawl it was.
+- **Codex is text-only.** Anything that builds its own content parts must check
   `getModelCapabilities()` first — the site default may now be a Codex model.
+  **`/jkai` chat asks a different question**: `getChatInputCapabilities(ctx)`,
+  which reports what the CHAT can accept rather than what the model can. Images,
+  PDFs and audio are pre-analysed into text (`$lib/jkai/media/preanalyse`) when
+  the model cannot read them natively, so the composer must not grey them out —
+  applying the model gate there dropped every image John attached, twice. Video
+  stays gated on the model, because nothing can extract text from it.
 - **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
-- The bridge lives in `packages/jkai-codex-bridge` (see its README) and is
-  deployed by `scripts/deploy-codex-bridge.sh`, **not** by `ci-deploy.sh`, which
-  never syncs `packages/`. It needs `codex login --device-auth` once per host.
+- The bridge lives in `packages/jkai-codex-bridge` (see its README). A merge to
+  master deploys it via `scripts/ci-stage-sidecars.sh` in the release job;
+  `scripts/deploy-codex-bridge.sh` is the by-hand escape hatch. Plain
+  `ci-deploy.sh` never syncs `packages/`. It needs `codex login --device-auth`
+  once per host — and the bridge now refreshes that token itself
+  (`src/codex-auth.ts`), since the CLI is no longer in the path to do it.
 
 ### Merging a PR — never use `gh pr merge --auto`
 
@@ -109,6 +124,36 @@ redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is
 - `src/routes/admin/` — admin UIs (blog, biome, scraper, gmail, jkai)
 - `src/routes/jkai/` — jkai chat hub + autonomous builder
 - `src/lib/datastore/` — permanent flexible datastore (collections + jsonb records, row-level permissions, query DSL, audit, TTL). Surfaces: `database` workflow node, `datastore` toolset, `/admin/ai/datastore`. Spec: `docs/superpowers/specs/2026-07-18-datastore-and-self-improvement-design.md`
+- `src/lib/codegraph/` — the **build-history knowledge graph**. Nodes are files and gates;
+  episodes (a gate failed, edits followed, the gate passed) and lessons (the 272 curated
+  `~/.claude/.../memory/*.md` notes, imported verbatim) hang off them. Surfaces:
+  `/jkai/codegraph` (ER map, ask, review + forget, serves), the `codegraph` toolset, and
+  `scripts/codegraph-query.mjs`.
+
+  **Retrieval is keyed on code first, prose last.** 29% of John's prompts are ≤25 chars,
+  so "crack on" embeds to nothing. The two sharp keys are mechanical and cost no LLM call:
+  the FILE SET a build is touching, and the FINGERPRINT of the gate error it just hit
+  (`orchestrator.ts` has already appended those diagnostics to `evaluation`). Both are
+  retrospective, so a greenfield task ("add a Notion connector") matches neither — for
+  that, and only after both decline, `planBuildQuery` falls back to a `topic:` seed built
+  from the task text. It needs three meaningful tokens, so the short prompts that
+  motivated keying on code still plan nothing at all.
+
+  **Two channels, and neither is the tool bridge.** All 5,214 tool actions across 280
+  production build iterations are pi built-ins — the bridge has never once been called.
+  So: PUSH is computed in-process at `executor.ts` and appended to the user prompt; PULL
+  is `scripts/codegraph-query.mjs` over **bash**, the only transport pi never strips.
+  A new script needs its own rsync line in `ci-release.sh` or it silently does not exist
+  in production.
+
+  **Forgetting is a tombstone with a required reason**, filtered in exactly one place
+  (`retrieve.ts`). Staleness (every cited path gone from that repo) ranks a lesson down
+  and flags it; it never hides it on its own, and the sweep refuses to run when its
+  sentinel check fails rather than quarantining the whole corpus.
+
+  Backfill: `node scripts/codegraph-backfill.mjs --all` on homeserv (the transcripts are
+  858 MB and live only there). Spec: `docs/superpowers/specs/2026-08-17-code-memory-graph.md`.
+
 - `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`). Dashboard: `/admin/ai/improvement`.
 
   Phases: `gather → learn → discover → build → repair → optimise → propose → report`. All LLM calls are pinned to

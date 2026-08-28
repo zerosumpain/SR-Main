@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { LEGISLATION_BY_ID, LEGAL_LAYER_META } from '../lib/legislation';
-  import type { LegalLayer } from '../lib/types';
+  import { LEGISLATION_BY_ID, LEGAL_LAYER_META } from '$lib/dfe-data-strategy/legislation';
+  import type { LegalLayer } from '$lib/dfe-data-strategy/types';
 
   const items = $derived(app.align.legalImplicated.map((id) => LEGISLATION_BY_ID[id]).filter(Boolean));
   const LAYERS: LegalLayer[] = ['protection-basis', 'legal-gateway', 'governance'];

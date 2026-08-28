@@ -1,5 +1,6 @@
 import { db } from '$lib/db';
 import { blogPosts, blogPostTags } from '$lib/db/schema';
+import type { BlogAuthorship } from './authorship';
 import { eq, desc, and } from 'drizzle-orm';
 import type { PostMeta, Post } from './types';
 
@@ -163,6 +164,7 @@ export async function updatePostFields(
     status: 'draft' | 'published';
     publishedAt: Date | null;
     previewToken: string;
+    authorship: BlogAuthorship;
   }>,
 ) {
   await db

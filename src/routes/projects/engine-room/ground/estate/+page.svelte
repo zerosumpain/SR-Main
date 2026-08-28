@@ -16,23 +16,25 @@
 </script>
 
 <svelte:head>
-  <title>Three places, one codebase · The Engine Room</title>
+  <title>Estate · The Engine Room</title>
   <meta name="description" content="A public origin with no inbound port, a machine at home doing the three things a data centre cannot, and a disposable machine for unreviewed code — with the same code on all of them." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="ground"
-    title="Three places, one codebase"
+    title="Estate"
     line="There is no production branch. The same code runs everywhere, and what a process is permitted to do gets decided at startup by the software working out where it has woken up and adjusting its expectations accordingly."
-    lineEli5="The same program runs on a server, on a computer at home, and on a temporary machine that checks new code. Each is allowed to do different things." />
+    lineEli5="The same program runs on a public server, on a computer at home, and on a throwaway machine that checks new code. What each copy is allowed to do depends on where it woke up — decided at startup, not by keeping separate versions." />
 
   <Instrument
     kicker="The instrument"
     title="What wakes up where"
     tone={TONE}
     reading="Click a machine to read its column, or a row to read why it is gated that way."
-    takeaway="{oneOnly} of the {SUBSYSTEMS.length} run in exactly one place. Two copies of a nightly job writing into one database is not redundancy, it is a race with a database at the end of it — so nearly everything scheduled refuses to start anywhere but the origin, and the scraper refuses everywhere else.">
+    readingEli5="Click a machine to see what runs on it, or a row for why it is limited that way."
+    takeaway="{oneOnly} of the {SUBSYSTEMS.length} run in exactly one place. Two copies of a nightly job writing into one database is not redundancy, it is a race with a database at the end of it — so nearly everything scheduled refuses to start anywhere but the origin, and the scraper refuses everywhere else."
+    takeawayEli5="{oneOnly} of the {SUBSYSTEMS.length} parts run in exactly one place. Two copies of the same nightly job writing into one database is not a safety net, it is a collision — so nearly everything on a schedule refuses to start anywhere but its own machine.">
     <HostMatrix />
   </Instrument>
 
@@ -41,6 +43,7 @@
     title="Why anything is at home at all"
     tone={TONE}
     reading="Three reasons, and every one of them is a property of the place rather than anything I could fix in software."
+    readingEli5="Three reasons — and each one is a property of the place itself, not something software could fix."
     takeaway={HOUSE_COST.body}>
     <ul class="reasons">
       {#each HOUSE_REASONS as r (r.k)}

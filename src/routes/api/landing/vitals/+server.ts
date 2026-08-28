@@ -7,6 +7,7 @@ import { jkaiBuilds, workflows, workflowRuns, projectVisibility } from '$lib/db/
 import { desc, eq, like, isNotNull, sql } from 'drizzle-orm';
 import { isProjectSlug, defaultsPublic } from '$lib/projects/visibility';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
+import { publishedLink } from '$lib/builds/published-link';
 
 /**
  * Public, read-only aggregator for the landing-page "Vital Signs" tiles.
@@ -92,9 +93,10 @@ function deriveBuilder(
 ): VitalsPayload['builder'] {
   const rawTitle = latestPublished?.title ?? null;
   const lastShippedTitle = rawTitle ? rawTitle.slice(0, 48) : null;
-  const lastShippedHref = latestPublished?.publishedSlug
-    ? `/projects/${latestPublished.publishedSlug}/`
-    : null;
+  // Public surface: only ever link to a page on this site. A git-target build
+  // stores a PR url here, which is neither a project nor ours to advertise.
+  const shippedLink = publishedLink(latestPublished?.publishedSlug);
+  const lastShippedHref = shippedLink && !shippedLink.external ? shippedLink.href : null;
 
   if (!latest) {
     return { stage: 'idle', active: false, shippedCount, lastShippedTitle, lastShippedHref };

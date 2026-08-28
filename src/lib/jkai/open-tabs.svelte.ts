@@ -38,7 +38,7 @@ export interface TabView {
 
 /**
  * Five is a UI limit, not an engine one — the server has no cap on concurrent
- * chat jobs (they are scoped per conversation) and Hermes gives each thread its
+ * chat jobs (they are scoped per conversation) and each thread gets its
  * own session. Five tabs is where the strip stops being readable at 1100px, and
  * it keeps the multiplexed follow-up stream plus one job stream per running tab
  * inside the browser's six-connection HTTP/1.1 budget on the dev server.

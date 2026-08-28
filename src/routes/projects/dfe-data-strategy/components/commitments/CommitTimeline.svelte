@@ -2,7 +2,7 @@
   import { ledger } from '../../lib/commitmentsFilter.svelte';
   import { THEME_META, THEME_ORDER, STATUS_META } from '../../lib/commitments';
   import CommitList from './CommitList.svelte';
-  import type { Commitment, CommitmentStatus } from '../../lib/types';
+  import type { Commitment, CommitmentStatus } from '$lib/dfe-data-strategy/types';
 
   // the delivery wall: when the commitments land, lane per theme, glyph per status
   const START = 2024 * 12; // months since year 0

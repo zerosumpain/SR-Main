@@ -28,7 +28,7 @@ describe('requiredString', () => {
     expect(requiredString({ name: '   ' }, 'name').ok).toBe(false);
   });
 
-  it('coerces non-strings, since Hermes stringifies tool args', () => {
+  it('coerces non-strings, since a client may stringify tool args', () => {
     expect(requiredString({ n: 42 }, 'n')).toEqual({ ok: true, value: '42' });
   });
 });

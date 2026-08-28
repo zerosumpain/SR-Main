@@ -11,9 +11,6 @@ import { TOOL_POLICY_COLLECTION, TOOL_POLICY_PERMISSIONS } from '$lib/toolpolicy
 /** Actor every self-improvement datastore write runs as. */
 export const SYSTEM_ACTOR = 'system';
 
-/** Owner WhatsApp number for the nightly summary (CLAUDE.md). */
-export const OWNER_PHONE = '+447359228511';
-
 /** System collection slugs (pinned in the plan — do not rename). */
 export const COLLECTIONS = {
   apiCatalog: 'api_catalog',
@@ -187,7 +184,14 @@ export type ActionKind =
   /** A trialled policy beat its baseline and was kept. */
   | 'policy_kept'
   /** A trialled policy failed to beat its baseline and was rolled back. */
-  | 'policy_reverted';
+  | 'policy_reverted'
+  /**
+   * A trial could not be judged because its measurement source had stopped
+   * receiving data before the trial began. Recorded rather than skipped
+   * silently: "nothing happened tonight" and "the evidence was too old to use"
+   * look identical in the ledger otherwise, and the second one needs fixing.
+   */
+  | 'measurement_stale';
 
 /**
  * The plain-English record of one improvement, captured WHERE THE FACTS ARE

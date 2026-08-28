@@ -1,4 +1,6 @@
 <script lang="ts">
+  import VoicePanel from './VoicePanel.svelte';
+  import type { VoiceCard } from '$lib/voice/types';
   import { onMount } from 'svelte';
   import {
     EditorView,
@@ -25,11 +27,14 @@
     onSave,
     onAutoSave,
     uploadImage,
+    voiceCard = null,
   }: {
     content?: string;
     onSave?: (content: string) => Promise<void>;
     onAutoSave?: (content: string) => Promise<void>;
     uploadImage?: (file: File) => Promise<string>;
+    /** Passed through from the page loader. Null simply hides the Voice panel. */
+    voiceCard?: VoiceCard | null;
   } = $props();
 
   let editorContainer: HTMLDivElement | undefined = $state();
@@ -53,11 +58,16 @@
     return `${minutes} min read`;
   }
 
+  // Same plain text feeds the Voice panel, so the two strips cannot disagree
+  // about what document they are describing.
+  let plainForVoice = $state('');
+
   function updateWordCount(text: string) {
     // Strip markdown syntax for a fair readability measure: render to HTML
     // then drop tags, the same way the published page sees it.
     const plain = plainTextFromHtml(renderContent(text, 'markdown'));
     scores = readability(plain);
+    plainForVoice = plain;
   }
 
   function getContent(): string {
@@ -456,6 +466,10 @@
     </div>
   {/if}
 
+  {#if voiceCard}
+    <VoicePanel text={plainForVoice} card={voiceCard} />
+  {/if}
+
   <!-- Status bar -->
   <div class="status-bar">
     <div class="status-left">
@@ -659,10 +673,23 @@
     color: var(--text-muted);
   }
 
+  /* Tailwind's preflight strips list markers globally — restore them here. */
   .preview-pane :global(ul),
   .preview-pane :global(ol) {
     padding-left: 1.5em;
     margin-bottom: 1.25em;
+  }
+
+  .preview-pane :global(ul) {
+    list-style: disc;
+  }
+
+  .preview-pane :global(ul ul) {
+    list-style: circle;
+  }
+
+  .preview-pane :global(ol) {
+    list-style: decimal;
   }
 
   .preview-pane :global(li) {
@@ -671,9 +698,29 @@
     color: var(--text-secondary);
   }
 
+  .preview-pane :global(li::marker) {
+    color: var(--accent);
+  }
+
   .preview-pane :global(img) {
     max-width: 100%;
     margin: 1.5em 0;
+    border: 1px solid var(--card-border);
+  }
+
+  .preview-pane :global(figure) {
+    margin: 1.5em 0;
+  }
+
+  .preview-pane :global(figure img) {
+    margin: 0;
+  }
+
+  .preview-pane :global(figcaption) {
+    margin-top: 0.5em;
+    font-family: var(--font-mono);
+    font-size: max(0.8125rem, var(--fs-label-xs));
+    color: var(--text-muted);
   }
 
   /* Status bar */

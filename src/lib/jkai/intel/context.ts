@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes, intelRelationships, intelNotes, intelNoteEntities } from '$lib/db/schema';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { generateEmbedding } from './embed';
 
 interface KnowledgeContext {
@@ -48,6 +48,77 @@ export async function buildKnowledgeContext(userMessage: string): Promise<string
   }
 }
 
+/**
+ * What the planner should believe a random page costs on this host.
+ *
+ * Postgres defaults `random_page_cost` to 4.0, a number tuned for spinning
+ * disks. Every host this runs on is SSD-backed (`lsblk` reports ROTA=0 on the
+ * production VPS), so 4.0 is simply the wrong input — 1.1 is the standard value
+ * for solid-state storage.
+ *
+ * It matters here specifically because it is what decides whether the HNSW
+ * indexes get used at all. The embeddings are TOASTed, so `intel_entities`
+ * looks like a cheap 857-page table to the planner (seq scan costed at ~1028)
+ * while the real work is detoasting 13,720 × 6KB vectors — 150ms. pgvector's
+ * HNSW startup estimate scales with `random_page_cost`, so at 4.0 it comes out
+ * at 2258, loses to a seq scan that is really 60× slower, and the index sits
+ * there unused.
+ *
+ * Measured on production, same query, 2026-08-24:
+ *   random_page_cost 4.0 → Seq Scan,   161.7ms
+ *   random_page_cost 2.0 → Index Scan,   7.3ms
+ *   random_page_cost 1.1 → Index Scan,   2.5ms
+ *
+ * Deliberately `SET LOCAL` on these two queries rather than `ALTER SYSTEM`.
+ * Setting it database-wide is arguably the more correct fix and would help
+ * other index choices too, but it changes every plan in the database and that
+ * is an operator's decision, not a side effect of a chat-latency change.
+ */
+const SSD_RANDOM_PAGE_COST = 1.1;
+
+/**
+ * The two vector lookups, in one transaction so `SET LOCAL` covers both and
+ * resets itself on commit (safe on a pooled connection — Postgres unwinds
+ * `SET LOCAL` at transaction end, so it cannot leak to the next borrower).
+ */
+async function vectorLookups(vectorStr: string): Promise<[unknown[], unknown[]]> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL random_page_cost = ${sql.raw(String(SSD_RANDOM_PAGE_COST))}`);
+
+    const entityRows = await tx.execute(sql`
+      SELECT e.id, e.name, et.name as type_name, et.icon, e.summary,
+             e.properties,
+             e.embedding <=> ${vectorStr}::vector as distance
+      FROM intel_entities e
+      JOIN intel_entity_types et ON e.type_id = et.id
+      WHERE e.embedding IS NOT NULL
+        AND e.merged_into_id IS NULL
+      ORDER BY distance ASC
+      LIMIT 8
+    `);
+
+    const noteRows = await tx.execute(sql`
+      SELECT n.id, n.title,
+             substring(n.processed_content from 1 for 400) as excerpt,
+             n.created_at,
+             n.embedding <=> ${vectorStr}::vector as distance
+      FROM intel_notes n
+      WHERE n.embedding IS NOT NULL
+        AND n.status = 'processed'
+        -- Stated explicitly, even though a held note's status is 'held' and the
+        -- line above already excludes it. That exclusion is incidental — it
+        -- depends on two columns happening to agree — and this is the door the
+        -- whole mail gate exists to keep shut: chat must never answer from an
+        -- email nobody approved.
+        AND n.graph_state = 'admitted'
+      ORDER BY distance ASC
+      LIMIT 5
+    `);
+
+    return [entityRows.rows, noteRows.rows] as [unknown[], unknown[]];
+  });
+}
+
 async function findRelevantContext(query: string): Promise<KnowledgeContext> {
   let embedding: number[];
   try {
@@ -58,39 +129,26 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
 
   const vectorStr = `[${embedding.join(',')}]`;
 
-  const entityRows = await db.execute(sql`
-    SELECT e.id, e.name, et.name as type_name, et.icon, e.summary,
-           e.properties,
-           e.embedding <=> ${vectorStr}::vector as distance
-    FROM intel_entities e
-    JOIN intel_entity_types et ON e.type_id = et.id
-    WHERE e.embedding IS NOT NULL
-      AND e.merged_into_id IS NULL
-    ORDER BY distance ASC
-    LIMIT 8
-  `);
+  const [entityRows, noteRows] = await vectorLookups(vectorStr);
 
-  const relevantEntities = (entityRows.rows as any[]).filter((r) => r.distance < 0.6);
-
-  const noteRows = await db.execute(sql`
-    SELECT n.id, n.title,
-           substring(n.processed_content from 1 for 400) as excerpt,
-           n.created_at,
-           n.embedding <=> ${vectorStr}::vector as distance
-    FROM intel_notes n
-    WHERE n.embedding IS NOT NULL
-      AND n.status = 'processed'
-    ORDER BY distance ASC
-    LIMIT 5
-  `);
-
-  const relevantNotes = (noteRows.rows as any[]).filter((r) => r.distance < 0.5);
+  const relevantEntities = (entityRows as any[]).filter((r) => r.distance < 0.6);
+  const relevantNotes = (noteRows as any[]).filter((r) => r.distance < 0.5);
 
   const entityIds = relevantEntities.map((e: any) => e.id);
-  const entities = [];
 
-  for (const row of relevantEntities) {
-    const rels = entityIds.length > 0
+  // Two queries, not 1 + N + M.
+  //
+  // This ran one relationships query per relevant entity, then a separate
+  // single-row name lookup per relationship, every one of them awaited inside
+  // nested `for` loops. Production holds 16,505 relationships at 2.46 per
+  // entity, so a typical turn made roughly thirty sequential database round
+  // trips — plus an external embedding call above — before the first token of
+  // the reply could even be requested. The work is the same; the waiting was
+  // the cost.
+  const REL_PER_ENTITY = 10;
+
+  const allRels =
+    entityIds.length > 0
       ? await db
           .select({
             type: intelRelationships.type,
@@ -99,23 +157,54 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
             targetId: intelRelationships.targetEntityId,
           })
           .from(intelRelationships)
-          .where(sql`${intelRelationships.sourceEntityId} = ${row.id} OR ${intelRelationships.targetEntityId} = ${row.id}`)
-          .limit(10)
+          .where(
+            or(
+              inArray(intelRelationships.sourceEntityId, entityIds),
+              inArray(intelRelationships.targetEntityId, entityIds),
+            ),
+          )
+          // Generous headroom over the per-entity cap applied below. A hub
+          // entity with hundreds of edges must not drag the whole batch.
+          .limit(entityIds.length * REL_PER_ENTITY * 3 + 50)
       : [];
 
-    const relDescriptions: string[] = [];
-    for (const rel of rels) {
-      const otherId = rel.sourceId === row.id ? rel.targetId : rel.sourceId;
-      const [other] = await db
-        .select({ name: intelEntities.name })
-        .from(intelEntities)
-        .where(eq(intelEntities.id, otherId))
-        .limit(1);
+  // Bucket by entity, capped per entity — the same shape the old per-entity
+  // `.limit(10)` produced.
+  const relsByEntity = new Map<string, typeof allRels>();
+  for (const id of entityIds) relsByEntity.set(id, []);
+  for (const rel of allRels) {
+    // A self-relationship touches one bucket once, not twice.
+    const sides = rel.sourceId === rel.targetId ? [rel.sourceId] : [rel.sourceId, rel.targetId];
+    for (const side of sides) {
+      const bucket = relsByEntity.get(side);
+      if (bucket && bucket.length < REL_PER_ENTITY) bucket.push(rel);
+    }
+  }
 
-      if (other) {
-        const direction = rel.sourceId === row.id ? '→' : '←';
-        relDescriptions.push(`${direction} ${rel.type.replace(/_/g, ' ')}: ${other.name}`);
-      }
+  // Every name the descriptions will need, in one lookup.
+  const otherIds = [
+    ...new Set(allRels.flatMap((r) => [r.sourceId, r.targetId]).filter((id): id is string => !!id)),
+  ];
+  const nameRows =
+    otherIds.length > 0
+      ? await db
+          .select({ id: intelEntities.id, name: intelEntities.name })
+          .from(intelEntities)
+          .where(inArray(intelEntities.id, otherIds))
+      : [];
+  const nameById = new Map(nameRows.map((r) => [r.id, r.name]));
+
+  const entities = [];
+  for (const row of relevantEntities) {
+    const relDescriptions: string[] = [];
+    for (const rel of relsByEntity.get(row.id) ?? []) {
+      const otherId = rel.sourceId === row.id ? rel.targetId : rel.sourceId;
+      const otherName = otherId ? nameById.get(otherId) : undefined;
+      // An edge whose other end has been merged away or deleted described
+      // nothing before either — it just cost a query to discover that.
+      if (!otherName) continue;
+      const direction = rel.sourceId === row.id ? '→' : '←';
+      relDescriptions.push(`${direction} ${rel.type.replace(/_/g, ' ')}: ${otherName}`);
     }
 
     entities.push({

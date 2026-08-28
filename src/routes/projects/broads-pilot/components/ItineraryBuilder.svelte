@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
   import { fmtDist, fmtTime, fmtMoney } from '../lib/format';
-  import { breydonAdvice } from '../lib/tide';
+  import { breydonAdvice } from '$lib/broads-pilot/tide';
 
   let copied = $state(false);
 

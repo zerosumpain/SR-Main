@@ -49,6 +49,7 @@
       section: 'Recall & agents',
       items: [
         { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Knowledge graph, notes & alerts', keywords: 'graph entities relationships' },
+        { code: 'CG', label: 'Codegraph', href: '/jkai/codegraph', desc: 'What building this codebase has already taught us', keywords: 'code graph build history episodes lessons precedent relevance' },
         { code: 'KN', label: 'Recall', href: '/jkai/intel/search', desc: 'Search notes, entities, files, research, memory & datastore', keywords: 'recall search @knowledge unified knowledge' },
         { code: 'AG', label: 'Agents', href: '/jkai/agents', desc: 'Your specialist agent team', keywords: 'delegate specialist team persona' },
         { code: 'PR', label: 'Prompts', href: '/jkai/prompts', desc: 'The prompts that actually run', keywords: 'prompt workbench system soul' },
@@ -59,6 +60,7 @@
       items: [
         { code: 'MON', label: 'Monitors', href: '/jkai/monitors', desc: 'Watch X, tell me when Y', keywords: 'watch alert notify schedule' },
         { code: 'BR', label: 'Briefing', href: '/jkai/briefing', desc: 'Your daily digest', keywords: 'digest daily morning summary' },
+        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams', desc: 'What it noticed on spare cycles', keywords: 'daydream notice pattern idle location places suggestions' },
       ],
     },
     {

@@ -1,6 +1,6 @@
 // outcomes.ts — display metadata for the outcomes the engine produces. Self-contained.
 
-import type { YearResult } from './types';
+import type { YearResult } from '$lib/policy-engine/types';
 
 export interface OutcomeMeta {
   id: keyof YearResult & string;

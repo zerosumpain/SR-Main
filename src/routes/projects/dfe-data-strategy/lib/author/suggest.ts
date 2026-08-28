@@ -6,13 +6,13 @@
 
 import { POSTURE_BY_ID } from '../postures';
 import { CAPABILITY_BY_ID, CAPABILITY_IDS } from '../capabilities';
-import { PRESSURES_BY_ID } from '../pressures';
-import { MATURITY_DIMENSIONS } from '../maturity';
-import { LEGISLATION_BY_ID } from '../legislation';
-import { FRAMEWORKS } from '../frameworks';
+import { PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
+import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
+import { LEGISLATION_BY_ID } from '$lib/dfe-data-strategy/legislation';
+import { FRAMEWORKS } from '$lib/dfe-data-strategy/frameworks';
 import { MUST_ANSWER } from '../commitments';
 import { pct } from '../format';
-import type { AlignmentResult, StrategyState } from '../types';
+import type { AlignmentResult, StrategyState } from '$lib/dfe-data-strategy/types';
 
 export interface SuggestedLine {
   id: string;

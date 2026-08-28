@@ -3,9 +3,9 @@
   // this-boat verdict, notes and a safety advisory. Opaque panel so it can float.
   import { app } from '../lib/appState.svelte';
   import { fmtClearance } from '../lib/format';
-  import { bridgeVerdict } from '../lib/passability';
-  import { bridgeTideWindows, hasRealDataForDay, fmtTideTime } from '../lib/tide';
-  import type { Bridge, Lock, Verdict } from '../lib/types';
+  import { bridgeVerdict } from '$lib/broads-pilot/passability';
+  import { bridgeTideWindows, hasRealDataForDay, fmtTideTime } from '$lib/broads-pilot/tide';
+  import type { Bridge, Lock, Verdict } from '$lib/broads-pilot/types';
 
   const VERDICT_COLOR: Record<Verdict, string> = { pass: 'var(--success)', marginal: 'var(--warn)', blocked: 'var(--error)' };
   const VERDICT_LABEL: Record<Verdict, string> = {

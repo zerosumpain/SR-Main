@@ -5,7 +5,7 @@
 
   let {
     content = '',
-    /** Send a slash command to Hermes WITHOUT persisting it as a user message.
+    /** Send a slash command WITHOUT persisting it as a user message.
      *  The chat handler accepts `silent: true` for exactly this. */
     onSilentSend,
     /** Auto-select policy from admin settings. When `defaultAction !== 'none'`

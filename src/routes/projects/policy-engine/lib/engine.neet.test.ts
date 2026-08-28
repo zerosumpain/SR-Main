@@ -4,9 +4,9 @@
 // youth guarantee → unemployed segment; upstream absence → pipeline).
 
 import { describe, it, expect } from 'vitest';
-import { runSim } from './engine';
-import { baselineLevers, policyLevers, LEVERS_BY_ID } from './levers';
-import { BASELINE } from './params';
+import { runSim } from '$lib/policy-engine/engine';
+import { baselineLevers, policyLevers, LEVERS_BY_ID } from '$lib/policy-engine/levers';
+import { BASELINE } from '$lib/policy-engine/params';
 import { PRESETS } from './scenarios';
 
 const at = (years: ReturnType<typeof runSim>['years'], y: number) => years.find((r) => r.year === y)!;

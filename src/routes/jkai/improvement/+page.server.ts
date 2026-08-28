@@ -10,7 +10,7 @@ import { listBacklog } from '$lib/selfimprove/backlog';
 import { loadCustomToolHealth } from '$lib/selfimprove/context';
 import { buildStories, summariseStories } from '$lib/selfimprove/narrative';
 import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
-import type { CallEfficiency } from '$lib/server/hermes-sessions';
+import type { CallEfficiency } from '$lib/selfimprove/call-efficiency';
 import { COLLECTIONS, CRON_EXPR, CRON_TZ } from '$lib/selfimprove/types';
 import type { ImprovementRunData, QuestionInsights, ToolAttemptData } from '$lib/selfimprove/types';
 
@@ -67,9 +67,9 @@ async function loadInsights(): Promise<QuestionInsights | null> {
  * The last persisted calls-per-turn measurement plus its recent history.
  *
  * Read from the datastore rather than measured live: `getCallEfficiency` walks
- * every message in the window and on the VPS costs a Tailscale round-trip, so a
- * page load must not trigger it. The nightly optimise phase writes these, and
- * the "Measure now" button re-writes them on demand.
+ * every trace in the window, so a page load must not trigger it. The nightly
+ * optimise phase writes these, and the "Measure now" button re-writes them on
+ * demand.
  */
 async function loadEfficiency(): Promise<{
   latest: CallEfficiency | null;

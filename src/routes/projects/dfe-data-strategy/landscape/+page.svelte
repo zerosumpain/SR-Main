@@ -7,7 +7,7 @@
   import PressureMatrix from '../components/PressureMatrix.svelte';
   import PressureMap from '../components/PressureMap.svelte';
   import CapabilityDemand from '../components/CapabilityDemand.svelte';
-  import { PRESSURES } from '../lib/pressures';
+  import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
   import { CAPABILITY_AREAS } from '../lib/capabilities';
 
   const urgent = PRESSURES.filter((p) => p.severity >= 4 && p.urgency >= 4).length;

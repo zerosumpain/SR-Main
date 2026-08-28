@@ -14,7 +14,12 @@ The workspace is at /home/jkai/workspace/BUILD_ID/dev with full read/write acces
 HOST ENVIRONMENT — these are ALREADY INSTALLED on the host. Do NOT reinstall them:
 - Python 3.12 (\`python3\`), pip, common stdlib + venv
 - Node 22 (\`node\`), npm, npx
-- Playwright + Chromium (\`npx playwright\` works out of the box; do NOT \`npm install playwright\` again — it's installed globally)
+- Playwright, with the BUNDLED CHROMIUM AND NOTHING ELSE. It is NOT installed globally and \`npx playwright\` DOES NOT WORK: there is no playwright in your workspace, so npx fetches the newest release, which wants a browser revision nobody downloaded and dies with \`Executable doesn't exist at .../chrome-headless-shell\`. Build dd2dcc57 lost an iteration to exactly that. Require the site's own copy by absolute path instead — verified working:
+    \`\`\`js
+    const { chromium } = require('/opt/strange-rambling-svelte/node_modules/playwright');
+    \`\`\`
+  and run it with \`node\`, not \`npx\`. Do NOT \`npm install playwright\` and do NOT \`npx playwright install\` — neither finishes inside an iteration.
+  Launch it as \`chromium.launch()\` with NO \`channel\` option. There is no Google Chrome on this host (\`channel: 'chrome'\` fails on /opt/google/chrome/chrome), and no webkit and no firefox — those binaries were never downloaded. Build bc8bf49f lost most of an iteration reaching for \`channel: 'chrome'\` and then webkit; if chromium cannot do it, use node:test or pytest instead.
 - Git, curl, wget, jq, ripgrep (\`rg\`)
 - bash + standard GNU coreutils
 - /usr/bin/pi (the agent CLI) — present but you don't invoke it directly
@@ -42,6 +47,12 @@ WHEN YOU WRAP (every iteration), finish with exactly this structure:
 
 ## Evaluation
 Honest assessment: what works in the live preview right now, what's still stubbed, what's unfinished. Estimate completion %.
+End this section with a status line on its own, exactly one of:
+  STATUS: COMPLETE   — the brief is delivered; nothing of substance is left to build.
+  STATUS: CONTINUE   — there is more real work to do.
+This line is how the orchestrator decides whether to run another iteration. Say COMPLETE only when
+you would be content for the user to see this as the finished thing; a high completion % with
+"STATUS: CONTINUE" is a normal, expected combination.
 
 ## Next Steps
 Ordered list of concrete follow-ups for the next iteration. Be specific — the next iteration reads this to decide what to build.
@@ -54,6 +65,15 @@ Your project is served live via a reverse proxy on a dedicated per-build port. T
 - Your server process is started from the live/ workspace and proxied to the user's browser.
 - Server-side routes, WebSockets, sqlite persistence, long-running background workers — all fair game.
 - Purely static sites still work; just pick a static server.
+
+WHERE YOU ARE — YOU CANNOT CHANGE THE STRANGE RAMBLINGS SITE:
+Everything above is true of YOUR SANDBOX and nothing else. You are not in the strangeramblings.com repository, you have no branch, and you cannot open a pull request. Nothing you write can become a page, a route, an API endpoint, a Svelte component, a workflow node or a schema change on that site. Your deliverable is the preview URL, and that is the whole of it.
+
+Nor can you escalate. \`request_change\` — the tool that does branch the real repo — is destructive, so it is deliberately withheld from builds; there is no sequence of tool calls that gets you there.
+
+So if the task you were given only makes sense as a change to the site — it names an SR route, an endpoint, a component, the database schema, or simply says "on the site" — STOP ON ITERATION 1. Do not build a standalone imitation of it and do not spend iterations improving that imitation; a preview that mimics a site page is worth nothing to the user, and the budget spent proving it cannot ship is budget wasted. Write the \`## Evaluation\` section, say plainly that this needs \`request_change\` rather than an app build, and describe what you would have built so whoever reads it can start that lane with a head start.
+
+Build dd2dcc57 was asked for a family location dashboard "for the site" and spent five iterations and 2.8M tokens writing a \`python3 server.py\` that could never become a route. It was killed by hand. One honest paragraph on iteration 1 would have cost about ninety seconds.
 
 SERVING — DO THIS FIRST, BEFORE ANY FEATURE CODE:
 Your very first actions in any iteration where serve.json doesn't already exist must be: (1) write a valid serve.json, (2) create the minimum files the startCommand needs (index.html, main.py, server.js — whatever applies), (3) run the server from bash and curl the healthCheck to confirm 200. Only THEN start building features. A visible loading screen the user can see is worth more than invisible code.
@@ -90,8 +110,9 @@ UI STANDARDS:
 TESTING (LAYER IT IN, DON'T FRONT-LOAD IT):
 - Do NOT write tests in the scaffolding iteration. Preview first, tests once the skeleton is stable.
 - Once the preview is alive and you're adding real functionality, maintain a tests/ directory. Python → pytest. Node → node:test.
-- Create tests/run.sh containing the command to execute tests (e.g. "cd .. && python3 -m pytest tests/ -v" or "cd .. && node --test tests/").
-- The orchestrator runs your tests after every iteration. Failing tests block promotion to live — so only write tests you know pass right now.
+- Create tests/run.sh containing the command to execute tests (e.g. "python3 -m pytest tests/ -v" or "node --test tests/").
+- run.sh is executed with the working directory ALREADY set to your workspace root — the directory that holds tests/. Do not cd in it; write paths relative to that root.
+- The orchestrator runs your tests after every iteration and reports the result back to you. Your work is promoted to live/ either way, so a red test costs you the next iteration rather than the preview — but write only tests you know pass right now.
 
 ERROR RECOVERY:
 - If a tool call fails, diagnose before retrying. Don't re-run the same command hoping for different output — change something.
@@ -161,6 +182,15 @@ MATCH THE SURROUNDING CODE. Before writing anything, read two existing files of 
 WORK IN THIS ORDER, EVERY ITERATION:
   1. Read the task. Identify the smallest set of files that can deliver it.
   2. Read those files, plus two precedents. Use the codebase digest below rather than re-listing the tree.
+     ASK THE HISTORY FIRST — it is cheaper than reading, and it knows things the code does not say:
+       node __CODEGRAPH_CMD__ 'file:src/lib/example.ts | hops 1'
+       node __CODEGRAPH_CMD__ 'fingerprint:typecheck:TS2345'      # after a gate failure
+       node __CODEGRAPH_CMD__ 'topic:"how deploys pick up new scripts"'
+     It returns the rules that apply to those files and what happened the last time
+     they were changed, with the verdict of each past attempt. If it says NO PRECEDENT,
+     that means the graph was asked and had nothing — treat it as new ground, not as
+     permission. One call costs a few hundred milliseconds; re-deriving the same
+     context by grepping costs you a third of your iteration.
   3. Make the change.
   4. Add or update tests next to the existing tests for that area.
   5. Check your work with the NARROWEST command that can prove it (see below).
@@ -295,7 +325,7 @@ The low-poly scene is the EXCEPTION, not the default. It is right for a quantity
 For something physical or spatial that no artefact can draw, generate an illustration:
     node __STUDIO_IMAGE_CMD__ --prompt "<what to draw>" --out assets/<name>.png
 It writes the file into your tree and prints the <figure> markup. Never let a generated image carry a number — a model will draw a convincing axis with invented values on it. Quantities belong in the instruments, which are exact and which the reader can operate.
-7. Do NOT use Tailwind. A post-iteration linter rejects any class attribute containing bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, flex or grid as a whole word. Note that a class named "chapter-grid" matches — pick another name.
+7. Do NOT use Tailwind. A post-iteration linter rejects any class TOKEN that starts with bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, or is exactly flex or grid (variant prefixes like sm: and hover: count). Your own kebab-case names are fine even when they contain those fragments — "chapter-grid" and "nm-text-input" both pass.
 
 THE CHAPTER CONTRACT — every chapter page must have all four:
 1. A root element with \`data-chapter="<n>"\`, numbered from 1, and NO \`data-chapter-status="placeholder"\` — remove that attribute the moment the chapter is genuinely written.
@@ -347,6 +377,7 @@ EVIDENCE:
 TESTING:
 - No tests in the skeleton iteration.
 - Once chapters are landing, keep a tests/ directory and a tests/run.sh with the command to run them. Python → pytest, Node → node:test. Only write tests you have seen pass.
+- run.sh is executed with the working directory ALREADY set to your workspace root — the directory that holds tests/. Do not cd in it; write paths relative to that root.
 
 ERROR RECOVERY: if a tool call fails, diagnose before retrying. Never re-run the same command hoping for different output. Stuck after two attempts, change approach.
 
@@ -390,8 +421,37 @@ export type BuildPromptMode = 'app' | 'repo' | 'studio';
  * quietly omits a section is worse than none — it answers "why did it do that"
  * with the wrong text.
  */
-export const DESIGN_SYSTEM_PROMPT_BLOCK =
-  `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+const DESIGN_SYSTEM_HEAD =
+  `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n`;
+
+const DESIGN_SYSTEM_TAIL =
+  `4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+
+/**
+ * Step 3 is the only line that differs by mode, and it has to.
+ *
+ * An app build is a standalone project with no stylesheet of its own, so it
+ * genuinely must pull the tokens in. A repo build is a clone of THIS site,
+ * where \`src/app.css\` and \`$lib/styles/nm-tokens.css\` are already imported by
+ * the root layout — every page has the tokens before it asks. The mount is
+ * still useful there as documentation, but importing it is actively harmful:
+ * \`syncDesignAssets\` writes it into \`dev/\`, which for a git-target build IS
+ * the clone, and \`.git/info/exclude\` hides it. So a relative import resolves
+ * for the agent's own gate and dangles everywhere else.
+ *
+ * Change request #414 did exactly that — \`@import '../../../../design-system/
+ * tokens.css'\` in a new /projects page. Its gate passed, and CI failed on
+ * \`Can't resolve\`, because the two were not looking at the same tree. The
+ * agent was following instructions; the instructions were written for the
+ * other lane.
+ */
+export function designSystemPromptBlock(mode: BuildPromptMode = 'app'): string {
+  const step3 =
+    mode === 'repo'
+      ? `3. Do NOT import or copy anything from \`./design-system/\` — read it for guidance only. This is a clone of the site itself, so the tokens are ALREADY global: \`src/app.css\` and \`$lib/styles/nm-tokens.css\` are imported by the root layout and every page inherits them. Just use \`var(--…)\`. The mount is git-excluded and does not exist in CI, so an \`@import\` of it passes your gate and fails the build.\n`
+      : `3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n`;
+  return DESIGN_SYSTEM_HEAD + step3 + DESIGN_SYSTEM_TAIL;
+}
 
 // Canonical shape of a studio chapter-plan entry. src/lib/db/schema.ts keeps
 // its own inline copy of this shape on the `chapterPlan` jsonb column
@@ -425,6 +485,17 @@ export function studioResearchScript(cwd: string = process.cwd()): string {
   return `${cwd}/scripts/studio-research.mjs`;
 }
 
+/**
+ * Absolute path to the build-history graph query, same reason again: the agent
+ * runs it over bash by path, and a relative path resolves against its workspace
+ * rather than the repo. Shipped to the VPS by its own line in ci-release.sh —
+ * that file is an allow-list, and a script missing from it silently does not
+ * exist in production.
+ */
+export function codegraphQueryScript(cwd: string = process.cwd()): string {
+  return `${cwd}/scripts/codegraph-query.mjs`;
+}
+
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
@@ -433,9 +504,14 @@ export function buildSystemPrompt(
   if (mode === 'studio') {
     const verify = studioVerifyCommand().replace('$PORT', String(assignedPort));
     return (
-      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify)
-        .replace('__STUDIO_IMAGE_CMD__', studioImageScript())
-        .replace('__STUDIO_RESEARCH_CMD__', studioResearchScript()) +
+      // replaceAll, not replace: a string-argument `replace` substitutes only
+      // the FIRST occurrence, so the moment a placeholder is used twice the
+      // later ones survive into the prompt and the agent is told to run a
+      // command literally named `__STUDIO_VERIFY_CMD__`. Caught by
+      // build-context.test.ts, which asserts no placeholder survives in any mode.
+      STUDIO_SYSTEM_PROMPT.replaceAll('__STUDIO_VERIFY_CMD__', verify)
+        .replaceAll('__STUDIO_IMAGE_CMD__', studioImageScript())
+        .replaceAll('__STUDIO_RESEARCH_CMD__', studioResearchScript()) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
       `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)` +
       `\nThe chapter spine (titles, lever and outcome ids) is at /home/jkai/workspace/${buildId}/.studio/spine.json — the checker reads it automatically.`
@@ -443,7 +519,7 @@ export function buildSystemPrompt(
   }
   if (mode === 'repo') {
     return (
-      REPO_SYSTEM_PROMPT +
+      REPO_SYSTEM_PROMPT.replaceAll('__CODEGRAPH_CMD__', codegraphQueryScript()) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
       `\nThis is a git clone. You are already on the correct branch — do not create, switch or delete branches, and do not commit or push. The orchestrator commits and opens the pull request for you once the gate passes.`
     );
@@ -466,6 +542,18 @@ export function buildIterationContext(
   mode: BuildPromptMode = 'app',
   gateCommand: string | null = null,
   chapterPlan: Array<ChapterPlanEntry> | null = null,
+  /*
+   * The FINAL gate, when the target has one, and it has to be named.
+   *
+   * "Do not run the gate yourself" used to name only `gateCommand`. The target
+   * splits its gate in two — `gateCommand` per iteration, `finalGateCommand`
+   * (a full vite build) once before the PR — so an agent told not to run the
+   * first was never told anything about the second. Build 42244cc0 ran
+   * `npm run gate:build` and hit `exit 124` at the 300-second tool limit, over
+   * and over, correctly concluding "full gate is not yet green" each time. It
+   * was obeying the instruction it was given. The instruction was incomplete.
+   */
+  finalGateCommand: string | null = null,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
@@ -492,7 +580,10 @@ export function buildIterationContext(
   // this to skip the tool-call discovery phase that previously ate the
   // first 20-50 actions of every iteration.
   if (codebaseDigest.trim()) {
-    contextMessage += `\n\n${codebaseDigest}\n\nDO NOT re-read or re-list these files unless you're about to modify one. Trust the digest for "what exists and where".`;
+    const digestGuidance = mode === 'repo'
+      ? 'This codebase digest is a partial, recency-ranked sample of the workspace. For anything you cannot see in the digest, use grep or find rather than assuming it does not exist.'
+      : 'DO NOT re-read or re-list these files unless you\'re about to modify one. Trust the digest for "what exists and where".';
+    contextMessage += `\n\n${codebaseDigest}\n\n${digestGuidance}`;
   } else if (fileList.trim()) {
     contextMessage += `\n\n## Current Workspace Files\n\`\`\`\n${fileList}\n\`\`\``;
   } else {
@@ -509,7 +600,7 @@ export function buildIterationContext(
       // on two type errors. Vitest transpiles — it does not typecheck — so a
       // green focused run says nothing about the half of the gate that fails
       // most often. Say so, and say plainly that a red gate outranks it.
-      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself: every command you run is killed at 300 seconds, and the gate takes longer, so you would only ever see a timeout. If it fails, the failing lines appear at the top of your next iteration under "The gate FAILED".\n\nVerify narrowly in the meantime — the one test file covering what you touched. But know what that does NOT prove: **vitest transpiles without typechecking**, so a passing focused run tells you nothing about \`svelte-check\`, which is the part of the gate that most often refuses a change. A one-argument call to a two-argument function passes vitest and fails the gate every time.\n\nSo: while the gate is red you are NOT finished, however green your own tests are. Fix what the gate names before writing anything else, and never close an iteration reporting success on a red gate — say what is still failing instead.`;
+      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself${finalGateCommand ? `, and do not run \`${finalGateCommand}\` either — the orchestrator runs that too, once, after the gate above is green` : ''}: every command you run is killed at 300 seconds, and both take longer, so you would only ever see a timeout. If it fails, the failing lines appear at the top of your next iteration under "The gate FAILED".\n\nVerify narrowly in the meantime — the one test file covering what you touched. But know what that does NOT prove: **vitest transpiles without typechecking**, so a passing focused run tells you nothing about \`svelte-check\`, which is the part of the gate that most often refuses a change. A one-argument call to a two-argument function passes vitest and fails the gate every time.\n\nSo: while the gate is red you are NOT finished, however green your own tests are. Fix what the gate names before writing anything else, and never close an iteration reporting success on a red gate — say what is still failing instead.`;
     }
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Deliver the smallest correct change, get the gate green, then close with ## Evaluation and ## Next Steps.`;
   } else if (mode === 'studio') {
@@ -527,7 +618,13 @@ export function buildIterationContext(
     } Close with ## Evaluation and ## Next Steps.`;
   } else {
     contextMessage += `\n\n## Assigned Serving Port\nYour server must bind to port ${assignedPort}. Reflect this in serve.json.`;
-    contextMessage += `\n\nBegin iteration ${iterationNumber}. Work until the iteration's scope is fully delivered, then close with ## Evaluation and ## Next Steps.`;
+    // "Work until the scope is fully delivered" used to close every app
+    // iteration, contradicting the HARD STOPS above it — which say wrap as
+    // soon as one route returns 200 — and naming a per-iteration scope that
+    // was never stated for most builds. The stops were added the day after
+    // this line and reversed the policy without removing it; the repo and
+    // studio branches were written later and got it right.
+    contextMessage += `\n\nBegin iteration ${iterationNumber}. Ship one thin increment, honour the HARD STOPS above, then close with ## Evaluation and ## Next Steps.`;
   }
 
   messages.push({ role: 'user', content: contextMessage });

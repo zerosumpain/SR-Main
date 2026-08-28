@@ -44,7 +44,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   // Prefer the chat node's OWN output when the caller named it. The chat
-  // node calls Hermes and returns the LLM's reply on `response` — that's
+  // node returns the LLM's reply on `response` — that's
   // what the panel should persist, regardless of what downstream did with
   // the text (WhatsApp send, email, etc., would otherwise hijack the
   // panel with `{ success: true }` style payloads). Falls back to terminal

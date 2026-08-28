@@ -4,9 +4,9 @@
   import { pct } from '../../lib/format';
   import { POSTURE_BY_ID } from '../../lib/postures';
   import { CAPABILITY_BY_ID, CAPABILITY_IDS } from '../../lib/capabilities';
-  import { PRESSURES_BY_ID } from '../../lib/pressures';
-  import { MATURITY_DIMENSIONS } from '../../lib/maturity';
-  import { LEGISLATION_BY_ID } from '../../lib/legislation';
+  import { PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
+  import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
+  import { LEGISLATION_BY_ID } from '$lib/dfe-data-strategy/legislation';
   import { SOURCES } from '../../lib/sources';
   import AlignmentView from '../AlignmentView.svelte';
   import CoverageBars from '../CoverageBars.svelte';

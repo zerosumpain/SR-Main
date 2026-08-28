@@ -12,10 +12,10 @@ import { error, json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve } from '../../lib/retrieval.server';
-import { coerceJson } from '../../lib/jsonsafe';
+import { coerceJson } from '$lib/dfe-data-strategy/jsonsafe';
 import { TEMPLATE_BY_ID } from '../../lib/author/templates';
 import { MUST_ANSWER, DOCUMENTS_BY_ID } from '../../lib/commitments';
 import {
@@ -53,6 +53,8 @@ function cleanAnswers(raw: unknown): InterviewAnswer[] {
 
 const STYLE = `Style rules — follow all of them:
 - British English, plain and active. Say "we will", name owners and dates where the answers imply them.
+  (Deliberately NOT $lib/voice — this is institutional departmental voice, not John's. Giving a
+   DfE strategy document his first person and his self-deprecation would be the register split failing.)
 - Decisions, not aspirations: every paragraph should either decide something, commit to something, or evidence something.
 - Ground claims in the EVIDENCE PACK by naming the source in prose (e.g. "the 2025 State of Digital Government review found…"). Never include URLs.
 - Mostly flowing paragraphs; a short bulleted list is allowed where it genuinely helps. Use ### sub-headings only in sections over 450 words.

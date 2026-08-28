@@ -1,12 +1,15 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import { publishedLink } from './published-link';
   import PromoteModal from './PromoteModal.svelte';
+  import type { LaneStat } from './lane-stats';
+  import { bucketOf, bucketLabel, outcomeNote } from './build-status';
 
   type Build = {
     id: string;
     title: string | null;
     prompt: string;
     status: string;
+    outcome: string | null;
     iterationsCompleted: number | null;
     tokensUsed: number | null;
     budgetConfig: any;
@@ -16,17 +19,28 @@
     cardTitle: string | null;
     cardBlurb: string | null;
     cardTag: string | null;
-    origin: 'manual' | 'hermes' | string | null;
+    origin: 'manual' | 'chat' | string | null;
     createdAt: string | Date;
   };
 
-  let { builds: initialBuilds }: { builds: Build[] } = $props();
+  /** Chat wrote the files itself, whatever it was called at the time. `hermes`
+   *  is the legacy stamp for the same thing; matching only the new value would
+   *  drop every pre-rename build out of its own filter and its own count. */
+  function isChatOrigin(origin: string | null): boolean {
+    return origin === 'chat' || origin === 'hermes';
+  }
+
+  let { builds: initialBuilds, lanes = [] }: { builds: Build[]; lanes?: LaneStat[] } = $props();
   let builds = $state<Build[]>(initialBuilds);
   let busyId = $state<string | null>(null);
   let selected = $state<Set<string>>(new Set());
   let bulkBusy = $state(false);
   let openMenuId = $state<string | null>(null);
-  let filter = $state<'all' | 'running' | 'queued' | 'paused' | 'awaiting' | 'completed' | 'failed' | 'published' | 'hermes'>('all');
+  let filter = $state<
+    | 'all' | 'running' | 'queued' | 'paused' | 'awaiting'
+    | 'delivered' | 'capped' | 'stopped' | 'registered' | 'failed' | 'unknown'
+    | 'published' | 'chat'
+  >('all');
   let toast = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   function showToast(kind: 'ok' | 'err', text: string) {
@@ -34,32 +48,28 @@
     setTimeout(() => { toast = null; }, 2200);
   }
 
-  function bucket(b: Build): string {
-    if (b.status === 'running') return 'running';
-    if (b.status === 'queued') return 'queued';
-    if (b.status === 'paused') return 'paused';
-    if (b.status === 'awaiting_plan_approval' || b.status === 'awaiting_iter_approval' || b.planStatus === 'pending') return 'awaiting';
-    if (b.status === 'failed') return 'failed';
-    if (b.status === 'completed') return 'completed';
-    return 'completed';
-  }
+  // Lives in build-status.ts so it can be unit-tested — a function in a
+  // .svelte file cannot be, and this one used to end `return 'completed'`,
+  // which filed all 8 cancelled builds as successes.
+  const bucket = bucketOf;
 
   let filtered = $derived(
     filter === 'all'
       ? builds
       : filter === 'published'
         ? builds.filter((b) => b.publishedSlug)
-        : filter === 'hermes'
-          ? builds.filter((b) => b.origin === 'hermes')
+        : filter === 'chat'
+          ? builds.filter((b) => isChatOrigin(b.origin))
           : builds.filter((b) => bucket(b) === filter),
   );
 
   function counts() {
     const c: Record<string, number> = {
       all: builds.length,
-      running: 0, queued: 0, paused: 0, awaiting: 0, completed: 0, failed: 0,
+      running: 0, queued: 0, paused: 0, awaiting: 0, failed: 0,
+      delivered: 0, capped: 0, stopped: 0, registered: 0, unknown: 0,
       published: builds.filter((b) => b.publishedSlug).length,
-      hermes: builds.filter((b) => b.origin === 'hermes').length,
+      chat: builds.filter((b) => isChatOrigin(b.origin)).length,
     };
     for (const b of builds) c[bucket(b)] = (c[bucket(b)] || 0) + 1;
     return c;
@@ -206,8 +216,10 @@
 
   async function copyPreviewLink(b: Build) {
     openMenuId = null;
-    if (!b.publishedSlug) return;
-    const url = `${window.location.origin}/projects/${b.publishedSlug}/`;
+    const link = publishedLink(b.publishedSlug);
+    if (!link) return;
+    // An absolute PR url is already whole; only a /projects slug needs the origin.
+    const url = link.external ? link.href : `${window.location.origin}${link.href}`;
     try {
       await navigator.clipboard.writeText(url);
       showToast('ok', 'Link copied');
@@ -228,14 +240,6 @@
 
 <svelte:window onclick={onDocClick} />
 
-<PageHeader title="Builds">
-  {#snippet meta()}
-    <span class="idx-head-meta">
-      <span>{builds.length} {builds.length === 1 ? 'build' : 'builds'}</span>
-    </span>
-  {/snippet}
-</PageHeader>
-
 <div class="wrap">
   <header class="page-hdr">
     <div>
@@ -245,7 +249,13 @@
         Autonomous AI development. <code>plan</code>-first, <code>design-system</code>-locked, fully observable.
       </p>
     </div>
-    <a class="back-link" href="/jkai">← JKAI</a>
+    <nav class="hdr-links">
+      <!-- Anchored from here because this is where you ask "why did that build
+           take five iterations": the answer is what it was, or was not, told. -->
+      <a class="back-link" href="/jkai/codegraph">⌗ Codegraph</a>
+      <a class="back-link" href="/jkai/codegraph/serves">Build impact</a>
+      <a class="back-link" href="/jkai">← JKAI</a>
+    </nav>
   </header>
 
   <section class="nm-sec">
@@ -266,8 +276,8 @@
         <div class="stat-lbl">awaiting</div>
       </div>
       <div class="stat">
-        <div class="stat-val">{cnt.completed}</div>
-        <div class="stat-lbl">completed</div>
+        <div class="stat-val">{cnt.delivered}</div>
+        <div class="stat-lbl">delivered</div>
       </div>
       <div class="stat">
         <div class="stat-val">{cnt.published}</div>
@@ -275,6 +285,42 @@
       </div>
     </div>
   </section>
+
+  {#if lanes.some((l) => l.total > 0)}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">By lane</span>
+        <span class="nm-sec-meta">delivered / ran — cap-outs and hand-kills are not deliveries</span>
+      </div>
+      <div class="lanes">
+        <div class="lane lane-hd">
+          <span>lane</span>
+          <span>ran</span>
+          <span>delivered</span>
+          <span>median iters</span>
+          <span>hit cap</span>
+          <span>stopped</span>
+          <span>published</span>
+          <span>never ran</span>
+        </div>
+        {#each lanes as l (l.lane)}
+          <div class="lane">
+            <span class="lane-name">{l.lane}</span>
+            <span class="lane-n">{l.ran}<span class="lane-of">/{l.total}</span></span>
+            <span class="lane-n">
+              {l.successRate === null ? '—' : `${l.successRate}%`}<span class="lane-of">
+                {l.delivered}</span>
+            </span>
+            <span class="lane-n lane-key">{l.medianIterations === null ? '—' : l.medianIterations}</span>
+            <span class="lane-n lane-quiet">{l.capped || '—'}</span>
+            <span class="lane-n lane-quiet">{l.stopped || '—'}</span>
+            <span class="lane-n">{l.published}</span>
+            <span class="lane-n lane-quiet">{l.neverRan || '—'}</span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <section class="nm-sec">
     <div class="nm-sec-hd">
@@ -292,10 +338,14 @@
         { k: 'queued', label: 'Queued' },
         { k: 'awaiting', label: 'Awaiting' },
         { k: 'paused', label: 'Paused' },
-        { k: 'completed', label: 'Completed' },
+        { k: 'delivered', label: 'Delivered' },
+        { k: 'capped', label: 'Hit cap' },
+        { k: 'stopped', label: 'Stopped' },
         { k: 'failed', label: 'Failed' },
+        { k: 'registered', label: 'Registered' },
+        { k: 'unknown', label: 'Unknown' },
         { k: 'published', label: 'Published' },
-        { k: 'hermes', label: 'From Hermes' },
+        { k: 'chat', label: 'From chat' },
       ] as f (f.k)}
         <button
           class="chip"
@@ -356,11 +406,11 @@
           {@const canPromote = !isPublished && b.status !== 'queued' && b.status !== 'pending'}
           {@const isBusy = busyId === b.id}
           {@const buc = bucket(b)}
-          {@const isHermes = b.origin === 'hermes'}
+          {@const isChat = isChatOrigin(b.origin)}
           <article
             class="build-card"
             class:selected={isSelected}
-            class:hermes={isHermes}
+            class:chat={isChat}
             data-status={buc}
             data-origin={b.origin ?? 'manual'}
           >
@@ -375,8 +425,8 @@
                 {#if isSelected}✓{:else}&nbsp;{/if}
               </button>
 
-              {#if isHermes}
-                <span class="origin-flag" title="Built by Hermes via chat/WhatsApp">Hermes</span>
+              {#if isChat}
+                <span class="origin-flag" title="Written by chat itself — the builder never ran">Chat</span>
               {/if}
 
               <div class="quick-actions">
@@ -470,9 +520,9 @@
                   <span class="card-title">{b.title ?? b.prompt.slice(0, 60)}</span>
                   <span class="card-prompt">{b.prompt.slice(0, 90)}{b.prompt.length > 90 ? '…' : ''}</span>
                 </div>
-                <span class="status-pill" data-status={buc}>
+                <span class="status-pill" data-status={buc} title={outcomeNote(buc) ?? ''}>
                   <span class="status-dot" data-status={buc} aria-hidden="true"></span>
-                  {buc}
+                  {bucketLabel(buc)}
                 </span>
               </div>
 
@@ -532,12 +582,7 @@
     color: var(--text-primary);
     font-family: var(--font-body);
   }
-  .idx-head-meta {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    color: var(--text-muted);
-  }
-
+  .hdr-links { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
   .page-hdr {
     display: flex;
     justify-content: space-between;
@@ -654,6 +699,52 @@
     .stats { grid-template-columns: repeat(2, 1fr); }
   }
 
+  /* ——— Lane split ———
+     Repo / app / studio is the strongest predictor of iteration cost in the
+     build history — roughly 10x between the extremes, at near-identical
+     success rates. Column widths are fixed rather than minmax(0,1fr): a
+     zero-min track collapses to nothing here. */
+  .lanes {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--card-border);
+    border: 1px solid var(--card-border);
+    overflow-x: auto;
+  }
+  .lane {
+    display: grid;
+    grid-template-columns: 6rem repeat(7, minmax(4.5rem, 1fr));
+    gap: 0.7rem;
+    align-items: baseline;
+    background: var(--card-bg);
+    padding: 0.6rem 0.85rem;
+    min-width: 44rem;
+  }
+  .lane-hd span {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+  .lane-name {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .lane-n {
+    font-family: var(--font-mono);
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .lane-key { color: var(--accent); }
+  .lane-of { color: var(--text-ghost); font-size: 0.8125rem; }
+  .lane-quiet { color: var(--text-muted); }
+
   /* ——— Filter chips ——— */
   .filters {
     display: flex;
@@ -768,10 +859,10 @@
   }
   .build-card:hover { border-color: var(--text-primary); }
   .build-card.selected { border-color: var(--accent); }
-  /* Hermes-origin builds get a distinctive left rail + accent border on top
+  /* Chat-origin builds get a distinctive left rail + accent border on top
      so users can tell at a glance which entries came in via the agent vs.
      were started manually from /jkai/builds/new. */
-  .build-card.hermes {
+  .build-card.chat {
     border-left: 3px solid var(--accent-ink);
     border-top: 2px solid var(--accent-ink);
   }
@@ -969,6 +1060,12 @@
   .status-pill[data-status="queued"] { border-color: #b48a32; color: #b48a32; }
   .status-pill[data-status="failed"] { border-color: #b43232; color: #b43232; }
   .status-pill[data-status="paused"] { border-color: var(--text-muted); color: var(--text-muted); }
+  .status-pill[data-status="delivered"] { border-color: var(--status-success, #2d7d46); color: var(--status-success, #2d7d46); }
+  /* Not failures, but not deliveries either — muted, and never green. */
+  .status-pill[data-status="capped"] { border-color: #b48a32; color: #b48a32; }
+  .status-pill[data-status="stopped"] { border-color: var(--text-muted); color: var(--text-muted); }
+  .status-pill[data-status="registered"] { border-color: var(--card-border); color: var(--text-muted); }
+  .status-pill[data-status="unknown"] { border-color: #b43232; color: #b43232; }
 
   .card-stats {
     display: grid;
@@ -1026,7 +1123,11 @@
   .status-dot[data-status="queued"] { background: #b48a32; }
   .status-dot[data-status="paused"] { background: var(--text-muted); }
   .status-dot[data-status="awaiting"] { background: var(--accent); }
-  .status-dot[data-status="completed"] { background: var(--text-muted); opacity: 0.5; }
+  .status-dot[data-status="delivered"] { background: var(--status-success, #2d7d46); }
+  .status-dot[data-status="capped"] { background: #b48a32; }
+  .status-dot[data-status="stopped"] { background: var(--text-muted); opacity: 0.5; }
+  .status-dot[data-status="registered"] { background: var(--text-muted); opacity: 0.35; }
+  .status-dot[data-status="unknown"] { background: #b43232; }
   .status-dot[data-status="failed"] { background: #b43232; }
 
   @keyframes pulse {

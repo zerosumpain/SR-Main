@@ -1,7 +1,7 @@
 import {
   buildSystemPrompt,
   buildIterationContext,
-  DESIGN_SYSTEM_PROMPT_BLOCK,
+  designSystemPromptBlock,
   type BuildPromptMode,
   type ChapterPlanEntry,
 } from './prompt';
@@ -10,6 +10,7 @@ import {
   allocatePort,
   ensureSandboxRunning,
   ensureWorkspace,
+  ensureDepsInstalled,
   syncDesignAssets,
   syncJkaiExtension,
 } from './sandbox';
@@ -137,7 +138,7 @@ export async function executeIteration(
   // A git-target build is editing an existing repo and its deliverable is a
   // diff, not a preview server. It needs a different system prompt — see
   // REPO_SYSTEM_PROMPT in ./prompt for why the app-build one actively harms it.
-  const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string } | null })
+  const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string; finalGateCommand?: string } | null })
     .gitTargetConfig;
   const originIsStudio = (build as JkaiBuild & { origin?: string }).origin === 'studio';
   const promptMode: BuildPromptMode = gitTarget ? 'repo' : originIsStudio ? 'studio' : 'app';
@@ -152,13 +153,18 @@ export async function executeIteration(
   // (admin action, image rebuild, crash). Re-verify every time.
   await ensureSandboxRunning();
   await ensureWorkspace(build.id);
+  // A finished build that gets continued may have had its node_modules
+  // reclaimed (see reclaimFinishedWorkspaces). Put the tree back before the
+  // agent runs — the system prompt promises it that `npm install` has already
+  // happened, and an unresolvable import reads to it as broken code.
+  await ensureDepsInstalled(build.id);
 
   const assignedPort = await allocatePort(build.id);
 
   let systemPrompt = buildSystemPrompt(build.id, assignedPort, promptMode);
   const enforceDesign = (build as JkaiBuild & { enforceDesignSystem?: boolean }).enforceDesignSystem !== false;
   if (enforceDesign && !isStudio) {
-    systemPrompt += DESIGN_SYSTEM_PROMPT_BLOCK;
+    systemPrompt += designSystemPromptBlock(promptMode);
   }
   if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
 
@@ -242,7 +248,253 @@ export async function executeIteration(
   const { listDevFiles } = await import('./sandbox');
   const { buildCodebaseDigest } = await import('./codebase-digest');
   const devFiles = await listDevFiles(build.id).catch(() => []);
-  const codebaseDigest = await buildCodebaseDigest(build.id, devFiles).catch(() => '');
+  // The precedent channel spends ~4.8 KB of the same context. Shrink the digest
+  // by the same amount rather than adding to a prompt that is already ~19 KB —
+  // the digest's tail is its least relevant part.
+  const precedentEnabled = promptMode === 'repo' && process.env.CODEGRAPH_PRECEDENT !== '0';
+  const codebaseDigest = await buildCodebaseDigest(build.id, devFiles, {
+    sharingBudgetWithPrecedent: precedentEnabled,
+  }).catch(() => '');
+
+  // Codegraph push — what this codebase has already learned about the files
+  // this iteration is touching, or about the gate error the last one hit.
+  //
+  // Repo mode only: an app/studio build is greenfield and has no history in
+  // this graph, so the retrieval would be a guaranteed miss and pure latency.
+  //
+  // Deliberately not fatal and deliberately not silent. The tool bridge spent
+  // sixty days logging "OK" while returning nothing to 280 iterations, so this
+  // logs three DISTINCT outcomes — served, empty, failed — and `empty` is a
+  // real finding ("no precedent"), not a soft error. Timeboxed, because a slow
+  // graph must cost the build nothing.
+  let codegraphBlock = '';
+  if (promptMode === 'repo' && process.env.CODEGRAPH_PUSH !== '0') {
+    try {
+      // Close the loop on the PREVIOUS iteration's serve first. This is the
+      // earliest moment the answer exists: the gate has now run and its
+      // diagnostics are in prevIteration.evaluation. Without this the evidence
+      // counters stay at zero forever and ranking never leaves its recency bias.
+      const { resolveBuildServes, recordServed } = await import('$lib/codegraph/feedback');
+      const resolution = await resolveBuildServes({
+        buildId: build.id,
+        nextEvaluation: prevIteration?.evaluation ?? null,
+        nextGatePassed: prevIteration ? /gate.{0,20}(passed|green)/i.test(prevIteration.evaluation ?? '') : null,
+      }).catch(() => null);
+      if (resolution && resolution.resolved > 0) {
+        await emitLog(
+          build.id,
+          'system',
+          `Codegraph feedback: ${resolution.resolved} serve(s) resolved as ${resolution.outcome} — ${resolution.lessons} lesson(s), ${resolution.episodes} episode(s) updated`,
+          iteration.id,
+        );
+      }
+
+      const { planBuildQuery, bareNamesInText, dirHintsInText } = await import(
+        '$lib/codegraph/build-context'
+      );
+      // Bare filenames need the node table to become paths, so the lookup
+      // happens here rather than inside the pure planner. Without it a task
+      // that names `orchestrator.ts` instead of `src/lib/jkai/orchestrator.ts`
+      // retrieves nothing at all — which is how build f85ed296 ran with no
+      // context and no serve recorded.
+      const { lookupNamedFiles } = await import('$lib/codegraph/name-lookup');
+      const named = await lookupNamedFiles(
+        bareNamesInText(build.prompt),
+        dirHintsInText(build.prompt),
+      );
+      if (named.ambiguous.length) {
+        await emitLog(
+          build.id,
+          'system',
+          `Codegraph: ignored ${named.ambiguous.length} ambiguous filename(s) — ${named.ambiguous.join(', ')} (name each with its full path to seed from it)`,
+          iteration.id,
+        );
+      }
+      const planned = planBuildQuery(
+        {
+          prompt: build.prompt,
+          previousEvaluation: prevIteration?.evaluation ?? null,
+          previousActions: prevIteration?.actions ?? null,
+        },
+        named.resolved,
+      );
+      if (!planned) {
+        await emitLog(build.id, 'system', 'Codegraph: nothing to query (no gate error, no file set)', iteration.id);
+      } else {
+        const { runCgql, buildContextBlock } = await import('$lib/codegraph/retrieve');
+        const { db: database } = await import('$lib/db');
+        const { codegraphQueries } = await import('$lib/db/schema');
+        const result = await Promise.race([
+          runCgql(planned.query),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+        ]);
+        codegraphBlock = buildContextBlock(result);
+        const servedLessonIds = result.lessons.map((l) => l.id);
+        const servedEpisodeIds = result.episodes.map((e) => e.id);
+        await database.insert(codegraphQueries).values({
+          channel: 'push',
+          buildId: build.id,
+          iterationId: iteration.id,
+          query: planned.query,
+          outcome: result.outcome,
+          episodeIds: servedEpisodeIds,
+          lessonIds: servedLessonIds,
+          // The fingerprints that CAUSED this retrieval, kept so the next
+          // iteration can tell whether what was served actually addressed them.
+          servedFor: planned.fingerprints ?? [],
+          charsServed: codegraphBlock.length,
+          durationMs: result.durationMs,
+        }).catch(() => {});
+        await recordServed({ lessonIds: servedLessonIds, episodeIds: servedEpisodeIds }).catch(() => {});
+        await emitLog(
+          build.id,
+          'system',
+          result.outcome === 'served'
+            ? `Codegraph: ${result.lessons.length} lesson(s), ${result.episodes.length} episode(s) from ${planned.reason} — ${codegraphBlock.length} chars in ${result.durationMs}ms`
+            : `Codegraph: NO PRECEDENT for ${planned.reason} — this is new ground`,
+          iteration.id,
+        );
+      }
+    } catch (err) {
+      // Loud, and distinguishable from "nothing found". A retrieval that fails
+      // quietly is the failure mode this whole system exists to stop repeating.
+      codegraphBlock = '';
+      await emitLog(
+        build.id,
+        'error',
+        `Codegraph push FAILED (continuing without): ${(err as Error).message}`,
+        iteration.id,
+      );
+    }
+  }
+
+  /*
+   * The precedent channel — what this repo's code actually LOOKS like.
+   *
+   * Separate from the codegraph push on purpose: different question, different
+   * heading, its own kill switch and its own ledger row, so either can be
+   * switched off and A/B'd without the other. Merging them would make the
+   * budget impossible to attribute.
+   *
+   * codegraph picks the paths; the bytes come from this build's own workspace.
+   * A sibling the clone does not have is skipped rather than injected as a file
+   * the agent cannot open.
+   */
+  let precedentBlock = '';
+  if (promptMode === 'repo' && process.env.CODEGRAPH_PRECEDENT !== '0') {
+    try {
+      const {
+        precedentTargets, precedentQuery, testQuery, skeleton, buildPrecedentBlock,
+        PRECEDENT_MAX_FILES,
+      } = await import('$lib/codegraph/precedent');
+      const { editedPathsFromActions, pathsInText, bareNamesInText, dirHintsInText } = await import(
+        '$lib/codegraph/build-context'
+      );
+      const { lookupNamedFiles } = await import('$lib/codegraph/name-lookup');
+      const named = await lookupNamedFiles(bareNamesInText(build.prompt), dirHintsInText(build.prompt));
+      const targets = precedentTargets(
+        editedPathsFromActions(prevIteration?.actions ?? null),
+        pathsInText(build.prompt),
+        named.resolved,
+      );
+
+      if (!targets.length) {
+        await emitLog(build.id, 'system', 'Precedent: no target file to match a shape against', iteration.id);
+      } else {
+        const { runCgql } = await import('$lib/codegraph/retrieve');
+        const { readDevFile } = await import('./sandbox');
+        const { db: database } = await import('$lib/db');
+        const { codegraphQueries } = await import('$lib/db/schema');
+
+        // Timeboxed the same way the push is: a slow graph must cost the build
+        // nothing, and a lookup that fails is worth strictly less than the
+        // iteration it would delay.
+        const runCgqlSafely = async (q: string): Promise<string[]> => {
+          try {
+            const r = await Promise.race([
+              runCgql(q),
+              new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+            ]);
+            return r.nodes.map((n) => n.canonicalPath);
+          } catch {
+            return [];
+          }
+        };
+
+        const chosen: Array<{ target: string; path: string; source: string }> = [];
+        const pairings: Array<{ target: string; tests: string[] }> = [];
+        const asked: string[] = [];
+        const missing: string[] = [];
+
+        // Which file tests this one. Asked for EVERY target, including ones
+        // that got no sibling: a build that already knows the shape can still
+        // be wrong about the filename, which is the failure this fixes.
+        for (const target of targets) {
+          const tq = testQuery(target, 2);
+          if (!tq) continue;
+          asked.push(tq);
+          const found = await runCgqlSafely(tq);
+          if (found.length) pairings.push({ target, tests: found });
+        }
+
+        for (const target of targets) {
+          if (chosen.length >= PRECEDENT_MAX_FILES) break;
+          const q = precedentQuery(target, PRECEDENT_MAX_FILES - chosen.length);
+          if (!q) continue;
+          asked.push(q);
+          const result = await Promise.race([
+            runCgql(q),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+          ]);
+          for (const node of result.nodes) {
+            if (chosen.length >= PRECEDENT_MAX_FILES) break;
+            if (chosen.some((c) => c.path === node.canonicalPath)) continue;
+            // The workspace is the authority on what exists. A read that fails
+            // means this clone predates the file, which is a fact about the
+            // branch, not an error worth failing the iteration over.
+            const source = await readDevFile(build.id, node.canonicalPath).catch(() => '');
+            if (!source) { missing.push(node.canonicalPath); continue; }
+            chosen.push({ target, path: node.canonicalPath, source: skeleton(source) });
+          }
+        }
+
+        precedentBlock = buildPrecedentBlock(chosen, pairings);
+        await database.insert(codegraphQueries).values({
+          channel: 'precedent',
+          buildId: build.id,
+          iterationId: iteration.id,
+          query: asked.join(' ;; ').slice(0, 2000),
+          outcome: chosen.length || pairings.length ? 'served' : 'empty',
+          episodeIds: [],
+          lessonIds: [],
+          servedFor: [],
+          charsServed: precedentBlock.length,
+          durationMs: 0,
+        }).catch(() => {});
+
+        await emitLog(
+          build.id,
+          'system',
+          chosen.length
+            ? `Precedent: ${chosen.map((c) => c.path).join(', ') || 'no exemplar'}` +
+              (pairings.length ? ` · tests ${pairings.flatMap((p) => p.tests).join(', ')}` : '') +
+              ` — ${precedentBlock.length} chars` +
+              (missing.length ? ` (${missing.length} not in this clone)` : '')
+            : `Precedent: NO PRECEDENT for ${targets.join(', ')} — no file of that shape in the graph`,
+          iteration.id,
+        );
+      }
+    } catch (err) {
+      // Loud and non-fatal, same contract as the codegraph push.
+      precedentBlock = '';
+      await emitLog(
+        build.id,
+        'error',
+        `Precedent channel FAILED (continuing without): ${(err as Error).message}`,
+        iteration.id,
+      );
+    }
+  }
 
   const contextMessages = buildIterationContext(
     build.prompt,
@@ -257,6 +509,7 @@ export async function executeIteration(
     isStudio
       ? ((build as JkaiBuild & { chapterPlan?: Array<ChapterPlanEntry> }).chapterPlan ?? null)
       : null,
+    gitTarget?.finalGateCommand ?? null,
   );
 
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];
@@ -309,7 +562,17 @@ export async function executeIteration(
   const deliveries = await consumePendingDeliveries(build.id, 10).catch(() => []);
   const deliveriesBlock = buildDeliveriesBlock(deliveries);
 
-  const userPrompt = [deliveriesBlock, contextMessages.map((m) => m.content).join('\n\n')]
+  // Codegraph last: it is the most specific thing in the prompt, and what the
+  // history says about THIS file set should be the freshest instruction the
+  // agent reads before it starts work.
+  const userPrompt = [
+    deliveriesBlock,
+    contextMessages.map((m) => m.content).join('\n\n'),
+    // Shape first, then history: "here is how we write this" is context for
+    // "here is what went wrong last time", not the other way round.
+    precedentBlock,
+    codegraphBlock,
+  ]
     .filter((s) => s.length > 0)
     .join('\n\n');
 

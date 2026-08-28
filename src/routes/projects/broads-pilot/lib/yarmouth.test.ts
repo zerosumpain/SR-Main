@@ -7,8 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { route } from './router';
-import type { WaterGraph, Restrictions, Boat, Mooring } from './types';
+import { route } from '$lib/broads-pilot/router';
+import type { WaterGraph, Restrictions, Boat, Mooring } from '$lib/broads-pilot/types';
 
 const load = <T>(f: string): T =>
   JSON.parse(readFileSync(join(process.cwd(), 'static/broads-pilot', f), 'utf8')) as T;

@@ -23,22 +23,23 @@
 </script>
 
 <svelte:head>
-  <title>Standing questions · The Engine Room</title>
+  <title>Watchlist · The Engine Room</title>
   <meta name="description" content="Watching a knowledge graph for change rather than querying it: nine structural alarms, thresholds that are both relative and absolute, and a saved perspective that narrows a view and briefs the assistant at the same time." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Standing questions"
+    title="Watchlist"
     line="A graph will happily tell you its shape any time you ask. What it will not tell you is what moved since you last looked — which is the only part worth being interrupted for."
-    lineEli5="You mark things as worth watching. Overnight it works out what actually moved, and only pipes up when it is genuinely worth knowing." />
+    lineEli5="You mark things as worth watching. Overnight it checks what actually moved, and only speaks up when the movement is worth being interrupted for — the whole design is about staying quiet." />
 
   <Instrument
     kicker="The instrument"
     title="Two bars, and a change has to clear both"
     tone={TONE}
     reading="Move an entity between two nights. Switch a bar off and hear exactly what it had been sparing you from."
+    readingEli5="Move something between two nights, then switch a bar off and hear exactly what it had been sparing you from."
     takeaway={BOTH_KINDS.body}>
     <AlarmBench />
   </Instrument>
@@ -59,7 +60,9 @@
     title="Nine kinds of movement, and one that never wakes you"
     tone={TONE}
     reading="Pick one."
-    takeaway="Joining the watchlist gets reported and never alarms. You did that on purpose thirty seconds ago; announcing it back to you is just noise with extra steps. The baseline it recorded is still shown, because every later comparison is measured against it.">
+    readingEli5="Pick a kind of change."
+    takeaway="Joining the watchlist gets reported and never alarms. You did that on purpose thirty seconds ago; announcing it back to you is just noise with extra steps. The baseline it recorded is still shown, because every later comparison is measured against it."
+    takeawayEli5="Adding something to the watchlist is recorded but never raises an alert — you did it yourself thirty seconds earlier, and being told about it again is noise. The starting point is kept, because every later change is measured against it.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Kinds of change">
         {#each ALARMS as a (a.id)}
@@ -89,6 +92,7 @@
     title="A perspective saved once, and used everywhere"
     tone={TONE}
     reading="Three rules shape how a saved view behaves. Pick one."
+    readingEli5="A saved way of looking at the graph follows three rules. Pick one."
     takeaway={STANDING.body}>
     <div class="strip">
       <div class="chips" role="group" aria-label="Rules a saved view follows">

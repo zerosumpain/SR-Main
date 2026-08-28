@@ -28,6 +28,15 @@ export interface Candidate {
    *  sibling inheritance and a small verified override map for the entries it
    *  leaves blank (160 of 345 catalogue rows today). */
   openWeights: boolean;
+  /** True when the model accepts image input, per OpenRouter's
+   *  `architecture.input_modalities`. Only the `vision` profile filters on it —
+   *  everything else ignores it. */
+  imageInput: boolean;
+  /** True when the model accepts a `file` content part (i.e. a PDF sent whole).
+   *  Tracked separately from `imageInput` because plenty of models take pictures
+   *  and NOT documents — minimax-m3 declares `["text","image","video"]` — and
+   *  the vision workload has to do both: caption images AND OCR scanned PDFs. */
+  fileInput: boolean;
 }
 
 export interface ScoredCandidate extends Candidate {
@@ -59,8 +68,12 @@ export function enrichRow(row: RawModelRow, openWeights?: OpenWeightResolver): C
   const raw = (row.raw ?? {}) as {
     supported_parameters?: unknown;
     benchmarks?: { artificial_analysis?: { agentic_index?: number } };
+    architecture?: { input_modalities?: unknown };
   };
   const supported = Array.isArray(raw.supported_parameters) ? raw.supported_parameters : [];
+  const inputs = Array.isArray(raw.architecture?.input_modalities)
+    ? (raw.architecture.input_modalities as unknown[]).map((m) => String(m))
+    : [];
   const bench = raw.benchmarks?.artificial_analysis ?? {};
   const prompt = row.promptPrice != null ? Number(row.promptPrice) : null;
   const completion = row.completionPrice != null ? Number(row.completionPrice) : null;
@@ -79,6 +92,8 @@ export function enrichRow(row: RawModelRow, openWeights?: OpenWeightResolver): C
     id: row.id,
     name: row.name,
     toolsSupported: supported.includes('tools'),
+    imageInput: inputs.includes('image'),
+    fileInput: inputs.includes('file'),
     blendedPerM,
     agenticIndex: typeof bench.agentic_index === 'number' ? bench.agentic_index : null,
     throughput: t != null && Number.isFinite(t) ? t : null,
@@ -100,6 +115,16 @@ export interface SelectOpts {
   openWeightsOnly: boolean;
   /** Historical first-time-correct rate (Wilson lower bound) per model id. */
   successFor: (modelId: string) => { rate: number | null; samples: number };
+  /** Restrict the pool to models that accept image input (the `vision` profile). */
+  requireImageInput?: boolean;
+  /** Restrict the pool to models that accept a `file` content part. Set with
+   *  `requireImageInput` for the vision profile — a model that reads pictures but
+   *  not documents would silently ignore a PDF and answer about the prompt. */
+  requireFileInput?: boolean;
+  /** Require tool-calling support. True for every query profile; the vision
+   *  profile turns it OFF, because captioning an image never calls a tool and
+   *  demanding it would drop most of the image-capable catalogue for no gain. */
+  requireTools?: boolean;
 }
 
 /**
@@ -115,6 +140,21 @@ export interface SelectOpts {
  * Price stays log-scaled and clamped to PRICE_WEIGHT_CAP so extra cheapness has
  * diminishing returns.
  */
+/**
+ * OpenRouter's `:batch` variants cannot be called through chat completions at
+ * all — a request returns 404 "This model is only available through the Batch
+ * API. Use the /api/beta/batches endpoint instead."
+ *
+ * They matter because they are priced roughly half their parent, which makes
+ * them magnetic to a cost-aware selector: the vision profile picked
+ * `openai/gpt-5.6-luna:batch` at $0.22/1M over the same model at $2.25/1M, and
+ * every call would have 404'd. 61 of them in the catalogue today, so this is not
+ * a corner case waiting to happen — it is one that did.
+ */
+function isUncallableVariant(id: string): boolean {
+  return id.endsWith(':batch');
+}
+
 export function selectForProfile(
   candidates: Candidate[],
   opts: SelectOpts,
@@ -126,9 +166,13 @@ export function selectForProfile(
   const floor = opts.qualityFloorFrac * bestAgentic;
 
   // 2. Hard eligibility filter.
+  const requireTools = opts.requireTools ?? true;
   const eligible = candidates.filter(
     (c) =>
-      c.toolsSupported &&
+      !isUncallableVariant(c.id) &&
+      (!requireTools || c.toolsSupported) &&
+      (!opts.requireImageInput || c.imageInput) &&
+      (!opts.requireFileInput || c.fileInput) &&
       c.agenticIndex != null &&
       c.blendedPerM != null &&
       c.blendedPerM > 0 &&

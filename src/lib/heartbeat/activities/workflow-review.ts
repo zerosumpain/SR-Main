@@ -1,7 +1,7 @@
 import { db } from '$lib/db';
 import { workflowRuns, workflows, nodeExecutions, heartbeatPulses } from '$lib/db/schema';
 import { and, desc, eq, gt, isNotNull } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { ActivityHandler } from '../types';
 

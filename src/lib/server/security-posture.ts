@@ -2,10 +2,10 @@
  * Security posture for ONE host: SSH configuration, fail2ban state, evidence of
  * actual exposure, and the app's own auth gates.
  *
- * Shaped after hermes-control.ts — shells local commands through execFile with
+ * Shells local commands through execFile with
  * timeouts, exposes typed state, and is consumed by both the page load and the
  * `/api/admin/security` endpoint so the peer host can read it over the same
- * service-auth the Hermes admin surface uses.
+ * the shared service bridge secret.
  *
  * Everything mutable here is deliberately absent. The panel can lift a fail2ban
  * ban and nothing else: sshd configuration is not editable from a browser, and

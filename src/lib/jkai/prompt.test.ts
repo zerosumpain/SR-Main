@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSystemPrompt, buildIterationContext } from './prompt';
+import { buildSystemPrompt, buildIterationContext, designSystemPromptBlock } from './prompt';
 
 // Repo mode exists because a change-request build used to be handed the
 // standalone-app prompt: it was told to write a serve.json and get a preview
@@ -49,6 +49,44 @@ describe('buildSystemPrompt', () => {
   });
 });
 
+// Change request #414 wrote `@import '../../../../design-system/tokens.css'`
+// into a new /projects page, passed its own gate and failed CI on
+// `Can't resolve`. It was following step 3, which told it to import the mount
+// — correct for a standalone app, wrong for a clone of this repo, where the
+// mount is git-excluded and the tokens are already global.
+describe('designSystemPromptBlock', () => {
+  it('tells an app build to import the mounted tokens', () => {
+    const b = designSystemPromptBlock('app');
+    expect(b).toMatch(/Import `\.\/design-system\/tokens\.css`/);
+  });
+
+  it('defaults to app mode for existing callers', () => {
+    expect(designSystemPromptBlock()).toBe(designSystemPromptBlock('app'));
+  });
+
+  it('never tells a repo build to import the mount', () => {
+    const b = designSystemPromptBlock('repo');
+    expect(b).not.toMatch(/Import `\.\/design-system\/tokens\.css`/);
+    expect(b).toMatch(/Do NOT import or copy anything from/);
+    expect(b).toMatch(/does not exist in CI/);
+  });
+
+  it('points a repo build at the stylesheets the root layout already loads', () => {
+    const b = designSystemPromptBlock('repo');
+    expect(b).toMatch(/src\/app\.css/);
+    expect(b).toMatch(/nm-tokens\.css/);
+  });
+
+  it('keeps the rules that do not depend on mode in both', () => {
+    for (const mode of ['app', 'repo'] as const) {
+      const b = designSystemPromptBlock(mode);
+      expect(b).toMatch(/Read `\.\/design-system\/README\.md`/);
+      expect(b).toMatch(/Never hard-code hex colours or font names/);
+      expect(b).toMatch(/\.nm-sec/);
+    }
+  });
+});
+
 describe('buildIterationContext', () => {
   const ctx = (mode: 'app' | 'repo', gate: string | null = null) =>
     buildIterationContext('do the thing', null, '', null, 2, 8123, '', mode, gate)[0].content;
@@ -66,6 +104,16 @@ describe('buildIterationContext', () => {
 
   it('omits the definition of done when there is no gate command', () => {
     expect(ctx('repo', null)).not.toContain('Definition of Done');
+  });
+
+  it('describes a repo digest as partial while preserving app digest guidance', () => {
+    const repo = buildIterationContext('do the thing', null, '', null, 2, 8123, '## Codebase Digest', 'repo')[0].content;
+    const app = buildIterationContext('do the thing', null, '', null, 2, 8123, '## Codebase Digest', 'app')[0].content;
+
+    expect(repo).not.toContain('Trust the digest for "what exists and where".');
+    expect(repo).toContain('partial, recency-ranked sample of the workspace');
+    expect(repo).toContain('use grep or find rather than assuming it does not exist');
+    expect(app).toContain('DO NOT re-read or re-list these files unless you\'re about to modify one. Trust the digest for "what exists and where".');
   });
 });
 

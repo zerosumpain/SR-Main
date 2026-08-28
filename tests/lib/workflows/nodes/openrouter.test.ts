@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 // chat_completion routes through the resilient workflow gateway (timeout,
 // concurrency, model failover) rather than a raw OpenRouter client, so that is
 // what the test intercepts. list_models / get_usage still call the REST API
-// directly with the key from deepdive/keys.
+// directly with the key from $lib/llm/keys.
 const mockChatCompletion = vi.fn().mockResolvedValue({
   id: 'gen-123',
   choices: [{ message: { content: 'Hello world' } }],
@@ -15,7 +15,7 @@ vi.mock('$lib/llm/workflow-gateway', () => ({
   resilientChatCompletion: (...args: unknown[]) => mockChatCompletion(...args),
 }));
 
-vi.mock('$lib/deepdive/keys', () => ({
+vi.mock('$lib/llm/keys', () => ({
   loadKeys: () => ({ openrouterApiKey: 'test-key' }),
 }));
 

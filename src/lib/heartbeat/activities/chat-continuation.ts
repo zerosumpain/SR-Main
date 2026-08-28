@@ -100,7 +100,7 @@ export function beatGate(opts: {
  *  closed-looking turn to be genuinely waiting. */
 const SILENT_MIN_STALE_MS = 6 * 60_000;
 /** Recent tool-step or token activity on a job for this conversation means
- *  Hermes is actively working in the background. Skip pulse even if the most
+ *  the agent is actively working in the background. Skip pulse even if the most
  *  recent SvelteKit chat job has finalised. */
 const RECENT_ACTIVITY_WINDOW_MS = 90_000;
 
@@ -177,7 +177,7 @@ export const chatContinuation: ActivityHandler = {
 
     // 2. Filter out conversations with an active job in the in-memory job-store.
     // We also treat *recently active* jobs (any status, lastEventAt within
-    // RECENT_ACTIVITY_WINDOW_MS) as in-flight: Hermes may have finalised a
+    // RECENT_ACTIVITY_WINDOW_MS) as in-flight: the turn may have finalised a
     // SvelteKit-side job while still iterating on a subagent internally, and
     // a flurry of tool-step events through the bus updates `lastEventAt`
     // even after the formal `status === 'running'` window ends.

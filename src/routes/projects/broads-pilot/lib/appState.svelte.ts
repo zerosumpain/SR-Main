@@ -1,13 +1,13 @@
 // Central rune-store for the Broads Pilot planner. Holds the loaded datasets,
 // the user's boat/origin/itinerary, map + layer UI state, and derives the route,
 // reachability and daylight budget from the engine. Instantiated once.
-import type { Datasets, Boat, Mooring, Poi, RouteLeg, PoiKind, LatLng, GraphEdge } from './types';
+import type { Datasets, Boat, Mooring, Poi, RouteLeg, PoiKind, LatLng, GraphEdge } from '$lib/broads-pilot/types';
 import { loadDatasets } from './data';
-import { buildAdjacency, nearestNode } from './graph';
-import { route as computeRoute, reachable as computeReachable } from './router';
-import { daylightHours } from './daylight';
-import { routeFuel } from './fuel';
-import { haversine, distToSegment } from './geo';
+import { buildAdjacency, nearestNode } from '$lib/broads-pilot/graph';
+import { route as computeRoute, reachable as computeReachable } from '$lib/broads-pilot/router';
+import { daylightHours } from '$lib/broads-pilot/daylight';
+import { routeFuel } from '$lib/broads-pilot/fuel';
+import { haversine, distToSegment } from '$lib/broads-pilot/geo';
 import type { Units } from './format';
 
 export interface UserPosition { lat: number; lng: number; speed: number | null; heading: number | null; accuracy: number }

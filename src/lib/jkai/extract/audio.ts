@@ -1,5 +1,5 @@
 // src/lib/jkai/extract/audio.ts
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { ExtractError, type ExtractResult, type ExtractOptions } from './types';
 import { isLocalSttAvailable, transcribeLocally } from './stt-local';

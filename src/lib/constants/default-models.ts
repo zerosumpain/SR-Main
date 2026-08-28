@@ -12,7 +12,7 @@
 export const DEFAULT_CHAT_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
 // One default for every LLM task on the site, including the autonomous builder
-// and Hermes delegation children (John, 2026-07-25: "the default model should be
+// and delegation children (John, 2026-07-25: "the default model should be
 // the one any llm task uses across the whole site"). This deliberately retires
 // the separate fast-model carve-out that existed because glm-5.2 timed out on
 // tool-heavy delegation — see reference_glm52_agentic_slowness for the history,
@@ -56,12 +56,43 @@ export const DEFAULT_SELFIMPROVE_MODEL_ID = 'deepseek/deepseek-v4-flash';
 /** Workflow doctor diagnosis calls — pinned for the same reason. */
 export const DEFAULT_DOCTOR_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
-/** Image captioning + OCR. MUST accept image input: the site default may be a
- *  Codex model, which is text-only and would caption the prompt, not the file. */
-export const DEFAULT_VISION_MODEL_ID = 'openai/gpt-4o-mini';
+/**
+ * Image captioning + OCR. MUST accept image input: the site default may be a
+ * Codex model, which is text-only and would caption the prompt, not the file.
+ *
+ * Was `openai/gpt-4o-mini`, which was wrong twice over. It **refused** to
+ * transcribe roughly one document in three ("I'm unable to provide the
+ * transcript"), and it is not in `OPENROUTER_CAPS` at all — so
+ * `getModelCapabilities()` reported it TEXT_ONLY, meaning the `image-input`
+ * guard would have refused to let anyone select it in the picker. It was only
+ * ever reachable as this hard-coded default.
+ *
+ * gemini-2.5-flash is `ALL` in the capability map (so it is selectable),
+ * transcribed the same scan cleanly 3 runs out of 3, and was the fastest of the
+ * candidates at ~1.2s against ~2.8s for gemini-3.5-flash and ~5.7s for
+ * claude-sonnet-4.5. 3.5-flash also started wrapping its output in
+ * "==Start of OCR for page 1==" markers, which is not what a transcript is.
+ */
+export const DEFAULT_VISION_MODEL_ID = 'google/gemini-2.5-flash';
 
 /** Image GENERATION. Must emit an image; no text model can serve this at all. */
 export const DEFAULT_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image';
+
+/**
+ * The canvas/chat `generate_image` tool, which calls OpenRouter's
+ * /images/generations endpoint rather than chat-completions — a different API
+ * that the models above do not serve, and vice versa.
+ *
+ * Lived in `process.env.JKAI_IMAGE_MODEL` alone until 2026-08-22, which made it
+ * the one model on the site that no screen could show you and no screen could
+ * change. It is now the `image-tool` workload.
+ *
+ * A LITERAL, not a `process.env` read: this module is imported by
+ * `$lib/models/workloads`, which is deliberately client-importable so the picker
+ * renders the same list the server enforces. The env var is still honoured, one
+ * layer up in `resolveImageToolModel` where the server actually is.
+ */
+export const DEFAULT_IMAGE_TOOL_MODEL_ID = 'black-forest-labs/flux-1.1-pro';
 
 /** Embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const DEFAULT_EMBEDDING_MODEL_ID = 'openai/text-embedding-3-large';
@@ -134,6 +165,21 @@ export function isGlmModel(modelId: string): boolean {
   return modelId.startsWith('z-ai/glm') || modelId.startsWith('glm-');
 }
 
+/**
+ * True for an embedding model.
+ *
+ * Load-bearing for provider routing rather than cosmetic: Codex is the site's
+ * fallback when OpenRouter is unusable, and the bridge has no embeddings
+ * endpoint — it translates chat completions and nothing else. So an embedding
+ * request must NEVER be re-routed to Codex; it has to fail with OpenRouter's own
+ * error, which is at least the true one. Falling back would swap a clear
+ * "402 insufficient credits" for a 404 from a bridge that was never asked to do
+ * this, and the next person would debug the wrong thing.
+ */
+export function isEmbeddingModelId(modelId: string): boolean {
+  return /(^|\/)text-embedding|embedding/i.test(modelId);
+}
+
 /** Minimum max_tokens for a reasoning model. Reasoning tokens are billed and
  *  counted as completion tokens, so a tight budget (some call sites ask for 50)
  *  is consumed entirely by thinking and the caller gets an EMPTY string back. */
@@ -152,7 +198,7 @@ export const REASONING_TOKEN_FLOOR = 3000;
  *
  * 76 of the ~340 catalogued OpenRouter models advertise a completion cap below
  * this (lowest ceiling 16384), which is why `withProviderCap` in
- * $lib/jkai/usage-capture clamps the request back down per model.
+ * $lib/llm/usage-capture clamps the request back down per model.
  */
 export const DEFAULT_NODE_MAX_TOKENS = 25_000;
 

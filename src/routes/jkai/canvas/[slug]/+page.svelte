@@ -741,7 +741,7 @@
     }
   }
   // A `replace_bubble` carries the whole recomputed reply (the server keeps the
-  // text per Hermes message id — see $lib/jkai/hermes-frames), so it supersedes
+  // text per upstream message id), so it supersedes
   // both what's rendered and anything still queued. Without this the live panel
   // silently diverged from the row that gets persisted.
   function setStreamText(chatNodeId: string, content: string) {
@@ -1190,10 +1190,10 @@
   //
   //  - **Unwired** (no edges either side): the node is acting as the canvas
   //    orchestrator panel. Send to `/api/workflows/orchestrator/chat` →
-  //    Hermes `jkai-canvas` (design-first edit flow).
+  //    the `jkai-canvas` design-first edit flow.
   //  - **Wired as trigger** (outgoing edges only): typing starts a workflow
   //    run via `/api/workflows/[id]/chat`. The chat node's executor calls
-  //    Hermes, response flows downstream; we subscribe to the run SSE so
+  //    the agent, response flows downstream; we subscribe to the run SSE so
   //    `chat_stream` log events still render in the panel.
   //  - **Wired as receiver / middle** (any incoming edge): typing is
   //    disabled — the node only speaks when upstream data arrives via Run.
@@ -1253,7 +1253,7 @@
       return;
     }
 
-    // wiring === 'unwired' → orchestrator (Hermes jkai-canvas design-first).
+    // wiring === 'unwired' → orchestrator (jkai-canvas design-first).
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -1285,7 +1285,7 @@
   // bare EventSource. Two reasons, both bugs this replaces:
   //   - the old handler called finalizeChatStream from `onerror`, and onerror
   //     fires on any transient drop. finalize reloads the persisted row, which
-  //     mid-run is empty, so a blip emptied the bubble while Hermes was still
+  //     mid-run is empty, so a blip emptied the bubble while the agent was still
   //     answering. streamChatJob rides the drop out and RESUMES from the last
   //     event id instead of replaying the buffer (a replay doubled the text).
   //   - it never handled `replace_bubble`, so the live panel and the reloaded

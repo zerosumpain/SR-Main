@@ -3,6 +3,7 @@
 
 export { register } from './registry-internal';
 export type { ToolDefinition, ToolResult } from './registry-internal';
+import { ownerPhone } from '$lib/config/owner';
 import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from './registry-internal';
 import type { ToolResult } from './registry-internal';
 
@@ -29,11 +30,18 @@ import './tools/request-change';
 import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
 import './tools/scraper';
+import './tools/file-share';
 import './tools/files';
 import './tools/route-export';
+import './tools/route-plan';
 import './tools/knowledge';
 import './tools/intel-graph';
+import './tools/mail';
+import './tools/codegraph';
 import './tools/agents';
+import './tools/discovery';
+import './tools/recall';
+import './tools/browser';
 import './tools/monitors';
 import './tools/gmail';
 import './tools/apple-calendar';
@@ -84,6 +92,26 @@ export function getToolsetDefinitions(toolset: string) {
   }));
 }
 
+/**
+ * OpenAI-format definitions for specific tools, by name.
+ *
+ * For pushing an individual capability into the always-on set without dragging
+ * its whole toolset along: `research_web_search` lives in `research`, which
+ * also carries nine session-management tools nobody wants on every turn.
+ *
+ * Silently skips a name that is not registered — the caller is a prompt-assembly
+ * path and must not fail a turn because a tool was renamed.
+ */
+export function getToolDefinitionsByName(names: readonly string[]) {
+  return names
+    .map((n) => tools.find((t) => t.name === n))
+    .filter((t): t is NonNullable<typeof t> => !!t)
+    .map((t) => ({
+      type: 'function' as const,
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    }));
+}
+
 /** Compact manifest of all toolsets — category, tool names, and one-line descriptions */
 export function getToolsetManifest(): Array<{
   toolset: string;
@@ -117,8 +145,12 @@ export function getToolsetManifest(): Array<{
     datastore: 'Permanent sitewide datastore — full CRUD over collections of JSON records with filters/aggregates and row-level permissions (structured/queryable data that persists across chats and workflows)',
     apis: 'API catalogue + integration register — search catalogued external data sources, call them for live data (SSRF-guarded), authenticate with owner-registered secret handles you can use but never read (api_secrets_list), and RECORD a working call as a reusable named integration (api_integration_save/test) that also appears in the no-code canvas node',
     knowledge: 'Unified knowledge recall — one search across /drive files, deep-dive research facts, personal memory, and datastore records (the @knowledge mention)',
+    discovery: 'Find capability you were not handed — search every registered tool by keyword (tool_search), read one tool\'s exact schema (tool_describe), and list or read the curated skill playbooks (skills_list, skill_view)',
+    browser: 'A real headless browser on the residential-IP host — navigate, read the page, click, type, scroll, list images, and read the console. Use for pages that need JavaScript or a login, and for diagnosing why a page misbehaves',
+    recall: 'Continuity across conversations — search what was actually said before (session_search), search stored facts about the user (memory_search), and pin a new one (memory_remember)',
     agents: 'Persistent agent team — list/define named specialist agents and delegate a focused sub-task to one (each has its own persona, allowed tools, and shared team memory)',
     monitors: 'Natural-language monitors — create a "watch X, tell me when Y" scheduled workflow and list active monitors (manage/pause on /jkai/monitors)',
+    'codegraph': 'Build-history GRAPH for this repo — what changing a file has taught us before. Seed a query with file:PATH, fingerprint:<error class>, gate:NAME or topic:"text", then pipe | hops 1 | lessons | episodes. Returns the rules that apply to those files and what happened the last time they changed, each with a verdict (verified/landed/repaired). Use for "how do I change X here", "why is it done this way", "has this broken before" — where intel-graph answers about the WORLD, this answers about the CODE.',
     'intel-graph': 'Intel knowledge GRAPH structure — find entities, walk their N-hop neighbourhood, trace how two things are connected, and read what the graph noticed on its own (brokers, unexpected links, likely-missing links). Use when the question is about how things RELATE, where knowledge_search answers what is known ABOUT a thing.',
   };
 
@@ -150,7 +182,7 @@ export async function executeTool(
 
   // Attach a durable watcher to anything that spawns a long-running task.
   //
-  // This hook used to live in general-chat.ts, which the Hermes cutover made
+  // This hook used to live in general-chat.ts, which the cutover made
   // dormant — so every `producesLongRunningTask` declaration went inert and
   // the last auto-bound watcher dates from May. The model was told by the tool
   // catalogue that watchers attach themselves, so it stopped registering them;
@@ -181,7 +213,13 @@ export async function executeTool(
 /** Compact system prompt section — lists toolsets, not individual tools */
 export function buildSystemPromptSection(): string {
   const toolsets = getAvailableToolsets();
-  return `\n\n--- Capabilities ---\nYou have toolsets available: ${toolsets.join(', ')}.\nUse activate_toolset(name) to load tools for a domain. Use jkai_help() to see what's available in each toolset.\nWhen tools are pre-loaded for you, use them directly — no activation needed.\n\nJohn's WhatsApp number: +447359228511`;
+  // The owner's WhatsApp number used to be appended here as a literal, which
+  // put it in the repo, in every commit, and in the prompt sent to a model on
+  // every single turn. It is read from the environment now, and only mentioned
+  // at all when something is configured to receive it.
+  const phone = ownerPhone();
+  const contact = phone ? `\n\nJohn's WhatsApp number: ${phone}` : '';
+  return `\n\n--- Capabilities ---\nYou have toolsets available: ${toolsets.join(', ')}.\nUse activate_toolset(name) to load tools for a domain. Use jkai_help() to see what's available in each toolset.\nWhen tools are pre-loaded for you, use them directly — no activation needed.${contact}`;
 }
 
 // Re-export toolset helpers for use by meta-tools and general-chat

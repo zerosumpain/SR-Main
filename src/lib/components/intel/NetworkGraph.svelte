@@ -21,7 +21,7 @@
   import * as d3 from 'd3';
   import { untrack } from 'svelte';
 
-  import type { NetNode, NetEdge } from './types';
+  import type { NetNode, NetEdge } from '$lib/codegraph/types';
   import {
     recencyFade,
     clusterColour,

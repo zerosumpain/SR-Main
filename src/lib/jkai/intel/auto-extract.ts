@@ -77,16 +77,41 @@ export interface AutoExtractInput {
    * re-bill an unchanged thread.
    */
   force?: boolean;
+  /**
+   * Store the note but do NOT read it into the graph.
+   *
+   * The note is written, embedded and searchable exactly as always; what is
+   * skipped is `extractFromNote` — the model call — and everything downstream
+   * of it. The row lands at `graph_state = 'pending'` and waits for the owner
+   * to admit it (see $lib/jkai/intel/mail-admit).
+   *
+   * This is what stopped the mailbox poisoning the graph. It is a REQUEST, not
+   * a command, and the note's existing state overrules it: a thread already
+   * admitted re-extracts when a reply arrives (it was approved, and the approval
+   * covers the conversation, not one message), and a thread already rejected is
+   * left alone rather than re-queued for a decision that has been made.
+   */
+  hold?: boolean;
 }
 
 export type AutoExtractOutcome =
   | { status: 'extracted'; noteId: string; entityCount: number }
+  | { status: 'held'; noteId: string }
   | { status: 'unchanged' | 'disabled' | 'too-short' | 'skipped' | 'failed'; noteId?: string };
 
 /** Cap the text sent to the model. Enough for a report; not a whole book. */
 const MAX_EXTRACT_CHARS = 24_000;
-/** Below this there is nothing worth an LLM call. */
-const MIN_EXTRACT_CHARS = 200;
+/**
+ * Below this there is nothing worth an LLM call.
+ *
+ * Exported so a caller that RATIONS its calls can apply the same floor before
+ * it spends from its budget. The Gmail sweep decremented `extractBudget` and
+ * then discovered the thread was too short in here — no note written, no model
+ * called, no hash stored, so the same thread was retried and cost another unit
+ * every night in perpetuity. Two clocks for one decision is always a bug; this
+ * is the one clock.
+ */
+export const MIN_EXTRACT_CHARS = 200;
 
 export function isAutoExtractEnabled(): boolean {
   // Off in the builder sidecar — that process imports this transitively but
@@ -97,7 +122,7 @@ export function isAutoExtractEnabled(): boolean {
 
 async function findDerivedNote(kind: AutoKind, refId: string) {
   const [row] = await db
-    .select({ id: intelNotes.id, metadata: intelNotes.metadata })
+    .select({ id: intelNotes.id, metadata: intelNotes.metadata, graphState: intelNotes.graphState })
     .from(intelNotes)
     .where(
       and(
@@ -173,6 +198,20 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
       if (prevHash === input.contentHash) return { status: 'unchanged', noteId: existing.id };
     }
 
+    // What the gate actually decides, resolved once and before any work.
+    //
+    // The caller's `hold` is a request about a note it may never have seen. The
+    // note's own state is the fact, and the fact wins:
+    //
+    //   rejected  — the owner has ruled. A new reply does not reopen it, and
+    //               re-queueing would ask the same question a second time.
+    //   admitted  — approved, so a new reply is extracted like any other
+    //               source. Approval is of the thread, not of one message.
+    //   pending / new — held, which is what `hold` asked for.
+    const priorState = existing?.graphState ?? null;
+    if (priorState === 'rejected') return { status: 'skipped', noteId: existing?.id };
+    const held = !!input.hold && priorState !== 'admitted';
+
     const clipped = text.length > MAX_EXTRACT_CHARS ? text.slice(0, MAX_EXTRACT_CHARS) : text;
     const metadata = {
       ...(input.metadata ?? {}),
@@ -201,7 +240,8 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           title: input.title,
           rawContent: clipped,
           processedContent: clipped,
-          status: 'processing',
+          status: held ? 'held' : 'processing',
+          ...(held ? { graphState: 'pending' as const } : {}),
           metadata,
           categories,
           // Also set on update, so notes written before a source override
@@ -220,13 +260,31 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           processedContent: clipped,
           source: input.source ?? input.kind,
           format: 'summary',
-          status: 'processing',
+          status: held ? 'held' : 'processing',
+          graphState: held ? 'pending' : 'admitted',
           metadata,
           categories,
           observedAt: input.observedAt,
         })
         .returning({ id: intelNotes.id });
       noteId = created.id;
+    }
+
+    // Held: the note is stored, and that is the whole job.
+    //
+    // The embedding is still worth paying for and is the only cost here — a
+    // fraction of a cent per thread against the model call it replaces. It is
+    // what lets the queue group a mailbox by TOPIC rather than only by sender,
+    // and what makes a pending note findable before anyone has decided about
+    // it. The graph-facing readers (searchIntel, recall) filter to admitted, so
+    // an embedded pending note cannot leak into an answer through that door.
+    if (held) {
+      await embedNote(noteId).catch((err) =>
+        // A note that could not be embedded is still a note. It clusters by
+        // sender and subject like any other; it just will not match on topic.
+        console.warn(`[intel:auto] could not embed held note ${noteId}:`, err instanceof Error ? err.message : err),
+      );
+      return { status: 'held', noteId };
     }
 
     // An unparseable model response now THROWS rather than resolving to an
@@ -254,11 +312,38 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
       .set({
         title: input.title || extraction.summary.slice(0, 100) || input.kind,
         status: 'processed',
+        // Extraction happened, so by definition this note is in the graph. Set
+        // here rather than by the admission path alone, because the state has to
+        // describe what is TRUE of the row, not what somebody intended — a note
+        // left at 'pending' with entities hanging off it would make the purge
+        // and the queue disagree about the same thread.
+        graphState: 'admitted',
         updatedAt: new Date(),
       })
       .where(eq(intelNotes.id, noteId));
 
-    await embedNote(noteId);
+    // Non-fatal, and the ordering is why. By this line the entities and edges
+    // are committed and the note is already marked `processed` / `admitted`, so
+    // throwing here would return 'failed' for work that had entirely succeeded:
+    // the queue would say "retry me" about a thread already in the graph, and
+    // the caller would skip recording the decision. Inconsistent, not merely
+    // untidy.
+    //
+    // It is also the exact failure seen on 2026-08-27. Extraction fell back to
+    // Codex when OpenRouter ran out of credit and succeeded; embeddings cannot
+    // fall back (the bridge has no such endpoint), so this line threw and took a
+    // good admission down with it. An entity without a vector is still an
+    // entity — it just will not match by similarity until re-embedded, which is
+    // what `backfillPendingEmbeddings` and the entity backfill sweep are for.
+    //
+    // Matches the two entity-embedding call sites in ./graph, both of which
+    // already swallow this.
+    await embedNote(noteId).catch((err) =>
+      console.warn(
+        `[intel:auto] ${input.kind} ${input.refId} extracted but not embedded:`,
+        err instanceof Error ? err.message : err,
+      ),
+    );
 
     console.log(
       `[intel:auto] ${input.kind} ${input.refId} → ${stats.entityCount} entities, ${stats.relationshipCount} relationships`,

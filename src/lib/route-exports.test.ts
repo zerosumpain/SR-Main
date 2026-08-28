@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  GPX_MIME_TYPE,
-  hashRouteExportToken,
-  routeDownloadUrl,
-  routeExportName,
-  validateRouteExport,
-} from './route-exports';
+import { GPX_MIME_TYPE, routeExportName, validateRouteExport } from './route-exports';
+import { hashShareToken, shareDownloadUrl } from './file-shares';
 import { routeMessage } from './workflows/site-tools/tools/route-export';
 
 const GPX = '<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk/></gpx>';
@@ -38,9 +33,11 @@ describe('route exports', () => {
 
   it('makes opaque, file-scoped download links and WhatsApp payloads', () => {
     const token = 'a'.repeat(43);
-    const url = routeDownloadUrl(token);
-    expect(url).toContain(`/api/route-exports/${token}/download`);
-    expect(hashRouteExportToken(token)).not.toContain(token);
+    const url = shareDownloadUrl(token);
+    // New exports go to the general share endpoint, not the legacy GPX one.
+    expect(url).toContain(`/api/file-shares/${token}/download`);
+    expect(url).not.toContain('/api/route-exports/');
+    expect(hashShareToken(token)).not.toContain(token);
     expect(routeMessage('running', 8.9, url)).toBe(`Running route ready — 8.9 mi. Download GPX: ${url}`);
   });
 });

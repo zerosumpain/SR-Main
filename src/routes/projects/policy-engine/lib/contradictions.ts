@@ -5,7 +5,7 @@
 // stance. Neutral throughout: the camps are described, not adjudicated by the author.
 // Self-contained.
 
-import type { ConfidenceLevel } from './types';
+import type { ConfidenceLevel } from '$lib/policy-engine/types';
 
 export interface Camp {
   label: string;        // short name for the position

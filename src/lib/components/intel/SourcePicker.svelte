@@ -16,7 +16,7 @@
   // Categories are nested under Files because that is what they describe: they
   // are set on Drive folders and mean nothing for an email or a deep dive.
 
-  import type { NetCategory } from './types';
+  import type { NetCategory } from '$lib/codegraph/types';
 
   let {
     sources = [],

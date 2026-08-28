@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { DIRECTIONS, DIRECTIONS_BY_ID, directionsForLever, milburnPackageLevers } from './directions';
 import { ANALYSES_BY_ID } from './evidence';
 import { THEMES_BY_ID } from './themes';
-import { LEVERS_BY_ID, baselineLevers, policyLevers } from './levers';
-import { runSim } from './engine';
+import { LEVERS_BY_ID, baselineLevers, policyLevers } from '$lib/policy-engine/levers';
+import { runSim } from '$lib/policy-engine/engine';
 
 // the set of valid outcome ids = the numeric keys of a YearResult
 const OUTCOME_IDS = new Set(Object.keys(runSim(baselineLevers()).years[0]));

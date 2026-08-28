@@ -41,7 +41,7 @@
   import { untrack, onDestroy } from 'svelte';
 
   import type { ForceGraph3DInstance } from '3d-force-graph';
-  import type { NetNode, NetEdge } from './types';
+  import type { NetNode, NetEdge } from '$lib/codegraph/types';
   import {
     recencyFade,
     clusterColour,

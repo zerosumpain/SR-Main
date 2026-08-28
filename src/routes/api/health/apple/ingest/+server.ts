@@ -3,6 +3,13 @@ import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
 import { appleHealthMetrics } from '$lib/db/schema';
 import { and, eq, gte, lte } from 'drizzle-orm';
+import { ingestWorkouts } from '$lib/trails/ingest';
+import {
+  normaliseActivityType,
+  OUTDOOR_TYPES,
+  routePointCoords,
+  type HaeWorkout,
+} from '$lib/trails/hae-workouts';
 import type { RequestHandler } from './$types';
 
 const SUPPORTED_METRICS = [
@@ -46,6 +53,9 @@ export const POST: RequestHandler = async ({ request }) => {
   const start = Date.now();
   const payload = await request.json();
   const metrics: AppleHealthMetric[] = payload?.data?.metrics || [];
+  const workouts: HaeWorkout[] = Array.isArray(payload?.data?.workouts)
+    ? payload.data.workouts
+    : [];
 
   console.log(
     `[apple-ingest] received ${metrics.length} metric(s): ` +
@@ -54,6 +64,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   let totalSynced = 0;
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   for (const metric of metrics) {
     if (!SUPPORTED_METRICS.includes(metric.name)) {
@@ -113,6 +124,50 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
+  // Workouts — the /health/activities half. Independent of the metrics loop above: a
+  // failure in either must not cost the other its batch.
+  let workoutResult = { workoutsSynced: 0, tracksSynced: 0, seriesSynced: 0, skipped: 0 };
+  if (workouts.length) {
+    console.log(`[apple-ingest] received ${workouts.length} workout(s)`);
+    const ingested = await ingestWorkouts(workouts);
+    errors.push(...ingested.errors);
+    workoutResult = {
+      workoutsSynced: ingested.workoutsSynced,
+      tracksSynced: ingested.tracksSynced,
+      seriesSynced: ingested.seriesSynced,
+      skipped: ingested.skipped,
+    };
+    console.log(
+      `[apple-ingest] workouts — ${ingested.workoutsSynced} synced, ` +
+        `${ingested.tracksSynced} track(s), ${ingested.seriesSynced} series`,
+    );
+
+    // An outdoor workout with no usable GPS trace means either the payload
+    // carried no route (HAE toggle off, or the request was rejected upstream
+    // for size) or the route arrived in a shape the mapper rejects — the v2
+    // key-name change slipped through here once, invisibly, because `route`
+    // is a modelled key and unusable points leave no trace in metadata. So
+    // when points exist but fail, name the keys of the first one. Warn — in
+    // the log and in the response so HAE's activity log shows it — but do not
+    // fail the sync: the workout itself landed, and HAE retries failed
+    // batches indefinitely.
+    for (const w of workouts) {
+      if (!w || typeof w !== 'object') continue;
+      const type = normaliseActivityType(typeof w.name === 'string' ? w.name : null);
+      if (!OUTDOOR_TYPES.has(type)) continue;
+      const route = Array.isArray(w.route) ? w.route : [];
+      const usable = route.filter((p) => routePointCoords(p) !== null).length;
+      if (usable >= 2) continue;
+      const detail = route.length
+        ? `route has ${route.length} point(s) but ${usable} usable; first point keys: ${Object.keys(route[0] ?? {}).join(',')}`
+        : 'no route data in payload';
+      warnings.push(`${w.name ?? 'workout'} (${w.start ?? 'no date'}): outdoor workout without a usable GPS trace — ${detail}`);
+    }
+    if (warnings.length) {
+      console.log(`[apple-ingest] warnings: ${warnings.join('; ')}`);
+    }
+  }
+
   console.log(
     `[apple-ingest] done — ${totalSynced} record(s) synced` +
       (errors.length ? `, errors: ${errors.join('; ')}` : ''),
@@ -121,7 +176,9 @@ export const POST: RequestHandler = async ({ request }) => {
   return json({
     success: errors.length === 0,
     recordsSynced: totalSynced,
+    ...workoutResult,
     errors: errors.length ? errors : undefined,
+    warnings: warnings.length ? warnings : undefined,
     duration: Date.now() - start,
   });
 };

@@ -1,6 +1,6 @@
 // $lib/datastore/audit.ts
 //
-// Fire-and-forget audit trail (precedent: src/lib/jkai/llm-usage-log.ts). Audit
+// Fire-and-forget audit trail (precedent: src/lib/llm/usage-log.ts). Audit
 // writes must NEVER break a datastore operation, so this swallows its own errors
 // — both synchronous (a bad mock / missing db) and asynchronous (insert failure).
 // Every mutating access-layer call records a before/after image here; the log

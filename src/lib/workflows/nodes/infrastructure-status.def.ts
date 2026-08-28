@@ -8,7 +8,7 @@ export const infrastructureStatusDef: NodeDefinition = {
   configSchema: {
     type: 'object',
     properties: {
-      scope: { type: 'string', description: 'all | home_assistant | production_app | homeserv | pi_runner | hermes' },
+      scope: { type: 'string', description: 'all | home_assistant | production_app | homeserv | pi_runner' },
       historyLimit: { type: 'number', description: 'Number of audit records retained per workflow (1–52).' },
     },
   },
@@ -22,10 +22,9 @@ export const infrastructureStatusDef: NodeDefinition = {
       { value: 'production_app', label: 'Production app and scheduler' },
       { value: 'homeserv', label: 'Homeserv host' },
       { value: 'pi_runner', label: 'Pi runner' },
-      { value: 'hermes', label: 'Hermes runtime' },
     ], description: 'Unavailable server-side integrations remain explicitly unavailable; no inferred health is shown.' },
     { key: 'historyLimit', label: 'History retained', type: 'number', min: 1, max: 52, description: 'Durable audit records retained for this workflow.' },
   ],
-  llmDescription: 'Read-only, reusable infrastructure version-position review. For each detected capability it returns versionReviews with installed evidence, official latest stable release URL/date, bounded release-note benefits, compatibility implications and recommendation. It has separately-scoped collectors for Home Assistant, production app, homeserv, Pi runner and Hermes. It never runs shell commands or installs updates. Missing current-version or publisher evidence is returned as unavailable; never infer it.',
+  llmDescription: 'Read-only, reusable infrastructure version-position review. For each detected capability it returns versionReviews with installed evidence, official latest stable release URL/date, bounded release-note benefits, compatibility implications and recommendation. It has separately-scoped collectors for Home Assistant, production app, homeserv and the Pi runner. It never runs shell commands or installs updates. Missing current-version or publisher evidence is returned as unavailable; never infer it.',
   llmExamples: [{ scope: 'all', historyLimit: 12 }],
 };

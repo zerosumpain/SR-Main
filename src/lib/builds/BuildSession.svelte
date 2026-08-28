@@ -22,6 +22,7 @@
    * behaviour, plus Controls (live settings) and Blueprint (the machinery).
    */
   import { onMount, onDestroy } from 'svelte';
+  import { publishedLink } from './published-link';
   import { invalidateAll } from '$app/navigation';
   import BuildSessionPanel from './BuildSessionPanel.svelte';
   import StreamLine from './StreamLine.svelte';
@@ -68,9 +69,8 @@
 
   let livePreviewUrl = $state<string | null>(null);
   const previewLink = $derived(
-    build.publishedSlug
-      ? `/projects/${build.publishedSlug}/`
-      : (build.serveConfig || livePreviewUrl) ? `/api/jkai/proxy/${build.id}/` : null,
+    publishedLink(build.publishedSlug)?.href
+      ?? ((build.serveConfig || livePreviewUrl) ? `/api/jkai/proxy/${build.id}/` : null),
   );
 
   // Elapsed timer.

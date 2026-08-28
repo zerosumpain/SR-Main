@@ -1,14 +1,16 @@
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
+import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { desc, eq, and, asc } from 'drizzle-orm';
 import { resolvePublishSlug } from '$lib/jkai/publish-slug';
+import { publishedLink } from '$lib/builds/published-link';
 
 /**
- * Normalise the `files` argument of `register_hermes_build`.
+ * Normalise the `files` argument of `register_chat_build`.
  *
- * Hermes stringifies nested argument values on their way to a tool, so a
+ * A model may stringify nested argument values on their way to a tool, so a
  * perfectly well-formed `files` array arrives in any of four shapes: the real
  * array, a JSON string holding the array, an array holding one JSON string, or
  * an array of per-file JSON strings. Rejecting the encoded forms taught the
@@ -31,7 +33,7 @@ function parseMaybe(v: unknown): unknown {
 }
 
 /**
- * An array argument, however deeply Hermes stringified it on the way in.
+ * An array argument, however deeply it was stringified on the way in.
  * Shared by `files` and `checks` — both arrive encoded, for the same reason,
  * and silently dropping `checks` would leave an app registered with no
  * behavioural coverage while appearing, from the outside, to have been tested.
@@ -122,7 +124,25 @@ function describeShape(v: unknown): string {
 register({
   name: 'build_create',
   description:
-    'Start a new JKAI autonomous build. Provide a prompt describing what to build. ' +
+    'Start a new JKAI autonomous build: a SELF-CONTAINED app built in a sandbox — a dashboard, ' +
+    'a game, a simulator, a data explorer, a one-off tool. It gets a workspace, a server on a ' +
+    'private port and a preview URL, and that preview is the whole deliverable. ' +
+    // The boundary is stated as a deliverable rather than a caveat because the
+    // old description ("Start a new JKAI autonomous build. Provide a prompt
+    // describing what to build") named no limits at all, while `request_change`
+    // opens by warning you off itself. Asked on 2026-08-23 for a Life360
+    // history dashboard "for the site", chat read one tool advertising its cost
+    // and one advertising nothing, and picked this one: the build spent five
+    // iterations and 2.8M tokens writing a standalone `python3 server.py` that
+    // could never become a route, and was killed by hand. Nothing misjudged the
+    // lane — this text never said there was one.
+    'IT CANNOT CHANGE THE STRANGE RAMBLINGS SITE. No repo access, no branch, no pull request. ' +
+    'Nothing it writes can become a page, route, API endpoint, component, workflow node or ' +
+    'schema change on strangeramblings.com, and it cannot escalate itself once started — ' +
+    '`request_change` is destructive and therefore not on the build tool bridge. ' +
+    'So if the ask names an SR route, endpoint, component or schema, or just says "on the site" ' +
+    'or "on strangeramblings.com", this is the WRONG tool and no amount of iterating fixes it: ' +
+    'use `request_change`, which branches the real repo, runs the gate and opens a PR. ' +
     'Optionally attach primary workflows the build should foreground in its planning context.',
   parameters: {
     type: 'object',
@@ -151,11 +171,11 @@ register({
     const insertValues: Record<string, unknown> = {
       title: (args.title as string) || null,
       prompt: args.prompt as string,
-      budgetConfig: {},
+      budgetConfig: { ...DEFAULT_BUILD_BUDGET },
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
     };
-    // Bare uuid, not Hermes' `chat_<uuid>` — build-progress-check posts to
+    // Bare uuid, not the `chat_<uuid>` form — build-progress-check posts to
     // orchestrator_chats, whose FK rejects the prefixed form outright.
     if (toolCtx?.conversationId) insertValues.conversationId = normaliseConversationId(toolCtx.conversationId);
     if (attachedWorkflowIds.length > 0) insertValues.attachedWorkflowIds = attachedWorkflowIds;
@@ -168,7 +188,7 @@ register({
 register({
   name: 'build_list',
   description:
-    'List recent JKAI builds with status (pending/running/completed/failed). ' +
+    'List recent JKAI builds with status (pending/running/completed/failed) and `outcome` — `completed` alone does NOT mean it worked: read `outcome` for delivered | budget_cap | stopped_by_user | registered. ' +
     'Compact by default — returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. ' +
     'Pass verbose:true to return the full rows including heavy columns (prompt, config, serve_config, model fields).',
   parameters: {
@@ -191,6 +211,7 @@ register({
         id: jkaiBuilds.id,
         title: jkaiBuilds.title,
         status: jkaiBuilds.status,
+        outcome: jkaiBuilds.outcome,
         publishedSlug: jkaiBuilds.publishedSlug,
         createdAt: jkaiBuilds.createdAt,
       })
@@ -340,7 +361,7 @@ register({
 
     // Server-computed liveness, because the caller has no clock.
     //
-    // Hermes injects no current time — its prompt builder tells the model to
+    // Chat injects no current time — the prompt builder tells the model to
     // shell out to `date` — so handing back bare ISO timestamps invites exactly
     // what happened on 2026-08-09: the model subtracted `updatedAt` against a
     // time it had guessed, said "last activity 3 min ago, so it's actively
@@ -397,9 +418,13 @@ register({
         // rather than making the caller notice the contradiction.
         failureKind: (build.failure as { kind?: string } | null)?.kind ?? null,
         iterations,
-        publishedUrl: build.publishedSlug
-          ? `https://strangeramblings.com/projects/${build.publishedSlug}/`
-          : null,
+        publishedUrl: (() => {
+          // Either a /projects page on this site or the PR a git-target build
+          // opened — never `strangeramblings.com/projects/https://github.com/...`.
+          const l = publishedLink(build.publishedSlug);
+          if (!l) return null;
+          return l.external ? l.href : `https://strangeramblings.com${l.href}`;
+        })(),
       },
     };
   },
@@ -614,11 +639,11 @@ register({
 });
 
 register({
-  name: 'register_hermes_build',
+  name: 'register_chat_build',
   description:
-    'Register an app you (Hermes) just built as a JKAI build, so it appears at /jkai/builds and can be promoted to /projects/<slug>/. ' +
+    'Register an app you just built as a JKAI build, so it appears at /jkai/builds and can be promoted to /projects/<slug>/. ' +
     'Use this whenever you finish a static web app (single-page or multi-page HTML/JS/CSS) in a conversation — typically WhatsApp or general chat. ' +
-    'You provide the source files; this tool writes them to the build workspace, creates a `jkai_builds` row marked origin=hermes, status=completed, and returns the build id + URL. ' +
+    'You provide the source files; this tool writes them to the build workspace, creates a `jkai_builds` row marked origin=chat, status=completed, and returns the build id + URL. ' +
     'After calling this, ask the user (in the same conversation) whether they want it conformed to the Strange Ramblings design system and published. ' +
     'If yes, call `build_tweak` with the build id and an instruction like "Apply the site design system, then publish to /projects/". ' +
     'If no, leave it — the user can still hit "Publish" from the /jkai/builds card to ship the raw version. ' +
@@ -635,7 +660,7 @@ register({
       updateBuildId: {
         type: 'string',
         description:
-          'Optional. The id of an existing hermes-origin build to REPLACE (same row, same workspace, same published slug) rather than creating a new one. Use this for every revision of an app you already registered in this conversation.',
+          'Optional. The id of an existing chat-origin build to REPLACE (same row, same workspace, same published slug) rather than creating a new one. Use this for every revision of an app you already registered in this conversation.',
       },
       checks: {
         type: 'array',
@@ -734,7 +759,9 @@ register({
     if (updateId) {
       const [existing] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, updateId)).limit(1);
       if (!existing) return { success: false, error: `no build ${updateId} to update` };
-      if (existing.origin !== 'hermes') {
+      // `hermes` is the legacy value this origin was called before the gateway
+      // was retired; rows written then are still replaceable by this tool.
+      if (existing.origin !== 'chat' && existing.origin !== 'hermes') {
         return {
           success: false,
           error: `build ${updateId} was made by the ${existing.origin} builder; this tool only replaces the files of a build it registered itself.`,
@@ -742,7 +769,7 @@ register({
       }
       const [updated] = await db
         .update(jkaiBuilds)
-        .set({ title, prompt, status: 'completed', updatedAt: new Date() })
+        .set({ title, prompt, status: 'completed', outcome: 'registered', updatedAt: new Date() })
         .where(eq(jkaiBuilds.id, updateId))
         .returning();
       build = updated;
@@ -752,13 +779,17 @@ register({
         title,
         prompt,
         status: 'completed',
-        origin: 'hermes',
+        // Chat wrote the files itself; the builder never ran. Filed as
+        // `completed` so it can be published, which made 15 of the first 83
+        // rows read as builder successes with zero iterations and zero tokens.
+        outcome: 'registered',
+        origin: 'chat',
         planStatus: 'approved',
         iterationsCompleted: 1,
         budgetConfig: { maxIterations: 10, maxTotalMinutes: 60 },
         modelProvider: ctx.provider,
         modelId: ctx.modelId,
-        enforceDesignSystem: false, // Hermes-origin starts as-is; user opts in to conformance via build_tweak.
+        enforceDesignSystem: false, // Chat-origin starts as-is; user opts in to conformance via build_tweak.
         // Mark it servable — a static index.html is enough for publishBuild to copy.
         serveConfig: {
           port: 0,
@@ -768,7 +799,7 @@ register({
           kind: 'static',
         },
       };
-      // Bare uuid, not Hermes' `chat_<uuid>` — build-progress-check posts to
+      // Bare uuid, not the `chat_<uuid>` form — build-progress-check posts to
     // orchestrator_chats, whose FK rejects the prefixed form outright.
     if (toolCtx?.conversationId) insertValues.conversationId = normaliseConversationId(toolCtx.conversationId);
       const [inserted] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
@@ -802,7 +833,7 @@ register({
     await db.insert(jkaiLogs).values({
       buildId,
       type: 'system',
-      content: `Hermes ${updateId ? 're-registered' : 'registered'} ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or have Hermes call build_tweak to conform it to the site design system first.`,
+      content: `${updateId ? 'Re-registered' : 'Registered'} ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or call build_tweak to conform it to the site design system first.`,
     });
 
     // Run it before anyone calls it done. `status: completed` on this row only
@@ -824,7 +855,7 @@ register({
       data: {
         id: buildId,
         title,
-        origin: 'hermes',
+        origin: 'chat',
         status: 'completed',
         replacedExisting: updateId ? true : undefined,
         publishedSlug,

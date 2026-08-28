@@ -12,8 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runLocalPython, isLocalPythonAvailable } from '$lib/jkai/local-python';
 
-// Matches the voice already configured for Hermes' own TTS
-// (~/.hermes-jkai/config.yaml → tts.voice), so spoken output sounds the same
+// Matches the voice the previous TTS path was configured with, so spoken output sounds the same
 // whichever path produced it.
 const EDGE_VOICE = process.env.LOCAL_TTS_VOICE || 'en-US-AriaNeural';
 const EDGE_TIMEOUT_MS = Number(process.env.LOCAL_TTS_TIMEOUT_MS ?? 120_000);

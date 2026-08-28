@@ -9,7 +9,7 @@
 
   import type { GateState } from '../lib/population';
   import { COHORT_N, DIS_COHORT_N } from '../lib/population';
-  import { fmtCompact } from '../lib/format';
+  import { fmtCompact } from '$lib/policy-engine/format';
 
   interface Props { pipeline: GateState[]; horizon: number; comparatorName?: string; scale?: number; regionName?: string; }
   let { pipeline, horizon, comparatorName = 'status quo', scale = 1, regionName = '' }: Props = $props();

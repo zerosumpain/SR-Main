@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
+  import { bucketLabel, bucketOf, outcomeNote } from './build-status';
+  import { publishedLink } from './published-link';
+  import PromoteModal from './PromoteModal.svelte';
   import { invalidateAll } from '$app/navigation';
   import Activity from './Activity.svelte';
   import FilesTimeline from './FilesTimeline.svelte';
@@ -67,6 +70,13 @@
   const isTerminalStatus = $derived(
     build.status === 'completed' || build.status === 'failed' || build.status === 'paused',
   );
+  const detailBucket = $derived(
+    bucketOf({
+      status: build.status,
+      planStatus: (build as { planStatus?: string | null }).planStatus ?? null,
+      outcome: (build as { outcome?: string | null }).outcome ?? null,
+    }),
+  );
   const startMs = $derived(
     build.startedAt ? new Date(build.startedAt).getTime() : new Date(build.createdAt).getTime(),
   );
@@ -93,9 +103,21 @@
   let livePreviewUrl = $state<string | null>(null);
   // Always-prominent banner is shown when we have any signal the app is up:
   // the persisted serveConfig (page load / 10s poll) OR a live stage event.
+  const published = $derived(publishedLink(build.publishedSlug));
+  // A change request's page lives in the repo, so its address never reaches
+  // `publishedSlug` — that column holds the PR. Offer the card control when
+  // the build published off-site (a PR) or already has a card to edit.
+  const canCard = $derived(!!build.projectSlug || published?.external === true);
+  const cardLink = $derived(build.projectSlug ? `/projects/${build.projectSlug}/` : null);
+  let carding = $state(false);
+
+  function afterCard(result: { slug: string; url: string }) {
+    build = { ...build, projectSlug: result.slug };
+    carding = false;
+  }
   const previewLink = $derived(
-    build.publishedSlug
-      ? `/projects/${build.publishedSlug}/`
+    published
+      ? published.href
       : (build.serveConfig || livePreviewUrl)
         ? `/api/jkai/proxy/${build.id}/`
         : null,
@@ -281,7 +303,12 @@
       <a class="row-link" href="/jkai/builds">← all builds</a>
       <div class="kicker">
         JKAI build ·
-        <span class="status-pill" data-status={build.status}>{build.status}</span>
+        <!-- The bucket, not the raw status: `completed` is claimed by a
+             delivery, a budget cap-out, a hand-kill and a chat
+             registration, and this pill painted all four the same green. -->
+        <span class="status-pill" data-status={detailBucket} title={outcomeNote(detailBucket) ?? ''}
+          >{bucketLabel(detailBucket)}</span
+        >
         ·
         <span class="elapsed" class:running={!isTerminalStatus} title="Elapsed since the build started">
           {formatElapsed(elapsedMs)}{!isTerminalStatus ? '' : ' (final)'}
@@ -332,10 +359,23 @@
         {publishing ? 'Publishing…' : 'Publish'}
       </button>
     {/if}
-    {#if build.publishedSlug}
-      <a class="row-link" href={`/projects/${build.publishedSlug}/`} target="_blank" rel="noreferrer">↗ Live</a>
-      <button class="row-link danger" disabled={unpublishing} onclick={unpublishBuild} type="button">
-        {unpublishing ? 'Unpublishing…' : 'Unpublish'}
+    {#if published}
+      <a class="row-link" href={published.href} target="_blank" rel="noreferrer">↗ {published.label}</a>
+      <!-- A PR lives on GitHub; there is nothing on this site to take down. -->
+      {#if !published.external}
+        <button class="row-link danger" disabled={unpublishing} onclick={unpublishBuild} type="button">
+          {unpublishing ? 'Unpublishing…' : 'Unpublish'}
+        </button>
+      {/if}
+    {:else if build.publishedSlug}
+      <span class="dim">{build.publishedSlug}</span>
+    {/if}
+    {#if canCard}
+      {#if cardLink}
+        <a class="row-link" href={cardLink} target="_blank" rel="noreferrer">↗ Project page</a>
+      {/if}
+      <button class="nm-btn-ghost" onclick={() => (carding = true)} type="button">
+        {build.projectSlug ? 'Edit card' : 'Add to /projects'}
       </button>
     {/if}
   </div>
@@ -392,6 +432,10 @@
     <BuildSidebar build={build} onAfter={refresh} />
   </div>
 </div>
+
+{#if carding}
+  <PromoteModal build={build} kind="repo" onClose={() => (carding = false)} ondone={afterCard} />
+{/if}
 
 <style>
   .wrap {
@@ -501,13 +545,21 @@
   .status-pill[data-status='running'] {
     color: var(--accent);
   }
-  .status-pill[data-status='completed'] {
+  .status-pill[data-status='delivered'] {
     color: var(--status-success);
+  }
+  .status-pill[data-status='capped'],
+  .status-pill[data-status='stopped'],
+  .status-pill[data-status='registered'] {
+    color: var(--text-muted);
+  }
+  .status-pill[data-status='unknown'] {
+    color: var(--status-error);
   }
   .status-pill[data-status='failed'] {
     color: var(--status-error);
   }
-  .status-pill[data-status='awaiting_plan_approval'] {
+  .status-pill[data-status='awaiting'] {
     color: var(--accent);
   }
   .elapsed {

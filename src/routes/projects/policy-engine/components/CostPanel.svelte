@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { YearResult } from '../lib/types';
+  import type { YearResult } from '$lib/policy-engine/types';
   import OutcomeChart, { type ChartSeries } from './OutcomeChart.svelte';
-  import { fmtGBPbn, fmtGBP, fmtNum } from '../lib/format';
+  import { fmtGBPbn, fmtGBP, fmtNum } from '$lib/policy-engine/format';
   import { neetYearsAvoided } from '../lib/economics';
 
   interface Props { sim: YearResult[]; baseSim: YearResult[]; horizon: number; }

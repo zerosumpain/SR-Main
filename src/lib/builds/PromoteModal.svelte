@@ -16,6 +16,7 @@
    *  - Save card (PATCH) writes copy only. Instant, and cannot break a live page.
    */
   import { slugifyTitle } from '$lib/jkai/publish-slug';
+  import { publishedLink } from './published-link';
   import { resolveProjectCard } from '$lib/jkai/project-card';
 
   interface PromotableBuild {
@@ -23,6 +24,7 @@
     title: string | null;
     prompt: string;
     publishedSlug: string | null;
+    projectSlug?: string | null;
     cardTitle?: string | null;
     cardBlurb?: string | null;
     cardTag?: string | null;
@@ -43,18 +45,62 @@
     build,
     onClose,
     ondone,
+    /**
+     * Which lane produced the thing being carded.
+     *
+     * 'app'  — a sandbox build. Promoting COPIES its workspace to /projects.
+     * 'repo' — a change request. Its page is already in the repo and already
+     *          deployed, so there is nothing to copy: only the card is missing,
+     *          and the address is read off the PR rather than invented from the
+     *          title.
+     */
+    kind = 'app',
   }: {
     build: PromotableBuild;
     onClose: () => void;
     /** Fired after a successful write so the list can refresh its rows. */
     ondone: (result: { slug: string; url: string }) => void;
+    kind?: 'app' | 'repo';
   } = $props();
 
-  const isPublished = $derived(!!build.publishedSlug);
+  const isRepo = $derived(kind === 'repo');
+  // A repo card is never "published" in the copy-the-files sense, so the
+  // address stays editable and the verb stays "Add card".
+  const isPublished = $derived(!isRepo && !!build.publishedSlug);
 
+  // A repo build's address is a fact about the PR, not a guess from the title —
+  // it is filled in by the detect call below. Leaving it blank until then is
+  // deliberate: a plausible wrong address is worse than an empty field.
   let slug = $state(
-    build.publishedSlug ?? slugifyTitle(build.title ?? build.prompt.slice(0, 60)) ?? '',
+    kind === 'repo'
+      ? (build.projectSlug ?? '')
+      : (build.publishedSlug ?? slugifyTitle(build.title ?? build.prompt.slice(0, 60)) ?? ''),
   );
+  let detecting = $state(kind === 'repo' && !build.projectSlug);
+  let candidates = $state<string[]>([]);
+  let detectNote = $state<string | null>(null);
+
+  $effect(() => {
+    if (kind !== 'repo' || !detecting) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/jkai/builds/${build.id}/project-card`);
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (data.slug) slug = data.slug;
+        candidates = Array.isArray(data.candidates) ? data.candidates : [];
+        detectNote = data.reason ?? null;
+      } catch {
+        if (!cancelled) detectNote = 'Could not read the pull request — enter the address by hand.';
+      } finally {
+        if (!cancelled) detecting = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
   let cardTitle = $state(build.cardTitle ?? build.title ?? '');
   let cardBlurb = $state(build.cardBlurb ?? '');
   let cardTag = $state(build.cardTag ?? '');
@@ -79,13 +125,30 @@
     }),
   );
 
-  const canSubmit = $derived(!busy && cleanSlug.length > 0 && cardBlurb.length <= MAX_BLURB);
+  const canSubmit = $derived(
+    !busy && !detecting && cleanSlug.length > 0 && cardBlurb.length <= MAX_BLURB,
+  );
 
-  async function submit(mode: 'promote' | 'card') {
+  async function submit(mode: 'promote' | 'card' | 'repo-card') {
     if (!canSubmit) return;
     busy = true;
     err = null;
     try {
+      if (mode === 'repo-card') {
+        const res = await fetch(`/api/jkai/builds/${build.id}/project-card`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug: cleanSlug, cardTitle, cardBlurb, cardTag }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          err = data.error ?? 'Could not add the card';
+          return;
+        }
+        ondone({ slug: data.slug, url: data.url });
+        onClose();
+        return;
+      }
       const res = await fetch(`/api/jkai/builds/${build.id}/publish`, {
         method: mode === 'promote' ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -124,21 +187,27 @@
     class="pm"
     role="dialog"
     aria-modal="true"
-    aria-label="Promote build to a project"
+    aria-label={isRepo ? 'Add this build to the projects index' : 'Promote build to a project'}
     onclick={(e) => e.stopPropagation()}
   >
     <header class="pm-head">
       <div>
-        <span class="pm-eyebrow">{isPublished ? 'Project card' : 'Promote to project'}</span>
+        <span class="pm-eyebrow"
+          >{isRepo ? 'Add to /projects' : isPublished ? 'Project card' : 'Promote to project'}</span
+        >
         <h2 class="pm-title">{build.title || build.prompt.slice(0, 60)}</h2>
       </div>
       <button class="pm-x" onclick={onClose} disabled={busy} aria-label="Close">✕</button>
     </header>
 
     <p class="pm-blurb">
-      {#if isPublished}
-        Live at <a href="/projects/{build.publishedSlug}/" target="_blank" rel="noopener"
-          >/projects/{build.publishedSlug}/</a
+      {#if isRepo}
+        This page is already in the repo and already deployed — nothing is copied. Adding a card
+        only lists <b>/projects/{cleanSlug || '…'}/</b> on the projects index, and it starts
+        <b>private</b>: you'll see it, nobody else will, until you flip it public there.
+      {:else if isPublished}
+        Live at <a href={publishedLink(build.publishedSlug)?.href ?? '#'} target="_blank" rel="noopener"
+          >{publishedLink(build.publishedSlug)?.href ?? build.publishedSlug}</a
         >. Editing the card changes only the copy on the projects index — the page itself is
         untouched.
       {:else}
@@ -152,11 +221,24 @@
       <input
         class="pm-in mono"
         bind:value={slug}
-        disabled={busy || isPublished}
-        placeholder="graphing-calculator"
+        disabled={busy || isPublished || detecting}
+        placeholder={isRepo ? 'family-life360-history' : 'graphing-calculator'}
         maxlength="60"
       />
-      {#if isPublished}
+      {#if detecting}
+        <span class="pm-hint">Reading the pull request…</span>
+      {:else if isRepo && candidates.length > 1}
+        <span class="pm-hint">
+          This PR touched more than one page —
+          {#each candidates as c (c)}
+            <button class="pm-pick" type="button" onclick={() => (slug = c)}>{c}</button>
+          {/each}
+        </span>
+      {:else if isRepo && detectNote}
+        <span class="pm-hint">{detectNote}</span>
+      {:else if isRepo && slug}
+        <span class="pm-hint">Detected from the pull request. Change it if that's the wrong page.</span>
+      {:else if isPublished}
         <span class="pm-hint">
           Re-addressing a live page would orphan any link to it — unpublish first to move it.
         </span>
@@ -223,7 +305,11 @@
 
     <div class="pm-actions">
       <button class="pm-ghost" onclick={onClose} disabled={busy}>Cancel</button>
-      {#if isPublished}
+      {#if isRepo}
+        <button class="pm-go" onclick={() => submit('repo-card')} disabled={!canSubmit}>
+          {busy ? 'Adding…' : build.projectSlug ? 'Save card' : 'Add card'}
+        </button>
+      {:else if isPublished}
         <button class="pm-go" onclick={() => submit('card')} disabled={!canSubmit}>
           {busy ? 'Saving…' : 'Save card'}
         </button>
@@ -233,7 +319,7 @@
         </button>
       {/if}
     </div>
-    {#if busy && !isPublished}
+    {#if busy && !isPublished && !isRepo}
       <p class="pm-hint pm-wait">
         Building and copying the project — this can take a couple of minutes. Leave this open.
       </p>
@@ -242,6 +328,16 @@
 </div>
 
 <style>
+  .pm-pick {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    border: 1px solid var(--line);
+    background: none;
+    color: var(--accent);
+    padding: 0.1rem 0.35rem;
+    margin-left: 0.35rem;
+    cursor: pointer;
+  }
   .pm-backdrop {
     position: fixed;
     inset: 0;

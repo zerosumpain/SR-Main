@@ -14,6 +14,34 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
+/**
+ * `::ffff:127.0.0.1` → `127.0.0.1`. Anything that is not an IPv4-mapped IPv6
+ * address comes back unchanged.
+ *
+ * The embedded address arrives in EITHER form: a literal typed as
+ * `::ffff:127.0.0.1` keeps its dotted quad, but `new URL()` normalises the
+ * hostname to hextets (`::ffff:7f00:1`) — and that is the form every SSRF
+ * caller actually passes, since they read `url.hostname`. Unwrapping only the
+ * dotted form left `http://[::ffff:127.0.0.1]/` reaching loopback through
+ * every SSRF-guarded path on the site (`isIP('7f00:1')` is 0, so the recursive
+ * call fell through to "not blocked").
+ *
+ * Exported because the same normalisation is needed on the INBOUND side —
+ * `getClientAddress()` reports a loopback client as `::ffff:127.0.0.1` on a
+ * dual-stack listener. See $lib/server/client-address.
+ */
+export function unwrapMappedIPv4(addr: string): string {
+  const lower = addr.toLowerCase().split('%')[0];
+  if (!lower.startsWith('::ffff:')) return addr;
+  const tail = lower.slice('::ffff:'.length);
+  if (isIP(tail) === 4) return tail;
+  const hextets = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail);
+  if (!hextets) return addr;
+  const hi = parseInt(hextets[1], 16);
+  const lo = parseInt(hextets[2], 16);
+  return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join('.');
+}
+
 /** True if `ip` (a v4 or v6 literal) is in a private / loopback / link-local / CGNAT range. */
 export function isBlockedIP(ip: string): boolean {
   const v = isIP(ip);
@@ -34,25 +62,11 @@ export function isBlockedIP(ip: string): boolean {
     const lower = ip.toLowerCase().split('%')[0];
     if (lower === '::1' || lower === '::') return true; // loopback / unspecified
     if (lower.startsWith('::ffff:')) {
-      // IPv4-mapped. NOTE the embedded address arrives in EITHER form:
-      // a literal typed as `::ffff:127.0.0.1` keeps its dotted quad, but
-      // `new URL()` normalises the hostname to hextets (`::ffff:7f00:1`) — and
-      // that is the form every caller actually passes, since they read
-      // `url.hostname`. Unwrapping only the dotted form left
-      // `http://[::ffff:127.0.0.1]/` reaching loopback through every
-      // SSRF-guarded path on the site (`isIP('7f00:1')` is 0, so the recursive
-      // call fell through to "not blocked").
-      const tail = lower.slice('::ffff:'.length);
-      if (isIP(tail) === 4) return isBlockedIP(tail);
-      const hextets = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail);
-      if (hextets) {
-        const hi = parseInt(hextets[1], 16);
-        const lo = parseInt(hextets[2], 16);
-        return isBlockedIP([hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join('.'));
-      }
+      const dotted = unwrapMappedIPv4(lower);
       // Some other mapped/translated shape we do not model — refuse rather
       // than fall through to "public".
-      return true;
+      if (isIP(dotted) !== 4) return true;
+      return isBlockedIP(dotted);
     }
     if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 ULA
     // fe80::/10 link-local — first hextet fe80..febf.

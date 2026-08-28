@@ -26,7 +26,7 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // chat. Routing it through jkai_extended.invoke is fragile (the model
   // sometimes misforms the wrapper args), and the prompt-cost of a single
   // tool definition is modest vs. losing the "build me a quick app" UX.
-  'register_hermes_build',
+  'register_chat_build',
   // New-workflow path. Same rationale: the design-first flow ends with a
   // workflow_build_from_spec call, and the model must reliably hit it
   // after the user confirms. Cheap insurance.
@@ -75,6 +75,29 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // Unified recall across files + research + memory + datastore — the @knowledge
   // entry point. Kept visible so "what do I know about X" reaches it directly.
   'knowledge_search',
+  // ── Measured first-turn hot set (2026-08-20) ─────────────────────────────
+  // Not guessed. Counted out of the recorded turn history: for every top-level jkai
+  // thread, the `jkai_extended` sub-tools invoked on the FIRST turn, ranked by
+  // how many DISTINCT threads reached for them (raw call counts lie — a single
+  // Home-Assistant thread can fire `ha_query_state` a hundred times). The five
+  // below are the top of that list, and every one of them was costing a
+  // `jkai_extended` discovery round-trip before the work could start, on a
+  // first turn that already took a median 30s to say anything at all.
+  //
+  // Same argument as `workflow_lint` above: a tool the model has to pay a
+  // round-trip to reach is a tool it prices out of the plan. Measured off a
+  // real `tools/list`, the five add 3,031 characters — about 760 tokens —
+  // against a ~1.5k budget, so no descriptions were trimmed and nothing
+  // changes for the toolset lane or the workflow nodes.
+  //
+  // `apple_calendar_list` was next (8 threads) and is deliberately NOT here:
+  // its schema alone is ~750 tokens, which would nearly double the cost of
+  // this whole promotion for one fewer thread than the cheapest tool above it.
+  'workflow_list',       // 16 threads — "what canvases do I already have"
+  'workflow_inspect',    // 14 threads — reads one canvas before changing it
+  'file_search',         // 10 threads — semantic search over /drive
+  'gmail_search',        //  9 threads — the mail entry point
+  'ha_query_state',      //  9 threads — "is the X on"
 ]);
 
 export function isMetaToolEnabled(): boolean {

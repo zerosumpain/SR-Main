@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   WORKLOADS,
   SITE_WORKLOADS,
-  HERMES_WORKLOADS,
   getWorkload,
   isWorkloadId,
   emitsImages,
@@ -12,19 +11,13 @@ describe('workload registry', () => {
   it('has unique ids and unique setting keys', () => {
     const ids = WORKLOADS.map((w) => w.id);
     expect(new Set(ids).size).toBe(ids.length);
-    // Keys only need to be unique WITHIN a scope: a site key is an app_settings
-    // row and a Hermes key is a dotted config path, so a collision across the
-    // two would be a coincidence, not a bug.
-    for (const scope of ['site', 'hermes'] as const) {
-      const keys = WORKLOADS.filter((w) => w.scope === scope).map((w) => w.key);
-      expect(new Set(keys).size, `${scope} keys collide`).toBe(keys.length);
-    }
+    const keys = WORKLOADS.map((w) => w.key);
+    expect(new Set(keys).size, 'setting keys collide').toBe(keys.length);
   });
 
-  it('scopes its two groups correctly', () => {
+  it('scopes every role to the site', () => {
     expect(SITE_WORKLOADS.every((w) => w.scope === 'site')).toBe(true);
-    expect(HERMES_WORKLOADS.every((w) => w.scope === 'hermes')).toBe(true);
-    expect(WORKLOADS).toHaveLength(SITE_WORKLOADS.length + HERMES_WORKLOADS.length);
+    expect(WORKLOADS).toHaveLength(SITE_WORKLOADS.length);
   });
 
   it('gives every code-pinned role a stated reason', () => {
@@ -37,19 +30,8 @@ describe('workload registry', () => {
     }
   });
 
-  it('pairs every Hermes role with a provider key', () => {
-    // Writing a model without its provider leaves the engine calling the wrong
-    // API — Codex reaches Hermes as `openai-codex`, not `openrouter`.
-    for (const w of HERMES_WORKLOADS) {
-      expect(w.providerKey, `${w.id} has no providerKey`).toBeTruthy();
-    }
-    // Site workloads have no provider key: provider is recovered from the id.
-    expect(SITE_WORKLOADS.every((w) => !w.providerKey)).toBe(true);
-  });
-
   it('looks roles up by id', () => {
     expect(getWorkload('extraction')?.key).toBe('jkai.intel.extract_model');
-    expect(getWorkload('hermes-default')?.key).toBe('model.default');
     expect(getWorkload('nope')).toBeNull();
     expect(isWorkloadId('doctor')).toBe(true);
     expect(isWorkloadId('doctor-who')).toBe(false);

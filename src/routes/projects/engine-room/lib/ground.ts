@@ -99,7 +99,7 @@ export const SUBSYSTEMS: Subsystem[] = [
     why: 'Both run it. Only one of them is on the public internet.',
   },
   {
-    id: 'selfimprove', label: 'The night shift', what: 'Reads its own failures and writes improvements.',
+    id: 'selfimprove', label: 'Self-improvement', what: 'Reads its own failures and writes improvements.',
     runs: ['origin'], gate: 'hostname',
     why: 'Two copies of a nightly job that writes to a shared database is not redundancy, it is a race. Refuses to schedule at home unless deliberately switched on.',
   },

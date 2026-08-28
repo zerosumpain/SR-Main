@@ -34,7 +34,7 @@ export interface ServeConfig {
   description: string;
   /** When set to 'static', the build is a self-contained set of files in
    * /home/jkai/workspace/<id>/live/ and the proxy serves them directly
-   * (no dev server). register_hermes_build emits this kind for static
+   * (no dev server). register_chat_build emits this kind for static
    * HTML apps. When omitted or 'dev', the proxy expects a backing dev
    * server listening on `port` and bridges it via proxyToSandbox. */
   kind?: 'static' | 'dev';
@@ -85,5 +85,9 @@ export interface FailureEnvelope {
   lastEventAgeMs?: number;
   tokensBeforeStall?: number;
   stderrTail?: string;
+  /** Configured gate command that failed before this build was aborted. */
+  gateCommand?: string;
+  /** Extracted gate diagnostics shown to the next iteration. */
+  diagnostics?: string;
   attempts: number;
 }

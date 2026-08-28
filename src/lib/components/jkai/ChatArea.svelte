@@ -30,8 +30,12 @@
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import OpenRouterModelPicker from '$lib/components/jkai/OpenRouterModelPicker.svelte';
-  import { hermesModelCommand } from '$lib/jkai/hermes-model-command';
   import { coerceModelContext } from '$lib/constants/default-models';
+  import {
+    isThinkingLevel,
+    thinkingLevelsFor,
+    type ThinkingLevel,
+  } from '$lib/models/thinking';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { subscribeFollowups } from '$lib/jkai/followup-stream';
@@ -70,6 +74,7 @@
     autoSend = false,
     conversation = null,
     modelContextLength = null,
+    modelSupportsThinking = false,
     defaultChatModelId,
     altOpenRouterModel = null,
     messageCount = 0,
@@ -78,7 +83,6 @@
     useIntelContext = true,
     activeBuild = null,
     approvalUi,
-    hermesEnabled = false,
     onToggleThreadRail,
     onToggleGraphRail,
     graphRailOpen = true,
@@ -102,19 +106,25 @@
       title?: string | null;
       costUsd?: string | number | null;
       priceSnapshot?: { promptPrice: number; completionPrice: number } | null;
+      thinkingLevel?: string | null;
     } | null;
     /** Context window of the pinned model, for the header's `N CTX %` chunk.
      *  Null when the OpenRouter catalogue has no row for it. */
     modelContextLength?: number | null;
+    /** Whether the pinned model takes a reasoning instruction. False hides the
+     *  thinking chip entirely rather than offering a control that does nothing. */
+    modelSupportsThinking?: boolean;
     defaultChatModelId: string;
     altOpenRouterModel?: ModelContext | null;
     messageCount?: number;
-    onmodelchange?: (ctx: ModelContext) => void;
+    /** `supportsThinking` reports whether the NEW model takes a reasoning
+     *  instruction, so the parent can re-gate the thinking chip without a
+     *  reload. */
+    onmodelchange?: (ctx: ModelContext, supportsThinking?: boolean) => void;
     modelCapabilities?: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     useIntelContext?: boolean;
     activeBuild?: { id: string; status: string } | null;
     approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
-    hermesEnabled?: boolean;
     /** Raise the thread rail's slide-over (below 1100px it is off-canvas). */
     onToggleThreadRail?: () => void;
     /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
@@ -390,7 +400,7 @@
   // heartbeat line is suppressed while a tool runs (it would duplicate the
   // step card), and the card itself carried no clock — so a 16-minute
   // `workflow_run` showed a pulsing dot and nothing else, and the only thing
-  // that ever broke the silence was Hermes' "iteration x/y" filler. The card
+  // that ever broke the silence was an "iteration x/y" filler line. The card
   // now carries its own elapsed time off the same 250ms `hbNow` ticker, and
   // offers a Cancel once the wait stops looking normal.
   const TOOL_STEP_SLOW_MS = 120_000;
@@ -440,12 +450,12 @@
   }
 
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
-  // Dangerous-command approval gate (Hermes `send_exec_approval` → kind="approval").
-  // No waiter/id: the card's buttons reply /approve|/deny, resolved gateway-side by
-  // the chat's session_key. Cleared on button click, turn end, or cancel.
+  // Dangerous-command approval gate (kind="approval"). No waiter/id: the card's
+  // buttons reply /approve|/deny, resolved by the chat's session_key. Cleared on
+  // button click, turn end, or cancel.
   let pendingApproval = $state<{ command: string; description: string; sessionKey: string } | null>(null);
   let subAgents = $state<Record<string, SubAgentState>>({});
-  // Per-bubble reasoning state from Hermes `thinking` frames. Keyed by
+  // Per-bubble reasoning state from `thinking` frames. Keyed by
   // the assistant bubble's `message.id` (the in-flight `progressId`) so
   // the panel stays attached to its bubble after finalisation. Svelte 5
   // doesn't track in-place Map mutations, so we construct a fresh Map on
@@ -548,14 +558,14 @@
   });
 
   /**
-   * Fire a slash command (e.g. `/approve`) to Hermes WITHOUT recording it as
-   * a visible user bubble. Backend honours `silent: true` to skip the
+   * Fire a slash command (e.g. `/approve`) WITHOUT recording it as a visible
+   * user bubble. Backend honours `silent: true` to skip the
    * orchestratorChats user-row insert (chat/+server.ts).
    *
    * Called by SlashCommandButtonBar via the per-message `onSilentSend` prop.
-   * Reuses the same chat endpoint and SSE stream pipeline so Hermes' follow-
-   * up response (e.g. "✅ Command approved …") flows in as a normal
-   * assistant token stream — no special handling required on the recv side.
+   * Reuses the same chat endpoint and SSE stream pipeline so the follow-up
+   * response (e.g. "✅ Command approved …") flows in as a normal assistant
+   * token stream — no special handling required on the recv side.
    */
   async function silentSend(command: string): Promise<void> {
     if (!conversationId) return;
@@ -1023,10 +1033,10 @@
         researchRefs: meta?.researchRefs ?? undefined,
         // Hydrate workflow chips (created/updated canvases) across reloads
         workflowRefs: meta?.workflowRefs ?? undefined,
-        // The turn's recorded tool-call chain. This is the ONLY tool information
-        // that survives a reload on the Hermes engine — `metadata.toolSteps` is
-        // never written on that branch, so the inline step cards above are gone
-        // by now and the trace page is where the chain lives.
+        // The turn's recorded tool-call chain. For any turn whose
+        // `metadata.toolSteps` was never written, this is the ONLY tool
+        // information that survives a reload: the inline step cards above are
+        // gone by now and the trace page is where the chain lives.
         traceId: meta?.traceId ?? undefined,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
         // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
@@ -1138,6 +1148,43 @@
     return labels[name] || name.replace(/_/g, ' ');
   }
 
+  // ── Streaming toolchain bar ───────────────────────────────────────────────
+  // A live turn rendered one step-card per call, so a chain of eight tools
+  // pushed the answer — and everything above it — off the screen while you
+  // watched. The chain is behind one collapsed bar now: status glyph, count,
+  // and the step that is running right this second. Expanding gives back the
+  // same step-cards list, unchanged. Keyed by the in-flight bubble's id so a
+  // background tab keeps its own open/closed state.
+  let toolchainOpen = $state<Record<string, boolean>>({});
+  function toggleToolchain(bubbleId: string) {
+    toolchainOpen = { ...toolchainOpen, [bubbleId]: !toolchainOpen[bubbleId] };
+  }
+
+  type IndexedStep = { step: ToolStep; index: number };
+
+  /** Split a bubble's steps into the tool chain and the `status_update` notes,
+   *  keeping each step's ORIGINAL index — `toggleStepExpanded` addresses steps
+   *  by position in `msg.toolSteps`, so a filtered list would expand the wrong
+   *  card. The notes are prose the model wrote for the user and stay inline;
+   *  only the chain goes behind the bar. */
+  function splitToolSteps(steps: ToolStep[] | undefined): { chain: IndexedStep[]; notes: IndexedStep[] } {
+    const chain: IndexedStep[] = [];
+    const notes: IndexedStep[] = [];
+    (steps ?? []).forEach((step, index) => {
+      (step.tool === 'status_update' ? notes : chain).push({ step, index });
+    });
+    return { chain, notes };
+  }
+
+  /** The step the collapsed bar speaks for: whichever is still running, else
+   *  the last one to have finished. */
+  function currentChainStep(chain: IndexedStep[]): ToolStep | null {
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (chain[i].step.status === 'running') return chain[i].step;
+    }
+    return chain.length > 0 ? chain[chain.length - 1].step : null;
+  }
+
   function toggleStepExpanded(stepIndex: number) {
     messages = messages.map((m) => {
       if (!m.isProgress || !m.toolSteps) return m;
@@ -1242,7 +1289,7 @@
         messages = messages.map((m) => {
           if (m.id !== progressId || !m.toolSteps) return m;
           const idx = (() => {
-            // Prefer an exact id match — the bus + Hermes frames carry a stable
+            // Prefer an exact id match — bus events carry a stable
             // toolCallId, so concurrent calls of the SAME tool (e.g. many
             // parallel web_search / fetch_url) never write into each other's
             // card. Fall back to the most-recent running same-named step only
@@ -1383,7 +1430,7 @@
         if (ev.type === 'token') {
           a.liveTokens += ev.delta;
         } else if (ev.type === 'tool_start') {
-          // Hermes only relays child tool *starts* (completions are swallowed),
+          // Only child tool *starts* are relayed (completions are swallowed),
           // and children run their tools sequentially — so the arrival of the
           // next tool means the previous one finished. Close it out so the row
           // shows ✓ rather than an eternal spinner.
@@ -1566,40 +1613,11 @@
     void send();
   }
 
-  // ── Command palette (item 1) + model switcher (item 2) ──────────────────
-  // Both surfaces only function when Hermes handles the chat (`hermesEnabled`):
-  // the gateway interprets slash commands (/usage, /model …) before the agent
-  // runs, whereas the legacy in-process loop would forward them to the LLM as
-  // prose.
-
-  // Gateway slash commands that are safe to fire through the jkai bridge
-  // (verified at the platform-dispatch level in hermes gateway/run.py). `send`
-  // fires the command silently; `insert` drops it into the composer so the user
-  // can add an argument before sending.
-  const PALETTE_COMMANDS: { command: string; hint: string; mode: 'send' | 'insert' }[] = [
-    { command: '/usage', hint: 'Token usage & cost for this session', mode: 'send' },
-    { command: '/status', hint: 'Session status', mode: 'send' },
-    { command: '/compress', hint: 'Summarise & compress the context', mode: 'send' },
-    { command: '/goal', hint: 'Set a goal for the agent to pursue', mode: 'insert' },
-  ];
-  let paletteIndex = $state(0);
-  let paletteDismissed = $state(false);
-  const paletteMatches = $derived.by(() => {
-    if (!hermesEnabled || !conversationId) return [];
-    const v = input;
-    // Only while typing the command token itself — a space means we've moved on
-    // to arguments, so the palette gets out of the way.
-    if (!v.startsWith('/') || /\s/.test(v)) return [];
-    const q = v.slice(1).toLowerCase();
-    return PALETTE_COMMANDS.filter((c) => c.command.slice(1).toLowerCase().startsWith(q));
-  });
-  const paletteOpen = $derived(paletteMatches.length > 0 && !paletteDismissed);
+  // ── Model switcher ────────────────────────────────────────────────────────
 
   function onComposerInput() {
-    // Typing re-opens a dismissed palette and resets the highlight so a stale
+    // Typing re-opens a dismissed picker and resets the highlight so a stale
     // index can never point past the freshly-filtered list.
-    paletteDismissed = false;
-    paletteIndex = 0;
     mentionDismissed = false;
     mentionIndex = 0;
     // Editing a recalled message makes it the live draft: stop treating Up/Down
@@ -1649,22 +1667,10 @@
     });
   }
 
-  function selectPaletteCommand(cmd: { command: string; mode: 'send' | 'insert' }) {
-    paletteDismissed = true;
-    if (cmd.mode === 'send') {
-      input = '';
-      resetHistoryCycle();
-      void silentSend(cmd.command);
-    } else {
-      input = cmd.command + ' ';
-      tick().then(() => textareaEl?.focus());
-    }
-  }
-
   // "@" mention typeahead — @files searches /drive file content, @research
   // searches the materials (facts) of your deep-dive research sessions. Each
   // routes the turn to its domain skill and answers with citations. Triggers on
-  // an @-token being typed at the end of the input, mirroring the slash palette.
+  // an @-token being typed at the end of the input.
   const MENTION_OPTIONS: { token: string; hint: string }[] = [
     { token: '@files', hint: 'Search your /drive files by content — text, images, audio' },
     { token: '@research', hint: 'Search your deep-dive research materials by meaning' },
@@ -1689,9 +1695,9 @@
   }
 
   // ── Composer chips ────────────────────────────────────────────────────────
-  // The `/ prompt` and `⌥ workflow` chips are affordances for the typeahead
-  // that already exists: they seed the trigger character and focus the input,
-  // so the same palette opens whether you click or type.
+  // The `⌥ workflow` chip is an affordance for the typeahead that already
+  // exists: it seeds the trigger character and focuses the input, so the same
+  // picker opens whether you click or type.
   // The full prompt hint needs two lines at the phone's 16px input font (16px
   // is required — anything smaller makes iOS zoom the viewport on focus), and a
   // 48px field clips the second. Phones get the short form.
@@ -1704,14 +1710,9 @@
     return () => mq.removeEventListener('change', sync);
   });
   const composerPlaceholder = $derived(
-    isPhone ? 'Ask…' : 'Ask, or type / for prompts, ⌥ to fire a workflow…',
+    isPhone ? 'Ask…' : 'Ask, or type ⌥ to fire a workflow…',
   );
 
-  function insertSlash() {
-    paletteDismissed = false;
-    input = '/';
-    tick().then(() => textareaEl?.focus());
-  }
   function insertWorkflowMention() {
     mentionDismissed = false;
     input = input.length === 0 || input.endsWith(' ') ? `${input}@` : `${input} @`;
@@ -1778,8 +1779,8 @@
   // file_search hits render as clickable "sources" chips → open the file viewer at
   // the cited passage. Refs are attached to the assistant message server-side
   // (msg.fileRefs), populated live from the `done` event and on reload from
-  // persisted metadata (tool steps aren't persisted on the Hermes branch, so
-  // scraping them client-side was unreliable).
+  // persisted metadata (tool steps are not always persisted, so scraping them
+  // client-side was unreliable).
   type FileSearchRef = {
     fileId: string; source: string; modality: string; score: number;
     chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
@@ -1817,26 +1818,71 @@
     researchModal = ref;
   }
 
-  // Skill picker — pins a jkai domain skill for the conversation (general chat),
-  // sent as `pinnedSkill` on each turn. 'Auto' (null) leaves jkai-general to
-  // route. Switchable any time; sticky until changed. Server + adapter both
-  // allowlist the value, so an off-list name can't load an arbitrary skill.
-  let pinnedSkill = $state<string | null>(null);
-  let skillMenuOpen = $state(false);
-  const SKILL_OPTIONS: { value: string | null; label: string }[] = [
-    { value: null, label: 'Auto' },
-    { value: 'jkai-blog', label: 'Blog' },
-    { value: 'jkai-gmail', label: 'Email' },
-    { value: 'jkai-health', label: 'Health' },
-    { value: 'jkai-research', label: 'Research' },
-    { value: 'jkai-scheduled', label: 'Scheduled' },
-    { value: 'jkai-scraper', label: 'Scraper' },
-    { value: 'jkai-home-assistant', label: 'Home' },
-    { value: 'jkai-files', label: 'Files' },
-    { value: 'jkai-utility', label: 'Utility' },
-    { value: 'jkai-node-builder', label: 'Node Builder' },
-  ];
-  const pinnedSkillLabel = $derived(SKILL_OPTIONS.find((o) => o.value === pinnedSkill)?.label ?? 'Auto');
+  // ── Composer chip menus ───────────────────────────────────────────────────
+  // Both chip dropdowns are `position: fixed` and positioned from JS, which
+  // looks like overkill until you open one on a phone.
+  //
+  // Below 800px `.chip-row` becomes `flex-wrap: nowrap; overflow-x: auto` so
+  // the chips scroll sideways instead of wrapping. That makes it a SCROLL
+  // CONTAINER, and a scroll container clips on BOTH axes — CSS computes
+  // `overflow-y` to `auto` the moment `overflow-x` is not `visible`, so there
+  // is no "scroll horizontally, overflow vertically" to ask for. An absolutely
+  // positioned menu sits entirely above (or below) the row's content box and
+  // was clipped away to nothing: the element was in the DOM, had a real
+  // bounding box, and painted zero pixels. On desktop the row wraps instead of
+  // scrolling, so the same markup worked — which is why this only ever showed
+  // up on a phone.
+  //
+  // `position: fixed` escapes the clip because its containing block is the
+  // viewport. That holds only while no ancestor establishes a containing block
+  // of its own — a `transform`, `filter`, `perspective`, `contain` or
+  // `will-change` on any parent would silently bring the clipping back. There
+  // are none today (checked across the composer, pane and shell); if a slide
+  // animation ever lands on `.pane`, this is the code that breaks.
+  interface MenuPos {
+    left: number;
+    /** Distance from the viewport bottom to the trigger's top edge, so the menu
+     *  grows upward from the chip without anyone needing to know its height. */
+    bottom: number;
+  }
+  /** Matches `.model-menu { min-width: 12rem }`. Only used to keep the menu
+   *  inside the viewport, so an approximation is fine. */
+  const MENU_WIDTH = 192;
+  const MENU_GAP = 6;
+
+  function anchorMenu(trigger: EventTarget | null): MenuPos {
+    const rect = (trigger as HTMLElement).getBoundingClientRect();
+    return {
+      // Prefer left-aligned with the chip; slide it back inside the viewport
+      // rather than off the right edge when the chip is scrolled far over.
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8)),
+      bottom: window.innerHeight - rect.top + MENU_GAP,
+    };
+  }
+
+  let thinkingMenuPos = $state<MenuPos>({ left: 0, bottom: 0 });
+
+  /**
+   * A fixed menu does not travel with its trigger, so a rotate — or a phone
+   * keyboard opening — leaves it pointing at nothing. Close instead.
+   *
+   * Resize ONLY, deliberately. The obvious instinct is to close on scroll too,
+   * and it is wrong twice over: the backdrop covers the viewport while a menu
+   * is open, so the user cannot scroll the chip row underneath it anyway, and
+   * the scrolls that DO still fire are programmatic — the transcript following
+   * its tail as a reply streams in. Closing the menu because a background
+   * message arrived is exactly the "it won't stay open" complaint this whole
+   * change exists to fix. The composer is pinned to the bottom regardless of
+   * where the transcript is scrolled, so the anchor stays valid.
+   */
+  $effect(() => {
+    if (!thinkingMenuOpen) return;
+    const close = () => {
+      thinkingMenuOpen = false;
+    };
+    window.addEventListener('resize', close);
+    return () => window.removeEventListener('resize', close);
+  });
 
   // Model switcher — switchable only on a fresh conversation (no messages yet).
   // The conversation's model locks after the first message (the PATCH returns
@@ -1911,6 +1957,47 @@
   const modelIsDefault = $derived(currentModel.modelId === siteDefaultModelId);
   const modelTriggerLabel = $derived(shortModelLabel(currentModel.modelId));
 
+  // ── Thinking level ────────────────────────────────────────────────────────
+  // How hard the model is told to think on this thread. Unlike the model it is
+  // NOT locked after the first message — the answer that came back thin is the
+  // moment you want to turn it up — and every change is also remembered as the
+  // level the NEXT new thread opens on, so "the default" is simply the last
+  // thing chosen rather than a second setting to keep in step.
+  //
+  // Local state seeded once from the loaded row, not a $derived: the PATCH is
+  // fire-and-forget and the parent never re-fetches the pane, so the chip has
+  // to own what it shows. One pane per thread, mounted with the thread.
+  // `untrack` because capturing the initial value is exactly the intent here,
+  // and the compiler cannot tell that from a mistake — it warns
+  // `state_referenced_locally` on a bare prop read in this position, and that
+  // warning is worth keeping meaningful elsewhere in this file.
+  let thinkingLevel = $state<ThinkingLevel | null>(
+    untrack(() => (isThinkingLevel(conversation?.thinkingLevel) ? conversation.thinkingLevel : null)),
+  );
+  let thinkingMenuOpen = $state(false);
+  const thinkingOptions = $derived(thinkingLevelsFor(coerceModelContext(currentModel).provider));
+  const thinkingLabel = $derived(thinkingLevel ?? 'auto');
+
+  async function setThinkingLevel(level: ThinkingLevel | null) {
+    thinkingMenuOpen = false;
+    if (!conversationId || level === thinkingLevel) return;
+    const previous = thinkingLevel;
+    // Optimistic: the chip is a preference, and making the user wait on a round
+    // trip to see their own click is worse than reverting on the rare failure.
+    thinkingLevel = level;
+    try {
+      const res = await fetch(`/api/jkai/conversations/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thinkingLevel: level }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      thinkingLevel = previous;
+      showToast('Could not change the thinking level.');
+    }
+  }
+
   // ── Query-adaptive routing ────────────────────────────────────────────────
   // On the first message of a fresh conversation the server classifies the query
   // and returns the model chosen for that profile; we apply it via switchModel
@@ -1921,16 +2008,15 @@
   let routingVote = $state<'up' | 'down' | null>(null);
   const assistantReplyCount = $derived(messages.filter((m) => m.role === 'assistant' && !m.isProgress).length);
   const showRoutingFeedback = $derived(
-    hermesEnabled && !!routedInfo && routingVote === null && !loading && assistantReplyCount === 1,
+    !!routedInfo && routingVote === null && !loading && assistantReplyCount === 1,
   );
 
   async function applyRouting(text: string, isFirstMessage: boolean): Promise<void> {
-    // Only route the FIRST message of a conversation (model locks after it) and
-    // only on the Hermes engine (the switchModel /model path needs it).
+    // Only route the FIRST message of a conversation — the model locks after it.
     // `isFirstMessage` is snapshotted by the caller BEFORE it appends the
     // optimistic user bubble — reading `messages.length` here now would see that
     // bubble and silently disable routing for every conversation.
-    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
+    if (!conversationId || !isFirstMessage) return;
     // A hand-picked model wins over the router — overriding it would make the
     // picker feel broken.
     if (modelPickedByUser) return;
@@ -2003,7 +2089,9 @@
 
     // 1) Persist for cost accuracy + lock the conversation's model. The PATCH
     //    409s if a message already exists — the source of truth for "can we
-    //    still switch".
+    //    still switch". It also answers whether the NEW model takes a thinking
+    //    level, which the parent needs to re-gate the chip.
+    let supportsThinking: boolean | undefined;
     try {
       const res = await fetch(`/api/jkai/conversations/${conversationId}`, {
         method: 'PATCH',
@@ -2014,74 +2102,16 @@
         showToast(res.status === 409 ? 'Model locks after the first message.' : 'Could not switch model.');
         return;
       }
+      const row = await res.json().catch(() => null);
+      supportsThinking = row?.modelSupportsThinking === true;
     } catch {
       showToast('Could not switch model.');
       return;
     }
-    onmodelchange?.({ provider, modelId });
+    onmodelchange?.({ provider, modelId }, supportsThinking);
 
-    // 2) Tell Hermes for this chat session via the gateway /model command.
-    //    `loading` keeps the composer disabled until the switch turn settles so
-    //    the user's first real message can't race ahead of it.
-    if (!force) loading = true;
-    try {
-      await tellHermesModel(provider, modelId);
-    } finally {
-      if (!force) loading = false;
-    }
-  }
-
-  /** The conversation whose model we have already pushed to Hermes. */
-  let hermesModelAssertedFor: string | null = null;
-
-  /** Push a model choice to Hermes for this chat session via the gateway
-   *  `/model` command. Sent silently (no user bubble) and its confirmation reply
-   *  is drained without rendering.
-   *
-   *  Hermes keys the switch to the chat session and holds it in memory, so it
-   *  has to be pushed once per conversation — see `ensureHermesModel`. */
-  async function tellHermesModel(provider: ModelContext['provider'], modelId: string): Promise<void> {
-    try {
-      const res = await fetch('/api/workflows/orchestrator/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: hermesModelCommand(provider, modelId), conversationId, silent: true }),
-      });
-      const data = await res.json().catch(() => null);
-      const jobId = data?.jobId;
-      if (jobId) {
-        const stream = streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} });
-        await Promise.race([
-          stream.done.catch(() => {}),
-          new Promise((r) => setTimeout(r, 15000)),
-        ]);
-      }
-      hermesModelAssertedFor = conversationId ?? null;
-    } catch {
-      // The choice is already persisted site-side; if the /model turn failed
-      // Hermes keeps its own default and pricing may be off until the next turn.
-    }
-  }
-
-  /** Make sure Hermes is running the model this conversation says it is.
-   *
-   *  A conversation only ever told Hermes its model when the user *changed* the
-   *  picker. One that took the chat default silently never told it anything, so
-   *  Hermes fell back to `model.default` in its own config.yaml — the UI, the
-   *  price snapshot and the cost accounting all said one model while a different
-   *  one answered (seen 2026-08-09: a conversation stamped codex/gpt-5.6-terra
-   *  was served by deepseek-v4-flash on OpenRouter).
-   *
-   *  Cheap because it runs once per conversation: the model locks after the
-   *  first message, and `switchModel` already covers the hand-picked path. */
-  async function ensureHermesModel(isFirstMessage: boolean): Promise<void> {
-    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
-    if (hermesModelAssertedFor === conversationId) return;
-    // The id decides the provider, never the stored field: `currentModel` falls
-    // back to 'openrouter' whenever the conversation row hasn't loaded, which
-    // would hand Hermes a codex/ id under the wrong provider.
-    const ctx = coerceModelContext(currentModel);
-    await tellHermesModel(ctx.provider, ctx.modelId);
+    // The PATCH above IS the switch: the chat loop re-reads the model off the
+    // conversation row on every turn, so there is nothing further to tell it.
   }
 
   /**
@@ -2127,7 +2157,13 @@
     if (queuedText === undefined) input = '';
     resetHistoryCycle();
     loading = true;
-    heartbeat = null;
+    // Acknowledge the submit on the spot. The server's first heartbeat is 5s
+    // away and the typing dots went in 2026-05-28, so until now pressing enter
+    // emptied the composer and then changed nothing on screen for five seconds —
+    // which reads as a dropped send. This is the existing heartbeat mechanism
+    // with a client-only phase, not a second indicator: the first real frame
+    // (heartbeat, token, thinking, tool_start) overwrites or clears it.
+    heartbeat = { summary: '', phase: 'received', elapsedSec: 0, lastBeatAt: Date.now() };
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
@@ -2169,6 +2205,9 @@
       }
       messages = messages.map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
       loading = false;
+      // Nothing is coming — there is no job to stream from. Drop the synthetic
+      // ack so it can't outlive the turn it was acknowledging.
+      heartbeat = null;
       scrollToBottom();
       return;
     }
@@ -2190,36 +2229,18 @@
     }];
     scrollToBottom();
 
-    // Query-adaptive model pick. Deliberately AFTER the bubble and the typing
-    // indicator are on screen: it costs a round trip, and when it switches model
-    // it costs an entire silent /model turn on top (up to 15s). Running it first
-    // meant submit left the composer full and the screen unchanged for all of
-    // that — the send read as dropped. First message of a conversation only.
+    // Query-adaptive model pick. One ~70ms round trip; the switch is a PATCH on
+    // the conversation row, which the next turn reads. First message only.
     await applyRouting(text, isFirstMessage);
-
-    // Routing may have switched the model (and pushed it to Hermes already); if
-    // it didn't, this conversation still has to tell Hermes what it is running.
-    await ensureHermesModel(isFirstMessage);
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
     meterBegin();
 
-    // An "@files" mention routes this turn to the Files skill so the orchestrator
-    // reaches for the file_search tool (semantic search over /drive content); an
-    // "@research" mention routes to the Research skill for research_search
-    // (semantic search over deep-dive research materials). An explicit pinned
-    // skill wins; if both mentions appear, @files takes precedence (a turn pins
-    // one skill).
-    const mentionsFiles = /(^|\s)@files\b/i.test(text);
-    const mentionsResearch = /(^|\s)@research\b/i.test(text);
     // Entities named with @entity are sent as ids so the server can attach the
     // subgraph; clear them once the turn is away.
     const entityIds = pinnedEntityIds.slice();
     pinnedEntityIds = [];
-    const effectivePinnedSkill =
-      pinnedSkill ?? (mentionsFiles ? 'jkai-files' : mentionsResearch ? 'jkai-research' : undefined);
-
     try {
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -2229,7 +2250,6 @@
           conversationId,
           attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           useIntelContext,
-          pinnedSkill: effectivePinnedSkill,
           intelEntityIds: entityIds.length ? entityIds : undefined,
         }),
       });
@@ -2325,6 +2345,10 @@
 
   function phaseHumanLabel(phase: string): string {
     switch (phase) {
+      // Client-only phase, set the instant the user hits send so the thread
+      // says something before the first server frame arrives. No server phase
+      // is ever 'received'.
+      case 'received': return 'Received — working…';
       // Keep in sync with $lib/workflows/chat/job-store.ts phaseLabel() —
       // the server-side label is also "Connecting…" for the default
       // 'starting' phase so we match here for any client-only renders.
@@ -2359,29 +2383,6 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (paletteOpen) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        paletteIndex = (paletteIndex + 1) % paletteMatches.length;
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        paletteIndex = (paletteIndex - 1 + paletteMatches.length) % paletteMatches.length;
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        const cmd = paletteMatches[paletteIndex];
-        if (cmd) selectPaletteCommand(cmd);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        paletteDismissed = true;
-        return;
-      }
-    }
     // The entity picker takes keys first — it only opens after "@entity ", so it
     // can never be live at the same time as the token picker.
     if (entityPickerOpen) {
@@ -2605,18 +2606,8 @@
             <WorkerTray agents={Object.values(subAgents)} onToggleStep={toggleSubAgentStep} />
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
+              {@const split = splitToolSteps(msg.toolSteps)}
               <div class="progress-bubble mb-3">
-                <div class="progress-bubble-hdr">
-                  <span class="working-dot" aria-hidden="true"></span>
-                  <span class="sr-label-tight working-label">Working</span>
-                  <button
-                    type="button"
-                    onclick={cancelJob}
-                    class="nm-btn-ghost cancel-btn"
-                  >
-                    Cancel
-                  </button>
-                </div>
                 {#if pendingPlan}
                   <PlanCard
                     planId={pendingPlan.planId}
@@ -2669,102 +2660,145 @@
                     />
                   </div>
                 {/if}
-                {@render heartbeatLine()}
+                <!-- No heartbeat phase line here: "Thinking" / "Drafting reply"
+                     said nothing the toolchain bar below does not already say,
+                     and it was the second of four stacked status rows. It still
+                     renders in the no-tools branch, where it is all there is. -->
                 {#if connectionWarning}
                   <div class="conn-warning" role="status" aria-live="polite">
                     <span class="hb-dot warn"></span>
                     <span>{connectionWarning}</span>
                   </div>
                 {/if}
-                {#if thinkingByBubble.has(msg.id)}
-                  {@const t = thinkingByBubble.get(msg.id)!}
-                  <div class="reasoning-panel">
-                    <button
-                      type="button"
-                      class="reasoning-toggle"
-                      onclick={() => toggleThinking(msg.id)}
-                      aria-expanded={t.expanded ? 'true' : 'false'}
-                    >
-                      <span class="reasoning-label">Reasoning</span>
-                      {#if !t.expanded}
-                        <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
+                {#if split.notes.length > 0}
+                  <!-- Status updates render inline as plain prose. Deliberately
+                       OUTSIDE the toolchain bar: this is the model talking to the
+                       user mid-task, not a tool call, and collapsing it would
+                       hide the one thing on the bubble written to be read. -->
+                  <ul class="step-cards">
+                    {#each split.notes as note (note.index)}
+                      <li class="step-status-update-wrap">
+                        <div class="status-update-inline">
+                          <div class="sr-label-tight status-update-label">Status update</div>
+                          {(note.step.result as { message?: string })?.message ?? ''}
+                        </div>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+                {#if split.chain.length > 0}
+                  {@const open = toolchainOpen[msg.id] === true}
+                  {@const running = split.chain.filter((e) => e.step.status === 'running').length}
+                  {@const failed = split.chain.filter((e) => e.step.status === 'error').length}
+                  {@const current = currentChainStep(split.chain)}
+                  {@const slowMs = current?.status === 'running' && current.startedAt ? hbNow - current.startedAt : 0}
+                  <!-- One bar for the whole chain, collapsed by default. The
+                       per-call cards are still here, one click away — they were
+                       just never worth pushing the answer off screen for. -->
+                  <div class="toolchain" data-state={failed > 0 ? 'error' : running > 0 ? 'running' : 'done'}>
+                    <div class="tc-bar">
+                      <button
+                        type="button"
+                        class="tc-toggle"
+                        onclick={() => toggleToolchain(msg.id)}
+                        aria-expanded={open ? 'true' : 'false'}
+                      >
+                        <span class="tc-chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
+                        <span class="tc-status" data-status={failed > 0 ? 'error' : running > 0 ? 'running' : 'done'}>
+                          {#if running > 0}
+                            <span class="sc-dot"></span>
+                          {:else if failed > 0}
+                            ✗
+                          {:else}
+                            ✓
+                          {/if}
+                        </span>
+                        <span class="tc-title">toolchain</span>
+                        <span class="tc-count">{split.chain.length}</span>
+                        {#if !open && current}
+                          {@const cTool = resolveDisplayTool(current.tool, current.args).tool}
+                          {@const cCat = categorizeTool(cTool)}
+                          <span class="step-cat" data-cat={cCat}>{cCat}</span>
+                          <span class="tc-latest">
+                            {current.summary || friendlyToolName(cTool)}{current.status === 'running' && !current.summary ? ' …' : ''}
+                          </span>
+                        {/if}
+                      </button>
+                      {#if slowMs >= TOOL_STEP_SLOW_MS}
+                        <!-- A slow call earns its clock: a 16-minute tool used to
+                             show a pulsing dot and nothing else. -->
+                        <span class="step-clock" data-slow="true">{formatStepElapsed(slowMs)}</span>
                       {/if}
-                      <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
-                    </button>
-                    {#if t.expanded}
-                      <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
+                      <!-- Cancel lives on the bar now. It used to sit in the
+                           "Working" header above, and that header is gone — so
+                           without this the only way out of a running turn would
+                           be to wait two minutes for the slow-step escape hatch. -->
+                      <button type="button" class="step-cancel tc-cancel" onclick={cancelJob}>Cancel</button>
+                    </div>
+                    {#if open}
+                      <ul class="step-cards">
+                        {#each split.chain as entry (entry.index)}
+                          {@const step = entry.step}
+                          {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
+                          {@const stepCat = categorizeTool(dTool)}
+                          <li class="step-card" data-status={step.status}>
+                            <header class="step-card-hdr">
+                              <span class="step-status" data-status={step.status} aria-label={step.status}>
+                                {#if step.status === 'running'}
+                                  <span class="sc-dot"></span>
+                                {:else if step.status === 'error'}
+                                  ✗
+                                {:else}
+                                  ✓
+                                {/if}
+                              </span>
+                              <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
+                              <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
+                              {#if step.status === 'running' && step.startedAt}
+                                {@const stepMs = hbNow - step.startedAt}
+                                <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
+                                  {formatStepElapsed(stepMs)}
+                                </span>
+                                {#if stepMs >= TOOL_STEP_SLOW_MS}
+                                  <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
+                                {/if}
+                              {/if}
+                              {#if step.result !== undefined || Object.keys(step.args).length > 0}
+                                <button
+                                  type="button"
+                                  class="step-toggle"
+                                  onclick={() => toggleStepExpanded(entry.index)}
+                                  aria-expanded={step.expanded ? 'true' : 'false'}
+                                >
+                                  {step.expanded ? 'hide' : 'details'}
+                                </button>
+                              {/if}
+                            </header>
+                            {#if step.children?.length}
+                              <DelegateChildren children={step.children} />
+                            {/if}
+                            {#if step.expanded}
+                              <div class="step-card-body">
+                                {#if Object.keys(step.args).length > 0}
+                                  <details open>
+                                    <summary class="step-body-label">args</summary>
+                                    <JsonBlock data={step.args} />
+                                  </details>
+                                {/if}
+                                {#if step.result !== undefined}
+                                  <details open>
+                                    <summary class="step-body-label">result</summary>
+                                    <JsonBlock data={step.result} />
+                                  </details>
+                                {/if}
+                              </div>
+                            {/if}
+                          </li>
+                        {/each}
+                      </ul>
                     {/if}
                   </div>
                 {/if}
-                <ul class="step-cards">
-                  {#each msg.toolSteps as step, stepIndex}
-                    {#if step.tool === 'status_update'}
-                      <li class="step-status-update-wrap">
-                        <!-- Status updates render inline as plain prose -->
-                        <div class="status-update-inline">
-                          <div class="sr-label-tight status-update-label">Status update</div>
-                          {(step.result as { message?: string })?.message ?? ''}
-                        </div>
-                      </li>
-                    {:else}
-                      {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
-                      {@const stepCat = categorizeTool(dTool)}
-                      <li class="step-card" data-status={step.status}>
-                        <header class="step-card-hdr">
-                          <span class="step-status" data-status={step.status} aria-label={step.status}>
-                            {#if step.status === 'running'}
-                              <span class="sc-dot"></span>
-                            {:else if step.status === 'error'}
-                              ✗
-                            {:else}
-                              ✓
-                            {/if}
-                          </span>
-                          <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
-                          <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
-                          {#if step.status === 'running' && step.startedAt}
-                            {@const stepMs = hbNow - step.startedAt}
-                            <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
-                              {formatStepElapsed(stepMs)}
-                            </span>
-                            {#if stepMs >= TOOL_STEP_SLOW_MS}
-                              <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
-                            {/if}
-                          {/if}
-                          {#if step.result !== undefined || Object.keys(step.args).length > 0}
-                            <button
-                              type="button"
-                              class="step-toggle"
-                              onclick={() => toggleStepExpanded(stepIndex)}
-                              aria-expanded={step.expanded ? 'true' : 'false'}
-                            >
-                              {step.expanded ? 'hide' : 'details'}
-                            </button>
-                          {/if}
-                        </header>
-                        {#if step.children?.length}
-                          <DelegateChildren children={step.children} />
-                        {/if}
-                        {#if step.expanded}
-                          <div class="step-card-body">
-                            {#if Object.keys(step.args).length > 0}
-                              <details open>
-                                <summary class="step-body-label">args</summary>
-                                <JsonBlock data={step.args} />
-                              </details>
-                            {/if}
-                            {#if step.result !== undefined}
-                              <details open>
-                                <summary class="step-body-label">result</summary>
-                                <JsonBlock data={step.result} />
-                              </details>
-                            {/if}
-                          </div>
-                        {/if}
-                      </li>
-                    {/if}
-                  {/each}
-                </ul>
               </div>
             {:else}
               <!-- Subtle typing indicator — no tools yet -->
@@ -2795,32 +2829,14 @@
                 />
               {/if}
               <div class="hb-wrap">{@render heartbeatLine()}</div>
-              {#if thinkingByBubble.has(msg.id)}
-                {@const t = thinkingByBubble.get(msg.id)!}
-                <div class="reasoning-panel mb-3">
-                  <button
-                    type="button"
-                    class="reasoning-toggle"
-                    onclick={() => toggleThinking(msg.id)}
-                    aria-expanded={t.expanded ? 'true' : 'false'}
-                  >
-                    <span class="reasoning-label">Reasoning</span>
-                    {#if !t.expanded}
-                      <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
-                    {/if}
-                    <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
-                  </button>
-                  {#if t.expanded}
-                    <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
-                  {/if}
-                </div>
-              {/if}
-              <!-- Typing-dots block removed (2026-05-28): the heartbeat-line +
-                   reasoning panel + tool-step card collectively cover every
-                   in-flight state. The dots carried no information beyond
-                   "the bubble is in-flight" — which is already implied by
-                   the bubble's presence — so they were pure visual noise
-                   stacking on top of the more informative indicators. -->
+              <!-- No Reasoning panel while in flight: the finalised bubble below
+                   re-renders it from the same `thinkingByBubble` entry, so waiting
+                   costs nothing and the in-flight state stays one line. -->
+              <!-- Typing-dots block removed (2026-05-28): the heartbeat line
+                   above and the toolchain bar cover every in-flight state
+                   between them. The dots carried no information beyond "the
+                   bubble is in-flight" — which the bubble's presence already
+                   says — so they were noise stacked on the informative rows. -->
             {/if}
           {:else if msg.source === 'status_update'}
             <!-- Mid-task working note — stylistically distinct from a real reply.
@@ -2841,9 +2857,9 @@
                 <PromoteToolBanner messageId={msg.id} {marker} />
               {/each}
               {#if toolSteps.length === 0 && msg.traceId}
-                <!-- Reloaded history. `metadata.toolSteps` is never written on
-                     the Hermes branch, so there are no step cards to show — but
-                     the chain itself was recorded, and the trace page has it. -->
+                <!-- Reloaded history with no persisted `metadata.toolSteps`,
+                     so there are no step cards to show — but the chain itself
+                     was recorded, and the trace page has it. -->
                 <a
                   class="trace-standalone"
                   href={`/jkai/trace/${msg.traceId}`}
@@ -3059,25 +3075,6 @@
             {/each}
           </div>
         {/if}
-        {#if paletteOpen}
-          <div class="cmd-palette" role="listbox" aria-label="Slash commands">
-            {#each paletteMatches as cmd, i (cmd.command)}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <button
-                type="button"
-                role="option"
-                aria-selected={i === paletteIndex}
-                class="cmd-row"
-                class:active={i === paletteIndex}
-                onmousedown={(e) => { e.preventDefault(); selectPaletteCommand(cmd); }}
-                onmouseenter={() => (paletteIndex = i)}
-              >
-                <span class="cmd-name">{cmd.command}</span>
-                <span class="cmd-hint">{cmd.hint}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
         {#if entityPickerOpen}
           <div class="cmd-palette" role="listbox" aria-label="Entities">
             {#each entityMatches as e, i (e.id)}
@@ -3122,43 +3119,17 @@
         {/if}
         <ComposerAttachmentTray items={pendingAttachments} onRemove={removeAttachment} />
 
-        <!-- Chip row: model, prompt, workflow, attach, voice — then a live
-             per-turn cost estimate pushed to the right. -->
+        <!-- Chip row: model, workflow, attach, voice — then a live per-turn
+             cost estimate pushed to the right. -->
         <div class="chip-row">
-          {#if hermesEnabled && conversationId}
-            <div class="model-switcher skill-switcher">
-              <button
-                type="button"
-                class="model-btn"
-                onclick={() => (skillMenuOpen = !skillMenuOpen)}
-                disabled={loading}
-                title="Pin a domain skill for this chat (or Auto-route)"
-              >
-                <span class="skill-glyph" aria-hidden="true">◈</span>
-                <span class="model-name">{pinnedSkillLabel}</span>
-                <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
-              </button>
-              {#if skillMenuOpen}
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <div class="model-backdrop" onclick={() => (skillMenuOpen = false)}></div>
-                <div class="model-menu" role="listbox" aria-label="Pin a skill">
-                  {#each SKILL_OPTIONS as opt (opt.label)}
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={opt.value === pinnedSkill}
-                      class="model-opt"
-                      class:active={opt.value === pinnedSkill}
-                      onclick={() => { pinnedSkill = opt.value; skillMenuOpen = false; }}
-                    >
-                      <span class="model-opt-name">{opt.label}</span>
-                      {#if opt.value === null}<span class="model-opt-provider">auto-route</span>{/if}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
+          <!-- The model switcher is NOT gated on the engine. The loop honours
+               the per-conversation pin — it coerces `conv.modelProvider` /
+               `conv.modelId` on every turn — so the choice worked the whole
+               time; only the control to make it was hidden, which is why every
+               thread since the cutover has been on the default. Un-gated only
+               after the `/model` push above was gated, or each switch would
+               have posted a visible bubble and billed a turn. -->
+          {#if conversationId}
             <div class="model-switcher">
               {#if messages.length === 0}
                 <button
@@ -3190,10 +3161,65 @@
                 </span>
               {/if}
             </div>
+            <!-- Thinking level. Rendered for the whole life of the thread, not
+                 just before the first message the way the model picker is: the
+                 model is frozen because the cost ledger is pinned to it, and a
+                 thinking level is pinned to nothing. Hidden outright when the
+                 model takes no reasoning instruction. -->
+            {#if modelSupportsThinking}
+              <div class="model-switcher">
+                <button
+                  type="button"
+                  class="model-btn"
+                  onclick={(e) => {
+                    if (!thinkingMenuOpen) thinkingMenuPos = anchorMenu(e.currentTarget);
+                    thinkingMenuOpen = !thinkingMenuOpen;
+                  }}
+                  disabled={loading}
+                  title="How hard this model thinks. Changeable at any time, and remembered as the level your next thread opens on."
+                >
+                  <span class="skill-glyph" aria-hidden="true">◐</span>
+                  <span class="model-name">{thinkingLabel}</span>
+                  <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                {#if thinkingMenuOpen}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <div class="model-backdrop" onclick={() => (thinkingMenuOpen = false)}></div>
+                  <div
+                    class="model-menu"
+                    role="listbox"
+                    aria-label="Thinking level"
+                    style="left: {thinkingMenuPos.left}px; bottom: {thinkingMenuPos.bottom}px"
+                  >
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={thinkingLevel === null}
+                      class="model-opt"
+                      class:active={thinkingLevel === null}
+                      onclick={() => setThinkingLevel(null)}
+                    >
+                      <span class="model-opt-name">auto</span>
+                      <span class="model-opt-provider">provider default</span>
+                    </button>
+                    {#each thinkingOptions as lv (lv)}
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={thinkingLevel === lv}
+                        class="model-opt"
+                        class:active={thinkingLevel === lv}
+                        onclick={() => setThinkingLevel(lv)}
+                      >
+                        <span class="model-opt-name">{lv}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           {/if}
-          <button type="button" class="composer-chip" onclick={insertSlash} title="Insert a saved prompt">
-            <span class="chip-glyph" aria-hidden="true">/</span><span class="chip-word">prompt</span>
-          </button>
           <button type="button" class="composer-chip" onclick={insertWorkflowMention} title="Fire a workflow">
             <span class="chip-glyph" aria-hidden="true">⌥</span><span class="chip-word">workflow</span>
           </button>
@@ -3730,16 +3756,22 @@
   .route-fb-btn:hover { border-color: var(--accent); }
   .route-fb--done { color: var(--success); }
   .model-backdrop { position: fixed; inset: 0; z-index: 25; }
+  /* Fixed, not absolute, and both offsets come from `anchorMenu()` — see the
+     long note beside it in the script. Short version: below 800px `.chip-row`
+     is a scroll container, a scroll container clips on both axes, and an
+     absolutely positioned menu was clipped to nothing on every phone. Opening
+     UPWARD (the `bottom` offset) is deliberate too: the composer sits on the
+     bottom edge of the viewport, so a downward menu renders one and a half of
+     its five options. */
   .model-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 0.35rem;
+    position: fixed;
     min-width: 12rem;
+    /* A tall menu on a short phone must scroll rather than run off the top. */
+    max-height: min(60vh, 20rem);
+    overflow-y: auto;
     background: var(--surface-elevated);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
-    overflow: hidden;
     z-index: 26;
   }
   .model-opt {
@@ -3881,7 +3913,7 @@
   }
   .src-tag-glyph { font-size: var(--fs-label-xs); line-height: 1; }
 
-  /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
+  /* Reasoning panel — thinking deltas */
   .reasoning-panel {
     margin: 4px 0;
     padding: 0;
@@ -4121,6 +4153,85 @@
     flex-direction: column;
     gap: 6px;
   }
+
+  /* Collapsed toolchain bar — the streaming view's single line for the whole
+     chain. Same shell language as the worker tray: mono label, sunken band,
+     hairline border, a pulsing accent while something is running. */
+  .toolchain {
+    margin: 8px 10px 2px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    background: var(--surface-sunken);
+  }
+  .toolchain[data-state='running'] {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+  }
+  .toolchain[data-state='error'] {
+    border-color: color-mix(in srgb, var(--status-error) 55%, transparent);
+  }
+  .tc-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-right: 8px;
+  }
+  .tc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 4px 6px 8px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+  .tc-toggle:hover { color: var(--text-primary); }
+  .tc-chev { color: var(--text-ghost); width: 10px; flex-shrink: 0; }
+  .tc-status {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-ghost);
+  }
+  .tc-status[data-status='running'] { color: var(--accent); }
+  .tc-status[data-status='error']   { color: var(--status-error); }
+  .tc-status[data-status='done']    { color: var(--status-success); }
+  .tc-title {
+    flex-shrink: 0;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: var(--fs-label-xs);
+  }
+  .tc-count {
+    flex-shrink: 0;
+    font-size: var(--fs-label-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    padding: 1px 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+  }
+  .tc-latest {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: var(--fs-label-xs);
+  }
+  /* The expanded list keeps the step-card styling verbatim; it just sits inside
+     the bar's shell now instead of directly on the progress bubble. */
+  .toolchain .step-cards {
+    padding: 6px 8px 8px;
+    border-top: 1px solid var(--line-strong);
+  }
   .step-card {
     padding: 6px 10px;
     background: var(--surface-sunken);
@@ -4202,6 +4313,11 @@
   .step-clock[data-slow='true'] {
     color: var(--warn);
     font-weight: 600;
+  }
+  /* Cancel is the last thing on the toolchain bar, hard right, so the tool
+     summary keeps the width it needs. */
+  .tc-cancel {
+    margin-left: auto;
   }
   .step-cancel {
     flex-shrink: 0;
@@ -4337,30 +4453,6 @@
     background: var(--card-bg);
     border: 1px solid var(--accent);
     overflow: hidden;
-  }
-  .progress-bubble-hdr {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: var(--accent-tint-08);
-    border-bottom: 1px solid var(--line-strong);
-  }
-  .working-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
-    animation: hb-pulse 1.4s ease-in-out infinite;
-  }
-  .working-label {
-    color: var(--accent);
-    letter-spacing: 0.14em;
-  }
-  .cancel-btn {
-    margin-left: auto;
-    padding: 3px 10px;
-    font-size: var(--fs-label-xs);
   }
 
   /* Inline status-update block inside the step list */

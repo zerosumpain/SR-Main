@@ -1,10 +1,10 @@
 // montecarlo.ts — uncertainty propagation (Monte-Carlo over effect-size bands) and
 // one-at-a-time sensitivity (tornado) analysis. Self-contained.
 
-import type { LeverState, MonteCarloResult, SensitivityBar, YearResult } from './types';
-import { runSim } from './engine';
-import type { Band } from './params';
-import { LEVERS } from './levers';
+import type { LeverState, MonteCarloResult, SensitivityBar, YearResult } from '$lib/policy-engine/types';
+import { runSim } from '$lib/policy-engine/engine';
+import type { Band } from '$lib/policy-engine/params';
+import { LEVERS } from '$lib/policy-engine/levers';
 
 // deterministic RNG so a given scenario yields stable bands across re-renders
 // (exported for reuse by the triage model's uncertainty sampling)

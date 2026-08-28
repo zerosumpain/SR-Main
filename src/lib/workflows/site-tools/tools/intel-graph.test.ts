@@ -114,7 +114,7 @@ describe('intel-graph handlers against a live graph', () => {
 });
 
 describe('DEFAULT_SUBAGENT_TOOLS', () => {
-  // Tools a sub-agent gets from the Hermes MCP session rather than this
+  // Tools a sub-agent gets from its own MCP session rather than this
   // registry. They cannot be checked here, so they are named explicitly — which
   // is the point: anything NOT on this list must resolve locally, and
   // `intel_search` resolved in neither place.

@@ -13,18 +13,35 @@ const IMAGE_NAME = 'jkai-sandbox:latest';
 const SCRAPER_PROFILES_HOST = join(os.homedir(), '.openclaw', 'scraper-profiles');
 
 /**
- * Host-mode dispatch: when JKAI_BUILDS_HOSTMODE=1, this module runs all
- * `execInSandbox` / `writeFileInSandbox` calls directly on the host shell
- * instead of through `docker exec jkai-sandbox …`. Used on the VPS where
- * builds run as user johnk, no container, with the same workspace path
- * (`/home/jkai/workspace/<id>/` — created on the host with the right
- * ownership by deploy-builder.sh / deploy.sh).
+ * This module has TWO execution lanes. Pick deliberately — the difference is
+ * the whole security boundary.
  *
- * Scraper code paths (homeserv) leave HOST_MODE off so they keep talking
- * to the jkai-sandbox container, where Chromium + Playwright + the
- * residential-IP scraping environment lives.
+ * 1. BUILD LANE — `execInSandbox` / `writeFileInSandbox` / `execBuildCommand`
+ *    and everything below them. When JKAI_BUILDS_HOSTMODE=1 these run directly
+ *    on the host shell instead of `docker exec jkai-sandbox …`. That is
+ *    deliberate on the VPS, where builds run as user johnk against
+ *    `/home/jkai/workspace/<id>/` on the host filesystem (created with the
+ *    right ownership by deploy-builder.sh / deploy.sh), and where the build's
+ *    preview server must be reachable on loopback.
+ *
+ * 2. CONTAINED LANE — `execInContainer` / `writeFileInContainer` /
+ *    `ensureContainerRunning` / `getContainerStatus`. ALWAYS `docker exec`,
+ *    never the host shell, whatever JKAI_BUILDS_HOSTMODE says.
+ *
+ * Use the CONTAINED lane for anything running code this process did not
+ * author: the `code-execute` workflow node, the scraper runners, and any
+ * HTTP route that takes a command or a path from its caller.
+ *
+ * Why it matters: the production SvelteKit app is a systemd service running as
+ * `johnk`, who is in the `docker` and `sudo` groups. Host-lane shell from an
+ * untrusted caller therefore reaches the Docker socket, which is a trivial
+ * escalation to root on the production box. The build lane accepts that risk
+ * knowingly for agent-authored build code; nothing else should.
+ *
+ * `sandbox.contained-lane.test.ts` fails the build if an untrusted call site
+ * imports a build-lane primitive.
  */
-const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
+const BUILD_HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 
 export interface SandboxStatus {
   running: boolean;
@@ -41,8 +58,14 @@ export interface ExecResult {
 
 // --- Container Management ---
 
+/**
+ * BUILD LANE status. Under BUILD_HOST_MODE there is no container, so this
+ * reports a synthetic "running" — the host shell is always available.
+ * Untrusted callers must use `getContainerStatus()` instead, which reports
+ * the real container, or they will believe a dead sandbox is alive.
+ */
 export async function getSandboxStatus(): Promise<SandboxStatus> {
-  if (HOST_MODE) {
+  if (BUILD_HOST_MODE) {
     // No container — synthetic status so existing UI surfaces still render
     // something sensible. Uptime is the parent process uptime as a proxy.
     return {
@@ -52,6 +75,11 @@ export async function getSandboxStatus(): Promise<SandboxStatus> {
       uptime: formatUptime(process.uptime() * 1000),
     };
   }
+  return getContainerStatus();
+}
+
+/** CONTAINED LANE status — always the real jkai-sandbox container. */
+export async function getContainerStatus(): Promise<SandboxStatus> {
   try {
     const { stdout } = await execAsync(
       `docker inspect --format '{{.State.Running}}|{{.Id}}|{{.Config.Image}}|{{.State.StartedAt}}' ${CONTAINER_NAME} 2>/dev/null`,
@@ -68,12 +96,24 @@ export async function getSandboxStatus(): Promise<SandboxStatus> {
   }
 }
 
+/**
+ * BUILD LANE. Under BUILD_HOST_MODE this is a no-op — the host shell needs no
+ * starting. Untrusted callers must use `ensureContainerRunning()`.
+ */
 export async function ensureSandboxRunning(): Promise<void> {
   // Host mode: nothing to ensure — workspace is the host filesystem and the
   // shell is already available. Idempotent.
-  if (HOST_MODE) return;
+  if (BUILD_HOST_MODE) return;
+  return ensureContainerRunning();
+}
+
+/**
+ * CONTAINED LANE. Always brings up the real jkai-sandbox container, whatever
+ * BUILD_HOST_MODE says.
+ */
+export async function ensureContainerRunning(): Promise<void> {
   // Verify-then-fix: trust nothing, always re-inspect before every launch.
-  const status = await getSandboxStatus();
+  const status = await getContainerStatus();
   if (status.running) return;
 
   try {
@@ -97,7 +137,7 @@ export async function ensureSandboxRunning(): Promise<void> {
   // Post-condition check: make sure the container actually came up. A failed
   // `docker run` can succeed at the CLI level but leave the container stopped
   // (e.g. bad image, port conflict). Don't let callers proceed into a dead pipe.
-  const after = await getSandboxStatus();
+  const after = await getContainerStatus();
   if (!after.running) {
     throw new Error(
       `Sandbox container ${CONTAINER_NAME} failed to start after docker run`,
@@ -119,7 +159,7 @@ export async function getContainerIp(): Promise<string> {
   // Host mode: the build's preview server runs on the VPS host; reach it via
   // loopback. The /api/jkai/proxy/<id>/* route uses this to locate the build's
   // preview server.
-  if (HOST_MODE) return '127.0.0.1';
+  if (BUILD_HOST_MODE) return '127.0.0.1';
   if (cachedContainerIp) return cachedContainerIp;
   const { stdout } = await execAsync(
     `docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${CONTAINER_NAME}`,
@@ -140,7 +180,7 @@ export async function execInSandbox(
 ): Promise<ExecResult> {
   // Host mode: run directly on the host shell. The base-64 envelope still
   // applies — agent-supplied commands have arbitrary newlines / quotes.
-  if (HOST_MODE) {
+  if (BUILD_HOST_MODE) {
     try {
       const b64 = Buffer.from(command).toString('base64');
       const { stdout, stderr } = await execAsync(
@@ -194,6 +234,51 @@ export async function execInSandboxChecked(
   return result;
 }
 
+// --- Contained lane ---
+//
+// Always `docker exec jkai-sandbox`, never the host shell, whatever
+// JKAI_BUILDS_HOSTMODE says. Everything running code or paths supplied by a
+// caller — the `code-execute` node, the scraper runners, HTTP routes — belongs
+// here. See the lane note at the top of this file for why.
+
+/**
+ * Run a command inside the jkai-sandbox container. Never touches the host.
+ */
+export async function execInContainer(
+  command: string,
+  timeout = 120000,
+): Promise<ExecResult> {
+  try {
+    // Base64-encode the command to preserve newlines and special characters
+    const b64 = Buffer.from(command).toString('base64');
+    const { stdout, stderr } = await execAsync(
+      `docker exec ${CONTAINER_NAME} bash -c "echo '${b64}' | base64 -d > /tmp/jkai-exec.sh && bash /tmp/jkai-exec.sh"`,
+      { timeout, maxBuffer: 5 * 1024 * 1024 },
+    );
+    return { stdout, stderr, exitCode: 0 };
+  } catch (err: any) {
+    return {
+      stdout: err.stdout || '',
+      stderr: err.stderr || err.message,
+      exitCode: err.code || 1,
+    };
+  }
+}
+
+/**
+ * Write a file inside the jkai-sandbox container. Never touches the host
+ * filesystem — in particular, never the production checkout the web process
+ * is running from.
+ */
+export async function writeFileInContainer(
+  filePath: string,
+  content: string,
+  timeout = 30000,
+): Promise<ExecResult> {
+  const b64 = Buffer.from(content).toString('base64');
+  return execInContainer(`echo '${b64}' | base64 -d > ${filePath}`, timeout);
+}
+
 export async function execBuildCommand(
   command: string,
   workdir: string,
@@ -210,7 +295,7 @@ export async function writeFileInSandbox(
 ): Promise<ExecResult> {
   // Host mode: skip the base-64 shell round-trip and use fs directly. Faster
   // and handles content of any size without bash arg-list limits.
-  if (HOST_MODE) {
+  if (BUILD_HOST_MODE) {
     try {
       const { mkdir, writeFile } = await import('node:fs/promises');
       const { dirname } = await import('node:path');
@@ -695,7 +780,7 @@ export async function syncDesignAssets(buildId: string): Promise<string> {
   // In host mode, use fs directly — execInSandbox roundtrip via base64 is
   // unnecessary and harder to debug if it ever fails. In container mode,
   // execInSandbox creates the dir inside the named volume.
-  if (HOST_MODE) {
+  if (BUILD_HOST_MODE) {
     const { mkdir } = await import('node:fs/promises');
     await mkdir(`${dest}/examples`, { recursive: true });
   } else {
@@ -717,7 +802,7 @@ export async function syncDesignAssets(buildId: string): Promise<string> {
 
 // Base64 of a file over roughly this many characters risks tripping Linux's
 // MAX_ARG_STRLEN (128KB) once it's embedded in the `echo '<b64>' | base64 -d`
-// command writeFileInSandbox's non-HOST_MODE path builds. three.min.js's
+// command writeFileInSandbox's non-BUILD_HOST_MODE path builds. three.min.js's
 // ~893KB of base64 is the concrete case that forced this — it fails with
 // "Argument list too long" as a single `echo` argument.
 const CHUNKED_WRITE_B64_THRESHOLD = 60_000;
@@ -737,7 +822,7 @@ export function sliceBase64(b64: string, size = CHUNKED_WRITE_B64_THRESHOLD): st
 }
 
 /**
- * writeFileInSandbox's non-HOST_MODE path for files whose base64 blows past
+ * writeFileInSandbox's non-BUILD_HOST_MODE path for files whose base64 blows past
  * the shell's single-argument length cap (see CHUNKED_WRITE_B64_THRESHOLD
  * above). Writes the base64 to a side file in `printf … >>` slices, decodes it
  * in one shot, then verifies the decoded byte count — a silently truncated
@@ -810,7 +895,7 @@ export async function syncExplainerKit(buildId: string): Promise<string> {
         .map((rel) => rel.slice(0, rel.lastIndexOf('/'))),
     ),
   ];
-  if (HOST_MODE) {
+  if (BUILD_HOST_MODE) {
     const { mkdir } = await import('node:fs/promises');
     await mkdir(dest, { recursive: true });
     for (const d of dirs) await mkdir(`${dest}/${d}`, { recursive: true });
@@ -826,11 +911,11 @@ export async function syncExplainerKit(buildId: string): Promise<string> {
   const failures: string[] = [];
   for (const [rel, body] of Object.entries(assets)) {
     const filePath = `${dest}/${rel}`;
-    // HOST_MODE (writeFileInSandbox's fs.writeFile branch) has no arg-length
+    // BUILD_HOST_MODE (writeFileInSandbox's fs.writeFile branch) has no arg-length
     // limit; only the shell-echo branch below it does, so chunking is only
-    // ever needed off HOST_MODE.
+    // ever needed off BUILD_HOST_MODE.
     const needsChunking =
-      !HOST_MODE && Buffer.from(body).toString('base64').length > CHUNKED_WRITE_B64_THRESHOLD;
+      !BUILD_HOST_MODE && Buffer.from(body).toString('base64').length > CHUNKED_WRITE_B64_THRESHOLD;
     const r = needsChunking
       ? await writeFileInSandboxChunked(filePath, body)
       : await writeFileInSandbox(filePath, body);
@@ -1077,6 +1162,90 @@ export async function promoteDevToLive(buildId: string): Promise<void> {
     `find ${base}/live -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null; cp -a ${base}/dev/. ${base}/live/ 2>/dev/null && touch ${promoteMarker(base)}; echo done`,
     120000,
   );
+}
+
+/**
+ * Delete `node_modules` from a finished build's dev/ and live/ trees.
+ *
+ * Nothing has ever pruned a build workspace, so they accumulate: on
+ * 2026-08-21 the VPS root disk hit 90% with 74G under /home/jkai/workspace,
+ * and **52G of that was node_modules**. Source, `.git`, build output,
+ * `.svelte-kit` and snapshots together came to ~6G. So this removes only the
+ * reinstallable part and leaves every byte an agent actually wrote — which
+ * matters, because 23 of those workspaces held uncommitted feature work.
+ *
+ * Reversible by design, three ways: `ensureDepsInstalled` restores the tree
+ * before the next iteration, the publish path already runs
+ * `npm install --prefer-offline` on live/ before building, and static serving
+ * reads files out of live/ rather than node_modules — so a reclaimed
+ * published build still serves.
+ *
+ * Returns bytes freed, 0 if there was nothing to remove.
+ */
+export async function reclaimWorkspaceDeps(buildId: string): Promise<number> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  const res = await execInSandbox(reclaimDepsCommand(base), 120000);
+  return parseReclaimedBytes(res.stdout);
+}
+
+/**
+ * Size-then-delete in one round trip, split out so a test can pin exactly what
+ * it deletes. This runs `rm -rf` inside a tree holding uncommitted agent work,
+ * so "only ever the two node_modules paths" is a property worth a test rather
+ * than a careful read.
+ *
+ * `du` writes the byte total on line 1. A missing tree errors to a suppressed
+ * stderr and awk still prints 0, so re-running against an already-reclaimed
+ * build is a no-op rather than a failure.
+ */
+export function reclaimDepsCommand(base: string): string {
+  return (
+    `du -sb ${base}/dev/node_modules ${base}/live/node_modules 2>/dev/null | awk '{s+=$1} END {print s+0}'; ` +
+    `rm -rf ${base}/dev/node_modules ${base}/live/node_modules 2>/dev/null; echo done`
+  );
+}
+
+/** Byte total from `reclaimDepsCommand`'s first output line; 0 if unreadable. */
+export function parseReclaimedBytes(stdout: string): number {
+  const first = ((stdout ?? '').trim().split('\n')[0] ?? '').trim();
+  const n = Number.parseInt(first, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Reinstall dev/node_modules when it is missing but package.json says it
+ * should be there. Returns true if it actually installed.
+ *
+ * The counterpart to `reclaimWorkspaceDeps`: a Continue or resume on a
+ * reclaimed build must not hand the agent a tree whose imports don't resolve —
+ * and the system prompt flatly tells it "npm install has already been run in
+ * your workspace". It self-heals every other cause of a missing tree too (an
+ * interrupted install, a manual delete, an image rebuild).
+ *
+ * `--include=dev` is not optional: with NODE_ENV=production in the sandbox a
+ * plain `npm install` skips devDependencies and the gate's test runner is
+ * missing. Same reason as ensureGitWorkspace's install.
+ */
+export async function ensureDepsInstalled(buildId: string): Promise<boolean> {
+  const dev = `/home/jkai/workspace/${buildId}/dev`;
+  const check = await execInSandbox(depsMissingCommand(dev), 10000);
+  if (!check.stdout.includes('missing')) return false;
+  await execInSandbox(installDepsCommand(dev), 300000);
+  return true;
+}
+
+/**
+ * Echoes `missing` only when there is a package.json AND no node_modules.
+ * A workspace with no package.json (a plain-HTML build) must read as `ok` —
+ * running npm install there would fail every iteration forever.
+ */
+export function depsMissingCommand(dev: string): string {
+  return `if [ -f ${dev}/package.json ] && [ ! -d ${dev}/node_modules ]; then echo missing; else echo ok; fi`;
+}
+
+/** The reinstall itself. `--include=dev` is load-bearing — see ensureDepsInstalled. */
+export function installDepsCommand(dev: string): string {
+  return `cd ${dev} && npm install --include=dev --prefer-offline 2>&1 | tail -3`;
 }
 
 /**
@@ -1349,14 +1518,14 @@ export async function publishBuild(buildId: string, slug: string): Promise<strin
         rmSync(destDir, { recursive: true, force: true });
         mkdirSync(destDir, { recursive: true });
         const buildDir = `${liveDir}/${distCheck.stdout.trim()}`;
-        if (HOST_MODE) {
+        if (BUILD_HOST_MODE) {
           await execAsync(`cp -a ${buildDir}/. ${destDir}/`, { timeout: 120000 });
         } else {
           await execAsync(`docker cp ${CONTAINER_NAME}:${buildDir}/. ${destDir}/`, { timeout: 120000 });
         }
         // Also copy index.html from root if the build dir doesn't have one
         if (!existsSync(`${destDir}/index.html`)) {
-          const cpCmd = HOST_MODE
+          const cpCmd = BUILD_HOST_MODE
             ? `cp ${liveDir}/index.html ${destDir}/ 2>/dev/null`
             : `docker cp ${CONTAINER_NAME}:${liveDir}/index.html ${destDir}/ 2>/dev/null`;
           await execAsync(cpCmd, { timeout: 10000 }).catch(() => {});
@@ -1378,7 +1547,7 @@ export async function publishBuild(buildId: string, slug: string): Promise<strin
   // Full copy — the project is either static already or we can't easily extract just the frontend
   rmSync(destDir, { recursive: true, force: true });
   mkdirSync(destDir, { recursive: true });
-  if (HOST_MODE) {
+  if (BUILD_HOST_MODE) {
     await execAsync(`cp -a ${liveDir}/. ${destDir}/`, { timeout: 120000 });
   } else {
     await execAsync(`docker cp ${CONTAINER_NAME}:${liveDir}/. ${destDir}/`, { timeout: 120000 });

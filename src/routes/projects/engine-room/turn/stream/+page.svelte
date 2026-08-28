@@ -47,23 +47,25 @@
 </script>
 
 <svelte:head>
-  <title>Getting it back · The Engine Room</title>
+  <title>Streaming · The Engine Room</title>
   <meta name="description" content="How a streamed answer arrives as a chain of segments, and the accumulator that once overwrote a finished answer." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="turn"
-    title="Getting it back"
+    title="Streaming"
     line="A streamed answer turns up as a chain of segments down one channel. The entire job is stopping them treading on one another."
-    lineEli5="The answer arrives in pieces. The hard part is stopping the pieces from scribbling over each other." />
+    lineEli5="The answer arrives as a stream of small pieces, and the job here is putting them together without losing or overwriting any. That is harder than it sounds — this page shows the one mistake that ruins it." />
 
   <Instrument
     kicker="The failure"
     title="Seven frames, two accumulators"
     tone={TONE}
     reading="A real frame sequence, reconstructed one frame at a time. Run it through either accumulator."
-    takeaway="Two of the seven frames are not the answer at all. Only one of these two accumulators has the wit to notice.">
+    readingEli5="A real reply, replayed one piece at a time. Assemble it both ways and see which one survives."
+    takeaway="Two of the seven frames are not the answer at all. Only one of these two accumulators has the wit to notice."
+    takeawayEli5="Two of the seven pieces are progress notes, not answer. The naive assembler pastes them into the reply; the shipped one files them where they belong. That one distinction is the difference between a working chat and a mangled one.">
     <FrameStream />
   </Instrument>
 
@@ -72,7 +74,9 @@
     title="How long quiet is allowed"
     tone={TONE}
     reading="Pick a tier."
-    takeaway="How much silence is acceptable depends entirely on what it is waiting for. One global timeout would be simpler and would be wrong four different ways.">
+    readingEli5="Pick what it is waiting on."
+    takeaway="How much silence is acceptable depends entirely on what it is waiting for. One global timeout would be simpler and would be wrong four different ways."
+    takeawayEli5="Silence means different things depending on what is running: a long tool job can legitimately go quiet for minutes, an ordinary reply cannot. One shared timeout would either kill working jobs or let dead ones linger — so there are four.">
     <div class="wd">
       <Steps items={STEPS} selected={tier} onselect={(id) => (tier = id)} tone={TONE} railed />
     </div>
@@ -83,7 +87,8 @@
     kicker="Keeping the pipe open"
     title="Six numbers that hold the stream up"
     tone={TONE}
-    reading="Pick one for why.">
+    reading="Pick one for why."
+    readingEli5="Press a number for the reason it is set where it is.">
     <div class="kvs">
       {#each STREAM_CONSTANTS as c (c.k)}
         <button class="kv" class:on={konst === c.k} aria-pressed={konst === c.k} onclick={() => (konst = c.k)}>

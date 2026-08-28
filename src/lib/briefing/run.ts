@@ -1,6 +1,7 @@
 // Briefing pipeline: gather → synthesise (LLM) → store → deliver. Simpler than
 // the self-improve run loop (one synthesis, no budget phases) but shares the
 // gates/dogfooding pattern. Single-flight guard prevents overlap.
+import { ownerPhone } from '$lib/config/owner';
 import { randomUUID } from 'crypto';
 import { ensureCollection, updateCollection, upsertRecord } from '$lib/datastore';
 import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
@@ -9,7 +10,6 @@ import {
   BRIEFINGS_COLLECTION,
   BRIEFING_PERMS,
   SYSTEM_ACTOR,
-  OWNER_PHONE,
   SETTINGS_ENABLED_KEY,
   SETTINGS_TOPICS_KEY,
   asData,
@@ -73,7 +73,7 @@ function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = 
 
 async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{ markdown: string; llmCalls: number; costUsd: number }> {
   const ctx = await resolveDefaultModel();
-  const { getLLMClient } = await import('$lib/jkai/llm-client');
+  const { getLLMClient } = await import('$lib/llm/client');
   const { client, model } = await getLLMClient(ctx);
 
   // Engagement weighting (👍/👎 votes) — best-effort, '' when no signal.
@@ -104,7 +104,7 @@ async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{
   const tout = resp.usage?.completion_tokens ?? 0;
   let costUsd = 0;
   try {
-    const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
+    const { priceFor, computeCost } = await import('$lib/llm/pricing');
     const price = priceFor('openrouter', resp.model || model);
     if (price) costUsd = computeCost(price, tin, tout);
   } catch {
@@ -120,9 +120,11 @@ async function persist(data: BriefingData): Promise<void> {
 async function notify(data: BriefingData): Promise<void> {
   const firstLine = data.markdown.split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '') ?? data.title;
   try {
+    const to = ownerPhone();
+    if (!to) throw new Error('WORKFLOW_NOTIFY_PHONE is not set');
     const { executeTool } = await import('$lib/workflows/site-tools/registry');
     const msg = `☕ ${data.title}\n${firstLine.slice(0, 400)}\n${ADMIN_LINK}`;
-    await executeTool('whatsapp_send', { to: OWNER_PHONE, message: msg.slice(0, 600) });
+    await executeTool('whatsapp_send', { to, message: msg.slice(0, 600) });
   } catch (err) {
     console.error('[briefing] whatsapp notify failed:', errMsg(err));
   }

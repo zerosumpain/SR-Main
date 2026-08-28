@@ -10,6 +10,7 @@
 import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
 import { and, eq, gte } from 'drizzle-orm';
+import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
@@ -95,8 +96,8 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
         );
       }
       // Lazy imports keep the module light for tests that never reach the gateway.
-      const { getLLMClient } = await import('$lib/jkai/llm-client');
-      const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
+      const { getLLMClient } = await import('$lib/llm/client');
+      const { priceFor, computeCost } = await import('$lib/llm/pricing');
 
       // Still pinned off the chat default — this pipeline writes code that
       // ships unattended, so the model that authors it should not move because
@@ -108,12 +109,14 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       const { client, model } = await getLLMClient(await resolveSelfimproveModel());
       // max_tokens >= 3000 so GLM reasoning tokens don't truncate the answer
       // (feedback_glm_reasoning_tokens). No response_format — we parse loosely.
-      const resp = await client.chat.completions.create({
-        model,
-        messages,
-        max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
-        temperature: opts?.temperature ?? 0.3,
-      });
+      const resp = await withActivity('selfimprove', () =>
+        client.chat.completions.create({
+          model,
+          messages,
+          max_tokens: Math.max(opts?.maxTokens ?? 3000, 3000),
+          temperature: opts?.temperature ?? 0.3,
+        }),
+      );
 
       budget.llmCalls++;
       const usage = resp.usage;

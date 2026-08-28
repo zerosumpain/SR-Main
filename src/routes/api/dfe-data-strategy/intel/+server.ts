@@ -6,7 +6,7 @@
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { isOwnerEmail } from '$lib/server/access';
-import { runIntel, getIntelSnapshot } from '../../../projects/dfe-data-strategy/lib/intel.server';
+import { runIntel, getIntelSnapshot } from '$lib/dfe-data-strategy/intel.server';
 import type { RequestHandler } from './$types';
 
 async function authorized(event: Parameters<RequestHandler>[0]): Promise<boolean> {

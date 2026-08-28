@@ -1,7 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { extractPdf } from '../../src/lib/jkai/extract/pdf';
+import { existsSync } from 'fs';
+import { extractPdf, resolvePdfJsAssets } from '../../src/lib/jkai/extract/pdf';
+
+describe('pdf.js asset resolution', () => {
+  // Both of these resolve to real files or pdf.js quietly falls back: a missing
+  // worker takes every PDF down, and a missing font directory only degrades
+  // documents that don't embed their fonts — which is the harder one to notice.
+  // Asserting the paths EXIST is what catches a package layout change on upgrade.
+  it('resolves the worker and the standard-font directory to real paths', () => {
+    const { workerSrc, standardFontDataUrl } = resolvePdfJsAssets();
+    expect(workerSrc).toBeTruthy();
+    expect(existsSync(workerSrc!)).toBe(true);
+    expect(standardFontDataUrl).toBeTruthy();
+    expect(standardFontDataUrl!.endsWith('/')).toBe(true);
+    expect(existsSync(standardFontDataUrl!)).toBe(true);
+  });
+});
 
 describe('pdf extractor', () => {
   it('extracts text from a multi-page PDF', async () => {

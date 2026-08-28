@@ -1,9 +1,10 @@
 import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/llm/keys';
 import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from './types';
+import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
 
 const TTL_MS = 30_000;
 
@@ -109,7 +110,7 @@ export async function resolveThinkingModel(): Promise<ModelContext | null> {
   // thinking tier the one role that ignored the operator's choice: with the
   // default on codex/gpt-5.6-terra, an unset thinking model still resolved to
   // deepseek/deepseek-v4-flash. It cost nothing in practice only because the
-  // sole caller (general-chat.ts) is dormant behind the Hermes engine — which
+  // sole caller (general-chat.ts) was dormant at the time — which
   // is exactly the kind of latent divergence that surfaces the day that path
   // wakes up.
   return resolveDefaultModel();
@@ -122,9 +123,34 @@ export async function resolveChatAltOpenRouterModel(): Promise<ModelContext | nu
   return { provider: 'openrouter', modelId: v.modelId };
 }
 
+/**
+ * The thinking level a NEW chat thread starts on: whatever was last chosen.
+ *
+ * There is no separate "site default" control for this and there should not be
+ * one. A thinking level is a habit, not a policy — you turn it up because the
+ * work got harder and you leave it there — so the picker writes this key on
+ * every change and a fresh thread inherits it. Threads keep their own level in
+ * `jkai_conversations.thinking_level`, so changing it here never reaches back
+ * into a thread already running.
+ *
+ * Null (no row) means "provider default", the behaviour before the control
+ * existed. Note that is the ONLY way to express it: `app_settings.value` is
+ * `jsonb NOT NULL`, so clearing has to delete the row — see deleteSetting.
+ */
+const CHAT_THINKING_KEY = 'jkai.chat.thinking_level';
+
+export async function resolveDefaultThinkingLevel(): Promise<ThinkingLevel | null> {
+  const v = await getSetting<{ level?: unknown } | null>(CHAT_THINKING_KEY);
+  return isThinkingLevel(v?.level) ? v.level : null;
+}
+
+export async function setDefaultThinkingLevel(level: ThinkingLevel | null): Promise<void> {
+  if (level === null) await deleteSetting(CHAT_THINKING_KEY);
+  else await setSetting(CHAT_THINKING_KEY, { level });
+}
+
 /** /jkai approval-prompt UI behaviour — drives the inline Approve / Deny
- *  buttons that appear under Hermes' "dangerous command requires approval"
- *  messages. `defaultAction` is what auto-fires after `autoSelectMs` if the
+ *  buttons that appear under a "dangerous command requires approval" message. `defaultAction` is what auto-fires after `autoSelectMs` if the
  *  user doesn't click; `'none'` disables auto-select (buttons still render,
  *  user must click). */
 export interface ApprovalUiSettings {
@@ -145,32 +171,6 @@ export async function getApprovalUiSettings(): Promise<ApprovalUiSettings> {
 
 export async function setApprovalUiSettings(value: ApprovalUiSettings): Promise<void> {
   await setSetting(APPROVAL_UI_KEY, value);
-}
-
-/** Which engine answers /jkai chat.
- *
- * `true` → Hermes (the gateway on homeserv: terminal, file editing, skills,
- * delegation, web search). `false` → the in-repo `generalChat` loop, which
- * keeps every site toolset (intel, canvas, datastore, drive, Gmail…) but has
- * no terminal, file or browser tools.
- *
- * Unset falls back to the `JKAI_HERMES_CANVAS_CHAT` env var, so a host that
- * has never touched the toggle behaves exactly as it did before. Setting it
- * from /admin/ops/engine overrides the env var — which is the point: flipping
- * engines used to need an env edit and a redeploy on the VPS.
- *
- * Read per request (30s cache in getSetting), never captured at module load,
- * or the toggle would need a restart to take effect.
- */
-const HERMES_CHAT_KEY = 'jkai.chat.hermes_enabled';
-
-export async function isHermesChatEnabled(envDefault: boolean): Promise<boolean> {
-  const v = await getSetting<boolean | null>(HERMES_CHAT_KEY);
-  return typeof v === 'boolean' ? v : envDefault;
-}
-
-export async function setHermesChatEnabled(enabled: boolean): Promise<void> {
-  await setSetting(HERMES_CHAT_KEY, enabled);
 }
 
 export async function getOpenRouterApiKey(): Promise<string | undefined> {

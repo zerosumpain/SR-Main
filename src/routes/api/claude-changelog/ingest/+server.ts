@@ -10,16 +10,51 @@
 //
 // GET → summary stats (owner-gated via the normal /api gate; used for debugging).
 import { json, error } from '@sveltejs/kit';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { claudeSessions, claudeSessionStages } from '$lib/db/schema';
 import type { RequestHandler } from './$types';
 
+/**
+ * Bearer check. Fails CLOSED in production.
+ *
+ * This used to `return true` when the secret was unset, "for dev convenience".
+ * hooks.server.ts exempts every `/api/claude-changelog/*` POST from Auth.js by
+ * PREFIX, so on 2026-08-17 the production endpoint was an unauthenticated write
+ * into `claude_sessions`: `curl -X POST` with `{}` from the open internet
+ * returned 400 `missing session.id`, i.e. it had already cleared auth and
+ * reached the handler. The secret was simply absent from the VPS `.env` — and
+ * nothing said so, because "unset" and "authorised" were the same branch.
+ *
+ * That matters more now than it did: the codegraph reads this table, so an
+ * anonymous writer here is an anonymous writer into the context that steers
+ * every autonomous build. Poisoning the ingest poisons the builder.
+ *
+ * Dev convenience is kept, but only where "dev" is provable — `dev` is Vite's
+ * build-time constant, false in the production bundle. In production a missing
+ * secret is a misconfiguration, and the honest response to a misconfigured
+ * auth check is to refuse, not to wave everyone through.
+ */
 function authorized(request: Request): boolean {
   const secret = env.CLAUDE_CHANGELOG_SECRET;
-  if (!secret) return true; // unset → open (dev convenience), same as policy-engine
-  return (request.headers.get('authorization') ?? '') === `Bearer ${secret}`;
+  if (!secret) return dev;
+  const supplied = request.headers.get('authorization') ?? '';
+  return timingSafeEqualStr(supplied, `Bearer ${secret}`);
+}
+
+/**
+ * Constant-time string compare. A plain `===` on a bearer token leaks its
+ * length and its first differing byte through response timing; the endpoint is
+ * public and unrate-limited, so that is a real (if slow) oracle.
+ * Compare fixed-width digests so unequal lengths cannot short-circuit.
+ */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return timingSafeEqual(ha, hb);
 }
 
 const STAGES = new Set(['request', 'design', 'plan', 'result', 'fixes']);

@@ -1,5 +1,6 @@
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
+import { withChatContext, emptyChatUsage, type ChatUsageTotals } from '$lib/context/chat';
 import { db } from '$lib/db';
 import {
   homeAssistantConfig,
@@ -9,17 +10,19 @@ import {
   workflowNodes,
   workflowEdges,
 } from '$lib/db/schema';
-import { eq, isNull, desc } from 'drizzle-orm';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { eq, isNull, desc, sql } from 'drizzle-orm';
+import { getLLMClient } from '$lib/llm/client';
 import { recordConversationUsage, parseUsage } from '$lib/server/models/usage';
 import { resolveThinkingModel } from '$lib/server/models/settings';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
-import { META_TOOL_DEFINITIONS, getToolsetDefinitions, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
+import { thinkingRequestParams, type ThinkingLevel } from '$lib/models/thinking';
+import { coerceModelContext } from '$lib/constants/default-models';
+import { META_TOOL_DEFINITIONS, getToolsetDefinitions, getToolDefinitionsByName, buildSiteSystemPromptSection } from '$lib/workflows/site-tools/llm-tools';
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
-import { inferToolsets, inferToolsetsForTurn } from '$lib/workflows/site-tools/keyword-classifier';
+import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { buildMultimodalContent, encodedSizeBytes } from '$lib/jkai/media/multimodal';
@@ -32,6 +35,10 @@ import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
+import { getModelCapabilities } from '$lib/server/models/capabilities';
+import { renderSkillIndex } from '$lib/jkai/skills/registry';
+import { compressHistory, refreshCompression, renderCompressionSection } from './compress';
+import { carriedToolsets } from './carried-toolsets';
 
 const MAX_HISTORY = 30;
 const DEFAULT_TOOL_ROUNDS = 10;
@@ -54,14 +61,50 @@ function detectExtendedAutonomy(userMessage: string): boolean {
 }
 
 /**
- * Fire-and-forget "opening acknowledgement" call. Reasoning models like
- * GLM-5.x routinely sit silent for 10–20s before emitting either text or a
- * tool_call on the orchestrator's first round, so the user sees nothing but
- * a "Working…" spinner until tools start running. This kicks off a tiny
- * parallel call with no tools, no reasoning-heavy context, and a 60-token
- * cap to push a one-sentence "what I'm about to do" into the chat stream
- * within a couple of seconds. Persists as source=status_update so it
- * survives reload (same shape as the round-5 mid-task update).
+ * How long the turn must stay silent before the opening acknowledgement is
+ * worth an LLM call of its own.
+ *
+ * This used to fire at t=0, in parallel with prompt assembly. That was written
+ * for an era when the first round sat silent for 10–20s. It no longer
+ * pays: the ack is aborted the moment the orchestrator emits its own first
+ * content token, and the orchestrator now usually wins — measured 2026-08-24 on
+ * production, ONE `status_update` row landed against 2,674 assistant rows.
+ *
+ * The waste was not only the discarded call. The Codex bridge caps itself at
+ * `CODEX_BRIDGE_CONCURRENCY` (3) for the whole site, and firing the ack before
+ * prompt assembly meant it claimed one of those slots ~1s AHEAD of the call
+ * that actually answers the user. Two concurrent chats put four requests
+ * against three slots and a real answer queued behind an ack destined for the
+ * bin.
+ *
+ * 8s is chosen against two measured numbers: loop turn latency p90 is 7.8s, so
+ * a turn still silent at 8s is genuinely a slow one; and the free narration
+ * ticker's first tick is at 20s, so the ack still has time to land ahead of it
+ * and replace a generic "Still thinking…" with something specific.
+ */
+const ACK_SILENCE_MS = 8_000;
+
+/**
+ * The turn has gone quiet for at least this long before the mid-task status
+ * update is worth its own call. The round-5 note used to fire unconditionally,
+ * and it is the most expensive small thing in the loop: it re-sends the entire
+ * conversation plus every tool result so far (16k–33k input tokens, measured)
+ * to produce two sentences. On a turn that reached round 5 quickly the user has
+ * been watching tool cards stream the whole time and needs no such note.
+ */
+const STATUS_UPDATE_MIN_ELAPSED_MS = 45_000;
+
+/**
+ * Fire-and-forget "opening acknowledgement" call. Reasoning models routinely
+ * sit silent before emitting either text or a tool_call on the orchestrator's
+ * first round, so the user sees nothing but a "Working…" spinner until tools
+ * start running. This makes a tiny call with no tools and no reasoning-heavy
+ * context to push a one-sentence "what I'm about to do" into the chat stream.
+ * Persists as source=status_update so it survives reload (same shape as the
+ * mid-task update).
+ *
+ * Scheduled by `scheduleOpeningAck`, never called directly — see ACK_SILENCE_MS
+ * for why it must not fire at the top of the turn.
  */
 async function emitOpeningAck(opts: {
   userMessage: string;
@@ -120,6 +163,42 @@ async function emitOpeningAck(opts: {
   }
 }
 
+/**
+ * Arm the opening acknowledgement, to fire only if the turn is still silent
+ * after ACK_SILENCE_MS.
+ *
+ * `cancel()` is what the turn calls the moment it produces ANY visible sign of
+ * life. Two things count, not one: a content token (the answer has started, so
+ * an ack would talk over it) and a tool call (the tool card IS the feedback,
+ * and it says more than "Looking up the bin schedule" ever could). Cancelling
+ * on the tool call is the difference between an ack that rescues dead air and
+ * one that duplicates a card the user can already see.
+ *
+ * Safe to cancel repeatedly, and safe to cancel after the ack has already gone
+ * out — `emitOpeningAck` re-checks the signal before it writes anything.
+ */
+function scheduleOpeningAck(opts: {
+  userMessage: string;
+  modelContext: ModelContext;
+  conversationId: string | null | undefined;
+  priceSnapshot: PriceSnapshot | null;
+}): { cancel: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    void emitOpeningAck({ ...opts, signal: controller.signal });
+  }, ACK_SILENCE_MS);
+  // Node keeps the process alive for a pending timer; this one must never be
+  // the reason a worker lingers.
+  timer.unref?.();
+  return {
+    cancel: () => {
+      clearTimeout(timer);
+      controller.abort();
+    },
+  };
+}
+
 interface ToolProgress {
   tool: string;
   toolCallId: string;
@@ -136,6 +215,10 @@ interface ChatOptions {
   onToolProgress?: (step: ToolProgress) => void;
   onStreamEvent?: (event: JobEvent) => void;
   modelContext: ModelContext;
+  /** How hard to tell the model to think, from the conversation's own setting.
+   *  Null/undefined sends no reasoning field, leaving the provider's default —
+   *  which is what every turn did before the chip existed. */
+  thinkingLevel?: ThinkingLevel | null;
   priceSnapshot: PriceSnapshot | null;
   /** When false, skips injecting the intel knowledge graph into the system prompt. Defaults to true. */
   useIntelContext?: boolean;
@@ -227,7 +310,11 @@ function maybeIngestAsNote(userMessage: string): void {
 interface RunToolContext {
   activeTools: Array<any>;
   activatedToolsets: Set<string>;
-  haEntities: any[];
+  /** How many HA entities exist. Enough to decide whether the toolset is
+   *  offerable; the registry itself is only fetched if it is activated. */
+  haEntityCount: number;
+  /** Fetches the full entity registry, once, on first use. */
+  loadHaEntities: () => Promise<any[]>;
   onToolProgress?: (step: ToolProgress) => void;
   onProgress?: (text: string) => void;
   onStreamEvent?: (event: JobEvent) => void;
@@ -242,7 +329,7 @@ async function runSingleToolCall(
   toolCall: any,
   ctx: RunToolContext,
 ): Promise<{ toolMessage: { role: 'tool'; tool_call_id: string; content: string } }> {
-  const { activeTools, activatedToolsets, haEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
+  const { activeTools, activatedToolsets, haEntityCount, loadHaEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
   const fnName: string = toolCall.function.name;
   let fnArgs: Record<string, unknown>;
   try {
@@ -269,12 +356,16 @@ async function runSingleToolCall(
     if (activatedToolsets.has(toolset)) {
       toolResult = { success: true, data: { toolset, status: 'already_active', message: `${toolset} tools are already loaded.` } };
     } else if (toolset === 'home') {
-      if (haEntities.length > 0) {
+      if (haEntityCount > 0) {
         const defs = getToolsetDefinitions('home');
         activeTools.push(...defs);
         activatedToolsets.add('home');
         const { buildHASystemPromptSection } = await import('$lib/workflows/homeassistant/llm-tools');
-        const entitySummary = buildHASystemPromptSection(haEntities);
+        // Only now is the registry worth reading. It is 91KB across 415
+        // entities in production and was previously loaded on every turn,
+        // sequentially, ahead of the first token — to answer a question the
+        // row count already answers.
+        const entitySummary = buildHASystemPromptSection(await loadHaEntities());
         toolResult = {
           success: true,
           data: {
@@ -363,13 +454,39 @@ async function runSingleToolCall(
         }
       : (conversationId ? { conversationId, emit: () => {} } : undefined);
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
-    if (jobId && isDestructive(fnName)) {
-      const prompt = describeDestructiveAction(fnName, fnArgs);
-      const approved = await requireConfirmation(jobId, prompt, fnArgs, { destructive: true });
-      if (!approved) {
-        toolResult = { success: false, error: 'User declined the action.' };
+    if (isDestructive(fnName)) {
+      if (!jobId) {
+        // No job means no SSE stream, so there is nobody who *could* be shown a
+        // confirmation card. This used to fall through to the plain `else` and
+        // execute — `jobId && isDestructive(...)` reads as one guard but is two,
+        // and the absent half is the dangerous one. Every caller that passes no
+        // parentJobId got the ungated path: the WhatsApp bridge
+        // (workflows/whatsapp/orchestrator-bridge.ts), the follow-up queue, and
+        // agent delegation. Previously the same turns went through the MCP
+        // dispatcher, which already denies by default when nobody is attached
+        // (jkai/tool-step-bus.ts) — that is the behaviour being restored here,
+        // including its MCP_CONFIRM_UNATTENDED escape hatch so the two paths
+        // cannot drift apart again.
+        const policy = (process.env.MCP_CONFIRM_UNATTENDED ?? 'deny').toLowerCase();
+        if (policy === 'allow') {
+          toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
+        } else {
+          toolResult = {
+            success: false,
+            error:
+              `${fnName} changes something outside this conversation and needs confirmation, ` +
+              'but no user is attached to this session to give it. Ask again in /jkai, ' +
+              'where the confirmation can be shown.',
+          };
+        }
       } else {
-        toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
+        const prompt = describeDestructiveAction(fnName, fnArgs);
+        const approved = await requireConfirmation(jobId, prompt, fnArgs, { destructive: true });
+        if (!approved) {
+          toolResult = { success: false, error: 'User declined the action.' };
+        } else {
+          toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
+        }
       }
     } else {
       toolResult = await executeSiteTool(fnName, fnArgs, toolCtx);
@@ -564,48 +681,128 @@ async function buildPastedUrlsSection(
   return `\n\n--- Pasted URLs ---\nThe user pasted the following links in their message. Their readable contents have been fetched for you below — do not re-fetch unless you need a different page.\n\n${sections.join('\n\n')}`;
 }
 
+/**
+ * Run one chat turn.
+ *
+ * A thin wrapper whose only job is the opening ack's lifetime. The turn has
+ * many exits — a thrown LLM error, a cancelled job, an early return from a
+ * clarify gate — and every one of them has to disarm the timer, or a turn that
+ * died at round 2 still spends an ack call eight seconds later and posts it
+ * into a thread that has moved on. A `finally` is the only place that holds for
+ * all of them.
+ */
 export async function generalChat(
   input: { text: string; attachments?: JkaiAttachment[] },
   conversationHistory: HistoryMessage[],
   options: ChatOptions,
+): Promise<{ response: string; usage: ChatUsageTotals }> {
+  // Skipped for sub-agents — their output isn't meant for the user chat.
+  const ack =
+    options.conversationId && (options.subagentDepth ?? 0) === 0
+      ? scheduleOpeningAck({
+          userMessage: input.text,
+          modelContext: options.modelContext,
+          conversationId: options.conversationId,
+          priceSnapshot: options.priceSnapshot,
+        })
+      : null;
+  try {
+    // Tag every LLM call this turn makes with the turn it belongs to.
+    //
+    // Without this the ledger recorded chat with a null `session_id` — 3,671 of
+    // 3,675 openrouter rows and 355 of 370 codex rows over three days — so
+    // rounds-per-turn, cost-per-turn and TTFT could not be computed at all, and
+    // two review lanes produced contradictory round counts from the same table.
+    // The wrap goes here rather than at the route because sub-agents, the
+    // follow-up queue and the WhatsApp bridge all enter through this function
+    // and their calls are just as unattributable.
+    //
+    // `source: 'jkai-chat'` (set in usage-capture) is what separates these rows
+    // on /admin/ops/costs — deliberately NOT a synthetic `chat` workload, since
+    // chat's model comes from the `jkai.chat.default_model` setting and not from
+    // the workload registry the model picker writes to. A workload id there
+    // would imply a switch that does not exist.
+    const usage = emptyChatUsage();
+    const { response } = await withChatContext(
+      {
+        jobId: options.jobId ?? undefined,
+        conversationId: options.conversationId ?? undefined,
+        usage,
+      },
+      () => runGeneralChat(input, conversationHistory, options, () => ack?.cancel()),
+    );
+    // Returned even when every field is zero. A caller that gets no usage
+    // cannot tell "the turn was free" from "nobody measured it", and that
+    // ambiguity is what left every reply without a ledger line.
+    return { response, usage };
+  } finally {
+    ack?.cancel();
+  }
+}
+
+async function runGeneralChat(
+  input: { text: string; attachments?: JkaiAttachment[] },
+  conversationHistory: HistoryMessage[],
+  options: ChatOptions,
+  /** Disarms the opening ack. Called on the first visible sign of life. */
+  cancelAck: () => void,
 ): Promise<{ response: string }> {
   const { onProgress, onToolProgress } = options;
   const userMessage = input.text;
 
-  // Kick off the opening acknowledgement in parallel — it runs while the
-  // heavy orchestrator system prompt is being assembled and the first LLM
-  // round (which on reasoning models like GLM-5.x can sit silent for 10–20s)
-  // is in flight. Aborted as soon as the orchestrator emits its own first
-  // content token so we never double-up "Working…" callouts and the orchestrator's real reply.
-  // Skipped for sub-agents (their output isn't meant for the user chat).
-  const ackController = new AbortController();
-  if (options.conversationId && (options.subagentDepth ?? 0) === 0) {
-    void emitOpeningAck({
-      userMessage,
-      modelContext: options.modelContext,
-      conversationId: options.conversationId,
-      priceSnapshot: options.priceSnapshot,
-      signal: ackController.signal,
-    });
-  }
+  // The opening ack is armed by the `generalChat` wrapper above and disarmed
+  // through `cancelAck` — see ACK_SILENCE_MS for why it no longer runs at t=0.
 
   // Check if user wants to capture knowledge
   maybeIngestAsNote(userMessage);
 
-  // Load HA entity context (needed to know if HA is available)
-  let haEntities: any[] = [];
+  // Is Home Assistant available, and how many entities does it know about?
+  //
+  // This used to `select()` the whole `home_assistant_config` row before the
+  // prompt was even assembled — 91,135 characters of `entityRegistry` across
+  // 415 entities in production, fetched sequentially on EVERY turn, to satisfy
+  // two `haEntities.length` checks. A count answers both, and the rows are only
+  // read if the model actually activates the toolset.
+  let haEntityCount = 0;
   try {
-    const [haConfig] = await db
-      .select()
+    const [row] = await db
+      .select({
+        n: sql<number>`CASE
+          WHEN ${homeAssistantConfig.token} IS NULL THEN 0
+          WHEN jsonb_typeof(${homeAssistantConfig.entityRegistry}) <> 'array' THEN 0
+          ELSE jsonb_array_length(${homeAssistantConfig.entityRegistry})
+        END`,
+      })
       .from(homeAssistantConfig)
       .where(eq(homeAssistantConfig.id, 'default'))
       .limit(1);
-    if (haConfig?.token && Array.isArray(haConfig.entityRegistry)) {
-      haEntities = haConfig.entityRegistry as any[];
-    }
+    haEntityCount = Number(row?.n ?? 0);
   } catch (err) {
-    console.warn('[general-chat] Failed to load HA config:', err instanceof Error ? err.message : err);
+    console.warn('[general-chat] Failed to count HA entities:', err instanceof Error ? err.message : err);
   }
+
+  // Memoised: a turn can activate the `home` toolset only once, but a retry or
+  // a sub-agent could ask twice and the payload is large enough to be worth not
+  // fetching twice.
+  let haEntitiesCache: any[] | null = null;
+  const loadHaEntities = async (): Promise<any[]> => {
+    if (haEntitiesCache) return haEntitiesCache;
+    try {
+      const [haConfig] = await db
+        .select({ token: homeAssistantConfig.token, entityRegistry: homeAssistantConfig.entityRegistry })
+        .from(homeAssistantConfig)
+        .where(eq(homeAssistantConfig.id, 'default'))
+        .limit(1);
+      haEntitiesCache =
+        haConfig?.token && Array.isArray(haConfig.entityRegistry)
+          ? (haConfig.entityRegistry as any[])
+          : [];
+    } catch (err) {
+      console.warn('[general-chat] Failed to load HA registry:', err instanceof Error ? err.message : err);
+      haEntitiesCache = [];
+    }
+    return haEntitiesCache;
+  };
 
   // Build system prompt — fetched in parallel to cut cold-start latency.
   // siteSection is synchronous, so no Promise.all entry for it.
@@ -625,34 +822,29 @@ export async function generalChat(
     buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
   ]);
 
-  // Run the keyword classifier once, up front, in two widths.
-  //
-  // `inferredNow` is this message alone and gates prompt TEXT — guidance the
-  // model only needs while the subject is live. `inferred` also looks back over
-  // the last couple of user messages and gates TOOLS, which have to survive an
-  // agreement: "build it", "yes" and "go on then" name no subject, so a
-  // current-message-only match unloaded whatever the previous turn had set up.
-  // See inferToolsetsForTurn for the turn that exposed it.
-  const inferredNow = inferToolsets(userMessage);
-  const inferred = inferToolsetsForTurn(
-    userMessage,
-    conversationHistory.filter((h) => h.role === 'user').map((h) => h.content),
-  );
+  // Run the keyword classifier once, up front. Drives both the conditional
+  // scraper playbook below and the toolset auto-activation further down.
+  const matched = inferToolsets(userMessage);
+  // …plus whatever the last few turns established, so "go on then" keeps the
+  // tools the conversation was already using. See `carriedToolsets`.
+  const carried = carriedToolsets(conversationHistory, matched);
+  const inferred = [...matched, ...carried];
+  if (carried.length) {
+    onProgress?.(`[toolsets] carried forward from earlier turns: ${carried.join(', ')}\n`);
+  }
 
   // Stealth-scrape playbook — only injected when the user's message looks
   // scraper-related. Kept out of the always-on prompt so the typical /jkai
-  // turn doesn't pay for ~1KB of guidance it never uses. Deliberately on
-  // `inferredNow`: carried over, one mention of scraping would tax every
-  // later turn in the conversation with guidance it no longer needs.
-  const scraperSection = inferredNow.includes('scraper')
+  // turn doesn't pay for ~1KB of guidance it never uses.
+  const scraperSection = inferred.includes('scraper')
     ? `\n\n--- Web scraping ---\nThe \`stealth-scrape\` node is the pattern for reading live web pages — job boards, listings, prices, schedules, content behind cookie walls. It runs a stealth-patched Playwright on homeserv's residential IP and dispatches through a saved Python script keyed to a stable per-domain \`profile\` (e.g. \`civilservicejobs-gov-uk\`). Scripts have \`page\` (persistent context, cookies retained) and \`vars\` (string dict) in scope and \`return\` a list of dicts.\n\nWhen designing a scrape:\n1. \`scraper_script_list\` first — reuse an existing profile if one matches.\n2. If editing: \`scraper_script_read\` → modify → \`scraper_script_save\` → \`scraper_script_test\` to verify.\n3. If none exists: set \`goal\` + \`searchQuery\` on the \`stealth-scrape\` node — the first run authors and saves a script; subsequent runs replay it.\n\nTypical scrape canvas: \`trigger → (data-store get, stealth-scrape) → merge → transform (diff vs stored URLs) → llm-call (format) → gmail-send / whatsapp → data-store set\`. Keep transforms small (in-process, no sandbox); cap LLM prompts (few hundred chars per description); use \`bodyHtml\` not \`bodyText\` on \`gmail-send\` when output has links or lists.`
     : '';
 
   // API-first data answering — always on and deliberately compact. For any
   // factual / numeric / current / external question the model should reach a
   // real data source (api_search → api_call) before answering from memory.
-  // The tools it names (api_search, api_call, datastore_query) are
-  // ESSENTIAL_TOOL_NAMES, so they stay reachable regardless of which toolsets
+  // The tools it names (api_search, api_call, datastore_query) are pushed into
+  // the always-on set above, so they stay reachable regardless of which toolsets
   // the classifier activated — hence unconditional rather than inferred-gated.
   const apiFirstSection = `\n\n--- API-first data answering ---\nFor questions about current, factual, numeric, or external data, prefer a live source over model memory: (1) call \`api_search\` first to find a catalogued API for the ask; (2) fetch with \`api_call\` and cite the API you used inline, where its figure lands; (3) fall back to your own knowledge only when no API fits — and say so; (4) if you hit a useful API that isn't catalogued yet, \`api_register\` it. Recurring structured data worth querying again belongs in the datastore — \`datastore_save\` to record it, \`datastore_query\` to read it back — not \`save_memory\`, which is for distilled personal facts.`;
 
@@ -670,27 +862,71 @@ export async function generalChat(
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
+  // The skills index. One line per skill with its FULL description — the old index cut
+  // these to 60 characters, which is why whichever skill happened to fit a
+  // keyword inside that budget won the routing regardless of merit.
+  const skillsIndex = renderSkillIndex();
+  const skillsSection = skillsIndex
+    ? `\n\n--- Skills ---\nCurated playbooks for specific jobs. If one covers what you are about to do, read it with skill_view(id) BEFORE starting — it carries the specifics, constraints and traps that general knowledge does not. Prefer loading one over guessing; do not load one that is merely adjacent.\n\n${skillsIndex}\n`
+    : '';
+
+  // Older turns are summarised rather than dropped. `slice(-MAX_HISTORY)` was
+  // silent amnesia: message 31 back simply vanished, with nothing in the prompt
+  // saying so, which is how a long thread came to contradict what it agreed to
+  // an hour earlier. Computed here because the prompt section below needs it.
+  const compressed = await compressHistory(conversationHistory, options.conversationId, MAX_HISTORY);
+  // Carries what the summarised turns said, or says plainly that they are gone.
+  const compressionSection = renderCompressionSection(compressed);
+
   const personaSection = options.personaPrompt?.trim()
     ? `You are acting as a specialist agent. Adopt this role for the whole turn:\n${options.personaPrompt.trim()}\n\n---\n\n`
     : '';
-  const systemContent = `${personaSection}${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
+  // Order is a cache decision, not a stylistic one.
+  //
+  // Prompt caching matches on a PREFIX, so the first byte that changes between
+  // turns invalidates everything after it — including the ~5KB of tool schemas
+  // and the whole history that follow the system message. `graphSection` is
+  // rebuilt per message by `buildKnowledgeContext(userMessage)`, and it sat in
+  // the middle: everything behind it was uncacheable by construction.
+  //
+  // Measured on production over 36 hours: 224 codex calls at 54.1% cached, with
+  // the first decile — 69 calls — at 0% while averaging 8,998 input tokens. The
+  // first turn measured after the telemetry landed cached 25.4%. Cold vs warm
+  // is worth 1,690-3,047ms against 981-1,724ms on the same 15.7KB body, and a
+  // turn pays it once per round, nine times on that turn.
+  //
+  // So: everything that is the same on the next turn goes first, everything
+  // derived from THIS message goes last. `memorySection` stays in the stable
+  // block and still sits below the instructions, which `07-memory.md` promises
+  // the model it does.
+  const stablePrefix = `${personaSection}${basePrompt}${siteSection}${skillsSection}${apiFirstSection}${memorySection}${canvasSection}`;
+  const perTurnSuffix = `${compressionSection}${scraperSection}${pastedUrlsSection}${graphSection}${clarifySection}${planSection}`;
+  const systemContent = `${stablePrefix}${perTurnSuffix}`;
 
   // Build messages
   const messages: Array<any> = [
     { role: 'system', content: systemContent },
   ];
 
-  const recentHistory = conversationHistory.slice(-MAX_HISTORY);
+  // What this conversation's model can actually read. Anything it cannot is
+  // pre-analysed into text rather than sent as a part the provider will reject
+  // or quietly drop — this is the job the gateway used to do out of sight, and the
+  // reason attachments kept working on a text-only chat model.
+  const mediaCaps = getModelCapabilities(options.modelContext);
+
+  const recentHistory = compressed.messages;
   for (const h of recentHistory) {
     if (h.role === 'user' && h.attachments && h.attachments.length > 0) {
-      const parts = await buildMultimodalContent(h.content, h.attachments);
+      const parts = await buildMultimodalContent(h.content, h.attachments, { caps: mediaCaps });
       messages.push({ role: 'user', content: parts as any });
     } else {
       messages.push({ role: h.role, content: h.content } as any);
     }
   }
 
-  const userParts = await buildMultimodalContent(userMessage, input.attachments ?? []);
+  const userParts = await buildMultimodalContent(userMessage, input.attachments ?? [], {
+    caps: mediaCaps,
+  });
   const maxTurnBytes = Number(process.env.JKAI_MAX_TURN_BYTES ?? 104857600);
   if (encodedSizeBytes(userParts) > maxTurnBytes) {
     throw new Error(`Encoded turn payload exceeds JKAI_MAX_TURN_BYTES (${maxTurnBytes})`);
@@ -703,8 +939,14 @@ export async function generalChat(
   messages.push({ role: 'user', content: userContent as any });
 
   // --- Tiered tool assembly ---
-  // Always include meta-tools
-  const activeTools: Array<any> = [...META_TOOL_DEFINITIONS];
+  // Always include meta-tools, and the discovery toolset alongside them: tools
+  // for FINDING tools are useless if you must already know to activate them.
+  // Seeded from the registry rather than hand-copied into META_TOOL_DEFINITIONS
+  // so the schemas cannot drift from the `register()` calls that define them.
+  const activeTools: Array<any> = [
+    ...META_TOOL_DEFINITIONS,
+    ...getToolsetDefinitions('discovery'),
+  ];
   const activatedToolsets = new Set<string>();
 
   // Always-on background-task toolsets: follow-up queue, heartbeat actions,
@@ -717,6 +959,35 @@ export async function generalChat(
     activatedToolsets.add(ts);
   }
 
+  // Tools the always-on prompt ORDERS the model to use, pushed by name.
+  //
+  // Two separate gaps, one fix. The API-first section below instructs every
+  // turn to reach `api_search` → `api_call` before answering from memory, and
+  // says structured data belongs in `datastore_query` — while a comment above
+  // it claimed those were reachable because they are in ESSENTIAL_TOOL_NAMES.
+  // They are not: that set lives in `$lib/mcp/essentials` and is read by the
+  // tool-policy publisher, which this file has never imported. The model was
+  // being told to call tools it had not been handed.
+  //
+  // Separately, open-web lookup was gone from a default turn. The gateway had web
+  // search on every one — 99 `web_search` and 72 `web_extract` calls in 45 days
+  // — and the classifier only loads `research`/`web` on "research", "deep dive"
+  // or a literal URL. Sampled real queries ("Carmel College term dates", "Apple
+  // Developer Program fee") trip neither pattern, so the turn either paid an
+  // `activate_toolset` round first or answered from training data.
+  //
+  // BY NAME, not by toolset: `research` carries nine session-management tools
+  // that have no business on an ordinary turn. Cost is ~400-600 tokens of
+  // schema against a ~4.3s round, and it now sits inside the cacheable prefix.
+  const ALWAYS_ON_TOOL_NAMES = [
+    'api_search',
+    'api_call',
+    'datastore_query',
+    'research_web_search',
+    'fetch_url',
+  ] as const;
+  activeTools.push(...getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES));
+
   // Include agent_spawn as a meta-tool available in all chats — but ONLY
   // when this IS a top-level orchestrator call (not itself a sub-agent).
   if ((options.subagentDepth ?? 0) === 0 && options.jobId) {
@@ -727,7 +998,7 @@ export async function generalChat(
 
   // Auto-activate the toolsets the classifier matched earlier in this turn.
   for (const ts of inferred) {
-    if (ts === 'home' && haEntities.length === 0) continue;
+    if (ts === 'home' && haEntityCount === 0) continue;
     activeTools.push(...getToolsetDefinitions(ts));
     activatedToolsets.add(ts);
   }
@@ -786,10 +1057,32 @@ export async function generalChat(
   // canvas-bound calls stay on the base model — those are tactical, not
   // strategic. Returns null when the operator has disabled the split.
   const isOrchestrator = (options.subagentDepth ?? 0) === 0 && !!options.jobId && !options.workflowId;
-  const thinkingCtx: ModelContext | null = isOrchestrator ? await resolveThinkingModel() : null;
+  // Resolved lazily, once, and only if a round actually asks for it.
+  //
+  // `jkai.builder.thinking_model` is unset in production, so this resolves to
+  // `resolveDefaultModel()` — the model the turn is already running on. Round 0
+  // then "escalated" to itself, having paid a settings read ahead of the first
+  // token to do it.
+  //
+  // NOTE for whoever configures a thinking model: the condition below includes
+  // `round === 0`, so every turn would escalate on its first round, not only
+  // the long ones the threshold is for. Left as it is rather than quietly
+  // narrowed — it is dormant today, and changing when a tier fires is a
+  // decision, not a cleanup.
+  let thinkingCtxPromise: Promise<ModelContext | null> | null = null;
+  const getThinkingCtx = (): Promise<ModelContext | null> => {
+    if (!isOrchestrator) return Promise.resolve(null);
+    thinkingCtxPromise ??= resolveThinkingModel();
+    return thinkingCtxPromise;
+  };
   const THINKING_PROMPT_CHAR_THRESHOLD = 160_000; // ~40k tokens (4 chars/token)
 
   let responseText = '';
+
+  /** Wall clock for the whole turn — the mid-task status update is gated on it.
+   *  Distinct from the per-round `turnStartedAt` inside the loop, which resets
+   *  every round and so can never say how long the USER has been waiting. */
+  const turnBeganAt = Date.now();
 
   // Derive the tool-call budget for this turn. The caller can override
   // explicitly; otherwise we look at the user message for extended-autonomy
@@ -824,21 +1117,41 @@ export async function generalChat(
     );
     const lastMsg = messages[messages.length - 1];
     const lastUserText = lastMsg?.role === 'user' && typeof lastMsg.content === 'string' ? lastMsg.content : '';
-    const useThinking = !!thinkingCtx && (
+    const wantsThinking =
       round === 0
       || lastUserText.startsWith('Adjust the plan:')
       || lastUserText.startsWith('My answers:')
-      || promptChars > THINKING_PROMPT_CHAR_THRESHOLD
-    );
-    const turnCtx = useThinking && thinkingCtx ? thinkingCtx : baseCtx;
+      || promptChars > THINKING_PROMPT_CHAR_THRESHOLD;
+    const thinkingCtx = wantsThinking ? await getThinkingCtx() : null;
+    // Only an escalation if it lands somewhere else. Same model, same client —
+    // switching to an identical context bought nothing and read as a tier change
+    // in the logs.
+    const escalates =
+      !!thinkingCtx &&
+      (thinkingCtx.provider !== baseCtx.provider || thinkingCtx.modelId !== baseCtx.modelId);
+    const turnCtx = escalates && thinkingCtx ? thinkingCtx : baseCtx;
     const { client, model } = await getLLMClient(turnCtx);
+    // Read off the context that will actually serve THIS round, not the
+    // conversation's: an escalated round can land on the other provider, and
+    // the two spell the field differently. `coerceModelContext` because a
+    // persisted row can carry a codex/ id under provider 'openrouter'.
+    const thinking = thinkingRequestParams(
+      coerceModelContext(turnCtx).provider,
+      options.thinkingLevel,
+    );
 
     // Halfway through available rounds: get a plain-English status update so
     // the user can see progress. Separate call with no tools, doesn't count
     // against MAX_TOOL_ROUNDS. Persisted as a proper assistant message with
     // source=status_update so it shows up in the chat stream (not just the
     // working panel) and survives page reloads.
-    if (round === 5) {
+    //
+    // Gated on elapsed wall clock, not on the round number alone. This is the
+    // most expensive small thing in the loop — it re-sends the whole
+    // conversation plus every tool result so far to write two sentences — and
+    // a turn that reached round 5 inside STATUS_UPDATE_MIN_ELAPSED_MS has been
+    // streaming tool cards the entire time. There is nothing to reassure.
+    if (round === 5 && Date.now() - turnBeganAt >= STATUS_UPDATE_MIN_ELAPSED_MS) {
       try {
         const statusResp = await client.chat.completions.create({
           model,
@@ -853,6 +1166,10 @@ export async function generalChat(
           // Reasoning model needs ~4000 tokens just to think before producing
           // any output — 300 would guarantee empty content.
           max_tokens: 6000,
+          // Deliberately NOT carrying the turn's thinking level. This writes two
+          // conversational sentences about work already done; a thread set to
+          // `high` would buy nothing here and delay the one thing the call
+          // exists to deliver quickly. Same reasoning as the opening ack.
         });
         if (options.conversationId) {
           // Fire-and-forget: ~30ms per call we don't need to block on
@@ -951,6 +1268,7 @@ export async function generalChat(
         temperature: 0.4,
         max_tokens: 16384,
         ...(tools ? { tools } : {}),
+        ...thinking,
         stream: true,
         stream_options: { include_usage: true },
       });
@@ -968,7 +1286,7 @@ export async function generalChat(
         // answer second, and surfacing it is the whole point — it removes the
         // dead-air window that the narration ticker above only papered over.
         // Deliberately not accumulated into `fullContent` or persisted: the
-        // Hermes path treats reasoning as live-only too, so a reload drops it
+        // Reasoning is live-only, so a reload drops it
         // on both engines rather than one.
         const reasoningDelta = extractReasoningDelta(delta);
         if (reasoningDelta) {
@@ -982,15 +1300,19 @@ export async function generalChat(
             clearNarration();
             if (options.jobId) setJobPhase(options.jobId, 'thinking', 'Streaming reply…');
             // Orchestrator is now producing its own assistant content — drop
-            // the parallel opening ack so we don't render two "Working…"
-            // callouts back-to-back when the orchestrator turns out to be
-            // fast enough to beat the ack call.
-            ackController.abort();
+            // the opening ack so we don't render two "Working…" callouts
+            // back-to-back when the orchestrator beats the eight-second timer.
+            cancelAck();
           }
           fullContent += delta.content;
           options.onStreamEvent?.({ type: 'token', delta: delta.content });
         }
         if (Array.isArray(delta.tool_calls)) {
+          // A tool call is a visible sign of life too: the tool card renders in
+          // the chat and says more than the ack's one sentence ever could.
+          // Cancelling here is what stops the ack duplicating a card the user
+          // is already looking at.
+          cancelAck();
           for (const tc of delta.tool_calls as any[]) {
             const idx = tc.index ?? 0;
             let acc = fullToolCalls.find((t) => t.index === idx);
@@ -1022,6 +1344,7 @@ export async function generalChat(
             temperature: 0.4,
             max_tokens: 16384,
             ...(tools ? { tools } : {}),
+            ...thinking,
           });
           const rchoice = retry.choices[0];
           fullContent = rchoice?.message?.content ?? '';
@@ -1188,7 +1511,8 @@ export async function generalChat(
       msg.tool_calls.map((toolCall: any) => runSingleToolCall(toolCall, {
         activeTools,
         activatedToolsets,
-        haEntities,
+        haEntityCount,
+        loadHaEntities,
         onToolProgress,
         onProgress,
         onStreamEvent: options.onStreamEvent,
@@ -1206,6 +1530,17 @@ export async function generalChat(
 
   if (!responseText) {
     responseText = `Sorry, the model did not produce a final response after ${maxRounds} tool rounds.`;
+  }
+
+  // Bring the summary up to date, AFTER the reply.
+  //
+  // Summarising is an LLM call. Doing it where `compressHistory` is read would
+  // put a whole model round in front of the first token, on exactly the long
+  // threads that are already the slowest. So this turn answers with what the
+  // cache had — saying plainly when that is behind — and the next turn has the
+  // summary. Not awaited, and it swallows its own failures.
+  if (options.conversationId && compressed.needsRefresh) {
+    void refreshCompression(conversationHistory, options.conversationId, MAX_HISTORY);
   }
 
   return { response: responseText };

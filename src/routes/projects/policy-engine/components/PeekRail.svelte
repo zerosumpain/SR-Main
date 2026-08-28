@@ -3,7 +3,7 @@
   // which levers differ from the starting stance, without stealing space from the
   // prose. Click a chip to open the full drawer focused on that lever.
   import { app } from '../lib/appState.svelte';
-  import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '../lib/levers';
+  import { LEVERS_BY_ID, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
 
   const MAX_CHIPS = 8;
   const chips = $derived(app.changedFromBase.slice(0, MAX_CHIPS));

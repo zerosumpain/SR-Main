@@ -5,7 +5,7 @@
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
-  import { codexMeter, type CodexUsageView } from '$lib/jkai/usage-meter';
+  import { codexMeter, type CodexUsageView } from '$lib/llm/usage-meter';
 
   let {
     tokensToday,
@@ -79,6 +79,9 @@
     { label: 'Chat', href: '/jkai', meta: 'THREAD' },
     { label: 'Canvas', href: '/jkai/canvas', meta: canvasMeta },
     { label: 'Intel', href: '/jkai/intel', meta: 'GRAPH' },
+    // Beside Intel, not under it: the two graphs answer different questions
+    // (the world vs this codebase) and neither is a subsection of the other.
+    { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
     { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
   ]);
   const library: MenuRow[] = [
@@ -86,6 +89,7 @@
     { label: 'Research', href: '/jkai/research', meta: 'DEEP DIVE' },
     { label: 'Briefing', href: '/jkai/briefing', meta: 'DAILY' },
     { label: 'Monitors', href: '/jkai/monitors', meta: 'WATCHES' },
+    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'NOTICING' },
   ];
   const system = $derived<MenuRow[]>([
     { label: 'Agent team', href: '/jkai/agents', meta: 'DELEGATES' },

@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
-import { eq, and, desc, asc, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, asc, isNotNull, sql, inArray } from 'drizzle-orm';
 import { checkBudget } from './budget';
 import {
   ensureSandboxRunning,
@@ -14,6 +14,7 @@ import {
   writeStudioSpine,
   snapshotIteration,
   execInSandbox,
+  reclaimWorkspaceDeps,
   type GitTargetConfig,
 } from './sandbox';
 import { manageServeConfig } from './serve-manager';
@@ -29,6 +30,7 @@ import { runTests, extractDiagnostics, formatTestSummary } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { BudgetConfig, FailureEnvelope } from './types';
+import { formatRescuePrBody } from './rescue-body';
 import { emitStage } from './stage-events';
 import { notifyAllSubscribers } from '$lib/server/push';
 
@@ -45,6 +47,17 @@ const LIVENESS_PING_MS = 15_000;
  * Above the gate's 1_200_000 ms cap with room to spare — see reapStaleBuilds.
  */
 const STALE_BUILD_MS = 30 * 60_000;
+
+/**
+ * How long a finished build keeps its `node_modules` before the reclaim sweep
+ * takes it back.
+ *
+ * Long enough that a same-day Continue doesn't pay for a reinstall, short
+ * enough that a backlog clears on the first pass — when this was written every
+ * surviving workspace was 2–13 days old, so 24h reclaims the lot immediately
+ * while still protecting anything finished this session.
+ */
+const RECLAIM_AFTER_MS = 24 * 60 * 60_000;
 
 /**
  * Kit files the studio gate checks are actually served (see runStudioGate's
@@ -79,42 +92,7 @@ const STUDIO_KIT_CHECK_FILES = ['explainer-kit/tokens.css', 'explainer-kit/three
 
 export { onBuildLog } from './log-emitter';
 
-/**
- * Detect whether an iteration's evaluation signals the project is complete.
- * Looks for strong completion signals in the evaluation text.
- */
-function detectCompletion(evaluation: string | null): boolean {
-  if (!evaluation) return false;
-  const lower = evaluation.toLowerCase();
-
-  // Look for completion percentages anchored to progress/completion context
-  // Must be near words like "complete", "done", "progress", "goal" to avoid false positives
-  // like "95% of tests passing" or "95% of CSS work done"
-  const pctMatch = lower.match(/(?:progress|complete|done|goal|finished|overall)[^.]{0,30}(\d+)\s*%|(\d+)\s*%[^.]{0,30}(?:complete|done|finished|overall)/);
-  const pctValue = pctMatch ? parseInt(pctMatch[1] || pctMatch[2]) : 0;
-  if (pctValue >= 95) return true;
-
-  // Strong completion phrases
-  const completionPhrases = [
-    'project is complete',
-    'project complete',
-    'all features implemented',
-    'all features have been implemented',
-    'fully complete',
-    'fully implemented',
-    'nothing remains',
-    'no remaining work',
-    'all goals achieved',
-    'all objectives met',
-    'everything is working',
-    'all requirements met',
-    'all requirements have been met',
-    'project is finished',
-    'build is complete',
-  ];
-
-  return completionPhrases.some((phrase) => lower.includes(phrase));
-}
+import { detectCompletion } from './completion-signal';
 
 // --- Orchestrator Singleton ---
 
@@ -128,6 +106,7 @@ type QueuedAction =
   | { kind: 'replan'; revisedPrompt?: string }
   | { kind: 'continue'; prompt: string; modelOverride?: { provider?: string; modelId?: string } }
   | { kind: 'rejectIteration'; notes: string };
+
 
 class Orchestrator {
   private activeBuildId: string | null = null;
@@ -288,6 +267,9 @@ class Orchestrator {
       .update(jkaiBuilds)
       .set({
         status: current?.failure ? 'failed' : 'completed',
+        // Recorded whichever way the status lands. Someone stopping a build is
+        // a fact about the build, not a second opinion on the failure.
+        outcome: 'stopped_by_user',
         queuedAction: null,
         queuedAt: null,
         updatedAt: new Date(),
@@ -580,6 +562,47 @@ class Orchestrator {
     return reaped;
   }
 
+  /**
+   * Reclaim `node_modules` from builds that have finished. Returns bytes freed.
+   *
+   * A sweep rather than a hook on completion, for two reasons. There are nine
+   * separate places in this file that write a terminal status, so a hook would
+   * have to be added — and kept — at all nine. And a sweep also catches every
+   * build that finished before this existed, which is the entire backlog the
+   * feature was written for.
+   *
+   * Deliberately NOT "delete the workspace": a finished build stays viewable,
+   * served out of live/, and 23 workspaces were holding uncommitted agent work
+   * when this was written. Only the reinstallable part goes — see
+   * `reclaimWorkspaceDeps`.
+   */
+  async reclaimFinishedWorkspaces(): Promise<number> {
+    const cutoff = new Date(Date.now() - RECLAIM_AFTER_MS);
+    const finished = await db
+      .select({ id: jkaiBuilds.id, updatedAt: jkaiBuilds.updatedAt })
+      .from(jkaiBuilds)
+      .where(inArray(jkaiBuilds.status, ['completed', 'failed']));
+
+    let freed = 0;
+    let count = 0;
+    for (const b of finished) {
+      if (this.activeBuildId === b.id) continue; // ours, and possibly resuming
+      if (!b.updatedAt || b.updatedAt > cutoff) continue;
+      // One build's sandbox failure must not abort the sweep for the rest.
+      const bytes = await reclaimWorkspaceDeps(b.id).catch(() => 0);
+      if (bytes > 0) {
+        freed += bytes;
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.log(
+        `[orchestrator] reclaimed ${(freed / 1e9).toFixed(1)}GB of node_modules from ${count} finished build(s)`,
+      );
+    }
+    return freed;
+  }
+
   private async initAndPlan(buildId: string): Promise<void> {
     await ensureSandboxRunning();
 
@@ -852,22 +875,77 @@ class Orchestrator {
 
   // --- Private: Loop ---
 
+  /**
+   * Arm the loop for the next iteration, replacing any timer already armed.
+   *
+   * The `clearTimeout` is the whole point. This used to assign `loopTimer`
+   * without clearing it, and there are fourteen call sites — start, resume,
+   * restart, plan approval, iteration approval, the budget sleep, the retry
+   * paths. Any two of them firing left TWO live timers, both calling
+   * `runIteration` for the same build, and the only guard there was
+   * `activeBuildId !== buildId`, which is true for both because it is the same
+   * build. The orchestrator then ran a build's iterations CONCURRENTLY.
+   *
+   * Measured on build 42244cc0 (2026-08-17): eleven iterations, of which
+   * iterations 1 and 2 started in the same second and 3-9 overlapped in a
+   * rolling pile-up. The consequences were not subtle — each agent redid work
+   * another had already done and reported it as "confirming the existing
+   * change", they mutated one workspace underneath each other (one concluded
+   * `svelte-kit` was missing while another was installing), and the
+   * `iterationsCompleted` read-modify-write below lost six of eleven
+   * increments, so `maxIterations: 8` never bound and the build ran until it
+   * was killed by hand.
+   */
   private scheduleNext(buildId: string, delayMs = 0): void {
+    if (this.loopTimer) clearTimeout(this.loopTimer);
     this.loopTimer = setTimeout(() => this.runIteration(buildId), delayMs);
   }
+
+  /**
+   * The build whose iteration is in flight right now.
+   *
+   * Belt to `scheduleNext`'s braces. Clearing the timer stops the two-timers
+   * case, but any path that calls `runIteration` while one is already awaiting
+   * — a late-resolving promise, a future caller that forgets the timer — would
+   * reopen the same hole. A build's iterations must be serial, so this says so
+   * directly rather than relying on every caller behaving.
+   *
+   * NOT `activeBuildId`: that means "the build this orchestrator is working
+   * on", which stays set for the build's whole life and across the gaps
+   * between iterations. This is only ever set while one iteration is running.
+   */
+  private iteratingBuildId: string | null = null;
 
   private async runIteration(buildId: string): Promise<void> {
     if (this.stopped || this.activeBuildId !== buildId) return;
 
-    // Liveness ping for the whole iteration, including the gate. `updated_at`
-    // is only stamped at iteration boundaries, and the gate can run for twenty
-    // minutes writing nothing — so without this a build in the gate and a build
-    // whose sidecar died look identical to every reader. Same shape as the
-    // workflow engine's run heartbeat: a ticker around the long await, cleared
-    // in `finally`.
-    const liveness = this.startLivenessTicker(buildId);
+    if (this.iteratingBuildId) {
+      // Do NOT reschedule here. The iteration that is running will schedule the
+      // next one when it finishes; arming another timer from inside a rejected
+      // call is how a single build ends up with a growing pile of them.
+      console.warn(
+        `[orchestrator] refusing a concurrent iteration for ${buildId} — ${this.iteratingBuildId} is already in flight`,
+      );
+      return;
+    }
+    this.iteratingBuildId = buildId;
+
+    // Everything from here is inside the try, INCLUDING starting the liveness
+    // ticker. The guard above is only safe if it is always released, and it was
+    // being set before this line: had `startLivenessTicker` thrown, the guard
+    // would have stuck and the build would have refused every later iteration
+    // forever — a permanent deadlock, strictly worse than the concurrency it
+    // exists to prevent.
+    let liveness: ReturnType<typeof setInterval> | null = null;
 
     try {
+      // Liveness ping for the whole iteration, including the gate. `updated_at`
+      // is only stamped at iteration boundaries, and the gate can run for
+      // twenty minutes writing nothing — so without this a build in the gate
+      // and a build whose sidecar died look identical to every reader. Same
+      // shape as the workflow engine's run heartbeat: a ticker around the long
+      // await, cleared in `finally`.
+      liveness = this.startLivenessTicker(buildId);
       // Re-fetch build to get latest counters
       const [build] = await db
         .select()
@@ -895,9 +973,12 @@ class Orchestrator {
         if (budget.shouldComplete) {
           await db
             .update(jkaiBuilds)
-            .set({ status: 'completed', updatedAt: new Date() })
+            // Not a delivery. Six of the first 83 builds ended here and were
+            // counted as successes because `completed` was the only word for
+            // it; the log line said so too.
+            .set({ status: 'completed', outcome: 'budget_cap', updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
-          await emitLog(buildId, 'system', `Build completed: ${budget.reason}`);
+          await emitLog(buildId, 'system', `Build stopped on budget: ${budget.reason}`);
           this.activeBuildId = null;
           await this.dequeueNext();
           return;
@@ -995,9 +1076,26 @@ class Orchestrator {
 
       const startTime = Date.now();
 
-      const retryNudge = isEmptyOutputRetry
-        ? 'Your previous turn produced no tool calls and no structured evaluation. Re-read the plan and make at least one concrete action this turn.'
-        : undefined;
+      // What the last turn got wrong, handed to this one. `prevIteration` is
+      // completed-only, so anything the loop continues past — a lint
+      // rejection, an empty turn — is otherwise erased from the next prompt
+      // entirely and the agent repeats itself. This suffix is the only
+      // channel that reaches it.
+      const nudges: string[] = [];
+      if (isEmptyOutputRetry) {
+        nudges.push(
+          'Your previous turn produced no tool calls and no structured evaluation. Re-read the plan and make at least one concrete action this turn.',
+        );
+      }
+      const lastFailure = lastIteration?.status === 'failed'
+        ? (lastIteration.failure as (FailureEnvelope & { findingsSummary?: string }) | null)
+        : null;
+      if (lastFailure?.kind === 'design_lint' && lastFailure.findingsSummary) {
+        nudges.push(
+          `Your previous turn (#${lastIteration!.number}) was rejected by the design-system linter and NOT promoted. Fix these before anything else — they are the reason that work was discarded:\n${lastFailure.findingsSummary}`,
+        );
+      }
+      const retryNudge = nudges.length ? nudges.join('\n\n') : undefined;
 
       const deadlineRef = { current: Date.now() + 30 * 60 * 1000 };
       this.currentDeadline = deadlineRef;
@@ -1091,14 +1189,24 @@ class Orchestrator {
           // `server_is_overloaded` — and because budget.ts files a build that
           // exhausts maxIterations as `completed`, a build killed by someone
           // else's load would have been recorded as having finished.
-          iterationsCompleted: transient ? build.iterationsCompleted : build.iterationsCompleted + 1,
-          tokensUsed: build.tokensUsed + result.tokensUsed,
+          // Incremented in SQL, not read-modify-write. `build` was read at the
+          // top of this iteration, so `build.iterationsCompleted + 1` writes a
+          // value derived from a snapshot — and when two iterations overlapped,
+          // the later write silently discarded the earlier one's increment.
+          // Build 42244cc0 ran eleven iterations and recorded five, so the
+          // `maxIterations` check in budget.ts never bound. `scheduleNext` and
+          // `iteratingBuildId` should now make overlap impossible; this makes
+          // the counter correct even if they ever fail to.
+          iterationsCompleted: transient
+            ? sql`${jkaiBuilds.iterationsCompleted}`
+            : sql`${jkaiBuilds.iterationsCompleted} + 1`,
+          tokensUsed: sql`${jkaiBuilds.tokensUsed} + ${result.tokensUsed}`,
           // Wall-clock accrues whatever the iteration actually burned, pass or
           // fail. It used to accrue only on success, so a build whose every
           // iteration failed reported 0 active minutes and maxTotalMinutes
           // could never bind — contradicting the comment in budget.ts that says
           // a failed iteration costs as much as a successful one.
-          activeMinutesUsed: build.activeMinutesUsed + durationMs / 60000,
+          activeMinutesUsed: sql`${jkaiBuilds.activeMinutesUsed} + ${durationMs / 60000}`,
           consecutiveFailures: newConsecutiveFailures,
           updatedAt: new Date(),
         })
@@ -1237,8 +1345,16 @@ class Orchestrator {
                 status: 'failed',
                 failure: {
                   kind: 'design_lint',
-                  message: `${findings.length} design-system violations`,
+                  // The summary, not just the count. `prevIteration` is
+                  // completed-only, so a lint-rejected iteration is invisible
+                  // to the next prompt; carrying the findings here is what
+                  // lets runIteration hand them forward as a nudge. Without
+                  // it the agent is told it failed and never what on —
+                  // build 37a4109c was rejected six times over the same class
+                  // name with findings climbing 4 → 6.
+                  message: `${findings.length} design-system violations\n${summary}`,
                   findingsCount: findings.length,
+                  findingsSummary: summary,
                   attempts: 1,
                 } as unknown as Record<string, unknown>,
               })
@@ -1303,7 +1419,7 @@ class Orchestrator {
       // non-zero exit is a failed iteration whose output feeds the next
       // iteration's context (same shape/contract as runTests, so all the
       // downstream post-processing is unchanged).
-      let testResult: { passed: boolean; output: string; testCount: number; failCount: number; diagnostics: string };
+      let testResult: { passed: boolean; output: string; testCount: number; failCount: number; diagnostics: string; gateCommand?: string };
       if (build.gitTargetConfig) {
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         const dev = `/home/jkai/workspace/${buildId}/dev`;
@@ -1331,10 +1447,10 @@ class Orchestrator {
         // gate could read moves. It fails SAFE: no fingerprint, run the gate.
         const fingerprint = await this.workspaceFingerprint(dev);
         const cached = this.lastGate;
-        let gate: { out: string; passed: boolean };
+        let gate: { out: string; passed: boolean; command: string };
 
         if (fingerprint && cached && cached.buildId === buildId && cached.fingerprint === fingerprint) {
-          gate = { out: cached.out, passed: cached.passed };
+          gate = { out: cached.out, passed: cached.passed, command: cached.command };
           await emitLog(
             buildId,
             'system',
@@ -1345,7 +1461,7 @@ class Orchestrator {
           );
         } else {
           gate = await this.runGateChain(runGate, build.gitTargetConfig);
-          if (fingerprint) this.lastGate = { buildId, fingerprint, out: gate.out, passed: gate.passed };
+          if (fingerprint) this.lastGate = { buildId, fingerprint, out: gate.out, passed: gate.passed, command: gate.command };
         }
 
         testResult = {
@@ -1360,6 +1476,7 @@ class Orchestrator {
           // From the FULL output, not the truncated copy: a gate prints its
           // passing steps first, so the useful part is always near the end.
           diagnostics: gate.passed ? '' : extractDiagnostics(gate.out),
+          gateCommand: gate.command,
         };
       } else {
         await emitLog(buildId, 'system', 'Running tests...', iteration.id);
@@ -1422,6 +1539,8 @@ class Orchestrator {
             message: testResult.diagnostics
               ? `${this.consecutiveIdleIterations} consecutive iterations changed no files while the gate was still failing: ${testResult.diagnostics.split('\n').find((l) => l.trim())?.slice(0, 200) ?? ''}`
               : `${this.consecutiveIdleIterations} consecutive iterations changed no files.`,
+            gateCommand: testResult.gateCommand,
+            diagnostics: testResult.diagnostics,
             attempts: 1,
           });
           return;
@@ -1623,8 +1742,47 @@ class Orchestrator {
           }
           await db
             .update(jkaiBuilds)
-            .set({ status: 'completed', publishedSlug: prUrl, updatedAt: new Date() })
+            .set({
+              status: 'completed',
+              outcome: 'delivered',
+              publishedSlug: prUrl,
+              updatedAt: new Date(),
+            })
             .where(eq(jkaiBuilds.id, buildId));
+
+          // Resolve any codegraph serve that is still open.
+          //
+          // Feedback otherwise runs ONLY at the start of the next iteration,
+          // and a build that gets it right first time has no next iteration —
+          // so its serve stayed unresolved forever and the evidence never
+          // accrued. The loop could learn from builds that struggled but not
+          // from ones that went well, which is backwards: a first-time pass is
+          // the strongest possible evidence that what was served was right.
+          //
+          // Found by running a real build (e71e7b33): the push served 4,987
+          // characters, the build completed in one iteration with a green gate
+          // and an open PR, and helpful/unhelpful both stayed at 0.
+          //
+          // Only on the SUCCESS path, deliberately. A failed build is not
+          // evidence against what it was served — it fails for provider errors,
+          // token caps and stalls far more often than for bad context — and
+          // counting those as `unhelpful` would punish good intelligence for
+          // unrelated infrastructure faults.
+          try {
+            const { resolveCompletedBuildServes } = await import('$lib/codegraph/feedback');
+            const r = await resolveCompletedBuildServes(buildId);
+            if (r.resolved > 0) {
+              await emitLog(
+                buildId,
+                'system',
+                `Codegraph feedback: ${r.resolved} serve(s) resolved as helpful on first-pass completion — ${r.lessons} lesson(s), ${r.episodes} episode(s)`,
+                iteration.id,
+              );
+            }
+          } catch {
+            // Never let bookkeeping fail a build that has already succeeded.
+          }
+
           await emitLog(buildId, 'system', prUrl ? `Build complete — PR: ${prUrl}` : 'Build complete — no changes to publish.', iteration.id);
           await emitStage(buildId, { stage: 'completed', message: prUrl ?? undefined } as any);
           try {
@@ -1651,7 +1809,7 @@ class Orchestrator {
         // fresh plan.
         await db
           .update(jkaiBuilds)
-          .set({ status: 'completed', updatedAt: new Date() })
+          .set({ status: 'completed', outcome: 'delivered', updatedAt: new Date() })
           .where(eq(jkaiBuilds.id, buildId));
         const previewUrl = (build.serveConfig as { port?: number } | null)?.port
           ? `/api/jkai/proxy/${buildId}/`
@@ -1680,7 +1838,7 @@ class Orchestrator {
         if (!shouldContinue) {
           await db
             .update(jkaiBuilds)
-            .set({ status: 'completed', updatedAt: new Date() })
+            .set({ status: 'completed', outcome: 'delivered', updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
           // Route through the SvelteKit proxy (/api/jkai/proxy/<id>/...) — the
           // sandbox container doesn't publish its agent-picked ports to the
@@ -1736,7 +1894,8 @@ class Orchestrator {
       console.error(`[orchestrator] iteration error for ${buildId}:`, err);
       this.scheduleNext(buildId, 30000);
     } finally {
-      clearInterval(liveness);
+      if (liveness) clearInterval(liveness);
+      if (this.iteratingBuildId === buildId) this.iteratingBuildId = null;
     }
   }
 
@@ -1778,13 +1937,7 @@ class Orchestrator {
       'Build failed with uncommitted work — pushing the branch and opening a draft PR so it is not lost.',
     );
 
-    const body = [
-      `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the builder's gate, run in the build workspace, did not pass. CI runs its own gate on this PR and may reach a different result, so read the CI checks before judging the work.`,
-      '',
-      `> ${(failure.message ?? '').slice(0, 500)}`,
-      '',
-      'Review the diff before doing anything with it. To continue the work, resume the build rather than starting a new one — the workspace and branch are still on the VPS.',
-    ].join('\n');
+    const body = formatRescuePrBody(failure);
 
     const res = await publishViaGit(buildId, { ...cfg, openPr: true }, {
       draft: true,
@@ -1804,7 +1957,7 @@ class Orchestrator {
    * FINAL verdict — after `finalGateCommand`, when that ran — because that is
    * what the caller acts on.
    */
-  private lastGate: { buildId: string; fingerprint: string; out: string; passed: boolean } | null = null;
+  private lastGate: { buildId: string; fingerprint: string; out: string; passed: boolean; command: string } | null = null;
 
   /**
    * Hash of the working tree against HEAD, or null when it cannot be computed.
@@ -1842,10 +1995,13 @@ class Orchestrator {
   private async runGateChain(
     runGate: (cmd: string) => Promise<{ out: string; passed: boolean }>,
     cfg: { gateCommand: string; finalGateCommand?: string },
-  ): Promise<{ out: string; passed: boolean }> {
+  ): Promise<{ out: string; passed: boolean; command: string }> {
     const gate = await runGate(cfg.gateCommand);
-    if (gate.passed && cfg.finalGateCommand) return runGate(cfg.finalGateCommand);
-    return gate;
+    if (gate.passed && cfg.finalGateCommand) {
+      const finalGate = await runGate(cfg.finalGateCommand);
+      return { ...finalGate, command: cfg.finalGateCommand };
+    }
+    return { ...gate, command: cfg.gateCommand };
   }
 
   /** Which build `consecutiveIdleIterations` / `consecutiveTransient` describe. */

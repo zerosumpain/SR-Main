@@ -1,6 +1,8 @@
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { setSetting } from './settings';
+import { clearCapabilityCache } from './capabilities';
+import { clearPriceCache } from '$lib/llm/pricing';
 
 interface OpenRouterRawModel {
   id: string;
@@ -8,7 +10,10 @@ interface OpenRouterRawModel {
   description?: string;
   context_length?: number;
   pricing?: { prompt?: string; completion?: string; image?: string | null };
-  architecture?: { modality?: string };
+  // input_modalities is what capabilities are derived from — the whole raw
+  // object is persisted, so it reaches the DB whether or not it is declared
+  // here, but declaring it stops the field looking accidental.
+  architecture?: { modality?: string; input_modalities?: string[] };
 }
 
 interface OpenRouterEndpointStats {
@@ -145,6 +150,13 @@ export async function refreshOpenRouterCatalogue(): Promise<{ count: number }> {
       await tx.insert(openrouterModels).values(mapped);
     }
   });
+
+  // Capabilities and pricing are both derived from this table and cached in
+  // memory for their synchronous callers, so a refresh that does not drop those
+  // caches leaves the process answering from the previous snapshot until it
+  // restarts — which is how a hand-maintained list goes stale in the first place.
+  clearCapabilityCache();
+  clearPriceCache();
 
   await setSetting('openrouter.last_refreshed_at', new Date().toISOString());
   return { count: models.length };

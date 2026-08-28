@@ -16,7 +16,7 @@
  * PRICING IS DELIBERATELY ABSENT. These models are billed against a ChatGPT
  * Pro subscription, not per token — the marginal cost of a call is zero but the
  * call still consumes a finite weekly/5-hourly quota. Writing 0 into the cost
- * columns would understate spend in exactly the way $lib/jkai/llm-pricing's
+ * columns would understate spend in exactly the way $lib/llm/pricing's
  * header warns against, so `priceFor` returns null for these and the usage
  * charts label them "subscription" instead of £0.00.
  *
@@ -33,7 +33,7 @@
  * the picker as though it were measured. Null renders as "—".
  */
 
-import { isSubscriptionModelId } from '$lib/jkai/usage-meter';
+import { isSubscriptionModelId } from '$lib/llm/usage-meter';
 
 /** Reasoning effort levels the Codex SDK accepts (`ThreadOptions.modelReasoningEffort`). */
 export const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;

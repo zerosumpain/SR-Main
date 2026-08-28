@@ -3,13 +3,13 @@
 // region and comparison persist as you move between Overview / Build / Outcomes / Population / Regions
 // / Method. DOM- and navigation-free (persistence + permalink live in +layout.svelte). Self-contained.
 
-import { runSim } from './engine';
+import { runSim } from '$lib/policy-engine/engine';
 import { runMonteCarlo } from './montecarlo';
-import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from './levers';
+import { baselineLevers, policyLevers, LEVERS, AGE_BANDS, LEVERS_BY_ID } from '$lib/policy-engine/levers';
 import { PRESETS, type Preset, makeSaved, type SavedScenario } from './scenarios';
 import { regionalise, REGION_OPTIONS, regionScale } from './regions';
 import { optimizeGapWithinBudget, allocationBreakdown, type AllocRow } from './optimize';
-import type { LeverState, YearResult } from './types';
+import type { LeverState, YearResult } from '$lib/policy-engine/types';
 
 export interface OptimizeResult {
   baselineGap: number; gap: number; cost: number; closed: number; horizon: number;

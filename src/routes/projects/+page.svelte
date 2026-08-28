@@ -45,11 +45,24 @@
     });
   }
 
-  async function removeProject(buildId: string, slug: string) {
-    if (!confirm(`Remove published project "${slug}"? This deletes the public files but keeps the build.`)) return;
+  // Two kinds of card, two meanings of "remove". An app build was COPIED to
+  // /projects, so removing it deletes those files. A change request's page
+  // lives in the repo and is deployed — there is nothing to delete, and only
+  // the card is withdrawn. Deleting the route is a code change, not a button.
+  async function removeProject(buildId: string, slug: string, source: 'repo' | 'build') {
+    const question =
+      source === 'repo'
+        ? `Remove the card for "${slug}"? The page stays in the repo and stays deployed — this only takes it off this index.`
+        : `Remove published project "${slug}"? This deletes the public files but keeps the build.`;
+    if (!confirm(question)) return;
     removing = buildId;
     try {
-      const res = await fetch(`/api/jkai/builds/${buildId}/unpublish`, { method: 'POST' });
+      const res = await fetch(
+        source === 'repo'
+          ? `/api/jkai/builds/${buildId}/project-card`
+          : `/api/jkai/builds/${buildId}/unpublish`,
+        { method: source === 'repo' ? 'DELETE' : 'POST' },
+      );
       if (res.ok) {
         projects = projects.filter((p) => p.id !== buildId);
       }
@@ -116,6 +129,45 @@
   </div>
 
   <div class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    {#if showCard('bathroom')}
+    <div class="project-card group">
+      <a href="/projects/bathroom" class="absolute inset-0 z-0" aria-label="Open Bathroom Planner"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Tool
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · Home project
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Bathroom Planner — Refitting a Terrace Bathroom
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        Put your own measurements in and drag a bath, a walk-in shower and a wall-hung WC around a
+        to-scale floor plan that knows how much room you need to stand in front of each one, and how
+        far the toilet has drifted from the soil stack. Then a two-way cost model at 2026 rates —
+        set a budget and it picks the spec, or pick the spec and watch it climb — plus who does what,
+        the day-by-day programme, and a 47-item snag list to hold the last 5% against.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          to-scale planner · cost model · snag list
+        </span>
+        {@render visToggle('bathroom', '/projects/bathroom', 'Bathroom Planner')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('scs-earnings')}
     <div class="project-card group">
       <a href="/projects/scs-earnings/" class="absolute inset-0 z-0" aria-label="Open Senior Civil Servant Earnings"></a>
@@ -628,7 +680,7 @@
       {#each projects as project (project.id)}
         {@const card = resolveProjectCard(project)}
         <div class="project-card group">
-          <a href="/projects/{project.publishedSlug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
+          <a href="/projects/{project.slug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
 
           <div class="flex items-start justify-between mb-3">
             <p
@@ -665,14 +717,14 @@
 
             {#if data.authenticated}
               <div class="flex items-center gap-2">
-                {@render visToggle(project.publishedSlug!, `/projects/${project.publishedSlug}/`, project.title ?? 'Project')}
+                {@render visToggle(project.slug!, `/projects/${project.slug}/`, project.title ?? 'Project')}
                 <button
-                  onclick={() => removeProject(project.id, project.publishedSlug!)}
+                  onclick={() => removeProject(project.id, project.slug!, project.source)}
                   disabled={removing === project.id}
                   class="remove-btn px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
                   style="border-color: var(--error); color: var(--error); opacity: {removing === project.id ? 0.5 : 1};"
                 >
-                  {removing === project.id ? 'Removing...' : 'Remove'}
+                  {removing === project.id ? 'Removing...' : project.source === 'repo' ? 'Remove card' : 'Remove'}
                 </button>
               </div>
             {/if}

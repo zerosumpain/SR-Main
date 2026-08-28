@@ -18,7 +18,7 @@
   import LensPicker from '$lib/components/intel/LensPicker.svelte';
   import TimelineBrush from '$lib/components/intel/TimelineBrush.svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
-  import type { NetworkPayload } from '$lib/components/intel/types';
+  import type { NetworkPayload } from '$lib/codegraph/types';
   import { isFullRange, toDateInput, type TimeRange } from '$lib/jkai/intel/lenses';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';

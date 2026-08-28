@@ -7,6 +7,7 @@
   // come from the globally imported cards.css; only bespoke viz classes live in
   // this file's style block.
   import BandGauge from './BandGauge.svelte';
+  import { ordinal } from '$lib/trails/highlights';
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
 
   type Sufficiency = 'ok' | 'partial' | 'insufficient';
@@ -34,7 +35,14 @@
       avgRecovery: number;
       avgSleep: number;
     };
-    personalRecords: { label: string; value: number; unit: string; date: string }[];
+    personalRecords: {
+      label: string;
+      value: number;
+      unit: string;
+      date: string;
+      /** Pre-formatted, where value + unit cannot say it — a pace is 5:25, not 5.41. */
+      display?: string;
+    }[];
   };
 
   let {
@@ -168,7 +176,7 @@
             max={100}
             zones={VO2_ZONES}
             active={vo2active}
-            formatValue={(v) => Math.round(v) + 'th'}
+            formatValue={(v) => ordinal(Math.round(v))}
           />
         </div>
 
@@ -216,7 +224,9 @@
             <li class="fit-pr">
               <span class="fit-pr-label">{pr.label}</span>
               <span class="fit-pr-val">
-                {fmtPr(pr.value)}<span class="fit-pr-unit"> {pr.unit}</span>
+                {#if pr.display}{pr.display}{:else}{fmtPr(pr.value)}<span class="fit-pr-unit">
+                    {pr.unit}</span
+                  >{/if}
               </span>
               <span class="fit-pr-date">{pr.date}</span>
             </li>

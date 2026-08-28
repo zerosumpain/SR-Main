@@ -12,7 +12,7 @@
 
 import { upsertRecord } from '$lib/datastore';
 import { hasSensitive } from '$lib/security/sensitive';
-import { OWNER_PHONE } from '$lib/workflows/whatsapp/approval-notify';
+import { getOwnerPhone } from '$lib/workflows/whatsapp/approval-notify';
 import {
   COLLECTIONS,
   FIX_KIND_LABELS,
@@ -249,7 +249,7 @@ export async function finalizeAndNotify(runId: string, data: DoctorRunData): Pro
     // never pull the whole site-tool registry into the module graph.
     const { executeTool } = await import('$lib/workflows/site-tools/registry');
     const res = await executeTool('whatsapp_send', {
-      to: OWNER_PHONE,
+      to: getOwnerPhone(),
       message: buildWhatsappSummary(data),
     });
     data.whatsappDelivered = res?.success === true;

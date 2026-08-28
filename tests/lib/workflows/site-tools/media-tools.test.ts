@@ -9,8 +9,12 @@ const inserted: any[] = [];
 vi.mock('$lib/db', () => ({
   db: {
     insert: () => ({
+      // `.returning()` for the attachment write; `.catch()` because the cost
+      // ledger's fire-and-forget insert awaits nothing and only attaches a
+      // rejection handler (see $lib/llm/usage-log).
       values: (v: any) => ({
         returning: async () => { inserted.push(v); return [{ ...v, id: 'att-new', createdAt: new Date() }]; },
+        catch: () => {},
       }),
     }),
     select: () => ({
@@ -20,11 +24,18 @@ vi.mock('$lib/db', () => ({
     }),
   },
 }));
-vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {} }));
+vi.mock('$lib/db/schema', () => ({ jkaiAttachments: {}, agentActions: {} }));
 vi.mock('$lib/server/models/settings', () => ({
   getOpenRouterApiKey: async () => 'fake-or-key-for-test',
+  // generate_image resolves its model from the `image-tool` workload now, which
+  // reads app_settings. Unset here, so the registry fallback answers.
+  getSetting: async () => null,
+  setSetting: async () => {},
+  deleteSetting: async () => {},
+  clearSettingsCache: () => {},
+  resolveDefaultModel: async () => ({ provider: 'openrouter', modelId: 'deepseek/deepseek-v4-flash' }),
 }));
-vi.mock('$lib/deepdive/keys', () => ({
+vi.mock('$lib/llm/keys', () => ({
   loadKeys: vi.fn(() => ({ elevenlabsApiKey: 'test-key' })),
 }));
 

@@ -16,7 +16,6 @@ import { asc, desc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { extractIntoIntel, type AutoExtractOutcome } from './auto-extract';
 import { publishConversationSignal } from '$lib/workflows/chat/followup-queue';
-import { COMMAND_ECHO_RE } from '$lib/jkai/hermes-frames';
 
 /**
  * Assistant-turn counts at which we re-extract.
@@ -54,23 +53,35 @@ export function shouldExtractAtTurn(assistantTurns: number): boolean {
 }
 
 /**
- * Hermes writes its own tool-call progress log into the assistant TEXT stream,
+ * The old gateway wrote its tool-call progress log into the assistant TEXT stream,
  * so `⚙️ mcp_jkai_knowledge_search: "data spine"` is stored as message content
- * (see $lib/workflows/chat/hermes-tool-log). It is machinery, not knowledge, and
+ * (see $lib/workflows/chat/legacy-tool-log). It is machinery, not knowledge, and
  * feeding it to the extractor invites entities named after MCP tools.
  */
 const TOOL_LOG_LINE_RE = /^\s*⚙️.*$/gm;
 
 /**
- * Slash-command output Hermes echoes into the thread as an assistant message —
+ * Slash-command output echoed into the thread as an assistant message —
  * `/model` being the common one. It carries no knowledge about the subject, and
  * before this it both polluted the transcript and counted as a turn, which
  * shifted the extraction cadence off the real replies.
  *
- * Defined in `$lib/jkai/hermes-frames`, which now also uses it to keep the echo
+ * Kept narrow deliberately, so a real reply opening with those words is the
  * off the text channel in the first place. One definition on purpose: a detector
  * kept in two places here has drifted before.
  */
+
+/**
+ * A command echo is not an answer. The `/model` switch the chat sends itself
+ * produces "Model switched to `z-ai/glm-5.1` …", and extracting that as
+ * knowledge is how a thread came to "know" a model id was a topic of interest.
+ *
+ * No glyph, unlike the tool-log lines above — this is a deliberate exception to
+ * the glyph-then-phrase shape, kept narrow so a real reply opening with
+ * "Usage:" is the only false positive it can produce.
+ */
+const COMMAND_ECHO_RE =
+  /^\s*(?:Model switched to|Usage:|Unknown command\b|Available (?:commands|models)\b)/i;
 
 /** The knowledge-bearing text of one assistant turn, or '' if there is none. */
 export function cleanAssistantContent(content: string): string {
@@ -97,6 +108,17 @@ export async function maybeExtractThreadConcepts(
 ): Promise<AutoExtractOutcome | undefined> {
   let entityCount = 0;
   try {
+    // The per-thread opt-out, checked before anything else costs a query. It
+    // beats `force` on purpose: a sweep must not undo an explicit "keep this
+    // thread out of intel", which is exactly what a backfill would otherwise do
+    // the next time the extractor changes.
+    const [conv] = await db
+      .select({ intelEnabled: conversations.intelEnabled })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
+    if (conv && conv.intelEnabled === false) return;
+
     const rows = await db
       .select({
         role: orchestratorChats.role,

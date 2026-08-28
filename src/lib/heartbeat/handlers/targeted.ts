@@ -35,10 +35,10 @@ function elapsedLabel(since: Date, now: Date, granularityMin: number): string {
  * Run one tick of a 'targeted' action.
  *
  * This used to run a second LLM against the Postgres transcript. That agent
- * was not the one in the chat — Hermes never saw a single beat, and the beat
- * never saw Hermes' tools or session — so the two contradicted each other in
+ * was not the one in the chat — the agent never saw a single beat, and the beat
+ * never saw its tools or session — so the two contradicted each other in
  * the same thread (one beat announced "this session no longer exposes
- * build_inspect" ten minutes before Hermes used build_inspect). With no way to
+ * build_inspect" ten minutes before the agent used build_inspect). With no way to
  * observe the work it could only narrate, which is a fabrication surface on a
  * 30-second timer.
  *
@@ -52,7 +52,7 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
     return { outcome: 'error', summary: 'targeted action missing conversation_id' };
   }
 
-  // Rows written before registration normalised the id still carry Hermes'
+  // Rows written before registration normalised the id still carry the legacy
   // `chat_<uuid>` form. Normalise on read so they resolve instead of erroring
   // on every tick forever.
   const conversationId = normaliseConversationId(action.conversationId);

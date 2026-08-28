@@ -23,8 +23,23 @@
 # exit code alone. Both sides therefore assert a plausible summary line before
 # the run is allowed to pass.
 #
-# CI-only: this is not synced to the VPS by ci-deploy.sh and nothing at runtime
-# reads it.
+# THIS IS NOW THE LOCAL GATE, NOT THE CI ONE. CI splits the check and the tests
+# into separate jobs and shards the tests four ways, because overlapping two
+# workloads on one runner only ever buys you the longer of the two — whereas a
+# public repo gets free parallel runners, and four of them beat one. See the
+# `typecheck` and `test` jobs in .github/workflows/ci.yml.
+#
+# On one machine the original argument still holds exactly, so this stays the
+# right way to run the gate on homeserv:
+#
+#   ./scripts/gate-concurrent.sh                          # whole suite
+#   GATE_LEVEL=L2 GATE_BASE=origin/master ./scripts/...   # scoped to your branch
+#
+# `npm run gate` runs the same work strictly SEQUENTIALLY and is therefore the
+# slow way to do it locally.
+#
+# Not synced to the VPS (scripts/ci-release.sh is a per-file allow-list and this
+# file has no line in it) and nothing at runtime reads it.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

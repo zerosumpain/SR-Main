@@ -5,7 +5,7 @@
   import FileReferenceChips from './FileReferenceChips.svelte';
   import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
-  import { rewriteHermesToolLog } from '$lib/workflows/chat/hermes-tool-log';
+  import { stripLegacyToolLog } from '$lib/workflows/chat/legacy-tool-log';
   import { linkifyCitations, fileAnchors, researchAnchors, type CiteTarget } from '$lib/jkai/citation-linkify';
   import { linkifyEntities } from '$lib/jkai/intel/entity-linkify';
   import type { MentionTarget } from '$lib/jkai/intel/entity-card-store';
@@ -135,15 +135,18 @@
       .replace(/<\/table>/g, '</table></div>');
   }
 
-  // Hermes writes its own tool-call log into the text stream (`⚙️
-  // mcp_jkai_recall_memories: "…"`), which is machinery, not answer. Rewrite it
-  // into plain English BEFORE the markdown parse so both the live stream and
-  // stored history read the same — see $lib/workflows/chat/hermes-tool-log.
+  // The old gateway wrote its tool-call log into the text stream (`⚙️
+  // mcp_jkai_recall_memories: "…"`), which is machinery, not answer. Strip it
+  // BEFORE the markdown parse so both the live stream and stored history read
+  // the same — see $lib/workflows/chat/legacy-tool-log. The steps are not lost:
+  // they are the tool-call trace behind the *analyse* button, which is where
+  // anyone who wants the play-by-play goes to read it.
+  const answerText = $derived(role === 'assistant' ? stripLegacyToolLog(content) : content);
   let renderedContent = $derived(
     role === 'assistant'
       ? wrapTables(
           injectConvParam(
-            sanitizeChatHtml(marked.parse(rewriteHermesToolLog(content)) as string),
+            sanitizeChatHtml(marked.parse(answerText) as string),
             conversationId,
           ),
         )
@@ -237,7 +240,19 @@
     if (total > 0) chunks.push({ text: `${compactTokens(total)} tok` });
     const latency = formatLatency(stamp.latencyMs);
     if (latency) chunks.push({ text: latency });
-    chunks.push({ text: formatGbp(stamp.costUsd), accent: true });
+    // How many times the model was called for this one reply. Absent on
+    // older rows, which had no notion of it. Worth the space: the first
+    // measured turn on the loop took NINE rounds, and rounds — not tool speed —
+    // are what a reply costs.
+    if (typeof stamp.rounds === 'number' && stamp.rounds > 1) {
+      chunks.push({ text: `${stamp.rounds}×` });
+    }
+    // A Codex turn spends subscription quota, not cash, so `priceFor` returns
+    // null and the cost is a true zero. Rendering "£0.00" would read as "this
+    // was free" rather than "this is not billed in cash" — so say nothing, and
+    // keep the £ for turns that actually have one.
+    const billed = stamp.costUsd > 0 || stamp.provider !== 'codex';
+    if (billed) chunks.push({ text: formatGbp(stamp.costUsd), accent: true });
     return chunks;
   });
 
@@ -246,8 +261,11 @@
   // An attachment-only turn (the model returned a file and no prose) would
   // otherwise draw an empty bubble above the attachment block. Skip the bubble
   // and let the attachment be the message.
+  // Checked against the STRIPPED text: a turn that died inside a tool call has
+  // nothing but log lines in `content`, and that must draw no bubble at all
+  // rather than an empty one.
   const hasBody = $derived(
-    content.trim().length > 0 || !!heartbeat || hasThinking || !!metadata?.workflowGenerated,
+    answerText.trim().length > 0 || !!heartbeat || hasThinking || !!metadata?.workflowGenerated,
   );
   let heartbeatLabel = $derived.by(() => {
     if (!heartbeat) return '';
@@ -365,7 +383,8 @@
      row with an 84px mono gutter (who / when) and a body column beside it,
      divided by a hairline. The row is full-bleed so the divider and the
      assistant wash reach the pane edges, while the content inside stays on the
-     900px reading column via the centring padding. */
+     900px reading column via the centring padding. Under 800px the gutter
+     folds into a header line above the body (see the media query below). */
   .msg-row {
     display: grid;
     grid-template-columns: 84px minmax(0, 1fr);
@@ -571,6 +590,19 @@
     .cost-stamp {
       font-size: var(--fs-label-xs);
     }
+    /* The 84px gutter + 16px gap is ~100px of a ~360px pane — over a quarter
+       of the reading width spent on "who". Fold the meta into a header line so
+       the turn owns the full width, name just inside the top-left. */
+    .msg-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+    .msg-meta {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 8px;
+      padding-top: 0;
+    }
   }
   .chat-markdown :global(p) {
     margin: 0 0 0.5em;
@@ -723,24 +755,6 @@
     background: color-mix(in srgb, var(--card-border) 7%, transparent);
   }
   .chat-markdown :global(.md-table-wrap td) { color: var(--text-primary); }
-
-  /* A rewritten Hermes tool-log entry. Mono + ghost + a quiet accent tick, so a
-     step the model took reads as machinery sitting beside the answer rather than
-     as a sentence of the answer itself. Same left-tick geometry as the in-progress
-     status-update line in ChatArea, which is the other "this is the machine
-     talking" surface in the thread. */
-  .chat-markdown :global(.tool-log-step) {
-    margin: 0.5em 0;
-    padding: 2px 0 2px 8px;
-    border-left: 2px solid var(--accent-tint-20);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.5;
-    color: var(--text-ghost);
-  }
-  .chat-markdown :global(.tool-log-step + .tool-log-step) {
-    margin-top: -0.25em;
-  }
 
   /* Heartbeat-source message styling */
   .hb-msg {

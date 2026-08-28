@@ -74,7 +74,7 @@
   }
   .ch:global(.in) { opacity: 1; transform: none; }
 
-  .ch-head { max-width: 74ch; margin: 0 0 clamp(18px, 2.4vw, 30px); }
+  .ch-head { margin: 0 0 clamp(18px, 2.4vw, 30px); }
 
   .ch-no {
     display: inline-block; margin-bottom: 10px;
@@ -93,11 +93,12 @@
   }
   .lead .ch-title { font-size: clamp(34px, 5.6vw, 64px); }
 
+  /* Full width under the headline — the old 62ch cap left half the page empty. */
   .ch-sub {
     margin: 0;
     font-size: clamp(15.5px, 1.5vw, 18.5px);
     line-height: 1.55; color: rgba(28, 22, 17, 0.66);
-    max-width: 62ch; text-wrap: pretty;
+    text-wrap: pretty;
   }
 
   @media (max-width: 620px) {

@@ -13,20 +13,18 @@
  * `notifications` config (null/absent — the default for every existing
  * workflow) it does nothing, silently.
  *
- * WhatsApp sends are delegated to the Hermes bridge in production via the
+ * WhatsApp sends are delegated to the WhatsApp worker in production via the
  * WhatsApp service (`whatsapp/service.ts`), so this works in worker mode where
  * no local Baileys client is paired. The service is lazy-imported so the engine
  * doesn't pull in the WhatsApp stack unless a run actually needs to notify.
  */
 
+import { ownerPhone } from '$lib/config/owner';
 import { db } from '$lib/db';
 import { workflows, type WorkflowNotifications } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { markdownToWhatsApp } from './whatsapp/format';
 
-/** The owner's WhatsApp number — matches `chat/wa-escalation.ts`. An env
- *  override is honoured for test/other-owner setups but defaults to John's. */
-const OWNER_PHONE = process.env.WORKFLOW_NOTIFY_PHONE?.trim() || '+447359228511';
 const SITE_URL = 'https://strangeramblings.com';
 const CANVAS_NAME_PREFIX = 'canvas:';
 
@@ -100,7 +98,7 @@ async function sendWhatsApp(text: string): Promise<void> {
   try {
     const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
     const wa = getWhatsAppService();
-    const result = await wa.sendMessage(OWNER_PHONE, text);
+    const result = await wa.sendMessage(ownerPhone() ?? '', text);
     if (!result.sent) {
       console.warn(`[run-notifications] WhatsApp send failed: ${result.error ?? 'unknown error'}`);
     }

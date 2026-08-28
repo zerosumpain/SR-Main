@@ -49,8 +49,28 @@ export async function extractLocal(
 		}
 
 		const html = await res.text();
-		if (!html || html.length < 100) return null;
+		return readableFromHtml(html, url);
+	} catch (err: any) {
+		if (err?.name === 'AbortError') throw err;
+		return null;
+	}
+}
 
+/**
+ * The Readability half, over HTML you already hold.
+ *
+ * Split out because callers keep arriving with the bytes in hand. The /drive
+ * archiver downloads a page to decide whether it is a document, and then used
+ * to hand the URL to `fetchPageText` — which tries **Tavily Extract first**, so
+ * archiving a page the site had already fetched cost a Tavily credit to fetch
+ * it a second time. Parsing what we have costs nothing.
+ *
+ * Returns null rather than throwing on anything unparseable, so a caller can
+ * fall back to the paid routes only when it genuinely needs them.
+ */
+export function readableFromHtml(html: string, url: string): LocalExtractResult | null {
+	if (!html || html.length < 100) return null;
+	try {
 		const dom = new JSDOM(html, { url });
 		const reader = new Readability(dom.window.document);
 		const article = reader.parse();
@@ -64,8 +84,7 @@ export async function extractLocal(
 			content: article.textContent.trim(),
 			title: article.title ?? null,
 		};
-	} catch (err: any) {
-		if (err?.name === 'AbortError') throw err;
+	} catch {
 		return null;
 	}
 }

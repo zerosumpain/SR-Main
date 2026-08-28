@@ -5,7 +5,7 @@
  *
  *  - **LLM** — read back out of `agent_actions`, the site's durable cost
  *    ledger. Deep research now stamps its session id onto every call it makes
- *    (see `$lib/deepdive/meter`), which is what makes this query possible at
+ *    (see `$lib/context/research-meter`), which is what makes this query possible at
  *    all; before that the spend was in the ledger with a null id and could only
  *    be totalled site-wide.
  *  - **Tavily** — counters on the session row, because Tavily issues no

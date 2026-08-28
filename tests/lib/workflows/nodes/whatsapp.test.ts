@@ -62,15 +62,18 @@ describe('whatsapp executor — basic + markdown', () => {
     expect(sent).not.toContain('**');
   });
 
-  it('errors without a recipient', async () => {
-    const r = await whatsappExecutor.execute({}, { message: 'hi' }, ctx());
-    expect(r.output).toMatchObject({ sent: false });
+  it('THROWS without a recipient — a node that cannot deliver is not a completed node', async () => {
+    await expect(whatsappExecutor.execute({}, { message: 'hi' }, ctx())).rejects.toThrow(
+      /no recipient/i,
+    );
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 
-  it('errors with neither message nor media', async () => {
+  it('SKIPS (does not throw) when message and media both interpolate empty', async () => {
+    // Legitimate: `message` is templated, so a configured node can resolve to
+    // nothing when upstream produced no items. That is a skip, not a failure.
     const r = await whatsappExecutor.execute({}, { to: '+123' }, ctx());
-    expect(r.output.sent).toBe(false);
+    expect(r.output).toMatchObject({ sent: false, skipped: true });
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });
@@ -152,7 +155,7 @@ describe('whatsapp executor — idempotency suppression', () => {
       { to, message, formatMarkdown: false, suppressDuplicateWindowMins: 1440 },
       ctx(),
     );
-    expect(r.output).toMatchObject({ sent: false, suppressed: true });
+    expect(r.output).toMatchObject({ sent: false, suppressed: true, skipped: true });
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(mockAppendAtomic).not.toHaveBeenCalled();
   });
@@ -172,14 +175,15 @@ describe('whatsapp executor — idempotency suppression', () => {
     expect(mockAppendAtomic).toHaveBeenCalledOnce();
   });
 
-  it('does NOT record the hash when the send fails', async () => {
+  it('THROWS and does NOT record the hash when the send fails', async () => {
     mockSendMessage.mockResolvedValue({ sent: false, error: 'offline' });
-    const r = await whatsappExecutor.execute(
-      {},
-      { to, message, formatMarkdown: false, suppressDuplicateWindowMins: 1440 },
-      ctx(),
-    );
-    expect(r.output.sent).toBe(false);
+    await expect(
+      whatsappExecutor.execute(
+        {},
+        { to, message, formatMarkdown: false, suppressDuplicateWindowMins: 1440 },
+        ctx(),
+      ),
+    ).rejects.toThrow(/offline/);
     expect(mockAppendAtomic).not.toHaveBeenCalled();
   });
 
@@ -203,6 +207,52 @@ describe('whatsapp executor — media', () => {
     expect(att).toMatchObject({ kind: 'image', diskPath: '/tmp/report.png', mimeType: 'image/png' });
     expect(caption).toBe('Weekly update');
     expect(r.output).toMatchObject({ sent: true, media: true, messageId: 'a1' });
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('whatsapp executor — a send that did not send is a FAILURE', () => {
+  /**
+   * The production DB held 12 node_executions reading `WhatsApp bridge
+   * unreachable`, every one of them `node_status=completed,
+   * run_status=completed`. Workflows whose entire purpose was to deliver a
+   * message were reporting success while delivering nothing.
+   */
+  it('throws when the bridge is unreachable, carrying the underlying error', async () => {
+    mockSendMessage.mockResolvedValue({ sent: false, error: 'WhatsApp bridge unreachable' });
+    await expect(
+      whatsappExecutor.execute({}, { to: '+123', message: 'hi', formatMarkdown: false }, ctx()),
+    ).rejects.toThrow(/WhatsApp bridge unreachable/);
+  });
+
+  it('names how far it got when a multi-chunk send fails partway', async () => {
+    mockSendMessage
+      .mockResolvedValueOnce({ sent: true, messageId: 'm1' })
+      .mockResolvedValueOnce({ sent: false, error: 'dropped' });
+    const long = 'x'.repeat(5000);
+    await expect(
+      whatsappExecutor.execute({}, { to: '+123', message: long, formatMarkdown: false }, ctx()),
+    ).rejects.toThrow(/1\/\d+ chunk/);
+  });
+
+  it('still returns normally on a successful send', async () => {
+    mockSendMessage.mockResolvedValue({ sent: true, messageId: 'm1' });
+    const r = await whatsappExecutor.execute(
+      {},
+      { to: '+123', message: 'hi', formatMarkdown: false },
+      ctx(),
+    );
+    expect(r.output).toMatchObject({ sent: true, skipped: false, error: null });
+  });
+
+  it('does not throw in dryRun even when the underlying send would fail', async () => {
+    mockSendMessage.mockResolvedValue({ sent: false, error: 'offline' });
+    const r = await whatsappExecutor.execute(
+      {},
+      { to: '+123', message: 'hi' },
+      ctx({ dryRun: true }),
+    );
+    expect(r.output).toMatchObject({ simulated: true });
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });

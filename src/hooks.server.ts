@@ -14,12 +14,14 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
+import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
+import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { redirect, type Handle } from '@sveltejs/kit';
@@ -103,6 +105,7 @@ startScheduledEngine().catch((err) => {
 // idle-time run. Neither belongs in the jkai-builder sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
+import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
 // runaway schedules, proposes fixes. Structural sibling of selfimprove: same
 // prod-only cron gate, same leader-elected lane, so it boots the same way.
@@ -123,6 +126,8 @@ import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
+  // Monthly, advisory only — it writes a note and never touches the card.
+  startVoiceDrift();
   startWorkflowDoctor();
   startBriefingEngine();
   startConnectorMonitor();
@@ -267,9 +272,67 @@ const { handle: authHandle } = SvelteKitAuth({
   },
 });
 
+// JKAImaps (maps.strangeramblings.com) was retired in favour of the /health hub, which
+// does the same job with a server behind it — routes and recordings live in
+// Postgres instead of one phone's IndexedDB. The hostname now points at this
+// app, so every request arriving under it is a stale bookmark: send it to the
+// nearest equivalent rather than dumping everything on one landing page.
+//
+// This runs before the auth gate on purpose. /health/activities is owner-only, so a
+// redirect emitted after the gate would send visitors to /login?callbackUrl=…
+// instead of telling them where the thing went.
+const RETIRED_MAPS_HOST = 'maps.strangeramblings.com';
+
+function retiredMapsTarget(pathname: string): string {
+  const path = pathname.replace(/\/+$/, '').toLowerCase();
+  if (path === '/create' || path === '/discover') return '/health/plan';
+  if (path === '/record' || path.endsWith('/record')) return '/health/record';
+  if (path.startsWith('/route')) return '/health/routes';
+  if (path.startsWith('/history')) return '/health/activities';
+  return '/health/activities';
+}
+
+/**
+ * /trails moved under /health (2026-08).
+ *
+ * The body and the ground it covers were two dashboards asking the same
+ * question, so they became one hub. Old URLs are in the installed PWA, in saved
+ * links and in the retired-maps redirect above, so they 308 rather than 404.
+ *
+ * `/trails/dashboard` has no successor of its own — the physiology it showed is
+ * the signed-in view of /health itself.
+ *
+ * Kept as a pure function and mirrored by trails-redirect.test.ts, which cannot
+ * import this module without pulling in Auth.js and the whole workflow engine.
+ */
+export function trailsRedirectTarget(pathname: string): string | null {
+  if (pathname !== '/trails' && !pathname.startsWith('/trails/')) return null;
+  const rest = pathname.slice('/trails'.length).replace(/^\//, '').replace(/\/+$/, '');
+  if (!rest) return '/health/activities';
+  const [head, ...tail] = rest.split('/');
+  if (head === 'dashboard') return '/health';
+  if (head === 'segments' || head === 'plan' || head === 'routes' || head === 'record') {
+    return ['/health', head, ...tail].join('/');
+  }
+  // Anything else is an activity id.
+  return ['/health/activities', head, ...tail].join('/');
+}
+
 // Route protection
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
+
+  if (requestHost(event) === RETIRED_MAPS_HOST) {
+    throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
+  }
+
+  // /trails folded into /health. Before the auth gate on purpose — /trails is no
+  // longer a route at all, so falling through would 302 a stale bookmark to
+  // /login with a callbackUrl that leads nowhere.
+  {
+    const target = trailsRedirectTarget(pathname);
+    if (target) throw redirect(308, target + event.url.search);
+  }
 
   // Admin consolidation (2026-07): the /admin route tree was reorganised into
   // six sections. 308-redirect the old flat URLs to their new homes (preserving
@@ -299,15 +362,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (import.meta.env.DEV || env.AUTH_BYPASS === '1') {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    const isPrivate =
-      clientAddr === '127.0.0.1' ||
-      clientAddr === '::1' ||
-      clientAddr.startsWith('10.') ||
-      clientAddr.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(clientAddr) ||
-      // Tailscale CGNAT range (100.64.0.0/10) — covers homeserv's Tailscale clients.
-      /^100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\./.test(clientAddr);
-    if (isPrivate) {
+    // `isPrivateAddress` rather than a list of prefixes written out here. The
+    // hand-written version compared against `'127.0.0.1'` and missed
+    // `::ffff:127.0.0.1`, which is what a dual-stack listener actually reports
+    // — so on `vite dev --host` the bypass never fired and every request from
+    // the box itself 401'd. See $lib/server/client-address.
+    if (isPrivateAddress(clientAddr)) {
       return resolve(event);
     }
   }
@@ -348,17 +408,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  // /api/jkai/prompts/hermes is service-to-service: the VPS prompt workbench
-  // proxies here so it can read/write ~/.hermes-jkai/*.md, which only exist on
-  // homeserv. Same shape as /api/scraper/script above — whitelist on homeserv
-  // only; the handler still enforces the service token itself.
-  if (pathname === '/api/jkai/prompts/hermes') {
-    const { hostname } = await import('os');
-    if (hostname() === 'homeserv' || process.env.HERMES_PROMPTS_LOCAL === '1') {
-      return resolve(event);
-    }
-  }
-
   // Public API routes — read-only, used by public pages (plus the write-only
   // heartbeat-renderer telemetry beacon, which stores nothing). The list lives
   // in $lib/server/public-api-paths so the security panel can display exactly
@@ -369,9 +418,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   // /api/mcp* are service-to-service: the routing proxy and the local
   // dispatcher both authenticate via `Authorization: Bearer
-  // HERMES_BRIDGE_SECRET` inside the handlers themselves. They must
-  // bypass the Auth.js gate so the VPS-originated tool calls from
-  // homeserv's Hermes can land here on the VPS.
+  // SERVICE_BRIDGE_SECRET` inside the handlers themselves. They must
+  // bypass the Auth.js gate so a tool call from an MCP client can land.
   if (pathname === '/api/mcp' || pathname.startsWith('/api/mcp/')) {
     return resolve(event);
   }
@@ -405,6 +453,19 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/daydream/backfill POST is service-to-service: it pulls a month of
+  // Home Assistant history into the daydream trail and is triggered from a
+  // script, which has no user session. It self-authenticates via
+  // `Authorization: Bearer DAYDREAM_MAINTENANCE_SECRET` and ALSO accepts an
+  // owner session, so the button on /jkai/daydreams keeps working.
+  //
+  // Matched EXACTLY and POST-only, following the claude-changelog bypass above:
+  // a prefix here would hand the exemption to every future `/api/daydream/*`
+  // route, and `/api/daydream/thoughts` reads the owner's movements.
+  if (pathname === '/api/daydream/backfill' && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
   // /api/policy-engine/* (ingest + seed-workflows) are service-to-service: the
   // scheduled tracking workflows' http-request node has no user session. The
   // handlers self-authenticate via `Authorization: Bearer POLICY_INGEST_SECRET`,
@@ -421,7 +482,30 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // /api/policy-engine above). GET (debug summary) is deliberately NOT bypassed —
   // it falls through to the owner gate below (spec Decision Log #6: reads stay
   // owner-only).
-  if (pathname.startsWith('/api/claude-changelog/') && event.request.method === 'POST') {
+  //
+  // Matched EXACTLY, not by prefix — the same rule the tools/studio bypasses
+  // above already follow. A prefix here silently hands the exemption to every
+  // future `/api/claude-changelog/*` route somebody adds, which is how an
+  // endpoint ends up unauthenticated without anyone choosing that. Today only
+  // `/ingest` has a POST handler; the exemption should name it and no more.
+  if (pathname === '/api/claude-changelog/ingest' && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
+  // /api/jkai/codegraph/{ingest,query} POST are service-to-service: the
+  // homeserv backfill posts extracted graph units, and a running build reaches
+  // the graph through `scripts/codegraph-query.mjs` over bash — bash being the
+  // only transport pi has never stripped (all 5,214 recorded build actions are
+  // pi built-ins; the site-tool bridge has never once been called). Both
+  // self-authenticate with `Authorization: Bearer CLAUDE_CHANGELOG_SECRET` and
+  // fail CLOSED when it is unset in production; /query additionally accepts an
+  // owner session for chat and the UI.
+  //
+  // Exact pathnames, never a prefix — see the note above.
+  if (
+    (pathname === '/api/jkai/codegraph/ingest' || pathname === '/api/jkai/codegraph/query') &&
+    event.request.method === 'POST'
+  ) {
     return resolve(event);
   }
 
@@ -463,7 +547,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // /api/whatsapp/inbound is service-to-service: in delegated (production) mode
-  // Hermes relays owner WhatsApp messages here to run the approval-reply /
+  // The WhatsApp worker relays owner messages here to run the approval-reply /
   // whatsapp-trigger intercepts, with no user session. The handler
   // self-authenticates via `Authorization: Bearer WHATSAPP_INBOUND_SECRET` (and
   // is disabled 503 if the secret is unset), so it bypasses the Auth.js gate
@@ -478,7 +562,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (pathname === '/api/health/workflow-engine') {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    if (clientAddr === '127.0.0.1' || clientAddr === '::1') {
+    if (isLoopbackAddress(clientAddr)) {
       return resolve(event);
     }
   }
@@ -489,17 +573,21 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // secret + loopback through here; the endpoint re-checks the secret
   // (defence-in-depth). An owner browser (no secret) falls through to the normal
   // owner-gate and still works.
+  // /api/trails/segments is POST-ONLY here, unlike the others: the same path
+  // answers GET with segment geometry, and a GPS trace starts at the front
+  // door. A rebuild is an idempotent recompute of data already stored; handing
+  // out where it happened is not.
   if (
     pathname === '/api/deepdive/index-sources' ||
     pathname === '/api/deepdive/reindex-facts' ||
     pathname === '/api/jkai/intel/backfill' ||
     pathname === '/api/jkai/intel/source-facets' ||
-    pathname === '/api/jkai/intel/clusters/recalculate'
+    pathname === '/api/jkai/intel/clusters/recalculate' ||
+    (pathname === '/api/trails/segments' && event.request.method === 'POST')
   ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    const isLoopback = clientAddr === '127.0.0.1' || clientAddr === '::1';
-    if (isLoopback && hasMaintenanceSecret(event.request)) {
+    if (isLoopbackAddress(clientAddr) && hasMaintenanceSecret(event.request)) {
       return resolve(event);
     }
   }
@@ -527,7 +615,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     // Authed APIs are owner-only by default. A guest on the login allow-list has
     // a valid session but may only reach the guest-allowed surface (none, by
     // default). The genuinely public / service-to-service APIs (biome, agent,
-    // jkai proxy, space-lander, scraper, mcp, policy-engine, admin/hermes, …)
+    // jkai proxy, space-lander, scraper, mcp, policy-engine, …)
     // already returned earlier via isPublicPath and the explicit bypasses above,
     // so they never reach here. This subsumes the old /api/admin/* gate. Before
     // guests existed a session implied owner; introducing guests broke that
@@ -566,10 +654,23 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // Public page routes — no auth required.
-  const PUBLIC_PATHS = ['/health', '/tools'];
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
-    return resolve(event);
-  }
+  //
+  // /health is EXACT, and that is the whole point. The health hub now owns the
+  // ground data too: /health/activities, /health/segments, /health/plan,
+  // /health/routes and /health/record all carry GPS traces, and a GPS trace
+  // starts at the front door. Under the old prefix rule every one of those
+  // became anonymous the moment its directory existed — with no allowlist edit
+  // to review and, because scripts/check-public-routes.mjs could not see this
+  // array, a green gate. Written as explicit literals so that gate DOES see
+  // them; they are classified in HOOK_EXACT_BYPASSES / HOOK_BYPASSES there.
+  //
+  // The page itself decides what an anonymous visitor gets: /health builds two
+  // disjoint payloads and never sends the owner one to a browser without a
+  // session (see its +page.server.ts).
+  //
+  // /tools stays a PREFIX — static/tools/* is a genuine tree.
+  if (pathname === '/health') return resolve(event);
+  if (pathname === '/tools' || pathname.startsWith('/tools/')) return resolve(event);
 
   // Page routes redirect to sign-in
   const session = await event.locals.auth();
