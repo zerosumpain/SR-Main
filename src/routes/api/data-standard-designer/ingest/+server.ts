@@ -8,7 +8,7 @@
 
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { runDiscovery, getRegistrySnapshot } from '../../../projects/data-standard-designer/lib/discovery.server';
+import { runDiscovery, getRegistrySnapshot } from '$lib/data-standard-designer/discovery.server';
 import type { RequestHandler } from './$types';
 
 function authorized(request: Request): boolean {

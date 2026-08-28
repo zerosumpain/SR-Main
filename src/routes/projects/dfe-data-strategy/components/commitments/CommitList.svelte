@@ -2,7 +2,7 @@
   import { ledger } from '../../lib/commitmentsFilter.svelte';
   import { DOCUMENTS_BY_ID, THEME_META, STATUS_META } from '../../lib/commitments';
   import { app } from '../../lib/appState.svelte';
-  import type { Commitment } from '../../lib/types';
+  import type { Commitment } from '$lib/dfe-data-strategy/types';
 
   let { items, dense = false }: { items: Commitment[]; dense?: boolean } = $props();
   const eli = $derived(app.narrative === 'eli5');

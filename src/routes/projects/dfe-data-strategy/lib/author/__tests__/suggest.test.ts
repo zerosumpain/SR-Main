@@ -6,7 +6,7 @@ import { suggestLines, type SuggestContext } from '../suggest';
 import { SECTION_TEMPLATES } from '../templates';
 import { defaultState, runAlignment } from '../../engine';
 import { POSTURE_IDS } from '../../postures';
-import type { StrategyState } from '../../types';
+import type { StrategyState } from '$lib/dfe-data-strategy/types';
 
 function ctxFor(state: StrategyState): SuggestContext {
   return { state, align: runAlignment(state), scenarioName: 'Test stance' };

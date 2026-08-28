@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { LeverState } from '../lib/types';
+  import type { LeverState } from '$lib/policy-engine/types';
   import { runSensitivity, type McKey, MC_KEYS } from '../lib/montecarlo';
   import { OUTCOMES_BY_ID, OUTCOME_ELI5_LABEL } from '../lib/outcomes';
-  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '../lib/levers';
-  import { fmtNum } from '../lib/format';
+  import { LEVERS_BY_ID, GROUP_META, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
+  import { fmtNum } from '$lib/policy-engine/format';
   import { app } from '../lib/appState.svelte';
   const lname = (id: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? LEVERS_BY_ID[id].label : LEVERS_BY_ID[id].label);
   const oname = (id: string, label: string) => (app.narrative === 'eli5' ? OUTCOME_ELI5_LABEL[id] ?? label : label);

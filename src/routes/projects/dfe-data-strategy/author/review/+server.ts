@@ -11,7 +11,7 @@ import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve } from '../../lib/retrieval.server';
-import { coerceJson } from '../../lib/jsonsafe';
+import { coerceJson } from '$lib/dfe-data-strategy/jsonsafe';
 import { validateReview } from '../../lib/author/reviewValidate';
 import { SECTION_CRITERIA, DOCUMENT_CRITERIA, FAILURE_MODES, COMPONENT_CHECKLIST } from '../../lib/author/rubric';
 import { MUST_ANSWER, DOCUMENTS_BY_ID } from '../../lib/commitments';

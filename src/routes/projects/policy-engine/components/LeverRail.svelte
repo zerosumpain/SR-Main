@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { LeverState } from '../lib/types';
-  import { LEVERS, GROUP_META, GROUP_ORDER, LEVERS_BY_ID, LEVER_META, DRIVE_LABEL, LEVER_ELI5_NAME } from '../lib/levers';
+  import type { LeverState } from '$lib/policy-engine/types';
+  import { LEVERS, GROUP_META, GROUP_ORDER, LEVERS_BY_ID, LEVER_META, DRIVE_LABEL, LEVER_ELI5_NAME } from '$lib/policy-engine/levers';
   import { app } from '../lib/appState.svelte';
   const lname = (id: string, label: string) => (app.narrative === 'eli5' ? LEVER_ELI5_NAME[id] ?? label : label);
   const gname = (g: string) => (app.narrative === 'eli5' ? GROUP_META[g].eli5 : GROUP_META[g].label);

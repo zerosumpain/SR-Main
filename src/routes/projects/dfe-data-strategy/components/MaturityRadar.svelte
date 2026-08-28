@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { MATURITY_DIMENSIONS, MATURITY_LEVELS } from '../lib/maturity';
+  import { MATURITY_DIMENSIONS, MATURITY_LEVELS } from '$lib/dfe-data-strategy/maturity';
 
   const N = MATURITY_DIMENSIONS.length;
   const cx = 150;

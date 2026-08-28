@@ -12,7 +12,7 @@ import {
 } from '../commitments';
 import { ORGS, ORG_BY_ID } from '../orgs';
 import { CAPABILITY_IDS } from '../capabilities';
-import { PRESSURES } from '../pressures';
+import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
 
 const PRESSURE_IDS = new Set(PRESSURES.map((p) => p.id));
 const CAP_IDS = new Set(CAPABILITY_IDS);

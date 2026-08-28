@@ -2,7 +2,7 @@
   import { author } from '../../lib/author/authorState.svelte';
   import { app } from '../../lib/appState.svelte';
   import { MEASURE_LIBRARY, suggestMilestones, suggestRisks, quarterRange } from '../../lib/author/plan';
-  import { STAKEHOLDERS } from '../../lib/policy';
+  import { STAKEHOLDERS } from '$lib/dfe-data-strategy/policy';
   import { markdownToHtml } from '../../lib/author/serialize';
 
   // ---- roadmap ----

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { styleRoute, bandColor, speedDash, TIME_BANDS, PASSED_COLOR } from './route-style';
-import type { GraphEdge } from './types';
+import type { GraphEdge } from '$lib/broads-pilot/types';
 
 // A straight-line edge of `len` metres at `mph`, from [0,0] heading east along
 // a fixed latitude. Geometry is two points; length_m drives the timing.

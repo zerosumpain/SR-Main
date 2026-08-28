@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { PRESSURES } from '../lib/pressures';
+  import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
   import { CAPABILITY_AREAS } from '../lib/capabilities';
-  import type { Origin } from '../lib/types';
+  import type { Origin } from '$lib/dfe-data-strategy/types';
 
   const ORIGINS: { id: Origin; label: string }[] = [
     { id: 'cross-government', label: 'Cross-gov' },

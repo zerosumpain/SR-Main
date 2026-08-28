@@ -8,8 +8,8 @@ import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import { buildStrategyContext, targetBrief } from '../lib/policy';
-import { coerceJson } from '../lib/jsonsafe';
+import { buildStrategyContext, targetBrief } from '$lib/dfe-data-strategy/policy';
+import { coerceJson } from '$lib/dfe-data-strategy/jsonsafe';
 
 const HITS = new Map<string, number[]>();
 function rateLimited(ip: string): boolean {

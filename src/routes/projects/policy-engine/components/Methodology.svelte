@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LEVERS, GROUP_META } from '../lib/levers';
+  import { LEVERS, GROUP_META } from '$lib/policy-engine/levers';
   import { SOURCES } from '../lib/sources';
   import { BY_MATHS, OECD_AVG, SPEND_THRESHOLD, ENGLAND_PISA, TIER_META } from '../lib/comparators';
   import CausalFlow from './CausalFlow.svelte';

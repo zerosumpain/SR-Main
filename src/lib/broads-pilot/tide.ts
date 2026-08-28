@@ -4,7 +4,7 @@
 // Low water = maximum headroom = the window to pass the low tide-dependent
 // bridges. Pure + display-only; the app keeps its 0.3 m safety margin and defers
 // to the on-site gauge board. Times render in Europe/London (handles BST/GMT).
-import type { TideTable, Bridge } from './types';
+import type { TideTable, Bridge } from '$lib/broads-pilot/types';
 
 /** Mean semidiurnal tidal period (s) = 12 h 25 m. */
 const SEMIDIURNAL_S = 44700;

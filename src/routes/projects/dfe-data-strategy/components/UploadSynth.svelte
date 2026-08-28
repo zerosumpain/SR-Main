@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { MATURITY_BY_ID } from '../lib/maturity';
-  import { PRESSURES_BY_ID } from '../lib/pressures';
+  import { MATURITY_BY_ID } from '$lib/dfe-data-strategy/maturity';
+  import { PRESSURES_BY_ID } from '$lib/dfe-data-strategy/pressures';
   import { POSTURE_BY_ID } from '../lib/postures';
   import { CAPABILITY_BY_ID } from '../lib/capabilities';
 

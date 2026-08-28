@@ -4,7 +4,7 @@
 // the public/research edge. Angles are hand-placed so related organisations sit
 // near each other (departments to the north, delivery to the south).
 
-import type { Org } from './types';
+import type { Org } from '$lib/dfe-data-strategy/types';
 
 export const ORGS: Org[] = [
   // ring 0 — the centre

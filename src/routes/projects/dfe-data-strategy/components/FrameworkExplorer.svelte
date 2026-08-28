@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { FRAMEWORKS_BY_DATE } from '../lib/frameworks';
-  import type { Framework, FrameworkType } from '../lib/types';
+  import { FRAMEWORKS_BY_DATE } from '$lib/dfe-data-strategy/frameworks';
+  import type { Framework, FrameworkType } from '$lib/dfe-data-strategy/types';
 
   // Master–detail explorer for the 12 frameworks: a sortable index on the left
   // (date order, newest first, by default), the full detail of the picked one on

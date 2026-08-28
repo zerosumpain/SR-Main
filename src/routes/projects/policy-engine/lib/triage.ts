@@ -5,8 +5,8 @@
 // question of any early-warning system. ASSOCIATIONAL multipliers on an APPROXIMATED
 // overlap structure: a strategy demonstrator, NOT a deployable tool. Self-contained.
 
-import type { Band } from './params';
-import { band } from './params';
+import type { Band } from '$lib/policy-engine/params';
+import { band } from '$lib/policy-engine/params';
 import { mulberry32, triangular } from './montecarlo';
 
 export const COHORT_SIZE = 600_000;       // one England year group

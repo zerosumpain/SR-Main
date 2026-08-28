@@ -12,9 +12,9 @@ import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
-import { referenceIndex, STAKEHOLDERS, VALID_REFS } from '../lib/policy';
+import { referenceIndex, STAKEHOLDERS, VALID_REFS } from '$lib/dfe-data-strategy/policy';
 import { retrieve } from '../lib/retrieval.server';
-import { coerceJson } from '../lib/jsonsafe';
+import { coerceJson } from '$lib/dfe-data-strategy/jsonsafe';
 
 const HITS = new Map<string, number[]>();
 const WINDOW_MS = 60_000;

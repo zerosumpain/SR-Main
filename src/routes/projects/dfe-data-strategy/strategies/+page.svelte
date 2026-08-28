@@ -4,7 +4,7 @@
   import InfluenceMap from '../components/InfluenceMap.svelte';
   import StrategyTiers from '../components/StrategyTiers.svelte';
   import NextStep from '../components/NextStep.svelte';
-  import { STRATEGIES_BY_TIER } from '../lib/strategies';
+  import { STRATEGIES_BY_TIER } from '$lib/dfe-data-strategy/strategies';
   const eli = $derived(app.narrative === 'eli5');
 </script>
 

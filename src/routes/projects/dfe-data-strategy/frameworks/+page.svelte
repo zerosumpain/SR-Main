@@ -5,7 +5,7 @@
   import IntelInline from '../components/IntelInline.svelte';
   import FrameworkExplorer from '../components/FrameworkExplorer.svelte';
   import FrameworkMap from '../components/FrameworkMap.svelte';
-  import { STRATEGY_THEMES, FRAMEWORKS } from '../lib/frameworks';
+  import { STRATEGY_THEMES, FRAMEWORKS } from '$lib/dfe-data-strategy/frameworks';
 </script>
 
 <svelte:head><title>What good looks like — Keystone</title></svelte:head>

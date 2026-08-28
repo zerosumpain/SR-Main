@@ -11,8 +11,8 @@
     bridgeTideWindows,
     breydonCrossings,
     fmtTideTime,
-  } from '../lib/tide';
-  import type { Bridge } from '../lib/types';
+  } from '$lib/broads-pilot/tide';
+  import type { Bridge } from '$lib/broads-pilot/types';
 
   const tides = $derived(app.data?.tides ?? null);
   const day = $derived(app.date);

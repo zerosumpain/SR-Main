@@ -7,7 +7,7 @@
   import { app } from '../lib/appState.svelte';
   import { fmtRate, fmtDist, fmtTime } from '../lib/format';
   import { getRating, type Rating } from '../lib/ratings';
-  import type { Mooring, MooringTier, Poi, PoiKind } from '../lib/types';
+  import type { Mooring, MooringTier, Poi, PoiKind } from '$lib/broads-pilot/types';
 
   // parent supplies a camera-focus callback so setting the start centres the map
   // (matches the other start-setters); only used when the map is free-roaming.

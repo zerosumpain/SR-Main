@@ -4,15 +4,15 @@
   // people-numbers, an impact ledger (point-in-time ⇄ cumulative, with stocks barred from
   // summation), child-years averted, and population stocks over time (reused OutcomeChart).
 
-  import type { YearResult } from '../lib/types';
+  import type { YearResult } from '$lib/policy-engine/types';
   import OutcomeChart, { type ChartSeries } from './OutcomeChart.svelte';
   import CohortFunnel from './CohortFunnel.svelte';
   import {
     cohortPipeline, cohortHeadline, peopleLedger, personYears, populationStocks,
     COHORT_N, DIS_COHORT_N, type PeopleRow,
   } from '../lib/population';
-  import { BASE_YEAR, POP } from '../lib/params';
-  import { fmtCompact, fmtNum } from '../lib/format';
+  import { BASE_YEAR, POP } from '$lib/policy-engine/params';
+  import { fmtCompact, fmtNum } from '$lib/policy-engine/format';
 
   interface Props {
     sim: YearResult[];

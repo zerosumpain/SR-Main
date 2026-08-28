@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { STRATEGIES_BY_TIER, TIER_META, TIER_ORDER, KIND_META, voicesForStrategy } from '../lib/strategies';
-  import { STANCE_META } from '../lib/sectorVoices';
+  import { STRATEGIES_BY_TIER, TIER_META, TIER_ORDER, KIND_META, voicesForStrategy } from '$lib/dfe-data-strategy/strategies';
+  import { STANCE_META } from '$lib/dfe-data-strategy/sectorVoices';
   import { app } from '../lib/appState.svelte';
 </script>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { STRATEGIES, TIER_META, KIND_META, voicesForStrategy, type StrategyItem } from '../lib/strategies';
-  import { STANCE_META } from '../lib/sectorVoices';
+  import { STRATEGIES, TIER_META, KIND_META, voicesForStrategy, type StrategyItem } from '$lib/dfe-data-strategy/strategies';
+  import { STANCE_META } from '$lib/dfe-data-strategy/sectorVoices';
   import { app } from '../lib/appState.svelte';
 
   let hovered = $state<string | null>(null);

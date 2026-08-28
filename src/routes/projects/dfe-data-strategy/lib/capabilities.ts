@@ -4,7 +4,7 @@
 // Eight areas, deliberately mapped to the language of the UK-gov + corporate
 // frameworks (DMA-for-Government, DAMA-DMBOK, DCAM).
 
-import type { CapabilityArea } from './types';
+import type { CapabilityArea } from '$lib/dfe-data-strategy/types';
 
 export const CAPABILITY_AREAS: CapabilityArea[] = [
   {

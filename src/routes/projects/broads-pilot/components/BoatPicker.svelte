@@ -1,8 +1,8 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
-  import { bridgeVerdict } from '../lib/passability';
+  import { bridgeVerdict } from '$lib/broads-pilot/passability';
   import { fmtClearance, mToFtIn } from '../lib/format';
-  import type { Boat, Bridge, Verdict } from '../lib/types';
+  import type { Boat, Bridge, Verdict } from '$lib/broads-pilot/types';
 
   // Class grouping for the <select>: recommended/generic first, then the fleets.
   const GROUPS: { key: Boat['class']; label: string }[] = [

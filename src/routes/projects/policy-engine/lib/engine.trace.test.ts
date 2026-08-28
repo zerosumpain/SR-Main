@@ -4,8 +4,8 @@
 // provable "= the engine's value ✓" check.
 
 import { describe, it, expect } from 'vitest';
-import { runSim } from './engine';
-import { baselineLevers, policyLevers } from './levers';
+import { runSim } from '$lib/policy-engine/engine';
+import { baselineLevers, policyLevers } from '$lib/policy-engine/levers';
 
 const TRACED = [
   'gapKS4', 'gapKS2', 'gapReception', 'gapAge3',

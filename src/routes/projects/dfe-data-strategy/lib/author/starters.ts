@@ -5,11 +5,11 @@
 // pre-written strategy prose: the words stay the writer's job.
 
 import { COMMITMENTS, MUST_ANSWER, DOCUMENTS_BY_ID, STATUS_META } from '../commitments';
-import { LEGISLATION } from '../legislation';
-import { PRESSURES } from '../pressures';
+import { LEGISLATION } from '$lib/dfe-data-strategy/legislation';
+import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
 import { markdownToHtml } from './serialize';
 import type { StrategySection } from './templates';
-import type { CommitmentTheme } from '../types';
+import type { CommitmentTheme } from '$lib/dfe-data-strategy/types';
 
 export interface Starter {
   id: string;

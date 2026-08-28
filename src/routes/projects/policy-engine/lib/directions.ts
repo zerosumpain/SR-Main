@@ -6,8 +6,8 @@
 // in the corpus. Self-contained.
 
 import type { Lean } from './evidence';
-import type { LeverState } from './types';
-import { LEVERS_BY_ID } from './levers';
+import type { LeverState } from '$lib/policy-engine/types';
+import { LEVERS_BY_ID } from '$lib/policy-engine/levers';
 
 export type DirKind = 'diagnosis-direction' | 'recommendation';
 export type DirStatus = 'diagnosis' | 'recommended' | 'announced';
