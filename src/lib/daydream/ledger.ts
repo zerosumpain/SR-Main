@@ -660,7 +660,9 @@ export async function loadDiscoveries() {
   const { daydreamDigests, daydreamLeads } = await import('$lib/db/schema');
 
   const [board, digests, leads, sweep] = await Promise.all([
-    loadBoard(60),
+    // null = every person. The board is the one home for questions now; the
+    // Family tab links here rather than keeping a second copy.
+    loadBoard(120, null),
     db
       .select({
         day: daydreamDigests.day,

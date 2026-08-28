@@ -16,6 +16,8 @@ import {
 
 export interface StoredExclusion {
   id: string;
+  /** False when this row explains the event rather than hiding it. */
+  hidden: boolean;
   scope: ExclusionScope;
   uid: string | null;
   occurrenceStart: string | null;
@@ -41,6 +43,7 @@ export async function listExclusions(): Promise<StoredExclusion[]> {
     .orderBy(desc(daydreamCalendarExclusions.createdAt));
   return rows.map((r) => ({
     id: r.id,
+    hidden: r.hidden,
     scope: r.scope as ExclusionScope,
     uid: r.uid,
     occurrenceStart: r.occurrenceStart?.toISOString() ?? null,
@@ -63,9 +66,12 @@ export async function listExclusions(): Promise<StoredExclusion[]> {
  */
 export async function loadExclusionSet(): Promise<ExclusionSet> {
   try {
+    // Only rows that HIDE. A note-only row explains an event and must not
+    // remove it — hiding a PE day would hide the kit reminder with it.
     const rows = await db
       .select({ matchKey: daydreamCalendarExclusions.matchKey })
-      .from(daydreamCalendarExclusions);
+      .from(daydreamCalendarExclusions)
+      .where(eq(daydreamCalendarExclusions.hidden, true));
     return new ExclusionSet(rows.map((r) => r.matchKey));
   } catch (err) {
     console.error('[daydream] calendar exclusions unreadable, showing the whole diary:', err);
@@ -74,6 +80,8 @@ export async function loadExclusionSet(): Promise<ExclusionSet> {
 }
 
 export interface AddExclusionInput {
+  /** False writes a note that explains the event without hiding it. */
+  hidden?: boolean;
   scope: ExclusionScope;
   uid?: string | null;
   occurrenceStart?: string | null;
@@ -119,6 +127,7 @@ export async function addExclusion(
     title: input.title ?? null,
     calendarName: input.calendarName ?? null,
     reason: input.reason?.trim() || null,
+    hidden: input.hidden !== false,
     matchKey,
     updatedAt: new Date(),
   };
@@ -128,7 +137,15 @@ export async function addExclusion(
     .values(values)
     .onConflictDoUpdate({
       target: daydreamCalendarExclusions.matchKey,
-      set: { reason: values.reason, title: values.title, updatedAt: values.updatedAt },
+      set: {
+        reason: values.reason,
+        title: values.title,
+        // Upsert carries the visibility too: noting an event you had already
+        // hidden must not silently un-hide it, and hiding one you had only
+        // annotated must actually hide it.
+        hidden: values.hidden,
+        updatedAt: values.updatedAt,
+      },
     })
     .returning({ id: daydreamCalendarExclusions.id });
 
@@ -143,4 +160,32 @@ export async function removeExclusion(id: string): Promise<boolean> {
     .where(eq(daydreamCalendarExclusions.id, id))
     .returning({ id: daydreamCalendarExclusions.id });
   return rows.length > 0;
+}
+
+/**
+ * What the owner has told the engine about specific diary entries.
+ *
+ * Only the note-only rows: a hidden event is gone from every prompt, so
+ * carding its reason would describe something the model cannot see. Read by
+ * the ponder pack, which is the whole reason a note-without-hiding exists.
+ */
+export async function diaryNotes(limit = 20): Promise<Array<{ id: string; title: string | null; reason: string; scope: ExclusionScope }>> {
+  try {
+    const rows = await db
+      .select({
+        id: daydreamCalendarExclusions.id,
+        title: daydreamCalendarExclusions.title,
+        reason: daydreamCalendarExclusions.reason,
+        scope: daydreamCalendarExclusions.scope,
+      })
+      .from(daydreamCalendarExclusions)
+      .where(eq(daydreamCalendarExclusions.hidden, false))
+      .orderBy(desc(daydreamCalendarExclusions.updatedAt))
+      .limit(limit);
+    return rows
+      .filter((r): r is typeof r & { reason: string } => !!r.reason?.trim())
+      .map((r) => ({ id: r.id, title: r.title, reason: r.reason, scope: r.scope as ExclusionScope }));
+  } catch {
+    return [];
+  }
 }

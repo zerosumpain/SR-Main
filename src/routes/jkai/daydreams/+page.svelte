@@ -628,6 +628,7 @@
     feedback: string | null;
     proposedAt: string;
     testedAt: string | null;
+    subject: string;
   };
 
   let boardOpen = $state(false);
@@ -635,12 +636,44 @@
   let boardError = $state<string | null>(null);
   let board = $state<BoardRow[]>([]);
 
+  /** Whose questions to show. The board spans the household now that every
+   *  person gets their own; `all` is the default because the interesting thing
+   *  is usually the comparison. */
+  let boardWho = $state<string>('all');
+
+  /** The people who actually have questions, in household order, so the filter
+   *  never offers a name with nothing behind it. */
+  const boardPeople = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const q of board) counts.set(q.subject, (counts.get(q.subject) ?? 0) + 1);
+    const order = familyMembers.map((m) => m.subject);
+    return [...counts.entries()]
+      .sort((a, b) => {
+        const ia = order.indexOf(a[0]);
+        const ib = order.indexOf(b[0]);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      })
+      .map(([subject, n]) => ({ subject, n }));
+  });
+
+  const boardVisible = $derived(
+    boardWho === 'all' ? board : board.filter((q) => q.subject === boardWho),
+  );
+
   const VERDICT_LABEL: Record<string, string> = {
     supported: 'held up',
     refuted: 'nothing there',
     wrong_direction: 'backwards',
     underpowered: 'not enough data',
   };
+
+  /** Jump from a person's card to their questions on the board. One home for
+   *  questions; this is a route to it, not a second copy. */
+  async function openBoardFor(subject: string) {
+    boardWho = subject;
+    setTab('discoveries');
+    if (!boardOpen) await openBoard();
+  }
 
   async function openBoard() {
     boardOpen = true;
@@ -1500,7 +1533,7 @@
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Each person</span>
-      <span class="nm-sec-meta">their own questions, findings and suggestions</span>
+      <span class="nm-sec-meta">what the sweep found, and what cited them</span>
     </div>
 
     {#each familyMembers as m (m.subject)}
@@ -1518,27 +1551,26 @@
 
         {#if openPerson === m.subject}
           <div class="person-body">
-            <!-- Questions -->
+            <!-- Questions live on the Discoveries board, which spans the whole
+                 household with a name against each card. A second copy here
+                 would be two places to read the same thing and one of them
+                 would go stale. -->
             <div class="detail-block">
               <span class="sr-label-tight">Questions asked about {cap(m.subject)}</span>
               {#if !d?.hypotheses?.length}
                 <p class="cause-line">
-                  Nothing yet. Questions are proposed nightly per person and only once there
+                  Nothing yet. Questions are proposed nightly per person, and only once there
                   are enough days of history to answer them.
                 </p>
               {:else}
-                <div class="rows tight">
-                  {#each d.hypotheses.slice(0, 8) as h (h.id)}
-                    <div class="pq-row">
-                      <span class="pq-q">{h.question}</span>
-                      <span class="mono pq-verdict v-{h.verdict ?? 'open'}">{h.verdict ?? 'open'}</span>
-                      {#if h.r != null && h.qValue != null}
-                        <span class="mono pq-stats">r {h.r.toFixed(2)} · q {h.qValue.toFixed(3)} · n {h.pairs ?? '—'}</span>
-                      {/if}
-                    </div>
-                    {#if h.summary}<p class="cause-line">{h.summary}</p>{/if}
-                  {/each}
-                </div>
+                <p class="cause-line">
+                  {d.hypotheses.length} question{d.hypotheses.length === 1 ? '' : 's'},
+                  {d.hypotheses.filter((h) => h.verdict === 'supported').length} still holding.
+                  They sit on the board with everyone else's.
+                </p>
+                <button class="row-link" onclick={() => openBoardFor(m.subject)}>
+                  Open {cap(m.subject)}'s questions
+                </button>
               {/if}
             </div>
 
@@ -1620,12 +1652,15 @@
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">What it wondered</span>
-      <span class="nm-sec-meta">questions, and the answers</span>
+      <span class="nm-sec-meta">everyone's questions, and the answers</span>
     </div>
     <p class="sec-lede">
       The assistant chooses what to investigate before it sees any results, then
       deterministic statistics answer it. A question that came back empty is
       still worth reading — and is kept here exactly as long as one that held.
+      Questions are proposed per person nightly; the name on each card says whose
+      it is, and the correction is applied within that person, never across the
+      household.
     </p>
 
     <!-- Reorders what gets asked. Grants no new access: the proposer still sees
@@ -1646,10 +1681,30 @@
       {:else if board.length === 0}
         <p class="sec-lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
       {:else}
+        <!-- Every person's questions live here. The proposer runs per subject
+             nightly, so without a name against each card this is five people's
+             questions in one undifferentiated list. -->
+        {#if boardPeople.length > 1}
+          <div class="filters">
+            <span class="filter-label">Whose</span>
+            <button class="filter" class:on={boardWho === 'all'} onclick={() => (boardWho = 'all')}>
+              Everyone <span class="n">{board.length}</span>
+            </button>
+            {#each boardPeople as p (p.subject)}
+              <button class="filter" class:on={boardWho === p.subject} onclick={() => (boardWho = p.subject)}>
+                {cap(p.subject)} <span class="n">{p.n}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
         <div class="session-list">
-          {#each board as q (q.id)}
+          {#each boardVisible as q (q.id)}
             <div class="hyp" class:held={q.verdict === 'supported'}>
-              <div class="hyp-q">{q.question}</div>
+              <div class="hyp-hd">
+                <span class="who">{cap(q.subject)}</span>
+                <span class="hyp-q">{q.question}</span>
+              </div>
               <div class="hyp-meta">
                 <span class="mono">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
                 {#if q.lagDays}<span class="sep">·</span><span class="mono">next day</span>{/if}
@@ -2767,6 +2822,10 @@
   .hyp-why { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 70ch; }
   .hyp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.15rem; }
   .hyp-ask { font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .hyp-hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+  /* The name, not a colour: five people need to be told apart at a glance and
+     the palette has one accent. A chip reads at any size and in both themes. */
+  .who { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); border: 1px solid var(--accent); padding: 0 0.35rem; }
   .hyp-detail { margin-top: 0.5rem; border-top: 1px solid var(--line-hair); padding-top: 0.5rem; }
   .hyp-days { border-collapse: collapse; font-size: var(--fs-label-xs); min-width: 22rem; }
   .hyp-days th { text-align: left; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); font-weight: 400; padding: 0.15rem 0.9rem 0.15rem 0; border-bottom: 1px solid var(--line-strong); }

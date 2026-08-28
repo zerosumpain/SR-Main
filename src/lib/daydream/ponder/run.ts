@@ -185,6 +185,27 @@ async function noteCards(): Promise<PackInputs['aggregates']> {
   }
 }
 
+/**
+ * What the owner has said specific diary entries MEAN.
+ *
+ * The whole point of a note that does not hide: "PE days are a reminder to
+ * take PE kit into school, not an actual time commitment" is a fact the model
+ * should read alongside the diary, and hiding the event would have hidden the
+ * kit reminder along with the false commitment.
+ */
+async function diaryNoteCards(): Promise<PackInputs['aggregates']> {
+  try {
+    const { diaryNotes } = await import('../calendar/store');
+    const rows = await diaryNotes();
+    return rows.map((r) => ({
+      key: `diary-note:${r.id}`,
+      text: `About "${r.title ?? 'a diary entry'}" in the calendar, John says: ${r.reason}`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function recentVerdicts(): Promise<PackInputs['verdicts']> {
   try {
     return await db
@@ -254,13 +275,14 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, notes] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, notes, diaryNotes] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
       weekAhead(),
       buildProfileLines(now),
       noteCards(),
+      diaryNoteCards(),
     ]);
     const pack = assemblePack({
       snapshot,
@@ -270,7 +292,7 @@ export async function runPonder(
       // Hand-written aggregates, then the registry, then anything John has
       // said in his own words. His corrections go LAST so they are the nearest
       // thing to the instruction when the pack is read.
-      aggregates: [...aggregates, ...signals, ...notes],
+      aggregates: [...aggregates, ...signals, ...notes, ...diaryNotes],
       weekAhead: week,
       feedbackLines: [],
       profileLines,

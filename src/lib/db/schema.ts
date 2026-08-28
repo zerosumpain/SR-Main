@@ -4679,6 +4679,24 @@ export const daydreamCalendarExclusions = pgTable(
      *  engine does next. */
     reason: text('reason'),
 
+    /**
+     * Whether this row HIDES the event, or merely explains it.
+     *
+     * Not every correction is "stop looking at this". John's example: "PE days
+     * are a reminder to take PE kit into school, not an actual time
+     * commitment." That is a fact about what an entry MEANS, and the engine is
+     * better off knowing it than blind to it — hiding the event would also
+     * hide the kit reminder.
+     *
+     * `true`  — filtered out everywhere (busy minutes, prompts, suggestions).
+     * `false` — stays visible, and the reason is carded into the ponder pack
+     *           so the model reads it alongside the diary.
+     *
+     * Defaults true so every row written before this column existed keeps
+     * meaning exactly what it meant.
+     */
+    hidden: boolean('hidden').notNull().default(true),
+
     /** The one value the matcher actually compares, derived from scope + the
      *  fields above. Stored rather than computed so "already excluded?" is one
      *  indexed lookup, and so the unique index below can exist at all. */
