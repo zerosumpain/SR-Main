@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   composeClusterLabel,
+  labelForView,
   describeComposition,
   findUbiquitousEntities,
   UBIQUITY_REACH,
@@ -264,5 +265,63 @@ describe('diversity', () => {
 
   it('ignores entities with no provenance rather than counting them as a source', () => {
     expect(from([['email'], ['email'], []])).toBe(0);
+  });
+});
+
+describe('labelForView', () => {
+  // Production, 2026-08-29: filtered to important email, the row for the cluster
+  // holding one eBay order read "Hany Shoukry · Silent dev box deals" — a
+  // consultant and a shopping habit, neither of which appears in any email. They
+  // share the cluster with the order only because "England" and "London" are also
+  // the seller's address.
+  const rank = (ids: string[]) =>
+    new Map(ids.map((id, i) => [id, (ids.length - i) / ids.length]));
+
+  const cluster = [
+    n('hany', 'Hany Shoukry', 'person', ['chat']),
+    n('dev', 'Silent dev box deals', 'concept', ['chat']),
+    n('england', 'England', 'location', ['email:important']),
+    n('ebay', 'ebay.co.uk', 'organisation', ['email:important']),
+    n('dell', 'Dell Micro Desktop PC', 'product', ['email:important']),
+  ];
+  // Global centrality: England leads the whole graph on its football edges.
+  const ctx = {
+    pagerank: rank(['england', 'hany', 'dev', 'ebay', 'dell']),
+    ubiquitous: new Set<string>(),
+  };
+  const inView = new Set(['england', 'ebay', 'dell']);
+  // Degree among the visible nodes only: England's football edges are out of view.
+  const degreeInView = new Map([
+    ['ebay', 6],
+    ['dell', 5],
+    ['england', 2],
+  ]);
+
+  it('names the cluster after what the filter admits', () => {
+    expect(labelForView(cluster, (id) => inView.has(id), ctx, degreeInView)).toBe(
+      'ebay.co.uk · Dell Micro Desktop PC',
+    );
+  });
+
+  it('ranks within the slice, not by global centrality', () => {
+    // The regression this exists for: ranking the slice by `ctx.pagerank` puts
+    // England first on connections that are not on screen.
+    const byGlobal = labelForView(cluster, (id) => inView.has(id), ctx, ctx.pagerank);
+    expect(byGlobal).toBe('England · ebay.co.uk');
+    expect(labelForView(cluster, (id) => inView.has(id), ctx, degreeInView)).not.toContain(
+      'England',
+    );
+  });
+
+  it('falls back to the whole cluster, on its own ordering, when nothing is in view', () => {
+    expect(labelForView(cluster, () => false, ctx, degreeInView)).toBe(
+      composeClusterLabel(cluster, ctx),
+    );
+  });
+
+  it('still demotes the entities that are everywhere', () => {
+    const hubCtx = { pagerank: ctx.pagerank, ubiquitous: new Set(['ebay']) };
+    const label = labelForView(cluster, (id) => inView.has(id), hubCtx, degreeInView);
+    expect(label.startsWith('Dell')).toBe(true);
   });
 });

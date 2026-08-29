@@ -14,6 +14,7 @@ import {
 } from '$lib/jkai/intel/analytics/filter';
 import { reconcileFromAnalysis } from '$lib/jkai/intel/cluster-store';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
+import { labelForView } from '$lib/jkai/intel/analytics/cluster-label';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
 import { recencyOf, entityRelevance } from '$lib/jkai/intel/staleness';
@@ -62,14 +63,19 @@ export const GET: RequestHandler = async ({ url }) => {
   // back to the community index exactly as it did before.
   let clusterByCommunity = new Map<number, { key: string; colourIndex: number }>();
   const clusterLabels = new Map<number, string>();
+  /** Names the user typed, which no filter may override. */
+  const clusterNames = new Map<number, string | null>();
+  let ubiquitous: ReadonlySet<string> = new Set<string>();
   try {
     const roster = await reconcileFromAnalysis(analysis);
+    ubiquitous = roster.ubiquitous;
     const byKey = new Map(roster.clusters.map((c) => [c.key, c]));
     for (const [communityIndex, key] of roster.keyByIndex) {
       const stored = byKey.get(key);
       if (!stored) continue;
       clusterByCommunity.set(communityIndex, { key, colourIndex: stored.colourIndex });
       clusterLabels.set(communityIndex, stored.name ?? stored.autoLabel);
+      clusterNames.set(communityIndex, stored.name);
     }
   } catch (err) {
     console.warn('[intel/network] cluster roster unavailable; colouring by community index', err);
@@ -289,6 +295,22 @@ export const GET: RequestHandler = async ({ url }) => {
     olderEdges,
   };
 
+  // Degree WITHIN the current selection, computed once over the edge list.
+  //
+  // This is the ordering a filtered cluster row is named on. Global centrality
+  // is the wrong yardstick for a slice: "England" carries degree 10 across the
+  // whole graph, nearly all of it football, so ranking the important-email slice
+  // of a cluster by pagerank named it "England · London" when what the filter had
+  // actually admitted was one eBay order.
+  const degreeInView = new Map<string, number>();
+  if (filtering) {
+    for (const e of analysis.snapshot.edges) {
+      if (!selected.has(e.source) || !selected.has(e.target)) continue;
+      degreeInView.set(e.source, (degreeInView.get(e.source) ?? 0) + 1);
+      degreeInView.set(e.target, (degreeInView.get(e.target) ?? 0) + 1);
+    }
+  }
+
   const comps = components(index);
 
   // How far each cluster reaches into the filtered selection.
@@ -395,6 +417,29 @@ export const GET: RequestHandler = async ({ url }) => {
         reach,
         key: clusterByCommunity.get(id)?.key ?? null,
         colourIndex: clusterByCommunity.get(id)?.colourIndex ?? null,
+        // What to call this cluster given what the filter admits.
+        //
+        // The stored label describes the WHOLE cluster and stays that way — it
+        // is the durable identity, and `size` beside `reach` already says the
+        // row is a slice. But a name is a claim about what you are looking at,
+        // and under a filter the whole-cluster name is a claim about entities
+        // the filter removed: narrowed to important email, the cluster holding
+        // one eBay order was labelled "Hany Shoukry · Silent dev box deals",
+        // neither of which appears in any email.
+        //
+        // Null when nothing is filtered, so the client keeps the stored label
+        // verbatim rather than recomputing an identical string. A name the USER
+        // typed always wins — it is their word for this cluster, not a
+        // description of its contents.
+        inViewLabel:
+          filtering && !clusterNames.get(id)
+            ? labelForView(
+                ids.map((n) => index.byId.get(n)).filter((n): n is NonNullable<typeof n> => Boolean(n)),
+                (nodeId) => selected.has(nodeId),
+                { pagerank: centrality.pagerank, ubiquitous },
+                degreeInView,
+              )
+            : null,
         // The roster's label, which is the name the user gave it where there is
         // one. Falls back to the old rule — the most central member's name —
         // only when the roster could not be read; that rule produced "jkai",
