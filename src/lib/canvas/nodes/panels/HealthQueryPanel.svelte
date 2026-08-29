@@ -411,7 +411,7 @@
   .hq-raw summary { cursor: pointer; }
 
   kbd {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    font-family: var(--font-code); font-size: var(--fs-label-xs);
     padding: 1px 4px;
     background: var(--bg);
     border: 1px solid var(--card-border);

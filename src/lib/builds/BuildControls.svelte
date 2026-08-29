@@ -623,7 +623,7 @@
     font-style: normal;
   }
   .bc-help code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     color: var(--accent-ink);
   }
   .bc-empty {

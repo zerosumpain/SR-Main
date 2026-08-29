@@ -146,7 +146,7 @@
     border-color: var(--text-primary);
   }
   .syslog {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-muted);
     margin: 0.4rem 0 0;

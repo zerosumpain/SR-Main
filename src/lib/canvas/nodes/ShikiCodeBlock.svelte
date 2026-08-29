@@ -224,7 +224,7 @@
   .scb-body :global(pre.shiki) {
     margin: 0 !important;
     padding: 8px 10px !important;
-    font-family: var(--font-mono), 'Menlo', 'Monaco', monospace !important;
+    font-family: var(--font-code), 'Menlo', 'Monaco', monospace !important;
     font-size: var(--fs-label) !important;
     line-height: 1.55 !important;
     background: var(--bg) !important;
@@ -299,7 +299,7 @@
     padding: 8px 10px;
     background: var(--bg);
     color: var(--text-primary);
-    font-family: var(--font-mono), 'Menlo', 'Monaco', monospace;
+    font-family: var(--font-code), 'Menlo', 'Monaco', monospace;
     font-size: var(--fs-label);
     line-height: 1.55;
     overflow-x: auto;

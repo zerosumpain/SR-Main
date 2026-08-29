@@ -106,7 +106,7 @@
     border-color: var(--accent);
   }
   pre {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     margin: 4px 0;
     padding: 8px 10px;

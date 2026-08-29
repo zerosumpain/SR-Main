@@ -281,7 +281,7 @@
   .drive-line { margin: 0 0 0.6rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); line-height: 1.5; }
   .drive-line.err { color: var(--error); }
   .drive-line a { color: var(--accent); }
-  .drive-line code { font-family: var(--font-mono); color: var(--text-secondary); }
+  .drive-line code { font-family: var(--font-code); color: var(--text-secondary); }
 
   /* Row action. Sits in the meta line rather than taking a fourth column: the
      grid is already three columns at 620px and a button column would push the

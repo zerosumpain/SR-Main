@@ -484,7 +484,7 @@
     padding: 0.5rem 0;
   }
   .bcn-empty code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     color: var(--text-muted);
   }
   .bcn-row {

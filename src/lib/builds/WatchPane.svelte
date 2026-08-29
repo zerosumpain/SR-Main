@@ -131,7 +131,7 @@
     padding: 2px 0;
   }
   code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
   }
@@ -142,7 +142,7 @@
     min-width: 0;
   }
   .viewer {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     padding: 10px 12px;
     background: var(--code-bg);

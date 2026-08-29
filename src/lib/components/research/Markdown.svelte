@@ -60,7 +60,7 @@
   }
 
   .md :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
     background: var(--accent-tint-08);
     padding: 1px 4px;

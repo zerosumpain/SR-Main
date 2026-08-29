@@ -358,7 +358,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     white-space: pre-wrap;
     word-break: break-word;
     max-height: 220px;

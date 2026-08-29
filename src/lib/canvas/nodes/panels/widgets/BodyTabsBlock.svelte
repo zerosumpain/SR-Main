@@ -144,5 +144,5 @@
   }
   .bt-code:focus { border-color: var(--text-muted); }
   .bt-hint { font-size: var(--fs-label); color: var(--text-ghost); }
-  .bt-hint code { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-mono); }
+  .bt-hint code { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-code); }
 </style>

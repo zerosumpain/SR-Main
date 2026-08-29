@@ -217,7 +217,7 @@
     padding: 6px 8px;
     background: var(--bg);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
     line-height: 1.4;
