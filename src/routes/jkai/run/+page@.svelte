@@ -191,7 +191,9 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="runner">
+<!-- .jkai-runner is the type hook: this page resets to the ROOT layout so
+     .jkai-root is absent, and app.css keys the jkai Segoe UI scope off both. -->
+<div class="runner jkai-runner">
   <header class="rn-hdr">
     <span class="kicker">jkai runner</span>
     <span class="rn-lang">{lang || 'code'}</span>
