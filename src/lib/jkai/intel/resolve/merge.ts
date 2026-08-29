@@ -447,6 +447,12 @@ export async function backfillAliasesFromTombstones(
     updated++;
   }
 
+  // The whole reason this runs FIRST in the nightly stage is so the night's
+  // matching can use what it recovered. The entity snapshot is memoised for
+  // 60s, so without this the sweep two lines later would read a copy taken
+  // before the aliases existed and the ordering would buy nothing.
+  if (updated) invalidateResolutionCaches();
+
   return { updated, aliasesAdded };
 }
 
