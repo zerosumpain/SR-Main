@@ -100,7 +100,7 @@ async function openRouterChat(
     json?: boolean;
   },
 ): Promise<string> {
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = getFallbackModel();
   const fallbackSignal = AbortSignal.timeout(60_000);
   const combinedSignal = opts.signal
@@ -193,7 +193,7 @@ export async function jsonCompletion<T>(
   // slow, and silently falling back to `getPrimary()` would hand them back the
   // latency they pinned to avoid.
   const { client, model } = options?.model
-    ? { client: getOpenRouterClient(), model: options.model }
+    ? { client: await getOpenRouterClient(), model: options.model }
     : await getPrimary();
   const jsonSystemPrompt = systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.';
   const messages = [
@@ -344,7 +344,7 @@ export async function streamCompletion(
   // An explicitly-passed model is the caller's deliberate choice — no fallback.
   const explicitModel = !!options?.model;
   const { client, model } = explicitModel
-    ? { client: getOpenRouterClient(), model: options!.model! }
+    ? { client: await getOpenRouterClient(), model: options!.model! }
     : await getPrimary();
   const messages = [
     { role: 'system' as const, content: systemPrompt },
@@ -408,7 +408,7 @@ export async function streamCompletion(
         if (externalSignal.aborted) fallbackAc.abort(externalSignal.reason);
         else externalSignal.addEventListener('abort', () => fallbackAc.abort(externalSignal.reason), { once: true });
       }
-      return runStream(getOpenRouterClient(), fallbackModel, messages, {
+      return runStream(await getOpenRouterClient(), fallbackModel, messages, {
         temperature,
         maxTokens,
         signal: fallbackAc.signal,
@@ -473,7 +473,7 @@ export async function groundedCompletion(
    * non-OpenRouter base URL would simply be ignored, and this path always uses
    * the OpenRouter client.
    */
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = options.model ?? getFallbackModel();
   let text = '';
   /**
@@ -528,7 +528,7 @@ export async function groundedCompletion(
 export const EMBEDDING_DIM = 1536;
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = getEmbeddingModel();
 
   const response = await withRetry(
@@ -564,7 +564,7 @@ const EMBED_BATCH_SIZE = 48;
  */
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   if (!texts.length) return [];
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = getEmbeddingModel();
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {

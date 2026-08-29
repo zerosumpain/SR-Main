@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { loadKeys } from '$lib/llm/keys';
+import { getOpenRouterKey } from '$lib/llm/keys';
 import { interpolateTemplateStrict } from './template';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
 import { resolveMaxTokens } from './llm-helpers';
@@ -71,10 +71,10 @@ export const openrouterExecutor: NodeExecutor = {
       }
 
       case 'list_models': {
-        const keys = loadKeys();
-        if (!keys.openrouterApiKey) throw new Error('OpenRouter API key not configured');
+        const apiKey = await getOpenRouterKey();
+        if (!apiKey) throw new Error('OpenRouter API key not configured');
         const res = await fetch(`${OPENROUTER_BASE}/models`, {
-          headers: { Authorization: `Bearer ${keys.openrouterApiKey}` },
+          headers: { Authorization: `Bearer ${apiKey}` },
         });
         if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
         const data = await res.json();
@@ -83,10 +83,10 @@ export const openrouterExecutor: NodeExecutor = {
       }
 
       case 'get_usage': {
-        const keys = loadKeys();
-        if (!keys.openrouterApiKey) throw new Error('OpenRouter API key not configured');
+        const apiKey = await getOpenRouterKey();
+        if (!apiKey) throw new Error('OpenRouter API key not configured');
         const res = await fetch(`${OPENROUTER_BASE}/auth/key`, {
-          headers: { Authorization: `Bearer ${keys.openrouterApiKey}` },
+          headers: { Authorization: `Bearer ${apiKey}` },
         });
         if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
         const data = await res.json();

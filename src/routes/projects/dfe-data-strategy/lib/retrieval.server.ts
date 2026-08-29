@@ -292,7 +292,7 @@ let embedInit: Promise<void> | null = null;
 
 async function embedTexts(texts: string[]): Promise<number[][] | null> {
   try {
-    const client = getOpenRouterClient();
+    const client = await getOpenRouterClient();
     const model = getEmbeddingModel();
     const out: number[][] = [];
     for (let i = 0; i < texts.length; i += 96) {
@@ -309,7 +309,7 @@ async function ensureCorpusVecs(): Promise<void> {
   if (CORPUS_VECS || embedDisabled) return;
   if (!embedInit) {
     embedInit = (async () => {
-      if (!hasOpenRouter()) { embedDisabled = true; return; }
+      if (!(await hasOpenRouter())) { embedDisabled = true; return; }
       const v = await embedTexts(CHUNKS.map((c) => `${c.title}. ${c.text}`));
       if (v) CORPUS_VECS = v;
       else embedDisabled = true;

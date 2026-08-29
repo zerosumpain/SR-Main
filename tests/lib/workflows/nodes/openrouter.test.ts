@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 // chat_completion routes through the resilient workflow gateway (timeout,
 // concurrency, model failover) rather than a raw OpenRouter client, so that is
 // what the test intercepts. list_models / get_usage still call the REST API
-// directly with the key from $lib/llm/keys.
+// directly, with the key from `getOpenRouterKey()` — the resolver that reads
+// the app setting before keys.json, which is why it is async.
 const mockChatCompletion = vi.fn().mockResolvedValue({
   id: 'gen-123',
   choices: [{ message: { content: 'Hello world' } }],
@@ -16,7 +17,7 @@ vi.mock('$lib/llm/workflow-gateway', () => ({
 }));
 
 vi.mock('$lib/llm/keys', () => ({
-  loadKeys: () => ({ openrouterApiKey: 'test-key' }),
+  getOpenRouterKey: async () => 'test-key',
 }));
 
 // Mock fetch for list_models and get_usage

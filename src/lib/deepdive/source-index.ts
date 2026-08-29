@@ -12,13 +12,13 @@ import { sourceChunks, sources, facts, globalEntities, type NewSourceChunk, type
 import { chunkText } from '$lib/rag/chunk';
 import { generateEmbeddings } from './ai';
 import { extractContent } from './extract-content';
-import { loadKeys, getEmbeddingModel } from '$lib/llm/keys';
+import { hasOpenRouter, getEmbeddingModel } from '$lib/llm/keys';
 
 // Cap the content we chunk per source. phase 2 already slices fetched content to
 // ~10k chars; this is a hard ceiling for any other caller (e.g. backfill).
 const MAX_CONTENT_CHARS = 20000;
 
-const embeddingsAvailable = (): boolean => !!loadKeys().openrouterApiKey;
+const embeddingsAvailable = hasOpenRouter;
 
 export type SourceIndexResult =
   | { status: 'skipped'; reason: 'no-embeddings' | 'no-content' | 'no-chunks' }
@@ -35,7 +35,7 @@ export async function indexSourceContent(
   source: Pick<Source, 'id'>,
   content: string,
 ): Promise<SourceIndexResult> {
-  if (!embeddingsAvailable()) return { status: 'skipped', reason: 'no-embeddings' };
+  if (!(await embeddingsAvailable())) return { status: 'skipped', reason: 'no-embeddings' };
   const text = (content || '').slice(0, MAX_CONTENT_CHARS).trim();
   if (!text) return { status: 'skipped', reason: 'no-content' };
 
@@ -137,7 +137,7 @@ export type ReembedResult = { scanned: number; embedded: number; errors: number;
 export async function reembedFacts(opts: { limit?: number } = {}): Promise<ReembedResult> {
   const model = getEmbeddingModel();
   const result: ReembedResult = { scanned: 0, embedded: 0, errors: 0, model };
-  if (!embeddingsAvailable()) return result;
+  if (!(await embeddingsAvailable())) return result;
 
   const limit = Math.min(Math.max(opts.limit ?? 200, 1), 1000);
   const rows = await db
@@ -179,7 +179,7 @@ export async function reembedFacts(opts: { limit?: number } = {}): Promise<Reemb
  */
 export async function reembedGlobalEntities(opts: { limit?: number } = {}): Promise<{ scanned: number; embedded: number; errors: number }> {
   const result = { scanned: 0, embedded: 0, errors: 0 };
-  if (!embeddingsAvailable()) return result;
+  if (!(await embeddingsAvailable())) return result;
   const limit = Math.min(Math.max(opts.limit ?? 1000, 1), 5000);
 
   const rows = await db

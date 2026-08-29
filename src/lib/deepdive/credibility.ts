@@ -3,7 +3,7 @@ import { sources, facts } from '$lib/db/schema';
 import { eq, and, sql, ne } from 'drizzle-orm';
 import { jsonCompletion } from './ai';
 import { toVectorLiteral } from './vector';
-import { loadKeys } from '$lib/llm/keys';
+import { hasOpenRouter } from '$lib/llm/keys';
 
 // Static domain classification maps
 const TLD_SCORES: Record<string, { score: number; type: string }> = {
@@ -116,7 +116,7 @@ Respond with JSON: { "score": 0.X, "type": "..." }`,
 }
 
 export async function computeSourceAgreement(sessionId: string): Promise<void> {
-  const embeddingsAvailable = !!loadKeys().openrouterApiKey;
+  const embeddingsAvailable = await hasOpenRouter();
 
   if (embeddingsAvailable) {
     // Embedding-based: for each fact with an embedding, count distinct sources

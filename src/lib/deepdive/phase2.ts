@@ -10,7 +10,7 @@ import { getEmbeddingModel } from '$lib/llm/keys';
 import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
-import { loadKeys } from '$lib/llm/keys';
+import { hasOpenRouter } from '$lib/llm/keys';
 import { pLimit, getLlmConcurrencyLimit } from './concurrency';
 import type { SessionConfig, SessionStats } from './types';
 import { completeLead, measureAlignment, countConnectedEntities } from './frontier';
@@ -34,11 +34,11 @@ function bigramSimilarity(a: string, b: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-const embeddingsAvailable = (): boolean => !!loadKeys().openrouterApiKey;
+const embeddingsAvailable = hasOpenRouter;
 
 async function isDuplicate(sessionId: string, content: string): Promise<{ duplicate: boolean; embedding: number[] | null }> {
   // Try embedding-based dedup via OpenRouter + pgvector
-  if (embeddingsAvailable()) {
+  if (await embeddingsAvailable()) {
     try {
       const embedding = await generateEmbedding(content);
       const vectorStr = toVectorLiteral(embedding);

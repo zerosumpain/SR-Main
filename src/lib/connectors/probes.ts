@@ -614,14 +614,17 @@ async function probeOAuthSecrets(): Promise<ConnectorReport[]> {
 // ---------------------------------------------------------------------------
 async function probeOpenRouter(): Promise<ConnectorReport> {
   return guard('openrouter', 'OpenRouter (all LLM)', 'AI', 'service', async () => {
-    const { loadKeys } = await import('$lib/llm/keys');
-    const key = loadKeys().openrouterApiKey;
+    // Through getOpenRouterKey, not loadKeys: the key normally lives in the
+    // `openrouter.api_key` app setting, and reading only keys.json/env made
+    // this probe report a total LLM outage on a site whose chat was fine.
+    const { getOpenRouterKey } = await import('$lib/llm/keys');
+    const key = await getOpenRouterKey();
     if (!key) {
       return {
         status: 'broken' as ConnectorStatus,
         detail: 'no API key — every LLM call on the site will fail',
         live: false,
-        fixHint: 'Set OPENROUTER_API_KEY',
+        fixHint: 'Set the key at /admin/ai/models',
       };
     }
     const res = await fetchWithTimeout('https://openrouter.ai/api/v1/credits', {

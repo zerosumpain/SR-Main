@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { loadKeys, saveKeys, getKeysStatus } from '$lib/llm/keys';
 
 export const GET: RequestHandler = async () => {
-  return json(getKeysStatus());
+  return json(await getKeysStatus());
 };
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -17,5 +17,5 @@ export const POST: RequestHandler = async ({ request }) => {
 
   saveKeys(current);
 
-  return json(getKeysStatus());
+  return json(await getKeysStatus());
 };
