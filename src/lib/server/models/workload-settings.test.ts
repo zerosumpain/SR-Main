@@ -46,8 +46,10 @@ import {
   resolveWorkloadModel,
   describeSiteWorkloads,
   setWorkloadModel,
+  resolveVisionModel,
 } from './workload-settings';
 import { getWorkload } from '$lib/models/workloads';
+import { withChatContext } from '$lib/context/chat';
 
 const wl = (id: string) => getWorkload(id)!;
 
@@ -170,5 +172,88 @@ describe('setWorkloadModel', () => {
       provider: 'codex',
       modelId: 'codex/gpt-5.6-terra',
     });
+  });
+});
+
+/**
+ * The chat model picker is a claim about the whole session, not just the reply.
+ *
+ * Before this, an override reached the chat loop and its sub-agents and stopped:
+ * the same turn would summarise a research report, compact its own history and
+ * read an attached PDF on whatever the site default happened to be, while the
+ * UI and the price snapshot both named the model the owner chose.
+ *
+ * Two properties are load-bearing and pull in opposite directions, which is why
+ * they are tested together:
+ *  - a pin the owner set REACHES every role that can run on it, and
+ *  - it is WITHDRAWN from a role the model cannot serve, because the failure
+ *    there is not a worse answer but a broken one.
+ */
+describe('the session pin', () => {
+  const PINNED = { provider: 'openrouter' as const, modelId: 'openai/gpt-4o' };
+  const inSession = <T>(fn: () => Promise<T>) => withChatContext({ sessionModel: PINNED }, fn);
+
+  it('wins over the role fallback for an ordinary text role', async () => {
+    // `doctor` pins DEFAULT_DOCTOR_MODEL_ID in code. A session pin outranks it:
+    // the owner choosing a model in the composer is a later and more specific
+    // instruction than a constant in the source.
+    expect(await inSession(() => resolveWorkloadModel(wl('doctor')))).toEqual(PINNED);
+  });
+
+  it('wins over an explicitly pinned setting too', async () => {
+    // The admin pin is site-scope and standing; the session pin is thread-scope
+    // and deliberate. If the standing one won, the picker would be inert on
+    // exactly the roles someone had bothered to configure.
+    getSetting.mockResolvedValue({ modelId: 'z-ai/glm-5.2' });
+    expect(await inSession(() => resolveWorkloadModel(wl('doctor')))).toEqual(PINNED);
+  });
+
+  it('does NOTHING outside a session', async () => {
+    // The whole safety argument rests on this. Every nightly pass, scheduled
+    // job and unpinned thread runs with no store, and must resolve exactly as it
+    // did before the pin existed.
+    getSetting.mockResolvedValue({ modelId: 'z-ai/glm-5.2' });
+    expect(await resolveWorkloadModel(wl('doctor'))).toEqual({
+      provider: 'openrouter',
+      modelId: 'z-ai/glm-5.2',
+    });
+  });
+
+  it('is withdrawn from vision when the pinned model cannot see', async () => {
+    // gpt-oss-120b is text-only. Letting it serve OCR does not blur the answer,
+    // it fails the extract — and a failed extract stamps the file's hash, so a
+    // later code fix re-indexes nothing. The role keeps its own model instead.
+    const textOnly = { provider: 'openrouter' as const, modelId: 'openai/gpt-oss-120b' };
+    const got = await withChatContext({ sessionModel: textOnly }, () => resolveVisionModel());
+    expect(got.modelId).not.toBe('openai/gpt-oss-120b');
+  });
+
+  it('reaches vision when the pinned model CAN see', async () => {
+    // The gate is a capability check, not a blanket exemption for the role.
+    expect(await inSession(() => resolveVisionModel())).toEqual(PINNED);
+  });
+
+  it('is withdrawn from image generation for a model that only reads images', async () => {
+    // gpt-4o takes image input and emits none — the model a naive check waves
+    // through, and the one that returns prose where a picture was wanted.
+    const got = await inSession(() => resolveWorkloadModel(wl('image')));
+    expect(got.modelId).not.toBe('openai/gpt-4o');
+  });
+
+  it('reaches image generation for a model that emits images', async () => {
+    const generator = { provider: 'openrouter' as const, modelId: 'google/gemini-3.1-flash-image' };
+    expect(await withChatContext({ sessionModel: generator }, () => resolveWorkloadModel(wl('image')))).toEqual(
+      generator,
+    );
+  });
+
+  it('never reaches embeddings, whatever is pinned', async () => {
+    // Not a gate that happens to fail — a role the session model is the wrong
+    // KIND of thing for. No chat model in the catalogue is an embedding model,
+    // and a mismatched vector lands in a fixed-dimension column that cannot
+    // hold it. Asserted so a later "why is embeddings excluded?" cleanup has to
+    // delete a stated reason rather than an unexplained branch.
+    const got = await inSession(() => resolveWorkloadModel(wl('embeddings')));
+    expect(got.modelId).not.toBe(PINNED.modelId);
   });
 });

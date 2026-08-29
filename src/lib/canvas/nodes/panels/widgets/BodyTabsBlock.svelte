@@ -137,12 +137,12 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
   }
   .bt-code:focus { border-color: var(--text-muted); }
   .bt-hint { font-size: var(--fs-label); color: var(--text-ghost); }
-  .bt-hint code { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-mono); }
+  .bt-hint code { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-code); }
 </style>

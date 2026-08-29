@@ -284,13 +284,13 @@
   .pw-save { font-family: var(--font-mono); font-size: var(--fs-label); padding: 5px 14px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }
   .pw-save:disabled { opacity: 0.45; cursor: default; }
 
-  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-body); line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
+  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-code); font-size: var(--fs-body); line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
   .pw-editor:focus { border-color: var(--text-muted); }
   .pw-editor[readonly] { opacity: 0.75; }
 
   .pw-caveat { margin: 0 0 6px; font-size: var(--fs-label); color: var(--text-muted); }
   .pw-resolved-meta { margin: 0 0 8px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .pw-resolved { margin: 0; padding: 12px; max-height: 62vh; overflow: auto; background: var(--card-bg); border: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .pw-resolved { margin: 0; padding: 12px; max-height: 62vh; overflow: auto; background: var(--card-bg); border: 1px solid var(--line-strong); font-family: var(--font-code); font-size: var(--fs-label); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
   .pw-empty { font-size: var(--fs-nav); color: var(--text-ghost); }
   .pw-versions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -301,5 +301,5 @@
   .pw-version-diff { color: var(--text-muted); }
   .pw-restore { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; background: transparent; border: 1px solid var(--line-strong); color: var(--text-muted); cursor: pointer; }
   .pw-restore:hover { color: var(--text-primary); border-color: var(--text-muted); }
-  .pw-version-body { margin: 8px 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: hidden; }
+  .pw-version-body { margin: 8px 0 0; font-family: var(--font-code); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: hidden; }
 </style>

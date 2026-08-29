@@ -195,7 +195,7 @@
     line-height: 1.5;
   }
   .ps-textarea-code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
   }
   .ps-error {

@@ -311,7 +311,7 @@
     background: color-mix(in srgb, var(--card-border) 16%, transparent);
     border: 1px solid var(--card-border);
     color: var(--text-primary);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     white-space: pre-wrap; word-break: break-word;
     max-height: 100px; overflow-y: auto;
   }
@@ -321,13 +321,13 @@
     padding: 8px;
     background: var(--bg); color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     box-sizing: border-box; outline: none; resize: vertical;
   }
   .erb-code:focus { border-color: var(--text-muted); }
 
   .erb-hint { font-size: var(--fs-label); color: var(--text-ghost); }
-  .erb-hint :global(code) { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-mono); }
+  .erb-hint :global(code) { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-code); }
 
   input[type='text'], select {
     width: 100%; padding: 6px 8px;

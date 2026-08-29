@@ -298,7 +298,7 @@
     align-items: stretch;
   }
   .bsp-input {
-    font-family: var(--font-mono), monospace;
+    font-family: var(--font-code), monospace;
     font-size: var(--fs-body);
     padding: 0.5rem 0.6rem;
     border: 1px solid var(--text-primary, #1f1c18);

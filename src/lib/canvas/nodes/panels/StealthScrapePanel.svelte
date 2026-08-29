@@ -686,14 +686,14 @@
   }
   .ps-hint code {
     color: var(--accent);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
   }
   .ps-input {
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     padding: 4px 7px;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     outline: none;
     box-sizing: border-box;

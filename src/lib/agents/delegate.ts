@@ -7,6 +7,7 @@ import { generalChat } from '$lib/workflows/chat/general-chat';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
+import { currentSessionModel, currentSessionThinkingLevel } from '$lib/context/chat';
 import { getAgent } from './store';
 import { TEAM_MEMORY_COLLECTION } from './types';
 
@@ -31,9 +32,18 @@ export async function delegateToAgent(
   const agent = await getAgent(agentName);
   if (!agent) throw new Error(`No agent named "${agentName}". Use agent_list to see the team.`);
 
+  // Precedence: the agent's OWN pinned model, then the chat session's pin, then
+  // the site default.
+  //
+  // The agent wins because pinning a specialist to a model is a statement about
+  // that specialist — a code reviewer put on a coding model should stay there
+  // whichever thread calls it. The session comes next, so an unpinned agent
+  // dispatched from a pinned thread runs on the thread's model instead of
+  // quietly dropping to the site default, which is what it used to do.
+  const sessionModel = currentSessionModel();
   const modelContext = agent.model
     ? coerceModelContext({ provider: 'openrouter', modelId: agent.model })
-    : await resolveDefaultModel();
+    : (sessionModel ?? (await resolveDefaultModel()));
 
   const whitelist = agent.allowedTools?.length
     ? [...new Set([...agent.allowedTools, ...META_TOOLS])]
@@ -49,6 +59,11 @@ export async function delegateToAgent(
     [],
     {
       modelContext,
+      // Only forwarded as a session pin when the agent did not bring its own
+      // model — otherwise the agent's tools would resolve to the session's model
+      // while the agent itself ran on its own, which is worse than either.
+      sessionModel: agent.model ? null : sessionModel,
+      thinkingLevel: agent.model ? null : currentSessionThinkingLevel(),
       priceSnapshot: null,
       subagentDepth: 1,
       toolWhitelist: whitelist,

@@ -38,6 +38,21 @@ export interface ToolExecContext {
    * human-in-the-loop tool correctly report "unattended" there.
    */
   busKey?: string;
+  /**
+   * The model the owner pinned for this chat session, or absent when the thread
+   * runs on a stamped site default.
+   *
+   * Tools that only make an LLM call do not need this — `currentSessionModel()`
+   * in `$lib/context/chat` reaches them through the turn's AsyncLocalStorage.
+   * It is here for the tools whose work OUTLIVES the turn: a build, a studio
+   * build, a change request are all started and then abandoned by the chat that
+   * asked for them, and run later in a sidecar with no ambient context at all.
+   * Those have to write the model onto their row, and this is where they read
+   * it from.
+   */
+  modelContext?: import('$lib/server/models/types').ModelContext;
+  /** The session's reasoning effort, carried for the same reason. */
+  thinkingLevel?: import('$lib/models/thinking').ThinkingLevel | null;
 }
 
 /**

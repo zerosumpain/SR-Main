@@ -253,7 +253,10 @@ register({
 
     const { getLLMClient } = await import('$lib/llm/client');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
-    const { client, model } = await getLLMClient(await resolveDefaultModel());
+    const { currentSessionModel } = await import('$lib/context/chat');
+    const { client, model } = await getLLMClient(
+      currentSessionModel() ?? (await resolveDefaultModel()),
+    );
 
     const systemPrompt = `You are answering a question using ONLY the research findings provided below. Do not use any external knowledge.
 
@@ -394,7 +397,10 @@ register({
 
     const { getLLMClient } = await import('$lib/llm/client');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
-    const { client, model } = await getLLMClient(await resolveDefaultModel());
+    const { currentSessionModel } = await import('$lib/context/chat');
+    const { client, model } = await getLLMClient(
+      currentSessionModel() ?? (await resolveDefaultModel()),
+    );
 
     const systemPrompt = `Research Topic: ${session.topic}\n\nResearch Findings:\n${reportText}\n\n${instruction}${focus ? `\n\nFocus specifically on: ${focus}` : ''}`;
 

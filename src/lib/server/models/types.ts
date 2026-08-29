@@ -1,17 +1,9 @@
-/**
- * `openrouter` — per-token, billed to the OpenRouter key. The default for
- * everything.
- * `codex` — served by the local Codex bridge sidecar against John's ChatGPT
- * Pro subscription (packages/jkai-codex-bridge). Zero marginal cost, finite
- * quota, and a narrower feature set — see $lib/server/models/codex-catalogue
- * and getProviderFeatures() in ./capabilities.
- */
-export type ModelProvider = 'openrouter' | 'codex';
-
-export interface ModelContext {
-  provider: ModelProvider;
-  modelId: string;
-}
+// `ModelProvider` and `ModelContext` moved down to `$lib/constants/model-context`
+// so the ambient chat store can carry a model without `$lib/context` and
+// `$lib/server` importing each other. Re-exported here because this is where
+// most of the codebase already asks for them, and there is no reason to churn
+// a hundred import lines for a file move.
+export type { ModelProvider, ModelContext } from '$lib/constants/model-context';
 
 export interface PriceSnapshot {
   promptPrice: number; // USD per token

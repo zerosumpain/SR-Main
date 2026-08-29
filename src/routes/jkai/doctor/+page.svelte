@@ -679,7 +679,7 @@
   .hdr-links { display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end; flex-shrink: 0; }
   .back-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; white-space: nowrap; }
   .back-link:hover { text-decoration: underline; }
-  .mono { font-family: var(--font-mono); }
+  .mono { font-family: var(--font-code); }
 
   /* Stat tiles */
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem; }

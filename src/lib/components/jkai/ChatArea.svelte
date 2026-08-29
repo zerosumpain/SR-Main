@@ -106,6 +106,10 @@
       costUsd?: string | number | null;
       priceSnapshot?: { promptPrice: number; completionPrice: number } | null;
       thinkingLevel?: string | null;
+      /** Whether the owner CHOSE this model, as opposed to it being stamped from
+       *  the site default when the thread was opened. True is what makes the
+       *  rest of the session — tools, builds, sub-agents, OCR — follow it. */
+      modelPinnedByUser?: boolean;
     } | null;
     /** Context window of the pinned model, for the header's `N CTX %` chunk.
      *  Null when the OpenRouter catalogue has no row for it. */
@@ -2186,7 +2190,15 @@
     // forced, send() owns `loading` for the whole turn — this must not clear it.
     const force = opts?.force === true;
     if (!conversationId || (loading && !force)) return;
-    if (currentModel.provider === provider && currentModel.modelId === modelId) return;
+    // Re-picking the model already shown is normally a no-op — except on a
+    // thread that has never been pinned, where it is the owner saying "yes, this
+    // one" and is the only thing that sets `model_pinned_by_user`. Without this
+    // exception, choosing the model that happens to BE the site default leaves
+    // the session unpinned, so the reply runs on the chosen model and every tool,
+    // build and OCR behind it silently does not — the exact split the session
+    // pin exists to close, hiding on the one selection that looks like a no-op.
+    const alreadyPinned = conversation?.modelPinnedByUser === true;
+    if (currentModel.provider === provider && currentModel.modelId === modelId && alreadyPinned) return;
 
     // 1) Persist for cost accuracy + lock the conversation's model. The PATCH
     //    409s if a message already exists — the source of truth for "can we
@@ -3815,7 +3827,7 @@
     margin-bottom: 6px;
   }
   .approval-cmd {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--surface-sunken);
@@ -4025,7 +4037,7 @@
     margin: 0;
   }
   .reasoning-body :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.9em, var(--fs-label-xs));
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     padding: 0 4px;

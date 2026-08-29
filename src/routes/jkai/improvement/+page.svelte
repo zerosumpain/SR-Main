@@ -796,7 +796,7 @@
   .att-meta { display: flex; gap: 1rem; font-size: var(--fs-label-xs); color: var(--text-ghost); margin: 0.75rem 0 0; }
   .reject-reason { margin: 0.6rem 0; padding: 0.55rem 0.7rem; border-left: 2px solid #b3452f; background: var(--card-bg); font-size: 0.85rem; color: var(--text-secondary); }
   .rr-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: #b3452f; }
-  .code { margin: 0; padding: 0.75rem; background: var(--card-bg); border: 1px solid var(--line-strong); overflow-x: auto; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.5; color: var(--text-primary); }
+  .code { margin: 0; padding: 0.75rem; background: var(--card-bg); border: 1px solid var(--line-strong); overflow-x: auto; font-family: var(--font-code); font-size: var(--fs-label); line-height: 1.5; color: var(--text-primary); }
   .code.small { font-size: var(--fs-label); }
   .code code { font: inherit; }
 

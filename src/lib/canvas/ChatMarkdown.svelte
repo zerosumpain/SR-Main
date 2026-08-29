@@ -64,7 +64,7 @@
     font-style: italic;
   }
   .chat-md :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.9em, var(--fs-label-xs));
     background: var(--bg-section);
     border: 1px solid var(--card-border);

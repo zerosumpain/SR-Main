@@ -207,7 +207,7 @@
   .nmb-entry + .nmb-entry { border-top: 1px dashed var(--card-border); padding-top: 8px; }
   .nmb-entry-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .nmb-key {
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     color: var(--text-primary);
     word-break: break-all;
   }
@@ -217,7 +217,7 @@
     padding: 6px 8px;
     background: var(--bg);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
     line-height: 1.4;

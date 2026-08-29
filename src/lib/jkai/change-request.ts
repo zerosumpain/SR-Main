@@ -18,6 +18,7 @@ import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import type { ModelContext } from '$lib/server/models/types';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
 import { createIssue, commentOnIssue, githubConfigured, REPO_SLUG } from '$lib/github/issues';
@@ -90,11 +91,14 @@ export async function createChangeRequest({
   request,
   labels,
   conversationId,
+  modelContext,
 }: {
   title: string;
   request: string;
   labels?: string[];
   conversationId?: string;
+  /** The chat session's pinned model, when the asking thread had one. */
+  modelContext?: ModelContext;
 }): Promise<ChangeRequestResult> {
   if (!githubConfigured()) {
     throw new Error(
@@ -123,25 +127,40 @@ export async function createChangeRequest({
     labels: labels ?? ['change-request'],
   });
 
-  const ctx = await resolveDefaultModel();
+  // The asking session's pin, then the site default. A thread pinned to a model
+  // now re-tasks the builder it starts, which is the behaviour the picker always
+  // implied and never had — before this, a change request raised from a thread
+  // running on one model built on whichever model happened to be the site
+  // default when the build began.
+  const ctx = modelContext ?? (await resolveDefaultModel());
   const priceSnapshot = await snapshotPrice(ctx);
 
-  // The site deliberately runs one default model everywhere, which means the
-  // /jkai model picker also re-tasks the autonomous builder. That is fine for a
-  // model the agent runtime knows; it is not fine for one it doesn't. On
+  // Whichever of those two it was, the agent runtime has to recognise the id.
+  // That is fine for a model it knows; it is not fine for one it doesn't. On
   // 2026-08-07 the default was `~deepseek/deepseek-v4-flash-latest`, which pi
   // reports as "not found for provider openrouter — using custom model id":
   // no context-window metadata, so nothing manages context, and both builds
   // ballooned past a million tokens per iteration. Record it on the issue
   // rather than blocking — the build may still work, but the trail should say
   // the model was unrecognised before anyone blames the code.
+  //
+  // Now that a chat pin reaches here, the message has to name WHICH of the two
+  // chose the model: "the current site default" was the only possibility when
+  // this was written, and sending someone to /admin/ai/models to change a model
+  // their own thread picked would be a wild goose chase.
   if (/^[~@]/.test(ctx.modelId)) {
+    const origin = modelContext
+      ? 'the model pinned on the chat that asked for it'
+      : 'the current site default';
+    const remedy = modelContext
+      ? 'pick a plain model id in the chat composer before raising the request'
+      : 'set a plain id at /admin/ai/models';
     await commentOnIssue(
       issue.number,
-      `⚠️ Starting this build on \`${ctx.modelId}\`, the current site default. That id carries a ` +
+      `⚠️ Starting this build on \`${ctx.modelId}\`, ${origin}. That id carries a ` +
         `provider-alias prefix the agent runtime does not resolve to a known model, so it has no ` +
         `context-window metadata for it and cannot manage context. If this build burns tokens or ` +
-        `stalls, check the model before the code — set a plain id at /admin/ai/models.`,
+        `stalls, check the model before the code — ${remedy}.`,
     ).catch(() => {});
   }
 

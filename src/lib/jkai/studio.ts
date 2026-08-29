@@ -14,6 +14,7 @@ import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import type { ModelContext } from '$lib/server/models/types';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { BudgetConfig } from './types';
 import { RESEARCH_MODES, type ResearchMode } from './research-brief';
@@ -57,11 +58,21 @@ export async function createStudioBuild({
   challenge,
   title,
   researchMode = 'extend',
+  modelContext,
 }: {
   challenge: string;
   title?: string;
   /** See ResearchMode in research-brief.ts. Defaults to 'extend'. */
   researchMode?: ResearchMode;
+  /**
+   * The chat session's pinned model, when this was started from a pinned thread.
+   *
+   * Passed in rather than read from the ambient chat context because this is
+   * also the entry point for `POST /api/jkai/studio` (the service-token lane),
+   * which has no chat at all — an ambient read there would be a silent null and
+   * the parameter makes the difference visible at both call sites.
+   */
+  modelContext?: ModelContext;
 }): Promise<{ buildId: string }> {
   // The single choke point. drizzle's `enum` on a text column is a TypeScript
   // hint only — it emits no CHECK constraint — and the insert below is
@@ -86,7 +97,7 @@ export async function createStudioBuild({
     );
   }
 
-  const ctx = await resolveDefaultModel();
+  const ctx = modelContext ?? (await resolveDefaultModel());
   const priceSnapshot = await snapshotPrice(ctx);
 
   const [build] = await db

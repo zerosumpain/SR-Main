@@ -64,7 +64,14 @@
    */
   interface PaneData {
     messages: any[];
-    conversation: { modelProvider?: string; modelId?: string; thinkingLevel?: string | null } | null;
+    conversation: {
+      modelProvider?: string;
+      modelId?: string;
+      thinkingLevel?: string | null;
+      /** Whether the owner CHOSE this model rather than inheriting the site
+       *  default. What makes the rest of the session follow it. */
+      modelPinnedByUser?: boolean;
+    } | null;
     modelCaps: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
     contextLength: number | null;
     /** Whether the pinned model takes a reasoning instruction — gates the
@@ -459,6 +466,11 @@
       ...(pane.conversation ?? {}),
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
+      // The switch only reaches here on a PATCH that succeeded, and that PATCH
+      // is what pins the session. Recording it locally keeps the composer's
+      // no-op guard honest — otherwise re-picking the same model would fire a
+      // second, pointless PATCH every time.
+      modelPinnedByUser: true,
     };
     // Undefined means the switch reported nothing (an older response shape) —
     // leave the chip as it was rather than guessing it away.

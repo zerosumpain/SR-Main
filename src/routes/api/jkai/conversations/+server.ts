@@ -17,10 +17,17 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
 	const { title, source, whatsappPhoneNumber, modelProvider, modelId } = body;
 
-	// Resolve model: body override > admin chat default
+	// Resolve model: body override > admin chat default.
+	//
+	// Which of the two it was is recorded, not just the result. A body override
+	// is the composer's picker — a deliberate choice that the rest of the session
+	// should follow. The default branch stamps whatever the site default is right
+	// now, which is not a choice about anything and must not propagate.
 	let ctx: ModelContext;
+	let pinnedByUser = false;
 	if (modelProvider && modelId) {
 		ctx = { provider: modelProvider, modelId };
+		pinnedByUser = true;
 	} else {
 		ctx = await resolveDefaultModel();
 	}
@@ -40,6 +47,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			whatsappPhoneNumber: whatsappPhoneNumber || null,
 			modelProvider: ctx.provider,
 			modelId: ctx.modelId,
+			modelPinnedByUser: pinnedByUser,
 			thinkingLevel,
 			priceSnapshot,
 		})

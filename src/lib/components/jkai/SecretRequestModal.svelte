@@ -491,7 +491,7 @@
     color: var(--text-primary);
   }
   .sr-dest code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
   }
   .sr-note {
     color: var(--text-muted);
@@ -515,7 +515,7 @@
     gap: 10px;
   }
   .sr-target {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     text-transform: none;
     color: var(--text-primary);
   }

@@ -775,7 +775,7 @@
   .rich-host :global(p) { margin: 0 0 1.1em; }
   .rich-host :global(a) { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
   .rich-host :global(code) {
-    font-family: var(--font-mono); font-size: max(0.875em, var(--fs-label-xs));
+    font-family: var(--font-code); font-size: max(0.875em, var(--fs-label-xs));
     padding: 0.15em 0.45em; background: var(--card-bg); border: 1px solid var(--line-strong);
   }
   .rich-host :global(pre) {

@@ -131,7 +131,7 @@
     line-height: 1.4;
   }
   .mr-hint code, .mr-explain code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-muted);
   }
@@ -160,7 +160,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

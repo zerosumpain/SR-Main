@@ -475,7 +475,7 @@
   .fv-prose :global(hr) { border: 0; border-top: 1px solid var(--line-hair); margin: 1.6em 0; }
   .fv-prose :global(img) { max-width: 100%; height: auto; border-radius: 2px; margin: 0.4em 0; }
   .fv-prose :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;
@@ -487,7 +487,7 @@
     padding: 12px 14px;
     overflow-x: auto;
     border-radius: 2px;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
   }
   .fv-prose :global(pre code) { background: none; padding: 0; color: inherit; }

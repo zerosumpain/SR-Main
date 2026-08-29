@@ -10,6 +10,7 @@ import type { HistoryMessage } from './conversation-history';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
+import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
 
 export interface FollowUpCheck {
   done: boolean;
@@ -256,6 +257,8 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
 
     // Resolve pinned model for this conversation (falls back to admin default).
     let modelContext: ModelContext = await resolveDefaultModel();
+    let sessionModel: ModelContext | null = null;
+    let thinkingLevel: ThinkingLevel | null = null;
     let priceSnapshot: PriceSnapshot | null = null;
     const [conv] = await db
       .select()
@@ -267,12 +270,21 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
         provider: conv.modelProvider,
         modelId: conv.modelId,
       });
+      // A follow-up is the same session resuming, so it carries the same pin and
+      // the same reasoning effort. Without this a delivery would answer on the
+      // thread's model but run its tools on the site default — the very split
+      // the session pin exists to close, reappearing on the one turn the owner
+      // is not watching.
+      if (conv.modelPinnedByUser) sessionModel = modelContext;
+      thinkingLevel = isThinkingLevel(conv.thinkingLevel) ? conv.thinkingLevel : null;
       priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
     }
 
     const { response } = await generalChat({ text: followUpMessage }, recentHistory, {
       conversationId: item.conversationId,
       modelContext,
+      sessionModel,
+      thinkingLevel,
       priceSnapshot,
     });
 

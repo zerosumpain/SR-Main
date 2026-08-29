@@ -1742,6 +1742,21 @@ export const conversations = pgTable('jkai_conversations', {
   // thinking level changes neither. Mid-thread is exactly when you want it —
   // the answer that came back thin is the reason to turn it up.
   thinkingLevel: text('thinking_level'),
+  // Whether the model above was CHOSEN by the owner in the picker, as opposed to
+  // stamped from the site default when the thread was opened.
+  //
+  // Every thread carries a model — `POST /api/jkai/conversations` writes
+  // `resolveDefaultModel()` when the composer sends none — so "the thread's
+  // model" on its own cannot tell a deliberate pin from a default that happened
+  // to be current that day. That distinction is what decides whether the rest of
+  // the session follows the thread: a pin means "run everything on this", while
+  // a stamped default should keep letting each role resolve the LIVE site
+  // default, so an old thread resumed months later does not drag a stale model
+  // into its builds and its OCR.
+  //
+  // Set true by the PATCH that changes the model, and by a create whose body
+  // named one. Never set by the default path.
+  modelPinnedByUser: boolean('model_pinned_by_user').notNull().default(false),
 });
 
 export type Conversation = typeof conversations.$inferSelect;

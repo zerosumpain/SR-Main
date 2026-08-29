@@ -484,7 +484,7 @@
     padding: 0.5rem 0;
   }
   .bcn-empty code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     color: var(--text-muted);
   }
   .bcn-row {
@@ -526,7 +526,7 @@
   .bcn-input {
     width: 100%;
     padding: 0.45rem 0.55rem;
-    font-family: var(--font-mono), monospace;
+    font-family: var(--font-code), monospace;
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);

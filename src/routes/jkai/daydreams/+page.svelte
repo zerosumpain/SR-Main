@@ -2674,7 +2674,7 @@
   .back-link:hover { text-decoration: underline; }
 
   .banner { padding: 0.7rem 0.9rem; margin-bottom: 1.25rem; border-left: 3px solid var(--warn, #b0892a); background: var(--card-bg); font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); }
-  .banner code { font-family: var(--font-mono); color: var(--text-primary); }
+  .banner code { font-family: var(--font-code); color: var(--text-primary); }
 
   .sec-lede { margin: 0 0 0.9rem; font-size: var(--fs-label); line-height: 1.55; color: var(--text-muted); max-width: 68ch; }
 

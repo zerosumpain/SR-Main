@@ -163,7 +163,12 @@ register({
   handler: async (args, toolCtx) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
-    const ctx = await resolveDefaultModel();
+    // Read from the tool context, not from the ambient session store: the build
+    // is started here and then runs for up to an hour in a sidecar with no async
+    // context at all, so the model has to be written onto the row now or it is
+    // lost. Absent whenever the chat is on a stamped default, which keeps every
+    // unpinned thread on the site default exactly as before.
+    const ctx = toolCtx?.modelContext ?? (await resolveDefaultModel());
     const attachedRaw = args.attachedWorkflowIds;
     const attachedWorkflowIds = Array.isArray(attachedRaw) && attachedRaw.every((s) => typeof s === 'string')
       ? (attachedRaw as string[])
@@ -748,7 +753,7 @@ register({
     const titleArg = typeof args.title === 'string' && args.title.trim().length > 0 ? args.title.trim() : null;
     const title = titleArg ?? prompt.split('\n')[0].slice(0, 60);
 
-    const ctx = await resolveDefaultModel();
+    const ctx = toolCtx?.modelContext ?? (await resolveDefaultModel());
 
     // Re-registering an app the model has just revised should REPLACE it, not
     // mint a third row. Without this, one 2026-08-08 conversation produced

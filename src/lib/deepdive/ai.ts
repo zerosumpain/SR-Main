@@ -3,6 +3,7 @@ import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from '$lib/l
 import { getLLMClient, getGroundedCodexClient } from '$lib/llm/client';
 import { readCitations, type Citation } from './grounding';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { currentSessionModel } from '$lib/context/chat';
 import {
   isRateLimitError,
   isOurTimeoutAbort,
@@ -40,9 +41,23 @@ const DEFAULT_GROUNDED_CODEX_MODEL = 'gpt-5.6-terra';
 // Re-export so existing importers of these from $lib/deepdive/ai keep working.
 export { isRateLimitError };
 
-/** Primary client + model: the admin-configured site default (OpenRouter). */
+/**
+ * Primary client + model: the chat session's pinned model when a pinned thread
+ * started this run, otherwise the admin-configured site default (OpenRouter).
+ *
+ * A budgeted `research_start` runs synchronously inside the chat turn, so the
+ * ambient pin reaches it; an unbounded one is spawned from the turn and inherits
+ * the same async context. Both are work the owner kicked off from a thread whose
+ * model they chose. Every other entry point — the research pages, the scheduled
+ * runs, `runResearchSync` from a route — has no chat context at all and resolves
+ * the site default exactly as before.
+ *
+ * Embeddings are untouched: `generateEmbedding` resolves its own model through
+ * `getEmbeddingModel()` and asserts the vector width, because a chat model is
+ * not an embedding model in any circumstance.
+ */
 async function getPrimary(): Promise<{ client: import('openai').default; model: string }> {
-  return getLLMClient(await resolveDefaultModel());
+  return getLLMClient(currentSessionModel() ?? (await resolveDefaultModel()));
 }
 
 // GLM-class reasoning models spend a lot of reasoning time: a medium 2k-token

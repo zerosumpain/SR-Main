@@ -276,7 +276,7 @@
     border: 1px solid var(--card-border);
     background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
-  .bcp-code-inline { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
+  .bcp-code-inline { font-family: var(--font-code); font-size: var(--fs-label); color: var(--text-primary); }
   .bcp-link {
     background: transparent; border: none; padding: 0;
     font-family: var(--font-mono); font-size: var(--fs-label-xs);
@@ -291,7 +291,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

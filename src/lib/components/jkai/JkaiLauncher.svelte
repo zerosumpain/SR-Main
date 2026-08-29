@@ -247,7 +247,7 @@
   .jl-status { padding: 8px 14px; border-top: 1px solid var(--line-strong); font-size: var(--fs-label); color: var(--status-success, #2a9d4a); }
   .jl-status.busy { color: var(--text-muted); }
   .jl-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line-strong); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .jl-foot kbd { font-family: var(--font-mono); border: 1px solid var(--line-strong); padding: 0 3px; margin-right: 2px; }
+  .jl-foot kbd { font-family: var(--font-code); border: 1px solid var(--line-strong); padding: 0 3px; margin-right: 2px; }
 
   /* Mobile / PWA: give the panel room, drop the keyboard-hint footer on very
      small screens, and respect the notch. */
