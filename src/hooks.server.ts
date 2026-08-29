@@ -587,6 +587,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     pathname === '/api/jkai/intel/backfill' ||
     pathname === '/api/jkai/intel/source-facets' ||
     pathname === '/api/jkai/intel/clusters/recalculate' ||
+    pathname === '/api/jkai/intel/entities/split' ||
     (pathname === '/api/trails/segments' && event.request.method === 'POST')
   ) {
     let clientAddr = '';
