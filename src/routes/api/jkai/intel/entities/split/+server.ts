@@ -54,7 +54,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
       throw error(400, 'limit must be a positive number');
     }
-    return json(await runConflationSweep({ apply: !dryRun, limit }));
+    // A dry run writes NOTHING — not the splits and not the verdicts — so it can
+    // be repeated while a prompt is being tuned. `apply` stays opt-in either way.
+    return json(
+      await runConflationSweep(
+        dryRun ? { apply: false, record: false, limit } : { limit },
+      ),
+    );
   }
 
   if (body.action === 'undo') {

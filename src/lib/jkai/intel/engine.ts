@@ -389,6 +389,12 @@ export async function runIntelSweep(
   // Counts only, because that is all a run record holds. WHICH entities were
   // repaired is in the split ledger and the verdict collection, which are the
   // durable records and outlive the run log's retention.
+  //
+  // PROPOSE-ONLY unless INTEL_CONFLATION_APPLY=1. Measured on production: of
+  // twelve judged, ten were correctly left alone, one proposal was arguable and
+  // one was wrong — it wanted to move a child's `visited` and `present_at` edges
+  // onto the monitor that tracks her. One in two is not a rate at which to edit
+  // the graph unattended, so the night records proposals and a human reads them.
   stages.push(
     await runStage('conflation', async () => {
       const { runConflationSweep } = await import('./resolve/conflation.server');
@@ -398,6 +404,7 @@ export async function runIntelSweep(
         judged: out.judged,
         cached: out.cached,
         applied: out.applied,
+        proposed: out.proposed,
         queued: out.queued,
         skipped: out.skipped,
         failed: out.failed,
