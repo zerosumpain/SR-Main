@@ -138,6 +138,18 @@ one" and the palette slot is hashed from the key instead — with the legend goi
 through the same helper, because a key that disagrees with the picture is worse
 than no key.
 
+**The semantic pass was a 172-second outage waiting to happen.** It runs in
+211ms on homeserv's 1,121 entities and in **172 seconds** on production's 4,513
+— because Postgres defaults `random_page_cost` to 4.0, the embeddings are
+TOASTed so the table looks cheap to scan, and the HNSW index loses the estimate.
+Inside a `LATERAL` that mistake is multiplied by the row count: 4,513 correlated
+probes each falling back to a seq scan. `SET LOCAL random_page_cost = 1.1`
+(the treatment `context.ts` already gives the chat-turn lookups) takes it to
+**3.6 seconds** for the identical 2,705 pairs, and the result is memoised for
+five minutes because three intel surfaces trigger a sweep on one visit.
+
+A vector query that is fast on homeserv tells you nothing about production.
+
 ## Verified
 
 - `npm run gate:test` — 8,178 passing, 691 files. `svelte-check` clean.

@@ -271,6 +271,10 @@ export async function mergeEntities(
   );
 
   invalidateGraphAnalysis();
+  // Both memos name entities, and one of them is now a tombstone. Stale entries
+  // are skipped rather than dangerous, but a sweep immediately after a merge
+  // must not re-propose what it has just resolved.
+  invalidateResolutionCaches();
   return outcome;
 }
 
@@ -446,8 +450,34 @@ export async function backfillAliasesFromTombstones(
   return { updated, aliasesAdded };
 }
 
+/**
+ * How long the resolvable-entity snapshot stays good for.
+ *
+ * The load is 4,513 rows each carrying a 1536-dimension vector AS TEXT, which
+ * is parsed into 6.9 million floats in JS — CPU that blocks the event loop, on
+ * a process that is also serving chat. It was tolerable when one page called
+ * it; three surfaces now trigger a sweep on a single visit to intel.
+ *
+ * 60s, matching `getGraphAnalysis`, and dropped outright on every merge. What
+ * staleness can cost is an entity created in the last minute not appearing as a
+ * duplicate candidate for another minute, which is not a cost anybody can feel.
+ *
+ * Callers must treat the array as READ-ONLY — it is shared. Nothing in the
+ * matcher mutates it.
+ */
+const ENTITY_CACHE_MS = 60_000;
+let entityCache: { at: number; entities: ResolvableEntity[] } | null = null;
+
+/** Drop both memos. Called on every merge. */
+export function invalidateResolutionCaches(): void {
+  entityCache = null;
+  invalidateSemanticPairs();
+}
+
 /** Every live entity, in the shape the matcher wants. */
 export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
+  if (entityCache && Date.now() - entityCache.at < ENTITY_CACHE_MS) return entityCache.entities;
+
   const res = await db.execute(sql`
     SELECT
       e.id,
@@ -481,7 +511,7 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
     WHERE e.merged_into_id IS NULL
   `);
 
-  return (res.rows as Array<Record<string, unknown>>).map((r) => {
+  const entities = (res.rows as Array<Record<string, unknown>>).map((r) => {
     const raw = r.embedding;
     let embedding: number[] | null = null;
     if (typeof raw === 'string' && raw.length > 2) {
@@ -501,6 +531,9 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       summary: typeof r.summary === 'string' ? r.summary : null,
     };
   });
+
+  entityCache = { at: Date.now(), entities };
+  return entities;
 }
 
 /** How many surface forms one entity may accumulate. */
@@ -659,6 +692,14 @@ export const SEMANTIC_BLOCK_DISTANCE = 0.28;
 export const CANDIDATE_FLOOR = 0.35;
 /** Nearest neighbours to consider per entity. */
 export const SEMANTIC_BLOCK_K = 6;
+/**
+ * What the planner should believe a random page costs on this host.
+ *
+ * 1.1 is the standard value for solid-state storage, which is what every host
+ * here uses. See `$lib/jkai/intel/context.ts`, which carries the full reasoning
+ * and applies the same treatment to the chat-turn vector lookups.
+ */
+const SSD_RANDOM_PAGE_COST = 1.1;
 
 /**
  * Candidate pairs that share no word.
@@ -673,6 +714,28 @@ export const SEMANTIC_BLOCK_K = 6;
  * entities MEAN nearly the same thing — and hands the answers to the same
  * scorer. Approximate by nature, which is right for a blocking pass.
  */
+/**
+ * How long a semantic candidate list stays good for.
+ *
+ * The pass is 3.6s on production even with the planner behaving, and THREE
+ * surfaces trigger a sweep — the landing tile, the quality page and the triage
+ * hint fetch — so an uncached visit to intel pays for it three times.
+ *
+ * Safe to cache because of what it IS: a blocking pass. It proposes pairs for
+ * scoring; the scoring itself always reads live rows. The only thing five
+ * minutes of staleness can cost is an entity embedded in the last five minutes
+ * not yet having semantic neighbours — and embeddings are written nightly.
+ * Mirrors `getGraphAnalysis`, which caches the whole analysis for 60s for the
+ * same reason.
+ */
+const SEMANTIC_CACHE_MS = 5 * 60_000;
+let semanticCache: { key: string; at: number; pairs: Array<[string, string]> } | null = null;
+
+/** Drop the memo. Called on every merge — the pair list names entities. */
+export function invalidateSemanticPairs(): void {
+  semanticCache = null;
+}
+
 export async function loadSemanticPairs(
   opts: { distance?: number; k?: number; limit?: number } = {},
 ): Promise<Array<[string, string]>> {
@@ -680,23 +743,47 @@ export async function loadSemanticPairs(
   const k = Math.max(1, Math.min(20, opts.k ?? SEMANTIC_BLOCK_K));
   const limit = opts.limit ?? 20000;
 
-  const res = await db.execute(sql`
-    SELECT e.id AS a, n.id AS b
-    FROM intel_entities e
-    CROSS JOIN LATERAL (
-      SELECT o.id, (e.embedding <=> o.embedding) AS dist
-      FROM intel_entities o
-      WHERE o.merged_into_id IS NULL
-        AND o.embedding IS NOT NULL
-        AND o.id <> e.id
-      ORDER BY e.embedding <=> o.embedding
-      LIMIT ${k}
-    ) n
-    WHERE e.merged_into_id IS NULL
-      AND e.embedding IS NOT NULL
-      AND n.dist < ${distance}
-    LIMIT ${limit}
-  `);
+  const cacheKey = `${distance}|${k}|${limit}`;
+  if (semanticCache && semanticCache.key === cacheKey && Date.now() - semanticCache.at < SEMANTIC_CACHE_MS) {
+    return semanticCache.pairs;
+  }
+
+  // In a transaction ONLY so `SET LOCAL random_page_cost` covers the query and
+  // unwinds at commit — safe on a pooled connection, and the same treatment
+  // `$lib/jkai/intel/context.ts` gives the chat-turn vector lookups.
+  //
+  // Without it this is the difference between a feature and an outage.
+  // Postgres defaults `random_page_cost` to 4.0, a spinning-disk number; every
+  // host here is SSD. The embeddings are TOASTed, so `intel_entities` looks
+  // like a cheap 857-page table to the planner while the real work is
+  // detoasting 4,500 × 6KB vectors — so the seq scan wins the estimate, the
+  // HNSW index sits unused, and the lateral degenerates into 4,513 × 4,513
+  // full-dimension distance computations.
+  //
+  // Measured on production, this exact query, 2026-08-29:
+  //   random_page_cost 4.0 → 172,333ms
+  //   random_page_cost 1.1 →   3,616ms
+  // Same 2,705 pairs out of both.
+  const res = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL random_page_cost = ${sql.raw(String(SSD_RANDOM_PAGE_COST))}`);
+    return tx.execute(sql`
+      SELECT e.id AS a, n.id AS b
+      FROM intel_entities e
+      CROSS JOIN LATERAL (
+        SELECT o.id, (e.embedding <=> o.embedding) AS dist
+        FROM intel_entities o
+        WHERE o.merged_into_id IS NULL
+          AND o.embedding IS NOT NULL
+          AND o.id <> e.id
+        ORDER BY e.embedding <=> o.embedding
+        LIMIT ${k}
+      ) n
+      WHERE e.merged_into_id IS NULL
+        AND e.embedding IS NOT NULL
+        AND n.dist < ${distance}
+      LIMIT ${limit}
+    `);
+  });
 
   // Deduplicated on the unordered pair: nearest-neighbour is not symmetric, so
   // A→B and B→A both appear whenever the two are each other's neighbour.
@@ -711,6 +798,7 @@ export async function loadSemanticPairs(
     seen.add(key);
     out.push([a, b]);
   }
+  semanticCache = { key: cacheKey, at: Date.now(), pairs: out };
   return out;
 }
 
