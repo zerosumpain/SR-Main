@@ -377,7 +377,7 @@
     padding: 12px 14px;
     background: var(--code-bg);
     color: #e8dece;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: 12px;
     line-height: 1.55;
     tab-size: 2;
@@ -389,7 +389,7 @@
     overflow: auto;
     white-space: pre-wrap;
     word-break: break-word;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: 12px;
     line-height: 1.55;
     color: var(--text-primary);
@@ -433,7 +433,7 @@
     display: flex;
     gap: 8px;
     padding: 3px 14px;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     line-height: 1.5;
     white-space: pre-wrap;

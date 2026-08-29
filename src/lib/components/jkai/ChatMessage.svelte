@@ -748,7 +748,7 @@
     font-style: italic;
   }
   .chat-markdown :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;

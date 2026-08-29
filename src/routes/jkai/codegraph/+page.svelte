@@ -663,7 +663,7 @@
     color: var(--text-secondary); margin: 0.9rem 0 0.3rem; }
   .recs { list-style: none; padding: 0; margin: 0; font-size: var(--fs-label); }
   .recs li { padding: 0.15rem 0; border-top: 1px solid var(--divider); word-break: break-word; }
-  .recs code { font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .recs code { font-family: var(--font-code); font-size: var(--fs-label-xs); }
   .ek { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
         border: 1px solid var(--divider); padding: 0 0.25rem; margin-right: 0.25rem; }
   .err { color: var(--error); font-size: var(--fs-label); }

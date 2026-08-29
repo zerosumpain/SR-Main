@@ -288,7 +288,7 @@
   .ag-mem-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); flex: 1; }
   .ag-mem-prev {
     margin: 6px 0 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-muted);
     white-space: pre-wrap;

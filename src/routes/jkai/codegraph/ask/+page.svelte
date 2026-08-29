@@ -53,10 +53,10 @@
   button { padding: 0.6rem 1.2rem; border: 1px solid var(--accent-ink); background: var(--accent-ink);
            color: var(--bg); font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer; }
   .examples { list-style: none; padding: 0; margin: 0 0 1.5rem; display: grid; gap: 0.3rem; }
-  .examples code { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent-ink); }
+  .examples code { font-family: var(--font-code); font-size: 0.78rem; color: var(--accent-ink); }
   .meta { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); }
   pre { border: 1px solid var(--card-border); background: var(--card-bg); padding: 1rem;
-        overflow-x: auto; white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.6; }
+        overflow-x: auto; white-space: pre-wrap; font-family: var(--font-code); font-size: 0.8rem; line-height: 1.6; }
   .error { border: 1px solid var(--error-border); background: var(--error-bg); color: var(--error); padding: 0.8rem;
            font-family: var(--font-mono); font-size: 0.85rem; }
 </style>

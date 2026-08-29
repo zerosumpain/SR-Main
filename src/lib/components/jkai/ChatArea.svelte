@@ -3815,7 +3815,7 @@
     margin-bottom: 6px;
   }
   .approval-cmd {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--surface-sunken);
@@ -4025,7 +4025,7 @@
     margin: 0;
   }
   .reasoning-body :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.9em, var(--fs-label-xs));
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     padding: 0 4px;

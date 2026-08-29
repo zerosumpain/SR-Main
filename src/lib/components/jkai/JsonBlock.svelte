@@ -61,7 +61,7 @@
 
 <style>
   .json-block {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs, 10px);
     line-height: 1.55;
     white-space: pre-wrap;
