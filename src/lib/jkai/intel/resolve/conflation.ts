@@ -195,3 +195,47 @@ export function validateProposal(
   }
   return { action: 'apply', targetId: target.id };
 }
+
+/** A proposal as it was recorded, so a later one can be compared against it. */
+export interface RecordedProposal {
+  /** Local day (YYYY-MM-DD) the proposal was made. */
+  day: string;
+  targetName: string;
+  relationTypes: string[];
+}
+
+/**
+ * Does tonight's proposal say the same thing a previous night's did?
+ *
+ * This is the gate that lets the detector apply anything at all, and it exists
+ * because the proposals are NOT STABLE. Three dry runs over the same twelve
+ * entities, same prompt, `temperature: 0`, minutes apart:
+ *
+ *   run 2   IBCA Data Strategy -> IBCA Board (18 edges)   over-broad
+ *   run 3   IBCA Data Strategy -> IBCA (4 edges)          correct
+ *
+ * Requests are throughput-routed across providers, so `temperature: 0` buys
+ * nothing and a single judgement is a suggestion about one night rather than a
+ * finding. Agreement across nights is the cheapest available filter on that
+ * noise: the two IBCA answers above disagree in both target and size, and
+ * neither would have been applied.
+ *
+ * Exact on both halves deliberately. A proposal that keeps the target but grows
+ * the relation set is the over-broad failure mode — 4 edges becoming 18 — and
+ * treating it as agreement would apply exactly the version that is wrong.
+ *
+ * A DIFFERENT DAY, not merely a different run. Two sweeps minutes apart share
+ * whatever made the model answer as it did; the point is to sample twice.
+ */
+export function corroborates(
+  previous: RecordedProposal | null | undefined,
+  current: Omit<RecordedProposal, 'day'>,
+  today: string,
+): boolean {
+  if (!previous) return false;
+  if (!previous.day || previous.day === today) return false;
+  if (previous.targetName !== current.targetName) return false;
+  const before = [...new Set(previous.relationTypes)].sort();
+  const now = [...new Set(current.relationTypes)].sort();
+  return before.length === now.length && before.every((r, i) => r === now[i]);
+}
