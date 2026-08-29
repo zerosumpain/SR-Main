@@ -9,6 +9,11 @@ When the geocache is sparse (few entries), the dashboard's destination clusterin
 ## Backfill technique
 
 1. **Fetch the API** to get cluster centroids (`/api/family-presence/stats?range=30d` → `destinations[]`).
+   **Owner-only since 2026-08-29** — it was removed from `PUBLIC_API_PATHS` in the Landgrab
+   build (spec `docs/superpowers/specs/2026-08-29-landgrab-territory.md`, decision 18) because
+   it served five people's GPS history anonymously. An anonymous curl returns 401 and that is
+   correct: authenticate as the owner, or read `family_presence_current` from the data store
+   directly. **Do not put it back in the allow-list to make this step work.**
 2. **Reverse-geocode each centroid** via Nominatim:
    ```
    GET https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1

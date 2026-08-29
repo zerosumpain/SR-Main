@@ -57,6 +57,38 @@ function publicPathsFromAuth() {
   return [...code.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
+/**
+ * String literals in PUBLIC_API_PATHS (src/lib/server/public-api-paths.ts).
+ *
+ * This array is the OTHER way a route becomes anonymously reachable, and until
+ * 2026-08-29 this script had never read it. hooks.server.ts consults it for
+ * every /api/* request, so one line here opens one route to the internet
+ * without touching auth.ts, hooks.server.ts or any file in
+ * .github/protected-paths.txt — exactly the invisible addition this script
+ * exists to make visible.
+ *
+ * That blind spot is not hypothetical: `/api/family-presence/stats` sat in this
+ * array serving five people's clustered GPS history and current positions by
+ * first name, three of them children, and nothing flagged it. It happened to be
+ * the only entry not ALSO covered by a PUBLIC_PATHS prefix, so removing it
+ * emptied the blind spot without sealing it — today's two survivors,
+ * /api/biome/state and /api/landing/ecg-telemetry, are already in the snapshot
+ * via the /api/biome and /api/landing prefixes, which is why closing this gap
+ * changes the route count by zero. The point is the NEXT entry.
+ *
+ * These are EXACT paths, never prefixes: isPublicApiPath compares with ===.
+ * Treating them as prefixes would over-report the surface and, worse, would
+ * hand every route under /api/biome/state/* to the snapshot as anonymous when
+ * the hook would 401 them.
+ *
+ * Same technique as publicPathsFromAuth: strip prose first, then take the
+ * literals. The entries here are heavily commented too.
+ */
+function publicApiPathsFrom() {
+  const src = read(join(REPO, 'src', 'lib', 'server', 'public-api-paths.ts'));
+  return arrayLiteralsFrom(src, 'PUBLIC_API_PATHS');
+}
+
 // Hook-level bypass catalogue.
 //
 // These four arrays USED to live here. They now live in
@@ -71,7 +103,13 @@ function arrayLiteralsFrom(src, name) {
   // script `/api` as a public prefix, i.e. declaring all 300+ API routes
   // anonymous. Caught by the disjointness assertion below, which exists
   // because of it.
-  const block = src.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([\\s\\S]*?)\\]\\s*;`));
+  // `] as const;` as well as `];` — PUBLIC_API_PATHS is declared `as const` so
+  // that isPublicApiPath's === comparison is typed, and a terminator that only
+  // knew about `];` read that array as empty. The canary assertions below are
+  // what turned that into a loud failure rather than a silently smaller surface.
+  const block = src.match(
+    new RegExp(`export const ${name}[^=]*=\\s*\\[([\\s\\S]*?)\\]\\s*(?:as\\s+const\\s*)?;`),
+  );
   if (!block) return [];
   const code = block[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   return [...code.matchAll(/'([^']+)'/g)].map((m) => m[1]);
@@ -182,8 +220,27 @@ function walk(dir, acc = []) {
 
 assertNoUnclassifiedHookPaths();
 
+const PUBLIC_API_PATHS = publicApiPathsFrom();
+
+// Same failure mode as the four bypass arrays: a regex over another file can
+// silently return [] after a refactor, and an empty list makes the surface look
+// SMALLER — a green gate for the worst possible reason. /api/biome/state is the
+// canary because it is the oldest entry and the least likely to move.
+if (PUBLIC_API_PATHS.length < 2 || !PUBLIC_API_PATHS.includes('/api/biome/state')) {
+  console.error(
+    'check-public-routes: could not read PUBLIC_API_PATHS from ' +
+      `src/lib/server/public-api-paths.ts (got ${PUBLIC_API_PATHS.length} entries, ` +
+      `canary /api/biome/state ${PUBLIC_API_PATHS.includes('/api/biome/state') ? 'present' : 'MISSING'}).\n` +
+      'Fix the extraction in this script rather than regenerating the snapshot, or a\n' +
+      'route added to that array is world-readable with nothing to review.',
+  );
+  process.exit(2);
+}
+
 const prefixes = [...new Set([...publicPathsFromAuth(), ...HOOK_BYPASSES, ...HOOK_PAGE_PREFIX_BYPASSES])];
-const exact = new Set(HOOK_EXACT_BYPASSES);
+// PUBLIC_API_PATHS join HOOK_EXACT_BYPASSES rather than the prefix list: both
+// are matched with === by the code that enforces them.
+const exact = new Set([...HOOK_EXACT_BYPASSES, ...PUBLIC_API_PATHS]);
 
 const missing = CANARIES.filter((c) => !prefixes.includes(c));
 if (missing.length) {
@@ -208,8 +265,9 @@ const header = [
   '#',
   '# Every route here can be reached WITHOUT a session, because it sits under a',
   '# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts —',
-  '# or, for the page routes in HOOK_EXACT_BYPASSES, because that exact path is',
-  '# public while everything beneath it is not.',
+  '# or, for the exact paths in HOOK_EXACT_BYPASSES and PUBLIC_API_PATHS',
+  '# (src/lib/server/public-api-paths.ts), because that one path is public while',
+  '# everything beneath it is not.',
   '# Being listed is not a bug — but each line should be a deliberate decision,',
   '# and several self-gate internally (requireProjectPublic, requireDeckVisible,',
   '# validateAgentKey, assertScraperServiceRequest, bridge tokens).',

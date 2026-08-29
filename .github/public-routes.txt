@@ -2,8 +2,9 @@
 #
 # Every route here can be reached WITHOUT a session, because it sits under a
 # prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts —
-# or, for the page routes in HOOK_EXACT_BYPASSES, because that exact path is
-# public while everything beneath it is not.
+# or, for the exact paths in HOOK_EXACT_BYPASSES and PUBLIC_API_PATHS
+# (src/lib/server/public-api-paths.ts), because that one path is public while
+# everything beneath it is not.
 # Being listed is not a bug — but each line should be a deliberate decision,
 # and several self-gate internally (requireProjectPublic, requireDeckVisible,
 # validateAgentKey, assertScraperServiceRequest, bridge tokens).
@@ -187,6 +188,7 @@
 /projects/family-life360-history
 /projects/jkai
 /projects/jkai/[slug]/[...path]
+/projects/landgrab
 /projects/policy-engine
 /projects/policy-engine/attendance
 /projects/policy-engine/build
