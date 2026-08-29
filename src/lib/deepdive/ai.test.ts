@@ -25,7 +25,7 @@ vi.mock('$lib/server/models/settings', () => ({
   resolveDefaultModel: vi.fn(async () => ({ provider: 'openrouter', modelId: primaryModel })),
 }));
 vi.mock('$lib/llm/keys', () => ({
-  getOpenRouterClient: () => ({ chat: { completions: { create: mockFallbackCreate } } }),
+  getOpenRouterClient: async () => ({ chat: { completions: { create: mockFallbackCreate } } }),
   getFallbackModel: () => fallbackModel,
   getEmbeddingModel: () => 'openai/text-embedding-3-small',
 }));

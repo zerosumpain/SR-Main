@@ -8,7 +8,7 @@ import {
 import { eq, and, sql, ne } from 'drizzle-orm';
 import { generateEmbedding } from './ai';
 import { toVectorLiteral } from './vector';
-import { loadKeys } from '$lib/llm/keys';
+import { hasOpenRouter } from '$lib/llm/keys';
 import { emitLog } from './worker';
 
 function normalise(text: string): string {
@@ -30,7 +30,7 @@ function bigramSimilarity(a: string, b: string): number {
 }
 
 export async function linkSessionEntitiesToGlobal(sessionId: string): Promise<void> {
-  const embeddingsAvailable = !!loadKeys().openrouterApiKey;
+  const embeddingsAvailable = await hasOpenRouter();
 
   const sessionEntities = await db
     .select()

@@ -53,15 +53,48 @@ export function getTavilyKey(): string {
   return keys.tavilyApiKey;
 }
 
-export function getOpenRouterClient(): OpenAI {
-  const keys = loadKeys();
-  if (!keys.openrouterApiKey) throw new Error('OpenRouter API key not configured');
+/**
+ * The OpenRouter key, from the one place production actually keeps it.
+ *
+ * `loadKeys()` reads keys.json and the environment and nothing else.
+ * Production keeps the key in the `openrouter.api_key` app setting instead —
+ * there is no keys.json holding one in /opt/strange-rambling-svelte, and its
+ * .env has no OPENROUTER_API_KEY — so every caller that asked `loadKeys()` for
+ * it got `undefined` while jkai chat, which goes through the gateway and
+ * `getOpenRouterApiKey()`, worked fine. That split is what failed every
+ * pinned-model research tier with "OpenRouter API key not configured" and
+ * silently turned off every research embedding, for a fortnight, on prod only:
+ * homeserv's keys.json DOES hold a key, so it never reproduced locally.
+ *
+ * Async, and a dynamic import, because server/models/settings imports this
+ * module — a static import would close the cycle at module-evaluation time.
+ * The setting is read through `getSetting`'s 30s cache, so this is not a
+ * database round trip per call.
+ *
+ * The DB read is best-effort on purpose. A host with no database (a script, a
+ * test) still resolves the key from keys.json or the environment, which is
+ * exactly what this function did before.
+ */
+export async function getOpenRouterKey(): Promise<string | undefined> {
+  try {
+    const { getOpenRouterApiKey } = await import('$lib/server/models/settings');
+    const key = await getOpenRouterApiKey();
+    if (key) return key;
+  } catch {
+    // No database on this host, or it is down. Fall through to file + env.
+  }
+  return loadKeys().openrouterApiKey;
+}
+
+export async function getOpenRouterClient(): Promise<OpenAI> {
+  const apiKey = await getOpenRouterKey();
+  if (!apiKey) throw new Error('OpenRouter API key not configured');
   // Wrapped so CHAT usage is cost-captured. Embeddings via this client are
   // still uncaptured — installUsageCapture only patches chat.completions.create,
   // not embeddings.create.
   return installUsageCapture(
     new OpenAI({
-      apiKey: keys.openrouterApiKey,
+      apiKey,
       baseURL: 'https://openrouter.ai/api/v1',
     }),
     'openrouter',
@@ -90,21 +123,23 @@ export function getFallbackModel(): string {
 }
 
 /** True when an OpenRouter API key is configured (fallback is available). */
-export function hasOpenRouter(): boolean {
-  return !!loadKeys().openrouterApiKey;
+export async function hasOpenRouter(): Promise<boolean> {
+  return !!(await getOpenRouterKey());
 }
 
-export function getKeysStatus(): {
+export async function getKeysStatus(): Promise<{
   tavilyConfigured: boolean;
   openrouterConfigured: boolean;
   elevenlabsConfigured: boolean;
   fallbackModel: string;
   embeddingModel: string;
-} {
+}> {
   const keys = loadKeys();
   return {
     tavilyConfigured: !!keys.tavilyApiKey,
-    openrouterConfigured: !!keys.openrouterApiKey,
+    // Not `keys.openrouterApiKey` — the key normally lives in the DB, and a
+    // status that reads only the file reported "Not set" for a working key.
+    openrouterConfigured: !!(await getOpenRouterKey()),
     elevenlabsConfigured: !!keys.elevenlabsApiKey,
     fallbackModel: getFallbackModel(),
     embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-large',
