@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inferToolsets } from './keyword-classifier';
+import { inferToolsets, inferToolsetsForTurn, MAX_INFERRED_TOOLSETS } from './keyword-classifier';
 
 /**
  * The classifier is what decides which toolsets are pre-loaded for a turn on
@@ -111,5 +111,61 @@ describe('inferToolsets', () => {
     expect(inferToolsets('how did I sleep last night')).toContain('health');
     expect(inferToolsets('turn the kitchen lights off')).toContain('home');
     expect(inferToolsets('check my inbox')).toContain('gmail');
+  });
+});
+
+/**
+ * The agreement problem. A turn's tools were matched from that turn's message
+ * alone, so the word that approves a plan carried none of the plan's tools.
+ */
+describe('inferToolsetsForTurn', () => {
+  // The exact prod exchange (2026-08-13): a deck designed off
+  // presentation_describe_vocabulary, the assistant offering "say 'build it'",
+  // and "build it" then matching only `builds` — the app builder — so the deck
+  // tools went away and the deck was never created.
+  it('keeps the deck tools through "build it"', () => {
+    const prior = [
+      'create a slide deck on the capabilities of jkai, and the toolset it has available to it',
+      "there's a decks functionality in the site, and core functionality",
+    ];
+    expect(inferToolsets('build it')).not.toContain('decks'); // the fault
+    const got = inferToolsetsForTurn('build it', prior);
+    expect(got).toEqual(expect.arrayContaining(['decks', 'presentations']));
+  });
+
+  it.each(['yes', 'do it', 'go on then', 'yep, go for it'])('carries through the bare agreement %j', (msg) => {
+    expect(inferToolsets(msg)).not.toContain('decks');
+    expect(inferToolsetsForTurn(msg, ['make me a deck about the Broads'])).toContain('decks');
+  });
+
+  it('still matches the current message first', () => {
+    const got = inferToolsetsForTurn('how did I sleep', ['make me a deck about the Broads']);
+    expect(got[0]).toBe('health');
+    expect(got).toContain('decks');
+  });
+
+  it('forgets a subject once it is two messages behind', () => {
+    const got = inferToolsetsForTurn('build it', [
+      'make me a deck about the Broads',
+      'how did I sleep',
+      'turn the kitchen lights off',
+    ]);
+    expect(got).not.toContain('decks');
+  });
+
+  it('caps what a terse turn can inherit', () => {
+    const busy = 'deck sleep lights inbox workflow research blog scrape files apis calendar whatsapp';
+    expect(inferToolsets(busy).length).toBeGreaterThan(MAX_INFERRED_TOOLSETS); // the priors really are that broad
+    expect(inferToolsetsForTurn('build it', [busy, busy]).length).toBeLessThanOrEqual(MAX_INFERRED_TOOLSETS);
+  });
+
+  it('never drops a match on the current message, even over the cap', () => {
+    const busy = 'deck sleep lights inbox workflow research blog scrape files apis calendar whatsapp';
+    const now = inferToolsets(busy);
+    expect(inferToolsetsForTurn(busy, ['make me a deck'])).toEqual(expect.arrayContaining(now));
+  });
+
+  it('is a no-op with no history', () => {
+    expect(inferToolsetsForTurn('make me a deck')).toEqual(inferToolsets('make me a deck'));
   });
 });

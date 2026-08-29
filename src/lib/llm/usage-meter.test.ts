@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   codexMeter,
+  codexMeters,
   formatResetIn,
   formatWindowLabel,
   isSubscriptionModelId,
@@ -113,5 +114,54 @@ describe('codexMeter', () => {
   it('admits when the reading is stale', () => {
     const m = codexMeter(usage({ fetchedAt: NOW - 9 * 60_000 }), 'codex/gpt-5.6-terra', NOW);
     expect(m?.title).toContain('as of 9m ago');
+  });
+});
+
+describe('codexMeters', () => {
+  const twoWindows = () =>
+    usage({
+      windows: [
+        { usedPercent: 80, windowSeconds: 18_000, resetAt: NOW + 2 * 3_600_000 },
+        { usedPercent: 10, windowSeconds: 604_800, resetAt: NOW + 6 * 86_400_000 },
+      ],
+      headline: { usedPercent: 80, windowSeconds: 18_000, resetAt: NOW + 2 * 3_600_000 },
+    });
+
+  it('returns one meter per reported window, tightest first', () => {
+    const ms = codexMeters(twoWindows(), 'codex/gpt-5.6-terra', NOW);
+    expect(ms.map((m) => m.windowLabel)).toEqual(['5H', 'WEEKLY']);
+    expect(ms[0].remainingPercent).toBe(20);
+    expect(ms[1].remainingPercent).toBe(90);
+    expect(ms[1].resetIn).toBe('6d');
+  });
+
+  it('does not repeat the headline window when it also appears in windows', () => {
+    // Identity is not preserved across the load boundary, so the dedupe has to
+    // be on window LENGTH — a same-shape copy must still collapse.
+    const ms = codexMeters(usage(), 'codex/gpt-5.6-terra', NOW);
+    expect(ms).toHaveLength(1);
+    expect(ms[0].windowLabel).toBe('WEEKLY');
+  });
+
+  it('only flags the wider window as exhausted when its own figure says so', () => {
+    const ms = codexMeters(
+      { ...twoWindows(), limitReached: true },
+      'codex/gpt-5.6-terra',
+      NOW,
+    );
+    expect(ms[0].limitReached).toBe(true);
+    expect(ms[1].limitReached).toBe(false);
+  });
+
+  it('is empty for a metered model and for a host with no login', () => {
+    expect(codexMeters(twoWindows(), 'google/gemini-3.5-flash', NOW)).toEqual([]);
+    expect(codexMeters(null, 'codex/gpt-5.6-terra', NOW)).toEqual([]);
+  });
+
+  it('agrees with codexMeter on the headline', () => {
+    const u = twoWindows();
+    expect(codexMeter(u, 'codex/gpt-5.6-terra', NOW)).toEqual(
+      codexMeters(u, 'codex/gpt-5.6-terra', NOW)[0],
+    );
   });
 });

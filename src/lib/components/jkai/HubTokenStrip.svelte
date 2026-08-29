@@ -1,13 +1,14 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import type { CodexMeter } from '$lib/llm/usage-meter';
+  import { usageWindows, ensureUsageWindows } from '$lib/jkai/usage-windows.svelte';
 
   let {
     tokensToday,
     spendUsd,
     budgetUsd,
     credit = null,
-    codex = null,
+    codexWindows = [],
     contextTokens = null,
     contextFraction = null,
     liveRuns = 0,
@@ -21,10 +22,12 @@
      *  `credit.remainingUsd` and the strip says so; when null the strip has
      *  fallen back to the static app_settings budget. */
     credit?: { remainingUsd: number; totalUsd: number; usedUsd: number } | null;
-    /** Set only while a `codex/` model is answering. When present it REPLACES
-     *  the spend chunk: that turn spends subscription quota, not credit, so a
-     *  pound figure would be describing money the turn will never touch. */
-    codex?: CodexMeter | null;
+    /** Every rate-limit window the subscription reports, tightest first — set
+     *  only while a `codex/` model is answering. Non-empty REPLACES the spend
+     *  chunk: that turn spends subscription quota, not credit, so a pound
+     *  figure would be describing money the turn will never touch. Clicking the
+     *  chunk walks this list. */
+    codexWindows?: CodexMeter[];
     contextTokens?: number | null;
     contextFraction?: number | null;
     liveRuns?: number;
@@ -45,17 +48,76 @@
   }
 
   const isMobile = $derived(variant === 'mobile');
+
+  // ── Click-to-widen windows ────────────────────────────────────────────────
+  // Rolling, not calendar: "today" here has always meant the last 24 hours, and
+  // the day figure comes from the layout load rather than from the lazy fetch so
+  // that cycling back round to it lands on the number that was already there.
+  const WINDOWS = [
+    { key: 'day', label: 'today', long: 'the last 24 hours' },
+    { key: 'week', label: '7d', long: 'the last 7 days' },
+    { key: 'month', label: '30d', long: 'the last 30 days' },
+  ] as const;
+
+  let tokIdx = $state(0);
+  let spendIdx = $state(0);
+  let codexIdx = $state(0);
+
+  const tokWin = $derived(WINDOWS[tokIdx]);
+  const spendWin = $derived(WINDOWS[spendIdx]);
+  /** Modulo on read, not on write: the window list can shrink under us when the
+   *  active model changes mid-session. */
+  const codex = $derived(
+    codexWindows.length > 0 ? codexWindows[codexIdx % codexWindows.length] : null,
+  );
+
+  function cycleTokens() {
+    tokIdx = (tokIdx + 1) % WINDOWS.length;
+    ensureUsageWindows();
+  }
+  function cycleSpend() {
+    if (codexWindows.length > 0) {
+      codexIdx = (codexIdx + 1) % codexWindows.length;
+      return;
+    }
+    spendIdx = (spendIdx + 1) % WINDOWS.length;
+    ensureUsageWindows();
+  }
+  /** Warm the wider windows on hover so the first click is not a spinner. */
+  function prefetch() {
+    ensureUsageWindows();
+  }
+
+  /** null = we don't have this window yet (still loading, or the fetch failed). */
+  const tokValue = $derived(
+    tokWin.key === 'day' ? tokensToday : usageWindows.loaded ? usageWindows.tokens[tokWin.key] : null,
+  );
+  const spendValue = $derived(
+    spendWin.key === 'day' ? spendUsd : usageWindows.loaded ? usageWindows.spendUsd[spendWin.key] : null,
+  );
+  /** `…` while a fetch is in flight, `—` when it failed. Never a zero: a zero
+   *  is a claim about spend, and we don't have one. */
+  const pending = $derived(usageWindows.failed ? '—' : '…');
+
   const budgetPct = $derived(
     budgetUsd > 0 ? Math.max(0, Math.min(100, (spendUsd / budgetUsd) * 100)) : 0,
+  );
+
+  const tokTitle = $derived(
+    `Tokens in + out across every LLM call the site made in ${tokWin.long}. Click to switch window (today / 7d / 30d).`,
   );
 
   /** Hover detail for the spend chunk. With a live balance this is the whole
    *  picture — purchased, used, left — so the one-line strip doesn't have to
    *  carry three numbers. */
   const spendTitle = $derived(
-    credit
-      ? `Spent today ${formatGbp(spendUsd)} · OpenRouter credit ${formatGbp(credit.remainingUsd)} left of ${formatGbp(credit.totalUsd)} purchased (${formatGbp(credit.usedUsd)} used)`
-      : `Spent today ${formatGbp(spendUsd)} of a ${formatGbp(budgetUsd)} daily budget — OpenRouter balance unavailable`,
+    spendWin.key !== 'day'
+      ? `Spent over ${spendWin.long}${
+          credit ? ` · OpenRouter credit ${formatGbp(credit.remainingUsd)} left of ${formatGbp(credit.totalUsd)} purchased` : ''
+        }. Click to switch window (today / 7d / 30d).`
+      : credit
+        ? `Spent today ${formatGbp(spendUsd)} · OpenRouter credit ${formatGbp(credit.remainingUsd)} left of ${formatGbp(credit.totalUsd)} purchased (${formatGbp(credit.usedUsd)} used). Click to switch window (today / 7d / 30d).`
+        : `Spent today ${formatGbp(spendUsd)} of a ${formatGbp(budgetUsd)} daily budget — OpenRouter balance unavailable. Click to switch window (today / 7d / 30d).`,
   );
   const contextPct = $derived(
     contextFraction === null ? null : Math.max(0, Math.min(100, Math.round(contextFraction * 100))),
@@ -68,13 +130,22 @@
      TOK and spend are the last two standing. Each droppable chunk owns the
      separator that precedes it, so nothing ever leaves a dangling `/`. -->
 <div class="strip" class:mobile={isMobile} aria-label="Usage ledger">
-  <span class="chunk"><b>{compactTokens(tokensToday)}</b> tok</span>
+  <button
+    type="button"
+    class="chunk chunk-btn"
+    onclick={cycleTokens}
+    onpointerenter={prefetch}
+    title={tokTitle}
+  >
+    <b>{tokValue === null ? pending : compactTokens(tokValue)}</b> tok
+    <span class="win">{tokWin.label}</span>
+  </button>
 
   {#if !isMobile}
     <span class="unit unit-spend">
       <span class="sep" aria-hidden="true">/</span>
       {#if codex}
-        <span class="chunk spend" title={codex.title}>
+        <button type="button" class="chunk chunk-btn spend" onclick={cycleSpend} title={codex.title}>
           <b class="accent" class:warn={codex.limitReached}
             >{Math.round(codex.remainingPercent)}%</b
           ><span class="of">
@@ -82,23 +153,36 @@
               ? ` · ${codex.resetIn}`
               : ''}</span
           >
-        </span>
+        </button>
       {:else}
-        <span class="chunk spend" title={spendTitle}>
-          <b class="accent">{formatGbp(spendUsd)}</b><span class="of">
-            of {formatGbp(budgetUsd)}{credit ? ' credit' : ''}</span
-          >
-        </span>
+        <button
+          type="button"
+          class="chunk chunk-btn spend"
+          onclick={cycleSpend}
+          onpointerenter={prefetch}
+          title={spendTitle}
+        >
+          <b class="accent">{spendValue === null ? pending : formatGbp(spendValue)}</b>
+          {#if spendWin.key === 'day'}
+            <span class="of"> of {formatGbp(budgetUsd)}{credit ? ' credit' : ''}</span>
+          {:else}
+            <span class="of"> spent · {spendWin.label}</span>
+          {/if}
+        </button>
       {/if}
       <!-- Fill is what has been CONSUMED in both modes: spend against the
-           balance, or the tightest quota window against its ceiling. -->
-      <span class="budget-bar" aria-hidden="true">
-        <span
-          class="budget-fill"
-          class:warn={codex?.limitReached}
-          style="width: {codex ? codex.usedPercent : budgetPct}%"
-        ></span>
-      </span>
+           balance, or the selected quota window against its ceiling. Only the
+           day window has a ceiling to draw against — a 30-day total measured
+           against today's remaining credit would be a made-up fraction. -->
+      {#if codex || spendWin.key === 'day'}
+        <span class="budget-bar" aria-hidden="true">
+          <span
+            class="budget-fill"
+            class:warn={codex?.limitReached}
+            style="width: {codex ? codex.usedPercent : budgetPct}%"
+          ></span>
+        </span>
+      {/if}
     </span>
   {/if}
 
@@ -150,6 +234,32 @@
     align-items: center;
     gap: 0.45ch;
     white-space: nowrap;
+  }
+  /* The two windowed chunks are controls, not labels. They inherit the strip's
+     type entirely — the only affordance is the pointer and the hover lift, so
+     the ledger still reads as one line rather than a row of buttons. */
+  .chunk-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .chunk-btn:hover {
+    color: var(--text-primary);
+  }
+  .chunk-btn:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* The window this chunk is currently reporting. Quiet — it is the caption,
+     not the figure. */
+  .win {
+    opacity: 0.6;
   }
   /* Every figure in the ledger ticks in place during a turn — tabular stops the
      strip shivering as digits change width. */

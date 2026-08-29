@@ -77,3 +77,43 @@ export function inferToolsets(message: string): string[] {
   }
   return matched;
 }
+
+/** How many earlier user messages a turn can inherit toolsets from. */
+export const TOOLSET_CARRY_TURNS = 2;
+
+/** Ceiling on the toolsets one turn may pre-load. Only carried ones are
+ *  dropped — a match on the current message is never discarded. */
+export const MAX_INFERRED_TOOLSETS = 8;
+
+/** How much of an earlier message is scanned when carrying toolsets forward. */
+const CARRY_SCAN_CHARS = 4000;
+
+/**
+ * Toolsets for a turn, matched over a short window of the conversation rather
+ * than the current message alone.
+ *
+ * Classifying only the current message meant an agreement carried no tools.
+ * The turn that exposed it: a deck was designed with the real deck vocabulary,
+ * the assistant said "say 'build it' and I'll create it" — and "build it"
+ * matched only `builds` (the app builder), unloading `decks`/`presentations`.
+ * The deck was never created and the model reported the capability missing.
+ * "yes", "do it" and "go on then" match nothing at all, so they were worse.
+ *
+ * Carrying is bounded on both axes — a two-message window and a total cap —
+ * because every toolset is real tokens on the wire, and `workflows` (22KB) or
+ * `builds` (14KB) trailing a conversation forever is its own bug.
+ */
+export function inferToolsetsForTurn(userMessage: string, priorUserMessages: string[] = []): string[] {
+  const out = [...new Set(inferToolsets(userMessage))];
+
+  // Most recent first: a toolset from one turn ago beats one from three.
+  // Only the opening of each is scanned — a prior turn can be a pasted wall of
+  // text, and the subject of a message is named early or not at all.
+  for (const prior of priorUserMessages.slice(-TOOLSET_CARRY_TURNS).reverse()) {
+    for (const toolset of inferToolsets(prior.slice(0, CARRY_SCAN_CHARS))) {
+      if (out.length >= MAX_INFERRED_TOOLSETS) return out;
+      if (!out.includes(toolset)) out.push(toolset);
+    }
+  }
+  return out;
+}
