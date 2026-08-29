@@ -169,30 +169,50 @@ describe('splitEntity', () => {
     expect(links.map((l) => l.noteId)).toContain(ids.note);
   });
 
-  it('puts the moved edges back', async () => {
+  it('undoes the split it was asked for, not whichever one it found first', async () => {
     if (!dbReady) return;
-    const before = await db
-      .select({ id: intelRelationships.id })
-      .from(intelRelationships)
-      .where(eq(intelRelationships.sourceEntityId, ids.town));
+    // Two live splits at once, undone in the WRONG order on purpose. The first
+    // version of this looked up the ledger with a mistyped `filter` option, which
+    // `queryRecords` silently ignores — so it returned the first record in the
+    // collection and would have undone the other split. With one split on record
+    // the test passed anyway, which is exactly the shape of bug that ships.
+    const extraA = await edge(ids.town, 'has_reward_program', ids.bank);
+    const extraB = await edge(ids.town, 'insured_by', ids.bank);
 
-    const out = await splitEntity({
+    const first = await splitEntity({
       fromId: ids.town,
       to: { entityId: ids.person },
-      relationshipIds: [rel.college],
-      reason: `${TAG} deliberately wrong, to be undone`,
+      relationshipIds: [extraA],
+      reason: `${TAG} first`,
     });
-    expect(out.moved).toBe(1);
+    const second = await splitEntity({
+      fromId: ids.town,
+      to: { entityId: ids.person },
+      relationshipIds: [extraB],
+      reason: `${TAG} second`,
+    });
+    expect(first.moved).toBe(1);
+    expect(second.moved).toBe(1);
 
-    const undone = await undoSplit(out.key);
+    const undone = await undoSplit(second.key);
     expect(undone.restored).toBe(1);
 
-    const [restored] = await db
-      .select({ target: intelRelationships.targetEntityId })
+    const rows = await db
+      .select({ id: intelRelationships.id, source: intelRelationships.sourceEntityId })
       .from(intelRelationships)
-      .where(eq(intelRelationships.id, rel.college));
-    expect(restored.target).toBe(ids.town);
-    expect(before.length).toBeGreaterThanOrEqual(0);
+      .where(inArray(intelRelationships.id, [extraA, extraB]));
+    const byId = new Map(rows.map((r) => [r.id, r.source]));
+    // Only the second came back.
+    expect(byId.get(extraB)).toBe(ids.town);
+    expect(byId.get(extraA)).toBe(ids.person);
+
+    // And undoing it again is a no-op rather than a second restore.
+    expect((await undoSplit(second.key)).restored).toBe(0);
+  });
+
+  it('refuses to undo a split that does not exist', async () => {
+    if (!dbReady) return;
+    await expect(undoSplit(`${TAG}-nonexistent`)).rejects.toThrow(/no such split/);
   });
 
   it('creates the target when the referent has no entity yet', async () => {

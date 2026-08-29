@@ -36,7 +36,7 @@
 // in the datastore, no schema change, no `drizzle-kit push` prompt on release.
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
-import { ensureCollection, upsertRecord, queryRecords } from '$lib/datastore';
+import { ensureCollection, upsertRecord, queryRecords, getRecordByKey } from '$lib/datastore';
 import type { PermissionSet } from '$lib/datastore';
 import { invalidateGraphAnalysis } from '../analytics/load';
 
@@ -282,12 +282,11 @@ export async function splitEntity(plan: SplitPlan): Promise<SplitOutcome> {
  */
 export async function undoSplit(key: string): Promise<{ restored: number; dropped: number }> {
   await ensureSplitCollection();
-  const { records } = await queryRecords(
-    INTEL_SPLITS_COLLECTION,
-    { limit: 1, filter: { path: 'key', op: 'eq', value: key } },
-    SYSTEM_ACTOR,
-  );
-  const record = records[0]?.data as
+  // By key, not a jsonb filter. `queryRecords` silently ignores an option it does
+  // not know, so a mistyped filter does not fail — it returns the FIRST record in
+  // the collection and undoes somebody else's split.
+  const row = await getRecordByKey(INTEL_SPLITS_COLLECTION, key, SYSTEM_ACTOR).catch(() => null);
+  const record = row?.data as
     | { fromId: string; moved: MovedEdge[]; dropped: MovedEdge[]; undoneAt: string | null }
     | undefined;
   if (!record) throw new Error(`no such split: ${key}`);
