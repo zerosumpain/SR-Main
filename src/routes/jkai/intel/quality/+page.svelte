@@ -38,6 +38,9 @@
   let semanticPairs = $state(0);
   let seriesVariants = $state(0);
   let undecidedInBand = $state(0);
+  /** Pairs the reader has confirmed are one thing. Counted BEFORE the filter. */
+  let confirmedSame = $state(0);
+  let bandFloor = $state(0.4);
   /** Showing the pairs already answered, rather than the open queue. */
   let showRuledOut = $state(false);
   let adjudicating = $state(false);
@@ -62,6 +65,8 @@
         semanticPairs = body.semanticPairs ?? 0;
         seriesVariants = body.seriesVariants ?? 0;
         undecidedInBand = body.undecidedInBand ?? 0;
+        confirmedSame = body.confirmedSame ?? 0;
+        bandFloor = body.bandFloor ?? 0.4;
       }
     } finally {
       loading = false;
@@ -215,6 +220,27 @@
     selected = new Set(visible.filter((d) => d.autoMergeable).map(key));
   }
 
+  /** Rows the reader has ruled are one thing, among what is currently shown. */
+  const confirmedRows = $derived(visible.filter((d) => d.decision?.verdict === 'same'));
+
+  /**
+   * Bring the reader's confirmations into view and select them.
+   *
+   * The filter change is the load-bearing half. On the first production run all
+   * 49 confirmed pairs scored 0.49–0.55 on names alone — an abbreviation and its
+   * expansion share few words, which is the whole reason a reader was needed —
+   * so at the default 50% floor a third of them were not on the page at all.
+   * A button that could only select what happened to be visible would have
+   * reported the run's best output as "3 of 49".
+   */
+  async function selectConfirmed() {
+    if (minConfidence > bandFloor) {
+      minConfidence = bandFloor;
+      await load();
+    }
+    selected = new Set(visible.filter((d) => d.decision?.verdict === 'same').map(key));
+  }
+
   async function mergeSelected() {
     if (batching || !selectedRows.length) return;
     batching = true;
@@ -308,6 +334,11 @@
           Min confidence
           <select bind:value={minConfidence} onchange={load}>
             <option value={0.35}>35%</option>
+            <!-- The floor of the adjudication band. "Select the N the reader
+                 confirmed" drops the filter to exactly this, so it has to be a
+                 value the control can actually display — otherwise the select
+                 goes blank the moment that button is pressed. -->
+            <option value={0.4}>40%</option>
             <option value={0.5}>50%</option>
             <option value={0.7}>70%</option>
             <option value={0.85}>85%</option>
@@ -344,6 +375,16 @@
         <b>{ruledOut}</b> answered
         {#if adjudicatedApart}<i>+{adjudicatedApart} by the reader</i>{/if}
       </button>
+      <button
+        type="button"
+        class="led"
+        class:go={confirmedSame > 0}
+        disabled={!confirmedSame}
+        title="Pairs the reader read the evidence for and ruled are one thing. Clicking drops the confidence floor far enough to show all of them, then selects them."
+        onclick={selectConfirmed}
+      >
+        <b>{confirmedSame}</b> confirmed by the reader
+      </button>
       <span class="led" title="Pairs whose names differ only in a number — two members of one series, held below the queue.">
         <b>{seriesVariants}</b> held back as a series
       </span>
@@ -378,6 +419,11 @@
         <button type="button" class="ghost" onclick={selectAutoMergeable}>
           Select the {visible.filter((d) => d.autoMergeable).length} safe ones
         </button>
+        {#if confirmedRows.length}
+          <button type="button" class="ghost" onclick={selectConfirmed}>
+            Select the {confirmedRows.length} confirmed
+          </button>
+        {/if}
         {#if selectedRows.length}
           <span class="picked">{selectedRows.length} selected</span>
           <button type="button" class="primary" disabled={batching} onclick={mergeSelected}>
@@ -794,6 +840,12 @@
   button.led:not(:disabled):hover {
     border-color: var(--accent-tint-35);
     color: var(--accent);
+  }
+  button.led.go:not(:disabled) {
+    border-color: var(--success);
+  }
+  button.led.go:not(:disabled) b {
+    color: var(--success);
   }
   button.led.on {
     background: var(--accent-tint-08);

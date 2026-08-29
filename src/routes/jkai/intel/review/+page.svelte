@@ -47,6 +47,8 @@
     otherType: string;
     confidence: number;
     reason: string;
+    /** What the adjudicator said, when it has read this pair. */
+    rationale: string | null;
     /** Which side the resolver would keep. */
     keepId: string;
   }
@@ -78,6 +80,7 @@
             otherType: other.type,
             confidence: d.confidence,
             reason: d.reason,
+            rationale: d.decision?.rationale ?? null,
             keepId: d.keep.id,
           };
         }
@@ -589,6 +592,9 @@
                     {hint.otherName}<em>{hint.otherType}</em>
                   </a>
                   <p class="dh-why">{hint.reason} · {Math.round(hint.confidence * 100)}% confident</p>
+                  {#if hint.rationale}
+                    <p class="dh-why dh-read">{hint.rationale}</p>
+                  {/if}
                 </div>
                 <div class="dh-acts">
                   <button
@@ -1016,6 +1022,10 @@
     font-size: var(--fs-label);
     color: var(--text-muted);
     line-height: 1.45;
+  }
+  .dh-read {
+    color: var(--text-ghost);
+    font-style: italic;
   }
   .dh-acts {
     display: flex;
