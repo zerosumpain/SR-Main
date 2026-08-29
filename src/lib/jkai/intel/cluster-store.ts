@@ -63,6 +63,15 @@ export interface ClusterReconcileResult {
   changes: ReconcileChanges;
   /** True when this reconcile actually recomputed rather than reusing a snapshot. */
   recomputed: boolean;
+  /**
+   * Entities that touch so many clusters they cannot distinguish one.
+   *
+   * Returned rather than kept private because the network route needs the SAME
+   * set to label a cluster by the part of it a filter admits — and computing it
+   * twice per request would walk every node's neighbours twice for one answer
+   * that cannot differ.
+   */
+  ubiquitous: ReadonlySet<string>;
 }
 
 /** Idempotent; safe on every boot and again before any write. */
@@ -202,11 +211,11 @@ export async function reconcileFromAnalysis(
     lastReconciledAt = 0;
     lastResult = null;
     console.warn('[intel/clusters] roster write failed', err);
-    return { ...result, resolution, recomputed: true };
+    return { ...result, resolution, recomputed: true, ubiquitous };
   }
 
   lastReconciledAt = analysis.computedAt;
-  lastResult = { ...result, resolution, recomputed: true };
+  lastResult = { ...result, resolution, recomputed: true, ubiquitous };
   return lastResult;
 }
 

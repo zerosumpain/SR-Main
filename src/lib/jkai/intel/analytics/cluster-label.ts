@@ -270,3 +270,44 @@ export function composeClusterLabel(members: readonly GraphNode[], ctx: LabelCon
   const [dominantType, count] = composition.types[0] ?? ['entity', members.length];
   return `${members.length} ${pluralise(dominantType, count)}`;
 }
+
+/**
+ * A name for the part of a cluster a filter admits.
+ *
+ * A cluster is a fact about the whole graph, so its stored identity is built
+ * from all of its members and stays that way — but a row shown UNDER A FILTER is
+ * answering a narrower question, and naming it from members the filter has
+ * excluded answers a question nobody asked. Filtered to important email, the
+ * cluster holding one eBay order was called "Hany Shoukry · Silent dev box
+ * deals": a consultant and a shopping habit, neither of which appears in any
+ * email, both of which sit in the cluster only because "England" and "London"
+ * are also the seller's address.
+ *
+ * `rankInView` is the ordering, and it MUST be the visible members' degree
+ * within the visible slice — not their global centrality. Ranking the slice by
+ * global centrality renames that same row "England · London", which is worse
+ * than what it replaced: England carries degree 10 across the whole graph and
+ * almost all of it is football, so it outranks `ebay.co.uk` on connections that
+ * are not on screen. A node mostly attached to things you filtered out is not
+ * what the slice is about, and no demotion rule catches it — England reaches 3
+ * clusters and London 4, nowhere near ubiquitous.
+ *
+ * Falls back to the whole cluster, on the whole cluster's ordering, when nothing
+ * is in view — a row that would say "Unnamed cluster" says less than the durable
+ * name does.
+ */
+export function labelForView(
+  members: readonly GraphNode[],
+  inView: (id: string) => boolean,
+  ctx: LabelContext,
+  rankInView: ReadonlyMap<string, number>,
+): string {
+  const visible = members.filter((m) => inView(m.id));
+  if (!visible.length) return composeClusterLabel(members, ctx);
+  return composeClusterLabel(visible, {
+    // Same demotion — an entity that is everywhere is still a poor name for a
+    // slice of it — on a local ordering.
+    ubiquitous: ctx.ubiquitous,
+    pagerank: new Map(rankInView),
+  });
+}

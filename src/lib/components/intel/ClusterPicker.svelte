@@ -53,6 +53,11 @@
       /** How much of the cluster the current filter reaches; equals `size` unfiltered. */
       reach?: number;
       label: string;
+      /**
+       * What the cluster is called given what the filter admits. Null when
+       * nothing is filtered, or when the user has named this cluster.
+       */
+      inViewLabel?: string | null;
       colourIndex?: number | null;
       key?: string | null;
     }>;
@@ -176,7 +181,12 @@
             onclick={() => onToggleFocus(c.id)}
           >
             <span class="swatch" aria-hidden="true"></span>
-            <span class="name">{rich?.label ?? c.label}</span>
+            <!-- A name the user typed wins outright — it is their word for this
+                 cluster. Otherwise, under a filter, the cluster is named after
+                 the part of it you can actually see: the stored label describes
+                 all of it, and naming a filtered row after entities the filter
+                 removed describes something that is not on screen. -->
+            <span class="name">{rich?.name ?? c.inViewLabel ?? rich?.label ?? c.label}</span>
             {#if rich?.name}<span class="named" title="You named this cluster">·</span>{/if}
             <!-- Filtered, the row says how much of the cluster is in view over
                  how big it really is. Showing only the reach would make a large
