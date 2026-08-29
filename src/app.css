@@ -194,6 +194,36 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* jkai reading type — Segoe UI.
+ *
+ * jkai runs on Segoe UI rather than the site's DM Sans: it is an application
+ * surface, not editorial, and John reads it as chat. Scoped, not global — the
+ * blog, project pages and the rest of strangeramblings.com keep DM Sans.
+ *
+ * Keyed on :has() rather than set on .jkai-root, because several jkai modals
+ * (ShareConversationModal, OpenRouterModelPicker, SecretRequestModal, ...)
+ * portal themselves to <body> and so sit OUTSIDE .jkai-root. Redefining the
+ * token on <body> is the only place both the shell and its portals inherit
+ * from. It lives in app.css, not a component <style>, because Svelte's scoped
+ * CSS pruner deletes a :has() that matches a child of another component.
+ *
+ * .jkai-root       — /jkai/+layout.svelte, the hub shell (all sub-pages).
+ * .jkai-runner     — /jkai/run, which uses +page@.svelte to reset to the ROOT
+ *                    layout on purpose and therefore has no .jkai-root above it.
+ *
+ * Only the body/reading token moves. --font-display (Archivo Black headings)
+ * and --font-mono (JetBrains Mono labels, code, metrics) are unchanged.
+ *
+ * Segoe UI is a Microsoft font and is not licensable for web embedding, so
+ * there is no @font-face here: Windows renders it, everything else falls
+ * through the stack to its own UI sans.
+ */
+body:has(.jkai-root),
+body:has(.jkai-runner) {
+  --font-body: 'Segoe UI', 'Segoe UI Variable Text', system-ui, -apple-system,
+    'Helvetica Neue', Arial, sans-serif;
+}
+
 /* Grain texture overlay */
 body::after {
   content: '';
