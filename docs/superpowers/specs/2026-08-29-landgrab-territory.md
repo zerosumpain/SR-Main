@@ -255,3 +255,55 @@ per-tile history UI, offline tiles, badges and medals.
    the watermark age approaches the retention window.
 7. Chaikin-smoothed dissolve and Leaflet hatch fills have no repo precedent — genuinely new
    rendering work.
+
+---
+
+## Phase 1 outcome (2026-08-29)
+
+Built by Opus test-first, then taken apart by three adversarial reviewers (closure maths,
+spec conformance, build safety) and repaired. **99 tests green**, 29 net new over the
+first draft, 22 of which failed first as reproductions of real findings. `svelte-check`
+clean in `src/lib/geo`; module-boundary and schema-import gates OK; nothing in the repo
+imports `$lib/geo`, so the server-only isolation holds.
+
+Findings that changed the design, not just the code:
+
+- **`pointInRing` used the even-odd rule.** An exactly-retraced lap has winding 2, so an
+  even number of laps read as *outside* — 1 lap 25 tiles, 2 laps 0, 3 laps 25, 4 laps 0.
+  Replaced with a nonzero winding-number test. (The reviewer's own fixture did not
+  reproduce it — insetting the laps makes the corners cross and the popper splits them —
+  but their conclusion was right.)
+- **Ownership had an as-of bounds bug family (the blocker).** `resolveOwnership` threw
+  when `now` preceded every event on a tile, and the throw escaped the whole per-tile
+  loop, taking down the recompute. `ownerSince` was also replayed over events later than
+  `now`. Events are now filtered to `<= now` before replay; a tile whose only evidence
+  post-dates the question has no owner yet.
+- **New threshold `minRingWidthCells = 0.5`** — the thinness gate the spec lacked, as
+  `2 × area / perimeter >= 0.5 × tileSideM`. The reviewers' first suggestion (Polsby-Popper
+  compactness) was measured and rejected: it is length-dependent and lap-dependent, and
+  would have thrown away the exact multi-lap claim the winding fix had just rescued.
+  The width form is invariant to both. Rejects a 600 m out-and-back separated by 10–20 m;
+  accepts a real 400×40 m block.
+- **New thresholds `maxObservationGapS = 360`, `minMovingKmh = 1`** — the spec's
+  stationary defence ("collapse jitter within 25 m") is blind at a 30-minute cadence.
+- **`capturedAreaM2` now sits beside `areaM2`** — ring geometry (what a hand-check
+  measures) and cell count × the per-latitude constant (what leaderboards pay) are
+  different models and cannot be reconciled into one number, so both are carried.
+
+Two residuals, stated rather than hidden:
+
+1. **A 600 m out-and-back separated by 24–65 m still qualifies** and is awarded 8–12
+   cells. Below 23 m the width gate rejects it; above ~65 m nothing closes at all. In
+   that band no geometry distinguishes "down and back a dual carriageway" from "round a
+   narrow block" — they are the same shape. The line is drawn at the grid's resolution
+   rather than at a taste.
+2. **Decision 7's "one-line filter" understated cycling exclusion.** It is implemented
+   for Apple workouts via `excludedActivityTypes = ['ride','mtb']`, which is where the
+   bike actually is. Life360 carries no activity type and its `mode` column derives from
+   GPS speed, which the repo's own `MOVEMENT_MODES` comment says cannot separate running
+   from cycling — both land in `active` at 6.5–18 km/h. Excluding `active` outright would
+   delete John's runs. The Life360 half stays open.
+
+Also worth recording: a source polled slower than 6 minutes now captures no loops,
+because every leg is a hole in the record. Consistent with `segmentJourneys` upstream,
+but a real behavioural narrowing to know before Phase 2 ingest.
