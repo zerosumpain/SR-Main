@@ -9,7 +9,7 @@
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
 import type { GraphSnapshot, GraphNode, GraphEdge, AdjacencyIndex } from './model';
-import { buildIndex } from './model';
+import { buildIndex, resolveEntitySources } from './model';
 import { computeCentrality, type CentralityScores } from './centrality';
 import { detectCommunities, type CommunityResult } from './community';
 import { channelArtefactIds } from '../channel-artefacts';
@@ -213,13 +213,15 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
     const id = String(r.id);
     const created = r.created_at ? new Date(String(r.created_at)).getTime() : 0;
     const updated = r.updated_at ? new Date(String(r.updated_at)).getTime() : created;
-    // Unioned, not substituted: an entity first seen in a deep dive and since
-    // corroborated by email belongs to BOTH, and the source picker should find
-    // it under either. Only entities with no note links at all gain a source
-    // they did not have before.
-    const firstSeenSource = r.first_seen_source == null ? null : String(r.first_seen_source);
-    const sources = toStringArray(r.sources);
-    if (firstSeenSource && !sources.includes(firstSeenSource)) sources.push(firstSeenSource);
+    // A LAST RESORT, not a union — see `resolveEntitySources`. The rule the
+    // comment here used to claim ("only entities with no note links at all gain
+    // a source they did not have before") is the right one; it just was not the
+    // rule the code applied, and a channel filter was answering with another
+    // channel's entities as a result.
+    const sources = resolveEntitySources(
+      toStringArray(r.sources),
+      r.first_seen_source == null ? null : String(r.first_seen_source),
+    );
     // Same reasoning for the clock: an entity whose only evidence is the note it
     // was extracted from is as old as that note, not as old as `created_at`
     // happens to be. Staleness and anything ranking on age read this.
