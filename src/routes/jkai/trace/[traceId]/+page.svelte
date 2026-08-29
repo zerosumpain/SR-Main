@@ -1449,7 +1449,7 @@
     margin-top: 0.35rem;
   }
   .handler {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     line-height: 1.5;
     white-space: pre-wrap;

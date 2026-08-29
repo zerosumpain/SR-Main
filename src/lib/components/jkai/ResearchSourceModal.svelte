@@ -313,11 +313,11 @@
     color: var(--code-text);
     padding: 12px 14px;
     overflow-x: auto;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
   }
   .fv-prose :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;

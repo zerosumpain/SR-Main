@@ -690,7 +690,7 @@
     max-width: 72ch;
   }
   .bulk-text code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
   }
 

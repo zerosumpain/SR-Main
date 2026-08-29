@@ -144,5 +144,5 @@
   button.ghost { background: transparent; color: var(--text-secondary); border-color: var(--divider); }
   .error { border: 1px solid var(--error-border); background: var(--error-bg); color: var(--error); padding: 0.7rem; font-size: 0.85rem; }
   .empty { color: var(--text-secondary); }
-  code { font-family: var(--font-mono); }
+  code { font-family: var(--font-code); }
 </style>

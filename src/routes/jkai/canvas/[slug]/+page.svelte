@@ -7555,7 +7555,7 @@
     padding: 6px 8px;
     background: var(--surface-sunken);
     border: 1px solid var(--line-strong);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
@@ -8049,7 +8049,7 @@
     padding: 6px 8px;
     background: var(--bg);
     border: 1px solid var(--line-strong);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
     line-height: 1.4;
@@ -8415,7 +8415,7 @@
     width: 100%;
     margin-top: 8px;
     padding: 8px;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
@@ -8444,7 +8444,7 @@
   }
   .nm-field pre {
     margin: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-primary);
@@ -8694,7 +8694,7 @@
   .nm-trace {
     background: var(--surface-sunken);
     padding: 6px 10px;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     line-height: 1.8;
     color: var(--text-muted);
@@ -9317,7 +9317,7 @@
     background: var(--error-bg);
     border: 1px solid var(--error-border);
     color: var(--error);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     padding: 8px 10px;
     border-radius: var(--radius-round);
@@ -9371,7 +9371,7 @@
   .run-summary-node-type { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .run-summary-node-err-row {
     grid-column: 2;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--error);
     margin-top: 3px;
@@ -9380,7 +9380,7 @@
   }
   .run-summary-node-out {
     grid-column: 2;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
     margin-top: 3px;

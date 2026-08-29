@@ -179,7 +179,7 @@
          border: 1px solid var(--divider); padding: 0.05rem 0.35rem; color: var(--text-secondary); }
   .o-served { border-color: var(--accent-ink); color: var(--accent-ink); }
   .o-failed { border-color: var(--error-border); color: var(--error); }
-  code { font-family: var(--font-mono); font-size: 0.76rem; word-break: break-all; flex: 1; min-width: 200px; }
+  code { font-family: var(--font-code); font-size: 0.76rem; word-break: break-all; flex: 1; min-width: 200px; }
   .muted { color: var(--text-secondary); font-size: var(--fs-label-xs); }
   .err { color: var(--error); font-size: var(--fs-label-xs); }
   .tiles { display: flex; gap: 1.5rem; margin: 0 0 1rem; }

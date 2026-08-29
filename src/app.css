@@ -122,6 +122,11 @@
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-sans: var(--font-body);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Real monospace, for content whose ALIGNMENT carries meaning — source, JSON,
+   * logs, program output, diffs. Sitewide this is just --font-mono under another
+   * name; inside /jkai the two diverge, because there --font-mono is label
+   * chrome and gets Selawik. Point code surfaces at this, never at --font-mono. */
+  --font-code: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Type scale (v4 — rem-based, accessible floor).
    *
@@ -272,6 +277,32 @@ body:has(.jkai-root),
 body:has(.jkai-runner) {
   --font-body: 'Selawik', 'Segoe UI', 'Segoe UI Variable Text', system-ui,
     -apple-system, 'Helvetica Neue', Arial, sans-serif;
+
+  /* jkai's label chrome runs on Selawik too — eyebrows, metrics, nav, bylines.
+   *
+   * JetBrains Mono sits DIRECTLY behind it, and that placement is load-bearing
+   * rather than ornamental. jkai's markup uses 1,422 characters Selawik does not
+   * contain (U+2500 box-drawing x1133, arrows x81, plus ✓ ✕ ▸ ⚠ ⌘ …). Per-glyph
+   * fallback hands each of those to the NEXT family in the stack, so naming
+   * JetBrains Mono there means every one of them keeps rendering exactly as it
+   * does today, identically on every platform. Drop it and they scatter across
+   * whatever each OS happens to supply — which is the inconsistency the Selawik
+   * work existed to remove.
+   *
+   * Selawik has no `tnum`, so digits in label chrome are proportional now and
+   * numeric columns no longer align by default. That is the accepted cost of
+   * this change; a table that needs alignment should use --font-code. */
+  --font-mono: 'Selawik', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Code keeps real monospace inside jkai. These are the semantic code elements,
+ * so the rule holds for markdown code blocks, inline code and anything rendered
+ * into a <pre> without every component having to remember. Surfaces that show
+ * preformatted output WITHOUT a <pre>/<code> element cannot be caught here and
+ * name --font-code themselves. */
+body:has(.jkai-root) :is(pre, code, kbd, samp),
+body:has(.jkai-runner) :is(pre, code, kbd, samp) {
+  font-family: var(--font-code);
 }
 
 /* Grain texture overlay */

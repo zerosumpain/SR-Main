@@ -134,7 +134,7 @@
 <style>
   .kn { max-width: 860px; margin: 0 auto; padding: 24px 20px 80px; color: var(--text-primary); }
   .kn-sub { margin: 0 0 20px; color: var(--text-muted); font-size: var(--fs-nav); }
-  .kn-sub code { font-family: var(--font-mono); color: var(--accent-ink, var(--accent)); }
+  .kn-sub code { font-family: var(--font-code); color: var(--accent-ink, var(--accent)); }
 
   .kn-search { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
   .kn-row { display: flex; gap: 8px; }

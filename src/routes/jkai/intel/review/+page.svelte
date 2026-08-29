@@ -1219,7 +1219,7 @@
     cursor: default;
   }
   kbd {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     padding: 1px 4px;
     border: 1px solid var(--line-strong);

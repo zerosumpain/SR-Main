@@ -491,7 +491,7 @@
     color: var(--text-primary);
   }
   .sr-dest code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
   }
   .sr-note {
     color: var(--text-muted);
