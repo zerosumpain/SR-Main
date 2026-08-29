@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { Marked } from 'marked';
   import ThinkingTimeline from './ThinkingTimeline.svelte';
   import SlashCommandButtonBar from './SlashCommandButtonBar.svelte';
@@ -8,6 +9,8 @@
   import { stripLegacyToolLog } from '$lib/workflows/chat/legacy-tool-log';
   import { linkifyCitations, fileAnchors, researchAnchors, type CiteTarget } from '$lib/jkai/citation-linkify';
   import { linkifyEntities } from '$lib/jkai/intel/entity-linkify';
+  import { codeRenderer, enhanceCodeBlocks, runLaneFor } from '$lib/jkai/code-blocks';
+  import { openRunnerWindow } from '$lib/jkai/run-window';
   import type { MentionTarget } from '$lib/jkai/intel/entity-card-store';
   import { entityMentionHandlers } from '$lib/components/intel/entity-hover.svelte';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
@@ -105,7 +108,10 @@
 
   let clockTime = $derived(formatClockTime(createdAt));
 
-  const marked = new Marked({ gfm: true, breaks: true });
+  // `codeRenderer` swaps the bare <pre><code> for highlight.js markup. It has to
+  // be highlight.js and not shiki: sanitizeChatHtml allows `class` but no
+  // `style`, and shiki colours via inline style — see $lib/jkai/code-blocks.
+  const marked = new Marked({ gfm: true, breaks: true, renderer: codeRenderer });
 
   /**
    * Append `?conv=<conversationId>` to any /jkai/canvas/<slug> link in the
@@ -173,10 +179,15 @@
   // Intel entities named in the reply become hoverable references. Runs AFTER
   // citation linkification and skips anything already inside an <a>, so a real
   // source citation always wins over an entity mention at the same words.
+  // Code-block chrome goes on LAST, after both linkifiers. Run it earlier and
+  // the toolbar's own words ("copy", the language label) become text runs that
+  // citation matching would happily turn into a source link.
   let displayHtml = $derived(
-    role === 'assistant' && entityMentions.length
-      ? linkifyEntities(linkified.html, entityMentions).html
-      : linkified.html,
+    enhanceCodeBlocks(
+      role === 'assistant' && entityMentions.length
+        ? linkifyEntities(linkified.html, entityMentions).html
+        : linkified.html,
+    ),
   );
 
   const mentionEvents = entityMentionHandlers();
@@ -191,7 +202,77 @@
     if (kind === 'file' && fileRefs[idx]) onOpenFileRef?.(fileRefs[idx]);
     else if (kind === 'research' && researchRefs[idx]) onOpenResearchRef?.(researchRefs[idx]);
   }
+  // --- Code-block toolbar -------------------------------------------------
+  // The cards are injected into the sanitised HTML by `enhanceCodeBlocks`, so
+  // their buttons are handled by delegation on this container — the same shape
+  // the citation links use. The source is read back off the <code> element's
+  // textContent: highlight.js only wraps spans around escaped text, so that
+  // un-escapes to exactly what the model wrote.
+  let runNotice = $state<string | null>(null);
+  let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function codeBtnFromEvent(target: EventTarget | null): HTMLElement | null {
+    const el = target as HTMLElement | null;
+    return el?.closest?.('.cc-copy, .cc-run') ?? null;
+  }
+
+  function sourceOf(btn: HTMLElement): { code: string; lang: string } | null {
+    const card = btn.closest('.code-card');
+    const codeEl = card?.querySelector('pre code');
+    if (!card || !codeEl) return null;
+    return { code: codeEl.textContent ?? '', lang: card.getAttribute('data-lang') ?? '' };
+  }
+
+  async function copyCode(btn: HTMLElement): Promise<void> {
+    const src = sourceOf(btn);
+    if (!src) return;
+    try {
+      await navigator.clipboard.writeText(src.code);
+      // Ephemeral feedback written straight into the injected markup. A re-render
+      // would wipe it, which is fine — it only has to survive 1.4 seconds.
+      btn.textContent = 'copied';
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => { btn.textContent = 'copy'; }, 1400);
+    } catch {
+      runNotice = 'Could not reach the clipboard — select the block and copy by hand.';
+    }
+  }
+
+  function runCode(btn: HTMLElement): void {
+    const src = sourceOf(btn);
+    if (!src) return;
+    const lane = runLaneFor(src.lang);
+    if (!lane) return;
+    runNotice = null;
+    // Called straight out of the click, with no await in front of it, or the
+    // popup blocker stops treating the window as user-initiated.
+    const res = openRunnerWindow(src.code, src.lang, lane);
+    if (!res.ok) {
+      runNotice =
+        res.reason === 'blocked'
+          ? 'Your browser blocked the runner window — allow pop-ups for this site and press run again.'
+          : res.reason === 'too-big'
+            ? 'That block is too large to hand to the runner.'
+            : 'Could not stage the snippet — browser storage is unavailable.';
+    }
+  }
+
+  onMount(() => () => {
+    if (copyResetTimer) clearTimeout(copyResetTimer);
+  });
+
+  function handleCodeBtn(btn: HTMLElement): void {
+    if (btn.classList.contains('cc-copy')) void copyCode(btn);
+    else if (btn.classList.contains('cc-run')) runCode(btn);
+  }
+
   function onCiteClick(e: MouseEvent) {
+    const btn = codeBtnFromEvent(e.target);
+    if (btn) {
+      e.preventDefault();
+      handleCodeBtn(btn);
+      return;
+    }
     const a = citeFromEvent(e.target);
     if (a) {
       e.preventDefault();
@@ -201,6 +282,12 @@
     mentionEvents.handleClick(e);
   }
   function onCiteKey(e: KeyboardEvent) {
+    const btn = codeBtnFromEvent(e.target);
+    if (btn && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      handleCodeBtn(btn);
+      return;
+    }
     const a = citeFromEvent(e.target);
     if (a && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
@@ -334,6 +421,9 @@
         onmouseout={mentionEvents.onmouseout}
         onfocusin={mentionEvents.onfocusin}
       >{@html displayHtml}</div>
+      {#if runNotice}
+        <p class="run-notice">{runNotice}</p>
+      {/if}
       {#if unmatchedFileRefs.length > 0 && onOpenFileRef}
         <FileReferenceChips refs={unmatchedFileRefs} onOpen={onOpenFileRef} />
       {/if}
@@ -639,6 +729,76 @@
     background: none;
     padding: 0;
     font-size: inherit;
+  }
+
+  /* Code cards — the chrome `enhanceCodeBlocks` wraps around each fenced block.
+     :global because the markup arrives through {@html}, not the template. The
+     card owns the frame, so the <pre> inside gives up its own margin and radius. */
+  .chat-markdown :global(.code-card) {
+    margin: 0.6em 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    overflow: hidden;
+  }
+  .chat-markdown :global(.code-card pre) {
+    margin: 0;
+    border-radius: 0;
+  }
+  .chat-markdown :global(.cc-bar) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: var(--bg-section);
+    border-bottom: 1px solid var(--line-hair);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+  .chat-markdown :global(.cc-lang) {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .chat-markdown :global(.cc-spacer) { flex: 1; }
+  .chat-markdown :global(.cc-btn) {
+    padding: 2px 8px;
+    border-radius: var(--radius-sharp);
+    border: 1px solid var(--line-strong);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    user-select: none;
+  }
+  .chat-markdown :global(.cc-btn:hover) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .chat-markdown :global(.cc-run) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .chat-markdown :global(.cc-run:hover) {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  /* A language with no runtime still shows the button, greyed — the absence is
+     the answer to "why can't I run this", and the title says which runtime. */
+  .chat-markdown :global(.cc-run-off) {
+    opacity: 0.35;
+    cursor: default;
+    border-color: var(--line);
+  }
+  .chat-markdown :global(.cc-run-off:hover) {
+    border-color: var(--line);
+    color: var(--text-secondary);
+  }
+
+  .run-notice {
+    margin: 4px 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--warn);
   }
   .chat-markdown :global(ul),
   .chat-markdown :global(ol) {

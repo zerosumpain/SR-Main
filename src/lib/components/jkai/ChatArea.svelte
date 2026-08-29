@@ -19,6 +19,8 @@
   import DelegateChildren from '$lib/components/jkai/DelegateChildren.svelte';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
+  import { parseCodeRouteMarkers, stripCodeRouteMarkers } from '$lib/jkai/code-route-marker';
+  import CodeRouteCard from '$lib/components/jkai/CodeRouteCard.svelte';
   import { categorizeTool, resolveDisplayTool } from '$lib/workflows/chat/tool-summary';
   import MessageAttachments from './MessageAttachments.svelte';
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
@@ -248,6 +250,11 @@
   function promoteMarkersForMessage(m: Message) {
     if (m.role !== 'assistant') return [];
     return parsePromoteMarkers(m.content);
+  }
+
+  function codeRouteMarkerForMessage(m: Message) {
+    if (m.role !== 'assistant') return null;
+    return parseCodeRouteMarkers(m.content)[0] ?? null;
   }
 
   let messages = $state<Message[]>([]);
@@ -3032,7 +3039,7 @@
               {/if}
               <ChatMessage
                 role={msg.role}
-                content={msg.role === 'assistant' ? stripPromoteMarkers(msg.content) : msg.content}
+                content={msg.role === 'assistant' ? stripCodeRouteMarkers(stripPromoteMarkers(msg.content)) : msg.content}
                 metadata={msg.metadata}
                 thinking={msg.thinking}
                 {conversationId}
@@ -3048,6 +3055,18 @@
                 {entityMentions}
                 erProcessing={intelRunning && msgIndex === lastAssistantMessageIndex}
               />
+              {#if msg.role === 'assistant' && silentSend}
+                {@const route = codeRouteMarkerForMessage(msg)}
+                {#if route}
+                  <!-- Under the reply, not above it: the reply explains the two
+                       shapes, the card is the question that follows from it. -->
+                  <CodeRouteCard
+                    marker={route}
+                    onSilentSend={silentSend}
+                    isLatest={msgIndex === lastAssistantMessageIndex}
+                  />
+                {/if}
+              {/if}
               {#if msg.role === 'assistant' && msg.workflowRefs && msg.workflowRefs.length > 0}
                 <div class="wf-chips">
                   <span class="wf-chips-label">workflow</span>

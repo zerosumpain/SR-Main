@@ -48,6 +48,10 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // a retry loop could queue them serially. 3/hour, not 3/minute.
   { pattern: /^\/api\/jkai\/(studio|forge)(\/|$)/, capacity: 3, refillPerSecond: 3 / 3600 }, // 3/hour
   { pattern: /^\/api\/jkai\/(conversations|chat)(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 },
+  // Each run is a docker exec with a 20s ceiling. 20/min is far more than a
+  // human clicking Run in the runner window, and caps what a stuck retry loop
+  // in that window could hold open at once.
+  { pattern: /^\/api\/jkai\/run-snippet(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
 ];
 
