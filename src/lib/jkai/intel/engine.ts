@@ -376,6 +376,35 @@ export async function runIntelSweep(
       return { changes: (await runWatchlistCheck()).changes?.length ?? 0 };
     }, batch),
   );
+  // Conflation, AFTER the watchlist invalidated the analysis, so the shortlist is
+  // computed on a graph that includes the night's ingest rather than a cached one
+  // from before it.
+  //
+  // The three conflations this repairs were found by hand — a person reading
+  // relation lists over SSH — which fixes one night's graph and nothing about the
+  // next. Budgeted rather than exhaustive: a verdict is cached against the
+  // entity's relation vocabulary, so a night where nothing changed shape costs no
+  // model calls at all, and the ceiling bounds the first night.
+  //
+  // Counts only, because that is all a run record holds. WHICH entities were
+  // repaired is in the split ledger and the verdict collection, which are the
+  // durable records and outlive the run log's retention.
+  stages.push(
+    await runStage('conflation', async () => {
+      const { runConflationSweep } = await import('./resolve/conflation.server');
+      const out = await runConflationSweep();
+      return {
+        shortlisted: out.shortlisted,
+        judged: out.judged,
+        cached: out.cached,
+        applied: out.applied,
+        queued: out.queued,
+        skipped: out.skipped,
+        failed: out.failed,
+      };
+    }, batch),
+  );
+
   stages.push(
     await runStage('lenses', async () => ({ changes: (await runDueLensChecks()).length }), batch),
   );

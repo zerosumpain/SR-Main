@@ -19,6 +19,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { splitEntity, undoSplit, listSplits } from '$lib/jkai/intel/resolve/split';
+import { runConflationSweep } from '$lib/jkai/intel/resolve/conflation.server';
 import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
 
 // Both verbs re-check. A GET that lists what has been repaired is still a
@@ -38,6 +39,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+
+  // The detector, on demand. Folded in here rather than given its own path
+  // because it is the SAME capability — it splits entities — so a separate route
+  // would hand the same secret nothing new while costing a fourth registration.
+  //
+  // `dryRun` does everything except the writes. That is how the detector was
+  // checked against production before it was allowed to touch it, and it stays
+  // because the judgement is a model's: the first question about any night's
+  // proposals is "what would this have done".
+  if (body.action === 'sweep') {
+    const dryRun = body.dryRun === true;
+    const limit = body.limit === undefined ? undefined : Number(body.limit);
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      throw error(400, 'limit must be a positive number');
+    }
+    return json(await runConflationSweep({ apply: !dryRun, limit }));
+  }
 
   if (body.action === 'undo') {
     const key = String(body.key ?? '').trim();

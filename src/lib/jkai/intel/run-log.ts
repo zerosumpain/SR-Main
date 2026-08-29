@@ -55,6 +55,7 @@ export interface IntelStageResult {
     | 'adjudicate'
     | 'confidence'
     | 'watchlist'
+    | 'conflation'
     | 'lenses';
   ok: boolean;
   /** Stage-specific tallies, e.g. `{ threads: 412, extracted: 150 }`. */
