@@ -33,30 +33,42 @@ import type { AdjacencyIndex, GraphNode } from './model';
  *
  * This was the constant 20, and on 2026-08-29 it was measured flagging NOTHING.
  * It had been calibrated on a 9,042-entity graph with 106 clusters, where reach
- * ran 1 at the median, 2 at p90, 5 at p99 with a long thin tail:
+ * ran 1 at the median, 5 at p99 and a long thin tail: Johnkelly Main 72 · John
+ * Kelly 25 · jkai 22 · United Kingdom 21. The graph is now 4,515 entities in ~53
+ * clusters and its MAXIMUM reach is 13, so an absolute 20 cannot fire. A constant
+ * cannot express this rule — reach is bounded by the number of clusters, so the
+ * line has to move with them.
  *
- *   Johnkelly Main 72 · John Kelly 25 · jkai 22 · United Kingdom 21 ·
- *   Darlington 14 · WhatsApp 13 · Privacy Policy 12 · London 11 …
+ * A FIFTH, and the first attempt at this used a quarter, which is worth recording
+ * because it failed inside the hour. Reach on the live graph runs
  *
- * The graph is now 4,515 entities in 54 clusters and its MAXIMUM reach is 14, so
- * an absolute 20 cannot fire. A constant cannot express this rule: reach is
- * bounded by the number of clusters, so the line has to move with it.
+ *   WhatsApp 13 · Darlington 13 · John 11 · Home Assistant 10 · United Kingdom 8
  *
- * A quarter, because that is where the real gap is. Measured reach today runs
- * Darlington 14 · WhatsApp 14 · John 11 · Home Assistant 11 · United Kingdom 8 —
- * a clean break between 14 and 11, and `ceil(54/4) = 14` sits on it. The two it
- * catches are the town the operator lives in and the messaging platform, which
- * are exactly the "attached to everything" names this rule exists for. The two it
- * spares matter as much: "Home Assistant · Jemima" is the most informative label
- * in the roster, and demoting its first word to catch nothing else would be a
- * loss.
+ * and a quarter of 54 tracked clusters is 14 — one above the top of that list. It
+ * was measured flagging two entities when it was written and zero an hour later,
+ * because one community fell below the tracked size and Darlington's reach moved
+ * by one. A threshold that lands ON the boundary of the gap is a threshold that
+ * reports a different answer every run.
+ *
+ * These values are small, tightly-packed integers, so ANY line here is within ±1
+ * of flipping; there is no precise setting to find. What decides the direction is
+ * that the demotion is SOFT — a ubiquitous entity is sorted behind the specific
+ * ones, not suppressed, and still appears in a label when nothing else can carry
+ * it (see `composeClusterLabel`). Being slightly inclusive costs a second-place
+ * word. Being slightly exclusive costs the whole rule, which is the failure this
+ * replaces. So: inclusive.
+ *
+ * A fifth of ~53 is 11, which catches the messaging platform, the town the
+ * operator lives in and his own name — all three "attached to everything" — and
+ * spares Home Assistant at 10, IBCA at 7 and DfE, which are the best names in the
+ * roster and must not be disqualified by a rule aimed at the others.
  *
  * Percentile rules were tried and rejected. The old comment derived 20 as "four
  * times p99", but p99 is 3 here and integer-quantised, so 4xp99 jumps between 8,
  * 12 and 16 on a one-entity change — and on a small graph p99 IS the outlier, so
  * the rule stops flagging the very entity it was written for.
  */
-export const UBIQUITY_CLUSTER_SHARE = 0.25;
+export const UBIQUITY_CLUSTER_SHARE = 0.2;
 
 /**
  * Nothing below this is "everywhere", however small the graph. A guard against
