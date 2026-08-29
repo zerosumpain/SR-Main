@@ -38,12 +38,35 @@ const PERMISSIONS: PermissionSet = {
 /** Model calls per sweep. A ceiling on cost, not on the shortlist. */
 export const MAX_JUDGEMENTS_PER_SWEEP = 12;
 
+/**
+ * Whether a proposal may be APPLIED without anyone reading it. Off by default.
+ *
+ * Measured on production the day this shipped: of twelve entities judged, ten
+ * were correctly left alone and two were proposed for splitting —
+ * `PayPal -> PayPal REST API`, which is arguable, and
+ * `Jemima -> Family Presence Monitor`, which is not. Jemima is a person; the
+ * monitor tracks her. The model had mistaken a relationship WITH a system for a
+ * second referent INSIDE her.
+ *
+ * That is the distinction the whole detector turns on — a town cannot have a
+ * credit card, but a child can be tracked — and one wrong proposal in two is not
+ * a rate at which to edit a graph unattended. So the sweep PROPOSES, and the
+ * proposals are recorded for review; `INTEL_CONFLATION_APPLY=1` turns on
+ * application once they have earned it, which is how `AUTO_MERGE_THRESHOLD` was
+ * arrived at and how `mail-rules` stays propose-only until a rule is approved.
+ */
+export function isConflationAutoApplyEnabled(): boolean {
+  return process.env.INTEL_CONFLATION_APPLY === '1';
+}
+
 export interface ConflationSweepResult {
   shortlisted: number;
   judged: number;
   /** Verdicts served from the cache because the vocabulary had not moved. */
   cached: number;
   applied: number;
+  /** Splits the gate would allow, held for review because applying is off. */
+  proposed: number;
   queued: number;
   skipped: number;
   failed: number;
@@ -124,7 +147,7 @@ interface Verdict {
   entityName: string;
   fingerprint: string;
   conflated: boolean;
-  outcome: 'applied' | 'queued' | 'skipped';
+  outcome: 'applied' | 'proposed' | 'queued' | 'skipped';
   targetName?: string;
   why?: string;
   at: string;
@@ -155,7 +178,9 @@ Real examples from this graph:
 - a house that had absorbed the smart-home INSTALL (has_integration, flagged_risk, pending_update)
 - a country that was also the national football team (coaches, defeated, participates_in)
 
-Most entities are NOT conflated. A large entity with many relations of a similar kind is simply important — say so. Only answer "conflated" when a clearly separate referent is present, with its own vocabulary.
+A RELATIONSHIP WITH SOMETHING IS NOT A SECOND REFERENT. This is the distinction that matters and the one most easily got wrong. A town cannot have a credit card, so 'has_credit_card' on a town is a conflation. A person CAN be tracked, monitored, insured, employed or messaged — 'tracked_by', 'monitors', 'provides_location_for' on a person describe that person's relationship to a system, and moving them would attribute a child's whereabouts to a monitoring tool. Ask whether the relation is IMPOSSIBLE for the entity as described, not merely whether it mentions something else.
+
+Most entities are NOT conflated. A large entity with many relations of a similar kind is simply important — say so.
 
 Reply with JSON only:
 {"conflated": boolean, "relationTypes": string[], "targetName": string, "reason": string}
@@ -208,9 +233,13 @@ Some neighbours: ${neighbours.slice(0, 40).join(', ')}`,
  * checked against production before it was allowed to touch it.
  */
 export async function runConflationSweep(
-  opts: { apply?: boolean; limit?: number } = {},
+  opts: { apply?: boolean; record?: boolean; limit?: number } = {},
 ): Promise<ConflationSweepResult> {
-  const apply = opts.apply !== false;
+  // Applying is opt-in; recording is not. A dry run writes nothing, but a
+  // propose-only sweep MUST record, or it re-asks the model about the same
+  // entities every night for the life of the graph.
+  const apply = opts.apply ?? isConflationAutoApplyEnabled();
+  const record = opts.record !== false;
   const budget = Math.max(1, Math.min(opts.limit ?? MAX_JUDGEMENTS_PER_SWEEP, 50));
 
   const analysis = await getGraphAnalysis();
@@ -223,6 +252,7 @@ export async function runConflationSweep(
     judged: 0,
     cached: 0,
     applied: 0,
+    proposed: 0,
     queued: 0,
     skipped: 0,
     failed: 0,
@@ -265,7 +295,7 @@ export async function runConflationSweep(
     }
 
     const verdict = validateProposal(proposal, candidate, (name) => byName.get(name) ?? null);
-    const record: Verdict = {
+    const record0: Verdict = {
       entityId: candidate.id,
       entityName: candidate.name,
       fingerprint: candidate.fingerprint,
@@ -290,11 +320,12 @@ export async function runConflationSweep(
       const moving = typed.filter((r) => wanted.has(r.type)).map((r) => r.id);
 
       if (!moving.length || moving.length >= typed.length) {
-        record.outcome = 'skipped';
-        record.why = 'nothing left to move by the time it ran';
+        record0.outcome = 'skipped';
+        record0.why = 'nothing left to move by the time it ran';
         result.skipped++;
       } else if (!apply) {
-        result.applied++;
+        record0.outcome = 'proposed';
+        result.proposed++;
         result.splits.push({ entity: candidate.name, target: proposal.targetName, moved: moving.length });
       } else {
         try {
@@ -308,8 +339,8 @@ export async function runConflationSweep(
           result.splits.push({ entity: candidate.name, target: proposal.targetName, moved: out.moved });
         } catch (err) {
           result.failed++;
-          record.outcome = 'skipped';
-          record.why = err instanceof Error ? err.message : 'split failed';
+          record0.outcome = 'skipped';
+          record0.why = err instanceof Error ? err.message : 'split failed';
           console.warn(`[intel:conflation] splitting "${candidate.name}" failed:`, err);
         }
       }
@@ -320,10 +351,10 @@ export async function runConflationSweep(
       result.skipped++;
     }
 
-    if (apply) {
+    if (record) {
       await upsertRecord(
         CONFLATION_COLLECTION,
-        { key: candidate.id, data: record as unknown as Record<string, unknown> },
+        { key: candidate.id, data: record0 as unknown as Record<string, unknown> },
         SYSTEM_ACTOR,
       ).catch((err) => console.warn('[intel:conflation] verdict write failed:', err));
     }
