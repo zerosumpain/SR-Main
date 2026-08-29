@@ -11,12 +11,29 @@ Create `src/routes/api/<topic>/stats/+server.ts` — a SvelteKit GET handler tha
 3. Computes any derived statistics (per-person breakdowns, time-range filtering, aggregations)
 4. Returns JSON
 
-**Required:** Add the route to `PUBLIC_API_PATHS` in `src/hooks.server.ts` so it skips Google OAuth. Without this, unauthenticated requests (including the dashboard page itself) get "Unauthorized".
+**Only if the data is genuinely public:** add the route to `PUBLIC_API_PATHS` in
+`src/lib/server/public-api-paths.ts` (it moved out of `hooks.server.ts`) so it skips Google
+OAuth. Without this, unauthenticated requests get "Unauthorized" — which for anything
+carrying people's locations, names or health is the CORRECT answer, not a bug to work
+around.
 
 ```ts
-// In hooks.server.ts PUBLIC_PATHS array:
-'/api/family-presence/stats',
+// src/lib/server/public-api-paths.ts
+'/api/biome/state',
 ```
+
+`/api/family-presence/stats` used to be the worked example here. It was removed from that
+list on 2026-08-29 because it served five family members' GPS history and current
+positions anonymously, by first name. Note the trap that let it sit there: the CI
+public-routes lockfile (`scripts/check-public-routes.mjs`) read `PUBLIC_PATHS` and the
+hook bypasses and had **never** read `PUBLIC_API_PATHS`, so an entry added here was
+invisible to the gate.
+
+That is fixed in the same change — the lockfile now extracts `PUBLIC_API_PATHS` as exact
+paths and a new entry shows up as a `+` line in `.github/public-routes.txt` for review.
+So adding one is visible, which is not the same as it being right: a dashboard page
+needing the data belongs behind the same owner session as its endpoint, not in this
+array.
 
 ### Data store access pattern
 

@@ -118,7 +118,7 @@ The HA template queries both `person.john` and `person.john_kelly` — these may
 
 ## API Endpoint
 
-`GET /api/family-presence/stats` — public endpoint on strangeramblings.com. Returns current states, events, geocache, stats.
+`GET /api/family-presence/stats` — **owner-only since 2026-08-29**. Returns current states, events, geocache, stats. It was in `PUBLIC_API_PATHS` and served five family members' clustered GPS history and current positions anonymously, by first name; it was removed in the Landgrab build (spec `docs/superpowers/specs/2026-08-29-landgrab-territory.md`, decision 18). An anonymous curl now returns 401 — that is correct, not an outage. jkai's `family_presence_current` tool is unaffected because it reads the datastore directly.
 
 **Note:** The API endpoint code may still expect v1 data shapes (haversine history arrays, per-person trends). After the v2 rewrite, the data shapes changed. If the dashboard breaks, check whether the API endpoint needs updating to match v2 event/stats structures.
 

@@ -117,11 +117,13 @@ describe('thresholds', () => {
   });
 
   it('carries the gates the review added, so a claim row records all of them', () => {
-    // Cycling (Decision 7), the observation-gap and dwell halves of the
-    // stationary defence, and the ring-width floor. Each is a number a Phase 5
-    // retune will want, and each is only retunable without invalidating history
-    // because it is persisted on the claim.
-    expect(GEO_THRESHOLDS.excludedActivityTypes).toEqual(['ride', 'mtb']);
+    // The caller's activity-type filter (Amendment 1), the observation-gap and
+    // dwell halves of the stationary defence, and the ring-width floor. Each is
+    // a number a Phase 5 retune will want, and each is only retunable without
+    // invalidating history because it is persisted on the claim.
+    // Amendment 1: EMPTY. Cycling scores; the filter is the caller's, and it
+    // is applied when the map is read, not when the ledger is written.
+    expect(GEO_THRESHOLDS.excludedActivityTypes).toEqual([]);
     expect(GEO_THRESHOLDS.maxObservationGapS).toBe(360);
     expect(GEO_THRESHOLDS.minMovingKmh).toBe(1);
     expect(GEO_THRESHOLDS.minRingWidthCells).toBe(0.5);
@@ -500,23 +502,53 @@ describe('a phone that never moved captures nothing', () => {
   });
 });
 
-describe('cycling is excluded, as Decision 7 says', () => {
-  it('a ride does not capture, and the type comes from the workout, not the speed', () => {
-    const ride = walk(square(1200), { stepM: 50, speedMps: 15 / 3.6, mode: 'active' }).map(
+// Amendment 1 (John, 2026-08-29) reverses Decision 7. "Don't exclude cycling,
+// it just needs to be filterable." The reason the original gave — a bike loop
+// encloses ~10x a run for the same effort — is a VIEWING concern, not a scoring
+// one, so it moves to the read side. What the geometry has to prove now is
+// three things: a ride captures by default, the filter still works when a
+// caller asks for it, and the car gate is untouched by any of it.
+describe('cycling captures, and is filterable', () => {
+  const ride = () =>
+    walk(square(1200), { stepM: 50, speedMps: 15 / 3.6, mode: 'active' }).map(
       (f): GeoFix => ({ ...f, activityType: 'ride' }),
     );
-    const r = detectLoops(ride);
-    expect(r.rings).toHaveLength(0);
-    expect(r.dropped.activityType).toBeGreaterThan(0);
-    expect(GEO_THRESHOLDS.excludedActivityTypes).toContain('ride');
-    expect(GEO_THRESHOLDS.excludedActivityTypes).toContain('mtb');
+
+  it('a ride captures ground under the shipped thresholds', () => {
+    const r = detectLoops(ride());
+    expect(r.rings.length).toBeGreaterThan(0);
+    expect(r.dropped.activityType).toBe(0);
+    expect(r.thresholds.excludedActivityTypes).toEqual([]);
   });
 
-  it('a run at the same speed still captures — GPS speed cannot tell them apart', () => {
+  it('a caller-supplied filter still drops it, and says so', () => {
+    // The field survives as a filter. This is the call the read side would
+    // make if it ever wanted a foot-only rebuild rather than a foot-only view.
+    const r = detectLoops(ride(), { excludedActivityTypes: ['ride', 'mtb'] });
+    expect(r.rings).toHaveLength(0);
+    expect(r.dropped.activityType).toBeGreaterThan(0);
+    // And the set it used is handed back, so the claim row it would have
+    // written records the rule it was judged by.
+    expect(r.thresholds.excludedActivityTypes).toEqual(['ride', 'mtb']);
+  });
+
+  it('the filter is by declared type, not by speed — a run at ride pace is untouched', () => {
     const run = walk(square(600), { stepM: 50, speedMps: 15 / 3.6, mode: 'active' }).map(
       (f): GeoFix => ({ ...f, activityType: 'run' }),
     );
     expect(detectLoops(run).rings).toHaveLength(1);
+    expect(detectLoops(run, { excludedActivityTypes: ['ride', 'mtb'] }).rings).toHaveLength(1);
+  });
+
+  it('cycling counting does NOT make driving count', () => {
+    // The one gate the amendment explicitly leaves alone. A car logged as a
+    // ride is still a car: the mode cut and the 25 km/h ceiling both fire.
+    const drive = walk(square(1200), { stepM: 50, speedMps: 60 / 3.6, mode: 'vehicle' }).map(
+      (f): GeoFix => ({ ...f, activityType: 'ride' }),
+    );
+    const r = detectLoops(drive);
+    expect(r.rings).toHaveLength(0);
+    expect(r.dropped.mode).toBeGreaterThan(0);
   });
 });
 

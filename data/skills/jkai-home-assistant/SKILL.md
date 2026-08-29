@@ -142,7 +142,7 @@ This is an analytical task — discover person entities, pull parallel history, 
 
 **John:** How can we improve the family presence monitor? / Something's wrong with the presence notifications.
 
-The family presence monitor is an automated VPS workflow that runs every 5 min, pulls HA history, computes trend statistics, and sends WhatsApp alerts on movement changes. It has a live dashboard at `/projects/family-presence-dashboard/` backed by `/api/family-presence/stats`. See [references/family-presence-system.md](references/family-presence-system.md) for the full architecture, data structures, known issues, and improvement roadmap.
+The family presence monitor is an automated VPS workflow that runs every 5 min, pulls HA history, computes trend statistics, and sends WhatsApp alerts on movement changes. It has a live dashboard at `/projects/family-presence-dashboard/` backed by `/api/family-presence/stats` — **that endpoint is owner-only since 2026-08-29 and the dashboard page does not exist in this repo**; an anonymous fetch returns 401. See [references/family-presence-system.md](references/family-presence-system.md) for the full architecture, data structures, known issues, and improvement roadmap.
 
 ### Example 8 — Refuse to author a schedule
 

@@ -55,9 +55,19 @@ export interface GeoThresholds {
   maxSpeedKmh: number;
   /** Movement modes that can never capture ground. */
   excludedModes: readonly string[];
-  /** Declared workout types that can never capture ground. The mode column is
-   *  derived from GPS speed and cannot tell a bike from a runner, so this is
-   *  the only honest place the cycling exclusion can live. */
+  /**
+   * Declared workout types this CALLER does not want to count. Empty by
+   * default: since Amendment 1 (John, 2026-08-29) cycling captures ground like
+   * anything else, and the filtering happens at the viewing layer.
+   *
+   * The field stays because it is a filter, not a policy — a caller that wants
+   * a foot-only rebuild passes one — and because it is persisted in every
+   * claim's `closure.thresholds`, so a run made under a different rule stays
+   * legible as such rather than looking like a bug in the geometry.
+   *
+   * It is NOT the vehicle gate. `excludedModes` is what stops a car claiming
+   * the county, and that one is a policy and stays one.
+   */
   excludedActivityTypes: readonly ActivityTypeName[];
   /** A fix within this distance of the rolling anchor is stationary jitter. */
   jitterRadiusM: number;
@@ -100,16 +110,21 @@ export interface GeoThresholds {
  * column is derived from GPS speed alone and the trail contains fixes recorded
  * as `vehicle` at 399 km/h. 75 m of accuracy rather than 50 because poll-only
  * family phones report worse fixes than John's push stream and a 50 m gate
- * starves four of the five players; 25 km/h rather than a cycling-friendly
- * number because a bike loop encloses roughly ten times a run for the same
- * effort and would end the family contest in a week.
+ * starves four of the five players.
+ *
+ * `excludedActivityTypes` is EMPTY, and that is Amendment 1 rather than an
+ * oversight: cycling scores. The 25 km/h ceiling stays where it is, which means
+ * a ride captures the parts of itself that were ridden at a human pace and the
+ * fast legs cut the journey — a gate about cars, not about sports. Anyone who
+ * wants a foot-only view filters `activity_type` at the read, which is what the
+ * ledger now records it for.
  */
 export const GEO_THRESHOLDS: GeoThresholds = Object.freeze({
   zoom: TILE_ZOOM,
   maxAccuracyM: 75,
   maxSpeedKmh: 25,
   excludedModes: Object.freeze(['vehicle', 'rail']) as readonly string[],
-  excludedActivityTypes: Object.freeze(['ride', 'mtb']) as readonly ActivityTypeName[],
+  excludedActivityTypes: Object.freeze([]) as readonly ActivityTypeName[],
   jitterRadiusM: 25,
   maxObservationGapS: STILL_MAX_GAP_MINS * 60,
   minMovingKmh: 1,
@@ -156,6 +171,11 @@ export interface GeoFix {
    * `effectiveType()` has applied the owner's correction). Life360 never
    * carries one, so it is optional and its absence is never a reason to drop
    * a fix.
+   *
+   * Since Amendment 1 it is carried for the LEDGER's sake, not for a gate: it
+   * ends up on every capture event and claim so the map and the boards can be
+   * filtered after the fact. `excludedActivityTypes` reads it too, but only
+   * when a caller has asked for that.
    */
   activityType?: string | null;
 }
@@ -163,7 +183,8 @@ export interface GeoFix {
 export interface DropCounts {
   accuracy: number;
   mode: number;
-  /** Fixes belonging to an excluded workout type — cycling, today. */
+  /** Fixes the CALLER's activity-type filter excluded. Zero unless one was
+   *  passed: the shipped set excludes nothing. */
   activityType: number;
   /** Reported speed over the gate, plus legs whose implied speed was. */
   speed: number;
@@ -306,6 +327,11 @@ export function cleanJourney(
       cut();
       continue;
     }
+    // A CALLER-supplied filter, and normally a no-op — the shipped set is
+    // empty. Kept as a cut rather than a plain skip so that when someone does
+    // ask for a foot-only rebuild, a ride in the middle of a mixed journey
+    // severs the path instead of drawing a straight line across the gap it
+    // left behind, which is the same rule the vehicle cut follows.
     if (
       f.activityType != null &&
       (th.excludedActivityTypes as readonly string[]).includes(f.activityType)

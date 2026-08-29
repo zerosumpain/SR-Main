@@ -5138,3 +5138,299 @@ export const daydreamRules = pgTable(
 
 export type DaydreamRule = typeof daydreamRules.$inferSelect;
 export type NewDaydreamRule = typeof daydreamRules.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Landgrab — family territory capture (docs/superpowers/specs/2026-08-29-landgrab-territory.md)
+//
+// Four tables, owner-gated, and the split between them is the design:
+//
+//   geo_capture_events  the append-only LEDGER. Every board derives from it.
+//   geo_claims          one row per detected loop — the feed and the capture art.
+//   geo_tile_state      materialised current ownership, touched cells only.
+//   geo_daily_snapshot  the honest basis for the weekly gained/lost board.
+//
+// The ledger is deliberately independent of `daydream_trail`: `pruneTrail`
+// hard-deletes at TRAIL_RETENTION_DAYS, so captured ground that lived only in
+// the trail would evaporate at 90 days. Nothing here references it.
+//
+// There is no PostGIS on this box — the image is pgvector/pgvector:pg16 and the
+// only extensions available are cube, earthdistance and vector. All geometry is
+// pure TypeScript in $lib/geo, and the lat/lon bbox columns on geo_claims are
+// the plain-B-tree substitute for a spatial index.
+// ---------------------------------------------------------------------------
+
+/**
+ * One detected loop.
+ *
+ * Written before the events it produced, so a claim always has its ledger rows
+ * and never the other way round. The natural key is
+ * (subject, source_kind, source_ref, ring_index) — a stable function of the
+ * INPUT, not of when the ingest happened — which is what makes a re-run a
+ * no-op rather than a duplicate: the same journey re-derives the same rings in
+ * the same order.
+ *
+ * `closure` carries the whole GeoThresholds object that was in force, not just
+ * the method and the gap. The gates will be retuned after week one and history
+ * has to stay interpretable in the terms it was judged by.
+ */
+export const geoClaims = pgTable(
+  'geo_claims',
+  {
+    id: serial('id').primaryKey(),
+    subject: text('subject').notNull(),
+    /** When the journey this ring came from ENDED. The decay clock. */
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    /** UTC calendar day of `capturedAt`, stored rather than derived at read
+     *  time in whichever zone happened to ask. Matches the ledger's `day`. */
+    day: text('day').notNull(),
+    /** 'trail' | 'workout' */
+    sourceKind: text('source_kind').notNull(),
+    /** Stable id of the thing this came from: `apple:<activityId>` for a
+     *  workout, `<subject>@<journey start ISO>` for a trail journey. Not null,
+     *  because Postgres treats NULLs as distinct and the unique index below
+     *  would stop deduplicating anything. */
+    sourceRef: text('source_ref').notNull(),
+    /** Which ring of that journey — a figure-of-eight yields two. */
+    ringIndex: integer('ring_index').notNull().default(0),
+    /**
+     * The DECLARED activity, where the source knew one: walk | run | trail_run
+     * | hike | ride | mtb. NULL for every trail journey, because Life360
+     * genuinely carries no activity type — the UI must say "untyped" rather
+     * than guess, and `mode` cannot stand in for it (it derives from GPS speed,
+     * which puts a runner and a cyclist in the same band).
+     *
+     * Amendment 1: cycling captures ground and is filtered at the VIEWING
+     * layer. This column is what makes that possible — without it a ride is
+     * indistinguishable from a walk once it is in the ledger and the only
+     * filter available would be at ingest, which is the thing that was
+     * rejected.
+     */
+    activityType: text('activity_type'),
+
+    /** The real ring, [[lon, lat], ...] — same order as
+     *  activity_tracks.coordinates. Kept so a polygon renderer could be layered
+     *  on later without losing history. */
+    ring: jsonb('ring').notNull(),
+    /** Encoded, for cheap list rendering. Same codec as activity_tracks. */
+    polyline: text('polyline'),
+    /** { method, gapM, pathM, thresholds } — see ClosureRecord in $lib/geo/loops. */
+    closure: jsonb('closure').notNull(),
+
+    /** The ring's own shoelace area — what a hand-check of a claim measures. */
+    areaM2: doublePrecision('area_m2').notNull(),
+    /** The ground actually AWARDED: cell count x the per-latitude constant.
+     *  A different model from `areaM2` and deliberately not reconciled with it. */
+    capturedAreaM2: doublePrecision('captured_area_m2').notNull(),
+    /** 2 x area / perimeter — the thinness gate's measure, stored so a retune
+     *  can be argued from what shipped. */
+    widthM: doublePrecision('width_m').notNull(),
+    tileCount: integer('tile_count').notNull(),
+    /** { subject: count } — who held these cells immediately before this claim.
+     *  'unclaimed' counts virgin ground. */
+    tilesTaken: jsonb('tiles_taken').notNull(),
+
+    /** Lat/lon bounding box. The no-PostGIS index substitute: a viewport query
+     *  is four B-tree comparisons. */
+    minLat: doublePrecision('min_lat').notNull(),
+    maxLat: doublePrecision('max_lat').notNull(),
+    minLon: doublePrecision('min_lon').notNull(),
+    maxLon: doublePrecision('max_lon').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('geo_claims_source_idx').on(t.subject, t.sourceKind, t.sourceRef, t.ringIndex),
+    index('geo_claims_subject_at_idx').on(t.subject, t.capturedAt),
+    index('geo_claims_captured_idx').on(t.capturedAt),
+    index('geo_claims_bbox_idx').on(t.minLat, t.maxLat, t.minLon, t.maxLon),
+  ],
+);
+
+export type GeoClaim = typeof geoClaims.$inferSelect;
+export type NewGeoClaim = typeof geoClaims.$inferInsert;
+
+/**
+ * The append-only capture ledger.
+ *
+ * `geo_capture_events_unique_idx` on (subject, tile_x, tile_y, day, kind) is
+ * BOTH the idempotency key and the anti-farming rule, and it has to be one
+ * index rather than two mechanisms: at most one qualifying event per person per
+ * cell per UTC day per kind means ten laps of the garden score once, and it
+ * means an INSERT ... ON CONFLICT DO NOTHING re-run changes nothing. The
+ * earliest write wins, which is exactly what dedupeEvents() in $lib/geo does in
+ * memory — if the two disagreed a rebuild would score a multi-lap day
+ * fractionally differently from the live ingest, by a few hours of decay that
+ * nobody would ever trace.
+ *
+ * No foreign key to geo_claims on purpose: a trample event has no claim, and a
+ * ledger that cascades on a delete is not append-only.
+ */
+export const geoCaptureEvents = pgTable(
+  'geo_capture_events',
+  {
+    id: serial('id').primaryKey(),
+    subject: text('subject').notNull(),
+    tileX: integer('tile_x').notNull(),
+    tileY: integer('tile_y').notNull(),
+    /** UTC calendar day, `YYYY-MM-DD`. Part of the uniqueness key. */
+    day: text('day').notNull(),
+    /** 'loop' | 'trample' */
+    kind: text('kind').notNull(),
+    /** 3 for a loop, 1 for a trample. Stored rather than derived so a future
+     *  weighting change cannot silently rewrite history. */
+    weight: doublePrecision('weight').notNull(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    /** The loop this event came from, where there was one. Advisory. */
+    claimId: integer('claim_id'),
+    /** 'trail' | 'workout' */
+    sourceKind: text('source_kind').notNull(),
+    sourceRef: text('source_ref').notNull(),
+    /**
+     * The DECLARED activity behind this capture, or NULL for a trail journey.
+     * The filter dimension the map and the boards read.
+     *
+     * DELIBERATELY NOT PART OF THE UNIQUE INDEX BELOW. A cell walked and then
+     * ridden on the same day is still one loop capture and one trample capture
+     * — adding this column to the key would make it two, which is exactly the
+     * farming hole Decision 10 exists to close (ten laps of the garden score
+     * once; ten laps on a bike between them must not score ten more).
+     *
+     * The consequence is stated rather than hidden: on such a day the ledger
+     * records whichever kind got there first, so filtering rides out can
+     * remove a cell that was also walked. That is the honest cost of one event
+     * per person per cell per day, and it is a rounding error against the
+     * alternative.
+     *
+     * NEVER WRITE THE FILTER AS A BARE `activity_type not in (...)`. This
+     * column is NULL for every trail journey — four of the five family
+     * subjects — and in Postgres `null not in ('ride')` is NULL, not true, so
+     * a bare NOT IN silently drops the entire Life360 corpus and the foot-only
+     * map shows John alone while everyone else reads as a broken phone. Use
+     * `is distinct from` for one value, or `(activity_type is null or
+     * activity_type not in (...))` for several — or better, do not spell it at
+     * all: `activityTypeNotIn()` in $lib/geo/service is the one place it is
+     * written. Same class of trap as filtering daydream_trail by a `source`
+     * allow-list, which drops the whole `backfill` corpus.
+     */
+    activityType: text('activity_type'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('geo_capture_events_unique_idx').on(
+      t.subject,
+      t.tileX,
+      t.tileY,
+      t.day,
+      t.kind,
+    ),
+    // The recompute reads every event on a set of touched cells, so this is the
+    // hot one. node_executions taught the lesson: a hot table with no index.
+    index('geo_capture_events_tile_idx').on(t.tileX, t.tileY),
+    index('geo_capture_events_subject_at_idx').on(t.subject, t.capturedAt),
+    index('geo_capture_events_captured_idx').on(t.capturedAt),
+    // WRITE time, not capture time, and they are different questions. A daily
+    // snapshot is only valid until a row arrives that it should have seen — a
+    // gap/backfill fix, or the Phase 5 family backfill — and rollDailySnapshots
+    // finds those by comparing this column against the snapshot's own
+    // created_at. Created here rather than later because this table is the hot
+    // one and node_executions taught what adding an index to 2.5GB costs.
+    index('geo_capture_events_created_idx').on(t.createdAt),
+  ],
+);
+
+export type GeoCaptureEvent = typeof geoCaptureEvents.$inferSelect;
+export type NewGeoCaptureEvent = typeof geoCaptureEvents.$inferInsert;
+
+/**
+ * Materialised current ownership, one row per contested cell.
+ *
+ * Recomputed for TOUCHED cells only — the ledger is the truth and this is a
+ * cache of `resolveOwnership` over it. Composite primary key on the cell rather
+ * than a surrogate id: there is exactly one answer per cell and a serial id
+ * would let there be two.
+ *
+ * `owner_since` is the longest-held board's column, and it is the reason the
+ * recompute replays the ledger in time order rather than summing it once: it
+ * has to answer "how long have you held this", not "when did you first set foot
+ * here".
+ */
+export const geoTileState = pgTable(
+  'geo_tile_state',
+  {
+    tileX: integer('tile_x').notNull(),
+    tileY: integer('tile_y').notNull(),
+    ownerSubject: text('owner_subject').notNull(),
+    ownerScore: doublePrecision('owner_score').notNull(),
+    ownerSince: timestamp('owner_since', { withTimezone: true }).notNull(),
+    /** Most recent event on this cell, by anyone. */
+    lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
+    /**
+     * Who held it in the instant before the current owner took it, or null if
+     * nobody did.
+     *
+     * Derived from the LEDGER, not from the row this recompute overwrote. The
+     * obvious "whatever the row said before I changed it" loses every handover
+     * on a full rebuild into an empty table, and cannot see a handover that
+     * happens inside one run — which is every backfill. Deriving it keeps this
+     * column a pure function of geo_capture_events, which is what makes a
+     * re-run byte-identical.
+     */
+    previousOwner: text('previous_owner'),
+    /** Second place as at the last recompute — the "how close was it" column. */
+    runnerUp: text('runner_up'),
+    runnerUpScore: doublePrecision('runner_up_score').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tileX, t.tileY] }),
+    index('geo_tile_state_owner_idx').on(t.ownerSubject),
+    index('geo_tile_state_since_idx').on(t.ownerSince),
+  ],
+);
+
+export type GeoTileState = typeof geoTileState.$inferSelect;
+export type NewGeoTileState = typeof geoTileState.$inferInsert;
+
+/**
+ * Ownership as at the end of one UTC day.
+ *
+ * The weekly gained/lost board reads two of these and subtracts. It must NEVER
+ * be reconstructed by replaying a decayed ledger against today's clock: the
+ * decay is a function of age, so "who owned this last Sunday" asked today is a
+ * different question from the one Sunday answered.
+ */
+export const geoDailySnapshot = pgTable(
+  'geo_daily_snapshot',
+  {
+    /** UTC calendar day, `YYYY-MM-DD`. */
+    day: text('day').notNull(),
+    subject: text('subject').notNull(),
+    tileCount: integer('tile_count').notNull(),
+    /** Cell count x the per-latitude Mercator constant. No geodesic library. */
+    areaM2: doublePrecision('area_m2').notNull(),
+    /** Four-connected components of the owned cells — "how many geos". */
+    regionCount: integer('region_count').notNull(),
+    // ABSENCE MEANS ZERO. A subject who owned ground yesterday and owns none
+    // today has no row for today rather than a row of zeroes, so the weekly
+    // gained/lost board must read a missing row as nothing held, never as
+    // nothing known. writeDailySnapshot enforces that in both directions: it
+    // upserts the subjects who hold ground and DELETES the rows of any subject
+    // on that day who no longer does, so a repair cannot leave a ghost behind.
+    //
+    // WHEN this row was computed, and it is load-bearing rather than
+    // bookkeeping: a snapshot is stale the moment a capture event it should
+    // have seen is inserted after it (a gap or backfill fix landing on a day
+    // already rolled). rollDailySnapshots detects exactly that by comparing
+    // this against geo_capture_events.created_at, so the upsert deliberately
+    // REFRESHES it — a recompute that kept the original stamp would report
+    // itself as still stale forever and never make progress.
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.day, t.subject] }),
+    index('geo_daily_snapshot_subject_idx').on(t.subject, t.day),
+  ],
+);
+
+export type GeoDailySnapshot = typeof geoDailySnapshot.$inferSelect;
+export type NewGeoDailySnapshot = typeof geoDailySnapshot.$inferInsert;
