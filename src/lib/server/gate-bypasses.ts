@@ -48,6 +48,7 @@ export const HOOK_BYPASSES: string[] = [
   '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
   '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
   '/api/jkai/intel/clusters/recalculate', // as above; its own path so the secret cannot reach rename/narrate
+  '/api/jkai/intel/entities/split', // as above; conflation repair, driven from the VPS against prod
   '/api/trails/segments', // POST ONLY — loopback + MAINTENANCE_SECRET, re-checked in the handler.
   // GET on the same path is NOT bypassed: it answers with segment geometry, and a
   // GPS trace starts at the front door. Only the idempotent rebuild is reachable.
@@ -151,6 +152,7 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/jkai/intel/backfill': 'loopback + MAINTENANCE_SECRET',
   '/api/jkai/intel/source-facets': 'loopback + MAINTENANCE_SECRET',
   '/api/jkai/intel/clusters/recalculate': 'loopback + MAINTENANCE_SECRET',
+  '/api/jkai/intel/entities/split': 'loopback + MAINTENANCE_SECRET',
   '/api/trails/segments': 'POST only · loopback + MAINTENANCE_SECRET (GET stays gated)',
   '/api/jkai/studio': 'POST only · STUDIO_SERVICE_TOKEN',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
