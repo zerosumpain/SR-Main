@@ -162,21 +162,34 @@ describe('findUbiquitousEntities', () => {
   });
 
   it('spares an entity just under the threshold', () => {
-    // ceil(40 / 4) = 10, so a hub reaching 9 is not ubiquitous.
-    const { index, membership, tracked } = hubGraph(9, 40);
+    // ceil(40 / 5) = 8, so a hub reaching 7 is not ubiquitous.
+    const { index, membership, tracked } = hubGraph(7, 40);
     expect(findUbiquitousEntities(index, membership, tracked).has('hub')).toBe(false);
   });
 
   it('moves with the graph rather than sitting at a constant', () => {
     // The regression this exists for: the old constant 20 flagged NOTHING once
-    // the graph fell to 54 clusters, where the maximum reach was 14.
-    expect(ubiquityThreshold(106)).toBe(27);
-    expect(ubiquityThreshold(54)).toBe(14);
-    // Home Assistant reaches 11 of 54 and must survive — it is the best word in
-    // the roster's biggest label.
-    expect(ubiquityThreshold(54)).toBeGreaterThan(11);
-    // Darlington and WhatsApp reach 14 and must not.
-    expect(ubiquityThreshold(54)).toBeLessThanOrEqual(14);
+    // the graph fell to ~53 clusters, where the maximum reach was 13.
+    expect(ubiquityThreshold(106)).toBe(22);
+    expect(ubiquityThreshold(53)).toBe(11);
+  });
+
+  it('sits INSIDE the gap, not on its boundary', () => {
+    // The first version of this used a quarter and was measured flagging two
+    // entities when written and zero an hour later — ceil(54/4) = 14 sat one
+    // above the top of the reach list, so a single community dropping below the
+    // tracked size took the whole rule out. Live reach:
+    //
+    //   WhatsApp 13 · Darlington 13 · John 11 · Home Assistant 10 · UK 8
+    //
+    // Home Assistant is the best word in the roster's biggest label and must
+    // survive; the three above it are the "attached to everything" names.
+    const t = ubiquityThreshold(53);
+    expect(t).toBeGreaterThan(10); // spares Home Assistant
+    expect(t).toBeLessThanOrEqual(11); // catches John, Darlington, WhatsApp
+    // And it must not sit on the very top of the distribution, or it flags
+    // nothing the moment anything moves by one.
+    expect(t).toBeLessThan(13);
   });
 
   it('never lets a tiny graph make everything ubiquitous', () => {
