@@ -582,7 +582,7 @@
     opacity: 0.55;
   }
   .bb-rule {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs, 12px);
     color: var(--accent-ink);
     overflow-wrap: anywhere;

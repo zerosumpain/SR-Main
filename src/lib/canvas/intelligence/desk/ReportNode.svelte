@@ -699,7 +699,7 @@
     gap: 5px;
   }
   .rn-brief-input {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-body);
     line-height: 1.45;
     background: var(--bg-section, #111);

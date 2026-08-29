@@ -207,7 +207,7 @@
   .nmb-entry + .nmb-entry { border-top: 1px dashed var(--card-border); padding-top: 8px; }
   .nmb-entry-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .nmb-key {
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     color: var(--text-primary);
     word-break: break-all;
   }

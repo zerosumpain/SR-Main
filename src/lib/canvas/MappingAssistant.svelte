@@ -169,7 +169,7 @@
   .ma-action-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .ma-action-label { font-size: var(--fs-label); color: var(--text-primary); }
   .ma-field {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted);
+    font-family: var(--font-code); font-size: var(--fs-label-xs); color: var(--text-muted);
     background: color-mix(in srgb, var(--card-border) 20%, transparent);
     padding: 1px 4px; word-break: break-all; align-self: flex-start;
   }

@@ -125,7 +125,7 @@
     min-height: 220px;
   }
   .panel-textarea-code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     line-height: 1.5;
     tab-size: 2;

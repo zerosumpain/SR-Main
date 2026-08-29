@@ -284,7 +284,7 @@
   .pw-save { font-family: var(--font-mono); font-size: var(--fs-label); padding: 5px 14px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }
   .pw-save:disabled { opacity: 0.45; cursor: default; }
 
-  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-body); line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
+  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-code); font-size: var(--fs-body); line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
   .pw-editor:focus { border-color: var(--text-muted); }
   .pw-editor[readonly] { opacity: 0.75; }
 

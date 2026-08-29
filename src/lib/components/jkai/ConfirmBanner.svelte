@@ -72,7 +72,7 @@
     color: var(--text-primary);
   }
   .confirm-details {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     background: var(--surface-sunken);

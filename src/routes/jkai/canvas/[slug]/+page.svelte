@@ -7594,7 +7594,7 @@
     width: 100%;
     border: none;
     background: transparent;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-body);
     line-height: 1.5;
     color: var(--text-primary);

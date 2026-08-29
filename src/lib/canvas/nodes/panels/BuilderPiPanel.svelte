@@ -270,7 +270,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: var(--fs-label);
+    font-family: var(--font-code); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -339,7 +339,7 @@
   .bpp-pill[data-status='awaiting_plan_approval'],
   .bpp-pill[data-status='awaiting_iter_approval'] { color: #d28a3a; }
   .bpp-build-id {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }

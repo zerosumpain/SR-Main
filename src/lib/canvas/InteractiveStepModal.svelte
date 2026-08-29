@@ -346,7 +346,7 @@
   }
 
   .ism-input {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-body);
     padding: 6px 8px;
     background: var(--bg, #0d0d0d);

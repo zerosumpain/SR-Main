@@ -107,7 +107,7 @@
     z-index: 9001;
   }
   .bvm-id {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
     padding-right: 4px;

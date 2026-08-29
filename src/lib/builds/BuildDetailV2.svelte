@@ -502,7 +502,7 @@
     color: var(--text-primary);
   }
   .preview-url {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: 0.78rem;
     color: var(--text-muted);
     overflow: hidden;
