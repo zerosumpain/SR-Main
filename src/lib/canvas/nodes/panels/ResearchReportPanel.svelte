@@ -72,7 +72,7 @@
   .rr-readout { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); }
   .rr-code {
     width: 100%; padding: 8px; background: var(--bg); color: var(--text-primary);
-    border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label);
+    border: 1px solid var(--card-border); font-family: var(--font-code); font-size: var(--fs-label);
     box-sizing: border-box; outline: none; resize: vertical;
   }
   .rr-code:focus { border-color: var(--text-muted); }

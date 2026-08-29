@@ -216,6 +216,6 @@
     resize: vertical;
     min-height: 48px;
     max-height: 140px;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
   }
 </style>

@@ -135,7 +135,7 @@
     color: var(--text-muted);
   }
   .ps-input {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     padding: 6px 8px;
     background: var(--bg, #0d0d0d);

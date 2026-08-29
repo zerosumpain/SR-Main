@@ -268,7 +268,7 @@
   .bcf-req { color: var(--status-error, #c0392b); font-weight: 700; }
   .bcf-desc { font-size: var(--fs-label); color: var(--text-ghost); }
   .bcf-slider { display: flex; gap: 8px; align-items: center; color: var(--text-primary); }
-  .bcf-code { font-family: var(--font-mono); font-size: var(--fs-label); }
+  .bcf-code { font-family: var(--font-code); font-size: var(--fs-label); }
   .bcf-cheatsheet {
     margin-top: 4px;
     font-size: var(--fs-label);

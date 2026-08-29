@@ -441,7 +441,7 @@
     color: var(--text-primary);
   }
   .pm-in.mono {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
   }
   .pm-area {
     resize: vertical;
