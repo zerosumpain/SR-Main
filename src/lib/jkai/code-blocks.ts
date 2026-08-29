@@ -42,6 +42,24 @@ const BROWSER_LANGS = new Set(['html', 'css', 'javascript']);
 /** Runs through `execInContainer` — the contained lane, never the build lane. */
 const CONTAINER_LANGS = new Set(['python', 'bash']);
 
+/**
+ * Languages where "turn this into a real app" is a sensible offer. Narrower
+ * than the runnable set on purpose: a bash one-liner or a stylesheet is not an
+ * app, and a button that starts a paid build should not appear on one.
+ *
+ * This is the deterministic half of the build-vs-snippet choice. The
+ * `[[code-route]]` marker asks BEFORE the code exists and depends on the model
+ * judging the request ambiguous; this asks AFTER, on every snippet, and depends
+ * on nothing. The marker was the whole mechanism at first, which made the
+ * option appear unpredictably — "write me a flappy bird html script in chat"
+ * correctly suppressed it, and the route was then nowhere to be found.
+ */
+const BUILDABLE_LANGS = new Set(['html', 'javascript', 'typescript', 'python']);
+
+export function isBuildable(raw: string | null | undefined): boolean {
+  return BUILDABLE_LANGS.has(normaliseLang(raw));
+}
+
 export function normaliseLang(raw: string | null | undefined): string {
   const l = (raw ?? '').toLowerCase().trim();
   return LANG_ALIASES[l] ?? l;
@@ -153,6 +171,14 @@ export function enhanceCodeBlocks(html: string, opts: { allowRun?: boolean } = {
         ? `<span class="cc-btn cc-run" role="button" tabindex="0" data-lane="${lane}" title="Run this in a separate window">run</span>`
         : `<span class="cc-btn cc-run-off" title="No runtime for ${escapeHtml(label)} in the sandbox">run</span>`;
 
+    // Always present on a buildable snippet, so the route to a real app never
+    // depends on the model having offered it. Asks for confirmation before it
+    // spends anything — see ChatMessage.
+    const buildBtn =
+      allowRun && isBuildable(lang)
+        ? `<span class="cc-btn cc-build" role="button" tabindex="0" title="Turn this into a real app with the autonomous builder">build app</span>`
+        : '';
+
     return (
       `<div class="code-card" data-lang="${escapeHtml(lang)}">` +
       `<div class="cc-bar">` +
@@ -160,6 +186,7 @@ export function enhanceCodeBlocks(html: string, opts: { allowRun?: boolean } = {
       `<span class="cc-spacer"></span>` +
       `<span class="cc-btn cc-copy" role="button" tabindex="0" title="Copy to clipboard">copy</span>` +
       runBtn +
+      buildBtn +
       `</div>` +
       whole +
       `</div>`
