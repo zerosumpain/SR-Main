@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildIndex, hopNeighbourhood, components, pairKey, type GraphSnapshot } from './model';
+import {
+  buildIndex,
+  hopNeighbourhood,
+  components,
+  pairKey,
+  resolveEntitySources,
+  type GraphSnapshot,
+} from './model';
 import { betweenness, pagerank, computeCentrality, brokerageScore } from './centrality';
 import { detectCommunities, modularity } from './community';
 import { findPaths, shortestPath, commonNeighbours, adamicAdar } from './paths';
@@ -467,5 +474,34 @@ describe('surprise scoring', () => {
     expect(cosineDistance([1, 0], [1, 0, 0])).toBe(0.5);
     expect(cosineDistance([], [])).toBe(0.5);
     expect(cosineDistance([0, 0], [1, 0])).toBe(0.5);
+  });
+});
+
+describe('resolveEntitySources', () => {
+  // The channel filter must answer with the channel that was asked for. On the
+  // live graph 187 entities had note links whose sources did not include the
+  // first-seen note's, and unioning it in meant 48 of the 167 entities returned
+  // for 'email' had no email note at all — "GitHub", asserted by six chat notes,
+  // among them.
+  it('lets the note links decide whenever there are any', () => {
+    expect(resolveEntitySources(['chat'], 'email')).toEqual(['chat']);
+    expect(resolveEntitySources(['chat', 'file'], 'research')).toEqual(['chat', 'file']);
+  });
+
+  it('keeps the first-seen source only for an entity with no note links', () => {
+    // 482 entities on the live graph. Without this they carry no source at all
+    // and disappear from every filtered view.
+    expect(resolveEntitySources([], 'research')).toEqual(['research']);
+  });
+
+  it('reports no source rather than inventing one', () => {
+    expect(resolveEntitySources([], null)).toEqual([]);
+  });
+
+  it('does not alias the array it was given', () => {
+    const notes = ['chat'];
+    const out = resolveEntitySources(notes, 'email');
+    out.push('email');
+    expect(notes).toEqual(['chat']);
   });
 });

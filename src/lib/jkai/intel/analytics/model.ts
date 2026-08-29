@@ -197,3 +197,26 @@ export function components(index: AdjacencyIndex): string[][] {
 
   return out.sort((a, b) => b.length - a.length);
 }
+
+/**
+ * The channels an entity may be selected under.
+ *
+ * The note links decide it whenever there are any. `first_seen_in` — where the
+ * entity was extracted — fills in ONLY the silence, for the 482 entities on the
+ * live graph whose links have all gone and which would otherwise carry no source
+ * and disappear from every filtered view.
+ *
+ * It is a last resort rather than a union because it does not agree with the
+ * evidence: 187 entities have note links that do not include the first-seen
+ * note's source, and unioning it in let a channel filter answer with another
+ * channel's entities — "GitHub", asserted by six chat notes and no email, came
+ * back under 'email' on the strength of an email note that no longer links it.
+ * That was 29% of what asking for 'email' returned.
+ */
+export function resolveEntitySources(
+  noteSources: readonly string[],
+  firstSeenSource: string | null,
+): string[] {
+  if (noteSources.length > 0) return [...noteSources];
+  return firstSeenSource ? [firstSeenSource] : [];
+}
