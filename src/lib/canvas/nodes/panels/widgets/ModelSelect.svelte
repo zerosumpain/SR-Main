@@ -80,7 +80,7 @@
     color: var(--text-muted);
   }
   .ms-hint { font-size: var(--fs-label); color: var(--text-ghost); }
-  .ms-hint :global(code) { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-mono); }
+  .ms-hint :global(code) { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-code); }
   select {
     width: 100%;
     padding: 6px 8px;

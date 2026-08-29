@@ -131,7 +131,7 @@
     line-height: 1.4;
   }
   .mr-hint code, .mr-explain code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-muted);
   }

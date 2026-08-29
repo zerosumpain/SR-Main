@@ -616,7 +616,7 @@
     max-width: 60ch;
   }
   .sub code, code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);

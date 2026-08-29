@@ -364,7 +364,7 @@
     color: var(--text-secondary); margin-bottom: 0.35rem;
   }
   .claim-meta code {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    font-family: var(--font-code); font-size: var(--fs-label-xs);
     padding: 1px 5px; background: var(--card-border); border-radius: 3px; text-transform: none;
   }
   .claim-snippet { font-style: italic; color: var(--text-ghost); font-size: 0.88rem; }

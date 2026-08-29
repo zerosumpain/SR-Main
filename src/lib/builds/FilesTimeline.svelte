@@ -47,7 +47,7 @@
     gap: 4px;
   }
   code {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     color: var(--text-primary);
     margin: 0 6px;
@@ -64,7 +64,7 @@
     padding: 8px 10px;
     background: var(--code-bg);
     color: var(--code-text);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     white-space: pre-wrap;
     word-break: break-word;

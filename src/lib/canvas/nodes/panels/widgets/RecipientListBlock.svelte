@@ -146,7 +146,7 @@
   .rl-code:focus { border-color: var(--text-muted); }
   .rl-hint { font-size: var(--fs-label); color: var(--text-ghost); }
   .rl-hint :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     background: var(--bg);
     padding: 1px 4px;
   }

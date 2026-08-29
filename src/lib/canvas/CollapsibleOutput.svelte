@@ -42,7 +42,7 @@
   }
   .co-pre {
     margin: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label);
     line-height: 1.5;
     white-space: pre-wrap;

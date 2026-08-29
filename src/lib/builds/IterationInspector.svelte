@@ -446,7 +446,7 @@
     padding: 0.6rem;
     background: var(--code-bg);
     color: var(--code-text);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: var(--fs-label-xs, 12px);
     line-height: 1.55;
     white-space: pre-wrap;

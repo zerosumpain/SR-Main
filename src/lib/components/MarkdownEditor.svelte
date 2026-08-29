@@ -643,7 +643,7 @@
   }
 
   .preview-pane :global(code) {
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
     font-size: max(0.875em, var(--fs-label-xs));
     padding: 0.2em 0.5em;
     background: var(--card-bg);

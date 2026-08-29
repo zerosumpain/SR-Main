@@ -686,7 +686,7 @@
   }
   .ps-hint code {
     color: var(--accent);
-    font-family: var(--font-mono);
+    font-family: var(--font-code);
   }
   .ps-input {
     background: var(--bg);
