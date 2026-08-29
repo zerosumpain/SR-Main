@@ -390,11 +390,13 @@ export async function runIntelSweep(
   // repaired is in the split ledger and the verdict collection, which are the
   // durable records and outlive the run log's retention.
   //
-  // PROPOSE-ONLY unless INTEL_CONFLATION_APPLY=1. Measured on production: of
-  // twelve judged, ten were correctly left alone, one proposal was arguable and
-  // one was wrong — it wanted to move a child's `visited` and `present_at` edges
-  // onto the monitor that tracks her. One in two is not a rate at which to edit
-  // the graph unattended, so the night records proposals and a human reads them.
+  // Applies only a CORROBORATED proposal — one an earlier night made identically.
+  // The proposals are not stable: three runs over the same twelve entities, same
+  // prompt, temperature 0, gave `IBCA Data Strategy -> IBCA Board (18)` once and
+  // `IBCA Data Strategy -> IBCA (4)` the next, because requests are
+  // throughput-routed across providers. Asking twice on different days is the
+  // cheapest filter on that, and it is why a `proposed` verdict is deliberately
+  // NOT cache-suppressed. `INTEL_CONFLATION_APPLY=0` switches applying off.
   stages.push(
     await runStage('conflation', async () => {
       const { runConflationSweep } = await import('./resolve/conflation.server');
@@ -405,6 +407,7 @@ export async function runIntelSweep(
         cached: out.cached,
         applied: out.applied,
         proposed: out.proposed,
+        corroborated: out.corroborated,
         queued: out.queued,
         skipped: out.skipped,
         failed: out.failed,

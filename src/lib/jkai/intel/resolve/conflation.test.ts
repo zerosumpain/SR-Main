@@ -4,6 +4,7 @@ import {
   outlierThreshold,
   vocabularyFingerprint,
   validateProposal,
+  corroborates,
   MIN_CANDIDATE_DEGREE,
   type CandidateEntity,
 } from './conflation';
@@ -168,5 +169,47 @@ describe('validateProposal', () => {
         resolve,
       ).action,
     ).toBe('skip');
+  });
+});
+
+describe('corroborates', () => {
+  const today = '2026-09-02';
+  const proposal = { targetName: 'IBCA', relationTypes: ['owns', 'decision_maker_of'] };
+
+  it('agrees when a previous NIGHT said the same thing', () => {
+    expect(
+      corroborates({ day: '2026-09-01', targetName: 'IBCA', relationTypes: ['decision_maker_of', 'owns'] }, proposal, today),
+    ).toBe(true);
+  });
+
+  it('refuses a second run on the SAME day', () => {
+    // Two sweeps minutes apart share whatever made the model answer as it did.
+    // The point is to sample twice, not to ask twice.
+    expect(
+      corroborates({ day: today, targetName: 'IBCA', relationTypes: ['owns', 'decision_maker_of'] }, proposal, today),
+    ).toBe(false);
+  });
+
+  it('refuses when the target moved', () => {
+    // Observed: IBCA Board one night, IBCA the next.
+    expect(
+      corroborates({ day: '2026-09-01', targetName: 'IBCA Board', relationTypes: ['owns', 'decision_maker_of'] }, proposal, today),
+    ).toBe(false);
+  });
+
+  it('refuses when the relation set GREW, which is the over-broad failure', () => {
+    // 4 edges becoming 18. Treating that as agreement applies the wrong version.
+    expect(
+      corroborates(
+        { day: '2026-09-01', targetName: 'IBCA', relationTypes: ['owns', 'decision_maker_of', 'works_on'] },
+        proposal,
+        today,
+      ),
+    ).toBe(false);
+  });
+
+  it('refuses with nothing to compare against', () => {
+    expect(corroborates(null, proposal, today)).toBe(false);
+    expect(corroborates({ day: '', targetName: 'IBCA', relationTypes: ['owns'] }, proposal, today)).toBe(false);
   });
 });

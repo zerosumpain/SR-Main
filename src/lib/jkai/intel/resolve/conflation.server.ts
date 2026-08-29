@@ -17,9 +17,11 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { getGraphAnalysis, invalidateGraphAnalysis, type GraphAnalysis } from '../analytics/load';
 import { splitEntity } from './split';
+import { localDayOf } from '../run-log';
 import {
   shortlistCandidates,
   validateProposal,
+  corroborates,
   type Candidate,
   type CandidateEntity,
   type SplitProposal,
@@ -39,24 +41,26 @@ const PERMISSIONS: PermissionSet = {
 export const MAX_JUDGEMENTS_PER_SWEEP = 12;
 
 /**
- * Whether a proposal may be APPLIED without anyone reading it. Off by default.
+ * Kill switch. Applying is ON, but only ever for a CORROBORATED proposal.
  *
- * Measured on production the day this shipped: of twelve entities judged, ten
- * were correctly left alone and two were proposed for splitting —
- * `PayPal -> PayPal REST API`, which is arguable, and
- * `Jemima -> Family Presence Monitor`, which is not. Jemima is a person; the
- * monitor tracks her. The model had mistaken a relationship WITH a system for a
- * second referent INSIDE her.
+ * It shipped off, because the first dry run wanted to move twelve of a child's
+ * edges onto the monitor that tracks her — a relationship WITH a system mistaken
+ * for a second referent INSIDE her. Sharpening the prompt fixed that case, but
+ * the deeper problem is that the proposals are not stable: three runs over the
+ * same twelve entities, same prompt, `temperature: 0`, produced
+ * `IBCA Data Strategy -> IBCA Board (18 edges)` one time and
+ * `IBCA Data Strategy -> IBCA (4 edges)` the next. Requests are throughput-routed
+ * across providers, so a single judgement is a suggestion about one night.
  *
- * That is the distinction the whole detector turns on — a town cannot have a
- * credit card, but a child can be tracked — and one wrong proposal in two is not
- * a rate at which to edit a graph unattended. So the sweep PROPOSES, and the
- * proposals are recorded for review; `INTEL_CONFLATION_APPLY=1` turns on
- * application once they have earned it, which is how `AUTO_MERGE_THRESHOLD` was
- * arrived at and how `mail-rules` stays propose-only until a rule is approved.
+ * Agreement across NIGHTS is the filter — see `corroborates`. Those two IBCA
+ * answers disagree in both target and size, so neither would apply; a proposal
+ * that survives being asked twice, on different days, with the same target and
+ * the same relation set, has passed the only cheap test available for that noise.
+ *
+ * `INTEL_CONFLATION_APPLY=0` turns applying off entirely.
  */
 export function isConflationAutoApplyEnabled(): boolean {
-  return process.env.INTEL_CONFLATION_APPLY === '1';
+  return process.env.INTEL_CONFLATION_APPLY !== '0';
 }
 
 export interface ConflationSweepResult {
@@ -65,8 +69,10 @@ export interface ConflationSweepResult {
   /** Verdicts served from the cache because the vocabulary had not moved. */
   cached: number;
   applied: number;
-  /** Splits the gate would allow, held for review because applying is off. */
+  /** Splits the gate would allow, held because no earlier night agreed yet. */
   proposed: number;
+  /** Proposals a previous night had already made identically. */
+  corroborated: number;
   queued: number;
   skipped: number;
   failed: number;
@@ -163,6 +169,14 @@ interface Verdict {
    */
   relationTypes?: string[];
   edgeCount?: number;
+  /**
+   * The last proposal made about this entity, and the day it was made.
+   *
+   * Kept so a later night can agree with it. Written even when the proposal is
+   * NOT applied — that is the whole mechanism: tonight records, tomorrow
+   * corroborates.
+   */
+  lastProposal?: { day: string; targetName: string; relationTypes: string[] };
   why?: string;
   at: string;
 }
@@ -267,6 +281,7 @@ export async function runConflationSweep(
     cached: 0,
     applied: 0,
     proposed: 0,
+    corroborated: 0,
     queued: 0,
     skipped: 0,
     failed: 0,
@@ -284,9 +299,15 @@ export async function runConflationSweep(
   for (const candidate of shortlist) {
     if (result.judged >= budget) break;
 
-    // A verdict is about a vocabulary. Nothing new to ask while it holds.
+    // A verdict is about a vocabulary. Nothing new to ask while it holds — UNLESS
+    // the last answer was a proposal, which is the one case that must be asked
+    // again. Corroboration needs a second night, and the fingerprint is stable by
+    // construction for exactly the entities a proposal is about, so caching them
+    // would guarantee no proposal ever earned a second look and applying could
+    // never happen at all.
     const previous = verdicts.get(candidate.id);
-    if (previous && previous.fingerprint === candidate.fingerprint) {
+    const awaitingSecondOpinion = previous?.outcome === 'proposed' || previous?.outcome === 'queued';
+    if (previous && previous.fingerprint === candidate.fingerprint && !awaitingSecondOpinion) {
       result.cached++;
       continue;
     }
@@ -321,6 +342,16 @@ export async function runConflationSweep(
       at: new Date().toISOString(),
     };
 
+    const today = localDayOf();
+    const agreed = corroborates(previous?.lastProposal, proposal, today);
+    if (proposal.conflated) {
+      record0.lastProposal = {
+        day: today,
+        targetName: proposal.targetName,
+        relationTypes: [...new Set(proposal.relationTypes)],
+      };
+    }
+
     if (verdict.action === 'apply') {
       const wanted = new Set(proposal.relationTypes);
       // Re-read rather than trusting the shortlist's snapshot: the analysis is
@@ -338,9 +369,13 @@ export async function runConflationSweep(
         record0.outcome = 'skipped';
         record0.why = 'nothing left to move by the time it ran';
         result.skipped++;
-      } else if (!apply) {
+      } else if (!apply || !agreed) {
+        // Recorded, not done. Tomorrow's sweep asks again and compares.
         record0.outcome = 'proposed';
         record0.edgeCount = moving.length;
+        record0.why = apply
+          ? 'held — no earlier night has proposed the same split'
+          : 'held — applying is switched off';
         result.proposed++;
         result.splits.push({
           entity: candidate.name,
@@ -350,11 +385,12 @@ export async function runConflationSweep(
         });
       } else {
         try {
+          result.corroborated++;
           const out = await splitEntity({
             fromId: candidate.id,
             to: { entityId: verdict.targetId },
             relationshipIds: moving,
-            reason: `Conflation detected automatically: ${proposal.reason}`,
+            reason: `Conflation detected automatically, and proposed identically on ${previous?.lastProposal?.day} and ${today}: ${proposal.reason}`,
           });
           result.applied++;
           result.splits.push({
