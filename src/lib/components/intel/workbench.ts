@@ -19,6 +19,8 @@ export interface IntelCounts {
   watched: number;
   unconnected: number;
   heldMail: number;
+  /** Types the extractor coined that nobody has admitted or retired. */
+  proposedTypes: number;
 }
 
 export interface IntelSurface {
@@ -76,6 +78,19 @@ export const SURFACES: IntelSurface[] = [
       'Structural problems that corrupt every metric downstream. Triage judges one entity; this judges the shape of the whole.',
     count: 'unconnected',
     warnAbove: 60,
+  },
+  {
+    href: '/jkai/intel/categories',
+    label: 'Taxonomy',
+    stage: '03 repair',
+    question: 'What the graph is allowed to CALL things — entity types, and the categories on its sources.',
+    ratherThan:
+      'Quality fixes which node a thing is; this fixes which vocabulary describes it. Reach for it when a type filter has stopped being useful, or when the extractor keeps coining types.',
+    count: 'proposedTypes',
+    // A handful of held proposals is the system working. Two dozen is a
+    // vocabulary nobody chose — and every one of them is offered to the
+    // extractor as a legitimate option until it is ruled on.
+    warnAbove: 20,
   },
   {
     href: '/jkai/intel',

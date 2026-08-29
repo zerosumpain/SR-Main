@@ -9,6 +9,7 @@
 //
 //   GET             → { enabled, files, research, chats, alreadyExtracted }
 //   POST { kinds?, limit? } → run a pass, returns progress counters
+//   POST { aliases: true }  → recover the surface forms past merges discarded
 //
 // `kinds: ['chat']` is the odd one out: re-extracting a thread is NOT a no-op
 // the way re-extracting an unchanged file is. The old cadence (turn 2, then
@@ -53,9 +54,6 @@ export const GET: RequestHandler = async ({ locals, request }) => {
 
 export const POST: RequestHandler = async ({ locals, request }) => {
   if (!(await isMaintenanceAuthorized(request, locals))) return json({ error: 'unauthorized' }, { status: 401 });
-  if (!isAutoExtractEnabled()) {
-    return json({ error: 'Intel auto-extraction is disabled (INTEL_AUTO_EXTRACT=0).' }, { status: 409 });
-  }
 
   const body = (await request.json().catch(() => ({}))) as {
     kinds?: string[];
@@ -64,7 +62,24 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     embeddings?: boolean;
     dedupeLinks?: boolean;
     confidence?: boolean;
+    aliases?: boolean;
   };
+
+  // Surface forms recovered from past merges.
+  //
+  // Sits ABOVE the auto-extract gate, unlike every other pass here: it reads
+  // tombstones the graph already holds and calls nothing, so refusing it when
+  // extraction is switched off would be refusing on an unrelated grounds. Also
+  // in the nightly resolve stage, and idempotent — it only writes where the
+  // computed alias list differs from what is stored.
+  if (body.aliases) {
+    const { backfillAliasesFromTombstones } = await import('$lib/jkai/intel/resolve/merge');
+    return json(await backfillAliasesFromTombstones());
+  }
+
+  if (!isAutoExtractEnabled()) {
+    return json({ error: 'Intel auto-extraction is disabled (INTEL_AUTO_EXTRACT=0).' }, { status: 409 });
+  }
 
   // Summary-only pass: fills entities left without one. Separate from the
   // corpus sweep because re-extracting an unchanged item is a no-op by design,

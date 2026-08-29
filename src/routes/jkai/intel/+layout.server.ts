@@ -1,7 +1,7 @@
 // Counts for the Intel workbench nav.
 //
 // The nav is on every intel surface, so this runs on every intel page load —
-// which is why it is nine COUNT queries and nothing else. Anything expensive
+// which is why it is ten COUNT queries and nothing else. Anything expensive
 // (duplicate detection, the analytics snapshot) stays on the page that owns it;
 // a nav that costs a Louvain run would tax every page for a badge.
 import type { LayoutServerLoad } from './$types';
@@ -50,8 +50,16 @@ export const load: LayoutServerLoad = async () => {
       )
   `).then((r) => r.rows as Array<{ n: number }>);
 
+  // Types the extractor coined and nobody has ruled on. A proposed type is not
+  // inert — it re-enters the extraction prompt as a legitimate option — so this
+  // is a backlog, not a statistic, and it earns a badge.
+  const [proposedTypes] = await db.execute(sql`
+    SELECT COUNT(*)::int AS n FROM intel_entity_types WHERE status = 'proposed'
+  `).then((r) => r.rows as Array<{ n: number }>);
+
   return {
     intelCounts: {
+      proposedTypes: Number(proposedTypes?.n ?? 0),
       entities: entities[0]?.n ?? 0,
       notes: notes[0]?.n ?? 0,
       pending: pending[0]?.n ?? 0,

@@ -30,6 +30,7 @@
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
   import CommissionBar from '$lib/components/intel/CommissionBar.svelte';
   import { SURFACES } from '$lib/components/intel/workbench';
+  import { keyColour, type ColourMode } from '$lib/components/intel/graph-visual';
   import { entityHover } from '$lib/components/intel/entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import type { InsightData, UnlikelyRelation, PredictedLink } from '$lib/components/intel/types';
@@ -103,6 +104,92 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       ? activeCategories.filter((c) => c !== slug)
       : [...activeCategories, slug];
   }
+
+  // ── Colour and highlight ─────────────────────────────────────────────────
+  //
+  // Two different questions were being answered with one control, badly.
+  //
+  // "Where are the people in this graph" was a single-select type dropdown that
+  // REMOVED everything else — so the answer arrived with nothing to read it
+  // against. "Which of this came from work rather than from Drive" was a
+  // category filter buried in the Sources rail behind a files-are-selected gate,
+  // and it removed things too.
+  //
+  // Neither question wants removal. Both want the same picture with part of it
+  // brought forward. So: colour says what the hue MEANS, highlight brings a
+  // subset forward without moving anything, and filtering stays available as a
+  // separate, explicit step.
+  let colourBy = $state<ColourMode>('cluster');
+  let highlightKeys = $state<string[]>([]);
+  /** Multi-select type filter. `typeId` is kept for the single-type deep links. */
+  let activeTypes = $state<string[]>([]);
+
+  function toggleHighlight(key: string) {
+    highlightKeys = highlightKeys.includes(key)
+      ? highlightKeys.filter((k) => k !== key)
+      : [...highlightKeys, key];
+  }
+
+  /** Turn the current highlight into a real filter — the explicit second step. */
+  function filterToHighlight() {
+    if (!highlightKeys.length) return;
+    if (colourBy === 'type') activeTypes = [...highlightKeys];
+    else if (colourBy === 'category') activeCategories = [...highlightKeys];
+    highlightKeys = [];
+  }
+
+  /** Switching what the colour means makes the old highlight meaningless. */
+  function setColourBy(mode: ColourMode) {
+    if (mode === colourBy) return;
+    colourBy = mode;
+    highlightKeys = [];
+  }
+
+  const categoryColours = $derived(
+    new Map((network?.categories ?? []).map((c) => [c.slug, c.color])),
+  );
+
+  /**
+   * The legend for the current mode, with how many drawn nodes carry each key.
+   *
+   * Counted over what is ON SCREEN rather than over the whole graph, because
+   * the legend's job is to explain the picture in front of you. A key with no
+   * nodes in the current view is dropped — offering a highlight that would
+   * blank the graph is worse than not offering it.
+   */
+  const legend = $derived.by(() => {
+    if (colourBy === 'cluster' || !network) return [];
+    const counts = new Map<string, number>();
+    for (const n of network.nodes) {
+      const keys = colourBy === 'type' ? (n.typeId ? [n.typeId] : []) : (n.categories ?? []);
+      for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const rows =
+      colourBy === 'type'
+        ? (network.types ?? []).map((t) => ({
+            key: t.id,
+            label: `${t.icon} ${t.name}`,
+            // Through the same helper the graph draws with — a legend computing
+            // its own colour is a key that can disagree with the picture.
+            colour: keyColour(t.id, t.color),
+            count: counts.get(t.id) ?? 0,
+          }))
+        : (network.categories ?? []).map((c) => ({
+            key: c.slug,
+            label: c.name,
+            colour: keyColour(c.slug, c.color),
+            count: counts.get(c.slug) ?? 0,
+          }));
+    return rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count);
+  });
+
+  /** Nodes carrying no key at all under the current mode — always worth naming. */
+  const unclassified = $derived.by(() => {
+    if (colourBy === 'cluster' || !network) return 0;
+    return network.nodes.filter((n) =>
+      colourBy === 'type' ? !n.typeId : !(n.categories ?? []).length,
+    ).length;
+  });
 
   /** 3D is the default view; the choice persists so it is not re-made per visit. */
   const VIEW_KEY = 'intel:graph3d';
@@ -189,9 +276,14 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     activeSources = [];
     pinnedIds = [];
     typeId = '';
+    activeTypes = [];
     communityId = '';
     minDegree = 1;
     focusId = null;
+    // Highlight is a VIEW state, not a filter, so "clear filters" leaves it —
+    // except that a highlight against a graph whose filters just changed is
+    // usually stale. Cleared, and the count above never counted it.
+    highlightKeys = [];
   }
 
   const filterCount = $derived(
@@ -200,6 +292,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       activeSources.length +
       (pinnedIds.length ? 1 : 0) +
       (typeId ? 1 : 0) +
+      activeTypes.length +
       (communityId ? 1 : 0) +
       (focusId ? 1 : 0),
   );
@@ -207,8 +300,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   /** Per-section active counts, so a folded section still says what it is doing. */
   const sourceFilterCount = $derived(activeSources.length + activeCategories.length);
   const shapeFilterCount = $derived(
-    (typeId ? 1 : 0) + (minDegree > 1 ? 1 : 0) + pinnedIds.length + (focusId ? 1 : 0),
+    (typeId ? 1 : 0) + activeTypes.length + (minDegree > 1 ? 1 : 0) + pinnedIds.length + (focusId ? 1 : 0),
   );
+  const paintCount = $derived(highlightKeys.length + (colourBy === 'cluster' ? 0 : 1));
 
   // Path finder
   let pathFrom = $state('');
@@ -341,6 +435,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   const query = $derived.by(() => {
     const p = new URLSearchParams();
     if (typeId) p.set('typeId', typeId);
+    if (activeTypes.length) p.set('types', activeTypes.join(','));
     if (communityId) p.set('community', communityId);
     if (minDegree > 0) p.set('minDegree', String(minDegree));
     if (focusId) {
@@ -972,6 +1067,74 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         {/if}
       </RailSection>
 
+      <RailSection title="Colour &amp; highlight" badge={paintCount || null}>
+        <!-- Sits directly under Search because it answers the same shape of
+             question — "show me the X in here" — without the removal a filter
+             does. The type filter below still exists for when removal IS what
+             you want. -->
+        <div class="paint-modes" role="group" aria-label="Colour nodes by">
+          {#each [['cluster', 'Cluster'], ['type', 'Type'], ['category', 'Category']] as [mode, label] (mode)}
+            <button
+              type="button"
+              class="chip"
+              class:on={colourBy === mode}
+              onclick={() => setColourBy(mode as ColourMode)}
+            >{label}</button>
+          {/each}
+        </div>
+
+        {#if colourBy === 'cluster'}
+          <p class="hint">
+            Hue is the detected cluster — the one grouping you cannot read off a label. Switch to
+            Type or Category to colour by those and pick which to bring forward.
+          </p>
+        {:else if !legend.length}
+          <p class="hint">
+            {colourBy === 'category'
+              ? 'Nothing on screen carries a source category. They are set per folder in Drive.'
+              : 'Nothing on screen carries a type.'}
+          </p>
+        {:else}
+          <p class="hint">
+            Click to bring forward; the rest recedes without moving. Nothing is removed until you
+            filter.
+          </p>
+          <div class="legend">
+            {#each legend as row (row.key)}
+              <button
+                type="button"
+                class="legend-chip"
+                class:on={highlightKeys.includes(row.key)}
+                title="{row.count} on screen"
+                aria-pressed={highlightKeys.includes(row.key)}
+                onclick={() => toggleHighlight(row.key)}
+              >
+                <i class="swatch" style="background: {row.colour}" aria-hidden="true"></i>
+                <span class="lc-label">{row.label}</span>
+                <b>{row.count}</b>
+              </button>
+            {/each}
+          </div>
+          {#if unclassified > 0}
+            <p class="hint">
+              {unclassified} {unclassified === 1 ? 'node carries' : 'nodes carry'} no
+              {colourBy === 'type' ? ' type' : ' category'} at all, and {unclassified === 1 ? 'is' : 'are'}
+              drawn grey.
+            </p>
+          {/if}
+          {#if highlightKeys.length}
+            <div class="paint-acts">
+              <button type="button" class="link-btn" onclick={filterToHighlight}>
+                Filter to {highlightKeys.length === 1 ? 'it' : `these ${highlightKeys.length}`}
+              </button>
+              <button type="button" class="link-btn" onclick={() => (highlightKeys = [])}>
+                Clear highlight
+              </button>
+            </div>
+          {/if}
+        {/if}
+      </RailSection>
+
       <RailSection title="Recency" badge={windowActive ? (network?.stats.recentNodes ?? 0) : null}>
         <!-- Sits above Sources because it is the filter most often reached for
              first: "what happened since yesterday" is a narrower and more
@@ -1043,6 +1206,22 @@ import type { NetworkPayload } from '$lib/codegraph/types';
             <option value={t.id}>{t.icon} {t.name}</option>
           {/each}
         </select>
+        {#if activeTypes.length}
+          <!-- Set by "Filter to these" in Colour & highlight. Shown here, where
+               the other narrowing filters live, so it can be undone from the
+               same place — a filter you cannot find is a graph that looks
+               broken. -->
+          <div class="chips">
+            {#each activeTypes as id (id)}
+              {@const t = (network?.types ?? []).find((x) => x.id === id)}
+              <button
+                type="button"
+                class="chip on"
+                onclick={() => (activeTypes = activeTypes.filter((x) => x !== id))}
+              >{t ? `${t.icon} ${t.name}` : id.slice(0, 8)} ×</button>
+            {/each}
+          </div>
+        {/if}
 
         <label for="f-degree">Min connections: {minDegree}</label>
         <input id="f-degree" type="range" min="0" max="10" bind:value={minDegree} />
@@ -1195,6 +1374,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
             {selectedId}
             {focusCommunities}
             {explode}
+            {colourBy}
+            {highlightKeys}
+            {categoryColours}
             communities={network.communities ?? []}
             onSelect={onGraphSelect}
             onOpen={(id) => focus(id)}
@@ -1207,6 +1389,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
             matchedIds={highlightIds}
             {selectedId}
             {focusCommunities}
+            {colourBy}
+            {highlightKeys}
+            {categoryColours}
             onSelect={onGraphSelect}
             onOpen={(id) => focus(id)}
           />
@@ -1963,6 +2148,84 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     border-color: var(--accent-tint-35);
     color: var(--accent);
   }
+  /* Colour & highlight ---------------------------------------------------- */
+  .paint-modes {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .paint-modes .chip {
+    flex: 1 1 0;
+    text-align: center;
+    border-left-width: 1px;
+  }
+  /* One row per key, not a wrapping chip cloud.
+     The rail is ~280px and a type name is up to twenty characters, so chips
+     wrapped into two ragged columns and truncated mid-word — "process_st…",
+     "data_sourc…" — which is a legend you cannot read. Rows give the name the
+     full width, the count a fixed column, and the swatch a fixed place to be
+     compared down. */
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+    /* Capped and scrolled: 29 live entity types would otherwise push every
+       other rail section off the screen. */
+    max-height: 230px;
+    overflow-y: auto;
+  }
+  .legend-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 3px 7px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: left;
+  }
+  .legend-chip:hover {
+    border-color: var(--line-strong);
+    color: var(--accent);
+  }
+  .legend-chip.on {
+    background: var(--accent-tint-08);
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  .lc-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .legend-chip b {
+    flex: 0 0 auto;
+    font-weight: 400;
+    color: var(--text-ghost);
+  }
+  .legend-chip.on b {
+    color: var(--accent);
+  }
+  .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: var(--radius-sharp);
+    flex: 0 0 auto;
+  }
+  .paint-acts {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
   .filters-on {
     margin: 8px 0 2px;
     background: var(--accent-tint-04);

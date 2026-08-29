@@ -26,6 +26,9 @@
     recencyFade,
     clusterColour,
     clusterColourOf,
+    nodeColourOf,
+    matchesHighlight,
+    type ColourMode,
     clusterSlotOf,
     clusterSeedOf,
     nodeRelevance,
@@ -45,6 +48,9 @@
     matchedIds = [],
     selectedId = null,
     focusCommunities = [],
+    colourBy = 'cluster',
+    highlightKeys = [],
+    categoryColours,
     onSelect,
     onOpen,
   }: {
@@ -67,9 +73,30 @@
      * control that can only hold one answer at a time.
      */
     focusCommunities?: number[];
+    /**
+     * What the hue MEANS: the detected cluster (default), the entity type, or
+     * the source category the evidence carried.
+     */
+    colourBy?: ColourMode;
+    /**
+     * Type ids or category slugs to bring forward. Empty means no highlight is
+     * on, and everything draws normally — the alternative would blank the graph
+     * the moment the control appeared.
+     *
+     * Highlight is not a filter: nothing is removed, nothing moves, the layout
+     * is untouched. "Where are all the people" is a question about where they
+     * sit among everything else.
+     */
+    highlightKeys?: string[];
+    /** slug → the colour the analyst gave that category. */
+    categoryColours?: Map<string, string>;
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
   } = $props();
+
+  const highlightSet = $derived(new Set(highlightKeys));
+  /** Nodes outside an active highlight recede, exactly as a focused cluster does. */
+  const offHighlight = (d: NetNode) => !matchesHighlight(d, colourBy, highlightSet);
 
   let container = $state<HTMLDivElement | null>(null);
   let hovered = $state<NetNode | null>(null);
@@ -152,6 +179,23 @@
   /** True when a focus is set and this node is not part of it. */
   function outOfFocus(n: NetNode): boolean {
     return focusSet.size > 0 && !focusSet.has(n.community);
+  }
+
+  /**
+   * The one place opacity is decided, because four meanings share this channel:
+   * keyword dimming, whether the entity is confirmed, cluster focus and now a
+   * category/type highlight. They were computed inline in two places and had to
+   * be kept identical by hand — the focus repaint below is the second copy, and
+   * a fifth meaning arriving would have been a third.
+   */
+  function nodeOpacity(d: NetNode): number {
+    const base = dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4;
+    // A highlight LIFTS its own side as well as sinking the rest. Sinking alone
+    // left an unconfirmed highlighted node at 0.4 against a background at 0.4 ×
+    // 0.2, which is technically a contrast and is not one you can see: the
+    // answer to "where are the people" came back as a slightly less faint grey.
+    const lifted = highlightSet.size && !offHighlight(d) ? Math.max(base, 0.75) : base;
+    return lifted * (outOfFocus(d) ? 0.18 : 1) * (offHighlight(d) ? 0.2 : 1);
   }
 
   /**
@@ -301,13 +345,8 @@
       // Age was moved OFF opacity for this: opacity is shared with three other
       // meanings, and a colour receding towards the surface it sits on is what
       // "no longer current" actually looks like.
-      .attr('fill', (d) => washOut(clusterColourOf(d), nodeRelevance(d)))
-      .attr('fill-opacity', (d) =>
-        // Keyword dimming first, then cluster focus. Focus is a view state
-        // rather than a filter, so it dims rather than removes.
-        (dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4) *
-        (outOfFocus(d) ? 0.18 : 1),
-      )
+      .attr('fill', (d) => washOut(nodeColourOf(d, colourBy, categoryColours), nodeRelevance(d)))
+      .attr('fill-opacity', (d) => nodeOpacity(d))
       .attr('stroke', (d) =>
         d.id === selectedId ? 'var(--accent)' : pathSet.has(d.id) ? 'var(--accent)' : 'rgba(237,228,212,0.9)',
       )
@@ -578,18 +617,19 @@
    */
   $effect(() => {
     // Read as a stable key: the parent hands a fresh array each render, so
-    // depending on the array itself would restyle continuously.
-    const key = (focusCommunities ?? []).join(',');
+    // depending on the array itself would restyle continuously. Colour mode and
+    // highlight join it — both restyle in place and neither may rebuild the
+    // layout, because a node that jumps when you highlight it has answered a
+    // different question from the one you asked.
+    const key = `${(focusCommunities ?? []).join(',')}|${colourBy}|${(highlightKeys ?? []).join(',')}`;
     if (!rootGroup) return;
     untrack(() => {
       void key;
       rootGroup!
         .selectAll<SVGCircleElement, SimNode>('g.node > circle:first-of-type')
         .attr('r', (d) => radius(d))
-        .attr('fill-opacity', (d) =>
-          (dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4) *
-          (outOfFocus(d) ? 0.18 : 1),
-        );
+        .attr('fill', (d) => washOut(nodeColourOf(d, colourBy, categoryColours), nodeRelevance(d)))
+        .attr('fill-opacity', (d) => nodeOpacity(d));
       // Labels were placed at render time, so focus has to hide them here or a
       // dimmed cluster would keep shouting its names over the focused one.
       rootGroup!

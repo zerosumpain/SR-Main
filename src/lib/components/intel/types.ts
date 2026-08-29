@@ -45,11 +45,32 @@ export interface PredictedLink {
   via: InsightEntity[];
 }
 
+export interface DuplicateSide {
+  id: string;
+  name: string;
+  type: string;
+  degree: number;
+  noteCount: number;
+  /** Surface forms already recorded for this entity. */
+  aliases?: string[];
+  summary?: string | null;
+}
+
+/** A standing answer to "are these the same thing?", or null if nobody has said. */
+export interface DuplicateDecision {
+  verdict: 'same' | 'different' | 'unsure';
+  decidedBy: 'human' | 'llm' | 'auto';
+  rationale: string | null;
+  model: string | null;
+  at: string;
+}
+
 export interface DuplicateRow {
   confidence: number;
   signals: string[];
   reason: string;
   autoMergeable: boolean;
-  keep: { id: string; name: string; type: string; degree: number; noteCount: number };
-  merge: { id: string; name: string; type: string; degree: number; noteCount: number };
+  decision?: DuplicateDecision | null;
+  keep: DuplicateSide;
+  merge: DuplicateSide;
 }

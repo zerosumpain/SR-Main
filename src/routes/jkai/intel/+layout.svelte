@@ -12,7 +12,7 @@
   // The loop, and it is a loop:
   //   capture → triage → repair → explore → collect → act
   //
-  // Counts come from the intel layout load (`intelCounts`), which is nine COUNT
+  // Counts come from the intel layout load (`intelCounts`), which is ten COUNT
   // queries and nothing else — a nav badge must never cost an analytics run.
 
   import type { Snippet } from 'svelte';

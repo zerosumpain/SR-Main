@@ -28,6 +28,7 @@ const MAX_NODES = 600;
 
 export const GET: RequestHandler = async ({ url }) => {
   const typeId = url.searchParams.get('typeId');
+  const typeIds = parseCsv(url.searchParams.get('types'));
   const focusId = url.searchParams.get('focus');
   const hops = Math.min(Math.max(Number(url.searchParams.get('hops') ?? 2), 1), 5);
   const minDegree = Math.max(Number(url.searchParams.get('minDegree') ?? 0), 0);
@@ -87,6 +88,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const filtered = applyGraphFilter(index, community.membership, {
     typeId,
+    typeIds,
     communityId: communityFilter ? Number(communityFilter) : null,
     minDegree,
     focusId,
@@ -123,6 +125,7 @@ export const GET: RequestHandler = async ({ url }) => {
   // tiles and the graph disagree about whether a filter is on.
   const filtering =
     !!typeId ||
+    typeIds.length > 0 ||
     !!focusId ||
     !!communityFilter ||
     !!q ||
