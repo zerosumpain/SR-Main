@@ -28,28 +28,46 @@
 import type { AdjacencyIndex, GraphNode } from './model';
 
 /**
- * How many distinct clusters an entity must touch before it stops being a
+ * What share of the tracked clusters an entity must reach before it stops being a
  * useful name for any one of them.
  *
- * This started as "leads more than a quarter of all clusters" and that rule
- * never fired once: on the production graph no entity leads more than a single
- * cluster, because leading is what makes a cluster form around you. The signal
- * that actually separates a generic hub from a subject is REACH — how many
- * distinct clusters an entity has a neighbour in.
- *
- * Measured over the 106 tracked clusters, reach is 1 at the median, 2 at p90 and
- * 5 at p99, with a long thin tail:
+ * This was the constant 20, and on 2026-08-29 it was measured flagging NOTHING.
+ * It had been calibrated on a 9,042-entity graph with 106 clusters, where reach
+ * ran 1 at the median, 2 at p90, 5 at p99 with a long thin tail:
  *
  *   Johnkelly Main 72 · John Kelly 25 · jkai 22 · United Kingdom 21 ·
  *   Darlington 14 · WhatsApp 13 · Privacy Policy 12 · London 11 …
- *   … IBCA 9 · Home Assistant 9 · Department for Education 9
  *
- * 20 is four times p99, which is where the operator's own email address, his
- * name, the platform and the country he lives in sit — and comfortably above
- * IBCA, DfE and Home Assistant, which are the best names in the whole set and
- * must not be disqualified by a rule aimed at the others.
+ * The graph is now 4,515 entities in 54 clusters and its MAXIMUM reach is 14, so
+ * an absolute 20 cannot fire. A constant cannot express this rule: reach is
+ * bounded by the number of clusters, so the line has to move with it.
+ *
+ * A quarter, because that is where the real gap is. Measured reach today runs
+ * Darlington 14 · WhatsApp 14 · John 11 · Home Assistant 11 · United Kingdom 8 —
+ * a clean break between 14 and 11, and `ceil(54/4) = 14` sits on it. The two it
+ * catches are the town the operator lives in and the messaging platform, which
+ * are exactly the "attached to everything" names this rule exists for. The two it
+ * spares matter as much: "Home Assistant · Jemima" is the most informative label
+ * in the roster, and demoting its first word to catch nothing else would be a
+ * loss.
+ *
+ * Percentile rules were tried and rejected. The old comment derived 20 as "four
+ * times p99", but p99 is 3 here and integer-quantised, so 4xp99 jumps between 8,
+ * 12 and 16 on a one-entity change — and on a small graph p99 IS the outlier, so
+ * the rule stops flagging the very entity it was written for.
  */
-export const UBIQUITY_REACH = 20;
+export const UBIQUITY_CLUSTER_SHARE = 0.25;
+
+/**
+ * Nothing below this is "everywhere", however small the graph. A guard against
+ * degenerate inputs, not a calibration.
+ */
+export const UBIQUITY_REACH_FLOOR = 4;
+
+/** The reach at which an entity stops distinguishing any one cluster. */
+export function ubiquityThreshold(trackedClusters: number): number {
+  return Math.max(UBIQUITY_REACH_FLOOR, Math.ceil(trackedClusters * UBIQUITY_CLUSTER_SHARE));
+}
 
 /** How many leaders a name is built from. */
 const LEADERS = 2;
@@ -143,6 +161,7 @@ export function findUbiquitousEntities(
   const out = new Set<string>();
   // Nothing can be ubiquitous across fewer than two clusters.
   if (tracked.size < 2) return out;
+  const threshold = ubiquityThreshold(tracked.size);
 
   for (const id of index.ids) {
     const reach = new Set<number>();
@@ -151,9 +170,9 @@ export function findUbiquitousEntities(
     for (const neighbour of index.neighbours.get(id) ?? []) {
       const community = membership.get(neighbour);
       if (community !== undefined && tracked.has(community)) reach.add(community);
-      if (reach.size >= UBIQUITY_REACH) break;
+      if (reach.size >= threshold) break;
     }
-    if (reach.size >= UBIQUITY_REACH) out.add(id);
+    if (reach.size >= threshold) out.add(id);
   }
   return out;
 }

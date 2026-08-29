@@ -4,7 +4,7 @@ import {
   labelForView,
   describeComposition,
   findUbiquitousEntities,
-  UBIQUITY_REACH,
+  ubiquityThreshold,
   KNOWN_SOURCES,
 } from './cluster-label';
 import type { GraphNode } from './model';
@@ -135,34 +135,57 @@ describe('findUbiquitousEntities', () => {
    * A hub wired into `reach` clusters, each cluster otherwise self-contained.
    * Mirrors the real shape: one entity with neighbours everywhere.
    */
-  function hubGraph(reach: number) {
+  function hubGraph(reach: number, clusters = reach) {
     const ids = ['hub'];
     const neighbours = new Map<string, Set<string>>([['hub', new Set()]]);
     const membership = new Map<string, number>([['hub', 0]]);
     const tracked = new Set<number>();
-    for (let c = 0; c < reach; c++) {
+    for (let c = 0; c < clusters; c++) {
       const member = `m${c}`;
       ids.push(member);
       membership.set(member, c);
       tracked.add(c);
-      neighbours.set(member, new Set(['hub']));
-      neighbours.get('hub')!.add(member);
+      neighbours.set(member, new Set());
+      // The hub only reaches the first `reach` of them.
+      if (c < reach) {
+        neighbours.get(member)!.add('hub');
+        neighbours.get('hub')!.add(member);
+      }
     }
     return { index: { ids, neighbours }, membership, tracked };
   }
 
   it('flags an entity with neighbours in more clusters than the threshold', () => {
-    const { index, membership, tracked } = hubGraph(UBIQUITY_REACH + 5);
+    // A quarter of 40 is 10; this hub reaches 20.
+    const { index, membership, tracked } = hubGraph(20, 40);
     expect(findUbiquitousEntities(index, membership, tracked).has('hub')).toBe(true);
   });
 
   it('spares an entity just under the threshold', () => {
-    const { index, membership, tracked } = hubGraph(UBIQUITY_REACH - 2);
+    // ceil(40 / 4) = 10, so a hub reaching 9 is not ubiquitous.
+    const { index, membership, tracked } = hubGraph(9, 40);
     expect(findUbiquitousEntities(index, membership, tracked).has('hub')).toBe(false);
   });
 
+  it('moves with the graph rather than sitting at a constant', () => {
+    // The regression this exists for: the old constant 20 flagged NOTHING once
+    // the graph fell to 54 clusters, where the maximum reach was 14.
+    expect(ubiquityThreshold(106)).toBe(27);
+    expect(ubiquityThreshold(54)).toBe(14);
+    // Home Assistant reaches 11 of 54 and must survive — it is the best word in
+    // the roster's biggest label.
+    expect(ubiquityThreshold(54)).toBeGreaterThan(11);
+    // Darlington and WhatsApp reach 14 and must not.
+    expect(ubiquityThreshold(54)).toBeLessThanOrEqual(14);
+  });
+
+  it('never lets a tiny graph make everything ubiquitous', () => {
+    expect(ubiquityThreshold(2)).toBe(4);
+    expect(ubiquityThreshold(0)).toBe(4);
+  });
+
   it('counts only tracked clusters — fragments are not reach', () => {
-    const { index, membership, tracked } = hubGraph(UBIQUITY_REACH + 5);
+    const { index, membership, tracked } = hubGraph(20, 40);
     // Everything the hub touches is an untracked fragment.
     expect(findUbiquitousEntities(index, membership, new Set()).size).toBe(0);
   });
@@ -173,7 +196,7 @@ describe('findUbiquitousEntities', () => {
   });
 
   it('leaves an ordinary entity alone', () => {
-    const { index, membership, tracked } = hubGraph(UBIQUITY_REACH + 5);
+    const { index, membership, tracked } = hubGraph(20, 40);
     expect(findUbiquitousEntities(index, membership, tracked).has('m0')).toBe(false);
   });
 });
