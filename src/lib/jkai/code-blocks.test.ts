@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Marked } from 'marked';
 import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
-import { codeRenderer, enhanceCodeBlocks, normaliseLang, runLaneFor } from './code-blocks';
+import { codeRenderer, enhanceCodeBlocks, isBuildable, normaliseLang, runLaneFor } from './code-blocks';
 
 const marked = new Marked({ gfm: true, breaks: true, renderer: codeRenderer });
 
@@ -138,5 +138,40 @@ describe('allowRun: false (the public share view)', () => {
     );
     expect(html).toContain('hljs-keyword');
     expect(html).toContain('data-lang="python"');
+  });
+});
+
+describe('build app button (the deterministic half of the choice)', () => {
+  it('offers build on languages that could be an app', () => {
+    expect(isBuildable('html')).toBe(true);
+    expect(isBuildable('js')).toBe(true);
+    expect(isBuildable('py')).toBe(true);
+  });
+
+  it('withholds it where an app makes no sense', () => {
+    expect(isBuildable('bash')).toBe(false);
+    expect(isBuildable('css')).toBe(false);
+    expect(isBuildable('json')).toBe(false);
+    expect(isBuildable('')).toBe(false);
+  });
+
+  it('renders on a buildable block regardless of what the model offered', () => {
+    // The reported failure: "write me a flappy bird html script in chat" is an
+    // explicit choice, so the model correctly emits no [[code-route]] marker —
+    // and the route to an app then has to come from the block itself.
+    const html = render('```html\n<canvas id="game"></canvas>\n```');
+    expect(html).toContain('cc-build');
+  });
+
+  it('is absent on a bash block', () => {
+    expect(render('```bash\nls -la\n```')).not.toContain('cc-build');
+  });
+
+  it('is withheld from the public share view along with run', () => {
+    const html = enhanceCodeBlocks(
+      sanitizeChatHtml(marked.parse('```python\nprint(1)\n```') as string),
+      { allowRun: false },
+    );
+    expect(html).not.toContain('cc-build');
   });
 });

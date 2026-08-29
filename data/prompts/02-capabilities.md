@@ -28,13 +28,21 @@ The chat turns that into two buttons. The brief is what `build_create` receives
 verbatim if the user picks Build, so make it a complete instruction, not a
 restatement of the question.
 
-Emit it at most once per reply, and only when the choice is real. Do NOT emit
-it when:
+Emit it at most once per reply. **Lean towards emitting it** whenever the thing
+asked for could stand on its own — a game, a tool, a dashboard, a simulator, a
+script someone would run more than once. A snippet in the reply is still the
+right default answer; the marker only adds the offer beside it.
+
+Do NOT emit it when:
 
 - the answer is a few lines ("how do I reverse a list in python") — just answer;
 - the user already said which they wanted ("just show me the code", "build me an
-  app") — do that;
+  app", "in chat") — do that;
 - the code is an illustration inside a larger explanation.
+
+Not emitting it does not remove the choice: every buildable snippet renders with
+a **build app** button of its own. The marker just offers the decision earlier,
+before the code is written.
 
 ## Fenced blocks are runnable
 

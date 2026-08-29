@@ -218,7 +218,7 @@
 
   function codeBtnFromEvent(target: EventTarget | null): HTMLElement | null {
     const el = target as HTMLElement | null;
-    return el?.closest?.('.cc-copy, .cc-run') ?? null;
+    return el?.closest?.('.cc-copy, .cc-run, .cc-build') ?? null;
   }
 
   function sourceOf(btn: HTMLElement): { code: string; lang: string } | null {
@@ -266,9 +266,33 @@
     if (copyResetTimer) clearTimeout(copyResetTimer);
   });
 
+  /** Set when "build app" is clicked; cleared on confirm or cancel. A build
+   *  costs real money, so the toolbar click only ever arms this bar. */
+  let pendingBuild = $state<{ lang: string } | null>(null);
+
+  function armBuild(btn: HTMLElement): void {
+    const src = sourceOf(btn);
+    if (!src) return;
+    runNotice = null;
+    pendingBuild = { lang: src.lang || 'code' };
+  }
+
+  function confirmBuild(): void {
+    const p = pendingBuild;
+    pendingBuild = null;
+    if (!p || !onSilentSend) return;
+    // The agent already has the snippet and the request that produced it in
+    // context, so the brief is a pointer rather than a paraphrase — restating
+    // the code here would just give it a second, worse copy to work from.
+    void onSilentSend(
+      `Take the ${p.lang} snippet you just wrote and build it as a real app with the autonomous builder — call build_create with a brief describing it.`,
+    );
+  }
+
   function handleCodeBtn(btn: HTMLElement): void {
     if (btn.classList.contains('cc-copy')) void copyCode(btn);
     else if (btn.classList.contains('cc-run')) runCode(btn);
+    else if (btn.classList.contains('cc-build')) armBuild(btn);
   }
 
   function onCiteClick(e: MouseEvent) {
@@ -428,6 +452,14 @@
       >{@html displayHtml}</div>
       {#if runNotice}
         <p class="run-notice">{runNotice}</p>
+      {/if}
+      {#if pendingBuild && onSilentSend}
+        <div class="build-confirm">
+          <span class="bc-q">Build this {pendingBuild.lang} snippet as a real app? That starts an autonomous build.</span>
+          <span class="bc-spacer"></span>
+          <button type="button" class="bc-btn bc-cancel" onclick={() => { pendingBuild = null; }}>Cancel</button>
+          <button type="button" class="bc-btn bc-go" onclick={confirmBuild}>Build it</button>
+        </div>
       {/if}
       {#if unmatchedFileRefs.length > 0 && onOpenFileRef}
         <FileReferenceChips refs={unmatchedFileRefs} onOpen={onOpenFileRef} />
@@ -787,6 +819,16 @@
     background: var(--accent);
     color: var(--bg);
   }
+  /* Petrol, not orange: it sits next to run and must not read as the same kind
+     of action — one previews, the other commissions a build. */
+  .chat-markdown :global(.cc-build) {
+    border-color: var(--accent-ink);
+    color: var(--accent-ink);
+  }
+  .chat-markdown :global(.cc-build:hover) {
+    background: var(--accent-ink);
+    color: var(--bg);
+  }
   /* A language with no runtime still shows the button, greyed — the absence is
      the answer to "why can't I run this", and the title says which runtime. */
   .chat-markdown :global(.cc-run-off) {
@@ -804,6 +846,44 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--warn);
+  }
+
+  .build-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    padding: 8px 12px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-round);
+    background: var(--card-bg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+  }
+  .bc-q { color: var(--text-secondary); }
+  .bc-spacer { flex: 1; }
+  .bc-btn {
+    padding: 4px 12px;
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+  }
+  .bc-btn:hover { opacity: 0.85; }
+  /* Cancelling costs nothing, so it is the quiet default and comes first. */
+  .bc-cancel {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--line-strong);
+  }
+  .bc-go {
+    background: var(--accent);
+    color: var(--bg);
+    border: 1px solid var(--accent);
+    font-weight: 600;
   }
   .chat-markdown :global(ul),
   .chat-markdown :global(ol) {
