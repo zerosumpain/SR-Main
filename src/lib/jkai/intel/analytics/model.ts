@@ -220,3 +220,67 @@ export function resolveEntitySources(
   if (noteSources.length > 0) return [...noteSources];
   return firstSeenSource ? [firstSeenSource] : [];
 }
+
+/**
+ * The entity type that makes an edge a statement about WHERE, not about WHAT.
+ *
+ * Matched on the type NAME rather than an id because ids differ between homeserv
+ * and production, and a rule keyed on a production id would silently do nothing
+ * locally — the same trap the channel-artefact seed documents.
+ */
+export const PLACE_TYPE = 'location';
+
+/**
+ * Relations whose whole content is WHERE something happens to be.
+ *
+ * The narrow reading, arrived at by measuring the wide one. Two things in the
+ * same city are not related; but a route and its stops, or a nature reserve and
+ * the places inside it, ARE — and both are spelled with location relations. The
+ * wide set took 299 edges and would have scattered `Norfolk Broads` (21 pairs)
+ * and the `5.03 km pedestrian loop` (13) into singletons, which is a worse graph,
+ * not a better one.
+ *
+ * So COMPOSITION is deliberately absent — `contains`, `includes`,
+ * `includes_location`, `location_of`, `part_of`, `passes_through`, `route_stop`,
+ * `starts_at`, `ends_at`, `takes_place_in`, `operates_in`. A place made of places
+ * is a real structure. What is left is incidental position: an entity's address,
+ * where it is registered, where somebody happened to be.
+ *
+ * Deliberately checked together with a `location` endpoint rather than on their
+ * own, because several are overwhelmingly non-spatial elsewhere in this graph.
+ *
+ * `owned_by` and `flagged_risk` are the counter-examples and are NOT here: they
+ * touch a location a lot (11 and 10 edges), but only because `Home` had absorbed
+ * the Home Assistant install. That is conflation, and the repair for it is
+ * `splitEntity`, not this.
+ */
+export const SPATIAL_RELATIONS: ReadonlySet<string> = new Set([
+  'located_in', 'located_at', 'based_in', 'resides_in', 'lives_in', 'registered_in',
+  'is_in', 'has_address', 'has_postcode', 'near', 'located_near', 'nearby',
+  'distance', 'visited', 'present_in', 'present_at',
+]);
+
+/**
+ * Is this edge only saying that something is at a place?
+ *
+ * Two things in the same city are not related to each other, but the graph joins
+ * them anyway: `Hany Shoukry based_in London` and `Olympia London located_in
+ * London` put a consultant and a venue in one community, and an eBay seller's
+ * registered address put an order for a Dell micro PC in with the 2026 World Cup.
+ * Co-location is the most common false adjacency in this graph and it is entirely
+ * TRUE — which is why it cannot be fixed by correcting data, only by declining to
+ * cluster on it.
+ *
+ * Requires BOTH a spatial relation and a `location` at the place end. An edge
+ * between two non-places is never co-location however it is named.
+ */
+export function isCoLocationEdge(
+  edge: Pick<GraphEdge, 'type' | 'source' | 'target'>,
+  byId: ReadonlyMap<string, GraphNode>,
+): boolean {
+  if (!SPATIAL_RELATIONS.has(edge.type)) return false;
+  return (
+    byId.get(edge.source)?.typeName === PLACE_TYPE ||
+    byId.get(edge.target)?.typeName === PLACE_TYPE
+  );
+}

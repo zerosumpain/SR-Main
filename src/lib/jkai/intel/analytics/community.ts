@@ -11,6 +11,7 @@
 // it yields a modularity figure that tells you whether the clustering means
 // anything at all.
 import type { AdjacencyIndex } from './model';
+import { isCoLocationEdge, pairKey } from './model';
 
 export interface CommunityResult {
   /** node id → community index. */
@@ -71,6 +72,18 @@ interface WeightedGraph {
   totalWeight: number;
 }
 
+/**
+ * Does anything other than co-location join these two?
+ *
+ * True when the pair has no recorded edges at all, so a caller holding an index
+ * built without them cannot silently lose every pair.
+ */
+function pairIsSubstantive(index: AdjacencyIndex, a: string, b: string): boolean {
+  const edges = index.edgesBetween.get(pairKey(a, b));
+  if (!edges || edges.length === 0) return true;
+  return edges.some((e) => !isCoLocationEdge(e, index.byId));
+}
+
 function toWeighted(index: AdjacencyIndex): { graph: WeightedGraph; order: string[] } {
   const order = [...index.ids];
   const idx = new Map(order.map((id, i) => [id, i]));
@@ -88,6 +101,22 @@ function toWeighted(index: AdjacencyIndex): { graph: WeightedGraph; order: strin
     for (const nb of index.neighbours.get(id) ?? []) {
       const j = idx.get(nb);
       if (j === undefined || j === i) continue;
+      // A pair joined ONLY by co-location is not adjacent for clustering.
+      //
+      // Two things in the same city are not related to each other, but every
+      // edge saying so is true, so this cannot be fixed in the data — only by
+      // declining to cluster on it. `Hany Shoukry based_in London` and
+      // `Olympia London located_in London` put a consultant and a venue in one
+      // community; an eBay seller's registered address put an order for a Dell
+      // micro PC in with the 2026 World Cup.
+      //
+      // Per PAIR, not per edge, and conservative by construction: one
+      // substantive relation anywhere between two nodes and the pair counts
+      // normally. Only a pair whose entire relationship is "both are in London"
+      // is dropped. The edges themselves stay in the snapshot — they are drawn,
+      // walked by path finding, and counted in degree and centrality. This is
+      // the only place that declines to see them.
+      if (!pairIsSubstantive(index, id, nb)) continue;
       adj.get(i)!.set(j, 1);
       if (i < j) totalWeight += 1;
     }

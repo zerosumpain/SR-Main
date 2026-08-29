@@ -5,6 +5,7 @@ import {
   components,
   pairKey,
   resolveEntitySources,
+  isCoLocationEdge,
   type GraphSnapshot,
 } from './model';
 import { betweenness, pagerank, computeCentrality, brokerageScore } from './centrality';
@@ -503,5 +504,92 @@ describe('resolveEntitySources', () => {
     const out = resolveEntitySources(notes, 'email');
     out.push('email');
     expect(notes).toEqual(['chat']);
+  });
+});
+
+describe('isCoLocationEdge', () => {
+  const byId = new Map(
+    [node('london', 'location'), node('hany', 'person'), node('venue', 'organisation')].map((n) => [
+      n.id,
+      n,
+    ]),
+  );
+
+  it('is true for an incidental position with a place at one end', () => {
+    expect(isCoLocationEdge(edge('hany', 'london', 'based_in'), byId)).toBe(true);
+    expect(isCoLocationEdge(edge('venue', 'london', 'located_in'), byId)).toBe(true);
+    // Either end may be the place.
+    expect(isCoLocationEdge(edge('london', 'hany', 'visited'), byId)).toBe(true);
+  });
+
+  it('is false without a place at either end, however the relation is named', () => {
+    // `part_of` has 147 edges in the live graph and only 27 touch a location.
+    // Matching on the relation alone would take out 120 statements about
+    // organisations and systems.
+    expect(isCoLocationEdge(edge('hany', 'venue', 'located_in'), byId)).toBe(false);
+  });
+
+  it('is false for COMPOSITION, which is real structure', () => {
+    // The wide version of this rule scattered `Norfolk Broads` and a running
+    // route into singletons. A place made of places is a cluster worth having.
+    for (const type of ['includes', 'contains', 'route_stop', 'passes_through', 'part_of', 'location_of']) {
+      expect(isCoLocationEdge(edge('london', 'venue', type), byId)).toBe(false);
+    }
+  });
+
+  it('is false for a relation that only LOOKS spatial because of a conflation', () => {
+    // `Home owned_by <device>` touches a location 11 times, but only because the
+    // house had absorbed the Home Assistant install. splitEntity repairs that.
+    expect(isCoLocationEdge(edge('london', 'venue', 'owned_by'), byId)).toBe(false);
+    expect(isCoLocationEdge(edge('london', 'venue', 'flagged_risk'), byId)).toBe(false);
+  });
+});
+
+describe('community detection ignores co-location', () => {
+  // Testing the MECHANISM, not the emergent effect. On a small synthetic graph
+  // Louvain separates a co-location star anyway — the merging this exists to stop
+  // only happens once the place is embedded in a dense real neighbourhood, where
+  // it is not reproducible in a unit test. What IS deterministic is whether the
+  // pair is adjacent at all for clustering purposes, so that is what is asserted.
+  // The effect on the live graph was measured instead: `Hany Shoukry` and
+  // `ebay.co.uk` shared a community before and do not after, and the eBay
+  // cluster went from 60 members to 22.
+
+  it('does not make a pair adjacent when co-location is ALL they share', () => {
+    const snapshot: GraphSnapshot = {
+      nodes: [node('london', 'location'), node('hany', 'person')],
+      edges: [edge('hany', 'london', 'based_in')],
+    };
+    const index = buildIndex(snapshot);
+    const { membership, communities } = detectCommunities(index);
+    // Joined in the graph, not joined for clustering.
+    expect(index.degree.get('london')).toBe(1);
+    expect(index.degree.get('hany')).toBe(1);
+    expect(membership.get('hany')).not.toBe(membership.get('london'));
+    expect(communities.size).toBe(2);
+  });
+
+  it('still clusters a pair that has any substantive edge as well', () => {
+    const snapshot: GraphSnapshot = {
+      nodes: [node('london', 'location'), node('a', 'person')],
+      edges: [
+        edge('a', 'london', 'based_in'),
+        // One real relation anywhere between the two and the pair counts.
+        edge('a', 'london', 'owns'),
+      ],
+    };
+    const { membership } = detectCommunities(buildIndex(snapshot));
+    expect(membership.get('a')).toBe(membership.get('london'));
+  });
+
+  it('leaves a place made of places alone', () => {
+    // Composition is real structure — the wide version of this rule scattered
+    // `Norfolk Broads` into singletons and was measured and rejected.
+    const snapshot: GraphSnapshot = {
+      nodes: [node('broads', 'location'), node('spot', 'location')],
+      edges: [edge('broads', 'spot', 'includes')],
+    };
+    const { membership } = detectCommunities(buildIndex(snapshot));
+    expect(membership.get('spot')).toBe(membership.get('broads'));
   });
 });
