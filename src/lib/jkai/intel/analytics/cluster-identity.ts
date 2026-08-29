@@ -267,6 +267,27 @@ export function reconcileClusters(input: ReconcileInput): ReconcileResult {
     indexForKey.set(pair.key, pair.index);
   }
 
+  // A key filed as a loser can still go on to win a body of its own.
+  //
+  // `indexForKey` cannot prevent that while the pairing runs: it is only set
+  // when a key CLAIMS a body, so at the moment a key loses one, the claim it
+  // will make on another has not happened yet. The pass below is where both
+  // facts are finally known, and a cluster that is about to be the identity of
+  // some other community was plainly not absorbed by this one.
+  //
+  // Left in, it broke the whole roster rather than merely mislabelling it. The
+  // winner retires each of its losers and drops them from `byKey`, so a key
+  // retired here and matched later read as `undefined` when its own community
+  // came round — production, 2026-08-29: recalculation 500'd on
+  // `Cannot read properties of undefined (reading 'members')` and every surface
+  // that reads the roster had been failing with it for three days.
+  for (const [index, keys] of [...losers]) {
+    const absorbed = keys.filter((key) => !indexForKey.has(key));
+    if (absorbed.length === keys.length) continue;
+    if (absorbed.length) losers.set(index, absorbed);
+    else losers.delete(index);
+  }
+
   const changes: ReconcileChanges = {
     created: [],
     matched: [],

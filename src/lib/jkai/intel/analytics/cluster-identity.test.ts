@@ -326,6 +326,45 @@ describe('reconcileClusters', () => {
     expect(r.changes.merged).toEqual(['cl_1']);
   });
 
+  // Production, 2026-08-29: `POST /api/jkai/intel/clusters {action:'recalculate'}`
+  // returned 500 with "Cannot read properties of undefined (reading 'members')",
+  // and every surface that reads the roster had been failing quietly for three
+  // days with it. The cluster was `d0db6f86` "Brett Murphy · House of Lords":
+  // it lost community #13 to a better overlap and then won #24 outright, so the
+  // winner of #13 retired it and deleted it from `byKey` twelve iterations
+  // before #24 came to read it.
+  //
+  // `indexForKey` cannot prevent this on its own — it is only set when a key
+  // CLAIMS a body, and at the moment a key is filed as a loser the claim it will
+  // make later has not happened yet.
+  it('does not absorb a cluster that goes on to win a body of its own', () => {
+    const existing = [
+      // Takes community 0 outright.
+      stored({ key: 'cl_1', members: ids('a', 10) }),
+      // Overlaps community 0 at 0.43 — enough to be a would-be merge, but it
+      // loses to cl_1 — and community 1 at 0.36, which it wins.
+      stored({ key: 'cl_2', members: [...ids('a', 6), ...ids('b', 4)] }),
+    ];
+    const r = reconcileClusters({
+      ...base,
+      detected: new Map([
+        [0, ids('a', 10)],
+        [1, ids('b', 5)],
+      ]),
+      stored: existing,
+      mintKey: mint(),
+    });
+
+    const live = r.clusters.filter((c) => c.live);
+    expect(live.map((c) => c.key).sort()).toEqual(['cl_1', 'cl_2']);
+    // Still here, so nothing absorbed it and nothing retired it.
+    expect(r.clusters.filter((c) => c.key === 'cl_2')).toHaveLength(1);
+    expect(r.clusters.find((c) => c.key === 'cl_1')!.mergedFrom).toEqual([]);
+    expect(r.changes.merged).toEqual([]);
+    expect(r.changes.retired).toEqual([]);
+    expect(r.keyByIndex.get(1)).toBe('cl_2');
+  });
+
   it('retires a cluster that has gone, without deleting its record', () => {
     const first = reconcileClusters({
       ...base,
