@@ -41,10 +41,82 @@ import type { ModelContext } from './types';
  * matters because the extraction role is called per note during ingest.
  */
 export async function resolveWorkloadModel(def: WorkloadDef): Promise<ModelContext> {
+  const session = await sessionModelForWorkload(def);
+  if (session) return session;
   const v = await getSetting<{ provider?: string; modelId?: string } | null>(def.key);
   if (v?.modelId) return coerceModelContext({ modelId: v.modelId });
   if (def.fallbackModelId) return coerceModelContext({ modelId: def.fallbackModelId });
   return resolveDefaultModel();
+}
+
+/**
+ * The chat session's pinned model, when this role can actually run on it.
+ *
+ * A model chosen in the /jkai composer is meant to serve the whole session, not
+ * just the reply — the tools it calls, the builds it starts, and the roles those
+ * reach. This is where every site workload opts in, so the answer is the same
+ * everywhere instead of being decided one call site at a time.
+ *
+ * Two things make it safe to put in front of the pin and the fallback:
+ *
+ * 1. **It is null unless the OWNER chose.** The store is only populated for a
+ *    thread whose `model_pinned_by_user` is set. Every scheduled job, nightly
+ *    pass, workflow run and unpinned thread has no store at all and resolves
+ *    exactly as it did before.
+ * 2. **It is withdrawn when the role needs something the model has not got.**
+ *    `def.requires` already states each role's capability — the registry the
+ *    picker filters on — so the check is the registry's own, not a second
+ *    opinion about it. A text-only pin reaching the vision role does not
+ *    degrade an extract, it FAILS one, and a failed extract stamps the file's
+ *    hash so a later fix re-indexes nothing.
+ *
+ * `embeddings` can never pass, and that is deliberate rather than an oversight:
+ * no chat model in the catalogue is an embedding model, and vectors from a
+ * mismatched one land in a fixed-dimension column that cannot hold them.
+ */
+async function sessionModelForWorkload(def: WorkloadDef): Promise<ModelContext | null> {
+  const { currentSessionModel } = await import('$lib/context/chat');
+  const pinned = currentSessionModel();
+  if (!pinned) return null;
+
+  switch (def.requires) {
+    // Chat models, which is what the picker offers — the pin is one by
+    // construction. `null` is a role with no requirement at all.
+    case 'tools':
+    case null:
+      return pinned;
+    case 'image-input':
+      return getModelCapabilities(pinned).image ? pinned : null;
+    case 'audio-input':
+      return getModelCapabilities(pinned).audio ? pinned : null;
+    case 'image-output':
+      return (await modelEmitsImages(pinned)) ? pinned : null;
+    // See the note above: not a gate that happens to fail, a role the session
+    // model is the wrong KIND of thing for.
+    case 'embeddings':
+      return null;
+    default:
+      return null;
+  }
+}
+
+/** Whether the catalogue says this model emits images. False on a lookup
+ *  failure — this sits on the generation path and must fall back, not throw. */
+async function modelEmitsImages(ctx: ModelContext): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ modality: openrouterModels.modality })
+      .from(openrouterModels)
+      .where(eq(openrouterModels.id, ctx.modelId))
+      .limit(1);
+    return emitsImages(row?.modality);
+  } catch (err) {
+    console.warn(
+      `[models] modality lookup failed for ${ctx.modelId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
 }
 
 /** Look a workload up by id and resolve it. Throws on an unknown id — these are
@@ -95,6 +167,11 @@ export const resolveDoctorModel = () => resolveById('doctor');
  */
 export async function resolveVisionModel(): Promise<ModelContext> {
   const def = SITE_WORKLOADS.find((w) => w.id === 'vision')!;
+  // Ahead of the explicit pin for the same reason it is in resolveWorkloadModel:
+  // a session model the owner chose serves the whole session. Gated on
+  // `requires: 'image-input'`, so a text-only chat model never reaches here.
+  const session = await sessionModelForWorkload(def);
+  if (session) return session;
   const pinned = await getSetting<{ provider?: string; modelId?: string } | null>(def.key);
   if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
 
@@ -132,6 +209,11 @@ export const resolveImageModel = () => resolveById('image');
  */
 export async function resolveImageToolModel(): Promise<ModelContext> {
   const def = SITE_WORKLOADS.find((w) => w.id === 'image-tool')!;
+  // Gated on `requires: 'image-output'` — a chat model that only emits text
+  // never reaches here, so the session pin cannot turn image generation into a
+  // 400 on a thread that happened to be on a text model.
+  const session = await sessionModelForWorkload(def);
+  if (session) return session;
   const pinned = await getSetting<{ modelId?: string } | null>(def.key);
   if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
   const fromEnv = envModelFor(def);

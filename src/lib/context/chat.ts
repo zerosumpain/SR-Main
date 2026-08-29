@@ -44,6 +44,8 @@
  * confident wrong number is worse in a ledger than an honest blank.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { ModelContext } from '$lib/constants/model-context';
+import type { ThinkingLevel } from '$lib/models/thinking';
 
 /**
  * Running totals for one turn, accumulated across every round it makes.
@@ -96,6 +98,35 @@ export interface ChatCallContext {
   conversationId?: string;
   /** Mutable running total, when the caller wants one back. */
   usage?: ChatUsageTotals;
+  /**
+   * The model the OWNER pinned for this session, or absent when the thread is
+   * running on a stamped site default.
+   *
+   * Present means every LLM call the turn makes should run on it — not just the
+   * reply. That is the whole point of the picker: before this existed the
+   * override reached the chat loop and its sub-agents and nothing else, so a
+   * turn pinned to one model would summarise a research report, compact its own
+   * history, review its memories and read an attached PDF on a completely
+   * different one, with the UI and the price snapshot both claiming otherwise.
+   *
+   * Absent for a thread nobody pinned, which is the common case. Each role then
+   * resolves the LIVE site default as it always did — see `model_pinned_by_user`
+   * in the schema for why a stamped default must not propagate.
+   *
+   * Rides the AsyncLocalStorage for the reason the rest of this file does: the
+   * OCR pass on an attachment is many frames below the code that knows which
+   * thread it serves, and those frames are shared with the nightly indexer,
+   * which has no thread at all.
+   *
+   * **Reaches only what runs INSIDE the turn.** Work that outlives it — a
+   * build, a studio build, a change request — is started and then abandoned by
+   * the turn that asked for it and runs later in a sidecar with no async context
+   * at all, so its model has to be written onto its row at creation. Those read
+   * the pin from `ToolExecContext.modelContext` instead.
+   */
+  sessionModel?: ModelContext;
+  /** The thread's reasoning effort, carried for the same reason as the model. */
+  sessionThinkingLevel?: ThinkingLevel | null;
 }
 
 const chatCtx = new AsyncLocalStorage<ChatCallContext>();
@@ -157,4 +188,26 @@ export function noteChatRound(round: {
 export function currentChatSessionId(): string | null {
   const store = chatCtx.getStore();
   return store?.jobId ?? store?.conversationId ?? null;
+}
+
+/**
+ * The model the owner pinned for the session this code is running inside, or
+ * null when there is no session or the thread was never pinned.
+ *
+ * The one call every role makes to opt in. Use it as the FIRST choice and keep
+ * the role's own resolution as the fallback:
+ *
+ *     const ctx = currentSessionModel() ?? (await resolveDefaultModel());
+ *
+ * written that way round so a role behaves exactly as it used to whenever there
+ * is no pin — which is every scheduled job, every nightly pass, and every thread
+ * the owner did not touch the picker on.
+ */
+export function currentSessionModel(): ModelContext | null {
+  return chatCtx.getStore()?.sessionModel ?? null;
+}
+
+/** The session's reasoning effort, or null outside a pinned session. */
+export function currentSessionThinkingLevel(): ThinkingLevel | null {
+  return chatCtx.getStore()?.sessionThinkingLevel ?? null;
 }

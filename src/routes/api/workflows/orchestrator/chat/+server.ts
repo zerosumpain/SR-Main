@@ -348,6 +348,13 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // Resolve the model pinned at conversation creation (or admin default).
         // Workflow-context chats (workflowId present) use the builder model; general /jkai chats use the chat model.
         let modelContext: ModelContext = await resolveDefaultModel();
+        // Non-null ONLY when the owner chose the model in the picker. That is
+        // what makes the rest of the session follow it — tools, sub-agents,
+        // recall, compaction, OCR on an attachment, and any build this turn
+        // starts. A thread simply stamped with the site default at creation
+        // leaves this null, and every one of those keeps resolving its own model
+        // exactly as before.
+        let sessionModel: ModelContext | null = null;
         let priceSnapshot: PriceSnapshot | null = null;
         // The thread's own thinking level. Null for a thread that predates the
         // control, or one left on "auto" — both mean "send no reasoning field".
@@ -365,6 +372,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
               provider: conv.modelProvider,
               modelId: conv.modelId,
             });
+            if (conv.modelPinnedByUser) sessionModel = modelContext;
             priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
             thinkingLevel = isThinkingLevel(conv.thinkingLevel) ? conv.thinkingLevel : null;
           }
@@ -375,7 +383,8 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // question is "which model answered".
         console.log(
           `[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId}` +
-            ` thinking=${thinkingLevel ?? 'auto'} (kind=${contextKind})`,
+            ` thinking=${thinkingLevel ?? 'auto'} session=${sessionModel ? 'pinned' : 'default'}` +
+            ` (kind=${contextKind})`,
         );
 
         // Wall-clock for the whole turn, all rounds and tools included — the
@@ -419,6 +428,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
             publishJobEvent(jobId, event);
           },
           modelContext,
+          sessionModel,
           thinkingLevel,
           priceSnapshot,
           useIntelContext: useIntelContext !== false,

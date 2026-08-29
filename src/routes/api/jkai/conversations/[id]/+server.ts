@@ -241,7 +241,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	const [updated] = await db
 		.update(conversations)
-		.set({ modelProvider, modelId, priceSnapshot })
+		.set({ modelProvider, modelId, priceSnapshot, modelPinnedByUser: true })
 		.where(eq(conversations.id, params.id))
 		.returning();
 

@@ -3,6 +3,7 @@ import { intelNotes, intelAlerts } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { currentSessionModel } from '$lib/context/chat';
 
 interface SimilarNote {
   id: string;
@@ -80,7 +81,7 @@ async function evaluateConnections(
 ): Promise<EvaluatedConnection[]> {
   if (similarNotes.length === 0 && similarEntities.length === 0) return [];
 
-  const modelCtx = await resolveDefaultModel();
+  const modelCtx = currentSessionModel() ?? (await resolveDefaultModel());
   const { client, model } = await getLLMClient(modelCtx);
 
   const notesContext = similarNotes

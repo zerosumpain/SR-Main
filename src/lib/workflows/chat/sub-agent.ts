@@ -1,6 +1,7 @@
 import { createJob, publishJobEvent, subscribeJob } from './job-store';
 import type { JobEvent } from './job-store';
 import type { ModelContext } from '$lib/server/models/types';
+import type { ThinkingLevel } from '$lib/models/thinking';
 
 export interface AgentSpawnArgs {
   task: string;
@@ -66,6 +67,16 @@ export async function runSubAgent(
   parentJobId: string,
   args: AgentSpawnArgs,
   modelContext: ModelContext,
+  /**
+   * The parent session's pin and reasoning effort.
+   *
+   * `modelContext` alone was never enough. It said which model to call and
+   * nothing about how hard to make it think, so a thread set to `high` dropped
+   * silently back to the provider default the moment it delegated — and the
+   * child's own tools resolved their models from the site default rather than
+   * from the session, because the pin never reached the child's ambient context.
+   */
+  session?: { sessionModel?: ModelContext | null; thinkingLevel?: ThinkingLevel | null },
 ): Promise<{ agentId: string; summary: string; result: { text: string } }> {
   const agentId = crypto.randomUUID();
   const task = (args.task ?? '').trim();
@@ -104,6 +115,8 @@ export async function runSubAgent(
         jobId: childJobId,        // give the child its own scope for events
         onStreamEvent: (e: JobEvent) => publishJobEvent(childJobId, e),
         modelContext,
+        sessionModel: session?.sessionModel ?? null,
+        thinkingLevel: session?.thinkingLevel ?? null,
         priceSnapshot: null,
         useIntelContext: false,
         subagentDepth: 1,         // mark this call as a sub-agent

@@ -98,6 +98,8 @@ register({
         // Link the build back to the chat that asked for it, so the
         // build-progress watcher can see it at all.
         conversationId: toolCtx?.conversationId,
+        // And build on that chat's model when it pinned one.
+        modelContext: toolCtx?.modelContext,
       });
 
       return {

@@ -215,6 +215,20 @@ interface ChatOptions {
   onToolProgress?: (step: ToolProgress) => void;
   onStreamEvent?: (event: JobEvent) => void;
   modelContext: ModelContext;
+  /**
+   * The model the OWNER pinned in the picker, or null when the thread is simply
+   * running on whatever the site default was when it was opened.
+   *
+   * Distinct from `modelContext`, which is always set and always answers the
+   * reply. This one decides whether the REST of the session follows: recall,
+   * compaction, memory review, research formatting, OCR on an attachment, and
+   * the model stamped onto any build the turn starts. Null leaves every one of
+   * those resolving its own model exactly as before.
+   *
+   * Set by the route from `jkai_conversations.model_pinned_by_user`; see that
+   * column for why a stamped default must not propagate.
+   */
+  sessionModel?: ModelContext | null;
   /** How hard to tell the model to think, from the conversation's own setting.
    *  Null/undefined sends no reasoning field, leaving the provider's default —
    *  which is what every turn did before the chip existed. */
@@ -323,6 +337,10 @@ interface RunToolContext {
   workflowId?: string | null;
   parentJobId?: string | null;
   modelContext?: ModelContext;
+  /** The owner's pin, or null on a thread running the stamped default. Handed to
+   *  tools whose work outlives the turn so they can persist it on their row. */
+  sessionModel?: ModelContext | null;
+  thinkingLevel?: ThinkingLevel | null;
   subagentDepth?: number;
   toolWhitelist?: string[];
 }
@@ -429,7 +447,13 @@ async function runSingleToolCall(
       try {
         const { runSubAgent } = await import('./sub-agent');
         const agentArgs = fnArgs as unknown as { task: string; tools?: string[] };
-        const out = await runSubAgent(ctx.parentJobId, agentArgs, ctx.modelContext);
+        // Thinking level rides along with the model. A thread turned up to
+        // `high` that farms half its work out to a sub-agent running on the
+        // provider default has not been turned up at all.
+        const out = await runSubAgent(ctx.parentJobId, agentArgs, ctx.modelContext, {
+          sessionModel: ctx.sessionModel ?? null,
+          thinkingLevel: ctx.thinkingLevel ?? null,
+        });
         toolResult = { success: true, data: out };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -443,11 +467,19 @@ async function runSingleToolCall(
     // callback publishes a `status` event onto the job's SSE stream, which
     // also resets the idle watchdog and the heartbeat ticker's currentStep.
     const jobId = ctx.parentJobId;
+    // The session pin travels on both branches. Undefined rather than null when
+    // absent: `ToolExecContext.modelContext` is optional, and a tool reads it as
+    // "did the owner choose one", so an explicit null would only add a second
+    // spelling of no.
+    const sessionModel = ctx.sessionModel ?? undefined;
+    const sessionThinking = ctx.sessionModel ? (ctx.thinkingLevel ?? null) : null;
     const toolCtx = jobId
       ? {
           jobId,
           conversationId: conversationId ?? undefined,
           workflowId: workflowId ?? null,
+          modelContext: sessionModel,
+          thinkingLevel: sessionThinking,
           emit: (text: string) => {
             const trimmed = text.trim().slice(0, 200);
             if (!trimmed) return;
@@ -456,7 +488,13 @@ async function runSingleToolCall(
           },
         }
       : (conversationId || workflowId
-          ? { conversationId: conversationId ?? undefined, workflowId: workflowId ?? null, emit: () => {} }
+          ? {
+              conversationId: conversationId ?? undefined,
+              workflowId: workflowId ?? null,
+              modelContext: sessionModel,
+              thinkingLevel: sessionThinking,
+              emit: () => {},
+            }
           : undefined);
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
     if (isDestructive(fnName)) {
@@ -733,6 +771,11 @@ export async function generalChat(
         jobId: options.jobId ?? undefined,
         conversationId: options.conversationId ?? undefined,
         usage,
+        // Everything the turn spawns, several frames down and through code that
+        // has no idea a chat exists, reads the pin from here. Only set when the
+        // owner actually chose — see ChatOptions.sessionModel.
+        sessionModel: options.sessionModel ?? undefined,
+        sessionThinkingLevel: options.sessionModel ? (options.thinkingLevel ?? null) : null,
       },
       () => runGeneralChat(input, conversationHistory, options, () => ack?.cancel()),
     );
@@ -1525,6 +1568,8 @@ async function runGeneralChat(
         workflowId: options.workflowId ?? null,
         parentJobId: options.jobId ?? null,
         modelContext: options.modelContext,
+        sessionModel: options.sessionModel ?? null,
+        thinkingLevel: options.thinkingLevel ?? null,
         subagentDepth: options.subagentDepth ?? 0,
         toolWhitelist: options.toolWhitelist,
       })),
