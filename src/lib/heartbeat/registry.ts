@@ -22,6 +22,7 @@ import { daydreamIntelBridge } from './activities/daydream-intel';
 import { daydreamMail } from './activities/daydream-mail';
 import { daydreamPonder } from './activities/daydream-ponder';
 import { daydreamWeekly } from './activities/daydream-weekly';
+import { geoTerritory } from './activities/geo-territory';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -52,6 +53,7 @@ const handlers: ActivityHandler[] = [
   daydreamIntelBridge,
   daydreamPonder,
   daydreamWeekly,
+  geoTerritory,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));
