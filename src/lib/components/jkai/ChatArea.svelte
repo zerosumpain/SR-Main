@@ -83,9 +83,6 @@
     useIntelContext = true,
     activeBuild = null,
     approvalUi,
-    onToggleThreadRail,
-    onToggleGraphRail,
-    graphRailOpen = true,
     active = true,
     onbusychange,
   }: {
@@ -126,10 +123,7 @@
     activeBuild?: { id: string; status: string } | null;
     approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
     /** Raise the thread rail's slide-over (below 1100px it is off-canvas). */
-    onToggleThreadRail?: () => void;
     /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
-    onToggleGraphRail?: () => void;
-    graphRailOpen?: boolean;
     /**
      * False when this pane is a background tab — mounted and streaming, but not
      * the one on screen. It suppresses the things that only make sense for the
@@ -2016,9 +2010,6 @@
       .filter((s): s is TurnStamp => s !== null),
   );
   const threadTurns = $derived(messages.filter((m) => m.role === 'assistant' && !m.isProgress).length);
-  const threadTokens = $derived(
-    turnStamps.reduce((sum, s) => sum + s.inputTokens + s.outputTokens, 0),
-  );
   const threadCostUsd = $derived(
     turnStamps.length > 0
       ? turnStamps.reduce((sum, s) => sum + s.costUsd, 0)
@@ -2030,7 +2021,6 @@
   const contextTokens = $derived(
     turnStamps.length > 0 ? turnStamps[turnStamps.length - 1].inputTokens : null,
   );
-  const threadTitle = $derived(conversation?.title?.trim() || 'new thread');
 
   $effect(() => {
     // The hub header carries ONE thread's numbers, so only the pane on screen
@@ -2613,51 +2603,17 @@
 {/snippet}
 
 <div class="chat-col">
-  <!-- Thread header: title, then the thread's own ledger line. -->
-  <div class="thread-hdr">
-    <div class="th-left">
-      <div class="th-title">
-        {#if onToggleThreadRail}
-          <button type="button" class="th-rail-btn" onclick={onToggleThreadRail} aria-label="Threads">≡</button>
-        {/if}
-        <span class="th-mark" aria-hidden="true">&gt;</span>{conversationId ? threadTitle : 'no thread'}
-      </div>
-      {#if conversationId}
-        <div class="th-meta">
-          <span>{shortModelLabel(currentModel.modelId)}</span>
-          <span class="th-sep" aria-hidden="true">/</span>
-          <span>{threadTurns} {threadTurns === 1 ? 'turn' : 'turns'}</span>
-          {#if threadTokens > 0}
-            <span class="th-sep" aria-hidden="true">/</span>
-            <span>{threadTokens >= 1000 ? `${(threadTokens / 1000).toFixed(1)}K` : threadTokens} tok</span>
-          {/if}
-          <span class="th-sep" aria-hidden="true">/</span>
-          <span class="th-cost">{formatGbp(threadCostUsd)}</span>
-        </div>
-      {/if}
+  <!-- No thread header. It carried the title, the model, the turn count and the
+       thread cost — the tab strip above names the thread, and the hub header and
+       the ledger rail already carry the numbers — so it was a row of screen
+       spent on repetition. Its two controls moved into the tab strip; the
+       heartbeat marker floats, because it is a transient notice and appears on
+       almost no turn. -->
+  {#if conversationId && heartbeatEntries.length > 0}
+    <div class="thread-tools">
+      <HeartbeatMarker entries={heartbeatEntries} variant="header" />
     </div>
-    <div class="th-actions">
-      {#if conversationId}
-        {#if heartbeatEntries.length > 0}
-          <!-- One marker for the session, latest beat showing. -->
-          <HeartbeatMarker entries={heartbeatEntries} variant="header" />
-        {/if}
-        {#if onToggleGraphRail}
-          <button
-            type="button"
-            class="th-chip th-graph-btn"
-            class:on={graphRailOpen}
-            onclick={onToggleGraphRail}
-            title="Knowledge graph for this thread"
-          >
-            ◆ graph
-          </button>
-        {/if}
-        <a class="th-chip" href="/jkai/canvas" title="Open the workflow canvas">→ canvas</a>
-      {/if}
-    </div>
-  </div>
-
+  {/if}
 
   <!-- Messages -->
   <div bind:this={chatContainer} class="msg-list" onscroll={onListScroll} use:stickyBottom>
@@ -3418,113 +3374,22 @@
     height: 100%;
   }
 
-  /* Thread header — title, ledger line, actions. */
-  .thread-hdr {
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 11px 20px;
-    border-bottom: 1px solid var(--line-hair);
-  }
-  .th-left {
-    min-width: 0;
-  }
-  .th-title {
-    display: flex;
-    align-items: baseline;
-    gap: 0.45ch;
-    font-family: var(--font-brand);
-    font-size: var(--fs-body);
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .th-mark {
-    color: var(--accent);
-    opacity: 0.7;
-  }
-  .th-meta {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    margin-top: 5px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-  }
-  .th-sep {
-    opacity: 0.4;
-  }
-  .th-cost {
-    color: var(--accent);
-  }
-  .th-actions {
+  /* What is left of the thread header: a transient heartbeat notice, floated
+     over the top-right of the transcript so it costs the column no height. It
+     renders on almost no turn, which is why it does not warrant a row. */
+  .thread-tools {
+    position: absolute;
+    top: 8px;
+    right: 16px;
+    z-index: 4;
     display: flex;
     align-items: center;
     gap: 6px;
-    flex: none;
-  }
-  .th-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 5px 9px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sharp);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--text-muted);
-    text-decoration: none;
-    transition: color 0.2s ease-out, border-color 0.2s ease-out;
-  }
-  .th-chip:hover {
-    color: var(--accent);
-    border-color: var(--accent-tint-35);
-  }
-  .th-graph-btn {
-    background: transparent;
-    cursor: pointer;
-  }
-  .th-graph-btn.on {
-    color: var(--accent);
-    border-color: var(--accent-tint-35);
-    background: var(--accent-tint-08);
-  }
-  /* The graph toggle only means anything once the rail is collapsible. */
-  @media (min-width: 1280px) {
-    .th-graph-btn {
-      display: none;
-    }
-  }
-  /* Thread-rail raise button appears only when the rail is off-canvas. */
-  .th-rail-btn {
-    display: none;
-    background: none;
-    border: none;
-    padding: 0 8px 0 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-body);
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-  .th-rail-btn:hover {
-    color: var(--accent);
-  }
-  @media (max-width: 1099px) {
-    .th-rail-btn {
-      display: inline;
-    }
+    padding: 3px 6px;
+    /* Opaque: the transcript scrolls underneath it. --card-bg is a 7% tint and
+       would let a message read straight through. */
+    background: var(--surface-elevated);
+    border: 1px solid var(--line-hair);
   }
 
   /* Message list — the only scrolling region in the column. */
@@ -4674,19 +4539,17 @@
 
   /* ── Phone (2a) ───────────────────────────────────────────────────────── */
   @media (max-width: 799px) {
-    .thread-hdr {
-      padding: 10px 16px;
-    }
     .msg-list {
       padding: 12px 16px;
+    }
+    .thread-tools {
+      top: 6px;
+      right: 12px;
     }
     /* The hairline divider carries the separation on a phone — 16px of extra air
        under every turn was a third of a short reply's height. */
     .msg-stack > .msg-slot {
       padding-bottom: 8px;
-    }
-    .th-chip {
-      display: none;
     }
     /* Chips reduce to glyphs and the row scrolls rather than wrapping. */
     .chip-row {

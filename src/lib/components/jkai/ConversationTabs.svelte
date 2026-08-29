@@ -10,6 +10,9 @@
     onClose,
     onNew,
     onCycle,
+    onToggleRail,
+    onToggleGraph,
+    graphOpen = false,
   }: {
     tabs: TabView[];
     activeId: string | null;
@@ -19,6 +22,13 @@
     onClose: (id: string) => void;
     onNew: () => void;
     onCycle: (delta: 1 | -1) => void;
+    /** Show/hide the thread rail. It is off-canvas at ≤1099px and this is the
+     *  only way back to it — the thread header that used to carry the control
+     *  is gone. */
+    onToggleRail?: () => void;
+    /** Show/hide the knowledge-graph rail for the open thread. */
+    onToggleGraph?: () => void;
+    graphOpen?: boolean;
   } = $props();
 
   const ACTIVITY_WORD: Record<TabActivity, string> = {
@@ -58,6 +68,15 @@
      read as a background gap rather than as the top of the conversation. -->
 <div class="tab-strip" role="tablist" aria-label="Open conversations">
   <div class="strip-row">
+    {#if onToggleRail}
+      <button
+        type="button"
+        class="strip-btn rail-btn"
+        onclick={onToggleRail}
+        aria-label="Threads"
+        title="Show threads">≡</button
+      >
+    {/if}
     <div class="cells">
       {#each tabs as tab (tab.id)}
         <div class="cell" class:current={tab.id === activeId} title={tab.title}>
@@ -107,6 +126,17 @@
     >
       +
     </button>
+
+    {#if onToggleGraph}
+      <button
+        type="button"
+        class="strip-btn graph-btn"
+        class:on={graphOpen}
+        onclick={onToggleGraph}
+        aria-label="Knowledge graph for this thread"
+        title="Knowledge graph for this thread">◆</button
+      >
+    {/if}
   </div>
 
   <!-- Its own row, never a cell in the strip. As a `flex: none` sibling of the
@@ -145,6 +175,52 @@
   }
   .cells::-webkit-scrollbar {
     display: none;
+  }
+
+  /* The two controls that used to sit in the thread header under this strip.
+     That row also carried the model, the turn count and the thread cost — all
+     of which the hub header and the ledger rail already say — so the row went
+     and the controls that had no other home came up here. */
+  .strip-btn {
+    flex: none;
+    width: 38px;
+    background: transparent;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    line-height: 1;
+    color: var(--text-ghost);
+    cursor: pointer;
+    transition: color 0.2s var(--ease-out);
+  }
+  .strip-btn:hover {
+    color: var(--accent);
+  }
+  .rail-btn {
+    border-right: 1px solid var(--line-hair);
+    /* Above 1099px the rail is docked and there is nothing to toggle. */
+    display: none;
+  }
+  @media (max-width: 1099px) {
+    .rail-btn {
+      display: block;
+    }
+  }
+  /* Pinned to the far edge rather than sitting against `+`: it acts on the rail
+     on the other side of the pane, not on the tabs. */
+  .graph-btn {
+    margin-left: auto;
+    border-left: 1px solid var(--line-hair);
+  }
+  .graph-btn.on {
+    color: var(--accent);
+  }
+  /* Phone: the bottom tab bar already carries GRAPH, and there is no rail to
+     open — it is a sheet. */
+  @media (max-width: 799px) {
+    .graph-btn {
+      display: none;
+    }
   }
 
   .cell {
