@@ -329,6 +329,20 @@ export const geoTerritory: ActivityHandler = {
           `${fmt(report.totalEventsWritten)}/${fmt(report.totalEventsProposed)} events new, ` +
           `${fmt(report.tilesTouched)} cells`,
       );
+      // The interior fill, said out loud. `fillTiles` is ground won by
+      // enclosure rather than by treading, and `fillOutingsCapped` is the guard
+      // rail firing — a journey whose interior was over the per-journey ceiling
+      // and was therefore paid NOTHING. A steady non-zero there is the vehicle
+      // gates leaking or the cap wanting a retune, and this line is the only
+      // place either would ever be noticed.
+      if (report.fillTiles || report.fillOutingsCapped) {
+        bits.push(
+          `fill ${fmt(report.fillTiles)} cells` +
+            (report.fillOutingsCapped
+              ? `, ${fmt(report.fillOutingsCapped)} capped (${fmt(report.fillInteriorRejected)} cells refused)`
+              : ''),
+        );
+      }
     } else {
       bits.push(`ingest failed: ${ingestError}`);
     }

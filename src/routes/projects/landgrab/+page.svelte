@@ -11,7 +11,14 @@
   import TerritoryMap from './TerritoryMap.svelte';
   import CaptureFeed from './CaptureFeed.svelte';
   import LandgrabBoards from './LandgrabBoards.svelte';
-  import { activityLabel, km2, relativeAge, UNTYPED_LABEL } from './identity';
+  import {
+    activityLabel,
+    km2,
+    relativeAge,
+    windowPhrase,
+    DATE_WINDOWS,
+    UNTYPED_LABEL,
+  } from './identity';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -44,6 +51,8 @@
     ]),
   );
   const selectedSubjects = $derived(new Set(lg.selected.subjects));
+  const selectedWindow = $derived(lg.selected.window);
+  const windowLine = $derived(windowPhrase(lg.selected.window));
   const missingPlayers = $derived(Math.max(0, 5 - lg.standings.length));
   /** Empty seats are drawn, not summarised. Four of five players have no
    *  history until the household backfill runs, and a board that hid that
@@ -54,13 +63,17 @@
 
   /** Filter state lives in the URL, so the page's own guard is also the
    *  filter's gate — nothing new to add to an allow-list and forget. */
-  async function apply(next: { activities?: string[]; subjects?: string[] }) {
+  async function apply(next: { activities?: string[]; subjects?: string[]; window?: string }) {
     const params = new URLSearchParams();
     const acts = next.activities ?? [...selectedActivityKeys];
     const subs = next.subjects ?? [...selectedSubjects];
+    const win = next.window ?? selectedWindow;
     const allActs = chips.map((c) => c.key);
     if (acts.length !== allActs.length) params.set('activity', acts.join(','));
     if (subs.length !== lg.available.subjects.length) params.set('who', subs.join(','));
+    // All time is the default and stays out of the URL, so the unfiltered page
+    // keeps the bare address it had before the window existed.
+    if (win !== 'all') params.set('window', win);
     const qs = params.toString();
     applying = true;
     try {
@@ -74,6 +87,13 @@
     const next = new Set(selectedActivityKeys);
     next.has(key) ? next.delete(key) : next.add(key);
     void apply({ activities: [...next] });
+  }
+
+  /** One at a time — a window is a choice, not a set, so re-picking the active
+   *  one is a no-op rather than a toggle back to all time. */
+  function pickWindow(key: string) {
+    if (key === selectedWindow) return;
+    void apply({ window: key });
   }
 
   function toggleSubject(subject: string) {
@@ -106,8 +126,11 @@
       <p class="hdr-stat">
         <span class="metric-label muted">Ground in play</span>
         <span class="hdr-num">{km2(lg.totals.areaM2)}<span class="hdr-unit">km²</span></span>
-        <span class="metric-label muted">
-          {lg.totals.cells.toLocaleString('en-GB')} cells · read {relativeAge(lg.generatedAt, now)}
+        <span class="metric-label muted hdr-sub">
+          {lg.totals.cells.toLocaleString('en-GB')} cells · {windowLine} · read {relativeAge(
+            lg.generatedAt,
+            now,
+          )}
         </span>
       </p>
     </div>
@@ -144,7 +167,7 @@
           <p class="stand-week">
             <span class="up">+{km2(s.gainedM2)}</span>
             <span class="down">−{km2(s.lostM2)}</span>
-            <span class="metric-label">this week</span>
+            <span class="metric-label">vs a week ago</span>
           </p>
         </article>
       {/each}
@@ -189,6 +212,22 @@
         </div>
       </div>
       <div class="tool-group">
+        <span class="metric-label">Captured within</span>
+        <div class="chips" role="radiogroup" aria-label="Date window">
+          {#each DATE_WINDOWS as w (w.key)}
+            <button
+              type="button"
+              class="chip"
+              role="radio"
+              class:on={selectedWindow === w.key}
+              aria-checked={selectedWindow === w.key}
+              onclick={() => pickWindow(w.key)}
+              disabled={applying}>{w.label}</button
+            >
+          {/each}
+        </div>
+      </div>
+      <div class="tool-group">
         <span class="metric-label">Players</span>
         <div class="chips">
           {#each roster as p (p.subject)}
@@ -207,7 +246,13 @@
         </div>
       </div>
       <p class="tool-note">
-        {#if lg.filterActive}
+        {#if lg.window.key !== 'all'}
+          Ownership is <b>replayed</b> over {windowLine} only, not hidden on the
+          map: a cell somebody won in June and somebody else walked on Tuesday
+          changes hands here. {#if lg.window.cellsOutsideWindow > 0}<b
+              >{lg.window.cellsOutsideWindow.toLocaleString('en-GB')} cells</b
+            > sit outside it.{:else}Every cell anyone holds falls inside it.{/if}
+        {:else if lg.filterActive}
           Ownership is being replayed over the filtered ledger, not read off the
           stored map — a cell won by bike does not survive a foot-only view.
         {:else}
@@ -235,12 +280,16 @@
             </li>
           {/each}
           {#if lg.territory.length === 0}
-            <li class="legend-none">No ground matches this filter.</li>
+            <li class="legend-none">
+              {lg.window.key === 'all'
+                ? 'No ground matches this filter.'
+                : `Nobody captured anything in ${windowLine}.`}
+            </li>
           {/if}
         </ul>
       </div>
       <aside class="stage-rail">
-        <CaptureFeed feed={lg.feed} players={lg.players} {now} />
+        <CaptureFeed feed={lg.feed} players={lg.players} window={lg.window} {now} />
         <section class="rules" aria-label="How ground is won">
           <header class="rules-hd"><span class="metric-label">How ground is won</span></header>
           <ol class="rules-list">
@@ -258,6 +307,7 @@
       players={lg.players}
       dangle={lg.dangle}
       feed={lg.feed}
+      window={lg.window}
       {now}
     />
 
@@ -266,6 +316,14 @@
       map shows dissolved, smoothed ground, never the grid. A capture decays with
       a thirty-day half-life, so ground gets cheaper to steal but never changes
       hands on its own — somebody has to actually go there.
+      {#if lg.window.key !== 'all'}
+        The date window narrows the evidence, not the picture: the map, every
+        board, the capture feed and the ground-in-play figure all answer over
+        {windowLine}. The gained and lost columns are the one thing measured
+        against something else — they compare this window with {lg.window
+          .weekBasis}, because a narrowed present held against an unnarrowed
+        week ago would report movement nobody made.
+      {/if}
     </p>
   {/if}
 </div>
@@ -335,6 +393,16 @@
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
     color: var(--accent);
+  }
+  /* The window's name lives on this line, so it is the one part of the header
+     that has to be allowed to wrap: `.hdr-r` is nowrap for the big numeral's
+     sake, and "1,358 cells / the last 7 days / read just now" is wider than a
+     390 px phone. It wraps rather than shrinking because the 12 px floor is
+     gated sitewide. */
+  .hdr-sub {
+    white-space: normal;
+    text-align: right;
+    max-width: 34ch;
   }
   .hdr-unit {
     font-family: var(--font-mono);
@@ -712,6 +780,9 @@
     .hdr-stat {
       align-items: flex-start;
       margin-top: 0.5rem;
+    }
+    .hdr-sub {
+      text-align: left;
     }
     h1 {
       font-size: var(--fs-display-sm);

@@ -4,9 +4,11 @@ import {
   cleanJourney,
   detectLoops,
   extractRings,
+  speedCeilingFor,
   trampledTiles,
   type GeoFix,
 } from './loops';
+import { fillInteriorOfSegments } from './fill';
 import { localProjection, tileAreaM2, tileAt, tileKeyOf, tileSideM } from './tiles';
 import { isSimpleRing, ringArea, ringPerimeter, type Vec2 } from './rings';
 import { ORIGIN, jitterFlower, square, walk } from './test-fixtures';
@@ -549,6 +551,191 @@ describe('cycling captures, and is filterable', () => {
     const r = detectLoops(drive);
     expect(r.rings).toHaveLength(0);
     expect(r.dropped.mode).toBeGreaterThan(0);
+  });
+});
+
+// Amendment 2 (John, 2026-08-29). Amendment 1 let cycling score but left the
+// 25 km/h ceiling applying to it, on the reasoning that a ride would simply
+// capture the parts of itself ridden at a human pace. Measured on the real
+// corpus that was wrong: 22.4% of a ride's legs are over 25 km/h, so the gate
+// did not trim the fast sections — it SHREDDED the journey (mean 175.6 segments
+// per ride, worst 1,348), and a shredded journey cannot reach the 400 m closure
+// floor or leave the fill anything to enclose. A ride could only ever paint a
+// line: the "snail trail that is a full loop" John was looking at.
+//
+// The repair is a SECOND ceiling keyed on the declared type. Everything below is
+// about the two halves of that being real: the raise reaches declared cycling,
+// and it reaches nothing else — least of all a car.
+describe('the speed ceiling is activity-aware', () => {
+  /**
+   * A ride at 32 km/h — the corpus's p95 leg speed, an ordinary fast stretch.
+   *
+   * Stripped of accuracy, mode and reported speed on purpose: that is exactly
+   * what `readWorkoutOutings` produces, and it means the implied-speed cut is
+   * the only gate any of these fixtures ever meets. Nothing here is being
+   * rescued by a defence the real workout path does not have.
+   */
+  const stripped = (f: GeoFix, type: string | null): GeoFix => ({
+    ...f,
+    accuracyM: null,
+    mode: null,
+    speedKmh: null,
+    activityType: type,
+  });
+
+  const ride = (side = 900, kmh = 32, type: string | null = 'ride') =>
+    walk(square(side), { stepM: 25, speedMps: kmh / 3.6 }).map((f) => stripped(f, type));
+
+  /**
+   * A car doing a sustained 70-90 km/h, in EXACTLY the data shape the workout
+   * path delivers: no accuracy, no mode, no reported speed. `readWorkoutOutings`
+   * supplies none of those, so the implied-speed cut is the only vehicle defence
+   * this journey ever meets — and it is labelled `ride`, so it is asking for the
+   * raised ceiling by name.
+   *
+   * A 900 m block, which is the point. 810,000 m2 is about 411 cells at z19:
+   * comfortably UNDER the 1,000-cell ring ceiling, so if the speed gate leaked,
+   * this would not be caught downstream — it would qualify as a claim.
+   */
+  const drive = (kmh: number, type: string | null = 'ride') =>
+    walk(square(900), { stepM: kmh / 3.6, speedMps: kmh / 3.6 }).map((f) => stripped(f, type));
+
+  it('exports the raised ceiling, and the population it applies to', () => {
+    expect(GEO_THRESHOLDS.rideMaxSpeedKmh).toBe(45);
+    expect(GEO_THRESHOLDS.rideActivityTypes).toEqual(['ride', 'mtb']);
+    // The untyped ceiling is UNCHANGED. This is an addition, not a relaxation.
+    expect(GEO_THRESHOLDS.maxSpeedKmh).toBe(25);
+  });
+
+  it('persists the ceiling on the claim, like every other threshold', () => {
+    // The whole point of storing the gate set: a claim made under 25 and one
+    // made under 45 are both legible after the fact, so a retune is a new
+    // number rather than an invalidated history.
+    const r = detectLoops(ride());
+    expect(r.rings.length).toBeGreaterThan(0);
+    expect(r.rings[0].closure.thresholds.rideMaxSpeedKmh).toBe(45);
+    expect(r.rings[0].closure.thresholds.rideActivityTypes).toEqual(['ride', 'mtb']);
+    expect(r.thresholds.rideMaxSpeedKmh).toBe(45);
+  });
+
+  it('a ride at 32 km/h survives whole instead of being shredded', () => {
+    const fixes = ride();
+    // The old rule, expressed as an override rather than as a memory of it.
+    const before = cleanJourney(fixes, { rideMaxSpeedKmh: 25 });
+    const after = cleanJourney(fixes);
+
+    expect(before.segments.length).toBeGreaterThan(100);
+    expect(before.dropped.speed).toBeGreaterThan(100);
+    expect(Math.max(...before.segments.map((seg) => seg.length))).toBe(1);
+    expect(after.segments).toHaveLength(1);
+    expect(after.dropped.speed).toBe(0);
+  });
+
+  it('and a shredded ride captures nothing, while a whole one closes', () => {
+    // The consequence, not the mechanism: this is what John was seeing.
+    const fixes = ride();
+    expect(detectLoops(fixes, { rideMaxSpeedKmh: 25 }).rings).toHaveLength(0);
+
+    const after = detectLoops(fixes);
+    expect(after.rings).toHaveLength(1);
+    expect(after.rings[0].closure.method).toBe('endpoint');
+    expect(after.rings[0].tiles.length).toBeGreaterThan(300);
+  });
+
+  it('applies to mtb as well as ride, and to nothing else declared', () => {
+    expect(detectLoops(ride(900, 32, 'mtb')).rings).toHaveLength(1);
+    // A `walk` logged at 32 km/h is not a fast walker, it is a wrong label or a
+    // journey in a car with a watch on. The strict ceiling still holds.
+    expect(detectLoops(ride(900, 32, 'walk')).rings).toHaveLength(0);
+    expect(detectLoops(ride(900, 32, 'hike')).rings).toHaveLength(0);
+  });
+
+  it('does NOT reach untyped trail data, where a bike and a car look the same', () => {
+    // Life360 carries no activity type and `mode` cannot stand in for one — it
+    // is derived from GPS speed, and a runner and a cyclist both land in
+    // `active`. So the untyped corpus keeps 25 km/h, and this is the assertion
+    // that stops a future refactor quietly widening the raise to everything.
+    const untyped = ride(900, 32, null);
+    const clean = cleanJourney(untyped);
+    expect(clean.segments.length).toBeGreaterThan(100);
+    expect(detectLoops(untyped).rings).toHaveLength(0);
+
+    expect(speedCeilingFor({ ...untyped[0] }, GEO_THRESHOLDS)).toBe(25);
+    expect(speedCeilingFor({ ...untyped[0], activityType: 'ride' }, GEO_THRESHOLDS)).toBe(45);
+  });
+
+  it('a leg bridging a ride fix and an untyped one takes the STRICTER ceiling', () => {
+    // A leg is only as trustworthy as its weaker end, and a mixed leg is the
+    // exact shape a misattributed raise would arrive in.
+    const fixes = ride();
+    const mixed = fixes.map((f, i): GeoFix => (i > 20 ? { ...f, activityType: null } : f));
+    const clean = cleanJourney(mixed);
+    expect(clean.dropped.speed).toBeGreaterThan(0);
+    expect(clean.segments.length).toBeGreaterThan(1);
+  });
+
+  it('a real car journey at 70-90 km/h is still severed, and still claims nothing', () => {
+    // The regression this whole amendment is one mistake away from. It is
+    // labelled `ride`, it has no mode and no reported speed, and it drives a
+    // block small enough to qualify as a claim if it ever got through.
+    for (const kmh of [70, 80, 90]) {
+      const fixes = drive(kmh);
+      const clean = cleanJourney(fixes);
+
+      // SEVERED: every leg is over the ceiling, so no run survives with enough
+      // vertices to be any shape at all.
+      expect(clean.dropped.speed).toBeGreaterThan(100);
+      expect(clean.segments.every((seg) => seg.length <= 1)).toBe(true);
+
+      const loops = detectLoops(fixes);
+      // NO CLAIM, and not because something downstream rejected it — nothing
+      // reached the qualification gates to be rejected.
+      expect(loops.rings).toHaveLength(0);
+      expect(loops.rejected).toHaveLength(0);
+
+      // NO GROUND BETWEEN THE FIXES: every leg the trample offers is refused,
+      // so the drive cannot paint a line down the roads it used. What remains
+      // is the discrete cells its own fixes sat in — the fixes are evidence
+      // that the phone was there, and that rule is not this amendment's to
+      // change.
+      let interpolated = 0;
+      for (const seg of loops.segments) {
+        const t = trampledTiles(seg);
+        interpolated += t.tiles.length - seg.length;
+      }
+      expect(interpolated).toBeLessThanOrEqual(0);
+
+      // AND NO INTERIOR: a drive round a block leaves a chain of single cells,
+      // and the fill must not weld them into a barrier and pay out the middle.
+      const fill = fillInteriorOfSegments(loops.segments.map((seg) => trampledTiles(seg).tiles));
+      expect(fill.tiles).toHaveLength(0);
+      expect(fill.interiorFound).toBe(0);
+    }
+
+    // CONTROL, so the four assertions above are a test and not a tautology.
+    // Lift the ceiling out of the way and the same drive qualifies as a ring of
+    // several hundred cells: the fixture is fully capable of claiming, and the
+    // speed gate is the only thing stopping it.
+    const uncapped = detectLoops(drive(80), { rideMaxSpeedKmh: 500 });
+    expect(uncapped.rings).toHaveLength(1);
+    expect(uncapped.rings[0].tiles.length).toBeGreaterThan(300);
+  });
+
+  it('the same car is severed whether it is labelled ride, mtb or nothing', () => {
+    for (const type of ['ride', 'mtb', 'walk', null]) {
+      const loops = detectLoops(drive(80, type));
+      expect(loops.rings).toHaveLength(0);
+      expect(loops.segments.every((seg) => seg.length <= 1)).toBe(true);
+    }
+  });
+
+  it('45 km/h is a ceiling, not an opening — 60 km/h on a bike is still cut', () => {
+    // The corpus has exactly one implied leg speed over 50 km/h across 176 real
+    // rides, so anything sustained above the ceiling is a vehicle whatever the
+    // watch was told.
+    const clean = cleanJourney(ride(900, 60));
+    expect(clean.dropped.speed).toBeGreaterThan(10);
+    expect(detectLoops(ride(900, 60)).rings).toHaveLength(0);
   });
 });
 

@@ -104,6 +104,63 @@ export type ActivityFilter = (typeof ACTIVITY_FILTERS)[number];
 /** Life360 carries no activity type. The UI says so rather than guessing. */
 export const UNTYPED_LABEL = 'untyped';
 
+// ---------------------------------------------------------------------------
+// The date window
+// ---------------------------------------------------------------------------
+
+/**
+ * How far back a capture is allowed to count, as a fixed small set rather than
+ * a date picker.
+ *
+ * A picker would offer a range whose two ends are separately wrong: the score
+ * decays with AGE, so an arbitrary end date changes the answer in a way nobody
+ * reading the map could predict, while a start date alone is the only half
+ * anyone actually wants ("the last week"). Four durations, no calendar, and the
+ * window slides with the clock — which is also what makes the week-on-week
+ * board still mean something under one.
+ *
+ * `ms: null` is all time, and is the default. That branch must stay exactly the
+ * unfiltered query, because it is the one the materialised geo_tile_state fast
+ * path answers.
+ */
+export const DATE_WINDOWS = [
+  { key: '24h', label: '24 hours', short: '24h', ms: 86_400_000 },
+  { key: '7d', label: '7 days', short: '7d', ms: 7 * 86_400_000 },
+  { key: '30d', label: '30 days', short: '30d', ms: 30 * 86_400_000 },
+  { key: 'all', label: 'All time', short: 'all', ms: null },
+] as const;
+
+export type DateWindow = (typeof DATE_WINDOWS)[number];
+export type DateWindowKey = DateWindow['key'];
+
+export const DEFAULT_WINDOW: DateWindowKey = 'all';
+
+/** Unknown or absent reads as all time — a bad query string never hides ground. */
+export function windowOf(key: string | null | undefined): DateWindow {
+  for (const w of DATE_WINDOWS) if (w.key === key) return w;
+  for (const w of DATE_WINDOWS) if (w.ms === null) return w;
+  return DATE_WINDOWS[0];
+}
+
+/** "the last 7 days" — the phrase every surface that respects the window uses. */
+export function windowPhrase(key: string | null | undefined): string {
+  const w = windowOf(key);
+  return w.ms === null ? 'all time' : `the last ${w.label.toLowerCase()}`;
+}
+
+/**
+ * The same fact in a board header's worth of room: "last 7d".
+ *
+ * Board headers are two mono labels on one baseline in a 380 px rail, and the
+ * long phrase wraps them onto three lines. Prose keeps `windowPhrase`; a header
+ * that is already a label uses this. Never a bare "7d" — a duration with no
+ * "last" reads as a column unit rather than a period.
+ */
+export function windowShort(key: string | null | undefined): string {
+  const w = windowOf(key);
+  return w.ms === null ? 'all time' : `last ${w.short}`;
+}
+
 export const activityLabel = (type: string | null): string =>
   type === null ? UNTYPED_LABEL : type.replace(/_/g, ' ');
 

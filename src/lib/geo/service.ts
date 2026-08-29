@@ -37,10 +37,16 @@
 //     `active` at 6.5-18 km/h. So the filter dimensions are `source_kind` and
 //     `activity_type`, and "untyped" is a real answer rather than a guess.
 //
-//  5. The car gate is a different thing and is untouched. `excludedModes` and
-//     the 25 km/h ceiling live in cleanJourney, and cleanJourney is now on the
-//     TRAMPLE path as well as the loop path — see tilesOf. It was not, and a
-//     drive would have painted weight-1 ground down every A-road it used.
+//  5. The car gate is a different thing. `excludedModes` and the speed ceiling
+//     live in cleanJourney, and cleanJourney is now on the TRAMPLE path as well
+//     as the loop path — see tilesOf. It was not, and a drive would have painted
+//     weight-1 ground down every A-road it used.
+//
+//     The ceiling is now activity-aware (Amendment 2): a fix carrying a declared
+//     `ride`/`mtb` type is judged at `rideMaxSpeedKmh`, everything else at the
+//     unchanged 25 km/h `maxSpeedKmh`. That is why `activityType` is stamped
+//     onto every workout FIX and not only onto the outing — cleanJourney reads
+//     it per fix. A trail fix carries null and keeps the strict gate.
 //
 // Re-running is a no-op by construction, and that is the property the whole
 // hourly heartbeat rests on: the ledger's uniqueIndex plus ON CONFLICT DO
@@ -54,6 +60,7 @@ import {
   desc,
   eq,
   gt,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -95,6 +102,7 @@ import {
   type CaptureKind,
 } from './ownership';
 import { connectedComponents } from './dissolve';
+import { fillInteriorOfSegments, type FillResult } from './fill';
 import { tileAreaM2, tileCentre, tileKeyOf, type Tile } from './tiles';
 
 // ---------------------------------------------------------------------------
@@ -114,8 +122,9 @@ export const WORKOUT_SUBJECT = 'john';
  * what has no ground under it at all: `swim` (a pool workout's GPS trace is the
  * building), and `other`, which is the phone's shrug.
  *
- * This is not the car gate. `excludedModes` and the 25 km/h ceiling in
- * cleanJourney are, and they apply to every type in this list.
+ * This is not the car gate. `excludedModes` and the speed ceiling in
+ * cleanJourney are, and they apply to every type in this list — at 45 km/h for
+ * `ride`/`mtb` and 25 km/h for the rest (Amendment 2).
  */
 export const CAPTURING_ACTIVITY_TYPES = ['run', 'trail_run', 'walk', 'hike', 'ride', 'mtb'] as const;
 
@@ -200,6 +209,20 @@ export interface IngestReport {
   /** Ledger rows offered, and how many the unique index actually accepted. */
   totalEventsProposed: number;
   totalEventsWritten: number;
+  /**
+   * The interior-fill half, reported separately because it is the one thing in
+   * this pipeline whose output is not visible in any other number.
+   *
+   * `fillTiles` is ground awarded for enclosure without treading;
+   * `fillOutingsCapped` is journeys whose interior blew the per-journey ceiling
+   * and were paid NOTHING for it. A `fillOutingsCapped` that is anything but
+   * near-zero means either the vehicle gates are leaking or the cap wants a
+   * retune, and it is the only place that shows.
+   */
+  fillEventsProposed: number;
+  fillTiles: number;
+  fillOutingsCapped: number;
+  fillInteriorRejected: number;
   elapsedMs: number;
 }
 
@@ -419,8 +442,12 @@ async function readWorkoutOutings(
         lat,
         lon,
         ts: new Date(startMs + (Number.isFinite(secs) ? secs * 1000 : 0)),
-        // Carried onto the fix so a caller-supplied filter can see it in
-        // cleanJourney. The workout has no per-point accuracy or mode.
+        // Carried onto the fix because cleanJourney reads it TWICE: once for a
+        // caller-supplied `excludedActivityTypes` filter, and once to pick the
+        // speed ceiling this leg is judged at (Amendment 2). The workout has no
+        // per-point accuracy or mode, so the implied-speed cut is the only
+        // vehicle defence on this path and the declared type is the only thing
+        // that can safely raise it.
         activityType: type,
       });
     }
@@ -477,9 +504,14 @@ function tilesOf(outing: Outing, th: Partial<GeoThresholds> | undefined) {
   const tiles: Tile[] = [];
   const seen = new Set<string>();
   let refusedLegs = 0;
+  /** The same cells, kept SEPARATED by cleaned segment — the unit the accuracy,
+   *  vehicle, speed, activity-type and observation-gap gates actually cut on.
+   *  The interior fill needs them apart; everything else wants them unioned. */
+  const perSegment: Tile[][] = [];
   for (const segment of loops.segments) {
     const t = trampledTiles(segment, th);
     refusedLegs += t.refusedLegs;
+    perSegment.push(t.tiles);
     for (const tile of t.tiles) {
       const key = tileKeyOf(tile.x, tile.y);
       if (seen.has(key)) continue;
@@ -488,7 +520,7 @@ function tilesOf(outing: Outing, th: Partial<GeoThresholds> | undefined) {
     }
   }
 
-  return { loops, trample: { tiles, refusedLegs } };
+  return { loops, trample: { tiles, refusedLegs }, perSegment };
 }
 
 /**
@@ -928,10 +960,12 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
   // result that is identical by construction.
   const prepared: PreparedClaim[] = [];
   const trampleByOuting: Array<{ outing: Outing; tiles: Tile[] }> = [];
+  const fillByOuting: Array<{ outing: Outing; tiles: Tile[] }> = [];
+  const fills: FillResult[] = [];
   const touched = new Map<string, Tile>();
 
   for (const outing of outings) {
-    const { loops, trample } = tilesOf(outing, options.thresholds);
+    const { loops, trample, perSegment } = tilesOf(outing, options.thresholds);
 
     loops.rings.forEach((ring, ringIndex) => {
       prepared.push({ outing, ringIndex, ring });
@@ -939,6 +973,39 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
     });
     trampleByOuting.push({ outing, tiles: trample.tiles });
     for (const t of trample.tiles) touched.set(tileKeyOf(t.x, t.y), t);
+
+    // ── the interior of what this journey encircled ───────────────────────
+    //
+    // Fed the journey's WHOLE captured cell set — rings and path unioned —
+    // rather than the path alone, and both halves of that matter.
+    //
+    // Including the ring cells is what stops fill from double-paying a loop:
+    // a journey that closed has already had its middle stamped weight 3, so
+    // handing fill a solid blob leaves it nothing to enclose. Including the
+    // path is the entire feature: 82% of real tracks never close, their ring
+    // list is empty, and the snail trail is all there is to work with.
+    //
+    // SEGMENT BY SEGMENT, not over the outing's union. `cleanJourney` cuts a
+    // journey at a vehicle leg, a speed-gate breach or a hole in the record,
+    // and a fill over the union welds those pieces back together: a fast
+    // circuit whose every leg the 25 km/h gate refused still leaves an
+    // unbroken chain of fix cells around the block, and the flood pays out its
+    // whole middle at weight 3. See fillInteriorOfSegments. The CEILING is
+    // still the journey's — it is applied to the union at the end — so a
+    // journey the gates cut in two gets one allowance, not two.
+    const fillParts = perSegment.map((tiles, i) => [
+      ...tiles,
+      ...loops.rings.filter((r) => r.segmentIndex === i).flatMap((r) => r.tiles),
+    ]);
+    const fill = fillInteriorOfSegments(fillParts, {
+      radiusCells: loops.thresholds.fillRadiusCells,
+      maxFillTiles: loops.thresholds.maxFillTiles,
+    });
+    fills.push(fill);
+    if (fill.tiles.length) {
+      fillByOuting.push({ outing, tiles: fill.tiles });
+      for (const t of fill.tiles) touched.set(tileKeyOf(t.x, t.y), t);
+    }
   }
 
   // ── the ledger view ─────────────────────────────────────────────────────
@@ -988,6 +1055,25 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
     }
   }
 
+  // Fill events are built alongside trample: they carry no claim id (the
+  // journey that produced them usually has no ring at all — that is the whole
+  // point) and they are stamped with the same source and activity type, so the
+  // existing activity/subject/source filters reach them without a change.
+  const fillEvents: LedgerRow[] = [];
+  for (const { outing, tiles: filled } of fillByOuting) {
+    for (const e of captureEvents(outing.subject, filled, outing.capturedAt, 'fill')) {
+      const row: LedgerRow = {
+        ...e,
+        claimId: null,
+        sourceKind: outing.sourceKind,
+        sourceRef: outing.sourceRef,
+        activityType: outing.activityType,
+      };
+      fillEvents.push(row);
+      addToTile(ledger, row);
+    }
+  }
+
   const claims = await writeClaims(prepared, ledger);
 
   // Loop events carry their claim id; trample events never have one. Stamped
@@ -1015,6 +1101,7 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
   const proposed: LedgerRow[] = [
     ...(dedupeEvents(loopEvents) as LedgerRow[]),
     ...(dedupeEvents(trampleEvents) as LedgerRow[]),
+    ...(dedupeEvents(fillEvents) as LedgerRow[]),
   ];
 
   const eventsWritten = await writeEvents(proposed);
@@ -1049,6 +1136,10 @@ export async function ingestGeoTerritory(options: IngestOptions = {}): Promise<I
     claimsTotal: prepared.length,
     totalEventsWritten: eventsWritten,
     totalEventsProposed: proposed.length,
+    fillEventsProposed: proposed.filter((p) => p.kind === 'fill').length,
+    fillTiles: fills.reduce((n, f) => n + f.tiles.length, 0),
+    fillOutingsCapped: fills.filter((f) => f.capped || f.bboxOverflow).length,
+    fillInteriorRejected: fills.reduce((n, f) => n + (f.capped ? f.interiorFound : 0), 0),
     elapsedMs: Date.now() - startedMs,
   };
 }
@@ -1096,6 +1187,22 @@ export interface TerritoryFilter {
   /** Drop untyped rows too. Off by default: untyped is the entire Life360
    *  corpus, i.e. four of the five subjects. */
   excludeUntyped?: boolean;
+  /**
+   * Only count captures at or after this instant — the date window.
+   *
+   * It belongs HERE, on the same filter every other dimension uses, and not as
+   * a separate "hide old cells" pass over the result, because the question a
+   * window asks is a counterfactual: "who would own this ground if only the
+   * last week counted". Hiding cells cannot answer it. A cell John won in June
+   * and Katie trampled on Tuesday is JOHN's on the unfiltered ledger and
+   * KATIE's under a seven-day window, and no amount of hiding turns the first
+   * answer into the second.
+   *
+   * The upper bound is `resolveFilteredOwnership`'s `now`, which already exists
+   * and is already applied — so a window is a pair (capturedFrom, now) and the
+   * caller moves BOTH when it asks the question as at an earlier instant.
+   */
+  capturedFrom?: Date;
 }
 
 /**
@@ -1138,6 +1245,7 @@ export function territoryFilterSql(filter: TerritoryFilter = {}) {
     filter.excludeUntyped ? isNotNull(geoCaptureEvents.activityType) : undefined,
     filter.subjects?.length ? inArray(geoCaptureEvents.subject, filter.subjects) : undefined,
     filter.sourceKinds?.length ? inArray(geoCaptureEvents.sourceKind, filter.sourceKinds) : undefined,
+    filter.capturedFrom ? gte(geoCaptureEvents.capturedAt, filter.capturedFrom) : undefined,
   ].filter((p): p is Exclude<typeof p, undefined> => p !== undefined);
   return parts.length ? and(...parts) : undefined;
 }

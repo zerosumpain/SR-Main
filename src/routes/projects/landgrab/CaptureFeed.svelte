@@ -9,15 +9,28 @@
    * Katie's, and reading them in the same words would flatten the only thing
    * anyone here cares about.
    */
-  import { activityLabel, km2, relativeAge, UNCLAIMED } from './identity';
+  import { activityLabel, km2, relativeAge, windowPhrase, windowShort, UNCLAIMED } from './identity';
   import type { PlayerIdentity } from './identity';
-  import type { FeedItem } from './types';
+  import type { FeedItem, WindowState } from './types';
 
   let {
     feed,
     players,
     now,
-  }: { feed: FeedItem[]; players: PlayerIdentity[]; now: number } = $props();
+    window: win,
+  }: {
+    feed: FeedItem[];
+    players: PlayerIdentity[];
+    now: number;
+    /** The feed lists the claims that BUILT the map on screen, so it is filtered
+     *  by the same window and says so — a feed narrating captures that scored
+     *  nothing towards the visible ownership would be the lie this filter is
+     *  meant to remove. */
+    window: WindowState;
+  } = $props();
+
+  const windowLine = $derived(windowPhrase(win.key));
+  const windowTag = $derived(windowShort(win.key));
 
   const byId = $derived(new Map(players.map((p) => [p.subject, p])));
 </script>
@@ -25,13 +38,20 @@
 <section class="feed" aria-label="Capture feed">
   <header class="feed-hd">
     <span class="metric-label">Capture feed</span>
-    <span class="metric-label muted">{feed.length} claims</span>
+    <span class="metric-label muted"
+      >{feed.length} claim{feed.length === 1 ? '' : 's'} · {windowTag}</span
+    >
   </header>
 
   {#if feed.length === 0}
     <p class="feed-empty">
-      No closed loops yet. Ground still changes hands on trample alone — walk a
-      block and come back round to make a claim.
+      {#if win.key === 'all'}
+        No closed loops yet. Ground still changes hands on trample alone — walk a
+        block and come back round to make a claim.
+      {:else}
+        No loop closed in {windowLine}. Widen the window to see older claims —
+        they still hold ground on the all-time map.
+      {/if}
     </p>
   {:else}
     <ol class="feed-list">

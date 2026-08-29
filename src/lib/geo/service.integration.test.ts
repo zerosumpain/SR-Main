@@ -32,6 +32,7 @@ import { walk, square } from './test-fixtures';
 import { tileAt, tileAreaM2 } from './tiles';
 import {
   ingestGeoTerritory,
+  rebuildGeoTerritory,
   rollDailySnapshots,
   writeDailySnapshot,
   trailWatermarkKey,
@@ -1257,4 +1258,559 @@ describe('the activity filter moves ownership, and never eats the untyped corpus
     // make, because it holds no untyped rows.
     expect(filtered.size).toBe(1);
   }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// The DATE WINDOW — "filter to the last 7 days capture only" (John, 2026-08-29)
+//
+// The window is a third dimension of the SAME TerritoryFilter the activity and
+// player chips already use, and it is here for the same reason the activity
+// filter is: the question is a counterfactual, not a visibility toggle. "Who
+// would own this ground if only the last week counted" cannot be answered by
+// hiding cells, because the answer names a DIFFERENT PERSON. A page that dimmed
+// old ground instead of replaying the ledger would keep painting the veteran's
+// colour on a cell the newcomer took on Tuesday.
+//
+// Three things are asserted, and the third is the one with a trap in it:
+//
+//  1. A contested cell CHANGES HANDS under the window.
+//  2. A cell whose only evidence predates the window has no owner at all — the
+//     map really does shrink, which is what makes "ground in play" honest.
+//  3. The window SLIDES with the instant it is asked about. The gained/lost
+//     board resolves ownership as at a week ago; with an ABSOLUTE lower bound
+//     that second question has a zero-width window and returns nothing, so
+//     every cell reads as freshly gained by whoever holds it today. Relative to
+//     its own instant it keeps meaning something — this week against last week.
+// ---------------------------------------------------------------------------
+
+const VETERAN = 'geotest-veteran';
+const MIDWEEK = 'geotest-midweek';
+const NEWCOMER = 'geotest-newcomer';
+const WINDOW_SUBJECTS = [VETERAN, MIDWEEK, NEWCOMER];
+
+/** Contested: all three have been here. */
+const WIN_TILE_A = { x: 993_001, y: 993_001 };
+/** The veteran's alone, and old. */
+const WIN_TILE_B = { x: 993_002, y: 993_001 };
+
+const WIN_NOW = new Date('2026-08-29T00:00:00.000Z');
+const DAY_MS = 86_400_000;
+const WIN_WEEK = 7 * DAY_MS;
+
+async function windowScrub() {
+  await db.delete(geoCaptureEvents).where(inArray(geoCaptureEvents.subject, WINDOW_SUBJECTS));
+  await db.delete(geoTileState).where(inArray(geoTileState.ownerSubject, WINDOW_SUBJECTS));
+  await db.delete(geoDailySnapshot).where(inArray(geoDailySnapshot.subject, WINDOW_SUBJECTS));
+}
+
+describe('the date window replays ownership rather than hiding ground', () => {
+  beforeAll(async () => {
+    await windowScrub();
+    const loop = (subject: string, tile: { x: number; y: number }, day: string) => ({
+      subject,
+      tileX: tile.x,
+      tileY: tile.y,
+      day,
+      kind: 'loop' as const,
+      weight: 3,
+      capturedAt: new Date(`${day}T09:00:00.000Z`),
+      sourceKind: 'trail',
+      sourceRef: `${subject}@${day}`,
+      activityType: null,
+    });
+    await db.insert(geoCaptureEvents).values([
+      // The veteran walked this ground three days running, three and a half
+      // weeks ago. Decayed, that is still the biggest score on the cell — which
+      // is the point: all time, it is his.
+      loop(VETERAN, WIN_TILE_A, '2026-08-03'),
+      loop(VETERAN, WIN_TILE_A, '2026-08-04'),
+      loop(VETERAN, WIN_TILE_A, '2026-08-05'),
+      // Ground only the veteran has ever touched, and only long ago.
+      loop(VETERAN, WIN_TILE_B, '2026-08-05'),
+      // Nine days ago — inside a 7-day window asked AS AT a week ago, outside
+      // the same window asked today. This is the row that makes the slide
+      // visible rather than a matter of opinion.
+      loop(MIDWEEK, WIN_TILE_A, '2026-08-20'),
+      // Two days ago.
+      {
+        subject: NEWCOMER,
+        tileX: WIN_TILE_A.x,
+        tileY: WIN_TILE_A.y,
+        day: '2026-08-27',
+        kind: 'trample' as const,
+        weight: 1,
+        capturedAt: new Date('2026-08-27T09:00:00.000Z'),
+        sourceKind: 'trail',
+        sourceRef: `${NEWCOMER}@2026-08-27`,
+        activityType: null,
+      },
+    ]);
+  });
+
+  afterAll(async () => {
+    if (process.env.GEO_KEEP === '1') return;
+    await windowScrub();
+  });
+
+  it('a contested cell changes hands under a seven-day window', async () => {
+    const tiles = [WIN_TILE_A, WIN_TILE_B];
+
+    const allTime = await resolveFilteredOwnership({ now: WIN_NOW, tiles });
+    expect(allTime.size).toBe(2);
+    expect([...allTime.values()].map((o) => o.owner).sort()).toEqual([VETERAN, VETERAN]);
+
+    const week = await resolveFilteredOwnership({
+      now: WIN_NOW,
+      filter: { capturedFrom: new Date(WIN_NOW.getTime() - WIN_WEEK) },
+      tiles,
+    });
+    // Cell A is the newcomer's: it is the only evidence left standing on it.
+    // Not dimmed, not annotated — a different person owns it.
+    const a = week.get(`${WIN_TILE_A.x}:${WIN_TILE_A.y}`);
+    expect(a?.owner).toBe(NEWCOMER);
+    // And cell B is nobody's. The map genuinely shrinks, so "ground in play"
+    // has to be read off the windowed answer, which is what the page does.
+    expect(week.size).toBe(1);
+  }, 120_000);
+
+  it('a 24-hour window empties ground nobody has touched today', async () => {
+    const day = await resolveFilteredOwnership({
+      now: WIN_NOW,
+      filter: { capturedFrom: new Date(WIN_NOW.getTime() - DAY_MS) },
+      tiles: [WIN_TILE_A, WIN_TILE_B],
+    });
+    expect(day.size).toBe(0);
+  }, 120_000);
+
+  it('the window must SLIDE with the instant, or the weekly board is a lie', async () => {
+    const weekAgo = new Date(WIN_NOW.getTime() - WIN_WEEK);
+    const tiles = [WIN_TILE_A, WIN_TILE_B];
+
+    // Sliding: the same seven days, measured back from a week ago. The midweek
+    // walker held cell A then.
+    const slid = await resolveFilteredOwnership({
+      now: weekAgo,
+      filter: { capturedFrom: new Date(weekAgo.getTime() - WIN_WEEK) },
+      tiles,
+    });
+    expect(slid.get(`${WIN_TILE_A.x}:${WIN_TILE_A.y}`)?.owner).toBe(MIDWEEK);
+
+    // Absolute: the bound left at "seven days before TODAY" while the question
+    // is asked as at a week ago. That is a window of zero width and it returns
+    // nothing, so the board would report the newcomer gaining a cell he had
+    // already held all week, off nobody.
+    const absolute = await resolveFilteredOwnership({
+      now: weekAgo,
+      filter: { capturedFrom: new Date(WIN_NOW.getTime() - WIN_WEEK) },
+      tiles,
+    });
+    expect(absolute.size).toBe(0);
+
+    // The consequence, spelled out: gained/lost over the slid pair is a real
+    // handover, and over the absolute pair is a phantom.
+    const nowWeek = await resolveFilteredOwnership({
+      now: WIN_NOW,
+      filter: { capturedFrom: new Date(WIN_NOW.getTime() - WIN_WEEK) },
+      tiles,
+    });
+    const keyA = `${WIN_TILE_A.x}:${WIN_TILE_A.y}`;
+    expect(nowWeek.get(keyA)?.owner).toBe(NEWCOMER);
+    expect(slid.get(keyA)?.owner).toBe(MIDWEEK); // lost it
+    expect(absolute.get(keyA)).toBeUndefined(); // lost it to nobody, from nothing
+  }, 120_000);
+
+  it('no window is byte-for-byte the unfiltered question', async () => {
+    const tiles = [WIN_TILE_A, WIN_TILE_B];
+    const bare = await resolveFilteredOwnership({ now: WIN_NOW, tiles });
+    const explicitlyAllTime = await resolveFilteredOwnership({
+      now: WIN_NOW,
+      filter: { capturedFrom: undefined },
+      tiles,
+    });
+    expect([...explicitlyAllTime.entries()].map(([k, v]) => [k, v.owner, v.score])).toEqual(
+      [...bare.entries()].map(([k, v]) => [k, v.owner, v.score]),
+    );
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// Interior fill
+//
+// The case the whole `fill` kind exists for, end to end through the real
+// ingest: a SNAIL TRAIL THAT IS A FULL LOOP. The walker goes right round a
+// 600 m block and then carries on 500 m down a spur, so the ground is
+// unambiguously encircled while the two ends of the polyline finish half a
+// kilometre apart. `detectLoops` cannot see it — 500 m is far outside
+// max(60 m, 5% of path) and the spur is collinear with the last leg, so there
+// is no self-intersection either — and it is the shape that 82% of production's
+// workout tracks have.
+// ---------------------------------------------------------------------------
+
+const SNAIL = 'geotest-snail';
+const FILL_SUBJECTS = [SNAIL];
+const FILL_ORIGIN = { lat: 54.5236, lon: 1.9 };
+const FILL_START = new Date('2026-08-20T08:00:00.000Z');
+const FILL_SIDE = 600;
+
+async function scrubFill() {
+  await db.delete(daydreamTrail).where(inArray(daydreamTrail.subject, FILL_SUBJECTS));
+  await db.delete(geoClaims).where(inArray(geoClaims.subject, FILL_SUBJECTS));
+  await db.delete(geoCaptureEvents).where(inArray(geoCaptureEvents.subject, FILL_SUBJECTS));
+  await db.delete(geoTileState).where(inArray(geoTileState.ownerSubject, FILL_SUBJECTS));
+  await db.delete(geoDailySnapshot).where(inArray(geoDailySnapshot.subject, FILL_SUBJECTS));
+  await db
+    .delete(appSettings)
+    .where(inArray(appSettings.key, FILL_SUBJECTS.map(trailWatermarkKey)));
+}
+
+const fillEventsOf = async () =>
+  db
+    .select({
+      tileX: geoCaptureEvents.tileX,
+      tileY: geoCaptureEvents.tileY,
+      kind: geoCaptureEvents.kind,
+      weight: geoCaptureEvents.weight,
+      claimId: geoCaptureEvents.claimId,
+      sourceKind: geoCaptureEvents.sourceKind,
+      activityType: geoCaptureEvents.activityType,
+      day: geoCaptureEvents.day,
+    })
+    .from(geoCaptureEvents)
+    .where(inArray(geoCaptureEvents.subject, FILL_SUBJECTS))
+    .orderBy(geoCaptureEvents.kind, geoCaptureEvents.tileX, geoCaptureEvents.tileY);
+
+describe('interior fill', () => {
+  beforeAll(async () => {
+    await scrubFill();
+    // Right round the block, then 500 m south down a spur.
+    const snail = walk(
+      [
+        [0, 0],
+        [FILL_SIDE, 0],
+        [FILL_SIDE, FILL_SIDE],
+        [0, FILL_SIDE],
+        [0, 0],
+        [0, -500],
+      ],
+      {
+        stepM: STEP_M,
+        speedMps: SPEED_MPS,
+        startTs: FILL_START,
+        accuracyM: 20,
+        mode: 'walking',
+        origin: FILL_ORIGIN,
+      },
+    );
+    await db.insert(daydreamTrail).values(
+      snail.map((f) => ({
+        ts: f.ts,
+        subject: SNAIL,
+        source: 'backfill',
+        lat: f.lat,
+        lon: f.lon,
+        accuracyM: f.accuracyM ?? null,
+        speedKmh: f.speedKmh ?? null,
+        mode: f.mode ?? 'walking',
+      })),
+    );
+  });
+
+  afterAll(async () => {
+    if (process.env.GEO_KEEP === '1') return;
+    await scrubFill();
+  });
+
+  it('captures the interior of a loop that never closes', async () => {
+    const report = await ingestGeoTerritory({
+      subjects: FILL_SUBJECTS,
+      full: true,
+      now: NOW,
+      includeWorkouts: false,
+    });
+
+    // The premise: no ring was detected, so before this feature the block's
+    // middle scored precisely nothing.
+    expect(report.claimsTotal).toBe(0);
+    expect(report.fillEventsProposed).toBeGreaterThan(0);
+    expect(report.fillOutingsCapped).toBe(0);
+
+    const events = await fillEventsOf();
+    const filled = events.filter((e) => e.kind === 'fill');
+    const trampled = events.filter((e) => e.kind === 'trample');
+    expect(filled.length).toBeGreaterThan(40);
+    expect(trampled.length).toBeGreaterThan(0);
+
+    // Loop weight, because enclosure is what the game scores.
+    for (const e of filled) expect(e.weight).toBe(3);
+    // No claim to hang off — that is the entire point of this shape.
+    for (const e of filled) expect(e.claimId).toBeNull();
+    // Reachable by the existing filters without a schema change.
+    for (const e of filled) expect(e.sourceKind).toBe('trail');
+    for (const e of filled) expect(e.activityType).toBeNull();
+
+    // Disjoint from the path: no cell is paid twice for one journey.
+    const walked = new Set(trampled.map((e) => `${e.tileX}:${e.tileY}`));
+    for (const e of filled) expect(walked.has(`${e.tileX}:${e.tileY}`)).toBe(false);
+
+    // And the fill actually won the ground.
+    const owned = await db
+      .select({ tileX: geoTileState.tileX, tileY: geoTileState.tileY })
+      .from(geoTileState)
+      .where(inArray(geoTileState.ownerSubject, FILL_SUBJECTS));
+    expect(owned.length).toBe(filled.length + trampled.length);
+  }, 120_000);
+
+  it('is idempotent — a second run writes nothing', async () => {
+    const before = await fillEventsOf();
+    const report = await ingestGeoTerritory({
+      subjects: FILL_SUBJECTS,
+      full: true,
+      now: NOW,
+      includeWorkouts: false,
+    });
+    expect(report.fillEventsProposed).toBeGreaterThan(0);
+    expect(report.totalEventsWritten).toBe(0);
+    expect(await fillEventsOf()).toEqual(before);
+  }, 120_000);
+
+  it('a REBUILD adds fill to history already ingested, and disturbs nothing else', async () => {
+    // Exactly the operator's position after this ships: a ledger full of loop
+    // and trample rows written before `fill` existed. Simulated by deleting the
+    // fill rows and leaving everything else exactly as it was.
+    const idsOf = () =>
+      db
+        .select({ id: geoCaptureEvents.id, kind: geoCaptureEvents.kind })
+        .from(geoCaptureEvents)
+        .where(inArray(geoCaptureEvents.subject, FILL_SUBJECTS))
+        .orderBy(geoCaptureEvents.id);
+
+    const wanted = (await fillEventsOf()).filter((e) => e.kind === 'fill');
+    expect(wanted.length).toBeGreaterThan(0);
+
+    await db
+      .delete(geoCaptureEvents)
+      .where(
+        and(inArray(geoCaptureEvents.subject, FILL_SUBJECTS), eq(geoCaptureEvents.kind, 'fill')),
+      );
+    const survivingBefore = await idsOf();
+    expect(survivingBefore.some((r) => r.kind === 'fill')).toBe(false);
+
+    const report = await rebuildGeoTerritory({
+      subjects: FILL_SUBJECTS,
+      now: NOW,
+      includeWorkouts: false,
+    });
+    expect(report.totalEventsWritten).toBe(wanted.length);
+
+    // The fill is back, byte for byte.
+    expect((await fillEventsOf()).filter((e) => e.kind === 'fill')).toEqual(wanted);
+    // And every pre-existing row still has its original id: append-only, with
+    // ON CONFLICT DO NOTHING, means a rebuild adds and never rewrites.
+    const survivingAfter = (await idsOf()).filter((r) => r.kind !== 'fill');
+    expect(survivingAfter).toEqual(survivingBefore);
+  }, 120_000);
+
+  it('the cap fires, awards nothing, and says so', async () => {
+    await scrubFill();
+    const snail = walk(
+      [
+        [0, 0],
+        [FILL_SIDE, 0],
+        [FILL_SIDE, FILL_SIDE],
+        [0, FILL_SIDE],
+        [0, 0],
+        [0, -500],
+      ],
+      {
+        stepM: STEP_M,
+        speedMps: SPEED_MPS,
+        startTs: FILL_START,
+        accuracyM: 20,
+        mode: 'walking',
+        origin: FILL_ORIGIN,
+      },
+    );
+    await db.insert(daydreamTrail).values(
+      snail.map((f) => ({
+        ts: f.ts,
+        subject: SNAIL,
+        source: 'backfill',
+        lat: f.lat,
+        lon: f.lon,
+        accuracyM: f.accuracyM ?? null,
+        speedKmh: f.speedKmh ?? null,
+        mode: f.mode ?? 'walking',
+      })),
+    );
+
+    const report = await ingestGeoTerritory({
+      subjects: FILL_SUBJECTS,
+      full: true,
+      now: NOW,
+      includeWorkouts: false,
+      thresholds: { maxFillTiles: 10 },
+    });
+
+    expect(report.fillOutingsCapped).toBe(1);
+    expect(report.fillEventsProposed).toBe(0);
+    expect(report.fillTiles).toBe(0);
+    // The refused count is reported, which is the only way a retune could ever
+    // be argued: a cap that silently awards nothing tells nobody anything.
+    expect(report.fillInteriorRejected).toBeGreaterThan(10);
+    expect((await fillEventsOf()).some((e) => e.kind === 'fill')).toBe(false);
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// Activity type AND date window AND player, together
+//
+// Each dimension has its own case above and each was added by a different piece
+// of work. Nothing asserted that they compose — and they are ANDed into one
+// WHERE clause over one replay, so a mistake here does not error, it quietly
+// answers a different question and the map draws it confidently.
+//
+// One contested cell, three claimants chosen so that every filter changes the
+// answer to a DIFFERENT person: dropping rides hands it over, narrowing to a
+// week hands it to someone else again, and the two together hand it to a third.
+// A test where two filters agree cannot tell composition from coincidence.
+// ---------------------------------------------------------------------------
+
+const C_OLD_RIDER = 'geotest-compose-oldrider';
+const C_NEW_RIDER = 'geotest-compose-newrider';
+const C_WALKER = 'geotest-compose-walker';
+const COMPOSE_SUBJECTS = [C_OLD_RIDER, C_NEW_RIDER, C_WALKER];
+const COMPOSE_TILE = { x: 992_101, y: 992_101 };
+/** The instant every question below is asked as at. */
+const COMPOSE_NOW = new Date('2026-08-29T12:00:00.000Z');
+const COMPOSE_WEEK = new Date(COMPOSE_NOW.getTime() - 7 * 86_400_000);
+
+async function composeScrub() {
+  await db.delete(geoCaptureEvents).where(inArray(geoCaptureEvents.subject, COMPOSE_SUBJECTS));
+  await db.delete(geoTileState).where(inArray(geoTileState.ownerSubject, COMPOSE_SUBJECTS));
+  await db.delete(geoDailySnapshot).where(inArray(geoDailySnapshot.subject, COMPOSE_SUBJECTS));
+}
+
+describe('the three filters compose: activity type AND date window AND player', () => {
+  beforeAll(async () => {
+    await composeScrub();
+    await db.insert(geoCaptureEvents).values([
+      // Six weeks ago, by bike, twice over: 6 x exp(-42/43.3) = 2.29. The
+      // biggest score on the cell, and the one both filters can reach.
+      ...['2026-07-18', '2026-07-19'].map((day) => ({
+        subject: C_OLD_RIDER,
+        tileX: COMPOSE_TILE.x,
+        tileY: COMPOSE_TILE.y,
+        day,
+        kind: 'loop',
+        weight: 3,
+        capturedAt: new Date(`${day}T09:00:00.000Z`),
+        sourceKind: 'workout',
+        sourceRef: 'apple:geotest-compose-old',
+        activityType: 'ride',
+      })),
+      // Two days ago, by bike: 3 x exp(-2/43.3) = 2.86. Inside a 7-day window.
+      {
+        subject: C_NEW_RIDER,
+        tileX: COMPOSE_TILE.x,
+        tileY: COMPOSE_TILE.y,
+        day: '2026-08-27',
+        kind: 'fill',
+        weight: 3,
+        capturedAt: new Date('2026-08-27T09:00:00.000Z'),
+        sourceKind: 'workout',
+        sourceRef: 'apple:geotest-compose-new',
+        activityType: 'ride',
+      },
+      // Yesterday, on foot and untyped, the way the whole Life360 corpus is:
+      // 1 x exp(-1/43.3) = 0.98. It only ever wins when both rides are gone.
+      {
+        subject: C_WALKER,
+        tileX: COMPOSE_TILE.x,
+        tileY: COMPOSE_TILE.y,
+        day: '2026-08-28',
+        kind: 'trample',
+        weight: 1,
+        capturedAt: new Date('2026-08-28T09:00:00.000Z'),
+        sourceKind: 'trail',
+        sourceRef: `${C_WALKER}@compose`,
+        activityType: null,
+      },
+    ]);
+  });
+
+  afterAll(async () => {
+    if (process.env.GEO_KEEP === '1') return;
+    await composeScrub();
+  });
+
+  const owner = async (filter: Parameters<typeof resolveFilteredOwnership>[0]['filter']) => {
+    const resolved = await resolveFilteredOwnership({
+      now: COMPOSE_NOW,
+      filter,
+      tiles: [COMPOSE_TILE],
+    });
+    return resolved.get(`${COMPOSE_TILE.x}:${COMPOSE_TILE.y}`)?.owner ?? null;
+  };
+
+  it('each dimension alone moves the cell to a different person', async () => {
+    // Unfiltered: the fresh ride's 2.86 beats the old rider's 2.29.
+    expect(await owner({})).toBe(C_NEW_RIDER);
+    // Rides out: only the untyped walker is left, and the untyped row survives.
+    expect(await owner({ excludeActivityTypes: ['ride', 'mtb'] })).toBe(C_WALKER);
+    // A week's window: the old rider's two events fall outside it.
+    expect(await owner({ capturedFrom: COMPOSE_WEEK })).toBe(C_NEW_RIDER);
+    // Players only: the old rider wins what is left when the fresh one is out.
+    expect(await owner({ subjects: [C_OLD_RIDER, C_WALKER] })).toBe(C_OLD_RIDER);
+  });
+
+  it('AND, not OR — every pair and the triple', async () => {
+    expect(
+      await owner({ excludeActivityTypes: ['ride', 'mtb'], capturedFrom: COMPOSE_WEEK }),
+    ).toBe(C_WALKER);
+    expect(
+      await owner({ capturedFrom: COMPOSE_WEEK, subjects: [C_OLD_RIDER, C_NEW_RIDER] }),
+    ).toBe(C_NEW_RIDER);
+    // The old rider is INSIDE the player filter and OUTSIDE the window, so an
+    // OR would hand him the cell. An AND leaves nobody.
+    expect(await owner({ capturedFrom: COMPOSE_WEEK, subjects: [C_OLD_RIDER] })).toBe(null);
+    // All three at once: foot-only, this week, and only the two riders named.
+    expect(
+      await owner({
+        excludeActivityTypes: ['ride', 'mtb'],
+        capturedFrom: COMPOSE_WEEK,
+        subjects: [C_OLD_RIDER, C_NEW_RIDER],
+      }),
+    ).toBe(null);
+    // And the same triple with the walker admitted is the walker.
+    expect(
+      await owner({
+        excludeActivityTypes: ['ride', 'mtb'],
+        capturedFrom: COMPOSE_WEEK,
+        subjects: [C_NEW_RIDER, C_WALKER],
+      }),
+    ).toBe(C_WALKER);
+  });
+
+  it('a 24-hour window empties a cell nobody has touched today', async () => {
+    const day = new Date(COMPOSE_NOW.getTime() - 86_400_000);
+    expect(await owner({ capturedFrom: day })).toBe(null);
+  });
+
+  it('excludeUntyped composes too, and is the only way to drop the trail row', async () => {
+    expect(
+      await owner({
+        excludeActivityTypes: ['ride', 'mtb'],
+        excludeUntyped: true,
+        capturedFrom: COMPOSE_WEEK,
+      }),
+    ).toBe(null);
+  });
+
+  it('the window is INCLUSIVE of its own bound, so a cell cannot fall through it', async () => {
+    const exact = new Date('2026-08-27T09:00:00.000Z');
+    expect(await owner({ capturedFrom: exact, subjects: [C_NEW_RIDER] })).toBe(C_NEW_RIDER);
+    expect(
+      await owner({ capturedFrom: new Date(exact.getTime() + 1), subjects: [C_NEW_RIDER] }),
+    ).toBe(null);
+  });
 });

@@ -5289,10 +5289,18 @@ export const geoCaptureEvents = pgTable(
     tileY: integer('tile_y').notNull(),
     /** UTC calendar day, `YYYY-MM-DD`. Part of the uniqueness key. */
     day: text('day').notNull(),
-    /** 'loop' | 'trample' */
+    /**
+     * 'loop' | 'trample' | 'fill'.
+     *
+     * 'fill' is the interior of ground a journey encircled without treading —
+     * see $lib/geo/fill. It is a THIRD value of the unique index below, not a
+     * flag on 'loop', so it is auditable, filterable and reversible with one
+     * DELETE, and so a rebuild can add it to history that was ingested before
+     * it existed without disturbing a single row already written.
+     */
     kind: text('kind').notNull(),
-    /** 3 for a loop, 1 for a trample. Stored rather than derived so a future
-     *  weighting change cannot silently rewrite history. */
+    /** 3 for a loop, 3 for a fill, 1 for a trample. Stored rather than derived
+     *  so a future weighting change cannot silently rewrite history. */
     weight: doublePrecision('weight').notNull(),
     capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
     /** The loop this event came from, where there was one. Advisory. */

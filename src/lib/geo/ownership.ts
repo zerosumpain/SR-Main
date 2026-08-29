@@ -34,7 +34,41 @@ export const DECAY_TAU_DAYS = 43.3;
 export const LOOP_WEIGHT = 3;
 export const TRAMPLE_WEIGHT = 1;
 
-export type CaptureKind = 'loop' | 'trample';
+/**
+ * Interior fill scores as a loop, because it IS one.
+ *
+ * A cell awarded by $lib/geo/fill is ground the outside could not reach without
+ * crossing cells the person occupied — that is the definition of enclosure the
+ * whole game is scored on, and it is a stronger demonstration than a polyline
+ * whose two ends happened to land within 60 m of each other. Paying it less
+ * than a loop would mean the 82% of real tracks that do not close geometrically
+ * are worth a third of the 18% that do, for identical ground.
+ *
+ * Its own constant rather than an alias, so it can be retuned without touching
+ * what a ring is worth.
+ */
+export const FILL_WEIGHT = LOOP_WEIGHT;
+
+/**
+ * 'loop'    — a tile centroid inside a detected ring.
+ * 'trample' — a tile the cleaned path crossed.
+ * 'fill'    — a tile the journey's cell set enclosed without treading.
+ *
+ * All three are separate values of the (subject, tile, day, KIND) unique index,
+ * which is the anti-farming key. Adding the third does not reopen that hole:
+ * the fill set is disjoint from the loop and trample sets of the SAME journey
+ * by construction (see fill.ts — closing is extensive, so nothing walked can
+ * also be enclosed), and the per-day uniqueness still means ten laps score
+ * once.
+ */
+export type CaptureKind = 'loop' | 'trample' | 'fill';
+
+/** What one event of each kind is worth. Stored on the row, never re-derived. */
+export const KIND_WEIGHT: Readonly<Record<CaptureKind, number>> = Object.freeze({
+  loop: LOOP_WEIGHT,
+  trample: TRAMPLE_WEIGHT,
+  fill: FILL_WEIGHT,
+});
 
 export interface CaptureEvent {
   subject: string;
@@ -101,7 +135,7 @@ export function captureEvents(
   tiles: Tile[],
   capturedAt: Date,
   kind: CaptureKind = 'loop',
-  weight = kind === 'loop' ? LOOP_WEIGHT : TRAMPLE_WEIGHT,
+  weight = KIND_WEIGHT[kind],
 ): CaptureEvent[] {
   const day = utcDay(capturedAt);
   return tiles.map((t) => ({

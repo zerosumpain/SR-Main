@@ -14,7 +14,8 @@ import {
 import { GEO_THRESHOLDS } from '$lib/geo/loops';
 import { connectedComponents, dissolveTiles } from '$lib/geo/dissolve';
 import { tileAreaM2, tileCentre, tileKeyOf, type Tile } from '$lib/geo/tiles';
-import { assignIdentities, ACTIVITY_FILTERS } from './identity';
+import { assignIdentities, ACTIVITY_FILTERS, DEFAULT_WINDOW, windowOf } from './identity';
+import type { DateWindowKey } from './identity';
 import type { LandgrabData, LandgrabRegion, FeedItem } from './types';
 
 // The guard, verbatim from /projects/family-life360-history. /projects is a
@@ -100,6 +101,37 @@ export const load: PageServerLoad = async (event) => {
     ? allSubjects.filter((s) => requestedSubjects.includes(s))
     : [...allSubjects];
 
+  // -------------------------------------------------------------------------
+  // The date window — John's "filter to the last 7 days capture only".
+  //
+  // It is a THIRD dimension of the same TerritoryFilter, not a second
+  // mechanism, because the question it asks is the same shape as the activity
+  // filter's: not "hide old ground" but "who would own this ground if only the
+  // last week counted". A cell John won in June and Katie trampled on Tuesday
+  // is John's on the full ledger and Katie's under a seven-day window, and no
+  // amount of hiding cells on the map turns the first answer into the second.
+  // So the window goes into the filter and ownership is replayed, exactly as a
+  // unticked activity chip already is.
+  //
+  // The window SLIDES with the instant the question is asked. That matters in
+  // exactly one place — the gained/lost board resolves ownership as at a week
+  // ago, and asking "who owned this a week ago, counting only captures from the
+  // last seven days" over an ABSOLUTE lower bound is a window of zero width: it
+  // would report every cell as freshly gained by whoever holds it. Relative to
+  // its own instant the board keeps meaning something: under a 7-day window it
+  // becomes this week's ground against last week's. Under all time the bound is
+  // absent at both instants and the board is bit-for-bit what it was before.
+  // -------------------------------------------------------------------------
+  const activeWindow = windowOf(event.url.searchParams.get('window'));
+  const windowKey: DateWindowKey = activeWindow.key;
+  const windowMs = activeWindow.ms;
+  const windowActive = windowMs !== null;
+  /** The window's lower bound as at an arbitrary instant. Undefined is all time. */
+  const windowFrom = (asOf: Date): Date | undefined =>
+    windowMs === null ? undefined : new Date(asOf.getTime() - windowMs);
+  /** The bound as at now — the one every period query on this page shares. */
+  const windowSince = windowFrom(now);
+
   const excludeActivityTypes = availableActivities.filter((t) => !includedActivities.includes(t));
   const subjectsFiltered = includedSubjects.length !== allSubjects.length;
   /**
@@ -113,13 +145,22 @@ export const load: PageServerLoad = async (event) => {
    */
   const noPlayers = subjectsFiltered && includedSubjects.length === 0;
   const filterActive =
-    excludeActivityTypes.length > 0 || (hasUntyped && !includeUntyped) || subjectsFiltered;
+    excludeActivityTypes.length > 0 ||
+    (hasUntyped && !includeUntyped) ||
+    subjectsFiltered ||
+    windowActive;
 
-  const filter: TerritoryFilter = {
+  /** The filter without its window — the base every instant shares. */
+  const baseFilter: TerritoryFilter = {
     excludeActivityTypes,
     excludeUntyped: hasUntyped ? !includeUntyped : false,
     subjects: subjectsFiltered ? includedSubjects : undefined,
   };
+  /** The filter as at an instant. The window's bound moves with the question. */
+  const filterAt = (asOf: Date): TerritoryFilter => ({
+    ...baseFilter,
+    capturedFrom: windowFrom(asOf),
+  });
 
   // -------------------------------------------------------------------------
   // The viewport, in cell space. The ledger's own extent: the map opens fitted
@@ -173,7 +214,7 @@ export const load: PageServerLoad = async (event) => {
   if (noPlayers) {
     // Nothing to resolve.
   } else if (filterActive) {
-    const resolved = await resolveFilteredOwnership({ now, filter, tileRange });
+    const resolved = await resolveFilteredOwnership({ now, filter: filterAt(now), tileRange });
     for (const [key, o] of resolved) {
       ownedNow.set(key, {
         subject: o.owner,
@@ -204,12 +245,28 @@ export const load: PageServerLoad = async (event) => {
   // asked today is a different question from the one last Saturday answered.
   // This is the same technique writeDailySnapshot uses, and it is what lets the
   // weekly board be two honest columns instead of one signed number.
+  //
+  // Under a date window the window's own lower bound moves back with `weekAgo`
+  // — see the note where windowFrom is defined. Without that, "a week ago"
+  // under a seven-day window is an empty ledger and every cell reads as gained.
   const ownedThen = new Map<string, string>();
   if (!noPlayers) {
-    for (const [key, o] of await resolveFilteredOwnership({ now: weekAgo, filter, tileRange })) {
+    for (const [key, o] of await resolveFilteredOwnership({
+      now: weekAgo,
+      filter: filterAt(weekAgo),
+      tileRange,
+    })) {
       ownedThen.set(key, o.owner);
     }
   }
+
+  // What the window itself costs, in cells: the same filter asked without it.
+  // Only under a window, and only so the page can state the price of narrowing
+  // instead of quietly showing a smaller map.
+  const cellsAllTime =
+    windowActive && !noPlayers
+      ? (await resolveFilteredOwnership({ now, filter: baseFilter, tileRange })).size
+      : ownedNow.size;
 
   // -------------------------------------------------------------------------
   // Cells -> painted ground. The grid is never shipped: per-cell geometry is
@@ -289,6 +346,10 @@ export const load: PageServerLoad = async (event) => {
         ? inArray(geoClaims.subject, includedSubjects)
         : sql`false`
       : undefined,
+    // The feed respects the window for the same reason the map does: a claim
+    // outside it contributed nothing to the ownership being drawn, so listing
+    // it would be the feed narrating a map that is not on screen.
+    windowSince ? gte(geoClaims.capturedAt, windowSince) : undefined,
   ].filter((p): p is Exclude<typeof p, undefined> => p !== undefined);
 
   const claimRows = await db
@@ -343,8 +404,18 @@ export const load: PageServerLoad = async (event) => {
   // summed under the same gates the capture path uses, so a drive cannot pad
   // the line any more than it can claim a cell.
   // -------------------------------------------------------------------------
+  //
+  // The period is the NARROWER of the window and a week, and the page says
+  // which. It never widens past a week because the trail is a rolling 90-day
+  // table and summing all of it in a load function is a different feature; it
+  // narrows to the window because "walked 12 km this week, enclosed nothing in
+  // the last 24 hours" is two periods in one sentence, which is the kind of
+  // quiet mismatch this filter exists to stop.
+  const effortStart = windowSince && windowSince > weekAgo ? windowSince : weekAgo;
+  const effortDays = (now.getTime() - effortStart.getTime()) / 86_400_000;
+
   const movedM = new Map<string, number>();
-  const weekStartS = Math.floor(weekAgo.getTime() / 1000);
+  const effortStartS = Math.floor(effortStart.getTime() / 1000);
   // The same expression the ingest uses: an owner type override beats the
   // source's own label, so a ride relabelled as a commute is filtered as one.
   const effectiveActivityType = sql<string>`coalesce(nullif(trim(${activities.typeOverride}), ''), ${activities.activityType})`;
@@ -358,7 +429,7 @@ export const load: PageServerLoad = async (event) => {
           .from(activities)
           .where(
             and(
-              gte(activities.startDate, weekStartS),
+              gte(activities.startDate, effortStartS),
               eq(activities.excludedFromSegments, false),
               sql`${effectiveActivityType} in (${sql.join(
                 countedTypes.map((t) => sql`${t}`),
@@ -384,7 +455,7 @@ export const load: PageServerLoad = async (event) => {
     .from(daydreamTrail)
     .where(
       and(
-        gte(daydreamTrail.ts, weekAgo),
+        gte(daydreamTrail.ts, effortStart),
         lte(daydreamTrail.ts, now),
         subjectsFiltered
           ? includedSubjects.length
@@ -424,7 +495,7 @@ export const load: PageServerLoad = async (event) => {
     .from(geoClaims)
     .where(
       and(
-        gte(geoClaims.capturedAt, weekAgo),
+        gte(geoClaims.capturedAt, effortStart),
         ...(claimFilter.length ? [and(...claimFilter)] : []),
       ),
     )
@@ -447,6 +518,18 @@ export const load: PageServerLoad = async (event) => {
       activities: [...includedActivities],
       untyped: includeUntyped,
       subjects: includedSubjects,
+      window: windowKey,
+    },
+    window: {
+      key: windowKey,
+      since: windowSince?.toISOString() ?? null,
+      // Named here rather than in the component so the sentence and the query
+      // that produced it are written in one place.
+      weekBasis: windowActive
+        ? `the same ${activeWindow.label.toLowerCase()} a week earlier`
+        : 'the map as it stood a week ago',
+      effortDays: Math.round(effortDays * 10) / 10,
+      cellsOutsideWindow: Math.max(0, cellsAllTime - ownedNow.size),
     },
     filterActive,
     players,
@@ -476,7 +559,19 @@ function emptyPayload(
       cellAreaM2: tileAreaM2(54.52),
       cellSideM: Math.sqrt(tileAreaM2(54.52)),
       available: { activities: [...availableActivities], untyped: hasUntyped, subjects: [] },
-      selected: { activities: [...availableActivities], untyped: true, subjects: [] },
+      selected: {
+        activities: [...availableActivities],
+        untyped: true,
+        subjects: [],
+        window: DEFAULT_WINDOW,
+      },
+      window: {
+        key: DEFAULT_WINDOW,
+        since: null,
+        weekBasis: 'the map as it stood a week ago',
+        effortDays: 7,
+        cellsOutsideWindow: 0,
+      },
       filterActive: false,
       players: [],
       territory: [],
