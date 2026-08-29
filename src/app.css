@@ -1,6 +1,52 @@
 @import 'tailwindcss';
 @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
+/* Selawik — self-hosted, so jkai reads identically on every device.
+ *
+ * Selawik is Microsoft's own open (OFL-1.1) substitute for Segoe UI, drawn to
+ * be METRIC-COMPATIBLE with it: same advance widths, so line breaks and layout
+ * are identical whether a reader lands on Selawik or on real Segoe UI. Segoe UI
+ * itself cannot be shipped — it has no web-embedding licence — which is why
+ * /jkai looked like Segoe UI on Windows and like the local system sans
+ * everywhere else until this landed.
+ *
+ * Licence text ships beside the files at static/fonts/selawik/OFL.txt; OFL-1.1
+ * requires it to travel with the font.
+ *
+ * Weights are 400/600/700 only, matching what Selawik actually contains. There
+ * is deliberately no 500: jkai asks for font-weight 500 in ~67 places and
+ * Selawik has no Medium, so the CSS font-matching algorithm resolves 500 down
+ * to 400. That is exactly what real Segoe UI does on Windows — it has no
+ * Medium either — so the fallback is the correct rendering, not a compromise.
+ *
+ * There is also no italic: Selawik ships none, so emphasis is synthesised. That
+ * too is now consistent everywhere, which is the point.
+ *
+ * Downloaded only where used. These declarations are global but a browser
+ * fetches a face only when a rendered glyph needs it, and outside /jkai
+ * nothing references Selawik. */
+@font-face {
+  font-family: 'Selawik';
+  src: url('/fonts/selawik/selawik-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Selawik';
+  src: url('/fonts/selawik/selawik-semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Selawik';
+  src: url('/fonts/selawik/selawik-bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* Warm brutalist palette — high contrast */
   --text-primary: #1a1008;
@@ -214,14 +260,18 @@ body {
  * Only the body/reading token moves. --font-display (Archivo Black headings)
  * and --font-mono (JetBrains Mono labels, code, metrics) are unchanged.
  *
- * Segoe UI is a Microsoft font and is not licensable for web embedding, so
- * there is no @font-face here: Windows renders it, everything else falls
- * through the stack to its own UI sans.
+ * Selawik leads, not Segoe UI — deliberately. Selawik is self-hosted (see the
+ * @font-face block at the top of this file), so leading with it is what makes
+ * every device render the same face; leading with Segoe UI would hand Windows
+ * a different one. Segoe UI stays next in line as the no-download fallback,
+ * and it also picks up the glyphs Selawik lacks: Selawik covers 348
+ * characters, so arrows, checks and maths symbols still fall through per
+ * glyph.
  */
 body:has(.jkai-root),
 body:has(.jkai-runner) {
-  --font-body: 'Segoe UI', 'Segoe UI Variable Text', system-ui, -apple-system,
-    'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Selawik', 'Segoe UI', 'Segoe UI Variable Text', system-ui,
+    -apple-system, 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Grain texture overlay */

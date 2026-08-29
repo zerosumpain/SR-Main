@@ -35,6 +35,19 @@
 </script>
 
 <svelte:head>
+  <!-- Selawik carries jkai's reading copy (see the jkai type scope in app.css).
+       Preloaded here rather than in app.html so only /jkai pays for it, and only
+       the regular weight: jkai asks for font-weight 500 in ~67 places and Selawik
+       has no Medium, so 500 resolves down to this face. 600/700 swap in.
+       `crossorigin` is required even same-origin — fonts always fetch in CORS
+       mode, and without it the browser downloads the file a second time. -->
+  <link
+    rel="preload"
+    as="font"
+    type="font/woff2"
+    href="/fonts/selawik/selawik-regular.woff2"
+    crossorigin="anonymous"
+  />
   <link rel="manifest" href="/manifest.webmanifest" />
   <!-- Cream, not black: the installed PWA's status bar has to continue the
        page, and the whole surface is #ede4d4. -->
