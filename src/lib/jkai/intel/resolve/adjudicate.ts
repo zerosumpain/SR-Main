@@ -296,11 +296,25 @@ export interface AdjudicationRun {
  */
 export async function adjudicateBatch(
   pairs: AdjudicationInput[],
-  opts: { neighbourNames?: (a: string, b: string) => string[] } = {},
+  opts: {
+    neighbourNames?: (a: string, b: string) => string[];
+    /**
+     * Called before every pair.
+     *
+     * Not decoration. The nightly engine registers a batch whose heartbeat goes
+     * STALE after 120s, and a stale batch stops suppressing the stall alarm —
+     * which is how a heavy intel stage previously got the service restarted
+     * underneath it, eight times a night. Forty sequential model calls is
+     * minutes of work, so every one of them has to say the process is busy.
+     */
+    onProgress?: (done: number, total: number) => void;
+  } = {},
 ): Promise<AdjudicationRun> {
   const run: AdjudicationRun = { considered: pairs.length, decided: 0, same: 0, different: 0, unsure: 0, failed: 0 };
 
+  let index = 0;
   for (const pair of pairs) {
+    opts.onProgress?.(index++, pairs.length);
     try {
       const [own, together] = pair.evidence.length
         ? [pair.evidence, [] as PairEvidence[]]
@@ -371,7 +385,13 @@ export interface CandidateForAdjudication {
  */
 export async function adjudicateCandidates(
   reports: CandidateForAdjudication[],
-  opts: { limit?: number; band?: { min: number; max: number }; force?: boolean } = {},
+  opts: {
+    limit?: number;
+    band?: { min: number; max: number };
+    force?: boolean;
+    /** Passed through to `adjudicateBatch` — see why it matters there. */
+    onProgress?: (done: number, total: number) => void;
+  } = {},
 ): Promise<AdjudicationRun & { skipped: number }> {
   const band = opts.band ?? ADJUDICATION_BAND;
   const limit = opts.limit ?? ADJUDICATION_NIGHTLY_LIMIT;
@@ -419,6 +439,6 @@ export async function adjudicateCandidates(
     };
   });
 
-  const run = await adjudicateBatch(inputs);
+  const run = await adjudicateBatch(inputs, { onProgress: opts.onProgress });
   return { ...run, skipped };
 }

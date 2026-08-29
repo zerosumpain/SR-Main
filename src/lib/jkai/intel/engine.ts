@@ -287,7 +287,9 @@ export async function runIntelSweep(
         // first, so the night's matching can already use them: the alias list is
         // what lets the resolver recognise a name it has seen lose an argument
         // before, and for 490 merges it was silently thrown away.
-        const aliases = await backfillAliasesFromTombstones();
+        const aliases = await backfillAliasesFromTombstones({
+          onProgress: (done, total) => batch.beat(`aliases ${done}/${total}`),
+        });
         const swept = await autoMergeDuplicates(undefined, { limit: AUTO_RESOLVE_LIMIT });
         for (const d of swept.details) {
           // Named in the journal, because a merge nobody can see is a merge
@@ -325,7 +327,13 @@ export async function runIntelSweep(
           import('./resolve/adjudicate'),
         ]);
         const sweep = await sweepDuplicates(ADJUDICATION_BAND.min);
-        const run = await adjudicateCandidates(sweep.reports);
+        batch.beat('adjudicate 0');
+        const run = await adjudicateCandidates(sweep.reports, {
+          // The batch heartbeat goes stale after 120s and a stale batch stops
+          // suppressing the stall alarm. Model calls are seconds each and this
+          // stage makes up to forty of them in a row, so it beats per pair.
+          onProgress: (done, total) => batch.beat(`adjudicate ${done}/${total}`),
+        });
         return {
           // `considered` is what was actually sent; `skipped` is everything the
           // band or an existing verdict held back. Both, because a stage that

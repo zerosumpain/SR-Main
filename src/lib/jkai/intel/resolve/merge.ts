@@ -396,7 +396,9 @@ export async function unmergeEntity(entityId: string): Promise<{ restored: numbe
  * Idempotent, cheap, and safe to run on every sweep: it only writes where the
  * computed list differs from what is stored.
  */
-export async function backfillAliasesFromTombstones(): Promise<{ updated: number; aliasesAdded: number }> {
+export async function backfillAliasesFromTombstones(
+  opts: { onProgress?: (done: number, total: number) => void } = {},
+): Promise<{ updated: number; aliasesAdded: number }> {
   const res = await db.execute(sql`
     SELECT
       s.id,
@@ -415,7 +417,13 @@ export async function backfillAliasesFromTombstones(): Promise<{ updated: number
   let updated = 0;
   let aliasesAdded = 0;
 
-  for (const row of res.rows as Array<Record<string, unknown>>) {
+  const rows = res.rows as Array<Record<string, unknown>>;
+  let seen = 0;
+  for (const row of rows) {
+    // One UPDATE per survivor on the first run (490 of them on production), and
+    // effectively none afterwards. The nightly engine's heartbeat goes stale at
+    // 120s, so a first run has to say it is working.
+    opts.onProgress?.(seen++, rows.length);
     const id = String(row.id);
     const name = String(row.name ?? '');
     const current = asStringArray(row.aliases);
