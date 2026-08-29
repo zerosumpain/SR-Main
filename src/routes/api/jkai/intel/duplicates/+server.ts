@@ -44,6 +44,9 @@ export const GET: RequestHandler = async ({ url }) => {
     adjudicatedApart: sweep.adjudicatedApart,
     semanticPairs: sweep.semanticPairs,
     seriesVariants: sweep.seriesVariants,
+    confirmedSame: sweep.confirmedSame,
+    /** The floor at which every confirmed pair is visible. */
+    bandFloor: ADJUDICATION_BAND.min,
     undecidedInBand: reports.filter(
       (r) =>
         !r.decision &&

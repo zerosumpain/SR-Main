@@ -832,6 +832,17 @@ export interface DuplicateSweep {
   semanticPairs: number;
   /** Pairs held back because their names differ only in a number. */
   seriesVariants: number;
+  /**
+   * Pairs the adjudicator ruled are the SAME thing, counted before the display
+   * filter.
+   *
+   * Before the filter on purpose. Every one of the 49 the first production run
+   * produced scored 0.49–0.55 on names alone — which is exactly where a real
+   * abbreviation lives, and which is at or below the quality page's default
+   * 50% floor. Counting them after the filter would report the most actionable
+   * thing the reader produces as zero.
+   */
+  confirmedSame: number;
 }
 
 /** Duplicate candidates across the whole graph, strongest first. */
@@ -865,6 +876,7 @@ export async function sweepDuplicates(
   let ruledOut = 0;
   let adjudicatedApart = 0;
   let seriesVariants = 0;
+  let confirmedSame = 0;
 
   // Candidates are generated at the REVIEW floor and filtered at `minConfidence`
   // only after decisions have been applied.
@@ -916,6 +928,7 @@ export async function sweepDuplicates(
             if (!opts.includeRuledOut) return null;
           }
         } else if (decision.verdict === 'same' && decision.decidedBy !== 'human') {
+          confirmedSame++;
           // Corroboration, capped: an adjudicator agreeing with the rules can
           // carry a pair over the auto-merge line, but only from a score that
           // was already close to it. It cannot manufacture one from nothing.
@@ -924,9 +937,10 @@ export async function sweepDuplicates(
             ...candidate,
             confidence: Math.min(0.95, candidate.confidence + lift),
             signals: [...candidate.signals, 'adjudicated'],
-            reason: `${candidate.reason}; adjudicated as the same thing${
-              decision.rationale ? ` — ${decision.rationale}` : ''
-            }`,
+            // The rationale is NOT appended here. It travels on the decision
+            // and every surface renders it in its own right, so folding it in
+            // too printed the same sentence twice on the quality page.
+            reason: `${candidate.reason}; adjudicated as the same thing`,
           };
         }
       }
@@ -946,7 +960,14 @@ export async function sweepDuplicates(
     .filter((r): r is DuplicateReport => r !== null)
     .sort((x, y) => y.candidate.confidence - x.candidate.confidence);
 
-  return { reports, ruledOut, adjudicatedApart, semanticPairs: extraPairs.length, seriesVariants };
+  return {
+    reports,
+    ruledOut,
+    adjudicatedApart,
+    semanticPairs: extraPairs.length,
+    seriesVariants,
+    confirmedSame,
+  };
 }
 
 export interface SweepResult {
