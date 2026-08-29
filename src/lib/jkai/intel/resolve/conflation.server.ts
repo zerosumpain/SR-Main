@@ -70,7 +70,7 @@ export interface ConflationSweepResult {
   queued: number;
   skipped: number;
   failed: number;
-  splits: Array<{ entity: string; target: string; moved: number }>;
+  splits: Array<{ entity: string; target: string; moved: number; relationTypes: string[] }>;
   queue: Array<{ entity: string; targetName: string; why: string }>;
 }
 
@@ -149,6 +149,20 @@ interface Verdict {
   conflated: boolean;
   outcome: 'applied' | 'proposed' | 'queued' | 'skipped';
   targetName?: string;
+  /**
+   * The relation types the proposal would move, and how many edges that is.
+   *
+   * Recorded because a propose-only queue whose proposals cannot be READ is not a
+   * queue — it is a list of names. The first proposal to survive the sharpened
+   * prompt was `IBCA Data Strategy -> IBCA Board`, 18 edges, and whether that is
+   * right turns entirely on whether the 18 are the four governance relations
+   * (`approves`, `decision_maker_of`, `requested_approval_of`) or also the
+   * thirteen `works_on` — which would be wrong, because people work on the
+   * strategy, not on the board. Without this field there is no way to tell and
+   * the reviewer is being asked to approve a number.
+   */
+  relationTypes?: string[];
+  edgeCount?: number;
   why?: string;
   at: string;
 }
@@ -302,6 +316,7 @@ export async function runConflationSweep(
       conflated: proposal.conflated,
       outcome: verdict.action === 'apply' ? 'applied' : verdict.action === 'queue' ? 'queued' : 'skipped',
       targetName: proposal.targetName || undefined,
+      relationTypes: proposal.conflated ? [...new Set(proposal.relationTypes)] : undefined,
       why: verdict.action === 'apply' ? proposal.reason : verdict.why,
       at: new Date().toISOString(),
     };
@@ -325,8 +340,14 @@ export async function runConflationSweep(
         result.skipped++;
       } else if (!apply) {
         record0.outcome = 'proposed';
+        record0.edgeCount = moving.length;
         result.proposed++;
-        result.splits.push({ entity: candidate.name, target: proposal.targetName, moved: moving.length });
+        result.splits.push({
+          entity: candidate.name,
+          target: proposal.targetName,
+          moved: moving.length,
+          relationTypes: [...new Set(proposal.relationTypes)],
+        });
       } else {
         try {
           const out = await splitEntity({
@@ -336,7 +357,12 @@ export async function runConflationSweep(
             reason: `Conflation detected automatically: ${proposal.reason}`,
           });
           result.applied++;
-          result.splits.push({ entity: candidate.name, target: proposal.targetName, moved: out.moved });
+          result.splits.push({
+            entity: candidate.name,
+            target: proposal.targetName,
+            moved: out.moved,
+            relationTypes: [...new Set(proposal.relationTypes)],
+          });
         } catch (err) {
           result.failed++;
           record0.outcome = 'skipped';
