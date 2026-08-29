@@ -9,9 +9,9 @@
    * since your oldest still-owned cell changed hands — and it exists for
    * exactly that reason.
    */
-  import { km2, relativeAge } from './identity';
+  import { km2, relativeAge, windowPhrase, windowShort } from './identity';
   import type { PlayerIdentity } from './identity';
-  import type { DangleLine, FeedItem, Standing } from './types';
+  import type { DangleLine, FeedItem, Standing, WindowState } from './types';
 
   let {
     standings,
@@ -19,13 +19,29 @@
     dangle,
     feed,
     now,
+    window: win,
   }: {
     standings: Standing[];
     players: PlayerIdentity[];
     dangle: DangleLine[];
     feed: FeedItem[];
     now: number;
+    /** The active date window. Every board here answers over it, and each one
+     *  says so in its own header rather than leaving the page to explain it
+     *  once at the top — a board read on its own must not read as all time. */
+    window: WindowState;
   } = $props();
+
+  const windowed = $derived(win.key !== 'all');
+  const windowLine = $derived(windowPhrase(win.key));
+  const windowTag = $derived(windowShort(win.key));
+  /** The effort lines sum the narrower of the window and a week, so the period
+   *  is a number from the server, never the hard-coded "last 7 days" it was. */
+  const effortLine = $derived(
+    win.effortDays >= 1
+      ? `last ${Math.round(win.effortDays)} day${Math.round(win.effortDays) === 1 ? '' : 's'}`
+      : `last ${Math.round(win.effortDays * 24)} hours`,
+  );
 
   const byId = $derived(new Map(players.map((p) => [p.subject, p])));
   const byArea = $derived([...standings].sort((a, b) => b.areaM2 - a.areaM2));
@@ -39,7 +55,10 @@
 
 <div class="boards">
   <section class="board board--wide">
-    <header class="board-hd"><span class="metric-label">Ground held</span><span class="metric-label muted">km²</span></header>
+    <header class="board-hd">
+      <span class="metric-label">Ground held</span>
+      <span class="metric-label muted">km² · {windowTag}</span>
+    </header>
     <ol class="board-list">
       {#each byArea as s, i (s.subject)}
         {@const p = byId.get(s.subject)}
@@ -56,7 +75,7 @@
   <section class="board board--wide">
     <header class="board-hd">
       <span class="metric-label">This week</span>
-      <span class="metric-label muted">gained / lost, never netted</span>
+      <span class="metric-label muted">gained / lost vs {win.weekBasis}</span>
     </header>
     <table class="week">
       <thead>
@@ -82,7 +101,10 @@
     </table>
   </section>
   <section class="board">
-    <header class="board-hd"><span class="metric-label">Geos</span><span class="metric-label muted">count</span></header>
+    <header class="board-hd">
+      <span class="metric-label">Geos</span>
+      <span class="metric-label muted">count · {windowTag}</span>
+    </header>
     <ol class="board-list">
       {#each byGeos as s, i (s.subject)}
         {@const p = byId.get(s.subject)}
@@ -97,7 +119,8 @@
   </section>
   <section class="board">
     <header class="board-hd">
-      <span class="metric-label">Longest held</span><span class="metric-label muted">days</span>
+      <span class="metric-label">Longest held</span>
+      <span class="metric-label muted">{windowed ? 'days, within window' : 'days'}</span>
     </header>
     <ol class="board-list">
       {#each byHeld as s, i (s.subject)}
@@ -114,10 +137,12 @@
   <section class="board">
     <header class="board-hd">
       <span class="metric-label">Most recent captures</span>
-      <span class="metric-label muted">closed loops</span>
+      <span class="metric-label muted">closed loops · {windowTag}</span>
     </header>
     {#if recent.length === 0}
-      <p class="board-empty">Nothing has closed a loop yet.</p>
+      <p class="board-empty">
+        {windowed ? `No loop closed in ${windowLine}.` : 'Nothing has closed a loop yet.'}
+      </p>
     {:else}
       <ol class="board-list">
         {#each recent as c (c.id)}
@@ -143,7 +168,7 @@
 <section class="dangles" aria-label="Effort against ground">
   <header class="board-hd">
     <span class="metric-label">Effort against ground</span>
-    <span class="metric-label muted">last 7 days</span>
+    <span class="metric-label muted">{effortLine}</span>
   </header>
   {#each dangle as d (d.subject)}
     {@const p = byId.get(d.subject)}
@@ -151,9 +176,9 @@
       <span class="dangle-badge" aria-hidden="true">{p?.initial ?? '?'}</span>
       <span class="dangle-name">{p?.name ?? d.subject}</span>
       {#if d.movedKm === 0 && d.enclosedM2 === 0}
-        <span class="dangle-quiet">nothing recorded in the last seven days</span>
+        <span class="dangle-quiet">nothing recorded in the {effortLine}</span>
       {:else}
-        moved <b>{d.movedKm.toFixed(1)} km</b> this week, enclosed
+        moved <b>{d.movedKm.toFixed(1)} km</b> in the {effortLine}, enclosed
         <b>{km2(d.enclosedM2)} km²</b>
         {#if d.claims}
           across {d.claims} loop{d.claims === 1 ? '' : 's'}

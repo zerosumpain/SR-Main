@@ -17,6 +17,7 @@
 import { haversineM, decimateTrack, type TrackPoint } from '$lib/trails/track';
 import type { ActivityTypeName } from '$lib/trails/activity-meta';
 import { STILL_MAX_GAP_MINS } from '$lib/daydream/types';
+import { FILL_RADIUS_CELLS, MAX_FILL_TILES } from './fill';
 import {
   bboxOf,
   pathLength,
@@ -51,8 +52,61 @@ export interface GeoThresholds {
   maxAccuracyM: number;
   /** Above this, it is not a walk. Applied to the reported speed AND to the
    *  speed implied by consecutive fixes, which is the one that catches a
-   *  misclassified drive. */
+   *  misclassified drive.
+   *
+   *  This is the UNTYPED ceiling and the default one. A source that declares
+   *  what the activity was gets `rideMaxSpeedKmh` instead — see below. */
   maxSpeedKmh: number;
+  /**
+   * The same ceiling for a fix the source DECLARED as cycling.
+   *
+   * Amendment 2 (John, 2026-08-29). Amendment 1 let cycling score but left the
+   * 25 km/h ceiling applying to it, and the consequence was not "a ride
+   * captures the slow parts of itself" — it was that 22.4% of every ride's legs
+   * cut the journey, so two real rides arrived at the geometry as 45 and 60
+   * separate segments. A shredded journey is far below the 400 m closure floor
+   * and far too broken for the interior fill to enclose anything, so a ride
+   * could only ever trample a line: the "snail trail that is a full loop"
+   * John was looking at.
+   *
+   * 45 km/h is read off the corpus, not chosen by taste. Over 135,700 implied
+   * leg speeds from 176 real rides (the 177th is dealt with below):
+   *
+   *     p50 19.8   p90 27.8   p95 30.4   p99 35.1   p99.9 39.7   max 59.5
+   *
+   * The cycling population ENDS at about 40 km/h — in 2.5 km/h bins the last
+   * populated one is 37.5-40 with 456 legs, then 67, 18, 11, 10, 0, 0, 0, 1.
+   * Above 45 km/h there are 22 legs in the whole corpus, 0.016%; above 50 there
+   * is one. So the band 42.5-57.5 km/h is EMPTY on real cycling, and a ceiling
+   * placed in it separates the two populations rather than slicing one.
+   *
+   * It is set at the top of that empty band rather than the bottom because the
+   * 40-50 tail is sampling noise, not speed: the watch samples at 1 Hz (median
+   * leg 1 s), and 12 m of GPS wander in one second reads as 43 km/h. Cutting
+   * there would sever a journey on a jitter spike, which is the exact failure
+   * being repaired.
+   *
+   * It still cuts a vehicle, and the corpus contains the proof rather than a
+   * hypothetical: one track labelled `ride` has a median leg of 33 km/h, a p90
+   * of 176 km/h and 1,122 legs over 40 km/h. It is a train or a car, and at a
+   * 45 km/h ceiling it is still shredded — while a car at a UK 70-90 km/h is
+   * 1.6-2x the ceiling and severed on every leg.
+   *
+   * This ceiling is NOT extended to untyped data. Life360 cannot tell a bike
+   * from a car — `mode` is derived from GPS speed alone — so the trail keeps
+   * `maxSpeedKmh`, and the raise reaches only a workout the owner's own watch
+   * declared, after `type_override` has had its say.
+   */
+  rideMaxSpeedKmh: number;
+  /**
+   * The declared activity types the raised ceiling applies to.
+   *
+   * A list rather than a hard-coded pair so that the number and the population
+   * it applies to are persisted together on every claim: a row whose stored
+   * thresholds say `rideActivityTypes: []` was made under the old rule, and
+   * that is legible without a git archaeology dig.
+   */
+  rideActivityTypes: readonly ActivityTypeName[];
   /** Movement modes that can never capture ground. */
   excludedModes: readonly string[];
   /**
@@ -99,6 +153,13 @@ export interface GeoThresholds {
    *  gate set, not the loop half of it. */
   maxInterpolationM: number;
   maxInterpolationS: number;
+  /** Structuring-element radius, in cells, for the interior fill's
+   *  morphological closing. See $lib/geo/fill. */
+  fillRadiusCells: number;
+  /** Ceiling on the interior ONE journey may be awarded, in cells. Must never
+   *  exceed `maxEnclosedTiles`, or a journey that failed to close could be paid
+   *  for more ground than one that closed. */
+  maxFillTiles: number;
 }
 
 /**
@@ -113,16 +174,26 @@ export interface GeoThresholds {
  * starves four of the five players.
  *
  * `excludedActivityTypes` is EMPTY, and that is Amendment 1 rather than an
- * oversight: cycling scores. The 25 km/h ceiling stays where it is, which means
- * a ride captures the parts of itself that were ridden at a human pace and the
- * fast legs cut the journey — a gate about cars, not about sports. Anyone who
- * wants a foot-only view filters `activity_type` at the read, which is what the
- * ledger now records it for.
+ * oversight: cycling scores. Anyone who wants a foot-only view filters
+ * `activity_type` at the read, which is what the ledger now records it for.
+ *
+ * The speed ceiling is now TWO numbers, and that is Amendment 2. Amendment 1
+ * left the 25 km/h ceiling applying to rides, on the reasoning that it was "a
+ * gate about cars, not about sports" and a ride would simply capture the parts
+ * of itself ridden at a human pace. Measured against the real corpus that
+ * reasoning was wrong: 22.4% of a ride's legs are over 25 km/h, so the gate did
+ * not trim a ride's fast sections, it SHREDDED the journey — 45 and 60 segments
+ * out of two real rides — and a shredded journey can neither close nor be
+ * filled. A ride could only ever paint a line. `rideMaxSpeedKmh` is the repair
+ * and its 45 is read off that corpus; the untyped 25 is untouched, because
+ * Life360 cannot tell a bike from a car.
  */
 export const GEO_THRESHOLDS: GeoThresholds = Object.freeze({
   zoom: TILE_ZOOM,
   maxAccuracyM: 75,
   maxSpeedKmh: 25,
+  rideMaxSpeedKmh: 45,
+  rideActivityTypes: Object.freeze(['ride', 'mtb']) as readonly ActivityTypeName[],
   excludedModes: Object.freeze(['vehicle', 'rail']) as readonly string[],
   excludedActivityTypes: Object.freeze([]) as readonly ActivityTypeName[],
   jitterRadiusM: 25,
@@ -138,6 +209,8 @@ export const GEO_THRESHOLDS: GeoThresholds = Object.freeze({
   minRingWidthCells: 0.5,
   maxInterpolationM: 300,
   maxInterpolationS: 180,
+  fillRadiusCells: FILL_RADIUS_CELLS,
+  maxFillTiles: MAX_FILL_TILES,
 });
 
 /**
@@ -213,6 +286,34 @@ function impliedKmh(a: GeoFix, b: GeoFix): number | null {
   if (!(seconds > 0)) return null;
   const metres = haversineM([a.lon, a.lat], [b.lon, b.lat]);
   return (metres / seconds) * 3.6;
+}
+
+/**
+ * The speed ceiling this ONE fix is judged against.
+ *
+ * The raise is keyed on the DECLARED type and nothing else. An absent type is
+ * not a bike — it is Life360, where `mode` comes from GPS speed and a runner
+ * and a cyclist both land in `active` — so the untyped default is the strict
+ * ceiling and stays there. See `rideMaxSpeedKmh`.
+ */
+export function speedCeilingFor(fix: GeoFix, th: GeoThresholds): number {
+  if (fix.activityType == null) return th.maxSpeedKmh;
+  return (th.rideActivityTypes as readonly string[]).includes(fix.activityType)
+    ? th.rideMaxSpeedKmh
+    : th.maxSpeedKmh;
+}
+
+/**
+ * The ceiling a LEG is judged against: the stricter of its two endpoints'.
+ *
+ * `min` rather than `max` because a leg is only as trustworthy as its weaker
+ * end. A journey that is genuinely all one ride sees the raised ceiling on
+ * every leg — every fix carries the same declared type — while a leg that
+ * bridges a declared ride and an untyped fix is exactly the shape a
+ * misattributed raise would arrive in, and it keeps the 25 km/h gate.
+ */
+function legCeiling(a: GeoFix, b: GeoFix, th: GeoThresholds): number {
+  return Math.min(speedCeilingFor(a, th), speedCeilingFor(b, th));
 }
 
 /**
@@ -340,7 +441,7 @@ export function cleanJourney(
       cut();
       continue;
     }
-    if (f.speedKmh != null && f.speedKmh > th.maxSpeedKmh) {
+    if (f.speedKmh != null && f.speedKmh > speedCeilingFor(f, th)) {
       dropped.speed++;
       cut();
       continue;
@@ -348,7 +449,7 @@ export function cleanJourney(
     const prev = current[current.length - 1];
     if (prev) {
       const kmh = impliedKmh(prev, f);
-      if (kmh != null && kmh > th.maxSpeedKmh) {
+      if (kmh != null && kmh > legCeiling(prev, f, th)) {
         dropped.speed++;
         cut();
       } else if ((f.ts.getTime() - prev.ts.getTime()) / 1000 > th.maxObservationGapS) {
@@ -412,6 +513,17 @@ export interface QualifiedRing {
    *  retune can be argued from what actually shipped. */
   widthM: number;
   closure: ClosureRecord;
+  /**
+   * Which cleaned segment this ring came out of.
+   *
+   * Carried because the interior fill has to know. `cleanJourney` CUTS a
+   * journey at a vehicle leg, a speed-gate breach or a hole in the record —
+   * "a dropped vehicle leg splits a journey rather than bridging it" — and a
+   * fill computed over the union of every segment's cells silently welds those
+   * pieces back together. The segment is the unit the gates severed, so it has
+   * to be the unit the fill reasons about.
+   */
+  segmentIndex: number;
 }
 
 export type RejectReason =
@@ -688,7 +800,7 @@ export function detectLoops(
   const rings: QualifiedRing[] = [];
   const rejected: RejectedRing[] = [];
 
-  for (const segment of clean.segments) {
+  for (const [segmentIndex, segment] of clean.segments.entries()) {
     if (segment.length < 4) continue;
     const proj = projectionFor(segment);
     const metres: Vec2[] = segment.map((f) => proj.toM(f.lat, f.lon));
@@ -754,6 +866,7 @@ export function detectLoops(
         capturedAreaM2,
         widthM,
         closure,
+        segmentIndex,
       });
     }
   }
