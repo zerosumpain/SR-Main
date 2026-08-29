@@ -1011,3 +1011,60 @@ a {
 
 /* every figure that can change in place is tabular */
 .fs-num, .fs-table .num, .fs-hud [data-num] { font-variant-numeric: tabular-nums; }
+
+/* ——— highlight.js token colours ———
+   highlight.js emits class-only markup (`<span class="hljs-keyword">`), which is
+   exactly why it is the highlighter for chat: sanitizeChatHtml permits `class`
+   and no `style` at all, so shiki's inline-styled output would arrive here as
+   grey text. The classes have been emitted by src/lib/blog/renderer.ts since it
+   was written, with nothing anywhere defining a colour for them — every code
+   block on the blog has been monochrome. This lights those up too.
+
+   Palette is the site's own: burnt orange for keywords, petrol for names and
+   numbers, green for strings, muted ink for comments. No new hexes. */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-name { color: var(--accent); }
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string { color: var(--success); }
+
+.hljs-comment,
+.hljs-quote { color: var(--text-ghost); font-style: italic; }
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-selector-attr,
+.hljs-selector-pseudo { color: var(--accent-ink); }
+
+.hljs-title,
+.hljs-section,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-type,
+.hljs-class .hljs-title { color: var(--accent-ink-hover); font-weight: 600; }
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-property { color: var(--text-secondary); }
+
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params { color: var(--text-primary); }
+
+.hljs-meta,
+.hljs-tag { color: var(--text-muted); }
+
+.hljs-deletion { color: var(--error); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }

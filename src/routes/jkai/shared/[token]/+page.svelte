@@ -37,6 +37,7 @@
             content={m.content}
             createdAt={m.createdAt}
             conversationId={null}
+            canRun={false}
           />
         {/each}
       {/if}
