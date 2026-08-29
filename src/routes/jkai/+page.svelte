@@ -510,6 +510,9 @@
       activeId={activeId}
       canOpenMore={openTabs.items.length < MAX_TABS}
       limitHit={openTabs.limitHit}
+      onToggleRail={() => (sidebarOpen = !sidebarOpen)}
+      onToggleGraph={() => (graphRailOpen = !graphRailOpen)}
+      graphOpen={graphRailOpen}
       onActivate={activateTab}
       onClose={closeTab}
       onNew={createConversation}
@@ -549,9 +552,6 @@
             activeBuild={pane.activeBuild}
             active={tab.id === activeId}
             onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}
-            onToggleThreadRail={() => (sidebarOpen = !sidebarOpen)}
-            onToggleGraphRail={() => (graphRailOpen = !graphRailOpen)}
-            {graphRailOpen}
             onmodelchange={(ctx: ModelContext, supportsThinking?: boolean) =>
               handleModelChange(tab.id, ctx, supportsThinking)}
           />
