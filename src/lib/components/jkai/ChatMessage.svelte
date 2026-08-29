@@ -49,6 +49,9 @@
     onOpenResearchRef,
     entityMentions = [],
     erProcessing = false,
+    /** Off for the public share view: /jkai/run is owner-gated, so a Run button
+     *  there would only ever open a sign-in page. Copy still works. */
+    canRun = true,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -92,6 +95,7 @@
      *  legend on the top edge — rather than dropping a separate pill into the
      *  thread, so the signal sits on the message it is about. */
     erProcessing?: boolean;
+    canRun?: boolean;
   } = $props();
 
   function formatClockTime(iso: string | undefined): string {
@@ -187,6 +191,7 @@
       role === 'assistant' && entityMentions.length
         ? linkifyEntities(linkified.html, entityMentions).html
         : linkified.html,
+      { allowRun: canRun },
     ),
   );
 

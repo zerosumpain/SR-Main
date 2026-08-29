@@ -137,15 +137,21 @@ const LANG_CLASS_RE = /language-([a-z0-9+#-]+)/i;
  * which reads the source back off the `<code>` element's textContent — the
  * highlighted markup un-escapes to exactly the text the model wrote.
  */
-export function enhanceCodeBlocks(html: string): string {
+export function enhanceCodeBlocks(html: string, opts: { allowRun?: boolean } = {}): string {
+  const allowRun = opts.allowRun ?? true;
   return html.replace(PRE_BLOCK_RE, (whole, attrs: string) => {
     const lang = normaliseLang(LANG_CLASS_RE.exec(attrs)?.[1] ?? '');
     const lane = runLaneFor(lang);
     const label = lang || 'code';
 
-    const runBtn = lane
-      ? `<span class="cc-btn cc-run" role="button" tabindex="0" data-lane="${lane}" title="Run this in a separate window">run</span>`
-      : `<span class="cc-btn cc-run-off" title="No runtime for ${escapeHtml(label)} in the sandbox">run</span>`;
+    // The public share view renders through this same component, and /jkai/run
+    // is owner-gated — so offering an anonymous reader a Run button would just
+    // open a sign-in page. Copy still works for everyone.
+    const runBtn = !allowRun
+      ? ''
+      : lane
+        ? `<span class="cc-btn cc-run" role="button" tabindex="0" data-lane="${lane}" title="Run this in a separate window">run</span>`
+        : `<span class="cc-btn cc-run-off" title="No runtime for ${escapeHtml(label)} in the sandbox">run</span>`;
 
     return (
       `<div class="code-card" data-lang="${escapeHtml(lang)}">` +

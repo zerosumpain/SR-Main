@@ -119,3 +119,24 @@ describe('enhanceCodeBlocks', () => {
     expect(html).not.toContain('data-lang="a"b"');
   });
 });
+
+describe('allowRun: false (the public share view)', () => {
+  it('drops the run button but keeps copy', () => {
+    const html = enhanceCodeBlocks(
+      sanitizeChatHtml(marked.parse('```python\nprint(1)\n```') as string),
+      { allowRun: false },
+    );
+    expect(html).toContain('cc-copy');
+    expect(html).not.toContain('cc-run');
+    expect(html).toContain('code-card');
+  });
+
+  it('still highlights and labels the block', () => {
+    const html = enhanceCodeBlocks(
+      sanitizeChatHtml(marked.parse('```python\ndef f(): pass\n```') as string),
+      { allowRun: false },
+    );
+    expect(html).toContain('hljs-keyword');
+    expect(html).toContain('data-lang="python"');
+  });
+});
