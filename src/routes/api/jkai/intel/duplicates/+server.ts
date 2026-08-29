@@ -195,6 +195,17 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ ok: true, result: run });
   }
 
+  // Recover the surface forms past merges threw away.
+  //
+  // The nightly resolve stage runs this too. It is here as well because a
+  // deploy should not have to wait until 04:15 to be provably working, and
+  // because it is idempotent — it only writes where the computed alias list
+  // differs from what is stored, so a second run does nothing.
+  if (action === 'backfill-aliases') {
+    const { backfillAliasesFromTombstones } = await import('$lib/jkai/intel/resolve/merge');
+    return json({ ok: true, result: await backfillAliasesFromTombstones() });
+  }
+
   if (action === 'unmerge') {
     const entityId = String(body.entityId ?? '');
     if (!entityId) throw error(400, 'entityId is required');
