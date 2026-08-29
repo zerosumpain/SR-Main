@@ -106,6 +106,122 @@ export function clusterSeedOf(node: {
   return typeof node.community === 'number' && Number.isFinite(node.community) ? node.community : 0;
 }
 
+// ── Colour mode ─────────────────────────────────────────────────────────────
+//
+// Colour on this graph has always meant "which cluster", and cluster is the
+// right default: it is the one grouping the layout itself is built around, and
+// it is the only one you cannot read off a label.
+//
+// It is not the only question, though. "Which of these came from work email
+// rather than from Drive" and "where are all the people" are both questions
+// about the same picture, and neither has ever been answerable from it — the
+// type filter was a single-select dropdown that REMOVED everything else, and
+// the category filter was buried in the Sources rail behind a files-selected
+// gate. Removing is the wrong verb: the answer to "where are the people" is
+// where they sit among everything else.
+//
+// So colour becomes a dial with three positions, and highlight becomes a
+// separate action from filter. Highlighting moves nothing and removes nothing.
+
+export type ColourMode = 'cluster' | 'type' | 'category';
+
+/** The key a node contributes under a given mode. Null = it has no answer. */
+export function colourKeyOf(
+  node: { typeId?: string; categories?: string[] },
+  mode: ColourMode,
+): string | null {
+  if (mode === 'type') return node.typeId ?? null;
+  if (mode === 'category') {
+    // A node can carry several categories — its evidence came from several
+    // places. The first is used for COLOUR (a dot has one fill) while
+    // `matchesHighlight` below considers all of them, so a node in two
+    // highlighted categories lights up under either.
+    return node.categories?.[0] ?? null;
+  }
+  return null;
+}
+
+/**
+ * A stable palette slot for an arbitrary key.
+ *
+ * Hashed rather than assigned by index, for the same reason cluster colours are
+ * taken from the roster: an index recomputed per request repaints the whole
+ * graph whenever the underlying list changes length, and a colour you have to
+ * relearn on every visit is not carrying information.
+ */
+export function paletteSlotOf(key: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % CLUSTER_COLOURS.length;
+}
+
+/**
+ * The column default for `intel_entity_types.color` and `intel_categories.color`.
+ *
+ * Treated as "nobody chose one" rather than as a colour. On the live graph 48 of
+ * 55 entity types carry exactly this value, so honouring it would paint the
+ * whole graph one shade of blue the moment you asked it to colour by type —
+ * which is a picture that answers nothing.
+ */
+export const UNSET_COLOUR = '#7dd3fc';
+
+/** Nothing to colour BY. Grey, so "unclassified" cannot be mistaken for a class. */
+export const UNCLASSIFIED_COLOUR = '#9a9086';
+
+/**
+ * The colour for one key, preferring a deliberately chosen one.
+ *
+ * Exported because the legend has to agree with the graph exactly. A legend
+ * drawn from the stored colour beside a graph drawn from the palette is a key
+ * that lies, which is worse than no key at all.
+ */
+export function keyColour(key: string, stored?: string | null): string {
+  if (stored && stored.toLowerCase() !== UNSET_COLOUR) return stored;
+  return clusterColour(paletteSlotOf(key));
+}
+
+/** The colour to draw a node in, under the current mode. */
+export function nodeColourOf(
+  node: {
+    clusterColourIndex?: number | null;
+    community?: number | null;
+    typeId?: string;
+    color?: string;
+    categories?: string[];
+  },
+  mode: ColourMode = 'cluster',
+  /** slug → the colour the analyst gave that category. */
+  categoryColours?: ReadonlyMap<string, string>,
+): string {
+  if (mode === 'cluster') return clusterColourOf(node);
+
+  const key = colourKeyOf(node, mode);
+  if (!key) return UNCLASSIFIED_COLOUR;
+
+  return keyColour(key, mode === 'category' ? categoryColours?.get(key) : node.color);
+}
+
+/**
+ * Is this node one of the highlighted ones?
+ *
+ * Empty set means "no highlight is on", which is TRUE for everything — the
+ * alternative (nothing matches) would blank the graph the moment the control
+ * was rendered.
+ */
+export function matchesHighlight(
+  node: { typeId?: string; categories?: string[] },
+  mode: ColourMode,
+  keys: ReadonlySet<string>,
+): boolean {
+  if (!keys.size) return true;
+  if (mode === 'type') return node.typeId ? keys.has(node.typeId) : false;
+  if (mode === 'category') return (node.categories ?? []).some((c) => keys.has(c));
+  return true;
+}
+
 // ── Relevance: how big and how vivid ────────────────────────────────────────
 //
 // Age used to be carried by opacity alone, which is the one channel already

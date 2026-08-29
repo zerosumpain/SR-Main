@@ -132,6 +132,21 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'Latency-visible: it runs after the reply is delivered and the entity rail stays empty until it finishes. Mechanical JSON against a fixed schema, so it takes the fastest cheap model rather than the smartest one.',
   },
   {
+    id: 'resolution',
+    scope: 'site',
+    label: 'Entity adjudication',
+    blurb: 'Reads the evidence behind two candidate duplicates and rules on whether they are one thing.',
+    key: 'jkai.intel.resolution_model',
+    // Follows the site default deliberately. Extraction is pinned cheap because
+    // it is mechanical JSON on a latency-visible path; this is the opposite —
+    // nothing waits on it, it runs a few hundred times a night at most, and the
+    // whole point of it is judgement the string rules could not make.
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
     id: 'selfimprove',
     scope: 'site',
     label: 'Self-improve',

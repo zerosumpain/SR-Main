@@ -11,7 +11,7 @@
   //      position you were at is still the position you are at.
 
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
 
@@ -28,6 +28,137 @@
   let toast = $state<string | null>(null);
   let showHelp = $state(false);
   let tab = $state<'entities' | 'alerts'>('entities');
+
+  // ── Duplicate suggestions ────────────────────────────────────────────────
+  //
+  // The queue's most expensive mistake was never a wrong confirm — it was a
+  // confirm that should have been a MERGE. Triage asked "is this real?" with no
+  // idea that the graph already held the same thing under a slightly different
+  // name, so the honest answer ("yes, it's real") added a second node for it,
+  // and the duplicate count grew faster than the sweep could clear it.
+  //
+  // Fetched after the page rather than in its load: the resolver compares every
+  // entity against every other, which is seconds of work, and a queue you cannot
+  // start clearing until it finishes is worse than one whose suggestions arrive
+  // a moment late.
+  interface DupHint {
+    otherId: string;
+    otherName: string;
+    otherType: string;
+    confidence: number;
+    reason: string;
+    /** Which side the resolver would keep. */
+    keepId: string;
+  }
+  let hints = $state<Record<string, DupHint>>({});
+  let hintsLoading = $state(true);
+  let hintsError = $state<string | null>(null);
+
+  onMount(async () => {
+    try {
+      // 0.5 rather than the resolver's floor: below that the reason is usually
+      // "the names share some words", which is not worth interrupting a triage
+      // pass for.
+      const res = await fetch('/api/jkai/intel/duplicates?min=0.5');
+      if (!res.ok) throw new Error(`the duplicate check came back ${res.status}`);
+      const body = await res.json();
+      const queued = new Set(items.map((i) => i.id));
+      const next: Record<string, DupHint> = {};
+      for (const d of body.duplicates ?? []) {
+        for (const [mine, other] of [
+          [d.keep, d.merge],
+          [d.merge, d.keep],
+        ] as const) {
+          if (!queued.has(mine.id)) continue;
+          // Keep the strongest hint per queued entity.
+          if (next[mine.id] && next[mine.id].confidence >= d.confidence) continue;
+          next[mine.id] = {
+            otherId: other.id,
+            otherName: other.name,
+            otherType: other.type,
+            confidence: d.confidence,
+            reason: d.reason,
+            keepId: d.keep.id,
+          };
+        }
+      }
+      hints = next;
+    } catch (err) {
+      // Named rather than swallowed: with no hints and no message the page looks
+      // like a graph with no duplicates in it, which is the opposite of true.
+      hintsError = err instanceof Error ? err.message : 'the duplicate check failed';
+    } finally {
+      hintsLoading = false;
+    }
+  });
+
+  const hintOf = (item: QueueItem | null): DupHint | null => (item ? (hints[item.id] ?? null) : null);
+  const hintCount = $derived(
+    items.filter((i) => statusOf(i) === 'pending' && hints[i.id]).length,
+  );
+
+  /**
+   * Merge the current entity with what it looks like — either direction.
+   *
+   * The resolver has already decided which side should survive (better
+   * connected, then more evidence, then the more specific name), so this takes
+   * its answer rather than assuming the queued item is the loser: confirming a
+   * well-connected new entity and folding a thin old one into it is a normal
+   * outcome, and forcing the queue item to always lose would quietly discard
+   * the better node.
+   */
+  async function mergeWithHint(item: QueueItem | null) {
+    const hint = hintOf(item);
+    if (!item || !hint || busyId) return;
+    busyId = item.id;
+    try {
+      if (hint.keepId === item.id) {
+        // The queued entity survives. Merge the other one into it, then confirm
+        // it — an entity that has just absorbed another is not still a guess.
+        await triage({ action: 'merge', entityId: hint.otherId, keepId: item.id });
+        await triage({ action: 'confirm', entityId: item.id });
+        statuses = { ...statuses, [item.id]: 'confirmed' };
+        notify(`Absorbed ${hint.otherName} into ${item.name}`);
+      } else {
+        await triage({ action: 'merge', entityId: item.id, keepId: hint.keepId });
+        statuses = { ...statuses, [item.id]: 'merged' };
+        notify(`Merged ${item.name} into ${hint.otherName}`);
+      }
+      const { [item.id]: _gone, ...rest } = hints;
+      hints = rest;
+      advance();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Merge failed');
+    } finally {
+      busyId = null;
+    }
+  }
+
+  /** "No, these are two things" — recorded durably, so it is never asked again. */
+  async function dismissHint(item: QueueItem | null) {
+    const hint = hintOf(item);
+    if (!item || !hint) return;
+    const { [item.id]: _gone, ...rest } = hints;
+    hints = rest;
+    try {
+      const res = await fetch('/api/jkai/intel/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'not-duplicate',
+          aId: item.id,
+          bId: hint.otherId,
+          aName: item.name,
+          bName: hint.otherName,
+          confidence: hint.confidence,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      notify(`Recorded: ${item.name} is not ${hint.otherName}`);
+    } catch {
+      notify('Hidden for now, but the decision did not save');
+    }
+  }
 
   // Merge picker
   let mergeOpen = $state(false);
@@ -307,6 +438,20 @@
         event.preventDefault();
         openMerge();
         break;
+      case 'd':
+        // The suggested merge, in one key. Only bound while there IS one, so
+        // the key is never a silent no-op.
+        if (hintOf(current)) {
+          event.preventDefault();
+          mergeWithHint(current);
+        }
+        break;
+      case 'D':
+        if (hintOf(current)) {
+          event.preventDefault();
+          dismissHint(current);
+        }
+        break;
       case 't':
         event.preventDefault();
         retypeEl?.focus();
@@ -357,7 +502,16 @@
         <div class="bar" role="progressbar" aria-valuenow={resolvedCount} aria-valuemin="0" aria-valuemax={items.length}>
           <span style="width: {progressPct}%"></span>
         </div>
-        <div class="counter right">{resolvedCount} resolved · {remaining} left</div>
+        <div class="counter right">
+          {resolvedCount} resolved · {remaining} left
+          {#if hintsLoading}
+            <span class="backlog">· checking for duplicates…</span>
+          {:else if hintsError}
+            <span class="backlog warn">· duplicate check failed: {hintsError}</span>
+          {:else if hintCount}
+            <span class="backlog">· {hintCount} look like something you already have</span>
+          {/if}
+        </div>
       </div>
 
       <div class="split">
@@ -380,6 +534,9 @@
                   <span class="sub">{item.typeName} · {item.relationshipCount} links · {item.noteCount} sources</span>
                 </span>
                 {#if status === 'pending'}
+                  {#if hints[item.id]}
+                    <span class="dup-dot" title="Looks like {hints[item.id].otherName}">⇢</span>
+                  {/if}
                   {#if item.watched}<span class="star" title="Watched">★</span>{/if}
                 {:else}
                   <span class="mark" class:reject={status === 'rejected'}>
@@ -418,6 +575,34 @@
             {#if current.aliases?.length}
               <div class="chips">
                 {#each current.aliases as alias (alias)}<span class="chip">{alias}</span>{/each}
+              </div>
+            {/if}
+
+            {#if hintOf(current)}
+              {@const hint = hintOf(current)!}
+              <!-- The question triage never asked. Confirming here creates a
+                   second node for something the graph already holds. -->
+              <div class="dup-hint">
+                <div class="dh-text">
+                  <span class="dh-kicker">Looks like an entity you already have</span>
+                  <a class="dh-name" href="/jkai/intel/entities/{hint.otherId}">
+                    {hint.otherName}<em>{hint.otherType}</em>
+                  </a>
+                  <p class="dh-why">{hint.reason} · {Math.round(hint.confidence * 100)}% confident</p>
+                </div>
+                <div class="dh-acts">
+                  <button
+                    type="button"
+                    class="primary"
+                    disabled={busyId === current.id || status !== 'pending'}
+                    onclick={() => mergeWithHint(current)}
+                  >
+                    {hint.keepId === current.id ? 'Absorb it' : 'Merge into it'} <kbd>d</kbd>
+                  </button>
+                  <button type="button" onclick={() => dismissHint(current)}>
+                    Two things <kbd>⇧D</kbd>
+                  </button>
+                </div>
               </div>
             {/if}
 
@@ -591,6 +776,8 @@
         <dt><kbd>y</kbd> <kbd>⏎</kbd></dt><dd>Confirm</dd>
         <dt><kbd>x</kbd> <kbd>n</kbd></dt><dd>Reject — deletes the entity</dd>
         <dt><kbd>m</kbd></dt><dd>Merge into an existing entity</dd>
+        <dt><kbd>d</kbd></dt><dd>Apply the suggested merge, when there is one</dd>
+        <dt><kbd>⇧D</kbd></dt><dd>Record that the suggestion is two different things</dd>
         <dt><kbd>w</kbd></dt><dd>Watch / unwatch</dd>
         <dt><kbd>t</kbd></dt><dd>Change type</dd>
         <dt><kbd>?</kbd></dt><dd>This help</dd>
@@ -674,6 +861,9 @@
   .counter .pos {
     color: var(--accent);
     font-size: var(--fs-label);
+  }
+  .counter .backlog.warn {
+    color: var(--warn);
   }
   .counter .backlog {
     color: var(--text-ghost);
@@ -771,6 +961,66 @@
   .star {
     color: var(--accent);
     font-size: var(--fs-label);
+  }
+  .dup-dot {
+    color: var(--accent-ink);
+    font-size: var(--fs-label);
+  }
+
+  /* The suggestion banner, above the evidence: it changes which QUESTION you
+     are answering, so it has to be read before the evidence rather than after
+     it. */
+  .dup-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 0 0 14px;
+    padding: 11px 13px;
+    border: 1px solid var(--accent-ink);
+    border-left-width: 3px;
+    border-radius: var(--radius-sharp);
+    background: var(--card-bg);
+  }
+  .dh-text {
+    min-width: 0;
+  }
+  .dh-kicker {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-ink);
+  }
+  .dh-name {
+    display: inline-block;
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-sm);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .dh-name:hover {
+    color: var(--accent);
+  }
+  .dh-name em {
+    font-style: normal;
+    margin-left: 7px;
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+  .dh-why {
+    margin: 3px 0 0;
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+  .dh-acts {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
   }
   .mark {
     color: var(--success);

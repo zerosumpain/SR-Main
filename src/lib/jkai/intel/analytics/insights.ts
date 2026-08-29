@@ -301,9 +301,9 @@ function detectTypeOutliers(a: GraphAnalysis): Insight[] {
       action: 'review',
       actionLabel: 'Tidy entity types',
       // /jkai/intel/types has never existed — this button 404'd. Type
-      // governance (proposed types, merging one type into another) lives on the
-      // quality page.
-      actionPayload: '/jkai/intel/quality#types',
+      // governance moved off the quality page into a surface of its own, which
+      // leads with the merge suggestions this insight is asking for.
+      actionPayload: '/jkai/intel/categories#suggestions',
     },
   ];
 }

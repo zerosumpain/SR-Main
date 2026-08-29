@@ -24,14 +24,23 @@
   /** Rows resolved this session, so they disappear without a full refetch. */
   let done = $state<Set<string>>(new Set());
 
-  let types = $state<Array<{ id: string; name: string; icon: string; count: number }>>([]);
-  let proposedTypes = $state<
-    Array<{ id: string; name: string; icon: string; description: string; rationale: string | null; entityCount: number }>
-  >([]);
-  /** Which existing type a rejected proposal should be folded into, per proposal. */
-  let foldInto = $state<Record<string, string>>({});
-  let mergeFrom = $state('');
-  let mergeInto = $state('');
+  /**
+   * What the sweep DID, as opposed to what it is showing.
+   *
+   * `ruledOut` is the count of pairs a person has already answered — a number
+   * that could not exist before, because a rejection lived in a browser tab and
+   * died with it. It is on screen for the same reason the source filter's
+   * honesty counters are: a filter that swallows its own decisions silently is
+   * indistinguishable from one that is broken.
+   */
+  let ruledOut = $state(0);
+  let adjudicatedApart = $state(0);
+  let semanticPairs = $state(0);
+  let seriesVariants = $state(0);
+  let undecidedInBand = $state(0);
+  /** Showing the pairs already answered, rather than the open queue. */
+  let showRuledOut = $state(false);
+  let adjudicating = $state(false);
 
   const key = (d: DuplicateRow) => `${d.keep.id}|${d.merge.id}`;
   const visible = $derived(duplicates.filter((d) => !done.has(key(d))));
@@ -39,25 +48,20 @@
   async function load() {
     loading = true;
     try {
-      const [dupRes, netRes] = await Promise.all([
-        fetch(`/api/jkai/intel/duplicates?min=${minConfidence}`),
-        fetch('/api/jkai/intel/network?minDegree=0'),
-      ]);
+      const params = new URLSearchParams({ min: String(minConfidence) });
+      if (showRuledOut) params.set('ruledOut', '1');
+      const dupRes = await fetch(`/api/jkai/intel/duplicates?${params}`);
       if (dupRes.ok) {
         const body = await dupRes.json();
         duplicates = body.duplicates ?? [];
-        proposedTypes = body.proposedTypes ?? [];
         total = body.total ?? 0;
         autoMergeable = body.autoMergeable ?? 0;
         threshold = body.threshold ?? 0.85;
-      }
-      if (netRes.ok) {
-        const net = await netRes.json();
-        const counts = new Map<string, number>();
-        for (const n of net.nodes ?? []) counts.set(n.typeId, (counts.get(n.typeId) ?? 0) + 1);
-        types = (net.types ?? [])
-          .map((t: { id: string; name: string; icon: string }) => ({ ...t, count: counts.get(t.id) ?? 0 }))
-          .sort((a: { count: number }, b: { count: number }) => a.count - b.count);
+        ruledOut = body.ruledOut ?? 0;
+        adjudicatedApart = body.adjudicatedApart ?? 0;
+        semanticPairs = body.semanticPairs ?? 0;
+        seriesVariants = body.seriesVariants ?? 0;
+        undecidedInBand = body.undecidedInBand ?? 0;
       }
     } finally {
       loading = false;
@@ -95,8 +99,88 @@
     }
   }
 
-  function dismiss(d: DuplicateRow) {
+  /**
+   * "These are two different things" — and it STAYS said.
+   *
+   * This used to add the pair to a `Set` that died with the tab, so every
+   * rejection this graph ever received was thrown away and re-proposed on the
+   * next nightly sweep. On a mailbox-fed graph that is most of what the queue
+   * contains.
+   */
+  async function dismiss(d: DuplicateRow) {
     done = new Set([...done, key(d)]);
+    try {
+      const res = await fetch('/api/jkai/intel/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'not-duplicate',
+          aId: d.keep.id,
+          bId: d.merge.id,
+          aName: d.keep.name,
+          bName: d.merge.name,
+          confidence: d.confidence,
+          signals: d.signals,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      ruledOut += 1;
+    } catch {
+      notify('Hidden for now, but the decision did not save');
+    }
+  }
+
+  /** Put an answered pair back in the queue. */
+  async function undecide(d: DuplicateRow) {
+    try {
+      const res = await fetch('/api/jkai/intel/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'undecide', aId: d.keep.id, bId: d.merge.id }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      notify('Back in the queue');
+      await load();
+    } catch {
+      notify('Could not reopen that pair');
+    }
+  }
+
+  /**
+   * Hand the undecided middle to a reader.
+   *
+   * Never merges anything. It records a verdict per pair, which moves the
+   * pair's score — an agreement can carry one over the existing auto-merge
+   * line, a disagreement drops it below the floor — and the threshold, its
+   * chain guard and its blast-radius cap are all untouched.
+   */
+  async function adjudicate() {
+    if (adjudicating) return;
+    adjudicating = true;
+    try {
+      const res = await fetch('/api/jkai/intel/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'adjudicate' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const r = (await res.json()).result as {
+        decided: number;
+        same: number;
+        different: number;
+        unsure: number;
+        failed: number;
+      };
+      notify(
+        `Read ${r.decided}: ${r.same} the same, ${r.different} different, ${r.unsure} unsure` +
+          (r.failed ? ` (${r.failed} could not be read)` : ''),
+      );
+      await load();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Adjudication failed');
+    } finally {
+      adjudicating = false;
+    }
   }
 
   // ── Bulk review ────────────────────────────────────────────────────────────
@@ -170,9 +254,11 @@
     }
   }
 
-  function dismissSelected() {
-    done = new Set([...done, ...selectedRows.map(key)]);
+  async function dismissSelected() {
+    const rows = selectedRows;
     selected = new Set();
+    for (const d of rows) await dismiss(d);
+    notify(`Recorded ${rows.length} as different things`);
   }
 
   async function sweep(dryRun: boolean) {
@@ -199,51 +285,6 @@
     }
   }
 
-  async function decideType(typeId: string, admit: boolean) {
-    if (busy) return;
-    busy = typeId;
-    try {
-      const res = await fetch('/api/jkai/intel/duplicates', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: admit ? 'admit-type' : 'reject-type',
-          typeId,
-          ...(admit ? {} : { intoTypeId: foldInto[typeId] || undefined }),
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      notify(admit ? 'Type admitted' : 'Type rejected');
-      await load();
-    } catch {
-      notify('Could not update that type');
-    } finally {
-      busy = null;
-    }
-  }
-
-  async function mergeTypes() {
-    if (!mergeFrom || !mergeInto || mergeFrom === mergeInto) return;
-    busy = 'types';
-    try {
-      const res = await fetch('/api/jkai/intel/duplicates', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'merge-types', fromTypeId: mergeFrom, intoTypeId: mergeInto }),
-      });
-      const body = await res.json();
-      notify(`Moved ${body.moved} entities`);
-      mergeFrom = '';
-      mergeInto = '';
-      await load();
-    } catch {
-      notify('Type merge failed');
-    } finally {
-      busy = null;
-    }
-  }
-
-  const tinyTypes = $derived(types.filter((t) => t.count <= 2));
 </script>
 
 <JkaiPageTitle title="INTEL / QUALITY" />
@@ -276,13 +317,53 @@
         <button type="button" class="primary" onclick={() => sweep(false)} disabled={sweeping || !autoMergeable}>
           {sweeping ? 'Working…' : `Merge ${autoMergeable} confident`}
         </button>
+        <button
+          type="button"
+          disabled={adjudicating || !undecidedInBand}
+          title="Read the evidence behind the pairs the rules cannot settle, and record a verdict on each. Never merges anything."
+          onclick={adjudicate}
+        >{adjudicating ? 'Reading…' : `Adjudicate ${Math.min(undecidedInBand, 40)}`}</button>
       </div>
     </header>
 
+    <!-- What the pass DID, not only what it is showing. Every number here was
+         invisible before, and two of them (ruled out, held back) are the sweep
+         withholding pairs — which is exactly the kind of decision that must
+         never be silent. -->
+    <div class="ledger">
+      <button
+        type="button"
+        class="led"
+        class:on={showRuledOut}
+        disabled={!ruledOut && !adjudicatedApart}
+        onclick={() => {
+          showRuledOut = !showRuledOut;
+          void load();
+        }}
+      >
+        <b>{ruledOut}</b> answered
+        {#if adjudicatedApart}<i>+{adjudicatedApart} by the reader</i>{/if}
+      </button>
+      <span class="led" title="Pairs whose names differ only in a number — two members of one series, held below the queue.">
+        <b>{seriesVariants}</b> held back as a series
+      </span>
+      <span class="led" title="Candidate pairs the nearest-neighbour pass proposed. Lexical blocking can only ever propose two entities that share a word.">
+        <b>{semanticPairs}</b> proposed by meaning
+      </span>
+      <span class="led"><b>{undecidedInBand}</b> in the band a reader can settle</span>
+    </div>
+
     {#if loading}
       <p class="muted">Comparing every entity against every other…</p>
+    {:else if showRuledOut && !visible.length}
+      <p class="muted">Nothing has been answered yet at this confidence.</p>
     {:else if !visible.length}
-      <p class="muted">No duplicates at this confidence. The graph is clean.</p>
+      <p class="muted">No open duplicates at this confidence. The graph is clean.</p>
+    {:else if showRuledOut}
+      <p class="muted">
+        Pairs already answered. A verdict from a person is final; one from the reader only pushes the
+        pair below the floor, so it can still be brought back.
+      </p>
     {:else}
       <p class="muted">
         {visible.length} shown of {total}. Above {Math.round(threshold * 100)}% confidence a merge is safe to
@@ -338,6 +419,15 @@
               {d.reason}
             </p>
 
+            {#if d.decision}
+              <p class="verdict" class:apart={d.decision.verdict === 'different'}>
+                <span class="v-who">{d.decision.decidedBy === 'human' ? 'You' : 'The reader'}</span>
+                said they are
+                <b>{d.decision.verdict === 'different' ? 'different things' : d.decision.verdict === 'same' ? 'the same thing' : 'not clear'}</b>
+                {#if d.decision.rationale}— {d.decision.rationale}{/if}
+              </p>
+            {/if}
+
             <div class="acts">
               <button type="button" class="primary" disabled={busy === key(d)} onclick={() => merge(d)}>
                 {busy === key(d) ? 'Merging…' : 'Merge'}
@@ -345,7 +435,11 @@
               <button type="button" disabled={busy === key(d)} onclick={() => merge(d, true)}>
                 Merge the other way
               </button>
-              <button type="button" class="ghost" onclick={() => dismiss(d)}>Not a duplicate</button>
+              {#if d.decision}
+                <button type="button" class="ghost" onclick={() => undecide(d)}>Ask again</button>
+              {:else}
+                <button type="button" class="ghost" onclick={() => dismiss(d)}>Not a duplicate</button>
+              {/if}
               <!-- Below the auto-merge line the question is "is this thing even
                    right", which is Triage's job, not this page's. -->
               <a class="ghost-link" href="/jkai/intel/review?focus={d.merge.id}">Judge in Triage</a>
@@ -356,80 +450,20 @@
     {/if}
   </section>
 
-  {#if proposedTypes.length}
-    <section class="panel">
-      <header><h2>Proposed types — awaiting a decision</h2></header>
-      <p class="muted">
-        The extractor coined these but cannot use them yet. Holding them is deliberate: an auto-admitted
-        type re-enters the next prompt as a legitimate option, so one bad coinage becomes self-reinforcing —
-        which is how a <code>font</code> type ended up collecting newspapers.
-      </p>
-      <ul class="dups">
-        {#each proposedTypes as t (t.id)}
-          <li class="dup">
-            <div class="pair">
-              <div class="side">
-                <span class="tag">proposed</span>
-                <strong>{t.icon} {t.name}</strong>
-                <span class="meta">{t.entityCount} entities waiting</span>
-              </div>
-            </div>
-            {#if t.rationale}<p class="why">{t.rationale}</p>{/if}
-            <div class="acts">
-              <button type="button" class="primary" disabled={busy === t.id} onclick={() => decideType(t.id, true)}>
-                Admit
-              </button>
-              <select bind:value={foldInto[t.id]} aria-label="Fold into">
-                <option value="">Reject (retire it)</option>
-                {#each types as e (e.id)}<option value={e.id}>Reject, re-type as {e.name}</option>{/each}
-              </select>
-              <button type="button" disabled={busy === t.id} onclick={() => decideType(t.id, false)}>
-                Reject
-              </button>
-            </div>
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
-
-  <!-- id="types" is the target of the "Tidy entity types" insight action, which
-       used to point at a /jkai/intel/types route that never existed. This is
-       the panel that insight is about: types holding one or two entities. -->
+  <!-- The taxonomy moved out.
+       It used to be two panels here: proposed types as a list, and every type
+       as a chip row with two 257-option <select>s. That is not a control
+       anybody can use, and it is a different question from this page's — this
+       page fixes which NODE a thing is; the taxonomy fixes which vocabulary
+       describes it. `id="types"` stays because the "Tidy entity types" insight
+       action links to it. -->
   <section class="panel" id="types">
     <header><h2>Entity types</h2></header>
     <p class="muted">
-      Types holding one or two entities fragment the taxonomy and make type filters useless. Fold them into a
-      broader type.
+      The taxonomy — entity types and the categories on their sources — now has its own surface, with
+      search, a status split and suggestions about what should be folded into what.
     </p>
-
-    {#if tinyTypes.length}
-      <div class="chips">
-        {#each tinyTypes as t (t.id)}
-          <span class="chip">{t.icon} {t.name} <b>{t.count}</b></span>
-        {/each}
-      </div>
-    {:else}
-      <p class="muted">Every type is carrying its weight.</p>
-    {/if}
-
-    <div class="type-merge">
-      <select bind:value={mergeFrom} aria-label="Type to retire">
-        <option value="">Move everything from…</option>
-        {#each types as t (t.id)}<option value={t.id}>{t.icon} {t.name} ({t.count})</option>{/each}
-      </select>
-      <span>→</span>
-      <select bind:value={mergeInto} aria-label="Type to keep">
-        <option value="">…into</option>
-        {#each types as t (t.id)}<option value={t.id}>{t.icon} {t.name} ({t.count})</option>{/each}
-      </select>
-      <button
-        type="button"
-        class="primary"
-        disabled={!mergeFrom || !mergeInto || mergeFrom === mergeInto || busy === 'types'}
-        onclick={mergeTypes}
-      >Merge types</button>
-    </div>
+    <a class="ghost-link" href="/jkai/intel/categories">Open the taxonomy →</a>
   </section>
 </div>
 
@@ -729,6 +763,67 @@
   }
   .type-merge span {
     color: var(--text-ghost);
+  }
+
+  /* The honesty row: what the sweep did, beside what it is showing. */
+  .ledger {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 12px;
+  }
+  .led {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  button.led {
+    cursor: pointer;
+  }
+  button.led:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  button.led:not(:disabled):hover {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  button.led.on {
+    background: var(--accent-tint-08);
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  .led b {
+    color: var(--accent-ink);
+    font-weight: 500;
+  }
+  .led i {
+    font-style: normal;
+    color: var(--text-ghost);
+  }
+
+  .verdict {
+    margin: 4px 0 0;
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+  .verdict.apart {
+    color: var(--text-ghost);
+  }
+  .v-who {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-ink);
   }
 
   .toast {

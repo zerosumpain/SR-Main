@@ -46,6 +46,9 @@
     recencyFade,
     clusterColour,
     clusterColourOf,
+    nodeColourOf,
+    matchesHighlight,
+    type ColourMode,
     clusterSlotOf,
     clusterSeedOf,
     nodeRelevance,
@@ -68,6 +71,9 @@
     explode = 1,
     communities = [],
     showShells = true,
+    colourBy = 'cluster',
+    highlightKeys = [],
+    categoryColours,
     onSelect,
     onOpen,
   }: {
@@ -105,6 +111,16 @@
     communities?: Array<{ id: number; size: number; label: string; colourIndex?: number | null; key?: string | null }>;
     /** Draw the translucent cluster shells. */
     showShells?: boolean;
+    /** What the hue means — cluster (default), entity type, or source category. */
+    colourBy?: ColourMode;
+    /**
+     * Type ids or category slugs brought forward. Like cluster focus and for
+     * the same reason: in 3D, removing the rest answers "what is in this group"
+     * when the question was "where does this group sit among the rest".
+     */
+    highlightKeys?: string[];
+    /** slug → the colour the analyst gave that category. */
+    categoryColours?: Map<string, string>;
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
   } = $props();
@@ -233,6 +249,9 @@
   const focusSet = $derived(new Set(focusCommunities ?? []));
   /** Only dim when there is something to dim AGAINST. */
   const dimming = $derived(matchSet.size > 0);
+  const highlightSet = $derived(new Set(highlightKeys));
+  /** Outside an active highlight. Recedes; never leaves the scene. */
+  const offHighlight = (n: NetNode) => !matchesHighlight(n, colourBy, highlightSet);
   /**
    * Stable dependency keys. The parent hands fresh arrays on every render, so
    * depending on the arrays themselves would restyle the scene continuously.
@@ -240,6 +259,15 @@
   const pathKey = $derived((highlightPath ?? []).join('|'));
   const matchKey = $derived((matchedIds ?? []).join('|'));
   const focusKey = $derived((focusCommunities ?? []).join(','));
+  /**
+   * Everything the restyle pass depends on, as one string.
+   *
+   * Colour mode and highlight ride the same key as focus deliberately: all
+   * three change how the scene is PAINTED and none of them may move a node.
+   * Rebuilding the layout on a highlight would answer a different question from
+   * the one being asked.
+   */
+  const paintKey = $derived(`${focusKey}|${colourBy}|${(highlightKeys ?? []).join(',')}`);
 
   const pathEdgeKeys = $derived.by(() => {
     const set = new Set<string>();
@@ -260,7 +288,9 @@
     // Focused clusters keep their size; the rest shrink towards the background.
     // Shrinking as well as fading matters in 3D specifically: a distant node is
     // already small, so opacity alone leaves the context reading as foreground.
-    return outOfFocus(n) ? base * 0.55 : base;
+    // A highlight recedes the same way, for the same reason.
+    if (outOfFocus(n)) return base * 0.55;
+    return offHighlight(n) ? base * 0.55 : base;
   }
 
   /** Size from importance alone — what decides which nodes are NAMED. See the
@@ -285,8 +315,12 @@
    */
   function nodeAlpha(n: NetNode): number {
     const base = dimming && !matchSet.has(n.id) ? 0.14 : n.confirmed ? 0.85 : 0.4;
-    return base * (outOfFocus(n) ? 0.18 : 1);
+    // Lifts its own side as well as sinking the rest — see the 2D view, which
+    // does exactly this and for exactly the same reason.
+    const lifted = highlightSet.size && !offHighlight(n) ? Math.max(base, 0.75) : base;
+    return lifted * (outOfFocus(n) ? 0.18 : 1) * (offHighlight(n) ? 0.2 : 1);
   }
+
 
   /**
    * An edge endpoint's id. `forceLink` mutates `source`/`target` from the id
@@ -475,7 +509,10 @@
     // Washed towards the page by staleness, using the LIVE background token
     // rather than the literal the 2D view can fall back to — the scene reads its
     // palette off the element so it follows the design system.
-    return rgba(washOut(clusterColourOf(node), nodeRelevance(node), palette.bg), nodeAlpha(node));
+    return rgba(
+      washOut(nodeColourOf(node, colourBy, categoryColours), nodeRelevance(node), palette.bg),
+      nodeAlpha(node),
+    );
   }
 
   function linkColour(edge: Sim3DEdge): string {
@@ -1270,7 +1307,7 @@
   $effect(() => {
     // A stable key: the parent hands a fresh array each render, so depending on
     // the array itself would restyle the scene continuously.
-    focusKey;
+    paintKey;
     const fg = graph;
     if (!fg) return;
     untrack(() => {

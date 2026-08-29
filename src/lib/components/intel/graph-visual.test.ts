@@ -14,6 +14,13 @@ import {
   edgeEmphasis,
   edgeDistanceScale,
   edgeForceStrength,
+  CLUSTER_COLOURS,
+  colourKeyOf,
+  paletteSlotOf,
+  nodeColourOf,
+  matchesHighlight,
+  keyColour,
+  UNSET_COLOUR,
 } from './graph-visual';
 import { RECENCY_FLOOR } from '$lib/jkai/intel/staleness';
 
@@ -178,5 +185,114 @@ describe('edge weight encodings', () => {
     // floor would assert something the data does not say.
     expect(weightRamp(undefined)).toBe(0.5);
     expect(weightRamp(null)).toBe(0.5);
+  });
+});
+
+// ── Colour mode ─────────────────────────────────────────────────────────────
+//
+// Same invariant as everything above: both views read these, so a disagreement
+// between the 2D and 3D pictures would be a disagreement here.
+
+describe('colourKeyOf', () => {
+  it('is the type id under type mode', () => {
+    expect(colourKeyOf({ typeId: 't1' }, 'type')).toBe('t1');
+  });
+
+  it('is the FIRST category under category mode', () => {
+    // A node's evidence can come from several places. A dot has one fill, so
+    // colour takes the first; `matchesHighlight` considers all of them.
+    expect(colourKeyOf({ categories: ['work', 'policy'] }, 'category')).toBe('work');
+  });
+
+  it('is null when the node carries nothing', () => {
+    expect(colourKeyOf({ categories: [] }, 'category')).toBeNull();
+    expect(colourKeyOf({}, 'type')).toBeNull();
+  });
+
+  it('is null under cluster mode — the cluster is not a key', () => {
+    expect(colourKeyOf({ typeId: 't1' }, 'cluster')).toBeNull();
+  });
+});
+
+describe('paletteSlotOf', () => {
+  it('is stable for the same key', () => {
+    expect(paletteSlotOf('work')).toBe(paletteSlotOf('work'));
+  });
+  it('lands inside the palette', () => {
+    for (const k of ['a', 'work', 'policy', 'organisation', '']) {
+      expect(paletteSlotOf(k)).toBeGreaterThanOrEqual(0);
+      expect(paletteSlotOf(k)).toBeLessThan(CLUSTER_COLOURS.length);
+    }
+  });
+});
+
+describe('nodeColourOf', () => {
+  it('falls back to the cluster colour in cluster mode', () => {
+    const node = { clusterColourIndex: 3, community: 9 };
+    expect(nodeColourOf(node, 'cluster')).toBe(clusterColour(3));
+  });
+
+  it('uses the type’s own colour when it has one', () => {
+    expect(nodeColourOf({ typeId: 't1', color: '#123456' }, 'type')).toBe('#123456');
+  });
+
+  it('uses the analyst’s colour for a category', () => {
+    const colours = new Map([['work', '#abcdef']]);
+    expect(nodeColourOf({ categories: ['work'] }, 'category', colours)).toBe('#abcdef');
+  });
+
+  it('hashes to a stable palette slot when nothing supplies a colour', () => {
+    const a = nodeColourOf({ categories: ['policy'] }, 'category');
+    const b = nodeColourOf({ categories: ['policy'] }, 'category');
+    expect(a).toBe(b);
+    expect(CLUSTER_COLOURS).toContain(a);
+  });
+
+  // "Unclassified" has to look different from "classified as the grey one".
+  it('is grey when the node has no key at all', () => {
+    expect(nodeColourOf({ categories: [] }, 'category')).toBe('#9a9086');
+  });
+});
+
+describe('matchesHighlight', () => {
+  it('matches everything when no highlight is on', () => {
+    // The alternative blanks the graph the moment the control renders.
+    expect(matchesHighlight({ typeId: 't1' }, 'type', new Set())).toBe(true);
+    expect(matchesHighlight({}, 'category', new Set())).toBe(true);
+  });
+
+  it('matches on ANY of a node’s categories, not just the one it is coloured by', () => {
+    const keys = new Set(['policy']);
+    expect(matchesHighlight({ categories: ['work', 'policy'] }, 'category', keys)).toBe(true);
+  });
+
+  it('excludes a node carrying none of the highlighted keys', () => {
+    expect(matchesHighlight({ typeId: 't2' }, 'type', new Set(['t1']))).toBe(false);
+    expect(matchesHighlight({ categories: [] }, 'category', new Set(['work']))).toBe(false);
+  });
+
+  it('never excludes anything in cluster mode', () => {
+    expect(matchesHighlight({ typeId: 't2' }, 'cluster', new Set(['t1']))).toBe(true);
+  });
+});
+
+describe('keyColour', () => {
+  // 48 of 55 live entity types carry exactly the column default. Honouring it
+  // paints the whole graph one shade of blue the moment you colour by type.
+  it('treats the column default as "nobody chose one"', () => {
+    expect(keyColour('t1', UNSET_COLOUR)).not.toBe(UNSET_COLOUR);
+    expect(CLUSTER_COLOURS).toContain(keyColour('t1', UNSET_COLOUR));
+  });
+
+  it('keeps a colour somebody actually chose', () => {
+    expect(keyColour('t1', '#ef4444')).toBe('#ef4444');
+  });
+
+  it('is case-insensitive about the default', () => {
+    expect(keyColour('t1', '#7DD3FC')).not.toBe('#7DD3FC');
+  });
+
+  it('is stable for one key', () => {
+    expect(keyColour('t1')).toBe(keyColour('t1'));
   });
 });

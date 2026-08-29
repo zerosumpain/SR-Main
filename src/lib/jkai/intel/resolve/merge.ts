@@ -28,11 +28,14 @@ import {
   findSharedSenderAddresses,
   countIdentitiesByAddress,
   pickSurvivor,
+  normaliseName,
   AUTO_MERGE_THRESHOLD,
   type MatchCandidate,
   type ResolvableEntity,
 } from './match';
 import { invalidateGraphAnalysis } from '../analytics/load';
+import { loadDecisions, repointDecisions, type MatchDecision } from './decisions';
+import { pairKeyOf as pairKey } from './pair-key';
 
 export interface MergeOutcome {
   keptId: string;
@@ -58,7 +61,14 @@ export async function mergeEntities(
   if (keepId === mergeId) throw new Error('cannot merge an entity into itself');
 
   const rows = await db
-    .select({ id: intelEntities.id, properties: intelEntities.properties, summary: intelEntities.summary, mergedIntoId: intelEntities.mergedIntoId })
+    .select({
+      id: intelEntities.id,
+      name: intelEntities.name,
+      aliases: intelEntities.aliases,
+      properties: intelEntities.properties,
+      summary: intelEntities.summary,
+      mergedIntoId: intelEntities.mergedIntoId,
+    })
     .from(intelEntities)
     .where(sql`${intelEntities.id} IN (${keepId}, ${mergeId})`);
 
@@ -172,11 +182,26 @@ export async function mergeEntities(
       ...((keep.properties as Record<string, unknown>) ?? {}),
     };
 
+    // Learn the loser's name.
+    //
+    // `intel_entities.aliases` has existed since resolution was built, is read
+    // by entity linkification, the ingest preview and lens filters — and was
+    // written by NOTHING. On production, after 490 merges, every one of 4,513
+    // entities carried an empty array. So the graph forgot each merge the
+    // moment it applied it: the surface form that had produced a duplicate was
+    // discarded, extraction could fork the same duplicate again the next day,
+    // and the matcher had no way to recognise it.
+    //
+    // Recording it here closes that loop — and is what makes `alias_match` (and
+    // alias blocking) able to fire at all.
+    const aliases = mergeAliases(keep, merge);
+
     await tx
       .update(intelEntities)
       .set({
         properties: mergedProps,
         summary: keep.summary ?? merge.summary,
+        aliases,
         updatedAt: new Date(),
       })
       .where(eq(intelEntities.id, keepId));
@@ -199,6 +224,9 @@ export async function mergeEntities(
       reason: opts.reason ?? null,
       snapshot: {
         merged: { id: mergeId, properties: merge.properties ?? null, summary: merge.summary ?? null },
+        // The survivor's alias list BEFORE this merge, so an unmerge hands back
+        // exactly the surface forms it took and leaves earlier ones alone.
+        survivorAliasesBefore: asStringArray(keep.aliases),
         // The edges and note links repointed by THIS merge, so an unmerge can
         // hand back exactly what it took and nothing else.
         movedRelationships: movedRelIds,
@@ -233,6 +261,15 @@ export async function mergeEntities(
     };
   });
 
+  // Carry the pair verdicts over. Without this, merging B into A orphans every
+  // "B is not C" a person ever recorded: the pair B|C can no longer be proposed,
+  // A|C has no verdict, and the same question comes back wearing a new name.
+  // Outside the transaction and best-effort — bookkeeping must not be able to
+  // fail a merge that has already been applied.
+  await repointDecisions(keepId, mergeId).catch((err) =>
+    console.error('[intel:resolve] could not repoint pair decisions:', err instanceof Error ? err.message : err),
+  );
+
   invalidateGraphAnalysis();
   return outcome;
 }
@@ -263,7 +300,7 @@ export async function unmergeEntity(entityId: string): Promise<{ restored: numbe
   // this, an unmerge handed back an entity with none of its connections —
   // technically reversible, practically useless.
   const [ledger] = await db
-    .select({ id: intelEntityMerges.id, snapshot: intelEntityMerges.snapshot })
+    .select({ id: intelEntityMerges.id, snapshot: intelEntityMerges.snapshot, survivorId: intelEntityMerges.survivorId })
     .from(intelEntityMerges)
     .where(and(eq(intelEntityMerges.mergedId, entityId), isNull(intelEntityMerges.undoneAt)))
     .orderBy(desc(intelEntityMerges.createdAt))
@@ -283,7 +320,19 @@ export async function unmergeEntity(entityId: string): Promise<{ restored: numbe
       movedRelationships?: Array<{ id: string; role: 'source' | 'target' }>;
       movedNoteIds?: string[];
       movedTimelineIds?: string[];
+      survivorAliasesBefore?: string[];
     };
+
+    // Hand back the survivor's alias list as it stood before the merge. Without
+    // this an undone merge leaves the loser's name recorded as another name for
+    // the survivor — which is precisely the claim the undo is retracting, and
+    // the matcher would go on acting on it.
+    if (Array.isArray(snap.survivorAliasesBefore)) {
+      await tx
+        .update(intelEntities)
+        .set({ aliases: snap.survivorAliasesBefore.filter((a) => typeof a === 'string'), updatedAt: new Date() })
+        .where(eq(intelEntities.id, ledger.survivorId));
+    }
 
     // Give back exactly the rows this merge took, identified by the ids
     // captured before they were repointed. Rows the survivor already had are
@@ -336,6 +385,59 @@ export async function unmergeEntity(entityId: string): Promise<{ restored: numbe
   return { restored };
 }
 
+/**
+ * Recover the surface forms 490 past merges threw away.
+ *
+ * Every merge before this change discarded the loser's name — but not the row:
+ * the loser survives as a tombstone carrying `merged_into_id` and its original
+ * name, so the whole history is recoverable from the graph itself. This unions
+ * every tombstone's name into its survivor's alias list.
+ *
+ * Idempotent, cheap, and safe to run on every sweep: it only writes where the
+ * computed list differs from what is stored.
+ */
+export async function backfillAliasesFromTombstones(): Promise<{ updated: number; aliasesAdded: number }> {
+  const res = await db.execute(sql`
+    SELECT
+      s.id,
+      s.name,
+      coalesce(s.aliases, '[]'::jsonb) AS aliases,
+      (
+        SELECT coalesce(jsonb_agg(t.name), '[]'::jsonb)
+        FROM intel_entities t
+        WHERE t.merged_into_id = s.id AND t.name IS NOT NULL
+      ) AS tombstone_names
+    FROM intel_entities s
+    WHERE s.merged_into_id IS NULL
+      AND EXISTS (SELECT 1 FROM intel_entities t WHERE t.merged_into_id = s.id)
+  `);
+
+  let updated = 0;
+  let aliasesAdded = 0;
+
+  for (const row of res.rows as Array<Record<string, unknown>>) {
+    const id = String(row.id);
+    const name = String(row.name ?? '');
+    const current = asStringArray(row.aliases);
+    // Reuse the merge rule so a backfilled list and a freshly merged one are
+    // built by exactly the same code — including the cap and the "never record
+    // the survivor's own name" rule.
+    let next = current;
+    for (const tombName of asStringArray(row.tombstone_names)) {
+      next = mergeAliases({ name, aliases: next }, { name: tombName });
+    }
+    if (next.length === current.length && next.every((v, i) => v === current[i])) continue;
+    aliasesAdded += next.length - current.length;
+    await db
+      .update(intelEntities)
+      .set({ aliases: next, updatedAt: new Date() })
+      .where(eq(intelEntities.id, id));
+    updated++;
+  }
+
+  return { updated, aliasesAdded };
+}
+
 /** Every live entity, in the shape the matcher wants. */
 export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
   const res = await db.execute(sql`
@@ -348,6 +450,12 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       -- Carries the email address for anyone the Gmail sweep created. Without
       -- it the exact-address match signal can never fire.
       e.properties                AS properties,
+      -- Every surface form the graph has already accepted for this entity. The
+      -- matcher went without these for the whole life of the feature, so an
+      -- alias recorded by one extraction could not help the next one recognise
+      -- the same thing under that name.
+      e.aliases                   AS aliases,
+      e.summary                   AS summary,
       COALESCE(d.degree, 0)       AS degree,
       COALESCE(n.note_count, 0)   AS note_count
     FROM intel_entities e
@@ -381,8 +489,56 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       noteCount: Number(r.note_count ?? 0),
       embedding,
       properties: asProperties(r.properties),
+      aliases: asStringArray(r.aliases),
+      summary: typeof r.summary === 'string' ? r.summary : null,
     };
   });
+}
+
+/** How many surface forms one entity may accumulate. */
+export const MAX_STORED_ALIASES = 24;
+
+/**
+ * The survivor's alias list after absorbing the loser.
+ *
+ * Everything the loser was called — its name and its own aliases — joins
+ * everything the survivor was already called, minus anything that normalises
+ * onto the survivor's own name (recording "IBCA" as an alias of "IBCA" tells
+ * nothing and costs a blocking key).
+ *
+ * Pure, and exported, because this is the rule that decides what the matcher
+ * gets to learn from a merge and it needs testing without a database.
+ */
+export function mergeAliases(
+  keep: { name: string; aliases?: unknown },
+  merge: { name: string; aliases?: unknown },
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>([normaliseName(keep.name)]);
+  for (const raw of [...asStringArray(keep.aliases), merge.name, ...asStringArray(merge.aliases)]) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = normaliseName(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+    if (out.length >= MAX_STORED_ALIASES) break;
+  }
+  return out;
+}
+
+/** Same driver caveat as `asProperties`, for a jsonb array of strings. */
+function asStringArray(raw: unknown): string[] {
+  let value = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 }
 
 /** jsonb comes back either parsed or as a string, depending on the driver path. */
@@ -406,6 +562,8 @@ export interface DuplicateReport {
   merge: ResolvableEntity;
   /** True when confidence clears the auto-merge bar. */
   autoMergeable: boolean;
+  /** A standing verdict on this pair. Null when nobody has answered it yet. */
+  decision: MatchDecision | null;
 }
 
 /**
@@ -475,24 +633,218 @@ export async function loadNeighbourIndex(): Promise<Map<string, Set<string>>> {
   return out;
 }
 
+/**
+ * Cosine distance below which two entities are close enough in meaning to be
+ * worth comparing at all. 0.28 ≈ 72% similar.
+ *
+ * This is a BLOCKING threshold, not a matching one: everything it produces is
+ * then scored by the ordinary rules and nearly all of it is discarded. Tightening
+ * it costs recall; loosening it costs a lot of scoring for nothing.
+ */
+export const SEMANTIC_BLOCK_DISTANCE = 0.28;
+/**
+ * The lowest score a pair is scored at all.
+ *
+ * Every sweep generates down to here regardless of the confidence it is asked
+ * to report at, so a decision that RAISES a pair's score has something to raise.
+ */
+export const CANDIDATE_FLOOR = 0.35;
+/** Nearest neighbours to consider per entity. */
+export const SEMANTIC_BLOCK_K = 6;
+
+/**
+ * Candidate pairs that share no word.
+ *
+ * Lexical blocking — the only kind the resolver had — can propose two entities
+ * only when they share a significant token, an acronym form or an email address.
+ * That is a ceiling on what can ever be FOUND, and no amount of improvement to
+ * the scoring lifts it: a pair that never meets is never scored.
+ *
+ * This uses the HNSW index that already exists on `intel_entities.embedding`
+ * (built for the chat context lookup) to ask a different question — which
+ * entities MEAN nearly the same thing — and hands the answers to the same
+ * scorer. Approximate by nature, which is right for a blocking pass.
+ */
+export async function loadSemanticPairs(
+  opts: { distance?: number; k?: number; limit?: number } = {},
+): Promise<Array<[string, string]>> {
+  const distance = opts.distance ?? SEMANTIC_BLOCK_DISTANCE;
+  const k = Math.max(1, Math.min(20, opts.k ?? SEMANTIC_BLOCK_K));
+  const limit = opts.limit ?? 20000;
+
+  const res = await db.execute(sql`
+    SELECT e.id AS a, n.id AS b
+    FROM intel_entities e
+    CROSS JOIN LATERAL (
+      SELECT o.id, (e.embedding <=> o.embedding) AS dist
+      FROM intel_entities o
+      WHERE o.merged_into_id IS NULL
+        AND o.embedding IS NOT NULL
+        AND o.id <> e.id
+      ORDER BY e.embedding <=> o.embedding
+      LIMIT ${k}
+    ) n
+    WHERE e.merged_into_id IS NULL
+      AND e.embedding IS NOT NULL
+      AND n.dist < ${distance}
+    LIMIT ${limit}
+  `);
+
+  // Deduplicated on the unordered pair: nearest-neighbour is not symmetric, so
+  // A→B and B→A both appear whenever the two are each other's neighbour.
+  const seen = new Set<string>();
+  const out: Array<[string, string]> = [];
+  for (const row of res.rows as Array<Record<string, unknown>>) {
+    const a = String(row.a ?? '');
+    const b = String(row.b ?? '');
+    if (!a || !b || a === b) continue;
+    const key = pairKey(a, b);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([a, b]);
+  }
+  return out;
+}
+
+export interface FindDuplicatesOptions {
+  /**
+   * Include the pgvector nearest-neighbour pass. On by default; the flag exists
+   * so a test can hold the matcher to lexical blocking alone.
+   */
+  semantic?: boolean;
+  /**
+   * Return pairs a human has already ruled out. Off by default — but the COUNT
+   * of what was withheld is always reported, because a filter that quietly
+   * swallows its own decisions is indistinguishable from one that is broken.
+   */
+  includeRuledOut?: boolean;
+}
+
+export interface DuplicateSweep {
+  reports: DuplicateReport[];
+  /** Pairs withheld because a human said they are different. */
+  ruledOut: number;
+  /** Pairs the adjudicator said are different. Held below the floor, not hidden. */
+  adjudicatedApart: number;
+  /** Pairs the vector pass contributed that lexical blocking never proposed. */
+  semanticPairs: number;
+  /** Pairs held back because their names differ only in a number. */
+  seriesVariants: number;
+}
+
 /** Duplicate candidates across the whole graph, strongest first. */
-export async function findDuplicates(minConfidence = 0.35): Promise<DuplicateReport[]> {
-  const [entities, addressIdentities, neighbours] = await Promise.all([
+export async function findDuplicates(
+  minConfidence = 0.35,
+  opts: FindDuplicatesOptions = {},
+): Promise<DuplicateReport[]> {
+  return (await sweepDuplicates(minConfidence, opts)).reports;
+}
+
+/** The same pass, with the bookkeeping the UI needs to be honest about it. */
+export async function sweepDuplicates(
+  minConfidence = 0.35,
+  opts: FindDuplicatesOptions = {},
+): Promise<DuplicateSweep> {
+  const useSemantic = opts.semantic !== false;
+  const [entities, addressIdentities, neighbours, decisions, extraPairs] = await Promise.all([
     loadResolvableEntities(),
     loadAddressIdentities(),
     loadNeighbourIndex(),
+    loadDecisions(),
+    useSemantic ? loadSemanticPairs().catch((err) => {
+      // A missing index or an unembedded corpus must not take the whole sweep
+      // down — lexical blocking still works, and saying so beats a 500.
+      console.error('[intel:resolve] semantic blocking unavailable:', err instanceof Error ? err.message : err);
+      return [] as Array<[string, string]>;
+    }) : Promise.resolve([] as Array<[string, string]>),
   ]);
   const byId = new Map(entities.map((e) => [e.id, e]));
 
-  return findDuplicateCandidates(entities, { minConfidence, addressIdentities, neighbours })
+  let ruledOut = 0;
+  let adjudicatedApart = 0;
+  let seriesVariants = 0;
+
+  // Candidates are generated at the REVIEW floor and filtered at `minConfidence`
+  // only after decisions have been applied.
+  //
+  // Generating at `minConfidence` directly looks equivalent and is not: an
+  // adjudicator's "yes, the same thing" LIFTS a pair's score, and the whole
+  // point of that lift is to carry a pair that scored 0.80 over the 0.85
+  // auto-merge line. Filter first and the pair is gone before the lift can
+  // reach it, so the verdict would have been recorded, displayed, and quietly
+  // unable to do the one thing it exists for.
+  const reports = findDuplicateCandidates(entities, {
+    minConfidence: Math.min(minConfidence, CANDIDATE_FLOOR),
+    addressIdentities,
+    neighbours,
+    extraPairs,
+  })
     .map((candidate) => {
       const a = byId.get(candidate.aId);
       const b = byId.get(candidate.bId);
       if (!a || !b) return null;
+
+      const decision = decisions.get(pairKey(candidate.aId, candidate.bId));
+      let scored = candidate;
+
+      // One series, two members. Counted and withheld rather than dropped
+      // silently: the number is shown beside the queue, and lowering the
+      // confidence floor brings them back into view.
+      //
+      // Read AFTER the decision, so a person saying "no, these two really are
+      // the same thing" overrules the rule. A guard a human cannot overrule is
+      // not a guard, it is a bug with a rationale.
+      if (candidate.signals.includes('numeric_variant')) {
+        const overruled = decision?.decidedBy === 'human' && decision.verdict === 'same';
+        if (!overruled) {
+          seriesVariants++;
+          if (!opts.includeRuledOut) return null;
+        }
+      }
+
+      if (decision) {
+        if (decision.verdict === 'different') {
+          // A person's answer is final; the model's only moves the score.
+          if (decision.decidedBy === 'human') {
+            ruledOut++;
+            if (!opts.includeRuledOut) return null;
+          } else {
+            adjudicatedApart++;
+            scored = { ...candidate, confidence: Math.min(candidate.confidence, 0.2) };
+            if (!opts.includeRuledOut) return null;
+          }
+        } else if (decision.verdict === 'same' && decision.decidedBy !== 'human') {
+          // Corroboration, capped: an adjudicator agreeing with the rules can
+          // carry a pair over the auto-merge line, but only from a score that
+          // was already close to it. It cannot manufacture one from nothing.
+          const lift = 0.1 * (decision.verdictConfidence ?? 0.7);
+          scored = {
+            ...candidate,
+            confidence: Math.min(0.95, candidate.confidence + lift),
+            signals: [...candidate.signals, 'adjudicated'],
+            reason: `${candidate.reason}; adjudicated as the same thing${
+              decision.rationale ? ` — ${decision.rationale}` : ''
+            }`,
+          };
+        }
+      }
+
+      // The final score is what `minConfidence` is about.
+      if (scored.confidence < minConfidence && !opts.includeRuledOut) return null;
+
       const { keep, merge } = pickSurvivor(a, b);
-      return { candidate, keep, merge, autoMergeable: candidate.confidence >= AUTO_MERGE_THRESHOLD };
+      return {
+        candidate: scored,
+        keep,
+        merge,
+        autoMergeable: scored.confidence >= AUTO_MERGE_THRESHOLD,
+        decision: decision ?? null,
+      };
     })
-    .filter((r): r is DuplicateReport => r !== null);
+    .filter((r): r is DuplicateReport => r !== null)
+    .sort((x, y) => y.candidate.confidence - x.candidate.confidence);
+
+  return { reports, ruledOut, adjudicatedApart, semanticPairs: extraPairs.length, seriesVariants };
 }
 
 export interface SweepResult {
@@ -504,10 +856,8 @@ export interface SweepResult {
   details: Array<{ keep: string; merge: string; confidence: number }>;
 }
 
-/** Order-independent key for a pair of ids. */
-export function pairKey(x: string, y: string): string {
-  return x < y ? `${x}|${y}` : `${y}|${x}`;
-}
+/** Order-independent key for a pair of ids. Re-exported; see `./pair-key`. */
+export { pairKeyOf as pairKey } from './pair-key';
 
 /**
  * Would merging `mergeId` into `keepId` join two entities nothing ever matched?

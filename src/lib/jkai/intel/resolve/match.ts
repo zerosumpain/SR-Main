@@ -523,7 +523,10 @@ export type MatchSignal =
   | 'initial_expansion'
   | 'name_reordering'
   | 'shared_neighbours'
-  | 'semantic';
+  | 'semantic'
+  | 'alias_match'
+  | 'adjudicated'
+  | 'numeric_variant';
 
 export interface MatchCandidate {
   aId: string;
@@ -544,6 +547,19 @@ export interface ResolvableEntity {
   embedding?: number[] | null;
   /** `intel_entities.properties`. Carries `email` for anyone Gmail created. */
   properties?: Record<string, unknown> | null;
+  /**
+   * Every surface form ever seen for this entity.
+   *
+   * The column has existed since resolution was built and the matcher did not
+   * so much as SELECT it — `loadResolvableEntities` fetched name, type, degree,
+   * notes, embedding and properties, and stopped. That is the one field whose
+   * entire purpose is to say "this thing is also called that", so a graph that
+   * had already recorded "IBCA" as an alias of the expanded name still could not
+   * use it to recognise a third node called IBCA.
+   */
+  aliases?: string[] | null;
+  /** The entity's own description. Read by the adjudicator, not by the rules. */
+  summary?: string | null;
 }
 
 /**
@@ -611,6 +627,117 @@ function cosine(a: number[], b: number[]): number {
  * similarity before it reaches the auto-merge threshold — otherwise "IBCA Data
  * Strategy" and "IBCA AI Strategy" would collapse into one.
  */
+/**
+ * The surface forms to compare an entity by: its name and every recorded alias.
+ *
+ * Capped, and deduplicated on the normalised form. An entity that has collected
+ * forty aliases through repeated merges would otherwise contribute forty
+ * blocking keys and forty comparisons per pair, which turns the sweep quadratic
+ * in exactly the entities that are already well resolved.
+ */
+export const MAX_ALIASES_CONSIDERED = 12;
+
+
+export function surfaceForms(e: ResolvableEntity): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (raw: unknown) => {
+    if (typeof raw !== 'string') return;
+    const name = raw.trim();
+    if (!name) return;
+    const key = normaliseName(name);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(name);
+  };
+  push(e.name);
+  for (const alias of e.aliases ?? []) {
+    if (out.length >= MAX_ALIASES_CONSIDERED) break;
+    push(alias);
+  }
+  return out;
+  // The cap counts the name, so an entity contributes at most
+  // MAX_ALIASES_CONSIDERED forms however many aliases it has collected.
+}
+
+/**
+ * True when one entity's recorded surface form IS the other's name.
+ *
+ * Deliberately stricter than "any alias resembles any alias": an alias is a
+ * claim the graph has already accepted, so matching one against the other side's
+ * NAME is evidence. Matching two aliases against each other is the same claim
+ * twice removed, and on a graph where aliases arrive from email display names it
+ * is how a shared honorific ("Dr") would start joining people up.
+ */
+export function aliasMatch(a: ResolvableEntity, b: ResolvableEntity): boolean {
+  const nameA = normaliseName(a.name);
+  const nameB = normaliseName(b.name);
+  if (!nameA || !nameB) return false;
+  const canonA = canonicalName(a.name);
+  const canonB = canonicalName(b.name);
+
+  // `surfaceForms` minus its first entry, which is the name itself — so the
+  // same cap and the same deduplication apply here as everywhere else.
+  const hits = (owner: ResolvableEntity, otherNorm: string, otherCanon: string) => {
+    for (const alias of surfaceForms(owner).slice(1)) {
+      const n = normaliseName(alias);
+      if (!n) continue;
+      if (n === otherNorm) return true;
+      if (otherCanon && canonicalName(alias) === otherCanon) return true;
+    }
+    return false;
+  };
+
+  return hits(a, nameB, canonB) || hits(b, nameA, canonA);
+}
+
+/**
+ * Whether a name carries enough of itself for a MEANING comparison to say
+ * anything about identity.
+ *
+ * Embeddings of very short or purely numeric names are dominated by the shape
+ * of the string rather than by what it refers to: on the live graph "43" and
+ * "33" come back 95% similar, as do every other pair of two-digit page numbers,
+ * so the vector pass proposed nine of them and every one was noise. A lexical
+ * signal can carry a short name — "MoJ" is a real acronym — but similarity
+ * alone cannot.
+ */
+export function hasSubstantiveName(name: string): boolean {
+  return significantTokens(name).some((t) => t.length >= 3 && /[a-z]/.test(t));
+}
+
+/** The digit runs in a name, in order. `"Nmap 7.80"` → `['7','80']`. */
+export function digitRuns(name: string): string[] {
+  return name.match(/\d+/g) ?? [];
+}
+
+/**
+ * True when two names are the same sentence with different numbers in it.
+ *
+ * This is the dominant false positive on the live graph, and it is invisible to
+ * every other rule: "700Wh Battery" and "600Wh Battery" share the word
+ * "battery", read 92% similar as vectors, and are two different batteries.
+ * So do "32GB"/"16GB", "iteration 2"/"iteration 3", "PR #166"/"PR #173",
+ * "Nmap 7.80"/"Nmap 7.991" and "192.168.1.0/24"/"192.168.0.0/24" — one series,
+ * many members, and nothing about being near each other makes them one thing.
+ *
+ * Both sides must carry digits. Without that guard the rule fires on "MoJ AI
+ * action plan for Justice" vs "MoJ AI action plan for Justice (2025-2028)",
+ * which is one plan written twice — a NUMBER APPEARING is not the same event as
+ * a number CHANGING.
+ */
+export function differsOnlyByNumber(a: string, b: string): boolean {
+  const runsA = digitRuns(a);
+  const runsB = digitRuns(b);
+  if (!runsA.length || !runsB.length) return false;
+  if (runsA.join('.') === runsB.join('.')) return false;
+  // An all-numeric name ("192.168.1.0/24", "43") strips to nothing on both
+  // sides, which still compares equal — and two different numbers with no words
+  // around them are as clearly two things as two numbers with words around them.
+  const strip = (name: string) => normaliseName(name.replace(/\d+/g, ' '));
+  return strip(a) === strip(b);
+}
+
 export interface ScoreOptions {
   /** address → how many distinct identities have written under it. */
   addressIdentities?: ReadonlySet<string> | ReadonlyMap<string, number>;
@@ -644,19 +771,40 @@ export function scorePair(
     Boolean(emailA && emailB && emailA === emailB) &&
     (emailTrust(emailA!, opts.addressIdentities) === 'proof' || isNameVariant(a.name, b.name));
 
+  // Surface forms, so every rule below can see an alias as well as a name. The
+  // pairwise loops are bounded by MAX_ALIASES_CONSIDERED on each side.
+  const formsA = surfaceForms(a);
+  const formsB = surfaceForms(b);
+  const anyForm = (fn: (x: string, y: string) => boolean): boolean => {
+    for (const x of formsA) for (const y of formsB) if (fn(x, y)) return true;
+    return false;
+  };
+
   if (sameEmail) {
     signals.push('same_email');
     confidence = 0.98;
   } else if (na && na === nb) {
     signals.push('identical_name');
     confidence = 0.97;
+  } else if (aliasMatch(a, b)) {
+    // One side's name is a form the other has already been observed under.
+    // Scored below an identical name and above a canonical one: the graph is
+    // asserting the equivalence rather than deriving it, but the assertion came
+    // from an extraction and extractions are wrong sometimes.
+    signals.push('alias_match');
+    confidence = 0.95;
   } else if (isCanonicalMatch(a.name, b.name)) {
     // Same name in different packaging — a filename, a slug with its namespace,
     // a company with its legal suffix. Scored just below identical, because the
     // packaging is the only thing that differed.
     signals.push('canonical_name');
     confidence = 0.93;
-  } else if (isAcronymPair(a.name, b.name)) {
+  } else if (anyForm(isCanonicalMatch)) {
+    // The same match one alias down. Discounted, because the equivalence now
+    // rests on a recorded surface form rather than on the two names themselves.
+    signals.push('canonical_name');
+    confidence = 0.86;
+  } else if (anyForm(isAcronymPair)) {
     signals.push('acronym');
     confidence = 0.9;
   } else if (isPersonPair(a, b) && isNameReordering(a.name, b.name)) {
@@ -676,6 +824,15 @@ export function scorePair(
       signals.push('high_token_overlap');
       confidence = 0.5 + (overlap - 0.7) * 0.8;
     }
+  }
+
+  // One series, two members. Applied like the conflicting-address rule below —
+  // a hard cap rather than a drop, so the pair stays inspectable — and hard
+  // enough to take it out of the default view: "600Wh Battery" and "700Wh
+  // Battery" are never one battery, however similar they read.
+  if (differsOnlyByNumber(a.name, b.name)) {
+    signals.push('numeric_variant');
+    confidence = Math.min(confidence, 0.38);
   }
 
   // Two DIFFERENT addresses on two entities is positive evidence they are not
@@ -706,16 +863,32 @@ export function scorePair(
   }
 
   // Semantic corroboration, when both sides have an embedding.
+  //
+  // Standalone — with no lexical signal at all — it additionally requires both
+  // names to be substantive. Similarity between two bare numbers says nothing
+  // about identity, and those pairs are exactly what a nearest-neighbour pass
+  // surfaces most of.
+  const substantiveNames = hasSubstantiveName(a.name) && hasSubstantiveName(b.name);
   let similarity: number | null = null;
   if (a.embedding && b.embedding) {
     similarity = cosine(a.embedding, b.embedding);
     if (similarity >= 0.9 && signals.length) {
       signals.push('semantic');
       confidence = Math.min(0.95, confidence + 0.2);
-    } else if (similarity >= 0.94 && !signals.length) {
+    } else if (similarity >= 0.94 && !signals.length && substantiveNames) {
       // Near-identical meaning with unlike names — worth review, never automatic.
       signals.push('semantic');
       confidence = 0.45;
+    } else if (similarity >= 0.86 && !signals.length && structurallyCorroborated && substantiveNames) {
+      // Unlike names, similar meaning, and the two already sit beside the same
+      // entities. Alone, none of those three is worth surfacing; together they
+      // are the shape of a rename or an abbreviation the lexical rules cannot
+      // see, and the only pairs that reach this branch at all are the ones the
+      // vector pass went looking for. Held well below auto-merge: this is a
+      // referral to a human (or to the adjudicator), not a finding.
+      signals.push('semantic');
+      signals.push('shared_neighbours');
+      confidence = 0.42;
     } else if (similarity < 0.55 && signals.length && confidence < 0.9 && !structurallyCorroborated) {
       // Names look alike but the entities mean different things. Back off —
       // unless the graph says otherwise. A summary is a description and can be
@@ -758,6 +931,7 @@ function describeSignals(
   const parts: string[] = [];
   if (signals.includes('same_email')) parts.push(`both use ${emailOf(a) ?? 'the same address'}`);
   if (signals.includes('identical_name')) parts.push('identical names');
+  if (signals.includes('alias_match')) parts.push('one is already recorded as an alias of the other');
   if (signals.includes('canonical_name')) parts.push(`the same name once "${shorter(a, b).name}" is unwrapped`);
   if (signals.includes('name_reordering')) parts.push('the same name in a different order');
   if (signals.includes('initial_expansion')) parts.push('one name is the other with initials');
@@ -765,6 +939,9 @@ function describeSignals(
   if (signals.includes('token_subset')) parts.push('one name contains the other');
   if (signals.includes('high_token_overlap')) parts.push('names share most of their words');
   if (signals.includes('shared_neighbours')) parts.push('they share connections in the graph');
+  if (signals.includes('numeric_variant')) {
+    parts.push('but the names differ only in a number, so these are two members of a series');
+  }
   if (signals.includes('semantic') && similarity !== null) {
     parts.push(`summaries are ${Math.round(similarity * 100)}% similar`);
   }
@@ -802,7 +979,19 @@ export function pickSurvivor(a: ResolvableEntity, b: ResolvableEntity): { keep: 
  */
 export function findDuplicateCandidates(
   entities: ResolvableEntity[],
-  opts: { minConfidence?: number } & ScoreOptions = {},
+  opts: {
+    minConfidence?: number;
+    /**
+     * Pairs discovered by something other than a shared token — today, the
+     * pgvector nearest-neighbour pass.
+     *
+     * They are scored by exactly the same rules; all this does is get them into
+     * the room. Lexical blocking can only ever propose two entities that share a
+     * word, an acronym or an address, which is a hard ceiling on what the
+     * resolver can find however good the scoring gets.
+     */
+    extraPairs?: Iterable<readonly [string, string]>;
+  } & ScoreOptions = {},
 ): MatchCandidate[] {
   const minConfidence = opts.minConfidence ?? 0.35;
   const { addressIdentities, neighbours } = opts;
@@ -811,8 +1000,11 @@ export function findDuplicateCandidates(
   const addTo = (key: string, e: ResolvableEntity) => {
     if (!key) return;
     const list = blocks.get(key);
-    if (list) list.push(e);
-    else blocks.set(key, [e]);
+    // Deduplicated: an entity whose name and alias share a token would
+    // otherwise appear twice in the same block and be compared with itself.
+    if (list) {
+      if (!list.includes(e)) list.push(e);
+    } else blocks.set(key, [e]);
   };
 
   for (const e of entities) {
@@ -824,13 +1016,20 @@ export function findDuplicateCandidates(
     const email = emailOf(e, addressIdentities);
     if (email) addTo(`email:${email}`, e);
 
-    const tokens = significantTokens(e.name);
-    // Block on every significant token: "IBCA Data Strategy" and "IBCA's Data
-    // Strategy" meet in the `ibca`, `data` and `strategy` blocks.
-    for (const t of tokens) addTo(t, e);
-    for (const acr of acronymsOf(e.name)) addTo(`acr:${acr}`, e);
-    // A short, single-token name is itself a potential acronym.
-    if (tokens.length === 1 && tokens[0].length <= 12) addTo(`acr:${tokens[0]}`, e);
+    // Aliases block as well as names. This is the difference between the
+    // matcher being able to use what the graph has already learned and having to
+    // rediscover it: an entity whose aliases record "IBCA" now meets a node
+    // called IBCA in the `ibca` block even though its own name shares no token
+    // with it.
+    for (const form of surfaceForms(e)) {
+      const tokens = significantTokens(form);
+      // Block on every significant token: "IBCA Data Strategy" and "IBCA's Data
+      // Strategy" meet in the `ibca`, `data` and `strategy` blocks.
+      for (const t of tokens) addTo(t, e);
+      for (const acr of acronymsOf(form)) addTo(`acr:${acr}`, e);
+      // A short, single-token name is itself a potential acronym.
+      if (tokens.length === 1 && tokens[0].length <= 12) addTo(`acr:${tokens[0]}`, e);
+    }
   }
 
   const best = new Map<string, MatchCandidate>();
@@ -845,6 +1044,20 @@ export function findDuplicateCandidates(
         const prev = best.get(key);
         if (!prev || cand.confidence > prev.confidence) best.set(key, cand);
       }
+    }
+  }
+
+  if (opts.extraPairs) {
+    const byId = new Map(entities.map((e) => [e.id, e]));
+    for (const [x, y] of opts.extraPairs) {
+      const a = byId.get(x);
+      const b = byId.get(y);
+      if (!a || !b) continue;
+      const cand = scorePair(a, b, { addressIdentities, neighbours });
+      if (!cand || cand.confidence < minConfidence) continue;
+      const key = `${cand.aId}|${cand.bId}`;
+      const prev = best.get(key);
+      if (!prev || cand.confidence > prev.confidence) best.set(key, cand);
     }
   }
 

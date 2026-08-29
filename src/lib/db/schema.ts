@@ -2623,6 +2623,85 @@ export const intelEntityMerges = pgTable(
 export type IntelEntityMerge = typeof intelEntityMerges.$inferSelect;
 
 /**
+ * A durable verdict on ONE pair of entities: are these the same thing?
+ *
+ * Everything before this was decided in a browser tab. `/jkai/intel/quality`
+ * had a "Dismiss" button that added the pair to a client-side `Set`, so a human
+ * ruling that "Church of England" and "Free Church of England" are two bodies
+ * survived exactly as long as the tab did — and the next nightly sweep proposed
+ * the pair again, at the same confidence, forever. On a graph the size of this
+ * one that is most of what the review queue contains.
+ *
+ * Keyed on `pair_key`, which is the two ids in id order, so the same pair can
+ * only ever hold one verdict however it is discovered.
+ *
+ * `decided_by` is load-bearing rather than decorative: a HUMAN `different` is
+ * final and removes the pair from the queue; an LLM `different` only pushes the
+ * pair below the floor, because a model's opinion must never be able to bury a
+ * real duplicate where nobody can find it again. Both stay readable under the
+ * "ruled out" filter — a guard that hides its own decisions is how the source
+ * filter came to be trusted while it was wrong.
+ */
+export const intelMatchDecisions = pgTable(
+  'intel_match_decisions',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** `a|b` with the two entity ids in id order. */
+    pairKey: text('pair_key').notNull(),
+    aEntityId: text('a_entity_id').notNull(),
+    bEntityId: text('b_entity_id').notNull(),
+    /** 'same' | 'different' | 'unsure'. */
+    verdict: text('verdict').notNull(),
+    /** 'human' | 'llm' | 'auto'. */
+    decidedBy: text('decided_by').notNull().default('human'),
+    /** The matcher's confidence at the time the verdict was recorded. */
+    confidence: doublePrecision('confidence'),
+    /** 0..1 — how sure the DECIDER was, which is a different question. */
+    verdictConfidence: doublePrecision('verdict_confidence'),
+    signals: jsonb('signals').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    rationale: text('rationale'),
+    /** Which model produced an `llm` verdict. Null for a human one. */
+    model: text('model'),
+    /** Names at decision time, so a ruled-out row is readable after a rename. */
+    aName: text('a_name'),
+    bName: text('b_name'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // The table is created empty, so a unique index is safe to push here — the
+  // documented `drizzle-kit push` hazard is a unique index added to a POPULATED
+  // table (see reference_drizzle_unique_push_gotcha).
+  (t) => ({
+    uniqPair: uniqueIndex('intel_match_decisions_pair_idx').on(t.pairKey),
+    byVerdict: index('intel_match_decisions_verdict_idx').on(t.verdict),
+  }),
+);
+
+export type IntelMatchDecision = typeof intelMatchDecisions.$inferSelect;
+export type NewIntelMatchDecision = typeof intelMatchDecisions.$inferInsert;
+
+/**
+ * A type-merge suggestion the analyst has waved away.
+ *
+ * The taxonomy page recomputes its suggestions from scratch on every load, so
+ * without this a rejected suggestion ("no, `policy` and `legislation` are not
+ * the same thing") comes back on the next visit and every visit after it —
+ * the same defect the entity queue had, one level up.
+ */
+export const intelTypeSuggestionDismissals = pgTable(
+  'intel_type_suggestion_dismissals',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** `fromTypeId|intoTypeId` in id order. */
+    pairKey: text('pair_key').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ uniqPair: uniqueIndex('intel_type_dismissals_pair_idx').on(t.pairKey) }),
+);
+
+export type IntelTypeSuggestionDismissal = typeof intelTypeSuggestionDismissals.$inferSelect;
+
+/**
  * Analyst-defined labels for intel SOURCES — "work", "family", "policy" — as
  * distinct from `intel_entity_types`, which classify what a node *is*. A
  * category is attached to a Drive folder and inherited by everything under it;

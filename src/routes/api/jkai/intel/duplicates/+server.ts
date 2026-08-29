@@ -2,38 +2,76 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
-  findDuplicates,
+  sweepDuplicates,
   mergeEntities,
   unmergeEntity,
   autoMergeDuplicates,
   mergeEntityTypes,
-  listProposedTypes,
 } from '$lib/jkai/intel/resolve/merge';
 import { AUTO_MERGE_THRESHOLD } from '$lib/jkai/intel/resolve/match';
+import { recordDecision, clearDecision } from '$lib/jkai/intel/resolve/decisions';
+import {
+  adjudicateCandidates,
+  ADJUDICATION_BAND,
+  ADJUDICATION_NIGHTLY_LIMIT,
+} from '$lib/jkai/intel/resolve/adjudicate';
+
+/** Rows sent to the page. The sweep itself is unbounded; the payload is not. */
+const PAGE_LIMIT = 200;
 
 export const GET: RequestHandler = async ({ url }) => {
   const minConfidence = Math.min(Math.max(Number(url.searchParams.get('min') ?? 0.35), 0), 1);
-  const [reports, proposedTypes] = await Promise.all([
-    findDuplicates(minConfidence),
-    listProposedTypes(),
-  ]);
+  // The ruled-out view. It exists because a filter that hides its own decisions
+  // is indistinguishable from one that is broken — the source filter on this
+  // same subsystem was trusted for weeks while it was silently wrong.
+  const includeRuledOut = url.searchParams.get('ruledOut') === '1';
+
+  // `listProposedTypes` went with the taxonomy panel: proposals are governed at
+  // /jkai/intel/categories now, and returning them here was one query per load
+  // for a list nothing rendered.
+  const sweep = await sweepDuplicates(minConfidence, { includeRuledOut });
+  const reports = includeRuledOut ? sweep.reports.filter((r) => r.decision) : sweep.reports;
 
   return json({
     threshold: AUTO_MERGE_THRESHOLD,
-    proposedTypes,
+    band: ADJUDICATION_BAND,
     total: reports.length,
     autoMergeable: reports.filter((r) => r.autoMergeable).length,
-    duplicates: reports.slice(0, 200).map((r) => ({
+    // What the sweep DID, not just what it is showing. `ruledOut` is the number
+    // of pairs a human has already answered; `semanticPairs` is how many
+    // candidates the vector pass contributed that no shared word could have.
+    ruledOut: sweep.ruledOut,
+    adjudicatedApart: sweep.adjudicatedApart,
+    semanticPairs: sweep.semanticPairs,
+    seriesVariants: sweep.seriesVariants,
+    undecidedInBand: reports.filter(
+      (r) =>
+        !r.decision &&
+        r.candidate.confidence >= ADJUDICATION_BAND.min &&
+        r.candidate.confidence <= ADJUDICATION_BAND.max,
+    ).length,
+    duplicates: reports.slice(0, PAGE_LIMIT).map((r) => ({
       confidence: Number(r.candidate.confidence.toFixed(3)),
       signals: r.candidate.signals,
       reason: r.candidate.reason,
       autoMergeable: r.autoMergeable,
+      decision: r.decision
+        ? {
+            verdict: r.decision.verdict,
+            decidedBy: r.decision.decidedBy,
+            rationale: r.decision.rationale,
+            model: r.decision.model,
+            at: r.decision.createdAt,
+          }
+        : null,
       keep: {
         id: r.keep.id,
         name: r.keep.name,
         type: r.keep.typeName,
         degree: r.keep.degree,
         noteCount: r.keep.noteCount,
+        aliases: (r.keep.aliases ?? []).slice(0, 6),
+        summary: r.keep.summary,
       },
       merge: {
         id: r.merge.id,
@@ -41,6 +79,8 @@ export const GET: RequestHandler = async ({ url }) => {
         type: r.merge.typeName,
         degree: r.merge.degree,
         noteCount: r.merge.noteCount,
+        aliases: (r.merge.aliases ?? []).slice(0, 6),
+        summary: r.merge.summary,
       },
     })),
   });
@@ -92,6 +132,67 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     return json({ ok: true, merged: merged.length, failed, pairs: merged });
+  }
+
+  // A verdict that OUTLIVES the tab. "Dismiss" used to write to a client-side
+  // Set, so every rejection this graph has ever received was thrown away and
+  // re-proposed on the next sweep.
+  if (action === 'not-duplicate' || action === 'same') {
+    const aId = String(body.aId ?? body.keepId ?? '');
+    const bId = String(body.bId ?? body.mergeId ?? '');
+    if (!aId || !bId) throw error(400, 'aId and bId are required');
+    await recordDecision({
+      aId,
+      bId,
+      verdict: action === 'same' ? 'same' : 'different',
+      decidedBy: 'human',
+      confidence: Number.isFinite(Number(body.confidence)) ? Number(body.confidence) : null,
+      verdictConfidence: 1,
+      signals: Array.isArray(body.signals) ? (body.signals as string[]).map(String) : [],
+      rationale: typeof body.rationale === 'string' ? body.rationale.slice(0, 400) : null,
+      aName: typeof body.aName === 'string' ? body.aName : null,
+      bName: typeof body.bName === 'string' ? body.bName : null,
+    });
+    return json({ ok: true });
+  }
+
+  /** Put a pair back in the queue — the undo for the two actions above. */
+  if (action === 'undecide') {
+    const aId = String(body.aId ?? '');
+    const bId = String(body.bId ?? '');
+    if (!aId || !bId) throw error(400, 'aId and bId are required');
+    await clearDecision(aId, bId);
+    return json({ ok: true });
+  }
+
+  // Read the evidence and rule on the undecided middle. Never merges: it writes
+  // decision rows, which move a pair's score and can carry it over the existing
+  // auto-merge threshold — the threshold, its chain guard and its nightly cap
+  // are all unchanged.
+  if (action === 'adjudicate') {
+    const min = Math.min(Math.max(Number(body.min ?? ADJUDICATION_BAND.min), 0), 1);
+    const limitRaw = Number(body.limit);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(ADJUDICATION_NIGHTLY_LIMIT, Math.max(1, Math.round(limitRaw)))
+      : ADJUDICATION_NIGHTLY_LIMIT;
+    const only = Array.isArray(body.pairs)
+      ? new Set((body.pairs as Array<Record<string, unknown>>).map((p) => `${p.aId}|${p.bId}`))
+      : null;
+
+    const sweep = await sweepDuplicates(min);
+    const reports = only
+      ? sweep.reports.filter(
+          (r) => only.has(`${r.keep.id}|${r.merge.id}`) || only.has(`${r.merge.id}|${r.keep.id}`),
+        )
+      : sweep.reports;
+
+    const run = await adjudicateCandidates(reports, {
+      limit,
+      // An explicit request about named pairs is a request, not a sweep: it may
+      // re-ask a question the model has already answered. A blanket run may not.
+      force: Boolean(only),
+    });
+    return json({ ok: true, result: run });
   }
 
   if (action === 'unmerge') {

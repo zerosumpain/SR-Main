@@ -65,6 +65,15 @@ export function inWindow(t: number, since?: number | null, until?: number | null
 
 export interface GraphFilter {
   typeId?: string | null;
+  /**
+   * Several entity types at once; a node passes if it carries ANY of them.
+   *
+   * `typeId` stays because deep links from entity cards and saved views carry
+   * it, and the two intersect rather than replace: a request naming both is
+   * asking for the one type AND one of the several, which is empty unless they
+   * agree. That is the honest reading, and nothing sends both.
+   */
+  typeIds?: string[];
   communityId?: number | null;
   minDegree?: number;
   focusId?: string | null;
@@ -139,6 +148,13 @@ export function applyGraphFilter(
   // 2. Attribute filters.
   if (filter.typeId) {
     keep = new Set([...keep].filter((id) => index.byId.get(id)?.typeId === filter.typeId));
+  }
+  if (filter.typeIds?.length) {
+    const wanted = new Set(filter.typeIds);
+    keep = new Set([...keep].filter((id) => {
+      const t = index.byId.get(id)?.typeId;
+      return t ? wanted.has(t) : false;
+    }));
   }
   if (filter.communityId !== null && filter.communityId !== undefined) {
     keep = new Set([...keep].filter((id) => community.get(id) === filter.communityId));

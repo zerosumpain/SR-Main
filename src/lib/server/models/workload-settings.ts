@@ -66,6 +66,9 @@ async function resolveById(id: string): Promise<ModelContext> {
 /** Intel entity extraction + resolution. Two call sites, both post-reply. */
 export const resolveExtractionModel = () => resolveById('extraction');
 
+/** Adjudicating one candidate duplicate pair against its evidence. */
+export const resolveResolutionModel = () => resolveById('resolution');
+
 /** The nightly self-improvement engine's code-authoring calls. */
 export const resolveSelfimproveModel = () => resolveById('selfimprove');
 

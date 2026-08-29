@@ -57,6 +57,16 @@ export function isAutoResolveEnabled(): boolean {
 }
 
 /**
+ * Adjudication is separately switchable because it is the only stage that
+ * spends money PER PAIR. Everything else in the sweep costs a fixed amount or
+ * nothing; this one scales with how many ambiguous duplicates the graph has,
+ * which is not a number anybody controls.
+ */
+export function isAdjudicationEnabled(): boolean {
+  return process.env.INTEL_ADJUDICATE !== '0';
+}
+
+/**
  * Merges one night may apply.
  *
  * Not a performance limit — the whole pass costs one query and some
@@ -69,6 +79,8 @@ const AUTO_RESOLVE_LIMIT = 25;
 
 export interface IntelSweepResult {
   confidenceScored: number;
+  /** Candidate pairs the adjudicator read and answered. */
+  pairsAdjudicated: number;
   watchChanges: number;
   lensChanges: number;
   /** Threads swept from the rolling Gmail window, if enabled. */
@@ -270,7 +282,12 @@ export async function runIntelSweep(
   if (isAutoResolveEnabled()) {
     stages.push(
       await runStage('resolve', async () => {
-        const { autoMergeDuplicates } = await import('./resolve/merge');
+        const { autoMergeDuplicates, backfillAliasesFromTombstones } = await import('./resolve/merge');
+        // Recover the surface forms every merge before this discarded. Runs
+        // first, so the night's matching can already use them: the alias list is
+        // what lets the resolver recognise a name it has seen lose an argument
+        // before, and for 490 merges it was silently thrown away.
+        const aliases = await backfillAliasesFromTombstones();
         const swept = await autoMergeDuplicates(undefined, { limit: AUTO_RESOLVE_LIMIT });
         for (const d of swept.details) {
           // Named in the journal, because a merge nobody can see is a merge
@@ -282,6 +299,49 @@ export async function runIntelSweep(
           merged: swept.merged,
           skipped: swept.skipped,
           chainsBroken: swept.chainsBroken,
+          aliasesLearned: aliases.aliasesAdded,
+          entitiesRelabelled: aliases.updated,
+        };
+      }, batch),
+    );
+  }
+
+  // Adjudication AFTER the auto-merge, on what the rules could not settle.
+  //
+  // Ordered this way on purpose: running it first would spend a model call on
+  // pairs the threshold was about to merge anyway. What is left after the merge
+  // is exactly the band the string rules cannot reach — names that resemble each
+  // other and mean different things, or mean the same thing and look nothing
+  // alike — and the only way through it is to read the evidence.
+  //
+  // It writes verdicts, never merges. A verdict of 'same' lifts the pair's
+  // score, so the NEXT night's resolve stage may carry it over the auto-merge
+  // line; that line, its chain guard and its 25-merge cap are untouched.
+  if (isAdjudicationEnabled()) {
+    stages.push(
+      await runStage('adjudicate', async () => {
+        const [{ sweepDuplicates }, { adjudicateCandidates, ADJUDICATION_BAND }] = await Promise.all([
+          import('./resolve/merge'),
+          import('./resolve/adjudicate'),
+        ]);
+        const sweep = await sweepDuplicates(ADJUDICATION_BAND.min);
+        const run = await adjudicateCandidates(sweep.reports);
+        return {
+          // `considered` is what was actually sent; `skipped` is everything the
+          // band or an existing verdict held back. Both, because a stage that
+          // reported only its verdicts would look identical whether it had read
+          // forty pairs or none.
+          considered: run.considered,
+          skipped: run.skipped,
+          decided: run.decided,
+          same: run.same,
+          different: run.different,
+          unsure: run.unsure,
+          failed: run.failed,
+          // How many candidates the vector pass contributed. Zero here with a
+          // healthy graph means embeddings are missing, not that nothing matched.
+          semanticPairs: sweep.semanticPairs,
+          ruledOut: sweep.ruledOut,
         };
       }, batch),
     );
@@ -325,6 +385,7 @@ export async function runIntelSweep(
     gmailThreads: find('gmail')?.counts?.threads ?? 0,
     gmailExtracted: find('gmail')?.counts?.extracted ?? 0,
     duplicatesMerged: find('resolve')?.counts?.merged ?? 0,
+    pairsAdjudicated: find('adjudicate')?.counts?.decided ?? 0,
     confidenceScored: find('confidence')?.counts?.scored ?? 0,
     watchChanges: find('watchlist')?.counts?.changes ?? 0,
     lensChanges: find('lenses')?.counts?.changes ?? 0,
@@ -336,6 +397,7 @@ export async function runIntelSweep(
     `[intel:engine] sweep ${status} in ${finished.getTime() - startedAt.getTime()}ms — ` +
       `${result.gmailThreads} gmail threads (${result.gmailExtracted} extracted), ` +
       `${result.duplicatesMerged} duplicates merged, ` +
+      `${result.pairsAdjudicated} pairs adjudicated, ` +
       `${result.confidenceScored} scored, ${result.watchChanges} watch changes, ` +
       `${result.lensChanges} lens changes` +
       // The messages, not the count. This line is the whole reason the Gmail
