@@ -391,7 +391,7 @@
     gap: 16px;
     width: 100%;
     align-self: stretch;
-    padding: 16px max(20px, calc((100% - 900px) / 2));
+    padding: 14px max(20px, calc((100% - 900px) / 2));
   }
   /* The wash and the divider belong to the whole TURN, not to its prose — a
      reply's attachments, workflow chips and build pill are part of the same
@@ -593,9 +593,13 @@
     /* The 84px gutter + 16px gap is ~100px of a ~360px pane — over a quarter
        of the reading width spent on "who". Fold the meta into a header line so
        the turn owns the full width, name just inside the top-left. */
+    /* Tighter on a phone: a turn is often two lines, and 16px of air above and
+       below each one meant a third of the screen was gaps. */
     .msg-row {
       grid-template-columns: minmax(0, 1fr);
       gap: 6px;
+      padding-top: 10px;
+      padding-bottom: 10px;
     }
     .msg-meta {
       flex-direction: row;

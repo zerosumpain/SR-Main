@@ -78,31 +78,35 @@ export interface CodexMeter {
 }
 
 /**
- * The Codex meter to render, or null when the header should keep showing the
- * OpenRouter balance.
+ * Every Codex meter worth rendering, headline first.
  *
- * Null covers three cases that all mean the same thing to the caller: the
+ * The header shows one window at a time but the account reports several (a 5-
+ * hour window and a weekly one, typically), and which one matters depends on
+ * what you are asking: the 5h window is what stops the next turn, the weekly is
+ * what stops the afternoon. So the strip cycles through this list on click
+ * rather than picking one for you — `codexMeter` below is just its first entry.
+ *
+ * Empty covers three cases that all mean the same thing to the caller: the
  * active model isn't a subscription model, there is no Codex login on this host
  * (so nothing to report), or the account reported no windows at all.
  */
-export function codexMeter(
+export function codexMeters(
   usage: CodexUsageView | null | undefined,
   modelId: string | null | undefined,
   now: number,
-): CodexMeter | null {
-  if (!isSubscriptionModelId(modelId)) return null;
-  if (!usage || !usage.headline) return null;
+): CodexMeter[] {
+  if (!isSubscriptionModelId(modelId)) return [];
+  if (!usage || !usage.headline) return [];
 
-  const { usedPercent, windowSeconds, resetAt } = usage.headline;
-  const windowLabel = formatWindowLabel(windowSeconds);
-  const resetIn = formatResetIn(resetAt, now);
-
+  const headline = usage.headline;
   const parts: string[] = [];
   const plan = usage.planType ? `ChatGPT ${usage.planType}` : 'ChatGPT subscription';
   parts.push(
     usage.limitReached
       ? `${plan} — limit reached`
-      : `${plan} — ${Math.round(100 - usedPercent)}% of the ${windowLabel.toLowerCase()} window left`,
+      : `${plan} — ${Math.round(100 - headline.usedPercent)}% of the ${formatWindowLabel(
+          headline.windowSeconds,
+        ).toLowerCase()} window left`,
   );
   for (const w of usage.windows) {
     const reset = formatResetIn(w.resetAt, now);
@@ -118,13 +122,36 @@ export function codexMeter(
   // Stale readings are carried forward on a failed refresh, so say how old.
   const ageMin = Math.floor((now - usage.fetchedAt) / 60_000);
   if (ageMin >= 2) parts.push(`as of ${ageMin}m ago`);
+  const title = `${parts.join(' · ')} · click to switch window`;
 
-  return {
-    usedPercent,
-    remainingPercent: Math.max(0, Math.min(100, 100 - usedPercent)),
-    windowLabel,
-    resetIn,
-    limitReached: usage.limitReached,
-    title: parts.join(' · '),
-  };
+  // Dedupe by window LENGTH, not object identity: `headline` and its twin in
+  // `windows` are the same window, but they do not survive the load boundary as
+  // the same object on every serialisation path.
+  const rest = usage.windows
+    .filter((w) => w.windowSeconds !== headline.windowSeconds)
+    .sort((a, b) => a.windowSeconds - b.windowSeconds);
+
+  return [headline, ...rest].map((w, i) => ({
+    usedPercent: w.usedPercent,
+    remainingPercent: Math.max(0, Math.min(100, 100 - w.usedPercent)),
+    windowLabel: formatWindowLabel(w.windowSeconds),
+    resetIn: formatResetIn(w.resetAt, now),
+    // The account-level flag belongs to the window that tripped it, which is
+    // the headline by definition. A wider window only reads as exhausted when
+    // its own figure says so.
+    limitReached: i === 0 ? usage.limitReached : usage.limitReached && w.usedPercent >= 99.5,
+    title,
+  }));
+}
+
+/**
+ * The Codex meter to render, or null when the header should keep showing the
+ * OpenRouter balance. The tightest window — the one nearest its ceiling.
+ */
+export function codexMeter(
+  usage: CodexUsageView | null | undefined,
+  modelId: string | null | undefined,
+  now: number,
+): CodexMeter | null {
+  return codexMeters(usage, modelId, now)[0] ?? null;
 }

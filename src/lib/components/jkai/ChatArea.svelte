@@ -498,18 +498,110 @@
   let chatContainer: HTMLDivElement;
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
 
-  // ── Follow-the-tail scrolling ───────────────────────────────────────────────
-  // The view only chases new content while the reader is parked at the bottom.
-  // Scroll up mid-turn to re-read something and the stream stops yanking you
-  // back; scroll (or click "latest") to within `SCROLL_SLACK` of the end and the
-  // follow re-arms itself. Read by the template, so it has to be `$state`.
+  // ── Scrolling: the pin, then the tail ───────────────────────────────────────
+  //
+  // SENDING PINS. The message you just sent is parked at the top of the pane and
+  // held there while the reply fills the space below it, because that space is
+  // where you are about to be reading. Holding it there needs room underneath
+  // that the transcript does not have yet, so `.tail-spacer` grows under the
+  // last turn and shrinks back to nothing as the reply grows into it.
+  //
+  // THEN THE TAIL. The older rule still governs everything else: the view chases
+  // new content only while the reader is parked at the bottom. Scroll up mid-turn
+  // to re-read something and the stream stops yanking you back; scroll (or click
+  // "↓ Latest") to within `SCROLL_SLACK` of the end and the follow re-arms.
+  //
+  // The two compose rather than fight, because while the reply still fits the
+  // pane the pinned position IS the bottom — the spacer is sized to make it so.
+  // Only once the reply outgrows the pane do they part, and there the pin wins:
+  // the perspective stays fixed and `↓ Latest` appears as the way down.
+  //
+  // Any scroll the reader makes releases the pin — wheel, touch, scrollbar,
+  // keyboard, all of it. We know the value we wrote (`pinnedTop`), so a
+  // scrollTop that is anything else means they moved it. Read by the template,
+  // so `stickToBottom` has to be `$state`; every handle below is a plain `let`.
   let stickToBottom = $state(true);
   const SCROLL_SLACK = 80;
+  /** Air left above the pinned message. A hair, not a margin — the point is to
+   *  hand the reply the rest of the pane. */
+  const PIN_PAD = 8;
   // rAF coalescer for the observer below — an internal handle, never `$state`.
   let stickPending = false;
+  /** The message the tail spacer is sized around, for the whole turn. */
+  let anchorMsgId: string | null = null;
+  /** Whether we are still HOLDING the view at that anchor. */
+  let pinned = false;
+  /** The last scrollTop we set ourselves while pinned. */
+  let pinnedTop = -1;
+  /** Sized imperatively: routing the height through the template would make
+   *  every write a DOM mutation the observer below then reacts to. */
+  let tailSpacerEl: HTMLDivElement | undefined;
+  let tailSpacerPx = 0;
+
+  function setTailSpacer(px: number) {
+    const next = Math.max(0, Math.round(px));
+    if (next === tailSpacerPx) return;
+    tailSpacerPx = next;
+    if (tailSpacerEl) tailSpacerEl.style.height = `${next}px`;
+  }
+
+  /** Drop the anchor and the room under it. For anything that means "take me to
+   *  the tail": opening a thread, bringing a tab forward, clicking ↓ Latest. */
+  function clearPin() {
+    anchorMsgId = null;
+    pinned = false;
+    pinnedTop = -1;
+    setTailSpacer(0);
+  }
+
+  /**
+   * Size the tail so the anchored message can reach the top of the pane, and put
+   * it there while the pin still holds. False when the anchor has gone (thread
+   * switched, message replaced), so the caller can give up on it.
+   */
+  function maintainPin(): boolean {
+    if (!chatContainer || anchorMsgId === null) return false;
+    const el = chatContainer.querySelector<HTMLElement>(
+      `[data-mid="${CSS.escape(anchorMsgId)}"]`,
+    );
+    if (!el) return false;
+    const anchorTop =
+      el.getBoundingClientRect().top -
+      chatContainer.getBoundingClientRect().top +
+      chatContainer.scrollTop;
+    const target = Math.max(0, anchorTop - PIN_PAD);
+    // Room enough that `target` is reachable at all. Sized from the transcript's
+    // own height (scrollHeight minus the spacer we last added), so it shrinks as
+    // the reply grows into it — the space is a placeholder for the answer, not a
+    // permanent gap at the end of the thread.
+    setTailSpacer(target + chatContainer.clientHeight - (chatContainer.scrollHeight - tailSpacerPx));
+    if (pinned) {
+      // Order matters: the spacer has to exist before the scroll, or the write
+      // is clamped by the old height and the pin lands short.
+      chatContainer.scrollTop = target;
+      pinnedTop = chatContainer.scrollTop;
+    }
+    return true;
+  }
+
+  /**
+   * Park the message just sent at the top of the pane.
+   *
+   * Three passes because the thing being measured is not there yet: the bubble
+   * lands on Svelte's flush, the typing indicator a frame later, and anything
+   * with a late height (attachments, a tool drawer) later still.
+   */
+  function pinToTop(messageId: string) {
+    anchorMsgId = messageId;
+    pinned = true;
+    requestAnimationFrame(() => void maintainPin());
+    setTimeout(() => void maintainPin(), 60);
+    setTimeout(() => void maintainPin(), 220);
+  }
 
   function onListScroll() {
     if (!chatContainer) return;
+    if (pinned && Math.abs(chatContainer.scrollTop - pinnedTop) > 4) pinned = false;
     stickToBottom =
       chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < SCROLL_SLACK;
   }
@@ -523,10 +615,22 @@
    */
   function stickyBottom(node: HTMLDivElement): { destroy(): void } {
     const follow = () => {
-      if (!stickToBottom || stickPending) return;
+      if (stickPending) return;
+      if (anchorMsgId === null && !stickToBottom) return;
       stickPending = true;
       requestAnimationFrame(() => {
         stickPending = false;
+        if (anchorMsgId !== null) {
+          if (!maintainPin()) clearPin();
+          else if (pinned) {
+            // The reply may have just run past the fold under a held pin, and no
+            // scroll event fires for that — re-read it so `↓ Latest` can offer
+            // the way down.
+            stickToBottom =
+              node.scrollHeight - node.scrollTop - node.clientHeight < SCROLL_SLACK;
+            return;
+          }
+        }
         if (stickToBottom) node.scrollTop = node.scrollHeight;
       });
     };
@@ -2188,9 +2292,10 @@
       createdAt: new Date().toISOString(),
     };
     messages = [...messages, userMsg];
-    // Sending is an explicit "take me to the bottom" — re-arms the follow even
-    // if the user had scrolled up to read something before typing.
-    scrollToBottom('auto', true);
+    // Sending parks what you just sent at the top of the pane and hands the rest
+    // of it to the reply. Overrides anything the reader had scrolled to before
+    // typing; they get it back the moment they touch the wheel.
+    pinToTop(userMsgId);
 
     // Offline short-circuit: if the browser reports it's offline, skip the
     // POST entirely, enqueue via the PWA outbox, and mark the user bubble
@@ -2375,8 +2480,12 @@
    * up" and would unstick the follow mid-animation.
    */
   function scrollToBottom(behavior: ScrollBehavior = 'auto', force = false) {
-    if (force) stickToBottom = true;
-    else if (!stickToBottom) return;
+    if (force) {
+      stickToBottom = true;
+      // `force` is the reader asking for the tail, which is the one thing the
+      // pin must not argue with.
+      clearPin();
+    } else if (!stickToBottom) return;
     requestAnimationFrame(() => {
       chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior });
     });
@@ -2950,7 +3059,7 @@
                 </div>
               {/if}
             {/if}
-            <div class="relative msg-slot" class:user-turn={msg.role === 'user'}>
+            <div class="relative msg-slot" class:user-turn={msg.role === 'user'} data-mid={msg.id}>
               {#if msg.source === 'followup' || msg.source === 'whatsapp'}
                 <div class="src-tag-row" class:justify-end={msg.role === 'user'}>
                   {#if msg.source === 'whatsapp'}
@@ -3009,6 +3118,10 @@
           {/if}
         {/each}
       </div>
+      <!-- Room for the reply under the last turn, so the message that started it
+           can sit at the top of the pane. Sized in JS (see `maintainPin`); zero
+           whenever nothing is anchored. -->
+      <div class="tail-spacer" bind:this={tailSpacerEl} aria-hidden="true"></div>
     {/if}
   </div>
 
@@ -3421,6 +3534,12 @@
     overflow-y: auto;
     padding: 18px 20px;
   }
+  /* Grown by `maintainPin` while a turn is anchored, back to zero when it is
+     not. It carries no content and no border — it is scrollable room, nothing
+     more. */
+  .tail-spacer {
+    height: 0;
+  }
   /* Full-width grid rather than a centred 900px block: a 900px reading column
      with a gutter either side. Everything lands in the centre column — which is
      the old geometry, unchanged — but a user turn is additionally allowed to
@@ -3448,7 +3567,7 @@
      by which side of the pane they hug. */
   .msg-stack > .msg-slot {
     grid-column: 1 / -1;
-    padding-bottom: 16px;
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--line-hair);
   }
   /* The assistant register is the wash — that, and the accent role label in the
@@ -4560,6 +4679,11 @@
     }
     .msg-list {
       padding: 12px 16px;
+    }
+    /* The hairline divider carries the separation on a phone — 16px of extra air
+       under every turn was a third of a short reply's height. */
+    .msg-stack > .msg-slot {
+      padding-bottom: 8px;
     }
     .th-chip {
       display: none;

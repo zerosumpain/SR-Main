@@ -5,7 +5,7 @@
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
-  import { codexMeter, type CodexUsageView } from '$lib/llm/usage-meter';
+  import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
 
   let {
     tokensToday,
@@ -47,7 +47,10 @@
    * credit. Recomputed on `hub.modelId` so switching model in the picker swaps
    * the meter without a navigation.
    */
-  const codexView = $derived(codexMeter(codex, effectiveModelId, Date.now()));
+  const codexViews = $derived(codexMeters(codex, effectiveModelId, Date.now()));
+  /** The tightest window — what the pill and the menu row report. The strip gets
+   *  the whole list, because clicking it walks them. */
+  const codexView = $derived(codexViews[0] ?? null);
 
   // Menu state is shared with the phone tab bar's `≡ more` tab.
   const menuOpen = $derived(hub.menuOpen);
@@ -182,7 +185,7 @@
           spendUsd={spendTodayUsd}
           {budgetUsd}
           {credit}
-          codex={codexView}
+          codexWindows={codexViews}
           contextTokens={hub.contextTokens}
           contextFraction={hub.contextFraction}
           liveRuns={runs}
@@ -297,7 +300,7 @@
       spendUsd={spendTodayUsd}
       {budgetUsd}
       {credit}
-      codex={codexView}
+      codexWindows={codexViews}
       contextTokens={hub.contextTokens}
       contextFraction={hub.contextFraction}
       liveRuns={runs}
