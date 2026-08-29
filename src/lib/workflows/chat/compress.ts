@@ -1,6 +1,7 @@
 import { ensureCollection, upsertRecord, getRecordByKey } from '$lib/datastore';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { currentSessionModel } from '$lib/context/chat';
 import type { HistoryMessage } from './conversation-history';
 
 /**
@@ -127,7 +128,10 @@ Write plain prose in past tense. No preamble, no headings, no markdown. Be speci
 
 async function summarise(text: string, previous: string | null): Promise<string | null> {
   try {
-    const ctx = await resolveDefaultModel();
+    // The session's pin first. Compaction rewrites the thread's own history —
+    // running it on a different model than the thread is the one place a
+    // mismatch actively rewrites what the pinned model gets to read next turn.
+    const ctx = currentSessionModel() ?? (await resolveDefaultModel());
     const { client, model } = await getLLMClient(ctx);
     const user = previous
       ? `Digest so far (fold the new messages into it, keeping what still matters):\n\n${previous}\n\n---\n\nNew messages that just fell out of the window:\n\n${text}`

@@ -56,11 +56,14 @@ register({
   category: 'JKAI Builder',
   toolset: 'builds',
   producesLongRunningTask: { kind: 'build', idPath: 'buildId', cadenceSeconds: 30 },
-  handler: async (args) => {
+  handler: async (args, toolCtx) => {
     const { createStudioBuild } = await import('$lib/jkai/studio');
     const { buildId } = await createStudioBuild({
       challenge: args.challenge as string,
       title: typeof args.title === 'string' ? args.title : undefined,
+      // The build outlives this turn, so the pin is persisted on its row rather
+      // than read from the turn's ambient context later.
+      modelContext: toolCtx?.modelContext,
       // createStudioBuild validates this and throws on anything unknown — the
       // column has no CHECK constraint, so that is the only real guard.
       ...(typeof args.researchMode === 'string'

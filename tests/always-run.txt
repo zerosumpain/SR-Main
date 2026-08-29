@@ -34,6 +34,7 @@ tests/lib/node-builder/codegen/registry-patch.test.ts
 tests/lib/node-builder/codegen/write-files.test.ts
 tests/lib/workflows/chat/destructive-gate-unattended.test.ts
 tests/lib/workflows/chat/prompt-cache-order.test.ts
+tests/lib/workflows/chat/session-model-wiring.test.ts
 tests/lib/workflows/chat/thinking-level-wiring.test.ts
 tests/lib/workflows/delegation-rule.test.ts
 tests/lib/workflows/orchestrator/dynamic-nodes.test.ts
