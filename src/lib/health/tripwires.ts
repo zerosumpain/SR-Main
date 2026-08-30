@@ -175,30 +175,55 @@ function sleepDebt(i: TripwireInput): Tripwire {
 }
 
 // 2 —————————————————————————————————————————————————————————————————
+
+export interface WeeklyVolume {
+  /** The last COMPLETE week, in kilometres. */
+  weekKm: number;
+  /** Median of the complete weeks in the window, in kilometres. */
+  medianKm: number;
+  /** Monday of the week `weekKm` measures. */
+  weekStart: string;
+}
+
+/** Complete weeks need at least this many before a median means anything. */
+export const MIN_COMPLETE_WEEKS = 4;
+
+/**
+ * The last complete week against its own twelve-week median.
+ *
+ * Exported because the tripwire, the ranked moves, the experiments and the
+ * verdict all quote this comparison and must quote the same one. The LAST
+ * bucket `weeklyVolume` ships is the week in PROGRESS — comparing a Tuesday
+ * against eleven whole weeks reads as a 70% collapse every Tuesday — so it is
+ * dropped. Strictly before today, because on a Sunday the current week ends
+ * today and is still being lived.
+ */
+export function weeklyVolumeSummary(
+  weeks: Array<{ weekStart: string; totalDistanceM: number }> | null | undefined,
+  today: string,
+): WeeklyVolume | null {
+  const complete = (weeks ?? []).filter((w) => weekEnd(w.weekStart) < today);
+  if (complete.length < MIN_COMPLETE_WEEKS) return null;
+  const last = complete[complete.length - 1];
+  const medianKm = median(complete.map((w) => w.totalDistanceM / 1000)) ?? 0;
+  if (medianKm <= 0) return null;
+  return { weekKm: last.totalDistanceM / 1000, medianKm, weekStart: last.weekStart };
+}
+
 function weeklyVolume(i: TripwireInput): Tripwire {
   const base = ['weekly-volume', 'Weekly volume', 'vs 12wk median', `< ${VOLUME_FLOOR_PCT}%`] as const;
-  // The LAST bucket weeklyVolume ships is the week in progress. Comparing a
-  // Tuesday against eleven whole weeks reads as a 70% collapse every Tuesday,
-  // so the in-progress week is dropped and the last COMPLETE one is judged.
-  // Strictly BEFORE today: on a Sunday the current week ends today and is still
-  // being lived, so it is not yet a week you can compare anything against.
-  const complete = (i.weeks ?? []).filter((w) => weekEnd(w.weekStart) < i.today);
-  if (complete.length < 4) {
-    return unread(...base, 'Needs four completed weeks before a median means anything.');
+  const summary = weeklyVolumeSummary(i.weeks, i.today);
+  if (!summary) {
+    return unread(...base, `Needs ${MIN_COMPLETE_WEEKS} completed weeks with distance on them before a median means anything.`);
   }
-  const last = complete[complete.length - 1];
-  const km = last.totalDistanceM / 1000;
-  const medianKm = median(complete.map((w) => w.totalDistanceM / 1000)) ?? 0;
-  if (medianKm <= 0) {
-    return unread(...base, 'No distance recorded in the window to take a median of.');
-  }
+  const { weekKm: km, medianKm, weekStart } = summary;
   const pct = Math.round((km / medianKm) * 100);
   const state: TripwireState =
     pct < VOLUME_FLOOR_PCT ? 'TRIPPED' : pct < VOLUME_CLOSE_PCT ? 'CLOSE' : 'ARMED';
   const meaning =
     state === 'ARMED'
-      ? `Week to ${short(last.weekStart)} at ${pct}% of the ${medianKm.toFixed(1)} km median. Nothing to do.`
-      : `Week to ${short(last.weekStart)} ran ${pct}% of the ${medianKm.toFixed(1)} km twelve-week median. One long easy day clears it; nothing else needs to change.`;
+      ? `Week to ${short(weekStart)} at ${pct}% of the ${medianKm.toFixed(1)} km median. Nothing to do.`
+      : `Week to ${short(weekStart)} ran ${pct}% of the ${medianKm.toFixed(1)} km twelve-week median. One long easy day clears it; nothing else needs to change.`;
   return { id: base[0], signal: base[1], window: base[2], trigger: base[3], state, now: `${km.toFixed(1)} km · ${pct}%`, meaning, readable: true };
 }
 

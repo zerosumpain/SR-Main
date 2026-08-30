@@ -13,12 +13,22 @@ import { getCircadianAlignment } from '$lib/health/services/circadian-service';
 import { getVO2Max } from '$lib/health/services/vo2max-service';
 import { getPolarised } from '$lib/health/services/polarised-service';
 import { getStats } from '$lib/health/stats-service';
-import { getTrailsDashboard } from '$lib/trails/physio-service';
-import { getSegmentHighlights } from '$lib/trails/segments-service';
-import { getSegmentChains } from '$lib/trails/highlights-service';
+import { getTrailsDashboard, trend } from '$lib/trails/physio-service';
+import {
+  getSegmentHighlights,
+  listSegments,
+  type SegmentListRow,
+} from '$lib/trails/segments-service';
+import { getSegmentChains, getHighlightCorpus } from '$lib/trails/highlights-service';
 import { listActivities } from '$lib/trails/activities-service';
-import { getHighlightCorpus } from '$lib/trails/highlights-service';
 import { getDailyPlan } from '$lib/trails/coach-service';
+import { acwrSeries } from '$lib/health/analytics/acwr';
+import { computeForecast } from '$lib/health/analytics/forecast';
+import { GETTABLE_GAP_PCT } from '$lib/trails/segments/form';
+import { computeMoves } from '$lib/health/moves';
+import { computeTripwires, weeklyVolumeSummary, type GettableSummary } from '$lib/health/tripwires';
+import { computeExperiments } from '$lib/health/experiments';
+import { computeVerdict } from '$lib/health/verdict';
 
 // /health is the ONE hub for the body and the ground it covers — the public
 // landing and, signed in, the consolidated dashboard that used to live at
@@ -47,6 +57,69 @@ async function safe<T>(label: string, p: Promise<T>): Promise<T | null> {
     console.warn(`[health] "${label}" failed:`, (err as Error)?.message);
     return null;
   }
+}
+
+/**
+ * The synchronous sibling of `safe()`. The derived layers below — forecast,
+ * moves, tripwires, experiments, verdict — are pure functions rather than
+ * queries, but they read a dozen optional structs each and the rule is the
+ * same: one of them throwing must cost its own panel, never the page.
+ */
+function safeSync<T>(label: string, fn: () => T): T | null {
+  try {
+    return fn();
+  } catch (err) {
+    console.warn(`[health] "${label}" failed:`, (err as Error)?.message);
+    return null;
+  }
+}
+
+/** Segments capped well clear of the ~390 in production; hitting it is logged. */
+const SEGMENT_LIMIT = 1000;
+
+/**
+ * The form taxonomy for the segments section, and the gettable count the
+ * positive tripwire fires on. `segmentForm` has already done the work on every
+ * row; this only counts it.
+ */
+function summariseSegmentForms(rows: SegmentListRow[]) {
+  const withForm = rows.filter((r) => r.form.direction !== 'unknown');
+  const improving = withForm.filter((r) => r.form.direction === 'improving');
+  const gettable = improving.filter((r) => r.form.gapPct != null && r.form.gapPct < GETTABLE_GAP_PCT);
+  const nearest =
+    [...improving]
+      .filter((r) => r.form.gapPct != null)
+      .sort((a, b) => (a.form.gapPct as number) - (b.form.gapPct as number))[0] ?? null;
+  const summary: GettableSummary = {
+    gettable: gettable.length,
+    improving: improving.length,
+    withForm: withForm.length,
+    nearest: nearest ? { name: nearest.name, gapPct: nearest.form.gapPct as number } : null,
+  };
+  return {
+    ...summary,
+    /** The four form tiles: everything without a read sits in `noRead`. */
+    taxonomy: {
+      improving: improving.length,
+      holding: withForm.filter((r) => r.form.direction === 'holding').length,
+      slipping: withForm.filter((r) => r.form.direction === 'slipping').length,
+      noRead: rows.length - withForm.length,
+      total: rows.length,
+    },
+    /** The gettable board itself, closest first — section F's proposed list. */
+    board: gettable
+      .slice()
+      .sort((a, b) => (a.form.gapPct as number) - (b.form.gapPct as number))
+      .slice(0, 10)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        activityType: r.activityType,
+        gapPct: r.form.gapPct as number,
+        daysSincePb: r.form.daysSincePb,
+        effortCount: r.effortCount,
+      })),
+  };
 }
 
 /** The five most recent outings, each with the single best thing about it. */
@@ -171,7 +244,7 @@ export const load: PageServerLoad = async (event) => {
   // request. One extra round trip in sequence is cheaper than doing the
   // expensive half of this page twice.
   const dashboard = await safe('trails-dashboard', getTrailsDashboard());
-  const [segments, chains, outings, coach] = await Promise.all([
+  const [segments, chains, outings, coach, segmentRows] = await Promise.all([
     safe('segment-highlights', getSegmentHighlights()),
     // Memoised on the same fingerprint as the highlight corpus, so the hub and
     // the segments explorer share one computation rather than each reloading
@@ -190,10 +263,118 @@ export const load: PageServerLoad = async (event) => {
         readiness: readiness?.score ?? null,
       }),
     ),
+    // Form on every segment, for the taxonomy tiles and the positive tripwire.
+    // No geometry comes back — `listSegments` projects around `coordinates` —
+    // and the effort read is three columns, the same one the explorer makes.
+    safe('segment-forms', listSegments({ limit: SEGMENT_LIMIT })),
   ]);
   const correlations = shared.provenance.correlationsAreIllustrative
     ? []
     : (data?.correlations ?? []);
+
+  // ——— the instrument deck ————————————————————————————————————————
+  //
+  // Six of the eight panels were already on this payload (monotony, polarised,
+  // circadian, autonomic, recovery debt, and sleep regularity in `shared`).
+  // ACWR and efficiency were not, and neither needs a query of its own: the
+  // dashboard has already computed both. The TRIMP-based ratio is the honest
+  // one — the Whoop-strain ratio is an interim while the load history fills —
+  // so it leads and strain is the fallback.
+  const acwr = dashboard?.load.trimpAcwr ?? dashboard?.load.strainAcwr ?? null;
+  const efficiency = dashboard?.efficiency ?? null;
+  const today = new Date().toISOString().slice(0, 10);
+  const segmentForms = segmentRows ? summariseSegmentForms(segmentRows.rows) : null;
+  if (segmentRows && segmentRows.rows.length >= SEGMENT_LIMIT) {
+    console.warn(
+      `[health] segment form list hit the ${SEGMENT_LIMIT}-row cap — the taxonomy tiles and the ` +
+        'gettable board now cover only the busiest segments.',
+    );
+  }
+
+  // ——— the forecast ——————————————————————————————————————————————
+  //
+  // Four cards, each a projection with its own cone. All four are floored at 0
+  // because none of these quantities can go negative and a cone that dips under
+  // the axis is drawing an impossible future.
+  const sleepDaily = (data?.series ?? [])
+    // 0 is the missing sentinel throughout HealthDay — there are no nulls in it.
+    .filter((d) => d.slept > 0)
+    .map((d) => ({ date: d.date, value: d.slept }));
+  const forecast = {
+    sleep: safeSync('forecast-sleep', () =>
+      sleepDaily.length ? computeForecast(trend(sleepDaily), { min: 0 }) : null,
+    ),
+    hrv: safeSync('forecast-hrv', () =>
+      dashboard?.hrv ? computeForecast(dashboard.hrv, { min: 0 }) : null,
+    ),
+    vo2max: safeSync('forecast-vo2max', () =>
+      dashboard?.vo2.series.length ? computeForecast(trend(dashboard.vo2.series), { min: 0 }) : null,
+    ),
+    acwr: safeSync('forecast-acwr', () =>
+      dashboard?.load.days.length
+        ? computeForecast(trend(acwrSeries(dashboard.load.days)), { min: 0 })
+        : null,
+    ),
+  };
+
+  // ——— the derived copy ————————————————————————————————————————————
+  //
+  // Moves, tripwires, experiments and the verdict are pure rules over the
+  // numbers above. Nothing here calls a model, and each is wrapped so a throw
+  // costs its own section rather than the page.
+  const volume = weeklyVolumeSummary(dashboard?.weeks, today);
+  const instrumentInputs = {
+    readiness: readiness ? { score: readiness.score, label: readiness.label } : null,
+    acwr,
+    monotony,
+    polarised,
+    sri: sleepRegularity,
+    circadian,
+    autonomic,
+    recoveryDebt,
+    efficiency: efficiency?.bkm ?? null,
+    vo2: vo2max,
+    volume: volume ? { weekKm: volume.weekKm, medianKm: volume.medianKm } : null,
+  };
+
+  const moves = safeSync('moves', () => computeMoves(instrumentInputs)) ?? [];
+  const tripwires =
+    safeSync('tripwires', () =>
+      computeTripwires({
+        today,
+        recoveryDebt,
+        acwr,
+        vo2: vo2max,
+        hrv: dashboard?.hrv ?? null,
+        rhr: dashboard?.rhr ?? null,
+        recovery: dashboard?.recovery ?? null,
+        weeks: dashboard?.weeks ?? null,
+        segments: segmentForms,
+      }),
+    ) ?? [];
+  const experiments =
+    safeSync('experiments', () =>
+      computeExperiments({
+        today,
+        sri: sleepRegularity,
+        circadian,
+        recoveryDebt,
+        acwr,
+        polarised,
+        volume: instrumentInputs.volume,
+        weeks: dashboard?.weeks ?? null,
+      }),
+    ) ?? [];
+  const verdict = safeSync('verdict', () =>
+    computeVerdict({
+      today,
+      moves,
+      experiments,
+      ...instrumentInputs,
+      rhr: dashboard?.rhr ?? null,
+      records: stats?.personalRecords ?? null,
+    }),
+  );
 
   return {
     mode: 'owner' as const,
@@ -213,5 +394,18 @@ export const load: PageServerLoad = async (event) => {
     chains: chains ?? [],
     outings: outings ?? [],
     coach,
+    // The two instrument-deck panels this payload did not already carry.
+    acwr,
+    efficiency,
+    // Section C, D, E, H and I, all derived — no model, no schema change.
+    forecast,
+    moves,
+    tripwires,
+    experiments,
+    verdict,
+    // Section F: the form taxonomy, the gettable board, and the counts behind
+    // the positive tripwire.
+    segmentForms,
+    volume,
   };
 };

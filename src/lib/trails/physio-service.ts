@@ -105,6 +105,12 @@ export interface ActivityPhysio {
   zones: ZoneSeconds | null;
   zoneEdges: number[]; // absolute bpm starts for z1..z5
   hrMax: number;
+  /**
+   * Where hrMax came from — 'observed' or 'tanaka'. The zone bar is only
+   * honest with it: every edge below is a fraction of this number, so a reader
+   * needs to know whether it was measured or estimated from an age formula.
+   */
+  hrMaxSource: string;
   mets: number | null;
   minHr: number | null;
   temperatureC: number | null;
@@ -331,6 +337,7 @@ export async function getActivityPhysio(detail: ActivityDetail): Promise<Activit
     zones: samples ? timeInZones(samples, profile.hrMax) : null,
     zoneEdges: zoneEdges(profile.hrMax),
     hrMax: profile.hrMax,
+    hrMaxSource: profile.hrMaxSource,
     mets: metsFrom(meta.intensity),
     minHr: qty((meta.heartRate as Record<string, unknown> | undefined)?.min),
     temperatureC: celsiusFrom(meta.temperature),

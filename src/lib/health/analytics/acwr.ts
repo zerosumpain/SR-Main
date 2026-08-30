@@ -1,6 +1,7 @@
 // src/lib/health/analytics/acwr.ts
 // EWMA-based Acute:Chronic Workload Ratio (Williams et al. 2017)
 import type { MetricResult } from './types';
+import type { DayPoint } from './rolling';
 
 export type LoadDay = { date: string; load: number };
 export type ACWRZone = 'detraining' | 'undertraining' | 'optimal' | 'caution' | 'danger';
@@ -68,4 +69,35 @@ function ewma(values: number[], halfLifeDays: number): number {
     s = lambda * values[i] + (1 - lambda) * s;
   }
   return s;
+}
+
+/**
+ * The ratio as it stood on each day — the series a trend line or a forecast
+ * needs, which `computeACWR` cannot give because it answers for one day only.
+ *
+ * The two EWMAs are carried forward rather than recomputed per prefix. They are
+ * recursive, so the carried value at day i is exactly what a full recompute
+ * over days 0..i would produce; this is the same number in O(n).
+ *
+ * Days before the 14-day floor are omitted, not zero-filled: `computeACWR`
+ * refuses to report a ratio there and a chart must not draw one either.
+ */
+export function acwrSeries(days: LoadDay[], minDays = 14): DayPoint[] {
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) return [];
+  const acuteLambda = 1 - Math.exp(Math.log(0.5) / 7);
+  const chronicLambda = 1 - Math.exp(Math.log(0.5) / 28);
+  let acute = sorted[0].load;
+  let chronic = sorted[0].load;
+  const out: DayPoint[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0) {
+      acute = acuteLambda * sorted[i].load + (1 - acuteLambda) * acute;
+      chronic = chronicLambda * sorted[i].load + (1 - chronicLambda) * chronic;
+    }
+    if (i + 1 < minDays) continue;
+    const ratio = chronic === 0 ? 0 : acute / chronic;
+    out.push({ date: sorted[i].date, value: Math.round(ratio * 1000) / 1000 });
+  }
+  return out;
 }
