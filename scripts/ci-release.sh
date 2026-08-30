@@ -114,6 +114,7 @@ if [ "$(cat "$STATE_DIR/schema.sha256" 2>/dev/null || true)" = "$SCHEMA_HASH" ];
   echo "    schema.ts unchanged — skipping drizzle push"
 else
   DRIZZLE_TIMEOUT="${DRIZZLE_TIMEOUT:-180}"
+  DRIZZLE_LOG="$(mktemp)"
   (
     cd "$VPS_DIR"
     if [ ! -x node_modules/.bin/drizzle-kit ]; then
@@ -122,15 +123,47 @@ else
     set -a; . ./.env; set +a
     set +e
     CI=1 FORCE_COLOR=0 timeout "${DRIZZLE_TIMEOUT}s" stdbuf -oL -eL \
-      node_modules/.bin/drizzle-kit push --config=drizzle.config.ts --force
-    ec=$?
+      node_modules/.bin/drizzle-kit push --config=drizzle.config.ts --force 2>&1 \
+      | tee "$DRIZZLE_LOG"
+    ec="${PIPESTATUS[0]}"
     set -e
     if [ "$ec" -eq 124 ]; then
       echo "==> drizzle-kit timed out after ${DRIZZLE_TIMEOUT}s — destructive change awaiting confirmation? Run manually." >&2
       exit 1
     fi
-    exit $ec
+    exit "$ec"
   )
+  # ---------------------------------------------------------------------------
+  # DRIZZLE-KIT'S EXIT CODE IS NOT EVIDENCE. Check what it SAID.
+  #
+  # On 2026-08-30 a push failed with
+  #
+  #   Error: Interactive prompts require a TTY terminal
+  #       at promptColumnsConflicts
+  #
+  # and **exited 0**. `--force` covers data loss, not rename disambiguation: the
+  # commit dropped a column and added one on the same table, so drizzle-kit
+  # wanted a human to say whether that was a rename. With `set -e` active the
+  # script sailed straight past, stamped the hash below, and the release went
+  # green — while the schema had not moved at all.
+  #
+  # Two things then compound it. The deployed code was already selecting the new
+  # column, so retrieval 500'd against a database that never got it. And the
+  # stamp meant the NEXT deploy would report "schema.ts unchanged — skipping
+  # drizzle push" and never try again: a one-off failure turned permanent.
+  #
+  # The comment above this block has always claimed the guard is "bounded by
+  # only recording the hash after a clean push". This is what makes that true.
+  # ---------------------------------------------------------------------------
+  if grep -qiE '^Error:|Interactive prompts require a TTY|Please run|error: could not' "$DRIZZLE_LOG"; then
+    echo "==> drizzle-kit push REPORTED AN ERROR while exiting 0 — schema was NOT applied:" >&2
+    grep -iE '^Error:|Interactive prompts require a TTY|Please run|error: could not' "$DRIZZLE_LOG" | head -5 >&2
+    echo "==> Apply it by hand on the VPS, then stamp $STATE_DIR/schema.sha256." >&2
+    echo "==> A drop + an add on ONE table reads as a rename and needs a TTY; split them across two deploys or run push interactively." >&2
+    rm -f "$DRIZZLE_LOG"
+    exit 1
+  fi
+  rm -f "$DRIZZLE_LOG"
   echo "$SCHEMA_HASH" > "$STATE_DIR/schema.sha256"
 fi
 
