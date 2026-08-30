@@ -5,6 +5,7 @@
   import { AUTOPILOT_MODES } from '$lib/blog/assistant/autopilot';
   import WritingDesk from '$lib/components/blog/WritingDesk.svelte';
   import MediaLibrary from '$lib/components/blog/MediaLibrary.svelte';
+  import ImageStudio from '$lib/components/blog/ImageStudio.svelte';
   import PostStatsCard from '$lib/components/blog/PostStatsCard.svelte';
   import { goto } from '$app/navigation';
   import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
@@ -718,6 +719,18 @@
     postId={data.post.id}
     {adminToken}
     onBlockersChanged={(n) => (openBlockers = n)}
+  />
+
+  <ImageStudio
+    postId={data.post.id}
+    {adminToken}
+    onUseAsCover={async (url) => {
+      coverImageUrl = url;
+      // Same path as a cover upload: suppress content and tags so an unsaved
+      // body is not written by a metadata action.
+      await save({ content: undefined, tags: undefined, coverImageUrl: url });
+    }}
+    onInsert={(item) => richApi?.insertMedia(item)}
   />
 
   <MediaLibrary
