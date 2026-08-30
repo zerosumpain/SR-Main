@@ -173,7 +173,9 @@ describe('briefingComposeExecutor', () => {
   it('counts gaps so a caller can refuse to send a mostly-empty briefing', async () => {
     const empty = await run({});
     expect(empty.gapCount).toBeGreaterThanOrEqual(6);
-    expect(empty.factSheet).toBe('');
+    // Daydreams are self-sourced, so a live test database may legitimately
+    // contribute only that optional section even with no upstream input.
+    expect(empty.facts.every((fact) => fact.section === 'Daydreams')).toBe(true);
   });
 });
 

@@ -11,6 +11,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/db', () => ({ db: {} }));
+vi.mock('$lib/server/owner', () => ({
+  isOwnerRequest: async (event: { getClientAddress?: () => string }) => event.getClientAddress?.() === '127.0.0.1',
+}));
 
 describe('/projects/landgrab guard', () => {
   const callLoad = async (event: Record<string, unknown>) => {
