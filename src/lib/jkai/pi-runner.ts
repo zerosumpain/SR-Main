@@ -76,7 +76,7 @@ const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
  *  - `npm install -g` floats to latest and overwrites in place, so without a
  *    recorded number there is nothing to roll back TO.
  */
-export const PI_VERSION = '0.73.1';
+export const PI_VERSION = '0.84.4';
 
 /**
  * The npm package `PI_VERSION` is a version OF.
@@ -94,7 +94,7 @@ export const PI_VERSION = '0.73.1';
  * test as `PI_VERSION`) so the install hints below name the right thing, and so
  * `scripts/check-pi-version.mjs` has one place to read the pinned identity from.
  */
-export const PI_PACKAGE = '@mariozechner/pi-coding-agent';
+export const PI_PACKAGE = '@earendil-works/pi-coding-agent';
 
 /**
  * `pi --version` for the binary we are actually about to run, cached per
