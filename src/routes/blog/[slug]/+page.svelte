@@ -143,10 +143,18 @@
     padding: 3.5rem 0 4rem;
   }
 
-  .art-head,
   .art-rule,
   .art-foot {
     grid-column: main;
+  }
+
+  /* The masthead spans the WHOLE editorial width — rail through margin — not
+     just the reading column. Confined to `main` it sat hard left with the
+     reserved margin column empty beside it, which reads as a layout bug rather
+     than as a measure. The lede keeps its own max-width below, because a
+     standfirst set to 67rem is not a standfirst. */
+  .art-head {
+    grid-column: rail-start / note-end;
   }
 
   .art-cover {
@@ -224,6 +232,7 @@
   }
 
   .art-lede {
+    max-width: 34rem;
     font-family: var(--font-read);
     font-size: clamp(1.125rem, 2vw, 1.375rem);
     line-height: 1.5;
@@ -319,6 +328,13 @@
         [main-end] minmax(1.25rem, 1fr)
         [bleed-end];
       padding-top: 2.5rem;
+    }
+
+    /* `rail-start` and `note-end` do not exist in the narrow template above,
+       so the masthead must be re-placed by a name that does — otherwise it
+       falls back to auto placement and lands in the gutter. */
+    .art-head {
+      grid-column: main;
     }
 
     .art-body {
