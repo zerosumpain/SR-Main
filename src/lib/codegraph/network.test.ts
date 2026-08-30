@@ -263,3 +263,17 @@ describe('verdict ranking', () => {
     expect(historyOf({ episodeCount: 2, lessonCount: 3 })).toBe(5);
   });
 });
+
+describe('gate nodes on the map', () => {
+  it('groups gates as gates, not as root files', () => {
+    // `directoryOf` splits on '/', and a gate path has none — so without a
+    // guard all five gate nodes land in '(root)' beside package.json.
+    expect(directoryOf('gate:vitest')).toBe('Gates');
+    expect(layerOf('gate:typecheck')).toBe('Gates');
+  });
+
+  it('leaves real paths grouped exactly as before', () => {
+    expect(directoryOf('src/lib/jkai/orchestrator.ts')).toBe('src/lib/jkai');
+    expect(layerOf('src/lib/codegraph/retrieve.test.ts')).toBe('Tests');
+  });
+});

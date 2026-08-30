@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { looksFailed, fingerprintOf, fingerprintsIn, gateOf, stripAnsi } from './fingerprint';
+import {
+  assertionMatcherIn, looksFailed, fingerprintOf, fingerprintsIn, gateOf, stripAnsi } from './fingerprint';
 
 const ESC = String.fromCharCode(27);
 const red = (s: string) => `${ESC}[31m${s}${ESC}[39m`;
@@ -175,5 +176,74 @@ describe('ANSI that arrived without its escape byte', () => {
     // Narrower than the escape-prefixed form on purpose: `[2J` or `[1A` are
     // plausible in prose, and a strip that eats real text is the worse failure.
     expect(stripAnsi('see note [12] and appendix [2A]')).toBe('see note [12] and appendix [2A]');
+  });
+});
+
+/*
+ * Subdividing the assertion bucket.
+ *
+ * `vitest:AssertionError` was 57 of 108 production episodes — 53% — so the hot
+ * lane handed a build every assertion this codebase had ever failed. Every
+ * string below is REAL output pulled from `codegraph_episodes.problem`, not a
+ * constructed example, because this file's whole premise is that the rules are
+ * written against measured output.
+ */
+describe('assertion matcher subdivision', () => {
+  const REAL = [
+    ['expected "vi.fn()" to be called 3 times, but got 2 times', 'toHaveBeenCalledTimes'],
+    ['expected +0 to be 1 // Object.is equality', 'toBe'],
+    ["expected 'IBCA · Data Strategy' to be 'IBCA · John Kelly' // Object.is equality", 'toBe'],
+    ['expected 2 to be greater than 3', 'toBeGreaterThan'],
+    ["expected undefined to be '{{input}}' // Object.is equality", 'toBe'],
+  ] as const;
+
+  for (const [text, matcher] of REAL) {
+    it(`reads ${matcher} out of production output`, () => {
+      expect(assertionMatcherIn(text)).toBe(matcher);
+    });
+  }
+
+  it('puts the matcher in the fingerprint', () => {
+    expect(
+      fingerprintOf('FAIL src/lib/daydream/budget.test.ts\nAssertionError: expected +0 to be 1 // Object.is equality', 'npx vitest run'),
+    ).toBe('vitest:AssertionError:toBe');
+  });
+
+  /*
+   * Order is the whole rule. "to be called 3 times" and "to be greater than"
+   * both CONTAIN "to be", so a generic-first check would collapse the entire
+   * vocabulary back into `toBe` and undo this change without failing anything.
+   */
+  it('does not let the generic matcher swallow a specific one', () => {
+    expect(assertionMatcherIn('expected "vi.fn()" to be called 3 times')).not.toBe('toBe');
+    expect(assertionMatcherIn('expected 2 to be greater than 3')).not.toBe('toBe');
+    expect(assertionMatcherIn('expected [] to have length 2')).toBe('toHaveLength');
+    expect(assertionMatcherIn('expected fn to throw an error')).toBe('toThrow');
+  });
+
+  it('falls back to the bare class when no matcher is readable', () => {
+    expect(fingerprintOf('AssertionError: something unparseable', 'vitest')).toBe(
+      'vitest:AssertionError',
+    );
+  });
+
+  it('is not fooled by a matcher word in the test NAME', () => {
+    // The window is anchored on `expected`, so "should contain" in a describe
+    // block cannot classify the failure.
+    expect(
+      assertionMatcherIn('FAIL x.test.ts > formatter > should contain the unit\nexpected 1 to be 2 // Object.is equality'),
+    ).toBe('toBe');
+  });
+
+  it('emits BOTH the sharp and coarse keys in the query set', () => {
+    // Sharp so it matches failures of the same matcher; coarse so episodes
+    // recorded before the subdivision existed stay reachable.
+    const set = fingerprintsIn('AssertionError: expected 2 to be greater than 3', 'npx vitest run');
+    expect(set).toContain('vitest:AssertionError:toBeGreaterThan');
+    expect(set).toContain('vitest:AssertionError');
+  });
+
+  it('leaves other named errors alone', () => {
+    expect(fingerprintOf('TypeError: x is not a function', 'vitest')).toBe('vitest:TypeError');
   });
 });

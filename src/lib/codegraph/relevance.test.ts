@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  VERDICT_WEIGHT,
+  verdictWeight,
   relevanceOf,
   wilsonLowerBound,
   recencyWeight,
@@ -269,5 +271,67 @@ describe('what can be evidence at all', () => {
   it('rejects a serve that carried no text', () => {
     expect(serveIsAttributable({ outcome: 'empty', servedFor: [] })).toBe(false);
     expect(serveIsAttributable({ outcome: 'failed', servedFor: ['x'] })).toBe(false);
+  });
+});
+
+/*
+ * The verdict multiplier.
+ *
+ * The schema has claimed since the graph shipped that "ranking multiplies by
+ * this: merged is not correct". Nothing did — and the omission was invisible
+ * because all 108 production episodes were `verified`, so the missing term
+ * would have multiplied everything by the same number.
+ *
+ * It stops being invisible the moment the scanner records unproven fix
+ * attempts, which it now does.
+ */
+describe('verdict weighting', () => {
+  it('scores a lesson (no verdict) unchanged', () => {
+    const e = { served: 0, helpful: 0, unhelpful: 0, observedAt: null };
+    expect(relevanceOf(e).score).toBe(relevanceOf({ ...e, verdict: null }).score);
+    expect(verdictWeight(undefined)).toBe(1);
+    expect(verdictWeight(null)).toBe(1);
+  });
+
+  it('ranks an unverified episode strictly below an identical verified one', () => {
+    // The regression this guards: recording unproven attempts is only safe
+    // because they rank lower. Without the multiplier they rank level.
+    const base = { served: 0, helpful: 0, unhelpful: 0, observedAt: null };
+    const verified = relevanceOf({ ...base, verdict: 'verified' }).score;
+    const unverified = relevanceOf({ ...base, verdict: 'unverified' }).score;
+    expect(unverified).toBeLessThan(verified);
+    expect(unverified).toBeCloseTo(verified * 0.5, 10);
+  });
+
+  it('orders the whole vocabulary the way the design argues for', () => {
+    const w = (v: string) => verdictWeight(v);
+    expect(w('verified')).toBeGreaterThan(w('landed'));
+    expect(w('landed')).toBeGreaterThan(w('unverified'));
+    expect(w('unverified')).toBeGreaterThan(w('repaired'));
+    expect(w('repaired')).toBeGreaterThan(w('abandoned'));
+  });
+
+  it('puts landed well below verified — 17.1% of merged PRs were repairs', () => {
+    expect(VERDICT_WEIGHT.landed).toBeLessThan(VERDICT_WEIGHT.verified);
+    expect(VERDICT_WEIGHT.landed).toBeGreaterThan(VERDICT_WEIGHT.unverified);
+  });
+
+  it('never multiplies to zero', () => {
+    // Same reason as OUTCOME_FLOOR: a unit at zero can never be ordered above
+    // anything, so it can never be served, so it can never recover.
+    for (const v of Object.keys(VERDICT_WEIGHT)) expect(verdictWeight(v)).toBeGreaterThan(0);
+  });
+
+  it('treats an unrecognised verdict as neutral rather than penalising it', () => {
+    expect(verdictWeight('something-new')).toBe(1);
+  });
+
+  it('does NOT decay with evidence — the record and its performance are separate', () => {
+    // An unverified episode that has since helped four times is still an
+    // unverified episode.
+    const proven = { served: 10, helpful: 8, unhelpful: 2, observedAt: null };
+    const a = relevanceOf({ ...proven, verdict: 'verified' }).score;
+    const b = relevanceOf({ ...proven, verdict: 'unverified' }).score;
+    expect(b).toBeCloseTo(a * 0.5, 10);
   });
 });

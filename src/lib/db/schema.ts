@@ -16,6 +16,7 @@ import {
   customType,
   primaryKey,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -3796,7 +3797,19 @@ export const codegraphNodes = pgTable(
   'codegraph_nodes',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-    /** 'file' | 'dir' | 'gate' | 'route' | 'table' | 'tool' | 'skill' */
+    /**
+     * 'file' | 'dir' | 'gate'.
+     *
+     * Trimmed from a seven-value aspiration to the three the writer can
+     * actually mint. `route`, `table`, `tool` and `skill` were declared, never
+     * produced, and never will be by this ingest — a taxonomy nothing can emit
+     * reads as a gap in the data rather than a gap in the model.
+     *
+     * `gate` was in exactly that position until 2026-08-30 and cost more than a
+     * stale comment: `resolveSeed` answers a `gate:` seed with
+     * `eq(kind, 'gate')`, production held zero such rows, and so the whole
+     * `gate:` lane returned an empty seed silently, every time.
+     */
     kind: text('kind').notNull().default('file'),
     /** Repo-relative path, or the gate name for kind='gate'. Identity. */
     canonicalPath: text('canonical_path').notNull(),
@@ -3805,7 +3818,6 @@ export const codegraphNodes = pgTable(
     displayName: text('display_name'),
     /** Template-generated, never LLM-written. See the fabrication memory. */
     summary: text('summary'),
-    embedding: vector('embedding'),
     /**
      * What KIND of file this is — 'api-endpoint', 'site-tool', 'test', … — a
      * pure function of the path (see codegraph/family.ts), stamped server-side
@@ -3818,14 +3830,36 @@ export const codegraphNodes = pgTable(
     episodeCount: integer('episode_count').notNull().default(0),
     lessonCount: integer('lesson_count').notNull().default(0),
     /**
+     * Edges touching this node, in either direction. Denormalised for the same
+     * reason the two counts above are, and RECOMPUTED rather than incremented so
+     * a re-run cannot inflate it.
+     *
+     * It exists so `walk()` can decline to expand THROUGH a hub without paying
+     * for a degree count per query. The graph is extremely uneven —
+     * `src/lib/db/schema.ts` has 805 edges and touches 19% of all nodes,
+     * `src/lib/db/index.ts` 593, against a mean of 8.2 — so a single hop from
+     * anywhere near the DB layer floods the 400-row budget with schema
+     * neighbours and returns a retrieval that has told the agent nothing.
+     * `siblingScore` already caps import in-degree for exactly this reason
+     * ("or `schema.ts` wins everything"); this is the same cap for traversal.
+     */
+    degree: integer('degree').notNull().default(0),
+    /**
      * Does this path still exist at git HEAD? A node whose file was deleted
      * cannot teach anything actionable. Refreshed by the sweep, and NEVER
      * trusted when the sentinel self-test fails — see codegraph/liveness.ts.
      */
     existsOnHead: boolean('exists_on_head').notNull().default(true),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
-    /** Tombstone, mirroring intel's merge model. Never a magic string. */
-    mergedIntoId: text('merged_into_id'),
+    /**
+     * Tombstone, mirroring intel's merge model. Never a magic string — and now
+     * enforced rather than asked for. See `supersededById` on lessons for the
+     * incident that made this a rule; the rule was written down and not applied
+     * to any of the three columns that needed it.
+     */
+    mergedIntoId: text('merged_into_id').references((): AnyPgColumn => codegraphNodes.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3925,7 +3959,6 @@ export const codegraphEpisodes = pgTable(
     verdict: text('verdict').notNull().default('unverified'),
     filesTouched: jsonb('files_touched').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     prNumber: integer('pr_number'),
-    embedding: vector('embedding'),
     /** How often this episode has been SERVED, and how often it preceded a pass. */
     servedCount: integer('served_count').notNull().default(0),
     helpfulCount: integer('helpful_count').notNull().default(0),
@@ -3978,7 +4011,6 @@ export const codegraphLessons = pgTable(
     originRef: text('origin_ref'),
     /** Repo-relative paths this lesson names. Drives staleness AND retrieval. */
     citedPaths: jsonb('cited_paths').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    embedding: vector('embedding'),
     servedCount: integer('served_count').notNull().default(0),
     /**
      * Outcome evidence — the input to `relevance.ts`.
@@ -4003,7 +4035,9 @@ export const codegraphLessons = pgTable(
      */
     retiredAt: timestamp('retired_at', { withTimezone: true }),
     retiredReason: text('retired_reason'),
-    supersededById: text('superseded_by_id'),
+    supersededById: text('superseded_by_id').references((): AnyPgColumn => codegraphLessons.id, {
+      onDelete: 'set null',
+    }),
     staleAt: timestamp('stale_at', { withTimezone: true }),
     observedAt: timestamp('observed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -4077,8 +4111,26 @@ export const codegraphQueries = pgTable(
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
     /** 'push' | 'pull' | 'chat' — which channel asked. */
     channel: text('channel').notNull(),
-    buildId: text('build_id'),
-    iterationId: text('iteration_id'),
+    /**
+     * SET NULL, never CASCADE.
+     *
+     * This is an AUDIT ledger — the table that exists so "is retrieval working?"
+     * can be answered from SQL rather than from a log line the system wrote
+     * about itself. Cascading would let deleting a build quietly delete the
+     * evidence of what that build was served, which is the one thing this table
+     * must not do. Losing the pointer is honest; losing the row is not.
+     *
+     * Enforced rather than trusted, because the soft reference had already
+     * rotted: production held `build_id = 'ab-verify-build'`, a hand-written
+     * placeholder from an A/B run that was never a build id and that nothing
+     * could have caught. That is the same magic-string failure the
+     * `supersededById` comment records from `forget_memory` (23 dangling rows) —
+     * written down as a rule three times over and applied to no column until now.
+     */
+    buildId: text('build_id').references(() => jkaiBuilds.id, { onDelete: 'set null' }),
+    iterationId: text('iteration_id').references(() => jkaiIterations.id, {
+      onDelete: 'set null',
+    }),
     /** The CGQL actually executed, verbatim, so a bad serve is reproducible. */
     query: text('query').notNull(),
     /** 'served' | 'empty' | 'failed' — empty and failed are NOT the same. */

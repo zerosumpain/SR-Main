@@ -52,6 +52,10 @@ export const load: PageServerLoad = async () => {
         helpful: e.helpfulCount,
         unhelpful: e.unhelpfulCount,
         observedAt: e.occurredAt ?? null,
+        // Must match `retrieve.ts` exactly — this page exists to explain the
+        // ranking retrieval actually uses, and a surface that scores by
+        // different rules is a surface that lies about the system.
+        verdict: e.verdict,
       }),
     })),
   ].sort((a, b) => b.relevance.score - a.relevance.score);

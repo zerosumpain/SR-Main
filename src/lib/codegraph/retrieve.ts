@@ -8,7 +8,7 @@
  * "forget" becomes a suggestion — the fourth caller always forgets.
  */
 import { db } from '$lib/db';
-import { and, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import {
   codegraphEdges,
   codegraphEpisodes,
@@ -19,6 +19,7 @@ import {
 } from '$lib/db/schema';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { parseCgql, topicTokens, type Pick, type QueryPlan, VERDICTS } from './query';
+import { gateSeedToPath } from './gates';
 import { relevanceOf, packByRelevance, type RelevanceParts } from './relevance';
 import { familyOf, siblingScore } from './family';
 
@@ -126,7 +127,13 @@ async function seedNodes(plan: QueryPlan, repo: string): Promise<string[]> {
       .from(codegraphNodes)
       .where(
         and(eq(codegraphNodes.repo, repo), eq(codegraphNodes.kind, 'gate'), nodeVisible(),
-          inArray(codegraphNodes.canonicalPath, seed.gates)),
+          // Through the SAME normaliser as ingest. A seed is written by a
+          // human or an agent — `gate:tsc`, `gate:svelte_check` — and matching
+          // raw text would resolve the spellings we happened to store and
+          // silently miss the rest, which is a quieter version of the bug this
+          // replaces (the lane matched nothing at all, because no gate node
+          // existed to match).
+          inArray(codegraphNodes.canonicalPath, seed.gates.map(gateSeedToPath))),
       )
       .limit(50);
     return rows.map((r) => r.id);
@@ -135,6 +142,27 @@ async function seedNodes(plan: QueryPlan, repo: string): Promise<string[]> {
   // fingerprint / topic seeds address episodes and lessons directly, not nodes.
   return [];
 }
+
+/**
+ * Degree above which a node is reached but never expanded THROUGH.
+ *
+ * Measured on the production graph: p50 = 3, p90 = 20, p95 = 30, p99 = 68,
+ * max = 805. So 100 sits just above the 99th percentile and excludes exactly
+ * **13 nodes of 4,156 (0.3%)** — `src/lib/db/schema.ts` (805 edges, touching
+ * 19% of the whole graph), `src/lib/db/index.ts` (593), `workflows/types.ts`
+ * (287), `models/settings.ts` (236) and nine others of the same character.
+ *
+ * These are not well-connected files, they are a different kind of object: a
+ * hop through `schema.ts` reaches a fifth of the repo, fills the 400-row edge
+ * budget with things that share nothing but a database import, and returns a
+ * retrieval that has told the agent nothing. `siblingScore` already caps import
+ * in-degree for precisely this reason — "or `schema.ts` wins everything" — and
+ * this is that cap applied to traversal.
+ *
+ * A hub is still a perfectly good SEED and a perfectly good RESULT. What it
+ * stops being is a bridge.
+ */
+const HUB_DEGREE = 100;
 
 /** Expand the seed set by `hops` along the permitted edge kinds. */
 async function walk(seedIds: string[], plan: QueryPlan): Promise<string[]> {
@@ -164,11 +192,28 @@ async function walk(seedIds: string[], plan: QueryPlan): Promise<string[]> {
         if (!seen.has(id)) { seen.add(id); next.push(id); }
       }
     }
-    frontier = next;
+    // Hubs stay in `seen` — they are legitimate results — but do not become the
+    // next frontier. Reading `degree` off the node rather than counting edges
+    // per query is why this costs one indexed lookup instead of a second walk;
+    // the column is recomputed at ingest beside episode_count and lesson_count.
+    frontier = next.length ? await withoutHubs(next) : next;
   }
   // Bounded: two hops on a dense file graph can reach most of the repo, and a
   // retrieval that returns everything has told the agent nothing.
   return [...seen].slice(0, 300);
+}
+
+/** The subset of `ids` that may be expanded through. See `HUB_DEGREE`. */
+async function withoutHubs(ids: string[]): Promise<string[]> {
+  const rows = await db
+    .select({ id: codegraphNodes.id })
+    .from(codegraphNodes)
+    .where(and(inArray(codegraphNodes.id, ids), lte(codegraphNodes.degree, HUB_DEGREE)));
+  const keep = new Set(rows.map((r) => r.id));
+  // Preserve the caller's ordering: `rows` comes back in whatever order the
+  // planner chose, and the frontier order decides which edges the next hop's
+  // 400-row cap sees first.
+  return ids.filter((id) => keep.has(id));
 }
 
 /**
@@ -518,6 +563,9 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
             helpful: e.helpfulCount ?? 0,
             unhelpful: e.unhelpfulCount ?? 0,
             observedAt: e.occurredAt ?? null,
+            // Without this the multiplier exists and never fires. An unverified
+            // episode would rank level with one we watched go green.
+            verdict: e.verdict,
           }),
         });
       }

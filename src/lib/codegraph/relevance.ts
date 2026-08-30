@@ -51,6 +51,21 @@ export interface Evidence {
   observedAt: Date | null;
   /** True when everything it cites is gone from its own repo. */
   stale?: boolean;
+  /**
+   * An episode's verdict. Lessons have none and pass `undefined`, scoring 1.
+   *
+   * Unset until 2026-08-30, and the schema comment on the column has claimed
+   * since the graph shipped that "ranking multiplies by this: merged is not
+   * correct". Nothing did. Every one of the 108 production episodes was
+   * `verified`, so the omission was invisible — the term would have multiplied
+   * everything by the same number.
+   *
+   * It stops being invisible the moment the scanner records unproven fix
+   * attempts, which it now does: without this, "someone edited these files
+   * after this error" would rank exactly level with "someone edited these files
+   * and we watched the gate go green".
+   */
+  verdict?: string | null;
 }
 
 export interface RelevanceParts {
@@ -137,6 +152,40 @@ export const STALE_WEIGHT = 0.35;
  */
 export const EVIDENCE_HALF_WEIGHT = 10;
 
+/**
+ * How much an episode's verdict is worth, as a multiplier.
+ *
+ * `verified` is the only one we actually watched work: a gate went red, files
+ * changed, and the SAME gate went green inside the same transcript.
+ *
+ * `landed` is deliberately well below it. A merged PR is the weakest strong
+ * signal there is — **17.1% of merged PRs in this repo were themselves
+ * repairs** — so "it shipped" buys roughly three quarters of "we saw it pass".
+ *
+ * `unverified` is the honest middle: a real failure, real edits after it, and
+ * no green run observed. It is worth serving ("this error happened here before,
+ * and here is what was touched next") and it must not outrank proof.
+ *
+ * `repaired` and `abandoned` sit below the neutral prior on purpose — a fix
+ * that later needed fixing, or one that was walked away from, is evidence
+ * pointing the other way. Neither reaches zero, for the same reason
+ * `OUTCOME_FLOOR` does not: a unit at zero can never be ordered above anything,
+ * so it can never be served, so it can never recover.
+ */
+export const VERDICT_WEIGHT: Record<string, number> = {
+  verified: 1,
+  landed: 0.75,
+  unverified: 0.5,
+  repaired: 0.4,
+  abandoned: 0.2,
+};
+
+/** The multiplier for a verdict; 1 for lessons and for anything unrecognised. */
+export function verdictWeight(verdict: string | null | undefined): number {
+  if (!verdict) return 1;
+  return VERDICT_WEIGHT[verdict] ?? 1;
+}
+
 export function relevanceOf(e: Evidence, now = Date.now()): RelevanceParts {
   const recency = recencyWeight(e.observedAt, now);
   const outcome = wilsonLowerBound(e.helpful, e.unhelpful);
@@ -164,7 +213,11 @@ export function relevanceOf(e: Evidence, now = Date.now()): RelevanceParts {
   const belief = (1 - confidence) * NEUTRAL_PRIOR + confidence * outcome;
   const recencyInfluence = 1 - confidence;
   const effectiveRecency = 1 - recencyInfluence * (1 - recency);
-  const score = belief * effectiveRecency * liveness;
+  // Verdict is a property of the RECORD, not of how it has performed, so it
+  // multiplies the finished score rather than feeding `belief`. It must not
+  // decay with evidence: an unverified episode that has since proved helpful
+  // four times is still an unverified episode, and the two facts are separate.
+  const score = belief * effectiveRecency * liveness * verdictWeight(e.verdict);
 
   let because: string;
   if (observations === 0) {

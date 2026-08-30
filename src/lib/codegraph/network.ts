@@ -106,6 +106,10 @@ const LAYERS: Array<[RegExp, string]> = [
 ];
 
 export function layerOf(path: string): string {
+  // Gate nodes are not code and have no path. Without this they fall through to
+  // 'Other' and, in the directory view, to '(root)' — filed alongside the repo's
+  // top-level files, which reads as a bug in the map rather than a node kind.
+  if (path.startsWith('gate:')) return 'Gates';
   if (/\.(test|spec)\.[tj]sx?$/.test(path)) return 'Tests';
   for (const [re, name] of LAYERS) if (re.test(path)) return name;
   return 'Other';
@@ -114,6 +118,7 @@ export function layerOf(path: string): string {
 /** The directory a file is filed under — two segments deep, which is where this
  *  repo's meaning lives (`src/lib/jkai` says something; `src` does not). */
 export function directoryOf(path: string): string {
+  if (path.startsWith('gate:')) return 'Gates';
   const parts = path.split('/');
   if (parts.length <= 1) return '(root)';
   return parts.slice(0, Math.min(3, parts.length - 1)).join('/');
