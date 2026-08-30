@@ -154,7 +154,7 @@ redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is
   Backfill: `node scripts/codegraph-backfill.mjs --all` on homeserv (the transcripts are
   858 MB and live only there). Spec: `docs/superpowers/specs/2026-08-17-code-memory-graph.md`.
 
-- `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`). Dashboard: `/admin/ai/improvement`.
+- `src/lib/selfimprove/` — nightly self-improvement engine. **Scheduled by the heartbeat, not a cron of its own**: the `daydream-improve` activity, window 02:30–03:55 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`. This file used to say "03:30" and a private croner; the second scheduler was retired 2026-08-30 (see `docs/superpowers/specs/2026-08-30-daydream-absorbs-selfimprove.md`). Dashboards: `/admin/ai/improvement` + `/jkai/improvement`, both reading the live heartbeat row for the schedule rather than a constant.
 
   Phases: `gather → learn → discover → build → repair → optimise → propose → report`. All LLM calls are pinned to
   `SELFIMPROVE_MODEL` (`deepseek/deepseek-v4-flash`), not the chat default.
