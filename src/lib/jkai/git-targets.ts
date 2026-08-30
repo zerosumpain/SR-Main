@@ -68,8 +68,20 @@ export const SR_MAIN_GIT_TARGET = {
   gateCommand:
     'npm run gate:public-routes && npm run gate:font-sizes && GATE_TEST_MAX_WORKERS=3 ./scripts/gate-concurrent.sh',
   // What the per-iteration gate no longer proves, proved once before the PR.
-  // The union of the two is exactly the old `npm run gate`.
-  finalGateCommand: 'npm run gate:build',
+  //
+  // `build:builder` is here because this target can reach the agent's OWN
+  // harness. There is no path allowlist on a repo build — the clone is the whole
+  // repo — so a build may edit `packages/jkai-builder/**`, and until this line
+  // nothing in the chain ever ran `node packages/jkai-builder/build.mjs`. A
+  // change that broke the sidecar bundle would pass `gate:build` (which is a
+  // vite build of the SITE, a different bundle entirely), open a green PR, and
+  // only fail when `ci-stage-builder.sh` tried to stage it — or worse, stage a
+  // bundle that builds but is wrong.
+  //
+  // It runs in the FINAL gate rather than per iteration for the same reason
+  // `gate:build` does: it is expensive and re-proving it on an iteration that
+  // only touched a test buys nothing.
+  finalGateCommand: 'npm run gate:build && npm run build:builder',
   openPr: true,
   prTitlePrefix: 'Agent: ',
 } as const satisfies GitTargetConfig;
@@ -85,7 +97,27 @@ export const ALLOWED_GIT_TARGETS = {
 
 export type GitTargetKey = keyof typeof ALLOWED_GIT_TARGETS;
 
-/** Resolve a target by key, or null when the key is not allow-listed. */
+/**
+ * Resolve a target by key, or null when the key is not allow-listed.
+ *
+ * `Object.hasOwn`, NOT a bare index-and-`?? null`.
+ *
+ * `ALLOWED_GIT_TARGETS` is an object literal, so it inherits from
+ * `Object.prototype` — and a bare lookup therefore answers for keys that are not
+ * in the allow-list at all:
+ *
+ *   resolveGitTarget('__proto__')   -> Object.prototype   (truthy)
+ *   resolveGitTarget('constructor') -> Object             (truthy)
+ *   resolveGitTarget('toString')    -> function           (truthy)
+ *
+ * `?? null` cannot catch those because none of them is null or undefined. This
+ * was harmless while nothing passed user input here; it stopped being harmless
+ * the moment `POST /api/jkai/builds` started taking a `gitTarget` key from the
+ * request body, which would have handed `publishViaGit` an object with no
+ * `repoUrl` and a `branchPrefix` of undefined. Caught by git-targets.test.ts,
+ * which exists to pin exactly this boundary.
+ */
 export function resolveGitTarget(key: string): GitTargetConfig | null {
+  if (!Object.hasOwn(ALLOWED_GIT_TARGETS, key)) return null;
   return (ALLOWED_GIT_TARGETS as Record<string, GitTargetConfig>)[key] ?? null;
 }

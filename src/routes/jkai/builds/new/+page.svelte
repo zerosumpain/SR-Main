@@ -26,6 +26,13 @@
   let enforceDesignSystem = $state(true);
   let planFirst = $state(false);
   let thinkingLevel = $state<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
+  // THE LANE. '' is the sandbox app lane and stays the default: a repo build
+  // clones SR-Main, edits it, runs the full gate and opens a PR, which is a
+  // materially bigger thing to start by accident. Until now this page could not
+  // express the choice at all, so every build started here was app-lane however
+  // the prompt was worded — build dd2dcc57 spent five iterations and 2.8M tokens
+  // writing a standalone imitation of a site page because of it.
+  let gitTarget = $state('');
   // Studio replaces the whole flow below with createStudioBuild's own
   // preconfigured budget/design defaults (see src/lib/jkai/studio.ts) — a
   // plain read-only-in-the-template flag, nothing derived or synced from it.
@@ -76,6 +83,9 @@
           enforceDesignSystem,
           planFirst,
           thinkingLevel,
+          // Omitted entirely for the app lane — the API only writes
+          // git_target_config when a lane was actually chosen.
+          gitTarget: gitTarget || undefined,
         }),
       });
 
@@ -193,6 +203,23 @@
 
     <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--line-strong);" class:opacity-50={studioMode}>
       <h2 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Strategy</h2>
+      <label class="block text-xs mb-1" style="color: var(--text-ghost);">Lane</label>
+      <select bind:value={gitTarget}
+        class="w-full rounded border px-2 py-1 text-sm mb-1"
+        style="background: var(--bg); border-color: var(--line-strong); color: var(--text-primary);">
+        <option value="">Sandbox app — self-contained, published to /projects</option>
+        <option value="sr-main">SR-Main repo — edits the site, opens a pull request</option>
+      </select>
+      <p class="text-xs mb-3" style="color: var(--text-ghost);">
+        {#if gitTarget === 'sr-main'}
+          Clones the repo, runs the full gate each iteration and opens a PR. It can reach any
+          file, including the builder's own code — nothing auto-merges, and anything touching
+          auth, schema, deploy or the agent's safety rails is flagged tier=high for review.
+        {:else}
+          Cannot produce site code. A prompt asking for a change to the site will get a
+          standalone imitation of it instead.
+        {/if}
+      </p>
       <label class="flex items-center gap-2 mb-3 text-sm" style="color: var(--text-primary);">
         <input type="checkbox" bind:checked={enforceDesignSystem} />
         Enforce site design system (recommended)
