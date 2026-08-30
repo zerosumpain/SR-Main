@@ -7,7 +7,8 @@ import {
 } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { getImprovementStatus } from '$lib/selfimprove/run';
-import { COLLECTIONS, CRON_EXPR, CRON_TZ, SETTINGS_ENABLED_KEY } from '$lib/selfimprove/types';
+import { COLLECTIONS, SETTINGS_ENABLED_KEY } from '$lib/selfimprove/types';
+import { improvementSchedule } from '$lib/selfimprove/schedule';
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
@@ -83,20 +84,21 @@ async function loadBacklog() {
 }
 
 export const load: PageServerLoad = async () => {
-  const [runs, insights, apis, tools, backlog, enabledSetting] = await Promise.all([
+  const [runs, insights, apis, tools, backlog, enabledSetting, schedule] = await Promise.all([
     loadRuns(),
     loadInsights(),
     loadApis(),
     loadSelfBuiltTools(),
     loadBacklog(),
     getSetting(SETTINGS_ENABLED_KEY),
+    improvementSchedule(),
   ]);
 
   return {
     // Kill-switch: unset (null) is treated as enabled by the engine; only an
     // explicit `false` pauses it.
     enabled: enabledSetting !== false,
-    schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: '03:30 Europe/London' },
+    schedule,
     status: getImprovementStatus(),
     runs,
     insights,

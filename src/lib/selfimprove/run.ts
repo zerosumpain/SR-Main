@@ -202,7 +202,7 @@ async function safePersist(runId: string, data: ImprovementRunData): Promise<voi
  */
 export async function runImprovementNow(
   opts?: { trigger?: 'manual' | 'cron' },
-): Promise<{ runId: string }> {
+): Promise<{ runId: string; data: ImprovementRunData }> {
   const trigger = opts?.trigger ?? 'manual';
   if (!acquireRunLock()) {
     throw new Error('a self-improvement run is already in progress');
@@ -244,7 +244,7 @@ export async function runImprovementNow(
       data.finishedAt = new Date().toISOString();
       data.report = 'Skipped: user was active when the nightly run was due.';
       await safePersist(runId, data);
-      return { runId };
+      return { runId, data };
     }
 
     let stop: 'budget' | 'time' | 'user' | null = null;
@@ -335,7 +335,7 @@ export async function runImprovementNow(
       await safePersist(runId, data);
     }
 
-    return { runId };
+    return { runId, data };
   } catch (err) {
     // Top-level surprise — capture as `failed`, never rethrow into the scheduler.
     console.error('[selfimprove] run failed:', errMsg(err));
@@ -344,7 +344,7 @@ export async function runImprovementNow(
     data.report = `Run failed: ${errMsg(err)}`;
     syncBudget(data, budget);
     await safePersist(runId, data);
-    return { runId };
+    return { runId, data };
   } finally {
     releaseRunLock();
   }

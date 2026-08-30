@@ -11,7 +11,8 @@ import { loadCustomToolHealth } from '$lib/selfimprove/context';
 import { buildStories, summariseStories } from '$lib/selfimprove/narrative';
 import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { CallEfficiency } from '$lib/selfimprove/call-efficiency';
-import { COLLECTIONS, CRON_EXPR, CRON_TZ } from '$lib/selfimprove/types';
+import { COLLECTIONS } from '$lib/selfimprove/types';
+import { improvementSchedule } from '$lib/selfimprove/schedule';
 import type { ImprovementRunData, QuestionInsights, ToolAttemptData } from '$lib/selfimprove/types';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only). Server load reads
@@ -204,7 +205,7 @@ export const load: PageServerLoad = async () => {
     stories,
     storySummary: summariseStories(stories),
     stats,
-    schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: '03:30 Europe/London' },
+    schedule: await improvementSchedule(),
     running: getImprovementStatus().running,
   };
 };

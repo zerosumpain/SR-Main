@@ -21,6 +21,7 @@ import { daydreamBank } from './activities/daydream-bank';
 import { daydreamIntelBridge } from './activities/daydream-intel';
 import { daydreamMail } from './activities/daydream-mail';
 import { daydreamPonder } from './activities/daydream-ponder';
+import { daydreamImprove } from './activities/daydream-improve';
 import { daydreamWeekly } from './activities/daydream-weekly';
 import { geoTerritory } from './activities/geo-territory';
 
@@ -52,6 +53,7 @@ const handlers: ActivityHandler[] = [
   daydreamBank,
   daydreamIntelBridge,
   daydreamPonder,
+  daydreamImprove,
   daydreamWeekly,
   geoTerritory,
 ];
