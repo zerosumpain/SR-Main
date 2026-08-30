@@ -28,6 +28,7 @@ import { buildSnapshot } from '../snapshot';
 import { persistCandidates, type PersistResult } from '../thought-store';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { assemblePack, renderPack, type PackInputs } from './pack';
+import { runLookups, MAX_LOOKUPS_PER_CYCLE } from './lookups';
 import { buildProfileLines } from './profile';
 import {
   MAX_ACTION_RULES,
@@ -45,6 +46,9 @@ export interface PonderResult {
   rulesAdmitted: number;
   rulesRefused: number;
   rejected: string[];
+  /** What the lookup stage did. On the pulse so a probe that never pays for
+   *  itself is visible rather than quietly costing a round trip a cycle. */
+  lookups: { asked: number; cards: number; failed: number };
   tokens: { prompt: number; completion: number };
   error: string | null;
 }
@@ -57,6 +61,7 @@ const EMPTY: PonderResult = {
   rulesAdmitted: 0,
   rulesRefused: 0,
   rejected: [],
+  lookups: { asked: 0, cards: 0, failed: 0 },
   tokens: { prompt: 0, completion: 0 },
   error: null,
 };
@@ -267,11 +272,11 @@ function systemPrompt(profileLines: string[]): string {
 }
 
 export async function runPonder(
-  opts: { now?: Date; verify?: boolean; subject?: string } = {},
+  opts: { now?: Date; verify?: boolean; subject?: string; lookupBudget?: number } = {},
 ): Promise<PonderResult> {
   const now = opts.now ?? new Date();
   const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], tokens: { prompt: 0, completion: 0 } };
+  const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], lookups: { asked: 0, cards: 0, failed: 0 }, tokens: { prompt: 0, completion: 0 } };
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
@@ -284,9 +289,20 @@ export async function runPonder(
       noteCards(),
       diaryNoteCards(),
     ]);
+    // The lookup stage. Code names a gap in what it has just assembled, calls a
+    // read-only first-party tool and cards the answer — see lookups.ts for why
+    // the model is not the one choosing. Soft: a failure here costs cards, never
+    // the cycle.
+    const lookups = await runLookups(
+      { snapshot, weekAhead: week },
+      { budget: opts.lookupBudget ?? MAX_LOOKUPS_PER_CYCLE },
+    );
+    result.lookups = { asked: lookups.asked.length, cards: lookups.cards.length, failed: lookups.failed };
+
     const pack = assemblePack({
       snapshot,
       verdicts,
+      lookups: lookups.cards,
       // Hand-written aggregates first, then whatever the registry discovered —
       // the second list is the one that grows without anyone editing this file.
       // Hand-written aggregates, then the registry, then anything John has

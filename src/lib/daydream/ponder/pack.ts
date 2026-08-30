@@ -12,7 +12,8 @@
 // card may say "home", "Jemima's usual Tuesday place", "4.2 km from home" —
 // never a lat/lon, never a raw email body, never a phone number.
 //
-// ASSEMBLY IS PURE. The queries live in gatherPackInputs() at the bottom;
+// ASSEMBLY IS PURE. The queries live in run.ts (and the lookup stage in
+// lookups.ts);
 // assemblePack() takes plain data so the card layout — the part that decides
 // what the model can and cannot see — is unit-testable with no database.
 
@@ -45,6 +46,13 @@ export interface PackInputs {
   feedbackLines: string[];
   /** Distilled behaviour profile lines (deterministic, see profile.ts). */
   profileLines: string[];
+  /**
+   * Cards fetched by the lookup stage — code saw a gap, called a read-only
+   * first-party tool and turned the answer into facts. Optional so every
+   * existing caller and fixture still type-checks; absent means the stage did
+   * not run, which is what a thin or budgetless cycle looks like.
+   */
+  lookups?: Array<{ ref: { kind: string; id: string }; text: string }>;
 }
 
 /** Card budget. A pack over ~90 cards stops being context and starts being a
@@ -59,6 +67,7 @@ export const PACK_LIMITS = {
   verdicts: 8,
   weekAhead: 12,
   interests: 8,
+  lookups: 12,
 } as const;
 
 function pounds(minor: number): string {
@@ -179,6 +188,13 @@ export function assemblePack(inputs: PackInputs): FactPack {
   }
   for (const t of s.interests.slice(0, PACK_LIMITS.interests)) {
     add('past', { kind: 'interest', id: t.refId }, `Recent interest (${t.source}): ${t.term}`);
+  }
+  // Looked-up facts last: they are context for what is already on the table,
+  // and a card's position is the only ordering signal the model gets. Their
+  // refs are ordinary evidence kinds, so a musing citing one drills through
+  // exactly like a musing citing a memory the snapshot supplied.
+  for (const l of (inputs.lookups ?? []).slice(0, PACK_LIMITS.lookups)) {
+    add('past', l.ref, l.text);
   }
 
   return { cards, byId: new Map(cards.map((c) => [c.id, c])) };

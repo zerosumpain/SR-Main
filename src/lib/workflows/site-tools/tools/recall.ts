@@ -108,6 +108,10 @@ register({
         data: {
           count: rows.length,
           memories: rows.map((m) => ({
+            // The id was omitted, which made a returned memory impossible to
+            // cite: anything quoting one could name the text but not the row
+            // it came from. Additive, so no existing caller changes.
+            id: m.id,
             category: m.category,
             content: m.content,
             confidence: m.confidence,
