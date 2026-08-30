@@ -21,6 +21,7 @@ import {
 } from './types';
 import type { Budget } from './run';
 import { addIdeas } from './backlog';
+import { collectStarvation } from '$lib/daydream/starvation';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -236,8 +237,49 @@ export async function learnInsights(
         priority: 2,
       })),
   ];
+
+  // Starvation leads, questions follow.
+  //
+  // Question-mining produced 33 tools in the fortnight to 2026-08-30 and not
+  // one was ever called: a question asked once is not a standing appetite, so
+  // the tool built to answer it waits for a repeat that never comes.
+  // Daydreaming runs every day whether or not anybody asks it anything, and it
+  // keeps a record of what it could not settle — a tool built for one of those
+  // has a caller the moment it ships, namely the thing that named the gap.
+  //
+  // Ordered first so the nightly intake cap spends its slots here before the
+  // question-mined ideas, rather than after.
+  let starving: Awaited<ReturnType<typeof collectStarvation>> = [];
   try {
-    const added = await addIdeas(ideas);
+    starving = await collectStarvation();
+  } catch (err) {
+    console.error('[selfimprove] starvation collection failed:', errMsg(err));
+  }
+  for (const s of starving) {
+    actions.push({
+      kind: 'insight',
+      detail: `${s.title} — ${s.evidence}`,
+      story: {
+        subject: s.title,
+        driver: s.detail,
+        driverEvidence: s.evidence,
+        // `recorded`, not inferred: this is a measurement, not a guess about
+        // what somebody meant.
+        driverRef: undefined,
+      },
+    });
+  }
+
+  try {
+    const added = await addIdeas([
+      ...starving.map((s) => ({
+        title: s.title,
+        detail: s.detail,
+        kind: s.kind,
+        priority: s.priority,
+      })),
+      ...ideas,
+    ]);
     for (const slug of added) actions.push({ kind: 'backlog_added', detail: slug });
   } catch (err) {
     console.error('[selfimprove] queueing insights to backlog failed:', errMsg(err));
