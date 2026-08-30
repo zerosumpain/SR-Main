@@ -43,7 +43,7 @@
 
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { customTools, daydreamSignals } from '$lib/db/schema';
+import { customTools, daydreamObservations, daydreamSignals } from '$lib/db/schema';
 import { executeTool } from '$lib/workflows/site-tools/registry';
 import { errMsg } from '../types';
 import { registerSignals, signalKey, type Reading, type SignalSpec } from './registry';
@@ -53,6 +53,40 @@ export const SOURCE = 'tool';
 /** Tools sampled per run. Each is a real invocation and several reach an
  *  external API, so this is a cost ceiling as much as a time one. */
 export const MAX_TOOLS_PER_RUN = 25;
+
+/**
+ * ONCE A DAY, not once a tick.
+ *
+ * `daydream-signals` runs **hourly**, and sampling is a real invocation of every
+ * tool — `truelayer_account_balances`, `paypal_subscriptions_list`,
+ * `tfl_line_status`, `github_service_status` all reach a third party. Hourly
+ * that is 22 × 24 ≈ **528 external calls a day**, against financial APIs among
+ * others, for a series whose grain is a day. TrueLayer is the sharp end: its
+ * refresh token rotates on every exchange.
+ *
+ * The observation store folds readings into one row per day anyway, so nothing
+ * is gained by asking more often than the series can resolve.
+ */
+export async function alreadySampledToday(day: string): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(daydreamObservations)
+      .where(
+        and(
+          eq(daydreamObservations.day, day),
+          sql`${daydreamObservations.signalKey} LIKE ${`${SOURCE}:%`}`,
+        ),
+      );
+    return Number(row?.n ?? 0) > 0;
+  } catch (err) {
+    // Fail CLOSED: if we cannot tell whether today was already sampled, do NOT
+    // sample. A missed day costs one point in a series; an unreadable guard
+    // that defaults to sampling turns a daily job back into an hourly one.
+    console.warn(`[daydream] could not check today's tool sampling: ${errMsg(err)}`);
+    return true;
+  }
+}
 
 /**
  * A tool whose signals were registered and then never produced a reading for

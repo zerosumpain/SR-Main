@@ -4,7 +4,12 @@ import { buildJourneySignals } from '$lib/daydream/signals/journeys';
 import { mirrorFeatures } from '$lib/daydream/signals/mirror';
 import { backfillWeather } from '$lib/daydream/signals/weather';
 import { buildGraphSignals } from '$lib/daydream/signals/graph';
-import { harvestToolSignals, registerHarvest, retireBarrenToolSignals } from '$lib/daydream/signals/tools';
+import {
+  alreadySampledToday,
+  harvestToolSignals,
+  registerHarvest,
+  retireBarrenToolSignals,
+} from '$lib/daydream/signals/tools';
 import { recordObservations, refreshSignalStats } from '$lib/daydream/signals/registry';
 import { localDay } from '$lib/daydream/features/build';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
@@ -116,11 +121,21 @@ export const daydreamSignalsRefresh: ActivityHandler = {
     // nothing ever called it — 33 shipped in the fortnight to 2026-08-30, 0
     // ever called. Sampled daily they become ordinary signals, join the sweep
     // at MIN_PAIRS and reach the ponder pack.
+    //
+    // ONCE A DAY. This action runs hourly and sampling is a real invocation of
+    // every tool — TrueLayer, PayPal, TfL, GitHub — so hourly would be ~528
+    // third-party calls a day for a series whose grain is a day.
     if (cfg.harvestTools) {
-      const tools = await harvestToolSignals();
+      const day = localDay(new Date());
+      const done = await alreadySampledToday(day);
+      if (done) {
+        details.tools = { skipped: 'already sampled today' };
+      }
+      const tools = done
+        ? { sampled: 0, specs: [], readings: [], barren: [], failed: [] }
+        : await harvestToolSignals();
       if (tools.sampled > 0) {
         const { registered } = await registerHarvest(tools);
-        const day = localDay(new Date());
         const readings = await recordObservations(day, tools.readings);
         const retired = await retireBarrenToolSignals();
         notes.push(`${tools.sampled} self-built tool(s) → ${readings} reading(s)`);
