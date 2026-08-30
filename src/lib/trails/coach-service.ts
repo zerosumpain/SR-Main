@@ -12,6 +12,7 @@ import { desc, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { activities, activitySegmentEfforts, activitySegments } from '$lib/db/schema';
 import { encodePolyline } from '$lib/health/polyline';
+import { localToday } from '$lib/health/day';
 import type { MetricResult } from '$lib/health/analytics/types';
 import type { MonotonyResult } from '$lib/health/analytics/monotony';
 import type { PolarisedResult } from '$lib/health/analytics/polarised';
@@ -134,11 +135,6 @@ async function soft<T>(label: string, fn: () => Promise<T>, degraded: string[]):
     degraded.push(`${label}: ${message}`);
     return null;
   }
-}
-
-/** Today where the workouts happened, not where the server is. */
-function localToday(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
 }
 
 /**
@@ -584,8 +580,9 @@ export async function getDailyPlan(
 
   // Keyed on the LOCAL day, read from the server's own clock in Europe/London
   // rather than through a UTC date — a plan made at 00:30 BST belongs to the day
-  // it was made on.
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  // it was made on. One formatter, in $lib/health/day, so the /health loader's
+  // day-anchored derivations cannot disagree with this cache key.
+  const today = localToday();
   if (planCache && planCache.key === today && Date.now() - planCache.at < PLAN_TTL_MS) {
     return planCache.value;
   }
