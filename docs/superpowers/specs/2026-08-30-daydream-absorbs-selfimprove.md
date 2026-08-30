@@ -83,7 +83,7 @@ the retry budget and the `lastError` feedback that `backlog.ts` exists for.
 - **M1** — cap intake, fix the sort *(shipped)*
 - **M2** — gap-fill the pack *(shipped)*
 - **M3** — the starvation ledger
-- **M4** — close the loop: a shipped tool registers signals
+- **M4** — close the loop: a shipped tool registers signals *(shipped)*
 - **M5** — one dashboard
 
 ## What deliberately does not merge
@@ -149,6 +149,28 @@ collide. The active-hours lockout that silently killed `daydream-bank` and
 `daydream-weekly` is already fixed in `schedule.ts` — a window skip reschedules
 to the next opening, not to `now + cadence`.
 *Reversible:* the row is editable from the heartbeat admin UI.
+
+**DL-7 — Tool signals are DISCOVERED, not flagged at ship time.**
+Options: (a) the toolsmith marks a tool as a signal source when it ships;
+(b) discovery samples the live registry.
+**Chosen: (b).** `verify.ts` runs the smoke test but `CaseOutcome` keeps only
+ok/error/ms, not the data — so reading a shipped tool's shape there means
+editing the one file that is the entire security boundary between LLM-authored
+text and the environment. Discovery touches none of it and adopts the **67
+tools that already exist**, not just those shipped from today. Only tools
+declaring no required parameters are sampled (22 of 67): a signal is read every
+day forever, and code cannot invent arguments — guessing is how a tool ends up
+called with the wrong input daily and recording a series about nothing.
+*Reversible:* one config flag on the activity.
+
+**DL-8 — No `consecutive_failures` column.**
+A tool that fails its first call never gets a signal row, so there is nothing to
+count against it; it is retried, which costs one failed call a day out of at
+most 25 and is named on the pulse. What needs muting is a tool that registered a
+signal and then went dark, and `observedDays` + `firstSeenAt` already say that.
+A schema change for a counter that answers a question the existing columns
+answer would be debt, not safety.
+*Reversible:* yes.
 
 **DL-6 — The schedule accessor lives in `heartbeat/`, not `selfimprove/`.**
 First written as `$lib/selfimprove/schedule.ts`, which closed a
