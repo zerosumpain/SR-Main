@@ -106,6 +106,65 @@ describe('generate_image', () => {
     expect(out.attachments?.[0].kind).toBe('image');
     expect(inserted.length).toBeGreaterThanOrEqual(1);
   });
+
+  // The regression test for a bug this suite could not have caught: the mock
+  // above never inspected the REQUEST, so it passed identically whether the
+  // aspect ratio was sent as a parameter or buried in the prompt text. It was
+  // buried in the prompt, the model ignored it, and every image came back
+  // 1024x1024 — the tool's `aspect_ratio` argument had never once worked.
+  it('sends aspect_ratio as a top-level parameter, not inside the prompt', async () => {
+    let sent: Record<string, unknown> | null = null;
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('openrouter.ai')) {
+        sent = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: fakePng.toString('base64'), media_type: 'image/webp' }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(fakePng, { status: 200, headers: { 'content-type': 'image/png' } });
+    }) as any;
+
+    const { handleGenerateImage } = await import('$lib/workflows/site-tools/tools/media-generate-image');
+    const out = await handleGenerateImage(
+      { prompt: 'a cat', aspect_ratio: '16:9', count: 1 },
+      { conversationId: 'c1', messageId: null },
+    );
+
+    expect(out.success).toBe(true);
+    expect(sent).not.toBeNull();
+    expect(sent!.aspect_ratio).toBe('16:9');
+    // The prompt must be the prompt and nothing else — an appended ratio line
+    // is what the model was ignoring.
+    expect(sent!.prompt).toBe('a cat');
+    expect(String(sent!.prompt)).not.toContain('aspect_ratio');
+
+    // And the reported media type is used rather than assuming PNG: a .png
+    // holding webp bytes serves with the wrong Content-Type.
+    expect(out.attachments?.[0].mimeType).toBe('image/webp');
+  });
+
+  it('defaults the aspect ratio rather than omitting it', async () => {
+    let sent: Record<string, unknown> | null = null;
+    const fakePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('openrouter.ai')) {
+        sent = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify({ data: [{ b64_json: fakePng.toString('base64') }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(fakePng, { status: 200, headers: { 'content-type': 'image/png' } });
+    }) as any;
+
+    const { handleGenerateImage } = await import('$lib/workflows/site-tools/tools/media-generate-image');
+    await handleGenerateImage({ prompt: 'a cat' }, { conversationId: 'c1', messageId: null });
+    expect(sent!.aspect_ratio).toBe('1:1');
+  });
 });
 
 describe('generate_audio_tts', () => {

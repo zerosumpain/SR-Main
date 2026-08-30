@@ -215,7 +215,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     requires: 'image-output',
     catalogue: 'image-out',
     reason:
-      "Must emit an image; a text model cannot serve this role at all. Note this does NOT cover the canvas `generate_image` tool, which calls OpenRouter's separate /images/generations endpoint with FLUX — a different API that these models do not serve. That one is set with the JKAI_IMAGE_MODEL env var.",
+      "Must emit an image; a text model cannot serve this role at all. Note this does NOT cover the canvas `generate_image` tool, which calls OpenRouter's separate /images/generations endpoint — a different API that these models do not serve. That one is the `image-tool` role below.",
   },
   {
     id: 'audio',
@@ -244,7 +244,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
   {
     id: 'image-tool',
     scope: 'site',
-    label: 'Image tool (FLUX)',
+    label: 'Image tool',
     blurb: "The canvas/chat `generate_image` tool — OpenRouter's /images/generations endpoint.",
     key: 'jkai.image.tool_model',
     envKey: 'JKAI_IMAGE_MODEL',
@@ -255,7 +255,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     // same situation as embeddings.
     catalogue: 'none',
     reason:
-      'A DIFFERENT API from the `image` role above: /images/generations, which the chat-completions image models do not serve. It was the last LLM spender on the site set only by an environment variable (JKAI_IMAGE_MODEL), i.e. unreadable and unchangeable from any screen.',
+      'A DIFFERENT API from the `image` role above: /images/generations, which the chat-completions image models do not serve. Typing a chat model here fails at call time. Verified serving this endpoint on 2026-08-30, cheapest first: google/gemini-2.5-flash-image ($0.039/image), openai/gpt-5-image-mini ($0.050), google/gemini-3-pro-image ($0.135). FLUX is gone — OpenRouter removed black-forest-labs/flux-1.1-pro and the endpoint 404s for it, which is why every image generation on the site silently failed until 2026-08-30.',
   },
   {
     id: 'embeddings',

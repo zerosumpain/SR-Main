@@ -199,7 +199,10 @@ export async function resolveVisionModel(): Promise<ModelContext> {
 export const resolveImageModel = () => resolveById('image');
 
 /**
- * The `generate_image` tool's FLUX model (/images/generations).
+ * The `generate_image` tool's model (/images/generations).
+ *
+ * NOT FLUX any more: OpenRouter removed `black-forest-labs/flux-1.1-pro` and
+ * the endpoint 404s for it. See DEFAULT_IMAGE_TOOL_MODEL_ID.
  *
  * Precedence: an explicit pin, then the legacy `JKAI_IMAGE_MODEL` env var, then
  * the constant. The env var is honoured HERE rather than in the constants module
