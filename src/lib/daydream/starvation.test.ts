@@ -4,6 +4,9 @@ const h = vi.hoisted(() => ({
   metricRows: [] as Array<{ metric: string; proposals: number; best_pairs: number }>,
   sourceRows: [] as Array<{ source: string; signals: number }>,
   throwOnExecute: false,
+  /** Values interpolated into the last sql`` template, so a test can assert on
+   *  what the query was actually parameterised with. */
+  sqlValues: [] as unknown[],
 }));
 
 vi.mock('$lib/db', () => ({
@@ -27,7 +30,13 @@ vi.mock('$lib/db/schema', () => ({
   daydreamSignals: { source: 'source', status: 'status', observedDays: 'observed_days', firstSeenAt: 'first_seen_at' },
 }));
 vi.mock('drizzle-orm', () => ({
-  sql: Object.assign((s: unknown, ...v: unknown[]) => ({ s, v }), { raw: () => 'sql' }),
+  sql: Object.assign(
+    (s: unknown, ...v: unknown[]) => {
+      h.sqlValues = v;
+      return { s, v };
+    },
+    { raw: () => 'sql' },
+  ),
 }));
 
 import {
@@ -43,9 +52,22 @@ beforeEach(() => {
   h.metricRows = [];
   h.sourceRows = [];
   h.throwOnExecute = false;
+  h.sqlValues = [];
 });
 
 describe('starvedMetrics', () => {
+  it('asks only about the owner', async () => {
+    // Every one of production's 48 underpowered hypotheses belongs to katie,
+    // jemima, rory or fintan, and none to john. Whoop, Apple Health,
+    // daydream_spend and the calendar are recorded for the OWNER ONLY, so a
+    // family member's zero pairs is policy, not starvation — and the first
+    // version of this file read them as "nothing writes sleepPerformance"
+    // while 248 non-null rows of it sat in the feature store.
+    h.sqlValues = [];
+    await starvedMetrics();
+    expect(h.sqlValues).toContain('john');
+  });
+
   it('reads the production shape', async () => {
     h.metricRows = [
       { metric: 'sleepPerformance', proposals: 9, best_pairs: 0 },

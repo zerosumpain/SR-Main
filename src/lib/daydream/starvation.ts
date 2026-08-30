@@ -25,27 +25,37 @@
 // old. That is not starvation, it is Tuesday. A ledger that said "wait longer"
 // two hundred times would be noise, and the toolsmith cannot build more days.
 //
-// What production actually shows is sharper. Of the metrics named by the 48
-// `underpowered` hypotheses:
+// What is left is a metric the proposer keeps asking about that comes back with
+// **zero overlapping days** — not too few, none. That is the one shape a tool
+// can close, because a tool can produce a measurement and cannot produce time.
 //
-//     sleepPerformance     9 proposals, best pairs 0
-//     recoveryScore        8 proposals, best pairs 0
-//     verifiedSpendMinor   7 proposals, best pairs 0
-//     sleepEfficiency      7 proposals, best pairs 0
-//     workouts             6 proposals, best pairs 0
-//     activeMinutes        6 proposals, best pairs 15   ← has data
-//     minutesOut           4 proposals, best pairs 16   ← has data
+// ── THE OWNER FILTER, AND WHY IT IS THE WHOLE CORRECTNESS OF THIS FILE ──────
 //
-// **Zero pairs is not "not enough days". It is no data at all.** The proposer
-// keeps asking about sleep, recovery, strain and spend because they are
-// obviously interesting, and every one of those questions dies unanswered
-// because nothing writes the column. That is the gap a tool can close, and it
-// is the only shape here that one can.
+// First written without one, on the strength of a query showing 14 metrics at
+// zero pairs — `sleepPerformance` across 9 proposals, `recoveryScore` across 8,
+// `verifiedSpendMinor` across 7. The conclusion drawn was "nothing writes these
+// columns". **That was wrong.** `daydream_day_features` holds 248 non-null
+// `sleep_performance` values, 248 `recovery_score` and 249
+// `verified_spend_minor`.
+//
+// The real explanation: **all 48 underpowered hypotheses belong to katie,
+// jemima, rory and fintan, and none to john.** Whoop, Apple Health,
+// `daydream_spend` and the calendar have no subject column, so since
+// 2026-08-28 they are recorded for the OWNER ONLY and are deliberately absent
+// for everyone else. Fintan's `sleepPerformance` has zero pairs because Fintan
+// has no Whoop strap, and building a tool for it would be building a tool for a
+// policy.
+//
+// So only the owner's own hypotheses count. On the day this filter was added
+// that takes the ledger from five confident, wrong build ideas to **none** —
+// John's 24 hypotheses are all `refuted`, which is a tested verdict, not a
+// starved one. Producing nothing is the correct answer and a detector that
+// cannot produce nothing is not a detector.
 
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamHypotheses, daydreamSignals } from '$lib/db/schema';
-import { errMsg } from './types';
+import { DEFAULT_SUBJECT, errMsg } from './types';
 
 /**
  * How many times a metric must have been asked about before its emptiness is
@@ -90,10 +100,14 @@ export async function starvedMetrics(): Promise<StarvedMetric[]> {
       SELECT metric, COUNT(*)::int AS proposals, COALESCE(MAX(pairs), 0)::int AS best_pairs
       FROM (
         SELECT ${daydreamHypotheses.metricA} AS metric, ${daydreamHypotheses.pairs} AS pairs
-          FROM ${daydreamHypotheses} WHERE ${daydreamHypotheses.verdict} = 'underpowered'
+          FROM ${daydreamHypotheses}
+          WHERE ${daydreamHypotheses.verdict} = 'underpowered'
+            AND ${daydreamHypotheses.subject} = ${DEFAULT_SUBJECT}
         UNION ALL
         SELECT ${daydreamHypotheses.metricB}, ${daydreamHypotheses.pairs}
-          FROM ${daydreamHypotheses} WHERE ${daydreamHypotheses.verdict} = 'underpowered'
+          FROM ${daydreamHypotheses}
+          WHERE ${daydreamHypotheses.verdict} = 'underpowered'
+            AND ${daydreamHypotheses.subject} = ${DEFAULT_SUBJECT}
       ) t
       WHERE metric IS NOT NULL
       GROUP BY metric
