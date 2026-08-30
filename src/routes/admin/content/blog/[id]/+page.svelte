@@ -1,6 +1,11 @@
 <svelte:head><title>Edit: {data.post.title} — Admin</title></svelte:head>
 <script lang="ts">
   import { getContext } from 'svelte';
+  import { BODY_FONT_OPTIONS, DEFAULT_BODY_FONT } from '$lib/blog/fonts';
+  import { AUTOPILOT_MODES } from '$lib/blog/assistant/autopilot';
+  import WritingDesk from '$lib/components/blog/WritingDesk.svelte';
+  import MediaLibrary from '$lib/components/blog/MediaLibrary.svelte';
+  import PostStatsCard from '$lib/components/blog/PostStatsCard.svelte';
   import { goto } from '$app/navigation';
   import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
   import RichEditor from '$lib/components/RichEditor.svelte';
@@ -24,6 +29,10 @@
   let tags = $state(data.post.tags.join(', '));
   let status = $state(data.post.status);
   let coverImageUrl = $state<string | null>(data.post.coverImageUrl ?? null);
+  let coverImageAlt = $state<string>(data.post.coverImageAlt ?? '');
+  // The post-level reading face. Defaults to 'read' (the Selawik / Segoe UI
+  // stack) for anything the loader did not give a value for.
+  let bodyFont = $state<string>(data.post.bodyFont ?? DEFAULT_BODY_FONT);
   let previewToken = $state(data.post.previewToken);
 
   let saving = $state(false);
@@ -149,6 +158,112 @@
     finally { autoScanInflight = false; }
   }
 
+  // ---------------------------------------------------------------------
+  // Autopilot — one editorial pass over the whole post.
+  //
+  // It produces ordinary proposals, so everything downstream (the margin
+  // callouts, accept/reject, the revision snapshot, the `proposal_resolved`
+  // taste signal) works unchanged. Nothing here writes the post.
+  // ---------------------------------------------------------------------
+  let mediaOpen = $state(false);
+  let openBlockers = $state(0);
+  let autopilotRunning = $state(false);
+  let autopilotPhase = $state<string | null>(null);
+  let autopilotSummary = $state<string | null>(null);
+
+  async function runAutopilot(mode: string) {
+    if (autopilotRunning) return;
+    autopilotRunning = true;
+    autopilotPhase = 'Starting…';
+    autopilotSummary = null;
+
+    // Save first. The pass runs against the SERVER's copy of the body, so an
+    // unsaved edit would be reviewed in its old form and every anchor computed
+    // against text the editor no longer shows.
+    try {
+      if (dirty) {
+        await save();
+        if (errorMsg) {
+          autopilotPhase = null;
+          return;
+        }
+      }
+
+      const res = await fetch(`/api/admin/blog/${data.post.id}/autopilot?token=${adminToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
+      if (!res.ok || !res.body) {
+        autopilotSummary = `Autopilot failed (${res.status}).`;
+        return;
+      }
+
+      // NDJSON: read whole lines, keep the trailing partial for the next chunk.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let added = 0;
+      let dropped = 0;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl = buffer.indexOf('\n');
+        while (nl !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          nl = buffer.indexOf('\n');
+          if (!line) continue;
+          let ev: Record<string, unknown>;
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.type === 'phase') {
+            autopilotPhase = String(ev.message ?? '');
+          } else if (ev.type === 'candidates') {
+            dropped = Array.isArray(ev.dropped) ? ev.dropped.length : 0;
+          } else if (ev.type === 'proposal') {
+            const proposal = ev.proposal as Proposal;
+            proposalStore.add(proposal);
+            if (proposal.kind === 'prose' && richApi) richApi.applyProposal(proposal);
+            proposalTick++;
+            added++;
+          } else if (ev.type === 'error') {
+            autopilotSummary = String(ev.error ?? 'Autopilot failed.');
+          } else if (ev.type === 'done') {
+            const offVoice = Number(ev.offVoice ?? 0);
+            if (ev.reason === 'too-short') {
+              autopilotSummary = 'Too short to review yet.';
+            } else {
+              // Report what was discarded as well as what survived. A pass that
+              // silently drops half its output looks like a weak model rather
+              // than a guard doing its job.
+              const bits = [`${added} suggestion${added === 1 ? '' : 's'} in the margin`];
+              if (dropped) bits.push(`${dropped} unsafe or empty`);
+              if (offVoice) bits.push(`${offVoice} off-voice`);
+              autopilotSummary = added === 0 && !dropped && !offVoice
+                ? 'Nothing worth changing — the post reads well.'
+                : bits.join(' · ');
+            }
+          }
+        }
+      }
+      // The authorship select is driven by the loader's copy; keep it honest.
+      if (added > 0 && (data.post.authorship === 'human' || data.post.authorship === 'unknown')) {
+        data.post.authorship = 'assisted';
+      }
+    } catch (e) {
+      autopilotSummary = e instanceof Error ? e.message : 'Autopilot failed.';
+    } finally {
+      autopilotRunning = false;
+      autopilotPhase = null;
+    }
+  }
+
   async function acceptMetaProposal(p: MetaProposal) {
     proposalStore.resolve(p.id, 'accepted');
     proposalTick++;
@@ -266,7 +381,9 @@
     excerpt !== data.post.excerpt ||
     content !== data.post.content ||
     tags !== data.post.tags.join(', ') ||
-    coverImageUrl !== (data.post.coverImageUrl ?? null)
+    coverImageUrl !== (data.post.coverImageUrl ?? null) ||
+    coverImageAlt !== (data.post.coverImageAlt ?? '') ||
+    bodyFont !== (data.post.bodyFont ?? DEFAULT_BODY_FONT)
   );
 
   function slugify(str: string): string {
@@ -281,7 +398,7 @@
     errorMsg = null;
     try {
       const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
-      const payload = { title, slug, excerpt, content, tags: tagList, coverImageUrl, ...overrides };
+      const payload = { title, slug, excerpt, content, tags: tagList, coverImageUrl, coverImageAlt, bodyFont, ...overrides };
       const res = await fetch(`/api/admin/blog/${data.post.id}?token=${adminToken}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -292,11 +409,22 @@
         errorMsg = body.error ?? `Error ${res.status}`;
         return;
       }
-      data.post.title = title;
-      data.post.slug = slug;
-      data.post.excerpt = excerpt;
-      data.post.content = content;
-      data.post.tags = tagList;
+      // Mirror ONLY what was actually sent.
+      //
+      // Callers suppress fields by passing `undefined` (`save({ content:
+      // undefined })`), which JSON.stringify then OMITS from the request — so
+      // the server keeps its old value. This block used to mirror every field
+      // unconditionally, so after a cover-image upload the page believed the
+      // body had been saved: `dirty` went false, the Save button greyed out,
+      // and the server still held the previous body. Unsaved prose, no warning.
+      const sent = (k: string) => !(k in overrides) || overrides[k] !== undefined;
+      if (sent('title')) data.post.title = title;
+      if (sent('slug')) data.post.slug = slug;
+      if (sent('excerpt')) data.post.excerpt = excerpt;
+      if (sent('content')) data.post.content = content;
+      if (sent('tags')) data.post.tags = tagList;
+      if (sent('coverImageAlt')) data.post.coverImageAlt = coverImageAlt;
+      if (sent('bodyFont')) data.post.bodyFont = bodyFont;
       if (overrides.coverImageUrl !== undefined) data.post.coverImageUrl = overrides.coverImageUrl as string | null;
       if (overrides.previewToken !== undefined) {
         data.post.previewToken = overrides.previewToken as string;
@@ -420,6 +548,17 @@
 
   async function togglePublish() {
     const newStatus = status === 'published' ? 'draft' : 'published';
+
+    // Publishing SAVES FIRST. This used to PUT `{ status }` on its own, so
+    // hitting Publish with unsaved edits in the editor published the previous
+    // body — the one thing a publish button must never do. Going back to draft
+    // does not need the save, but doing it anyway costs nothing and keeps the
+    // two paths identical.
+    if (dirty) {
+      await save();
+      if (errorMsg) return;
+    }
+
     saving = true;
     errorMsg = null;
     try {
@@ -476,6 +615,14 @@
     {#snippet actions()}
       <span class="nm-pill" data-state={status}>{status}</span>
       {#if saved}<span class="saved-flag">Saved</span>{/if}
+      {#if openBlockers > 0 && status !== 'published'}
+        <!-- Advisory, never a lock. A gate that refuses to publish is a gate
+             that gets worked around; one that says what is outstanding gets
+             read. -->
+        <span class="blocker-flag" title="Deterministic faults found by the pre-publish checks">
+          {openBlockers} to fix
+        </span>
+      {/if}
       <button class="nm-btn-ghost" onclick={togglePublish} disabled={saving}>
         {status === 'published' ? 'Unpublish' : 'Publish'}
       </button>
@@ -512,6 +659,14 @@
       <span class="sr-label-tight">Excerpt</span>
       <textarea class="nm-textarea" rows="2" bind:value={excerpt} placeholder="Brief excerpt…"></textarea>
     </label>
+    <label class="nm-field">
+      <span class="sr-label-tight">Reading face</span>
+      <select class="nm-text-input" bind:value={bodyFont}>
+        {#each BODY_FONT_OPTIONS as f (f.key)}
+          <option value={f.key}>{f.label} — {f.hint}</option>
+        {/each}
+      </select>
+    </label>
   </section>
 
   <section
@@ -533,7 +688,16 @@
       </span>
     </div>
     {#if coverImageUrl}
-      <img class="cover" src={coverImageUrl} alt="Cover" />
+      <img class="cover" src={coverImageUrl} alt={coverImageAlt || 'Cover'} />
+      <label class="nm-field" style="margin-top: 0.75rem;">
+        <span class="sr-label-tight">Alt text</span>
+        <input
+          class="nm-text-input"
+          type="text"
+          bind:value={coverImageAlt}
+          placeholder="What the image shows, for a reader who cannot see it"
+        />
+      </label>
     {:else}
       <div class="nm-empty">No cover image. Click Upload, or paste / drop one here.</div>
     {/if}
@@ -550,9 +714,63 @@
     <p class="muted">Share <code>/blog/preview/{previewToken}</code> to let someone read the draft without an admin session.</p>
   </section>
 
+  <WritingDesk
+    postId={data.post.id}
+    {adminToken}
+    onBlockersChanged={(n) => (openBlockers = n)}
+  />
+
+  <MediaLibrary
+    postId={data.post.id}
+    open={mediaOpen}
+    onClose={() => (mediaOpen = false)}
+    onInsert={(item) => {
+      richApi?.insertMedia(item);
+      mediaOpen = false;
+    }}
+  />
+
+  {#if !isMarkdown}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Autopilot</span>
+        {#if autopilotPhase}
+          <span class="ap-phase">{autopilotPhase}</span>
+        {:else if autopilotSummary}
+          <span class="ap-phase">{autopilotSummary}</span>
+        {/if}
+      </div>
+      <div class="ap-modes">
+        {#each AUTOPILOT_MODES as m (m.key)}
+          <button
+            class="ap-mode"
+            onclick={() => runAutopilot(m.key)}
+            disabled={autopilotRunning}
+            title={m.blurb}
+          >
+            <span class="ap-mode-label">{m.label}</span>
+            <span class="ap-mode-blurb">{m.blurb}</span>
+          </button>
+        {/each}
+      </div>
+      <p class="muted ap-note">
+        Runs one pass over the whole post in your voice and leaves suggestions in the margin.
+        It never edits or publishes anything — you accept each one. Paragraphs containing links or
+        embedded media are held back, because a plain-text rewrite would delete them. A post that
+        has been through a pass is tagged <strong>assisted</strong>, which keeps it out of the
+        voice corpus.
+      </p>
+    </section>
+  {/if}
+
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Content · {isMarkdown ? 'Markdown' : 'Rich Text (HTML)'}</span>
+      {#if !isMarkdown}
+        <span style="margin-left: auto;">
+          <button class="nm-btn-ghost" onclick={() => (mediaOpen = true)}>Media library</button>
+        </span>
+      {/if}
       {#if isMarkdown}
         <span style="margin-left: auto;">
           <button class="nm-btn-ghost" onclick={convertToRichText} disabled={converting}>
@@ -632,6 +850,12 @@
     />
   {/if}
 
+  <!-- Readers. The loader has been making four Umami round-trips per page load
+       since BlogStatsCard was retired in April and rendering them with
+       nothing; this is the surface they were computed for, now joined by the
+       first-party dwell figures Umami structurally cannot answer. -->
+  <PostStatsCard umami={data.stats ?? null} reads={data.reads ?? null} />
+
   <div class="bottom-row">
     <button class="nm-link-btn danger" onclick={deletePost} disabled={deleting}>
       {deleting ? '…' : 'Delete post'}
@@ -688,4 +912,66 @@
     padding: 0.08rem 0.38rem;
   }
   .bottom-row { display: flex; justify-content: flex-start; padding: 0.5rem 0 1.5rem; }
+
+  .ap-modes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.5rem;
+  }
+
+  .ap-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+    transition: border-color 0.15s ease-out;
+  }
+
+  .ap-mode:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  .ap-mode:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .ap-mode-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-primary);
+  }
+
+  .ap-mode-blurb {
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  .ap-phase {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+
+  .ap-note {
+    margin-top: 0.75rem;
+  }
+
+  .blocker-flag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    padding: 0.1rem 0.4rem;
+  }
 </style>

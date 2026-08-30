@@ -36,6 +36,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     match: (p) => p.startsWith('/admin/content'),
     items: [
       { label: 'Blog', href: '/admin/content/blog' },
+      { label: 'Responses', href: '/admin/content/comments' },
       { label: 'Hero', href: '/admin/content/hero' },
       { label: 'Voice', href: '/admin/content/voice' },
       { label: 'Effects', href: '/admin/content/effects' },

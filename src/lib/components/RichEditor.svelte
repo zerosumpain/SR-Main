@@ -8,7 +8,11 @@
   import Link from '@tiptap/extension-link';
   import Placeholder from '@tiptap/extension-placeholder';
   import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style';
-  import { Figure, ProjectEmbed } from '$lib/blog/tiptap-extras';
+  // The picker's options and the sanitiser's font-family allow-list are built
+  // from the SAME list. They used to be two hand-written copies, so a face
+  // added here looked perfect in /admin and was silently stripped on /blog.
+  import { FONT_OPTIONS } from '$lib/blog/fonts';
+  import { Figure, ProjectEmbed, PullQuote, Callout, Disclosure, Sidenote } from '$lib/blog/tiptap-extras';
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
   import { SuggestionDecorations, suggestionPluginKey } from '$lib/blog/assistant/suggestion-decorations';
   import type { ProseProposal } from '$lib/blog/assistant/proposal';
@@ -101,20 +105,52 @@
     }
   }
 
-  async function uploadAndInsert(file: File) {
+  /**
+   * Insert an uploaded file.
+   *
+   * `at` is a ProseMirror document position resolved from the DROP COORDINATES
+   * before the upload starts. Without it every dropped image landed wherever
+   * the caret happened to be — which for a drag from the desktop is usually
+   * the last place the author clicked, often several paragraphs away. The
+   * position is resolved up front because by the time the upload resolves the
+   * pointer is long gone.
+   *
+   * Each insert advances `at`, so dropping three files at once lays them out
+   * in the order they were dropped rather than the order the uploads happen to
+   * finish in.
+   */
+  async function uploadAndInsert(file: File, at?: number) {
     if (!uploadImage || !editor) return;
     uploading += 1;
     try {
       const url = await uploadImage(file);
-      // setImage requires the editor to have focus to find an insertion point.
-      editor.chain().focus().setImage({ src: url }).run();
+      if (!editor) return;
+      const isVideo = file.type.startsWith('video/');
+      const chain = editor.chain().focus();
+      if (typeof at === 'number') chain.setTextSelection(Math.min(at, editor.state.doc.content.size));
+      if (isVideo) {
+        // No Video node exists yet, so a video is inserted as raw HTML the
+        // sanitiser now admits (src/lib/blog/renderer.ts allows video/source
+        // attributes). It round-trips as an unknown block rather than a
+        // first-class node — good enough to publish, and honest about it.
+        chain.insertContent(`<video src="${url}" controls playsinline></video>`).run();
+      } else {
+        // setImage requires the editor to have focus to find an insertion point.
+        chain.setImage({ src: url }).run();
+      }
     } catch (e) {
       saveStatus = 'error';
       // eslint-disable-next-line no-console
-      console.error('image upload failed:', e);
+      console.error('media upload failed:', e);
     } finally {
       uploading -= 1;
     }
+  }
+
+  /** Media files from a clipboard or a drag. Video rides the same lane as
+   *  images now that the upload endpoint accepts mp4/webm. */
+  function isUploadableMedia(type: string): boolean {
+    return type.startsWith('image/') || type === 'video/mp4' || type === 'video/webm';
   }
 
   function extractImageFiles(dt: DataTransfer | null | undefined): File[] {
@@ -122,12 +158,12 @@
     if (!dt) return out;
     if (dt.files && dt.files.length) {
       for (const f of Array.from(dt.files)) {
-        if (f.type.startsWith('image/')) out.push(f);
+        if (isUploadableMedia(f.type)) out.push(f);
       }
     }
     if (!out.length && dt.items && dt.items.length) {
       for (const item of Array.from(dt.items)) {
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
+        if (item.kind === 'file' && isUploadableMedia(item.type)) {
           const f = item.getAsFile();
           if (f) out.push(f);
         }
@@ -163,6 +199,18 @@
   function handleKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
+      // stopPropagation is not enough — this is a window listener and so is the
+      // page's. Both fired for a Ctrl+S anywhere on the page, sending two PUTs
+      // for one keystroke.
+      //
+      // The boundary must be EXACTLY the page's: it skips when the target is
+      // inside `.editor-wrapper`, so this handler must own precisely that
+      // region. Guarding on `.rich-host` instead would leave a gap — the
+      // toolbar and the font selects are inside the wrapper but outside the
+      // host, and a Ctrl+S with one of those focused would then fire neither
+      // handler and silently save nothing.
+      const target = e.target;
+      if (target instanceof HTMLElement && !target.closest('.editor-wrapper')) return;
       manualSave();
     }
   }
@@ -350,6 +398,18 @@
         const tr = editor.state.tr.setMeta(suggestionPluginKey, { clear: true });
         editor.view.dispatch(tr);
       },
+      insertMedia: (item) => {
+        if (!editor) return;
+        const chain = editor.chain().focus();
+        if (item.mimeType.startsWith('video/')) {
+          // No Video node exists, so this rides the raw-HTML path the
+          // sanitiser now admits (video/source attributes were allowed as tags
+          // but stripped of every attribute until 2026-08-30).
+          chain.insertContent(`<video src="${item.url}" controls playsinline></video>`).run();
+        } else {
+          chain.setImage({ src: item.url, alt: item.altText ?? undefined }).run();
+        }
+      },
       setContent: (html) => {
         if (!editor) return;
         // Replacing the doc invalidates every tracked range — clear before
@@ -459,7 +519,17 @@
           // StarterKit v3 ships Link; disable so our explicit Link config wins.
           link: false,
         }),
-        Image.configure({ inline: false, allowBase64: false }),
+        Image.configure({
+          inline: false,
+          allowBase64: false,
+          // `resize` is an OBJECT or `false`, never a boolean true — the type is
+          // `{ enabled, directions?, minWidth?, minHeight?, alwaysPreserveAspectRatio? } | false`.
+          // It ships inside @tiptap/extension-image, so turning it on costs no new
+          // package (and every @tiptap/* must move as ONE unit, so a new one would
+          // drag a coordinated bump of all six). The sanitiser already permits
+          // width/height on <img>.
+          resize: { enabled: true, minWidth: 120, alwaysPreserveAspectRatio: true },
+        }),
         Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
         Placeholder.configure({ placeholder: 'Write your post… paste images directly into the body.' }),
         TextStyle,
@@ -467,6 +537,10 @@
         FontSize,
         Figure,
         ProjectEmbed,
+        PullQuote,
+        Callout,
+        Disclosure,
+        Sidenote,
         SuggestionDecorations,
       ],
       content: content || '',
@@ -476,6 +550,31 @@
       },
       editorProps: {
         attributes: { class: 'rich-content' },
+        // The slash menu owns these keys only while it is open, and returning
+        // true is what stops the keystroke reaching the document.
+        handleKeyDown: (_view, event) => {
+          if (!slashOpen) return false;
+          const items = slashFiltered;
+          if (event.key === 'Escape') {
+            closeSlash();
+            return true;
+          }
+          if (event.key === 'ArrowDown') {
+            slashIndex = items.length ? (slashIndex + 1) % items.length : 0;
+            return true;
+          }
+          if (event.key === 'ArrowUp') {
+            slashIndex = items.length ? (slashIndex - 1 + items.length) % items.length : 0;
+            return true;
+          }
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            const item = items[slashIndex];
+            if (!item) return false;
+            runSlashItem(item);
+            return true;
+          }
+          return false;
+        },
         handlePaste: (_view, event) => {
           const items = event.clipboardData?.items;
           if (!items) return false;
@@ -523,10 +622,21 @@
       if (!uploadImage) return;
       const ev = e as DragEvent;
       const files = extractImageFiles(ev.dataTransfer);
+      // The early return is load-bearing: it is what lets ProseMirror handle
+      // an INTERNAL drag (image, figure and projectEmbed are all draggable).
+      // Calling preventDefault() unconditionally here kills node reordering.
       if (!files.length) return;
       ev.preventDefault();
       ev.stopPropagation();
-      for (const f of files) uploadAndInsert(f);
+      // Resolve the drop point NOW — the pointer is gone by the time the
+      // upload resolves.
+      const coords = editor?.view.posAtCoords({ left: ev.clientX, top: ev.clientY });
+      let at = coords?.pos;
+      for (const f of files) {
+        uploadAndInsert(f, at);
+        // Advance so a multi-file drop keeps the dropped order.
+        if (typeof at === 'number') at += 1;
+      }
     };
     host.addEventListener('paste', onPasteNative, { capture: true });
     host.addEventListener('drop', onDropNative, { capture: true });
@@ -634,9 +744,132 @@
     const title = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     editor.chain().focus().setProjectEmbed({ src: path, title }).run();
   }
+
+  // ---------------------------------------------------------------------
+  // Slash menu.
+  //
+  // Written natively rather than with @tiptap/suggestion. That package is not
+  // installed, and TipTap 3.x extensions peer on an EXACT @tiptap/core version
+  // — adding one drags a coordinated bump of all six @tiptap packages, which is
+  // a disproportionate risk for a menu. Everything it needs is already
+  // reachable: the doc state says whether a trigger is active, and
+  // `coordsAtPos` says where to draw it.
+  //
+  // The trigger is a "/" that OPENS a text block. Allowing it mid-sentence
+  // means every URL and every date opens a menu, which is how a helpful
+  // affordance becomes something the author fights.
+  // ---------------------------------------------------------------------
+
+  type SlashItem = {
+    key: string;
+    label: string;
+    hint: string;
+    /** Search terms beyond the label. */
+    terms?: string[];
+    run: () => void;
+  };
+
+  // These are read by the template, so they are genuinely reactive state —
+  // unlike the timer and observer handles elsewhere in this file.
+  let slashOpen = $state(false);
+  let slashQuery = $state('');
+  let slashIndex = $state(0);
+  let slashLeft = $state(0);
+  let slashTop = $state(0);
+  // The document position of the "/" itself. Not reactive: only the handlers
+  // read it, and making it reactive would put a read and a write of the same
+  // signal inside one function.
+  let slashFrom = -1;
+
+  function slashItems(): SlashItem[] {
+    if (!editor) return [];
+    const e = editor;
+    return [
+      { key: 'h2', label: 'Heading', hint: 'Section heading', terms: ['h2', 'title'], run: () => e.chain().focus().toggleHeading({ level: 2 }).run() },
+      { key: 'h3', label: 'Subheading', hint: 'Sub-section', terms: ['h3'], run: () => e.chain().focus().toggleHeading({ level: 3 }).run() },
+      { key: 'ul', label: 'Bulleted list', hint: 'A list of points', terms: ['bullet', 'list'], run: () => e.chain().focus().toggleBulletList().run() },
+      { key: 'ol', label: 'Numbered list', hint: 'An ordered list', terms: ['number', 'ordered'], run: () => e.chain().focus().toggleOrderedList().run() },
+      { key: 'quote', label: 'Quote', hint: 'Block quotation', terms: ['blockquote'], run: () => e.chain().focus().toggleBlockquote().run() },
+      { key: 'pull', label: 'Pull quote', hint: 'A line lifted out and set large', terms: ['pullquote', 'feature'], run: () => e.chain().focus().setPullQuote().run() },
+      { key: 'note', label: 'Callout', hint: 'A bordered aside', terms: ['aside', 'info'], run: () => e.chain().focus().setCallout('note').run() },
+      { key: 'warn', label: 'Warning callout', hint: 'A callout in the warn colour', terms: ['caution'], run: () => e.chain().focus().setCallout('warn').run() },
+      { key: 'sidenote', label: 'Sidenote', hint: 'A note in the margin', terms: ['margin', 'footnote'], run: () => e.chain().focus().setSidenote().run() },
+      { key: 'details', label: 'Collapsible section', hint: 'Hidden until the reader opens it', terms: ['disclosure', 'accordion', 'interactive'], run: () => e.chain().focus().setDisclosure('Details').run() },
+      { key: 'code', label: 'Code block', hint: 'Syntax-highlighted code', terms: ['pre'], run: () => e.chain().focus().toggleCodeBlock().run() },
+      { key: 'hr', label: 'Divider', hint: 'A break between sections', terms: ['rule', 'separator'], run: () => e.chain().focus().setHorizontalRule().run() },
+      { key: 'image', label: 'Image', hint: 'Upload or drop a picture', terms: ['photo', 'picture', 'media'], run: () => pickImage() },
+      { key: 'embed', label: 'Project embed', hint: 'Embed a /projects page', terms: ['iframe'], run: () => embedProject() },
+    ];
+  }
+
+  const slashFiltered = $derived.by(() => {
+    const q = slashQuery.trim().toLowerCase();
+    const all = slashItems();
+    if (!q) return all;
+    return all.filter(
+      (i) => i.label.toLowerCase().includes(q) || (i.terms ?? []).some((t) => t.includes(q)),
+    );
+  });
+
+  function closeSlash() {
+    slashOpen = false;
+    slashQuery = '';
+    slashIndex = 0;
+    slashFrom = -1;
+  }
+
+  /** Re-evaluate the trigger from the document. Called on every transaction. */
+  function refreshSlash() {
+    if (!editor) return;
+    const { state } = editor;
+    // Aliased away from `$from`: Svelte reserves the `$` prefix for binding
+    // names, so destructuring ProseMirror's resolved position under its own
+    // property name is a compile error in a component.
+    const { $from: cursor, empty } = state.selection;
+    if (!empty || !cursor.parent.isTextblock) {
+      if (slashOpen) closeSlash();
+      return;
+    }
+    const start = cursor.start();
+    const before = state.doc.textBetween(start, cursor.pos, '\n', '\n');
+    const match = /^\/([\w-]*)$/.exec(before);
+    if (!match) {
+      if (slashOpen) closeSlash();
+      return;
+    }
+    slashFrom = start;
+    slashQuery = match[1];
+    slashIndex = 0;
+    if (!slashOpen) slashOpen = true;
+    try {
+      const coords = editor.view.coordsAtPos(start);
+      slashLeft = coords.left;
+      slashTop = coords.bottom + 6;
+    } catch {
+      // A position that cannot be measured (mid-relayout) is not worth
+      // throwing over; the menu keeps its last coordinates.
+    }
+  }
+
+  function runSlashItem(item: SlashItem) {
+    if (!editor || slashFrom < 0) return;
+    const to = editor.state.selection.from;
+    const from = slashFrom;
+    closeSlash();
+    // Delete the "/query" text FIRST, in its own transaction, so the command
+    // below acts on a clean empty block. Chaining the two lets the command see
+    // a block that still contains the trigger text, which several of them then
+    // wrap instead of replacing.
+    editor.chain().focus().deleteRange({ from, to }).run();
+    item.run();
+  }
+
   $effect(() => {
     if (!editor) return;
-    const handler = () => refreshActive();
+    const handler = () => {
+      refreshActive();
+      refreshSlash();
+    };
     editor.on('selectionUpdate', handler);
     editor.on('transaction', handler);
     return () => {
@@ -669,12 +902,11 @@
       <button class="tool-btn" class:active={activeMap.figure} onclick={toggleCaption} disabled={!activeMap.image && !activeMap.figure} title={activeMap.figure ? 'Remove the caption (back to a plain image)' : 'Add a caption to the selected image'}>Caption</button>
       <button class="tool-btn" onclick={embedProject} title="Embed a /projects page into the post">Embed</button>
       <span class="tool-divider"></span>
-      <select class="tool-select" title="Font — site fonts only" value={activeMap.fontFamily} onchange={(e) => applyFontFamily(e.currentTarget.value)}>
+      <select class="tool-select" title="Font for the selected text — site fonts only" value={activeMap.fontFamily} onchange={(e) => applyFontFamily(e.currentTarget.value)}>
         <option value="">Font</option>
-        <option value="var(--font-sans)">Sans</option>
-        <option value="var(--font-mono)">Mono</option>
-        <option value="var(--font-display)">Display</option>
-        <option value="var(--font-brand)">Brand</option>
+        {#each FONT_OPTIONS as f (f.key)}
+          <option value={f.cssVar} title={f.hint}>{f.label}</option>
+        {/each}
       </select>
       <select class="tool-select" title="Text size" value={activeMap.fontSize} onchange={(e) => applyFontSize(e.currentTarget.value)}>
         <option value="">Size</option>
@@ -686,6 +918,31 @@
   </div>
 
   <div bind:this={host} class="rich-host"></div>
+
+  {#if slashOpen && slashFiltered.length > 0}
+    <!-- position: fixed against viewport coordinates from coordsAtPos, so the
+         menu tracks the caret without the editor needing a positioned parent. -->
+    <div class="slash-menu" style="left: {slashLeft}px; top: {slashTop}px;" role="listbox" aria-label="Insert">
+      {#each slashFiltered as item, i (item.key)}
+        <button
+          class="slash-item"
+          class:active={i === slashIndex}
+          role="option"
+          aria-selected={i === slashIndex}
+          onmouseenter={() => (slashIndex = i)}
+          onmousedown={(e) => {
+            // mousedown, not click: a click fires after the editor has already
+            // lost focus, and the command then has no selection to act on.
+            e.preventDefault();
+            runSlashItem(item);
+          }}
+        >
+          <span class="slash-label">{item.label}</span>
+          <span class="slash-hint">{item.hint}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   {#if scores.words > 0}
     <div class="readability">
@@ -858,5 +1115,54 @@
     background: var(--accent-tint-35);
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+
+  .slash-menu {
+    position: fixed;
+    z-index: 80;
+    width: 19rem;
+    max-height: 17rem;
+    overflow-y: auto;
+    /* Opaque. --card-bg is a 7% tint and would show the prose through the
+       menu, which is the recurring overlay trap in this codebase. */
+    background: var(--surface-elevated, var(--bg));
+    border: 2px solid var(--line-strong);
+  }
+
+  .slash-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0.45rem 0.7rem;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--divider);
+    cursor: pointer;
+  }
+
+  .slash-item:last-child {
+    border-bottom: none;
+  }
+
+  .slash-item.active {
+    background: var(--accent);
+  }
+
+  .slash-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+
+  .slash-hint {
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+
+  .slash-item.active .slash-label,
+  .slash-item.active .slash-hint {
+    color: var(--bg);
   }
 </style>

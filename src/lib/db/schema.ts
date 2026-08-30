@@ -43,6 +43,12 @@ export const blogPosts = pgTable('blog_posts', {
   coverImageUrl: text('cover_image_url'),
   coverImageAlt: text('cover_image_alt'),
   contentFormat: text('content_format').default('html').notNull(),
+  // Which reading face the post's body copy is set in. The vocabulary lives in
+  // $lib/blog/fonts (NOT here — this file must have no $lib imports at all) and
+  // resolves to a --font-* custom property, so a value that is not in the
+  // vocabulary renders as the site default rather than as an arbitrary font.
+  // Defaults to 'read', the self-hosted Selawik / Segoe UI stack jkai uses.
+  bodyFont: text('body_font').notNull().default('read'),
   // Who actually wrote the prose. Load-bearing for the voice system: only
   // 'human' posts may seed the Voice Card or supply exemplars. Feeding
   // generated text back into the corpus is model collapse in miniature —
@@ -95,8 +101,202 @@ export const blogPostRevisions = pgTable('blog_post_revisions', {
   field: text('field').notNull(), // 'content' | 'title' | 'excerpt' | 'slug' | 'tags' | 'status' | 'cover_alt'
   previousValue: text('previous_value').notNull(), // raw text or JSON-encoded
   reason: text('reason'),
+  // What captured this revision: 'assistant' (a proposal being applied),
+  // 'autosave' (a periodic editor snapshot) or 'manual' (an explicit save).
+  // Defaults to 'assistant' so every row that existed before autosave shipped
+  // keeps its original meaning rather than being silently reclassified.
+  source: text('source').notNull().default('assistant'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// ==========================================
+// Blog engine overhaul (2026-08-30) — the editorial desk
+//
+// Four additive tables and one added column. Nothing here changes an existing
+// column's type or name: a drizzle-kit RENAME creates *and* drops, which makes
+// the push prompt, and the CI release step then times out and takes the deploy
+// with it.
+// ==========================================
+
+// Reader comments. Public POST, ALWAYS held for moderation — `status` starts at
+// 'held' and only an owner session moves it to 'published'. That default is the
+// whole security model for an anonymous endpoint on a site with no captcha: the
+// worst case of a spam flood is a full queue, never a defaced article.
+//
+// Deliberately NO email column and NO raw IP. The site has already had one PII
+// leak through a surface that collected more than it needed
+// (release-log), and a name plus a body is all a "subtle" comment feature
+// requires. `authorHash` is a salted digest of the client address, kept only so
+// per-address rate limiting and repeat-abuse detection can work; it is
+// irreversible and never leaves the server.
+export const blogComments = pgTable(
+  'blog_comments',
+  {
+    id: serial('id').primaryKey(),
+    postId: integer('post_id')
+      .notNull()
+      .references(() => blogPosts.id, { onDelete: 'cascade' }),
+    // One level of threading only. A reply to a reply attaches to the same
+    // parent, so the render is always two levels deep and can never need a
+    // recursive query.
+    parentId: integer('parent_id'),
+    authorName: text('author_name').notNull(),
+    body: text('body').notNull(),
+    // 'held' | 'published' | 'spam' | 'deleted'
+    status: text('status').notNull().default('held'),
+    // Salted SHA-256 of the client address. NOT reversible, never returned by
+    // any endpoint, and salted with a server secret so a rainbow table over the
+    // IPv4 space cannot undo it.
+    authorHash: text('author_hash'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    moderatedAt: timestamp('moderated_at', { withTimezone: true }),
+  },
+  (t) => [
+    // The public read: published comments for one post, oldest first.
+    index('blog_comments_post_status_idx').on(t.postId, t.status, t.createdAt),
+    // The moderation queue reads across all posts by age.
+    index('blog_comments_status_created_idx').on(t.status, t.createdAt),
+    // Rate limiting asks "how many from this address in the last hour".
+    index('blog_comments_author_created_idx').on(t.authorHash, t.createdAt),
+  ],
+);
+
+// First-party engagement beacons — the metric Umami structurally cannot answer.
+//
+// Umami reports pageviews, visitors and referrers well, and time-on-page only
+// as a site-wide average derived from the gap between two pageviews. For a blog
+// post that is read in one page and then closed there IS no second pageview, so
+// its dwell is either zero or missing. Dwell was named explicitly in the brief,
+// so it is measured here instead of approximated there.
+//
+// ONE ROW PER (post, session), upserted. A beacon fires on visibility change
+// and on pagehide, each time carrying the running totals, so a long read is one
+// row that grows rather than forty rows to sum. `sessionId` is a random id
+// minted per browsing session in sessionStorage — it identifies a *read*, not a
+// person, survives no restart, and is never joined to anything.
+export const blogPostViews = pgTable(
+  'blog_post_views',
+  {
+    id: serial('id').primaryKey(),
+    postId: integer('post_id')
+      .notNull()
+      .references(() => blogPosts.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').notNull(),
+    // Milliseconds the tab was VISIBLE with this article open. Hidden tabs do
+    // not accumulate — a post left open in a background tab overnight would
+    // otherwise report a fourteen-hour read and poison every average.
+    dwellMs: integer('dwell_ms').notNull().default(0),
+    // Deepest scroll reached, 0-100.
+    maxScrollPct: integer('max_scroll_pct').notNull().default(0),
+    // True once the end of the article body has been on screen.
+    completed: boolean('completed').notNull().default(false),
+    // HOST ONLY, never the full URL. A full referrer carries search terms and
+    // path-embedded identifiers; the host answers "where did they come from"
+    // without collecting any of that.
+    referrerHost: text('referrer_host'),
+    // 'mobile' | 'tablet' | 'desktop', from viewport width at first beacon.
+    deviceClass: text('device_class'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The upsert target. One read = one row.
+    uniqueIndex('blog_post_views_post_session_idx').on(t.postId, t.sessionId),
+    // Every admin query is "this post, this window".
+    index('blog_post_views_post_created_idx').on(t.postId, t.createdAt),
+    index('blog_post_views_referrer_idx').on(t.postId, t.referrerHost),
+  ],
+);
+
+// The writing desk's durable checklist.
+//
+// Kept OUT of blog_assistant_messages deliberately. A proposal is a diff
+// awaiting a decision; a checklist item is a standing concern with a lifecycle
+// (open → resolved/dismissed, and re-raised if the passage changes back).
+// Overloading the message log means every reload replays findings that were
+// already dealt with, which is exactly what made the old assistant noisy enough
+// to be ignored.
+//
+// `anchorHash` is what makes a re-run idempotent: it is a digest of the
+// normalised passage the finding is about, so the same sentence produces the
+// same item twice and updates it rather than duplicating. Edit the sentence and
+// the hash changes — the old item is orphaned (and swept) and a fresh one is
+// raised against the new text, which is the correct behaviour: a claim that was
+// cleared should not stay cleared once it has been rewritten.
+export const blogChecklistItems = pgTable(
+  'blog_checklist_items',
+  {
+    id: serial('id').primaryKey(),
+    postId: integer('post_id')
+      .notNull()
+      .references(() => blogPosts.id, { onDelete: 'cascade' }),
+    // 'claim' | 'link' | 'readability' | 'meta' | 'alt-text' | 'voice' | 'consistency'
+    kind: text('kind').notNull(),
+    // 'blocker' | 'review' | 'nit'. Only 'blocker' stops the publish gate, and
+    // only the deterministic checks may raise one — a model's opinion is never
+    // a blocker.
+    severity: text('severity').notNull().default('review'),
+    title: text('title').notNull(),
+    detail: text('detail').notNull(),
+    // The exact snippet in the post this is about, so the UI can scroll to it.
+    anchorText: text('anchor_text'),
+    anchorHash: text('anchor_hash').notNull(),
+    // [{ url, title, snippet, stance: 'supports' | 'contradicts' | 'unclear' }]
+    evidence: jsonb('evidence'),
+    // 'open' | 'resolved' | 'dismissed'
+    status: text('status').notNull().default('open'),
+    // Which run raised it. Lets a sweep retire items from a superseded run
+    // without touching anything the author has since acted on.
+    runId: text('run_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (t) => [
+    // The idempotency key. A re-run updates in place.
+    uniqueIndex('blog_checklist_post_anchor_kind_idx').on(t.postId, t.anchorHash, t.kind),
+    // The panel reads open items for one post by severity.
+    index('blog_checklist_post_status_idx').on(t.postId, t.status, t.severity),
+  ],
+);
+
+// The media library.
+//
+// A row per upload, rather than listing the store. The store has two
+// interchangeable backends (filesystem and Azure Blob) and NEITHER exposes a
+// listing through $lib/blog/image-store — adding one would mean a readdir on
+// one side and a prefix enumeration on the other, and the two would answer
+// differently the first time a deploy raced an upload. A table answers both
+// backends identically, and it is the only place alt text and dimensions can
+// live, since neither survives in a blob name.
+export const blogMedia = pgTable(
+  'blog_media',
+  {
+    id: serial('id').primaryKey(),
+    postId: integer('post_id')
+      .notNull()
+      .references(() => blogPosts.id, { onDelete: 'cascade' }),
+    filename: text('filename').notNull(),
+    // The public path, `/api/blog/images/<postId>/<filename>`. Stored rather
+    // than recomputed so a future change to the serving route cannot silently
+    // orphan every existing reference.
+    url: text('url').notNull(),
+    mimeType: text('mime_type').notNull(),
+    bytes: integer('bytes').notNull(),
+    width: integer('width'),
+    height: integer('height'),
+    // The last alt text the author used for this asset. Offered as the default
+    // the next time the same image is inserted — alt-text coverage is a
+    // publish-gate check, and the cheapest way to raise it is to stop asking
+    // the same question twice.
+    altText: text('alt_text'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('blog_media_post_filename_idx').on(t.postId, t.filename),
+    index('blog_media_post_created_idx').on(t.postId, t.createdAt),
+  ],
+);
 
 // ==========================================
 // Health Dashboard - OAuth Tokens

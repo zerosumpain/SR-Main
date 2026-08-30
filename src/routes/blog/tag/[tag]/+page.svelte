@@ -59,8 +59,8 @@
                 <div class="flex flex-wrap gap-1.5 mt-2">
                   {#each post.tags as tag}
                     <span
-                      class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
-                      style="background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted);"
+                      class="inline-block uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
+                      style="font-size: var(--fs-label-xs); background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted);"
                     >
                       {tag}
                     </span>

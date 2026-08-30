@@ -13,7 +13,6 @@
 <script lang="ts">
   import ProseContent from '$lib/components/ProseContent.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import { renderContent } from '$lib/blog/renderer';
 
   let { data } = $props();
 
@@ -28,7 +27,7 @@
 
 <PageHeader title={data.post.title.toUpperCase()} titleHref="/blog">
   {#snippet meta()}
-    <span class="text-[10px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-[var(--radius-round)]" style="font-family: var(--font-mono); background: var(--accent-tint-14); color: var(--accent); border: 1px solid var(--accent);">
+    <span class="uppercase tracking-[0.2em] px-2 py-0.5 rounded-[var(--radius-round)]" style="font-size: var(--fs-label-xs); font-family: var(--font-mono); background: var(--accent-tint-14); color: var(--accent); border: 1px solid var(--accent);">
       Draft
     </span>
   {/snippet}
@@ -43,7 +42,9 @@
   </div>
 
   <!-- Post -->
-  <div class="max-w-3xl">
+  <!-- Full width, not max-w-3xl: the editorial grid sets its own measure and
+       needs room either side of it for margin notes and bleed figures. -->
+  <div class="preview-body">
     {#if formattedDate}
       <p class="label mb-4">{formattedDate.toUpperCase()}</p>
     {/if}
@@ -52,8 +53,8 @@
       <div class="flex flex-wrap gap-1.5 mb-6">
         {#each data.post.tags as tag}
           <span
-            class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
-            style="background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted);"
+            class="inline-block uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
+            style="font-size: var(--fs-label-xs); background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted);"
           >
             {tag}
           </span>
@@ -68,7 +69,11 @@
     <hr class="rule mb-8" />
 
     <!-- Content -->
-    <ProseContent>{@html renderContent(data.post.content, data.post.contentFormat)}</ProseContent>
+    <!-- Identical to /blog/[slug]: same class, same editorial layout, same
+         reading face. What the author sees here is what publishes. -->
+    <ProseContent class="post-prose" editorial bodyFont={data.bodyFontVar}>
+      {@html data.articleHtml}
+    </ProseContent>
 
     <!-- Back -->
     <div class="mt-12 pt-6" style="border-top: 2px solid var(--line-strong);">
@@ -81,3 +86,9 @@
   <a href="/" class="nav-link">← Home</a>
   <a href="/admin" class="nav-link">Admin</a>
 </footer>
+
+<style>
+  .preview-body {
+    max-width: 78rem;
+  }
+</style>

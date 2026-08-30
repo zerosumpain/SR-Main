@@ -18,6 +18,10 @@ export interface RichEditorApi {
   /** Strip ALL suggestion marks from the document, treating each one as a
    *  reject (delete insertions, unwrap deletions). Used by the Clear button. */
   clearAllSuggestions: () => void;
+  /** Insert an already-uploaded asset at the cursor. Used by the media
+   *  library, which reuses bytes that are already in the store rather than
+   *  uploading them a second time. */
+  insertMedia: (item: { url: string; mimeType: string; altText?: string | null }) => void;
   /** Replace the entire document content. Used after rollback. */
   setContent: (html: string) => void;
 }
