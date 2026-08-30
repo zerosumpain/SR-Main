@@ -82,7 +82,7 @@ the retry budget and the `lastError` feedback that `backlog.ts` exists for.
 - **M0** — absorb the scheduler *(shipped)*
 - **M1** — cap intake, fix the sort *(shipped)*
 - **M2** — gap-fill the pack *(shipped)*
-- **M3** — the starvation ledger
+- **M3** — the starvation ledger *(shipped, narrowed — see DL-9)*
 - **M4** — close the loop: a shipped tool registers signals *(shipped)*
 - **M5** — one dashboard
 
