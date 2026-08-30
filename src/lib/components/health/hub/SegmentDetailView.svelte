@@ -114,18 +114,23 @@
                           >{/if}{part}{/each}</span
                     >
                     <span class="sc-metric">
-                      {climbMetric(entry.row)}{#if delta != null}
-                        <span class="sc-delta" class:worse={delta < 0}
+                      {climbMetric(entry.row)}{#if delta != null}{' '}<span
+                          class="sc-delta"
+                          class:worse={delta < 0}
                           >{delta > 0 ? '+' : '−'}{Math.abs(delta).toFixed(1)}%</span
                         >{/if}
                     </span>
                   </a>
                 {/each}
               </div>
+              <!-- The delta clause only exists when there IS a delta: outside
+                   the pace sports every efficiency on the row is null, and a
+                   sentence pointing at a figure that is not there is worse than
+                   a shorter sentence. -->
               <p class="sc-note">
                 If your efficiency here beats your efficiency there, that is fitness on this ground —
-                not the hill being kinder. The last figure is each segment's best efficiency against
-                this one's{refEf == null ? '' : ` ${refEf.toFixed(2)}`}.
+                not the hill being kinder.{#if refEf != null}{' '}The last figure is each segment's
+                  best efficiency against this one's {refEf.toFixed(2)}.{/if}
               </p>
             </div>
           {/if}
@@ -149,8 +154,9 @@
                           >{/if}{part}{/each}</span
                     >
                     <span class="sc-metric">
-                      {efficiencyMetric(entry.row)}{#if delta != null}
-                        <span class="sc-delta" class:worse={delta < 0}
+                      {efficiencyMetric(entry.row)}{#if delta != null}{' '}<span
+                          class="sc-delta"
+                          class:worse={delta < 0}
                           >{delta > 0 ? '+' : '−'}{Math.abs(delta).toFixed(1)}%</span
                         >{/if}
                     </span>

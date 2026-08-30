@@ -93,7 +93,12 @@
                 <circle cx={dot.x} cy={dot.y} r="3" class="sr-dot" />
               {/each}
               <circle cx={steps.pb.x} cy={steps.pb.y} r="4.5" class="sr-dot" />
-              <text x={steps.pb.x + 8} y={steps.pb.y - 5} class="sr-tick lit">{steps.pb.label}</text>
+              <text
+                x={steps.pb.anchor === 'end' ? steps.pb.x - 8 : steps.pb.x + 8}
+                y={steps.pb.y - 5}
+                text-anchor={steps.pb.anchor}
+                class="sr-tick lit">{steps.pb.label}</text
+              >
 
               {#each steps.xLabels as label, i (i)}
                 <text x={label.x} y="138" text-anchor={label.anchor} class="sr-tick">

@@ -157,6 +157,18 @@ describe('formTitle', () => {
   it('says so when there is no read', () => {
     expect(formTitle(segmentForm([], { now: NOW }))).toEqual(['Not enough', 'efforts yet']);
   });
+
+  it('does not call a 160-day-old record recent just because the gap is zero', () => {
+    // The PB is the most recent effort, so the gap is 0 — which says the record
+    // is in the window, not that it was set lately.
+    const times = [860, 845, 850, 830, 835, 820, 825, 810, 800, 790, 780, 698];
+    const efforts = times.map((durationS, i) =>
+      effort({ startedAt: NOW - (11 - i) * 40 * DAY, durationS }),
+    );
+    const form = segmentForm(efforts, { now: NOW });
+    expect(form.gapPct).toBe(0);
+    expect(formTitle(form)[1]).toBe('and holding the record');
+  });
 });
 
 describe('formCards', () => {
@@ -235,10 +247,23 @@ describe('scatterGeometry', () => {
     const pb = geo.dots.find((d) => d.kind === 'pb')!;
     expect(pb.y).toBeLessThan(Math.min(...geo.dots.filter((d) => d.kind !== 'pb').map((d) => d.y)));
     expect(geo.pb!.label).toBe('PB 11:38');
+    expect(geo.pb!.anchor).toBe('start');
   });
 
   it('draws nothing from a single effort', () => {
     expect(scatterGeometry([effort({ startedAt: NOW, durationS: 800 })])).toBeNull();
+  });
+
+  it('drops the last label when the last effort IS the record', () => {
+    const times = [860, 845, 850, 830, 835, 820, 825, 810, 800, 790, 780, 698];
+    const efforts = times.map((durationS, i) =>
+      effort({ startedAt: NOW - (11 - i) * 40 * DAY, durationS }),
+    );
+    const geo = scatterGeometry(efforts)!;
+    expect(geo.pb).not.toBeNull();
+    expect(geo.last).toBeNull();
+    // And at the right edge the one remaining label flips rather than clipping.
+    expect(geo.pb!.anchor).toBe('end');
   });
 });
 
@@ -256,6 +281,13 @@ describe('pbStepGeometry', () => {
     const geo = pbStepGeometry(twelveEfforts(), NOW)!;
     // The PB is 160 days back: five whole months.
     expect(geo.flat!.label).toBe('5 months flat');
+  });
+
+  it('labels the axis off the time domain, which runs to now', () => {
+    const geo = pbStepGeometry(twelveEfforts(), NOW)!;
+    // The oldest effort is 440 days back and the axis ends today.
+    expect(geo.xLabels[0].label).toBe('JUN 2025');
+    expect(geo.xLabels[2].label).toBe('AUG 2026');
   });
 
   it('drops the flat marker when the record has just moved', () => {
@@ -402,7 +434,10 @@ describe('groundNote', () => {
     const bands = gradientBands(track);
     const note = groundNote(segment(twelveEfforts()), profileGeometry(track), bands);
     expect(note).toContain('off-road by sport');
-    expect(note).toContain('steepest chord');
+    expect(note).toMatch(/steeper than 8%/);
+    // A single 50 m chord over a dropped altitude sample reads as a wall, so
+    // the note quotes the averaged shares and never `steepestPct`.
+    expect(note).not.toContain('steepest chord');
     expect(note).not.toContain('proposed');
   });
 });

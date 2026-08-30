@@ -75,14 +75,16 @@
                   {row.efficiencyFactor}
                 </td>
                 <td class="r" class:lit={row.litBpk} class:void={row.unranked}>{row.beatsPerKm}</td>
+                <!-- Badges AND the reason. An unranked row can still be the
+                     PB — nothing about the time depends on a heart rate — and
+                     showing only one of the two loses whichever is rarer. -->
                 <td class="held">
+                  {#each row.badges as badge (badge.text)}
+                    <span class="sb-badge {badge.tone}">{badge.text}</span>
+                  {/each}
                   {#if row.note}
                     <span class="sb-why">{row.note}</span>
-                  {:else if row.badges.length}
-                    {#each row.badges as badge (badge.text)}
-                      <span class="sb-badge {badge.tone}">{badge.text}</span>
-                    {/each}
-                  {:else}
+                  {:else if !row.badges.length}
                     <span class="sb-why">—</span>
                   {/if}
                 </td>

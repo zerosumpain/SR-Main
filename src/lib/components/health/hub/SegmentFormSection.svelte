@@ -113,7 +113,12 @@
           {/each}
 
           {#if scatter.pb}
-            <text x={scatter.pb.x + 7} y={scatter.pb.y - 8} class="sf-tick lit">{scatter.pb.label}</text>
+            <text
+              x={scatter.pb.anchor === 'end' ? scatter.pb.x - 7 : scatter.pb.x + 7}
+              y={scatter.pb.y - 8}
+              text-anchor={scatter.pb.anchor}
+              class="sf-tick lit">{scatter.pb.label}</text
+            >
           {/if}
           {#if scatter.last}
             <text x={scatter.last.x - 7} y={scatter.last.y - 10} text-anchor="end" class="sf-tick ink">

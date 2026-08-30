@@ -29,9 +29,30 @@
   const hasTrack = $derived(segment.coordinates.length > 1);
   const profile = $derived(profileGeometry(segment.coordinates));
   const note = $derived(groundNote(segment, profile, bands));
-  /** `fr` columns off the whole-percent shares, which sum to exactly 100. */
+
+  /**
+   * A BAND WITH NO DISTANCE IN IT IS DROPPED, and the tracks carry a
+   * `min-content` floor.
+   *
+   * The design lays the strip out in bare `fr` columns off the shares, which
+   * reads beautifully on its 32/41/21/6 split and falls apart on a real one:
+   * a segment that is 89% shallow gives the last three tracks 8fr, 2fr and
+   * 0fr, and their labels — which are two lines of mono, not a sliver —
+   * overprint each other. The floor keeps every label legible and keeps it
+   * over its own bar; the bar is then very slightly wider than its share at
+   * the thin end, which is the cheaper of the two lies.
+   */
+  const shown = $derived(
+    // The band's ORIGINAL index rides along: it picks the swatch, and looking
+    // it back up off `bands` after the filter costs the null-narrowing.
+    (bands?.usable ? bands.bands : [])
+      .map((band, index) => ({ band, index }))
+      .filter(({ band }) => band.sharePct > 0),
+  );
   const strip = $derived(
-    bands?.usable ? bands.bands.map((b) => `${Math.max(b.sharePct, 0)}fr`).join(' ') : null,
+    shown.length
+      ? shown.map(({ band }) => `minmax(min-content, ${band.sharePct}fr)`).join(' ')
+      : null,
   );
 </script>
 
@@ -107,16 +128,16 @@
             <text x={PROFILE.w} y="148" text-anchor="end" class="sg-tick">{profile.endLabel}</text>
           </svg>
 
-          {#if bands?.usable && strip}
+          {#if strip}
             <p class="sg-bands-label">Distance by gradient band</p>
             <div class="sg-bars" style="grid-template-columns: {strip}">
-              {#each bands.bands as band, i (band.label)}
-                <div class="sg-bar b{i}"></div>
+              {#each shown as entry (entry.band.label)}
+                <div class="sg-bar b{entry.index}"></div>
               {/each}
             </div>
             <div class="sg-bar-labels" style="grid-template-columns: {strip}">
-              {#each bands.bands as band (band.label)}
-                <p>{band.label}<br />{band.sharePct}%</p>
+              {#each shown as entry (entry.band.label)}
+                <p>{entry.band.label}<br />{entry.band.sharePct}%</p>
               {/each}
             </div>
           {/if}
@@ -340,9 +361,18 @@
     text-transform: uppercase;
     color: var(--text-muted);
   }
+  /* `white-space: nowrap` is what makes the `min-content` track floor mean the
+     whole label: an en dash is a line-break opportunity, so without it the
+     minimum contribution of `4–8%` is two characters and the labels overprint
+     each other anyway. The `<br>` still breaks — a forced break always does. */
   .sg-bar-labels p {
     margin: 0;
     min-width: 0;
+    white-space: nowrap;
+    padding-right: 10px;
+  }
+  .sg-bar-labels p:last-child {
+    padding-right: 0;
   }
 
   .sg-note {

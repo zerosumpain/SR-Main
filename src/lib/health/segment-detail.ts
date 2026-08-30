@@ -44,7 +44,13 @@ import { rankEfforts } from '$lib/trails/segments/metrics';
 import { MIN_HR_COVERAGE } from '$lib/trails/segments/metrics';
 import type { GradientBands } from '$lib/trails/segments/gradient-bands';
 import { elevationProfile, type TrackPoint } from '$lib/trails/track';
-import { formatDistance, formatDuration, formatPace, formatSpeed } from '$lib/trails/format';
+import {
+  formatDistance,
+  formatDuration,
+  formatPace,
+  formatSpeed,
+  isPaceSport,
+} from '$lib/trails/format';
 import { capitalise, sharePhrase, spell } from './activity-detail';
 
 // ——— small words and dates ————————————————————————————————————————
@@ -74,6 +80,15 @@ export function shortDate(iso: string | null | undefined): string {
   const month = MONTHS_SHORT[Number(m) - 1];
   if (!month || !y || !d) return String(iso);
   return `${Number(d)} ${month} ${y}`;
+}
+
+/**
+ * The month band of a unix timestamp, for an axis whose domain is time rather
+ * than a list of efforts. UTC rather than local: the only caller labels a month
+ * boundary, and a month is the same month either side of an hour's offset.
+ */
+export function monthYearOf(unixS: number): string {
+  return monthYear(new Date(unixS * 1000).toISOString().slice(0, 10));
 }
 
 /** `SEP 2023` — the month band an axis label or a stat card wants. */
@@ -377,10 +392,14 @@ export function groundNote(
     const steep = bands.bands
       .filter((b) => b.fromPct >= 8)
       .reduce((acc, b) => acc + b.sharePct, 0);
+    // The SHARES are quoted, never `steepestPct`. A single 50 m chord across a
+    // dropped altitude sample reads as a 100% wall, and one bad sample would
+    // then own the sentence; the shares are averaged over the whole path and
+    // shrug it off.
     parts.push(
       steep > 0
-        ? `${steep}% of it is steeper than 8%, and the steepest chord on it reads ${bands.steepestPct.toFixed(1)}%.`
-        : `Nothing on it is steeper than 8% — the steepest chord reads ${bands.steepestPct.toFixed(1)}%.`,
+        ? `${steep}% of it is steeper than 8%.`
+        : 'Nothing on it is steeper than 8%.',
     );
   }
 
@@ -417,9 +436,9 @@ export function formTitle(form: SegmentForm): string[] {
   if (form.direction === 'unknown') return ['Not enough', 'efforts yet'];
   const gap = form.gapPct == null ? null : form.gapPct * 100;
   const short = gap == null || gap < 0.05 ? null : `Still ${gap.toFixed(1)}% short`;
-  if (form.direction === 'improving') return ['Gaining ground,', short ?? 'and the PB is recent'];
-  if (form.direction === 'slipping') return ['Losing ground,', short ?? 'but the PB is recent'];
-  return ['Holding the line,', short ?? 'and the PB is recent'];
+  if (form.direction === 'improving') return ['Gaining ground,', short ?? 'and holding the record'];
+  if (form.direction === 'slipping') return ['Losing ground,', short ?? 'but still holding it'];
+  return ['Holding the line,', short ?? 'and holding the record'];
 }
 
 export function formCards(segment: SegmentDetail, nowS: number): FormCard[] {
@@ -584,7 +603,7 @@ export interface ScatterGeometry {
   /** The rolling median, `<polyline points>`. Empty when there is no window. */
   medianLine: string;
   gridlines: Array<{ y: number; label: string }>;
-  pb: { x: number; y: number; label: string } | null;
+  pb: { x: number; y: number; label: string; anchor: 'start' | 'end' } | null;
   last: { x: number; y: number; label: string } | null;
   xLabels: Array<{ x: number; label: string; anchor: 'start' | 'middle' | 'end' }>;
 }
@@ -647,16 +666,25 @@ export function scatterGeometry(efforts: SegmentEffortRow[]): ScatterGeometry | 
     dots,
     medianLine: medians.filter((v) => v != null).length > 1 ? medianLine : '',
     gridlines,
+    // A PB set on the most recent effort sits at the right edge, where a label
+    // running rightwards is clipped by the viewport rather than by CSS. It
+    // flips instead.
     pb: {
       x: dots[pbIndex].x,
       y: dots[pbIndex].y,
       label: `PB ${formatDuration(rows[pbIndex].durationS)}`,
+      anchor: dots[pbIndex].x > SCATTER.w - 90 ? ('end' as const) : ('start' as const),
     },
-    last: {
-      x: dots[lastIndex].x,
-      y: dots[lastIndex].y,
-      label: `Last ${formatDuration(rows[lastIndex].durationS)}`,
-    },
+    // When the most recent effort IS the record, one dot would carry two
+    // labels stacked on each other. The PB label is the one that says more.
+    last:
+      pbIndex === lastIndex
+        ? null
+        : {
+            x: dots[lastIndex].x,
+            y: dots[lastIndex].y,
+            label: `Last ${formatDuration(rows[lastIndex].durationS)}`,
+          },
     xLabels: [
       { x: SCATTER.x0, label: monthYear(rows[0].startDateLocal), anchor: 'start' },
       {
@@ -880,7 +908,11 @@ export function boardNotes(efforts: SegmentEffortRow[]): BoardNote[] {
     notes.push({
       key: 'tie',
       label: 'How a tie reads',
-      text: `${capitalise(spell(count))} efforts share EF ${tiedEf}, so all of them hold the same rank and none holds the next one. The board's ranks are competition ranks, not row numbers.`,
+      text: `${capitalise(spell(count))} efforts share EF ${tiedEf}, so ${
+        count === 2
+          ? 'both hold that rank and neither holds the next one'
+          : 'they all hold that rank and none holds the next one'
+      }. The board's ranks are competition ranks, not row numbers.`,
     });
   }
 
@@ -895,7 +927,7 @@ export interface PbStepGeometry {
   /** `<path d>` using H and V only — the record can only ever fall. */
   path: string;
   dots: Array<{ x: number; y: number }>;
-  pb: { x: number; y: number; label: string };
+  pb: { x: number; y: number; label: string; anchor: 'start' | 'end' };
   /** The flat stretch since the record last moved. */
   flat: { x: number; y: number; label: string } | null;
   gridlines: Array<{ y: number; label: string }>;
@@ -962,7 +994,14 @@ export function pbStepGeometry(
     dots: steps
       .slice(1)
       .map((s) => ({ x: Number(xOf(s.t).toFixed(1)), y: Number(yOf(s.value).toFixed(1)) })),
-    pb: { x: pbX, y: pbY, label: formatDuration(lastStep.value) },
+    // Past four fifths of the axis the label would run off the padded viewBox,
+    // so it flips to the left of the dot rather than being clipped.
+    pb: {
+      x: pbX,
+      y: pbY,
+      label: formatDuration(lastStep.value),
+      anchor: pbX > PB_STEP.w * 0.8 ? ('end' as const) : ('start' as const),
+    },
     flat:
       flatMonths >= 1
         ? {
@@ -975,18 +1014,15 @@ export function pbStepGeometry(
       const y = PB_STEP.top + (k / 2) * (PB_STEP.bottom - PB_STEP.top);
       return { y, label: formatDuration(vLo + (k / 2) * (vHi - vLo)) };
     }),
+    // THE AXIS IS TIME, SO THE LABELS ARE THE TIME DOMAIN'S — not the first,
+    // middle and last effort's. It runs to now, and labelling the right edge
+    // with the last effort's month would put a date under a point that is
+    // months to its left, which is exactly the reading the flat bar exists to
+    // prevent.
     xLabels: [
-      { x: 0, label: monthYear(rows[0].startDateLocal), anchor: 'start' },
-      {
-        x: PB_STEP.w / 2,
-        label: monthYear(rows[Math.floor(rows.length / 2)].startDateLocal),
-        anchor: 'middle',
-      },
-      {
-        x: PB_STEP.w,
-        label: monthYear(rows[rows.length - 1].startDateLocal),
-        anchor: 'end',
-      },
+      { x: 0, label: monthYearOf(t0), anchor: 'start' },
+      { x: PB_STEP.w / 2, label: monthYearOf(t0 + tSpan / 2), anchor: 'middle' },
+      { x: PB_STEP.w, label: monthYearOf(t1), anchor: 'end' },
     ],
     steps: steps.length,
     months: Math.max(1, Math.round(tSpan / (30.44 * 86_400))),
@@ -1146,7 +1182,7 @@ export function attempt(
   const ledeParts: string[] = [];
   if (gapS === 0) {
     ledeParts.push(
-      `The best of the last ${recent.length} efforts IS the record, at ${formatDuration(pb.durationS)}.`,
+      `The best of the last ${recent.length} efforts is the record itself, at ${formatDuration(pb.durationS)}.`,
     );
   } else {
     ledeParts.push(
@@ -1208,8 +1244,11 @@ export function attempt(
       `${capitalise(sharePhrase(profile.frontGainPct))} the climbing is in the first half`,
     );
   }
+  const pbRate = isPaceSport(segment.activityType)
+    ? formatPace(pb.paceSPerKm)
+    : formatSpeed(pb.paceSPerKm);
   howParts.push(
-    `the PB held ${formatPace(pb.paceSPerKm)} over ${formatDistance(segment.distanceM)} at ${
+    `the PB held ${pbRate} over ${formatDistance(segment.distanceM)} at ${
       segment.gradientPct > 0 ? '+' : ''
     }${segment.gradientPct}%`,
   );
