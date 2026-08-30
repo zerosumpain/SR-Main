@@ -51,9 +51,21 @@ no database access of its own, so it cannot widen its own context, and a claim
 about anything absent from this block is by construction invented." A tool loop
 trades that structural guarantee for a runtime audit. Instead *code* decides
 what to fetch: `gatherPackInputs()` gains a lookup stage, `assemblePack()` stays
-pure, every card stays code-built, and cite-or-die keeps working. The reach is
-the same — roughly 174 of 196 registered tools carry no `destructive` flag —
-without spending the guarantee to get it.
+pure, every card stays code-built, and cite-or-die keeps working.
+
+**Correction to this decision as first written (2026-08-30, during M2).** It
+said the allow-list would be "any tool not flagged `destructive`", on the basis
+that this leaves ~174 of 196 tools available. That framing was wrong and is not
+what shipped. The `destructive` flag marks 21 of 188 registered tools and it is
+not a read/write split: `ha_call_service`, `workflow_run`, `build_create`,
+`blog_create`, `datastore_save`, `save_memory` and `schedule_*` all write and
+none of them carry it. `executeTool` applies no gate of its own on headless
+paths either. So the lookup stage uses a **positive allow-list of named
+probes**, and adds a second rule the original decision missed entirely:
+**nothing that returns text somebody else wrote** — no `fetch_url`, no
+`research_web_search`, no `mail_read`. A lookup result becomes prompt context,
+so a probe over an attacker-controlled page is a prompt injection with a card id
+attached. Every shipped probe reads first-party derived state.
 
 **D3 — Starvation drives the toolsmith.** The build driver stops being "232
 questions, 5 unmet needs" and becomes what daydream could not answer: citations
@@ -68,8 +80,8 @@ the retry budget and the `lastError` feedback that `backlog.ts` exists for.
 ## Phases
 
 - **M0** — absorb the scheduler *(shipped)*
-- **M1** — cap intake, fix the sort
-- **M2** — gap-fill the pack
+- **M1** — cap intake, fix the sort *(shipped)*
+- **M2** — gap-fill the pack *(shipped)*
 - **M3** — the starvation ledger
 - **M4** — close the loop: a shipped tool registers signals
 - **M5** — one dashboard

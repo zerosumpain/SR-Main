@@ -90,6 +90,14 @@ export const daydreamPonder: ActivityHandler = {
       // The fabrication meter. Always reported — a quiet audit is a claim.
       `audit dropped ${result.rejected.length}`,
     ];
+    // Only when the stage did something: a line reading "0 lookups" on every
+    // pulse is noise, but a probe budget spent for no cards is worth seeing.
+    if (result.lookups.asked > 0) {
+      bits.push(
+        `looked up ${result.lookups.asked} → ${result.lookups.cards} card(s)` +
+          (result.lookups.failed ? `, ${result.lookups.failed} failed` : ''),
+      );
+    }
     if (result.error) bits.push(`error: ${result.error}`);
 
     return {
