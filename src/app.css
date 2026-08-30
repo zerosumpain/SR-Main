@@ -69,9 +69,14 @@
 
   /* "Good" olive — the one hue that means a number is going the right way.
      Two values because it is used two ways: --good is text on paper, and
-     --good-on-dark is a FILL on the dark bands, where the paper value sinks. */
+     --good-on-dark is text AND fill on the dark bands, where the paper value
+     sinks into the ground the way #c4570a does.
+     The dark value is measured off the dashboard reference, where it is the
+     only olive used on #1a1008 (20 occurrences); the handoff's token table
+     names #6b7f4a, but every appearance of that shade in the reference set is
+     on PAPER, next to text this token never has to carry. */
   --good: #55663a;
-  --good-on-dark: #6b7f4a;
+  --good-on-dark: #8a9a5b;
 
   /* Counter-accent — deep petrol. Sits opposite burnt orange on the wheel at
      the same depth. Editorial counterpoints only: inline links in long-form,

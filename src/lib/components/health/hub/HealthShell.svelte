@@ -154,7 +154,7 @@
     align-items: center;
     gap: 18px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
   }
@@ -176,7 +176,7 @@
   .hs-kicker,
   .hs-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: rgba(237, 228, 212, 0.55);
@@ -184,7 +184,7 @@
 
   .hs-back {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: rgba(237, 228, 212, 0.55);
@@ -255,7 +255,7 @@
   }
   .hs-note {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     line-height: 1.7;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -270,7 +270,7 @@
     gap: 20px;
     flex-wrap: wrap;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
   }
