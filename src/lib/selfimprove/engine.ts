@@ -1,82 +1,48 @@
 // src/lib/selfimprove/engine.ts
 //
-// The self-improvement scheduler. On boot it ALWAYS seeds the system
-// collections + API catalogue (host-agnostic), then — only in production
-// (hostname !== 'homeserv', unless SELF_IMPROVE_ALLOW_DEV=1) — schedules the
-// nightly run at 03:30 Europe/London. The cron callback re-checks the kill
-// switch and the idle gate before delegating to `runImprovementNow`, and never
-// throws into croner.
+// Boot-time seeding for the self-improvement engine.
+//
+// ── What used to be here ────────────────────────────────────────────────────
+//
+// This file also owned a private `croner` job at 03:30 Europe/London, with its
+// own host gate, its own kill-switch read and its own idle gate. That made the
+// site run two idle-cycle schedulers side by side, and the second one had no
+// advantage left over the first: the heartbeat gives an activity per-row
+// cadence, an active-hours window that reschedules to the next opening instead
+// of locking out, quota attribution on every pulse, a failure budget and a
+// dashboard that already lists twenty-odd other jobs.
+//
+// The schedule now lives in `$lib/heartbeat/activities/daydream-improve.ts`,
+// which carries every one of those gates across unchanged. Nothing about the
+// RUN moved: `runImprovementNow` still writes one `improvement_runs` record a
+// night and both ledgers still read it.
+//
+// Seeding stays here because it is host-agnostic and must happen on every boot
+// — dev included — so the system collections and the API catalogue exist before
+// anything asks for them.
 
-import { Cron } from 'croner';
-import os from 'os';
-import { getSetting } from '$lib/server/models/settings';
 import { runSeeds } from './seed-apis';
-import { runImprovementNow, isUserActive } from './run';
-import { CRON_EXPR, CRON_TZ, SETTINGS_ENABLED_KEY, errMsg } from './types';
+import { errMsg } from './types';
 
-let cronJob: Cron | null = null;
-let started = false;
-
-/** Read-only accessor for diagnostics/tests. */
-export function isScheduled(): boolean {
-  return cronJob !== null;
-}
+let seeded = false;
 
 /**
- * Seed on every boot; schedule the nightly cron only in production. Idempotent
- * — safe to call once from hooks.server.ts.
+ * Seed the system collections + API catalogue. Idempotent and safe to call
+ * once from hooks.server.ts; failures are logged and never thrown, because a
+ * seed problem must not stop the server booting.
  */
-export function startSelfImprovement(): void {
-  if (started) return;
-  started = true;
+export function startSelfImprovementSeeds(): void {
+  if (seeded) return;
+  seeded = true;
 
-  // Seeds are host-agnostic (dev + prod). Fire-and-forget; failures logged.
   void runSeeds()
     .then((r) => {
       if (r.seeded > 0) console.log(`[selfimprove] seeded ${r.seeded} API(s), ${r.skipped} already present`);
     })
     .catch((err) => console.error('[selfimprove] boot seed failed:', errMsg(err)));
-
-  // Prod-only cron gate (inverse of the scraper's homeserv-only gate).
-  const host = os.hostname();
-  if (host === 'homeserv' && process.env.SELF_IMPROVE_ALLOW_DEV !== '1') {
-    console.log(
-      '[selfimprove] host is homeserv — nightly cron disabled (seeds still ran). Set SELF_IMPROVE_ALLOW_DEV=1 to enable locally.',
-    );
-    return;
-  }
-
-  try {
-    cronJob = new Cron(CRON_EXPR, { timezone: CRON_TZ }, () => {
-      void fireCron();
-    });
-    console.log(`[selfimprove] nightly self-improvement scheduled (${CRON_EXPR} ${CRON_TZ})`);
-  } catch (err) {
-    console.error('[selfimprove] failed to schedule cron:', errMsg(err));
-  }
 }
 
-/** Cron callback — kill switch + idle gate, then run. Never throws. */
-async function fireCron(): Promise<void> {
-  try {
-    const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
-    if (enabled === false) {
-      console.log('[selfimprove] kill switch is off — skipping nightly run');
-      return;
-    }
-    if (await isUserActive()) {
-      console.log('[selfimprove] user active in the last hour — skipping nightly run');
-      return;
-    }
-    await runImprovementNow({ trigger: 'cron' });
-  } catch (err) {
-    // The overlap guard throws if a run is already in progress — expected; log.
-    console.error('[selfimprove] cron fire skipped/failed:', errMsg(err));
-  }
-}
-
-export function stopSelfImprovement(): void {
-  if (cronJob) cronJob.stop();
-  cronJob = null;
-  started = false;
+/** Test hook — lets a suite re-arm the once-only guard. */
+export function resetSelfImprovementSeeds(): void {
+  seeded = false;
 }

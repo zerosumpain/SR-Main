@@ -49,9 +49,12 @@ export { DEFAULT_SELFIMPROVE_MODEL_ID as SELFIMPROVE_MODEL } from '$lib/constant
 /** app_settings kill-switch key. Default (unset/null) is treated as enabled. */
 export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';
 
-/** Nightly cron: 03:30 Europe/London. */
-export const CRON_EXPR = '30 3 * * *';
-export const CRON_TZ = 'Europe/London';
+// The nightly cron used to live here (`30 3 * * *`, Europe/London). The
+// schedule is now a heartbeat activity — see
+// `$lib/heartbeat/activities/daydream-improve.ts` for the window and
+// `./schedule.ts` for the accessor the dashboards read. The constants are gone
+// rather than kept as documentation: two of them were being printed on two
+// pages as the live schedule, which is exactly how a dashboard starts lying.
 
 /** Skip a nightly run if the user chatted within this window (idle gate). */
 export const IDLE_WINDOW_MS = 60 * 60 * 1000; // 60 min
@@ -64,12 +67,13 @@ export const IDLE_WINDOW_MS = 60 * 60 * 1000; // 60 min
  * never what limited output; WORK_CAPS below was. Raising these would have
  * changed nothing at all.
  *
- * **`maxWallMs` cannot go up.** The night is scheduled back to back — 03:30
+ * **`maxWallMs` cannot go up.** The night is scheduled back to back —
  * selfimprove, **04:00 model-routing**, 04:15 intel (see
- * `$lib/workflowdoctor/types.ts`). 25 minutes from 03:30 ends at 03:55, which
- * is the whole reason for the number: it is a slot boundary, not a guess. The
- * engine also waits on a 60-minute idle window, so a run can start late and
- * eat into that margin without anyone changing a cap.
+ * `$lib/workflowdoctor/types.ts`). The heartbeat window opens at 02:30 and
+ * closes at 03:55, so 25 minutes from the latest possible start still lands
+ * before 04:00: it is a slot boundary, not a guess. The engine also waits on a
+ * 60-minute idle window, so a run can start late and eat into that margin
+ * without anyone changing a cap.
  *
  * Wall clock is therefore the real constraint on how much work fits in a
  * night, and WORK_CAPS below are sized against it rather than against the call

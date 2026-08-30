@@ -103,16 +103,19 @@ startScheduledEngine().catch((err) => {
   console.error('[hooks.server] Scheduled engine failed to start:', err);
 });
 
-// Datastore TTL reaper + nightly self-improvement engine. The reaper sweeps
-// expired records hourly; the self-improvement engine seeds its system
-// collections on every boot and (in production only) schedules the nightly
-// idle-time run. Neither belongs in the jkai-builder sidecar process.
+// Datastore TTL reaper + self-improvement seeds. The reaper sweeps expired
+// records hourly; self-improvement seeds its system collections and API
+// catalogue on every boot. Its nightly RUN is no longer scheduled here — that
+// moved onto the heartbeat as the `daydream-improve` activity, so the site has
+// one idle-cycle scheduler instead of two. Neither belongs in the jkai-builder
+// sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
-import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
+import { startSelfImprovementSeeds } from '$lib/selfimprove/engine';
 import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
 // runaway schedules, proposes fixes. Structural sibling of selfimprove: same
 // prod-only cron gate, same leader-elected lane, so it boots the same way.
+// (selfimprove itself has moved onto the heartbeat; this one has not.)
 import { startWorkflowDoctor, stopWorkflowDoctor } from '$lib/workflowdoctor/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 import { startConnectorMonitor, stopConnectorMonitor } from '$lib/connectors/monitor';
@@ -129,7 +132,7 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
-  startSelfImprovement();
+  startSelfImprovementSeeds();
   // Monthly, advisory only — it writes a note and never touches the card.
   startVoiceDrift();
   startWorkflowDoctor();
@@ -192,7 +195,6 @@ async function gracefulShutdown() {
   stopGmailWatcher();
   unregisterGmailBridge();
   stopDatastoreReaper();
-  stopSelfImprovement();
   stopWorkflowDoctor();
   stopBriefingEngine();
   stopConnectorMonitor();

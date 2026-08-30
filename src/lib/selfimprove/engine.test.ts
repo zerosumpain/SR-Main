@@ -1,20 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mutable host name for the prod-gate test.
-const h = vi.hoisted(() => ({ host: 'vps-prod' }));
-
-vi.mock('os', () => ({ default: { hostname: () => h.host } }));
-
-// Croner: capture whether a cron was scheduled (must be `new`-able).
-const cronCtor = vi.hoisted(() =>
-  vi.fn(function MockCron() {
-    return { stop: () => {} };
-  }),
-);
-vi.mock('croner', () => ({ Cron: cronCtor }));
-
-// Isolate the pipeline + settings so startSelfImprovement only exercises seeds
-// + scheduling.
+// Isolate the pipeline + settings so the seed path is all that runs here. The
+// nightly SCHEDULE is no longer this file's job — it lives on the heartbeat as
+// `daydream-improve`, and is covered by that activity's own test.
 vi.mock('./run', () => ({
   runImprovementNow: vi.fn(),
   isUserActive: vi.fn().mockResolvedValue(false),
@@ -48,18 +36,12 @@ vi.mock('$lib/datastore', () => {
 
 import { DatastoreError, ensureCollection, getRecordByKey, upsertRecord } from '$lib/datastore';
 import { seedApiCatalog, ensureSystemCollections, SEEDED_APIS } from './seed-apis';
-import { startSelfImprovement, stopSelfImprovement, isScheduled } from './engine';
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getRecordByKey).mockReset();
   vi.mocked(ensureCollection).mockResolvedValue({ id: 'c1' } as never);
   vi.mocked(upsertRecord).mockResolvedValue({ id: 'r1' } as never);
-  cronCtor.mockImplementation(function MockCron() {
-    return { stop: () => {} };
-  });
-  h.host = 'vps-prod';
-  stopSelfImprovement();
 });
 
 describe('ensureSystemCollections', () => {
@@ -112,33 +94,5 @@ describe('seedApiCatalog — idempotency', () => {
     expect(res.skipped).toBe(1);
     expect(res.seeded).toBe(SEEDED_APIS.length - 1);
     expect(upsertRecord).toHaveBeenCalledTimes(SEEDED_APIS.length - 1);
-  });
-});
-
-describe('startSelfImprovement — prod host gate', () => {
-  it('does NOT schedule the cron on homeserv without the dev override', () => {
-    h.host = 'homeserv';
-    delete process.env.SELF_IMPROVE_ALLOW_DEV;
-    startSelfImprovement();
-    expect(cronCtor).not.toHaveBeenCalled();
-    expect(isScheduled()).toBe(false);
-  });
-
-  it('schedules the nightly cron on a production (non-homeserv) host', () => {
-    h.host = 'vps-prod';
-    startSelfImprovement();
-    expect(cronCtor).toHaveBeenCalledTimes(1);
-    expect(isScheduled()).toBe(true);
-    stopSelfImprovement();
-  });
-
-  it('schedules on homeserv when SELF_IMPROVE_ALLOW_DEV=1', () => {
-    h.host = 'homeserv';
-    process.env.SELF_IMPROVE_ALLOW_DEV = '1';
-    startSelfImprovement();
-    expect(cronCtor).toHaveBeenCalledTimes(1);
-    expect(isScheduled()).toBe(true);
-    stopSelfImprovement();
-    delete process.env.SELF_IMPROVE_ALLOW_DEV;
   });
 });
