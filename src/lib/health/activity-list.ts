@@ -35,6 +35,7 @@ import {
 import type { Highlight } from '$lib/trails/highlights';
 import { activityLabel } from '$lib/trails/format';
 import { localDay } from '$lib/trails/activity-meta';
+import { nullsSinkComparator } from '$lib/health/list-sort';
 
 export type ColumnKey =
   | 'date'
@@ -402,22 +403,15 @@ function byRecency(a: FilterableRow, b: FilterableRow): number {
  * One active sort at a time. Rows with no value in the sorted column sink to
  * the bottom in BOTH directions — reversing the sort must not promote the
  * blanks to the top, and it must never hide them.
+ *
+ * The rule itself lives in $lib/health/list-sort, because /health/segments
+ * needs the identical one over a different row type and two copies of "how
+ * this site sorts" is exactly how the two lists start disagreeing.
  */
 export function buildComparator(
   sort: SortState | null,
 ): (a: FilterableRow, b: FilterableRow) => number {
-  if (!sort) return byRecency;
-  const dir = sort.dir === 'asc' ? 1 : -1;
-  return (a, b) => {
-    const va = sortValue(a, sort.key);
-    const vb = sortValue(b, sort.key);
-    if (va == null && vb == null) return byRecency(a, b);
-    if (va == null) return 1;
-    if (vb == null) return -1;
-    const cmp =
-      typeof va === 'string' && typeof vb === 'string' ? va.localeCompare(vb) : Number(va) - Number(vb);
-    return cmp * dir || byRecency(a, b);
-  };
+  return nullsSinkComparator<FilterableRow, ColumnKey>(sort, sortValue, byRecency);
 }
 
 /**
