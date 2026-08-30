@@ -90,6 +90,22 @@ export async function probeEstate(): Promise<Record<string, HealthStatus>> {
     ['adguard', httpProbe(`http://${TAILNET.porkserv}:8080/`)],
     // Self-signed TLS — see the header note.
     ['portainer', tcpProbe(TAILNET.porkserv, 9443)],
+    // The resolver itself, not its admin UI. A healthy :8080 says nothing about
+    // whether the LAN can still resolve a name, and that is the failure with the
+    // bigger blast radius. TCP :53 rather than a real query: node has no DNS
+    // primitive that targets one server without reconfiguring the process
+    // resolver, and a listening socket is the honest limit of what this proves.
+    ['adguard-dns', tcpProbe(TAILNET.porkserv, 53)],
+    // The host vitals agents. Probed like any other service so that "the thing
+    // that watches the boxes" cannot itself fail unwatched.
+    ['homeserv-vitals', httpProbe(`http://${TAILNET.homeserv}:9101/vitals`)],
+    ['porkserv-vitals', httpProbe(`http://${TAILNET.porkserv}:9101/vitals`)],
+    // ttyd, and sshd on both boxes. sshd is the last thing to stop answering on
+    // a machine that is still alive at all, so a host with everything else dark
+    // but :22 open is a service problem; one with :22 dark too is a box problem.
+    ['ttyd', httpProbe('http://homeserv.tail668b8c.ts.net:3010/')],
+    ['homeserv-ssh', tcpProbe(TAILNET.homeserv, 22)],
+    ['porkserv-ssh', tcpProbe(TAILNET.porkserv, 22)],
     // Loopback on the VPS ONLY. Probing 127.0.0.1:3110 from anywhere else can
     // never succeed, so it would paint a permanently-red tile for a service
     // that is fine — the same false-alarm shape as the old gateway probe that read

@@ -3,6 +3,7 @@
   import { getContext } from 'svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  import HostStatusStrip from '$lib/components/admin/HostStatusStrip.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -28,6 +29,12 @@
     title="Strange Ramblings Admin"
     sub="At-a-glance status of every connected system. Drill into any tile for the full controls."
   />
+
+  <!-- The two boxes on the LAN. Above the stat strip deliberately: everything
+       below this line is a number the site computed about itself, and all of it
+       is meaningless if homeserv has fallen over. Fetches after mount, so it
+       costs the console's load time nothing. -->
+  <HostStatusStrip />
 
   <!-- Top stat strip -->
   <div class="stat-grid">

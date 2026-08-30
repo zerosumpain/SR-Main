@@ -278,6 +278,18 @@ export const ENDPOINTS: EstateEndpoint[] = [
     probeId: 'home-assistant',
   },
   {
+    id: 'hs-vitals',
+    label: 'Vitals agent',
+    url: `http://${TAILNET.homeserv}:9101/vitals`,
+    host: 'homeserv',
+    exposure: 'tailnet',
+    auth: 'none',
+    note: 'Read-only host vitals (uptime, load, memory, swap, disk, temperature) for the /admin status strip. This is the box where memory pressure, not service failure, is what actually goes wrong.',
+    configuredIn: '~/bin/vitals-agent.mjs · systemd --user homelab-vitals',
+    probeId: 'homeserv-vitals',
+    exposureNote: 'Binds 0.0.0.0 and gates in the handler to 100.64.0.0/10 + loopback, rather than binding to its own 100.x address: that bind loses a boot race against tailscaled and then restart-loops in silence. Serves load averages and nothing sensitive.',
+  },
+  {
     id: 'hs-ttyd',
     label: 'ttyd web terminal',
     url: 'http://homeserv.tail668b8c.ts.net:3010/',
@@ -286,6 +298,7 @@ export const ENDPOINTS: EstateEndpoint[] = [
     auth: 'none',
     note: 'Browser shell on homeserv. Bound to 0.0.0.0, so anything on the LAN can open a terminal.',
     configuredIn: 'ttyd (systemd)',
+    probeId: 'ttyd',
     exposureNote: 'Not internet-facing, but unauthenticated on the LAN — the weakest link inside the house.',
   },
   {
@@ -327,6 +340,7 @@ export const ENDPOINTS: EstateEndpoint[] = [
     auth: 'ssh-key',
     note: 'Control node for the estate. Not port-forwarded — reachable from the LAN and the tailnet only.',
     configuredIn: '/etc/ssh/sshd_config',
+    probeId: 'homeserv-ssh',
   },
 
   // -------------------------------------------------------------- porkserv
@@ -350,6 +364,7 @@ export const ENDPOINTS: EstateEndpoint[] = [
     auth: 'none',
     note: 'The resolver itself. If this stops, LAN name resolution stops with it — a bigger blast radius than the UI suggests.',
     configuredIn: '~/porkserv/ (Ansible) · docker adguardhome',
+    probeId: 'adguard-dns',
   },
   {
     id: 'pork-portainer',
@@ -373,6 +388,18 @@ export const ENDPOINTS: EstateEndpoint[] = [
     configuredIn: '~/porkserv/runner.yml',
   },
   {
+    id: 'pork-vitals',
+    label: 'Vitals agent',
+    url: `http://${TAILNET.porkserv}:9101/vitals`,
+    host: 'porkserv',
+    exposure: 'tailnet',
+    auth: 'none',
+    note: 'Read-only host vitals for the /admin status strip. The same script homeserv runs, copied here by Ansible so there is one source of truth for both boxes.',
+    configuredIn: '~/porkserv/vitals.yml · /usr/local/bin/vitals-agent.mjs',
+    probeId: 'porkserv-vitals',
+    exposureNote: 'Binds 0.0.0.0 and gates in the handler to 100.64.0.0/10 + loopback — see the homeserv entry. Runs under DynamicUser with ProtectSystem=strict; it can read /proc and write nothing.',
+  },
+  {
     id: 'pork-ssh',
     label: 'SSH',
     address: 'porkserv.Home:22',
@@ -381,6 +408,7 @@ export const ENDPOINTS: EstateEndpoint[] = [
     auth: 'ssh-key',
     note: 'Passwordless sudo is live, so SSH access as john is root. Use the name — the LAN address is DHCP.',
     configuredIn: '~/.ssh/config · /etc/sudoers.d/john-nopasswd',
+    probeId: 'porkserv-ssh',
   },
 
   // -------------------------------------------------------------- external
