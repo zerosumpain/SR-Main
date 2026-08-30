@@ -1,4 +1,4 @@
-// src/lib/selfimprove/schedule.ts
+// src/lib/heartbeat/activity-schedule.ts
 //
 // What the two improvement dashboards should say about when the engine runs.
 //
@@ -12,11 +12,18 @@
 // constant here can drift from it within one click; the declared defaults on
 // the handler are the fallback for a cold database that has not been seeded
 // yet, never the answer when a real row exists.
+//
+// It lives in `heartbeat/` and not beside the engine it describes because it
+// reads a heartbeat row and a heartbeat handler's defaults. Putting it in
+// `selfimprove/` closed a `heartbeat <-> selfimprove` import cycle — the
+// activity imports `runImprovementNow`, so pointing anything back the other way
+// makes the two modules inseparable. `check-module-boundaries` caught it; the
+// baseline may only shrink, so the fix is the move, not an exemption.
 
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
-import { daydreamImprove } from '$lib/heartbeat/activities/daydream-improve';
+import { daydreamImprove } from './activities/daydream-improve';
 
 export interface ImprovementSchedule {
   /** 'HH:MM Zone' — the moment the window opens. */

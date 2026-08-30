@@ -8,7 +8,7 @@ import {
 import { getSetting } from '$lib/server/models/settings';
 import { getImprovementStatus } from '$lib/selfimprove/run';
 import { COLLECTIONS, SETTINGS_ENABLED_KEY } from '$lib/selfimprove/types';
-import { improvementSchedule } from '$lib/selfimprove/schedule';
+import { improvementSchedule } from '$lib/heartbeat/activity-schedule';
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';

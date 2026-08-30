@@ -12,7 +12,7 @@ import { buildStories, summariseStories } from '$lib/selfimprove/narrative';
 import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { CallEfficiency } from '$lib/selfimprove/call-efficiency';
 import { COLLECTIONS } from '$lib/selfimprove/types';
-import { improvementSchedule } from '$lib/selfimprove/schedule';
+import { improvementSchedule } from '$lib/heartbeat/activity-schedule';
 import type { ImprovementRunData, QuestionInsights, ToolAttemptData } from '$lib/selfimprove/types';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only). Server load reads

@@ -138,6 +138,17 @@ collide. The active-hours lockout that silently killed `daydream-bank` and
 to the next opening, not to `now + cadence`.
 *Reversible:* the row is editable from the heartbeat admin UI.
 
+**DL-6 — The schedule accessor lives in `heartbeat/`, not `selfimprove/`.**
+First written as `$lib/selfimprove/schedule.ts`, which closed a
+`heartbeat <-> selfimprove` cycle: the activity imports `runImprovementNow`, so
+anything pointing back the other way makes the two modules inseparable.
+`check-module-boundaries` failed CI on it — that pair is not in the baseline and
+the baseline may only shrink, so the fix is the move, not an exemption. It reads
+a heartbeat row and a heartbeat handler's defaults, so `heartbeat/` was always
+its right home. **Worth knowing: `gate-remote.sh` runs svelte-check, vitest and
+the build, but NOT the five lint gates** — a clean local gate does not mean the
+boundary linter passed.
+
 **DL-4 — The dashboards read the live row, not a constant.**
 `CRON_EXPR` + a hardcoded `'03:30 Europe/London'` was printed on two pages as
 the live schedule; after the move it would have been a confident lie, and a
