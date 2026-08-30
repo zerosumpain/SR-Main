@@ -1,6 +1,8 @@
 // tests/lib/health/analytics/acwr.test.ts
 import { describe, it, expect } from 'vitest';
-import { computeACWR, acwrSeries } from '$lib/health/analytics/acwr';
+import { computeACWR, acwrSeries, preferredACWR } from '$lib/health/analytics/acwr';
+import type { MetricResult } from '$lib/health/analytics/types';
+import type { ACWRResult } from '$lib/health/analytics/acwr';
 
 describe('computeACWR', () => {
   it('returns ratio ~1 for steady load', () => {
@@ -50,5 +52,53 @@ describe('acwrSeries', () => {
 
   it('returns nothing for an empty load history', () => {
     expect(acwrSeries([])).toEqual([]);
+  });
+});
+
+describe('preferredACWR — which ratio the page shows', () => {
+  const ZERO: ACWRResult = { acuteEWMA: 0, chronicEWMA: 0, ratio: 0, zone: 'detraining' };
+  const result = (
+    ratio: number,
+    sufficiency: MetricResult<ACWRResult>['sufficiency'],
+    sampleSize: number,
+  ): MetricResult<ACWRResult> => ({
+    value: ratio === 0 ? ZERO : { acuteEWMA: ratio * 10, chronicEWMA: 10, ratio, zone: 'optimal' },
+    sufficiency,
+    asOf: '2026-08-30',
+    sampleSize,
+  });
+
+  it('leads on TRIMP when TRIMP is readable', () => {
+    const trimp = result(1.05, 'ok', 40);
+    const strain = result(0.9, 'ok', 40);
+    expect(preferredACWR(trimp, strain)).toBe(trimp);
+  });
+
+  it('falls back to strain while the TRIMP history is still filling', () => {
+    // The bug this closes: `computeACWR` hands back a fully populated ZERO
+    // struct under fourteen load days, and physio-service builds a TRIMP result
+    // from ONE. `trimp ?? strain` therefore preferred a confident 0.00
+    // "detraining" for the whole of the fill-in period the fallback exists for.
+    const trimp = result(0, 'insufficient', 6);
+    const strain = result(1.12, 'ok', 40);
+    expect(preferredACWR(trimp, strain)).toBe(strain);
+  });
+
+  it('takes a PARTIAL TRIMP read over strain — partial is still a real ratio', () => {
+    const trimp = result(0.94, 'partial', 20);
+    expect(preferredACWR(trimp, result(1.12, 'ok', 40))).toBe(trimp);
+  });
+
+  it('keeps the insufficient TRIMP result when strain is missing or thin', () => {
+    const trimp = result(0, 'insufficient', 6);
+    expect(preferredACWR(trimp, null)).toBe(trimp);
+    expect(preferredACWR(trimp, result(0, 'insufficient', 3))).toBe(trimp);
+  });
+
+  it('reaches for strain when there is no TRIMP result at all, and null for neither', () => {
+    const strain = result(1.12, 'ok', 40);
+    expect(preferredACWR(null, strain)).toBe(strain);
+    expect(preferredACWR(null, null)).toBeNull();
+    expect(preferredACWR(undefined, undefined)).toBeNull();
   });
 });

@@ -138,8 +138,42 @@
   const rhrSeries = $derived(present(series.map((d) => d.rhr)));
   const sleptSeries = $derived(present(series.map((d) => d.slept)));
 
-  /** The last seven completed-or-current weeks, kilometres, oldest first. */
-  const weekKms = $derived((dashboard?.weeks ?? []).slice(-7).map((w) => w.totalDistanceM / 1000));
+  // ——— the week-volume tile ————————————————————————————————————
+  //
+  // ONE week, in the headline, the foot and the bars. `volume` is measured over
+  // COMPLETE weeks only (`weeklyVolumeSummary` drops any week whose Sunday has
+  // not passed); `dashboard.weeks.at(-1)` is a different week entirely — the
+  // bucket the most recent workout fell in, which for most of the week is the
+  // current, unfinished one. Reading the headline off the first and the session
+  // count, the duration and the low-run tag off the second put two weeks in one
+  // tile, and compared a part-week's monotonically-growing distance against full
+  // weeks, so the "Nwk low" tag fired on almost every day of almost every week.
+  //
+  // Which weeks are complete is NOT "all but the last": `weeklyVolume` anchors
+  // its buckets on the last workout's Monday, not on today's, so the final
+  // bucket is a past complete week whenever nothing has been logged this week.
+  // `volume.weekStart` is the only thing here that knows the calendar, so the
+  // whole tile is derived from it.
+  const weekBuckets = $derived(dashboard?.weeks ?? []);
+  const headlineIndex = $derived(
+    volume ? weekBuckets.findIndex((w) => w.weekStart === volume.weekStart) : -1,
+  );
+  /** The week the headline names, or null when no week has completed. */
+  const headlineWeek = $derived(headlineIndex >= 0 ? weekBuckets[headlineIndex] : null);
+  /**
+   * Exclusive upper bound for that week's workouts: the NEXT bucket's Monday.
+   * The buckets are contiguous, so this needs no date arithmetic at all and
+   * cannot drift across a BST boundary the way `weekStart + 7 days` can.
+   */
+  const headlineWeekEnd = $derived(
+    headlineIndex >= 0 ? (weekBuckets[headlineIndex + 1]?.weekStart ?? null) : null,
+  );
+  /** The last seven COMPLETE weeks, kilometres, oldest first. */
+  const weekKms = $derived(
+    headlineIndex >= 0
+      ? weekBuckets.slice(0, headlineIndex + 1).slice(-7).map((w) => w.totalDistanceM / 1000)
+      : [],
+  );
 
   const tiles = $derived.by((): Tile[] => {
     const out: Tile[] = [];
@@ -206,20 +240,26 @@
           : 'no sleep recorded',
     });
 
-    const lastWeek = dashboard?.weeks?.[dashboard.weeks.length - 1] ?? null;
-    const sessions = lastWeek
-      ? (dashboard?.workouts ?? []).filter((w) => w.day >= lastWeek.weekStart).length
+    // Sessions and duration for the SAME week the headline names, bounded at
+    // both ends — the old open-ended `w.day >= weekStart` swept in every
+    // workout since, which for the last complete week is the current one's.
+    const sessions = headlineWeek
+      ? (dashboard?.workouts ?? []).filter(
+          (w) =>
+            w.day >= headlineWeek.weekStart &&
+            (headlineWeekEnd == null || w.day < headlineWeekEnd),
+        ).length
       : 0;
     const lowestOfRun = weekKms.length > 1 && weekKms[weekKms.length - 1] === Math.min(...weekKms);
     out.push({
       label: 'Week volume',
-      value: volume ? fixed(volume.weekKm, 1) : lastWeek ? fixed(lastWeek.totalDistanceM / 1000, 1) : '—',
+      value: volume ? fixed(volume.weekKm, 1) : '—',
       unit: 'km',
       spark: [],
       weekBars: weekKms,
       good: !!volume && volume.weekKm >= volume.medianKm,
-      foot: lastWeek
-        ? `${sessions} session${sessions === 1 ? '' : 's'} · ${duration(lastWeek.totalS)}${lowestOfRun ? ` · ${weekKms.length}wk low` : ''}`
+      foot: headlineWeek
+        ? `${sessions} session${sessions === 1 ? '' : 's'} · ${duration(headlineWeek.totalS)}${lowestOfRun ? ` · ${weekKms.length}wk low` : ''}`
         : 'no completed week',
     });
 

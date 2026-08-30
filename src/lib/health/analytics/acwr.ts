@@ -57,6 +57,28 @@ export function computeACWR(days: LoadDay[]): MetricResult<ACWRResult> {
 }
 
 /**
+ * Which of the two ratios to show, when both exist.
+ *
+ * The TRIMP-based ratio is the honest one and the Whoop-strain ratio is the
+ * interim while the load history fills — but `computeACWR` returns a fully
+ * populated ZERO struct with `sufficiency: 'insufficient'` under fourteen days,
+ * and the physio service builds a TRIMP result the moment there is ONE load
+ * day. A plain `trimp ?? strain` therefore picks a confident 0.00 "detraining"
+ * over a perfectly readable strain ratio for the whole of the fill-in period the
+ * fallback exists to cover. Preference, then, is on USABILITY first.
+ */
+export function preferredACWR(
+  trimp: MetricResult<ACWRResult> | null | undefined,
+  strain: MetricResult<ACWRResult> | null | undefined,
+): MetricResult<ACWRResult> | null {
+  if (trimp && trimp.sufficiency !== 'insufficient') return trimp;
+  if (strain && strain.sufficiency !== 'insufficient') return strain;
+  // Neither is readable. Still hand back the TRIMP one when it exists so the
+  // panels that print "needs fourteen days" get a sample size to quote.
+  return trimp ?? strain ?? null;
+}
+
+/**
  * Exponentially weighted moving average.
  * lambda = 1 - exp(ln(0.5) / halfLifeDays) gives the weight assigned
  * to the current observation (half-life in days).

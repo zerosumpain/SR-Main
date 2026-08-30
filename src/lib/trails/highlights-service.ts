@@ -41,6 +41,18 @@ export interface HighlightCorpus {
 const TTL_MS = 5 * 60 * 1000;
 let cache: { key: string; value: HighlightCorpus } | null = null;
 
+/**
+ * A cheap key that moves whenever the activity/effort corpus really does.
+ *
+ * Exported because it is not highlight-specific: `segments-service` memoises
+ * its two unfiltered passes over `activity_segment_efforts` on the same key, so
+ * one ingest invalidates every derived read of the corpus at once rather than
+ * each cache inventing its own idea of "still current".
+ */
+export async function corpusFingerprint(): Promise<string> {
+  return fingerprint();
+}
+
 async function fingerprint(): Promise<string> {
   const [row] = await db
     .select({

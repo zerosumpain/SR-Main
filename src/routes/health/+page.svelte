@@ -61,8 +61,6 @@
   const showRecovery = $derived(
     !!owner && (usable(owner.recoveryDebt) || usable(owner.autonomic) || usable(owner.sleepRegularity) || usable(owner.circadian)),
   );
-  const showGround = $derived((owner?.outings?.length ?? 0) > 0);
-  const showCorrelations = $derived((owner?.correlations?.length ?? 0) > 0);
   const showFeatured = $derived((data.featuredActivities?.length ?? 0) > 0);
   const showFitness = $derived(
     usable(data.vo2max) ||
@@ -83,8 +81,6 @@
     if (showDirection) keys.push('direction');
     if (showLoad) keys.push('load');
     if (showRecovery) keys.push('recovery');
-    if (showGround) keys.push('ground');
-    if (showCorrelations) keys.push('correlations');
     if (showFeatured) keys.push('featured');
     return keys;
   });
