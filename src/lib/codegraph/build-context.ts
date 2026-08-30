@@ -170,6 +170,14 @@ export function planBuildQuery(
    * the ranking it feeds stays testable without a database.
    */
   namedFiles: string[] = [],
+  /**
+   * Paths the graph actually holds a live node for, when the caller has checked.
+   *
+   * `null` means "not checked" and preserves the old behaviour. Supplying it is
+   * what stops the file lane seeding on a path that does not exist — see the
+   * filter below.
+   */
+  knownPaths: ReadonlySet<string> | null = null,
 ): { query: string; reason: string; fingerprints: string[] } | null {
   // 1. The sharpest key: what the gate just said.
   const fps = fingerprintsIn(input.previousEvaluation ?? '', 'npm run gate');
@@ -185,7 +193,28 @@ export function planBuildQuery(
     ...namedFiles,
   ].filter(Boolean);
 
-  const unique = [...new Set(files)];
+  /*
+   * ONLY PATHS THE GRAPH ACTUALLY KNOWS.
+   *
+   * `pathsInText` is a regex over the task text and verifies nothing, so a task
+   * naming a file it is about to CREATE — the ordinary shape of "add
+   * scripts/foo.mjs" — planned a file query for a path with no node behind it.
+   * `resolveSeed` then produced an empty seed, and `pickLessons` answers an
+   * empty seed with the N most recently observed lessons in the corpus.
+   *
+   * Measured on build 4cda9a8d, seeded `file:scripts/codegraph-stats.mjs`: four
+   * lessons served, about the Landgrab territory game, the jkai model picker,
+   * the nightly conflation detector and pgvector neighbour ranking. Zero had
+   * anything to do with the task, and it was still logged as `served`.
+   *
+   * Declining here is what lets the TOPIC lane below run instead — and for that
+   * same build the topic lane returned `project_codegraph`, which carries the
+   * rule the task actually needed (a new file under `scripts/` needs its own
+   * rsync line in `ci-release.sh` or it is silently absent in production).
+   * So this is not merely "serve less"; it is "reach the lane that had the
+   * answer", which the file lane was shadowing by always claiming the query.
+   */
+  const unique = [...new Set(files)].filter((p) => !knownPaths || knownPaths.has(p));
   if (unique.length) {
     const q = cgqlForFiles(unique, { hops: 1 });
     // No fingerprints: a file-set serve cannot be resolved by "did the error

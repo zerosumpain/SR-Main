@@ -221,3 +221,55 @@ describe('the topic fallback', () => {
     }
   });
 });
+
+/*
+ * The file lane used to claim every query whose prompt happened to contain a
+ * path-shaped string, whether or not the graph held anything for it — and an
+ * unresolvable seed was answered with the newest lessons in the corpus.
+ *
+ * Measured on build 4cda9a8d, seeded `file:scripts/codegraph-stats.mjs` (a file
+ * the task was about to CREATE): four lessons served, about the Landgrab
+ * territory game, the jkai model picker, the nightly conflation detector and
+ * pgvector neighbour ranking. None related to the task; all logged as `served`.
+ */
+describe('the file lane declines paths the graph does not know', () => {
+  const task = {
+    prompt: 'Add a new script scripts/codegraph-stats.mjs that prints the corpus counts from the database.',
+    previousEvaluation: null,
+    previousActions: null,
+  };
+
+  it('still uses the file lane when the path IS known', () => {
+    const planned = planBuildQuery(task, [], new Set(['scripts/codegraph-stats.mjs']));
+    expect(planned?.query).toContain('file:scripts/codegraph-stats.mjs');
+  });
+
+  it('falls through to the topic lane when the path is NOT known', () => {
+    // Not merely "serves less" — the topic lane is the one that had the answer.
+    // For this very build it returned project_codegraph, which carries the rule
+    // the task needed: a new file under scripts/ needs its own rsync line in
+    // ci-release.sh or it is silently absent in production.
+    const planned = planBuildQuery(task, [], new Set());
+    expect(planned?.query.startsWith('file:')).toBe(false);
+    expect(planned?.query).toContain('topic:');
+  });
+
+  it('preserves the old behaviour when the caller has not checked', () => {
+    // null means "not checked", so nothing changes for callers that cannot look
+    // paths up — the planner stays pure and database-free.
+    const planned = planBuildQuery(task, [], null);
+    expect(planned?.query).toContain('file:scripts/codegraph-stats.mjs');
+  });
+
+  it('never lets an unknown path shadow a real gate failure', () => {
+    // The fingerprint lane is checked first and must stay first: it is the only
+    // key that can produce attributable evidence.
+    const planned = planBuildQuery(
+      { ...task, previousEvaluation: 'FAIL x.test.ts\nAssertionError: expected 1 to be 2 // Object.is equality' },
+      [],
+      new Set(),
+    );
+    expect(planned?.query).toContain('fingerprint:');
+    expect(planned?.fingerprints.length).toBeGreaterThan(0);
+  });
+});
