@@ -19,10 +19,10 @@ import {
   listSegments,
   type SegmentListRow,
 } from '$lib/trails/segments-service';
-import { getSegmentChains, getHighlightCorpus } from '$lib/trails/highlights-service';
-import { listActivities } from '$lib/trails/activities-service';
+import { getSegmentChains } from '$lib/trails/highlights-service';
 import { getDailyPlan } from '$lib/trails/coach-service';
-import { acwrSeries } from '$lib/health/analytics/acwr';
+import { acwrSeries, preferredACWR } from '$lib/health/analytics/acwr';
+import { localToday } from '$lib/health/day';
 import { computeForecast } from '$lib/health/analytics/forecast';
 import { GETTABLE_GAP_PCT } from '$lib/trails/segments/form';
 import { computeMoves } from '$lib/health/moves';
@@ -122,31 +122,6 @@ function summariseSegmentForms(rows: SegmentListRow[]) {
   };
 }
 
-/** The five most recent outings, each with the single best thing about it. */
-async function recentOutings() {
-  const [list, corpus] = await Promise.all([
-    // Five rows, each with a thumbnail — the one place the polyline earns its
-    // kilobyte.
-    listActivities({ limit: 5, withPolyline: true }),
-    getHighlightCorpus(),
-  ]);
-  return list.rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    activityType: row.activityType,
-    startDate: row.startDate,
-    startDateLocal: row.startDateLocal,
-    distanceM: row.distanceM,
-    durationS: row.durationS,
-    elevationGainM: row.elevationGainM,
-    avgHeartrate: row.avgHeartrate,
-    temperatureC: row.temperatureC,
-    segmentCount: row.segmentCount,
-    polyline: row.polyline,
-    highlight: corpus.byActivity.get(row.id)?.[0] ?? null,
-  }));
-}
-
 export const load: PageServerLoad = async (event) => {
   const owner = await isOwnerRequest(event);
 
@@ -177,7 +152,10 @@ export const load: PageServerLoad = async (event) => {
     stats,
   ] = await Promise.all([
     safe('series-30d', getHealthSeries30d()),
-    safe('featured-activities', getFeaturedActivities()),
+    // Anonymous only. The hand-picked outings are the public landing's closing
+    // chapter and nothing the owner dashboard renders reads them, so an owner
+    // request paid for the query and shipped the rows for nothing.
+    owner ? Promise.resolve(null) : safe('featured-activities', getFeaturedActivities()),
     safe('readiness', getReadiness()),
     safe('training-load', getTrainingLoad()),
     safe('monotony', getMonotony()),
@@ -244,13 +222,12 @@ export const load: PageServerLoad = async (event) => {
   // request. One extra round trip in sequence is cheaper than doing the
   // expensive half of this page twice.
   const dashboard = await safe('trails-dashboard', getTrailsDashboard());
-  const [segments, chains, outings, coach, segmentRows] = await Promise.all([
+  const [segments, chains, coach, segmentRows] = await Promise.all([
     safe('segment-highlights', getSegmentHighlights()),
     // Memoised on the same fingerprint as the highlight corpus, so the hub and
     // the segments explorer share one computation rather than each reloading
     // 1,136 activities and 6,317 efforts.
     safe('segment-chains', getSegmentChains(5)),
-    safe('recent-outings', recentOutings()),
     safe(
       'coach',
       getDailyPlan({
@@ -268,9 +245,6 @@ export const load: PageServerLoad = async (event) => {
     // and the effort read is three columns, the same one the explorer makes.
     safe('segment-forms', listSegments({ limit: SEGMENT_LIMIT })),
   ]);
-  const correlations = shared.provenance.correlationsAreIllustrative
-    ? []
-    : (data?.correlations ?? []);
 
   // ——— the instrument deck ————————————————————————————————————————
   //
@@ -279,10 +253,17 @@ export const load: PageServerLoad = async (event) => {
   // ACWR and efficiency were not, and neither needs a query of its own: the
   // dashboard has already computed both. The TRIMP-based ratio is the honest
   // one — the Whoop-strain ratio is an interim while the load history fills —
-  // so it leads and strain is the fallback.
-  const acwr = dashboard?.load.trimpAcwr ?? dashboard?.load.strainAcwr ?? null;
+  // so it leads and strain is the fallback, but only when TRIMP is actually
+  // READABLE: `preferredACWR` exists because `trimp ?? strain` preferred an
+  // insufficient zero struct over a usable strain ratio for exactly the fill-in
+  // period the fallback is for.
+  const acwr = preferredACWR(dashboard?.load.trimpAcwr, dashboard?.load.strainAcwr);
   const efficiency = dashboard?.efficiency ?? null;
-  const today = new Date().toISOString().slice(0, 10);
+  // Europe/London, not UTC. Every bucket this is compared against — the week
+  // Mondays, `startDateLocal`, the coach's own plan key — is a LOCAL day, so a
+  // UTC `today` ran the volume summary, the tripwires, the experiments and the
+  // verdict a day behind for the hour after midnight BST.
+  const today = localToday();
   const segmentForms = segmentRows ? summariseSegmentForms(segmentRows.rows) : null;
   if (segmentRows && segmentRows.rows.length >= SEGMENT_LIMIT) {
     console.warn(
@@ -379,11 +360,18 @@ export const load: PageServerLoad = async (event) => {
   return {
     mode: 'owner' as const,
     ...shared,
+    // Four fields the owner dashboard has no reader for, dropped here rather
+    // than shipped and ignored. `recentOutings()` was the expensive one: five
+    // rows through `listActivities({ withPolyline: true })` plus the highlight
+    // corpus, per request, for a route card no section on this page draws.
+    // `correlations` and `narrative` cost no query — they arrive on `shared`
+    // for the anonymous landing, which still renders both — but they are the
+    // landing's furniture, so the owner payload does not carry them.
+    narrative: null,
     // Whoop workouts back the Breakdown cards. Owner-only: each one carries a
     // sport and a clock, which is a routine, which is the thing the public
     // landing does not get.
     workouts: data?.workouts ?? [],
-    correlations,
     monotony,
     recoveryDebt,
     autonomic,
@@ -392,7 +380,6 @@ export const load: PageServerLoad = async (event) => {
     dashboard,
     segments,
     chains: chains ?? [],
-    outings: outings ?? [],
     coach,
     // The two instrument-deck panels this payload did not already carry.
     acwr,
