@@ -62,6 +62,7 @@
   --accent-tint-20: rgba(196, 87, 10, 0.2);
   --accent-tint-25: rgba(196, 87, 10, 0.25);
   --accent-tint-35: rgba(196, 87, 10, 0.35);
+  --accent-tint-50: rgba(196, 87, 10, 0.5);
   /* The accent, lightened for use ON DARK. --accent at #c4570a scores 2.6:1 on
      the #1a1008 full-bleed sections the health hub uses, which is under the
      floor; this is its partner, not a second accent. Paper keeps --accent. */
@@ -77,6 +78,8 @@
      on PAPER, next to text this token never has to carry. */
   --good: #55663a;
   --good-on-dark: #8a9a5b;
+  /* The olive as a hairline: the rhythm badge's border on paper. */
+  --good-line: rgba(107, 127, 74, 0.6);
 
   /* Counter-accent — deep petrol. Sits opposite burnt orange on the wheel at
      the same depth. Editorial counterpoints only: inline links in long-form,

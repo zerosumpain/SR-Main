@@ -25,7 +25,7 @@ import {
   type ActivityFilters,
   type AnchorRect,
   type FilterableRow,
-} from './ActivityTable.svelte';
+} from './activity-list';
 
 function highlight(partial: Partial<Highlight> = {}): Highlight {
   return {
