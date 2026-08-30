@@ -122,6 +122,22 @@
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-sans: var(--font-body);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Reading face — the self-hosted Selawik stack, with real Segoe UI behind it.
+   *
+   * Defined here as a TOKEN rather than repeated at each use site, because it
+   * now has two consumers: the /jkai application shell (which redefines
+   * --font-body to it, see the block further down) and the blog's reading
+   * surface, where it is the default body face for a post and one of the
+   * options in the editor's font picker.
+   *
+   * Selawik leads on purpose. It is self-hosted under OFL-1.1 (see the
+   * @font-face block at the top of this file), so every device renders the same
+   * face; leading with Segoe UI would hand Windows a different one. Selawik
+   * covers 348 characters, so arrows, checks and maths symbols fall through
+   * per-glyph to the families behind it. */
+  --font-read: 'Selawik', 'Segoe UI', 'Segoe UI Variable Text', system-ui,
+    -apple-system, 'Helvetica Neue', Arial, sans-serif;
   /* Real monospace, for content whose ALIGNMENT carries meaning — source, JSON,
    * logs, program output, diffs. Sitewide this is just --font-mono under another
    * name; inside /jkai the two diverge, because there --font-mono is label
@@ -275,8 +291,9 @@ body {
  */
 body:has(.jkai-root),
 body:has(.jkai-runner) {
-  --font-body: 'Selawik', 'Segoe UI', 'Segoe UI Variable Text', system-ui,
-    -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  /* The stack itself is --font-read in :root above; this is the same value, not
+     a second copy of it. */
+  --font-body: var(--font-read);
 
   /* jkai's label chrome runs on Selawik too — eyebrows, metrics, nav, bylines.
    *
@@ -1179,3 +1196,84 @@ a {
 .hljs-deletion { color: var(--error); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+
+/* ===========================================================================
+   Reading themes — /blog only, set by the reader.
+   ===========================================================================
+
+   `data-reading-theme` is stamped on <html> by ReaderControls.svelte and
+   REMOVED again when that component unmounts, so it can never follow a reader
+   onto the rest of the site. Only /blog/[slug] mounts it.
+
+   This is the site's first and only dark palette, and it is deliberately
+   scoped rather than a `prefers-color-scheme` rule: the rest of
+   strangeramblings.com is a single-register cream design whose components
+   assume that — `::selection`, the grain overlay, the burnt-orange accent and
+   every hard-coded rgba(26,16,8,…) tint were all chosen against it. Making
+   dark mode global would be a redesign of the whole site; making it a reading
+   preference on the one surface people spend twenty minutes on is the part
+   that actually pays.
+
+   Only TOKENS are redefined. No component rule is duplicated here, so a theme
+   cannot drift away from the layout it is colouring. Every value below is the
+   same role at a different lightness — the ink/paper relationship is inverted,
+   the accent is not.
+
+   The selectors are `html[data-reading-theme='…']`, specificity (0,1,1), which
+   beats `:root` (0,1,0). A theme defined inside `:root` would lose. */
+
+html[data-reading-theme='sepia'] {
+  --bg: #f2e8d5;
+  --bg-base: #f2e8d5;
+  --surface-elevated: #ece0c9;
+  --text-primary: #2b1d0e;
+  --text-secondary: #4a3720;
+  --text-muted: rgba(43, 29, 14, 0.68);
+  --text-ghost: rgba(43, 29, 14, 0.45);
+  --card-bg: rgba(43, 29, 14, 0.06);
+  --card-border: rgba(43, 29, 14, 0.18);
+  --divider: rgba(43, 29, 14, 0.08);
+  --bg-section: rgba(43, 29, 14, 0.04);
+  --line-strong: rgba(43, 29, 14, 0.16);
+}
+
+html[data-reading-theme='night'] {
+  --bg: #14100c;
+  --bg-base: #14100c;
+  --surface-elevated: #1e1913;
+  --text-primary: #ece3d6;
+  --text-secondary: #cdc2b2;
+  --text-muted: rgba(236, 227, 214, 0.62);
+  --text-ghost: rgba(236, 227, 214, 0.4);
+  --card-bg: rgba(236, 227, 214, 0.06);
+  --card-border: rgba(236, 227, 214, 0.18);
+  --divider: rgba(236, 227, 214, 0.1);
+  --bg-section: rgba(236, 227, 214, 0.04);
+  --line-strong: rgba(236, 227, 214, 0.2);
+
+  /* The burnt orange is legible on cream at #c4570a and muddy on near-black.
+     Lifted, not replaced — it is still the same accent, at the lightness the
+     new ground needs. */
+  --accent: #e07b2a;
+  --accent-hover: #f0913f;
+  --accent-ink: #3fa3b0;
+  --info: #3fa3b0;
+  --success: #5eb36c;
+  --warn: #d4ab4a;
+  --error: #e06a6a;
+}
+
+/* The grain is a paper texture. On the night ground it reads as noise on a
+   screen rather than tooth on a page, so it is dialled back rather than kept
+   at the value that was chosen against cream. */
+html[data-reading-theme='night'] body::after {
+  opacity: 0.15;
+}
+
+/* Images and video are the one thing that should not invert with the page.
+   A hard white photo on a near-black column glares; a small dim keeps the
+   contrast of the article without punching a hole in it. */
+html[data-reading-theme='night'] .prose img,
+html[data-reading-theme='night'] .prose video {
+  filter: brightness(0.88) contrast(1.02);
+}

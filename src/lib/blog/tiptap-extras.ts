@@ -207,3 +207,220 @@ export const ProjectEmbed = Node.create({
     };
   },
 });
+
+// ---------------------------------------------------------------------------
+// Editorial furniture (2026-08-30).
+//
+// These exist as real schema nodes rather than raw HTML for one hard reason:
+// TipTap parses everything against its schema, so `insertContent('<aside …>')`
+// on a schema that has never heard of <aside> silently drops the element and
+// keeps only its text. A slash-menu item that appears to work and quietly
+// inserts a bare paragraph is worse than no slash-menu item.
+//
+// Every tag and class below is already admitted by the blog sanitiser's
+// `allowedTags` / `allowedClasses` in $lib/blog/renderer — the two lists have
+// to agree or the element round-trips in the editor and vanishes on publish.
+// ---------------------------------------------------------------------------
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    pullQuote: {
+      /** Lift the selection into a pull quote. */
+      setPullQuote: () => ReturnType;
+    };
+    callout: {
+      /** Insert a callout in the given tone. */
+      setCallout: (tone?: CalloutTone) => ReturnType;
+    };
+    disclosure: {
+      /** Insert a collapsible section. */
+      setDisclosure: (summary?: string) => ReturnType;
+    };
+    sidenote: {
+      /** Insert a margin note at the cursor. */
+      setSidenote: () => ReturnType;
+    };
+  }
+}
+
+export type CalloutTone = 'note' | 'warn' | 'aside';
+
+const CALLOUT_CLASS: Record<CalloutTone, string> = {
+  note: 'callout-note',
+  warn: 'callout-warn',
+  aside: 'callout-aside',
+};
+
+/** <aside class="pull-quote"> — a line lifted out of the body and set large. */
+export const PullQuote = Node.create({
+  name: 'pullQuote',
+  group: 'block',
+  content: 'inline*',
+  defining: true,
+
+  parseHTML() {
+    return [{ tag: 'aside.pull-quote' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['aside', mergeAttributes(HTMLAttributes, { class: 'pull-quote' }), 0];
+  },
+
+  addCommands() {
+    return {
+      setPullQuote:
+        () =>
+        ({ commands }) =>
+          commands.setNode(this.name),
+    };
+  },
+});
+
+/** <aside class="callout-…"> — a bordered note carrying block content. */
+export const Callout = Node.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+
+  addAttributes() {
+    return {
+      tone: {
+        default: 'note' as CalloutTone,
+        parseHTML: (el: HTMLElement) => {
+          for (const tone of Object.keys(CALLOUT_CLASS) as CalloutTone[]) {
+            if (el.classList.contains(CALLOUT_CLASS[tone])) return tone;
+          }
+          return 'note';
+        },
+        // `tone` is an editor-side concept; the DOM carries it as the class
+        // below, so it must not also be emitted as a bare attribute — the
+        // sanitiser would strip it and the round-trip would lose the tone.
+        renderHTML: () => ({}),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'aside',
+        getAttrs: (el) =>
+          Object.values(CALLOUT_CLASS).some((c) => el.classList.contains(c)) ? null : false,
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes, node }) {
+    const tone = (node.attrs.tone as CalloutTone) ?? 'note';
+    return ['aside', mergeAttributes(HTMLAttributes, { class: CALLOUT_CLASS[tone] }), 0];
+  },
+
+  addCommands() {
+    return {
+      setCallout:
+        (tone: CalloutTone = 'note') =>
+        ({ commands }) =>
+          commands.insertContent({
+            type: this.name,
+            attrs: { tone },
+            content: [{ type: 'paragraph' }],
+          }),
+    };
+  },
+});
+
+/**
+ * <details><summary>…</summary>…</details> — the "interactive section".
+ *
+ * The summary is an ATTRIBUTE rather than a second content hole. Two content
+ * holes in one node need a node view to edit both, and the Figure node above
+ * already records what happens when attribute-driven DOM sits next to a content
+ * hole: clicking it puts the selection somewhere the toolbar cannot see.
+ */
+export const Disclosure = Node.create({
+  name: 'disclosure',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+
+  addAttributes() {
+    return {
+      summary: {
+        default: 'Details',
+        parseHTML: (el: HTMLElement) => el.querySelector('summary')?.textContent?.trim() || 'Details',
+        renderHTML: () => ({}),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'details', contentElement: (el) => {
+      // Everything except the <summary> is the body.
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.querySelector('summary')?.remove();
+      return clone;
+    } }];
+  },
+
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      'details',
+      mergeAttributes(HTMLAttributes),
+      ['summary', { contenteditable: 'false' }, String(node.attrs.summary ?? 'Details')],
+      ['div', {}, 0],
+    ];
+  },
+
+  addCommands() {
+    return {
+      setDisclosure:
+        (summary = 'Details') =>
+        ({ commands }) =>
+          commands.insertContent({
+            type: this.name,
+            attrs: { summary },
+            content: [{ type: 'paragraph' }],
+          }),
+    };
+  },
+});
+
+/**
+ * <span class="sidenote"><span class="sidenote-body">…</span></span>
+ *
+ * Inline, because a margin note is attached to a POINT in a sentence, not to a
+ * block. The visible reference marker is drawn by a CSS counter on the reading
+ * surface, so nothing here has to number anything — renumbering on every edit
+ * is exactly the kind of state that goes wrong.
+ */
+export const Sidenote = Node.create({
+  name: 'sidenote',
+  group: 'inline',
+  inline: true,
+  content: 'inline*',
+
+  parseHTML() {
+    return [{ tag: 'span.sidenote', contentElement: 'span.sidenote-body' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      'span',
+      mergeAttributes(HTMLAttributes, { class: 'sidenote' }),
+      ['span', { class: 'sidenote-body' }, 0],
+    ];
+  },
+
+  addCommands() {
+    return {
+      setSidenote:
+        () =>
+        ({ commands }) =>
+          commands.insertContent({
+            type: this.name,
+            content: [{ type: 'text', text: 'Note' }],
+          }),
+    };
+  },
+});

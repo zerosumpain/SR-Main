@@ -8,6 +8,7 @@ describe('PostMeta type', () => {
       title: 'Test Post',
       excerpt: 'A test post',
       coverImageUrl: null,
+      coverImageAlt: null,
       tags: ['tech', 'svelte'],
       publishedAt: '2026-01-01T00:00:00Z',
     };
@@ -24,11 +25,14 @@ describe('Post type', () => {
       slug: 'test-post',
       title: 'Test Post',
       excerpt: 'A test post',
+      id: 1,
       coverImageUrl: '/img/cover.png',
+      coverImageAlt: 'A cover',
       tags: ['tech'],
       publishedAt: '2026-01-01T00:00:00Z',
       content: '<p>Hello</p>',
       contentFormat: 'html',
+      bodyFont: 'read',
       previewToken: 'abc-123',
     };
     expect(post.content).toBe('<p>Hello</p>');
@@ -41,11 +45,14 @@ describe('Post type', () => {
       slug: 'md-post',
       title: 'MD Post',
       excerpt: 'A markdown post',
+      id: 2,
       coverImageUrl: null,
+      coverImageAlt: null,
       tags: [],
       publishedAt: null,
       content: '**bold**',
       contentFormat: 'markdown',
+      bodyFont: 'body',
       previewToken: 'xyz-456',
     };
     expect(post.contentFormat).toBe('markdown');

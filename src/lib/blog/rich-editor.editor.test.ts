@@ -6,7 +6,8 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style';
-import { Figure, ProjectEmbed } from './tiptap-extras';
+import { Figure, ProjectEmbed, PullQuote, Callout, Disclosure, Sidenote } from './tiptap-extras';
+import { renderContent } from './renderer';
 
 /**
  * Mounts a real TipTap editor and drives the commands the blog toolbar calls.
@@ -39,7 +40,17 @@ const EXTENSIONS = [
     codeBlock: { HTMLAttributes: { class: 'hljs' } },
     link: false,
   }),
-  Image.configure({ inline: false, allowBase64: false }),
+  Image.configure({
+    inline: false,
+    allowBase64: false,
+    // `resize` is an OBJECT or `false`, never a boolean true — the type is
+    // `{ enabled, directions?, minWidth?, minHeight?, alwaysPreserveAspectRatio? } | false`.
+    // It ships inside @tiptap/extension-image, so turning it on costs no new
+    // package (and every @tiptap/* must move as ONE unit, so a new one would
+    // drag a coordinated bump of all six). The sanitiser already permits
+    // width/height on <img>.
+    resize: { enabled: true, minWidth: 120, alwaysPreserveAspectRatio: true },
+  }),
   Link.configure({
     openOnClick: false,
     autolink: true,
@@ -51,6 +62,10 @@ const EXTENSIONS = [
   FontSize,
   Figure,
   ProjectEmbed,
+  PullQuote,
+  Callout,
+  Disclosure,
+  Sidenote,
 ];
 
 let editor: Editor | null = null;
@@ -68,6 +83,40 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+describe('editorial furniture survives the full round trip', () => {
+  // Two independent things must agree for any of these to work: the TipTap
+  // schema has to keep the element on setContent/getHTML, AND the blog
+  // sanitiser has to admit its tag and class on publish. Either one alone is
+  // a green test over a feature that does not work — the editor keeps it and
+  // the published page drops it, or vice versa. So each case asserts both.
+  const cases: { name: string; html: string; expect: RegExp }[] = [
+    { name: 'pull quote', html: '<aside class="pull-quote">Lifted</aside>', expect: /<aside class="pull-quote">Lifted<\/aside>/ },
+    { name: 'note callout', html: '<aside class="callout-note"><p>Note</p></aside>', expect: /class="callout-note"/ },
+    { name: 'warn callout', html: '<aside class="callout-warn"><p>Careful</p></aside>', expect: /class="callout-warn"/ },
+    { name: 'disclosure', html: '<details><summary>More</summary><p>Body</p></details>', expect: /<details>/ },
+    { name: 'sidenote', html: '<p>Text<span class="sidenote"><span class="sidenote-body">Aside</span></span></p>', expect: /class="sidenote-body"/ },
+  ];
+
+  for (const c of cases) {
+    it(`${c.name} round-trips through the editor and the sanitiser`, () => {
+      const e = mount();
+      e.commands.setContent(c.html);
+      const out = e.getHTML();
+      expect(out, `${c.name} did not survive the EDITOR`).toMatch(c.expect);
+      expect(renderContent(out, 'html'), `${c.name} did not survive the SANITISER`).toMatch(c.expect);
+    });
+  }
+
+  it('keeps a callout tone through the round trip', () => {
+    const e = mount();
+    e.commands.setContent('<aside class="callout-warn"><p>Careful</p></aside>');
+    // The tone lives in the CLASS, not in an attribute — an attribute would be
+    // stripped by the sanitiser and the tone would silently reset to note.
+    expect(e.getHTML()).toContain('callout-warn');
+    expect(e.getHTML()).not.toContain('tone=');
+  });
+});
+
 describe('the blog rich editor mounts and runs its toolbar', () => {
   it('mounts a ProseMirror view', () => {
     expect(mount().view).toBeTruthy();
@@ -79,6 +128,13 @@ describe('the blog rich editor mounts and runs its toolbar', () => {
     // toolbar buttons become silent no-ops rather than throwing.
     expect(e.schema.nodes.figure, 'Figure missing from schema').toBeTruthy();
     expect(e.schema.nodes.projectEmbed, 'ProjectEmbed missing from schema').toBeTruthy();
+    // The editorial furniture. These are schema nodes rather than raw HTML
+    // precisely because TipTap drops anything its schema does not know — a
+    // missing node here means the slash menu silently inserts a bare paragraph.
+    expect(e.schema.nodes.pullQuote, 'PullQuote missing from schema').toBeTruthy();
+    expect(e.schema.nodes.callout, 'Callout missing from schema').toBeTruthy();
+    expect(e.schema.nodes.disclosure, 'Disclosure missing from schema').toBeTruthy();
+    expect(e.schema.nodes.sidenote, 'Sidenote missing from schema').toBeTruthy();
   });
 
   it('runs the StarterKit marks and blocks the toolbar exposes', () => {

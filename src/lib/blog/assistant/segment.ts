@@ -9,7 +9,25 @@
 export type Paragraph = { text: string; sentences: string[] };
 export type Segmented = { paragraphs: Paragraph[] };
 
-const BLOCK_END_RE = /<\/(?:p|h[1-6]|blockquote|li|pre)>/gi;
+/**
+ * The tags that end a "paragraph" for segmentation purposes.
+ *
+ * EXPORTED because `$lib/blog/assistant/autopilot` has to split the body the
+ * same way to work out which paragraphs contain markup a plain-text rewrite
+ * would destroy. Two copies of this pattern would drift, and the drift is
+ * invisible: the indices still resolve, they just point at a different
+ * paragraph, so the exclusion protects the wrong one.
+ *
+ * Only ever used with `String.replace`, which resets `lastIndex` on completion.
+ * Do NOT call `.test()` on it — a shared /g regex is stateful between calls.
+ *
+ * `td`, `th`, `tr`, `summary`, `figcaption` and `aside` were added on
+ * 2026-08-30. Without them a table collapsed into ONE run-on paragraph
+ * ("ThingValueRowsShould have rules…"), which autopilot then offered to rewrite
+ * as flowing prose — accepting that would have destroyed the table.
+ */
+export const BLOCK_END_RE =
+  /<\/(?:p|h[1-6]|blockquote|li|pre|td|th|tr|summary|figcaption|aside|dd|dt)>/gi;
 const TAG_RE = /<\/?[^>]+>/g;
 // Sentence terminator followed by whitespace and an opener (capital, quote, paren).
 const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+(?=[A-Z"'(\[“‘])/g;

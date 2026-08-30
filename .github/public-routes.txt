@@ -74,6 +74,8 @@
 /auth-error
 /blog
 /blog/[slug]
+/blog/[slug]/comments
+/blog/[slug]/track
 /blog/preview/[token]
 /blog/tag/[tag]
 /broads/speed

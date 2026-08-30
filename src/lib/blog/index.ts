@@ -5,6 +5,7 @@ import { eq, desc, and } from 'drizzle-orm';
 import type { PostMeta, Post } from './types';
 
 export type { PostMeta, Post } from './types';
+import { DEFAULT_BODY_FONT } from './fonts';
 
 export async function getAllPosts(): Promise<PostMeta[]> {
   const posts = await db
@@ -14,6 +15,7 @@ export async function getAllPosts(): Promise<PostMeta[]> {
       title: blogPosts.title,
       excerpt: blogPosts.excerpt,
       coverImageUrl: blogPosts.coverImageUrl,
+      coverImageAlt: blogPosts.coverImageAlt,
       publishedAt: blogPosts.publishedAt,
     })
     .from(blogPosts)
@@ -43,6 +45,7 @@ export async function getAllPosts(): Promise<PostMeta[]> {
     title: p.title,
     excerpt: p.excerpt,
     coverImageUrl: p.coverImageUrl,
+    coverImageAlt: p.coverImageAlt ?? null,
     tags: tagMap.get(p.id) ?? [],
     publishedAt: p.publishedAt?.toISOString() ?? null,
   }));
@@ -57,7 +60,9 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
       excerpt: blogPosts.excerpt,
       content: blogPosts.content,
       coverImageUrl: blogPosts.coverImageUrl,
+      coverImageAlt: blogPosts.coverImageAlt,
       contentFormat: blogPosts.contentFormat,
+      bodyFont: blogPosts.bodyFont,
       previewToken: blogPosts.previewToken,
       publishedAt: blogPosts.publishedAt,
     })
@@ -74,13 +79,16 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
     .where(eq(blogPostTags.postId, post.id));
 
   return {
+    id: post.id,
     slug: post.slug,
     title: post.title,
     excerpt: post.excerpt,
     content: post.content,
     coverImageUrl: post.coverImageUrl,
+    coverImageAlt: post.coverImageAlt ?? null,
     tags: tagRows.map((t) => t.tag),
     contentFormat: post.contentFormat as 'html' | 'markdown',
+    bodyFont: post.bodyFont ?? DEFAULT_BODY_FONT,
     previewToken: post.previewToken ?? '',
     publishedAt: post.publishedAt?.toISOString() ?? null,
   };
@@ -94,6 +102,7 @@ export async function getPostsByTag(tag: string): Promise<PostMeta[]> {
       title: blogPosts.title,
       excerpt: blogPosts.excerpt,
       coverImageUrl: blogPosts.coverImageUrl,
+      coverImageAlt: blogPosts.coverImageAlt,
       publishedAt: blogPosts.publishedAt,
     })
     .from(blogPosts)
@@ -136,6 +145,7 @@ export async function getPostsByTag(tag: string): Promise<PostMeta[]> {
     title: p.title,
     excerpt: p.excerpt,
     coverImageUrl: p.coverImageUrl,
+    coverImageAlt: p.coverImageAlt ?? null,
     tags: tagMap.get(p.id) ?? [],
     publishedAt: p.publishedAt?.toISOString() ?? null,
   }));
@@ -196,7 +206,9 @@ export async function getPostByPreviewToken(token: string): Promise<Post | null>
       excerpt: blogPosts.excerpt,
       content: blogPosts.content,
       coverImageUrl: blogPosts.coverImageUrl,
+      coverImageAlt: blogPosts.coverImageAlt,
       contentFormat: blogPosts.contentFormat,
+      bodyFont: blogPosts.bodyFont,
       previewToken: blogPosts.previewToken,
       publishedAt: blogPosts.publishedAt,
     })
@@ -213,13 +225,16 @@ export async function getPostByPreviewToken(token: string): Promise<Post | null>
     .where(eq(blogPostTags.postId, post.id));
 
   return {
+    id: post.id,
     slug: post.slug,
     title: post.title,
     excerpt: post.excerpt,
     content: post.content,
     coverImageUrl: post.coverImageUrl,
+    coverImageAlt: post.coverImageAlt ?? null,
     tags: tagRows.map((t) => t.tag),
     contentFormat: post.contentFormat as 'html' | 'markdown',
+    bodyFont: post.bodyFont ?? DEFAULT_BODY_FONT,
     previewToken: post.previewToken ?? '',
     publishedAt: post.publishedAt?.toISOString() ?? null,
   };

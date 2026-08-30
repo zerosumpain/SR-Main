@@ -68,7 +68,9 @@ function metaProposal(field: MetaField, currentValue: unknown, suggestedValue: u
   };
 }
 
-function proseProposal(original: string, suggested: string, from: number, to: number, reason?: string): Proposal {
+/** Exported because the autopilot pass builds the same proposal shape without
+ *  going through the tool loop. One factory, so the two paths cannot drift. */
+export function proseProposal(original: string, suggested: string, from: number, to: number, reason?: string): Proposal {
   return {
     id: randomUUID(), kind: 'prose',
     original, suggested, anchor: { from, to }, reason, status: 'pending',
