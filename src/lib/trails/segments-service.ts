@@ -24,6 +24,7 @@ import { makeCorridor, corridorMatch, type LngLat } from './segments/corridor';
 import { effortMetrics, rankEfforts } from './segments/metrics';
 import { segmentForm, UNKNOWN_FORM, type FormEffort, type SegmentForm } from './segments/form';
 import { celsiusFrom } from './activity-meta';
+import { corpusFingerprint } from './highlights-service';
 import {
   segmentDescriptor,
   segmentName,
@@ -212,6 +213,110 @@ export interface SegmentListResult {
   types: Array<{ activityType: string; count: number }>;
 }
 
+// Two of the four queries `listSegments` makes do not depend on its arguments
+// at all: both are UNFILTERED full passes over `activity_segment_efforts` — one
+// grouped for the all-time bests, one three columns wide for the Form window.
+// At ~6,300 efforts each is cheap on its own and ruinous in aggregate, because
+// they were being paid TWICE per /health request (once for the taxonomy tiles,
+// once inside `getDailyPlan`'s coach path, which calls back in with a type
+// filter) and again on every segments-explorer render.
+//
+// Memoised on the corpus fingerprint, the same key `getHighlightCorpus` and
+// `getSegmentChains` use — so an ingest, an exclusion or a type correction
+// invalidates all of them together, and no caller has to remember to. Keyed on
+// the fingerprint rather than a bare TTL because a stale leaderboard after a
+// re-ingest is the kind of wrong that nobody notices.
+//
+// The cached entry is the PROMISE, not the resolved map. /health fires the
+// hub's `listSegments` and the coach's — which calls it again with a sport
+// filter — inside one `Promise.all`, so both start before either could have
+// populated a value cache: caching the result would have deduplicated the
+// second REQUEST while still running the scan twice within the first one.
+const CORPUS_TTL_MS = 5 * 60 * 1000;
+
+type Memo<T> = { key: string; at: number; value: Promise<T> } | null;
+let bestsCache: Memo<Map<number, SegmentBests>> = null;
+let formCache: Memo<Map<number, FormEffort[]>> = null;
+
+function fresh<T>(c: Memo<T>, key: string): Promise<T> | null {
+  return c && c.key === key && Date.now() - c.at < CORPUS_TTL_MS ? c.value : null;
+}
+
+/** All-time bests per segment, one grouped pass over every effort. */
+function segmentBestsByCorpus(key: string): Promise<Map<number, SegmentBests>> {
+  const hit = fresh(bestsCache, key);
+  if (hit) return hit;
+  const value = loadSegmentBests();
+  bestsCache = { key, at: Date.now(), value };
+  // A failed read must not be remembered as this corpus's answer for the next
+  // five minutes; drop the memo and let the next caller try the query again.
+  value.catch(() => {
+    if (bestsCache?.value === value) bestsCache = null;
+  });
+  return value;
+}
+
+async function loadSegmentBests(): Promise<Map<number, SegmentBests>> {
+  const rows = await db
+    .select({
+      segmentId: activitySegmentEfforts.segmentId,
+      durationS: sql<number | null>`min(${activitySegmentEfforts.durationS})`,
+      paceSPerKm: sql<number | null>`min(${activitySegmentEfforts.paceSPerKm})`,
+      efficiencyFactor: sql<number | null>`max(${activitySegmentEfforts.efficiencyFactor})`,
+      beatsPerKm: sql<number | null>`min(${activitySegmentEfforts.beatsPerKm})`,
+    })
+    .from(activitySegmentEfforts)
+    .groupBy(activitySegmentEfforts.segmentId);
+  return new Map<number, SegmentBests>(rows.map(({ segmentId, ...bests }) => [segmentId, bests]));
+}
+
+/**
+ * Three columns per effort, oldest first, bucketed by segment — the input the
+ * Form window needs.
+ *
+ * Deliberately NOT filtered to the segments a given call asks for: unfiltered
+ * is what makes the result shareable between the hub's 1,000-row read and the
+ * coach's single-sport one, which is where the duplicate scan came from. There
+ * are no window functions anywhere in this subsystem — every rank and trend is
+ * computed in JavaScript over rows already in memory — and this is still a far
+ * smaller read than the geometry the row projection avoids.
+ */
+function effortsForFormByCorpus(key: string): Promise<Map<number, FormEffort[]>> {
+  const hit = fresh(formCache, key);
+  if (hit) return hit;
+  const value = loadEffortsForForm();
+  formCache = { key, at: Date.now(), value };
+  value.catch(() => {
+    if (formCache?.value === value) formCache = null;
+  });
+  return value;
+}
+
+async function loadEffortsForForm(): Promise<Map<number, FormEffort[]>> {
+  const rows = await db
+    .select({
+      segmentId: activitySegmentEfforts.segmentId,
+      durationS: activitySegmentEfforts.durationS,
+      startedAt: activitySegmentEfforts.startedAt,
+      efficiencyFactor: activitySegmentEfforts.efficiencyFactor,
+    })
+    .from(activitySegmentEfforts)
+    .orderBy(asc(activitySegmentEfforts.startedAt));
+  const value = new Map<number, FormEffort[]>();
+  for (const e of rows) {
+    const bucket = value.get(e.segmentId);
+    if (bucket) bucket.push(e);
+    else value.set(e.segmentId, [e]);
+  }
+  return value;
+}
+
+/** Drop the corpus memos — called after a rebuild rewrites the efforts. */
+export function invalidateSegmentCorpus(): void {
+  bestsCache = null;
+  formCache = null;
+}
+
 export async function listSegments(
   opts: { types?: string[]; limit?: number } = {},
 ): Promise<SegmentListResult> {
@@ -224,7 +329,10 @@ export async function listSegments(
   //
   // The bests come from one grouped pass over the efforts — the explorer sorts
   // and crowns records from these without touching the per-effort table again.
-  const [rows, typeCounts, bestRows, formRows] = await Promise.all([
+  // One fingerprint for both corpus passes, so a single ingest cannot leave the
+  // bests fresh and the form windows stale against each other.
+  const corpusKey = await corpusFingerprint();
+  const [rows, typeCounts, bestsById, effortsById] = await Promise.all([
     db
       .select({
         id: activitySegments.id,
@@ -251,40 +359,9 @@ export async function listSegments(
       .from(activitySegments)
       .groupBy(activitySegments.activityType)
       .orderBy(desc(sql`count(*)`)),
-    db
-      .select({
-        segmentId: activitySegmentEfforts.segmentId,
-        durationS: sql<number | null>`min(${activitySegmentEfforts.durationS})`,
-        paceSPerKm: sql<number | null>`min(${activitySegmentEfforts.paceSPerKm})`,
-        efficiencyFactor: sql<number | null>`max(${activitySegmentEfforts.efficiencyFactor})`,
-        beatsPerKm: sql<number | null>`min(${activitySegmentEfforts.beatsPerKm})`,
-      })
-      .from(activitySegmentEfforts)
-      .groupBy(activitySegmentEfforts.segmentId),
-    // Three columns per effort, for the Form window. There are no window
-    // functions anywhere in this subsystem — every rank and trend in it is
-    // computed in JavaScript over rows already in memory — and at ~6,300 efforts
-    // this is a far smaller read than the geometry the projection above avoids.
-    db
-      .select({
-        segmentId: activitySegmentEfforts.segmentId,
-        durationS: activitySegmentEfforts.durationS,
-        startedAt: activitySegmentEfforts.startedAt,
-        efficiencyFactor: activitySegmentEfforts.efficiencyFactor,
-      })
-      .from(activitySegmentEfforts)
-      .orderBy(asc(activitySegmentEfforts.startedAt)),
+    segmentBestsByCorpus(corpusKey),
+    effortsForFormByCorpus(corpusKey),
   ]);
-  const bestsById = new Map<number, SegmentBests>(
-    bestRows.map(({ segmentId, ...bests }) => [segmentId, bests]),
-  );
-
-  const effortsById = new Map<number, FormEffort[]>();
-  for (const e of formRows) {
-    const bucket = effortsById.get(e.segmentId);
-    if (bucket) bucket.push(e);
-    else effortsById.set(e.segmentId, [e]);
-  }
 
   return {
     rows: rows.map((row) =>
@@ -758,6 +835,11 @@ export async function rebuildSegments(options: MatchOptions = {}): Promise<Rebui
     .filter((s): s is PreparedSegment => s != null);
 
   const written = await persistSegments(prepared);
+  // The efforts table has just been rewritten. The corpus fingerprint moves
+  // with it in every realistic case, but a rebuild that lands on the same
+  // counts and the same summed duration would otherwise serve five minutes of
+  // pre-rebuild bests and form windows.
+  invalidateSegmentCorpus();
 
   return {
     activitiesConsidered: sources.length,
