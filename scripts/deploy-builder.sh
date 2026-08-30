@@ -51,6 +51,10 @@ npm run build:builder
 # Upgrading pi = move the pin in a PR, run a canary build, then deploy — never
 # `npm i -g` straight onto the box, which leaves nothing to roll back to.
 PI_VERSION="$(node -p "require('./package.json').jkai.piVersion")"
+# The NAME is pinned too, and for the same reason the version is: pi has been
+# renamed once already, and a literal here would have kept installing from the
+# abandoned scope long after it stopped receiving releases.
+PI_PACKAGE="$(node -p "require('./package.json').jkai.piPackage")"
 echo "==> Ensuring pi $PI_VERSION on the build host..."
 # NOTE the 2>&1 on every `pi --version`: pi prints its version to STDERR, so
 # capturing stdout alone yields an empty string and every comparison here fails
@@ -63,7 +67,7 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "
     echo \"    pi $PI_VERSION already installed.\"
   else
     echo \"    pi is '\$installed' — installing $PI_VERSION ...\"
-    sudo npm install -g '@mariozechner/pi-coding-agent@$PI_VERSION'
+    sudo npm install -g '$PI_PACKAGE@$PI_VERSION'
     now=\"\$(pi --version 2>&1 | head -1)\"
     [ \"\$now\" = \"$PI_VERSION\" ] || { echo \"    ERROR: pi is '\$now' after install, expected $PI_VERSION\"; exit 1; }
     echo \"    pi $PI_VERSION installed.\"

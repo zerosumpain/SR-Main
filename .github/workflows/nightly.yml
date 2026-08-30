@@ -157,3 +157,56 @@ jobs:
               "A failure here means something reached master that PR-time selection did not cover. Worth understanding rather than just re-running.")"
             echo "opened a new issue"
           fi
+
+  # A pin that cannot go stale is a pin nobody checks. This is the check.
+  #
+  # Its own job, not a step in `full`: it needs no database, no build and no
+  # 45-minute timeout, and a red gate must not hide a moved dependency (nor the
+  # reverse). Runs on the same twice-daily schedule, so drift is noticed within
+  # twelve hours instead of the sixteen weeks it took last time.
+  #
+  # It only ever REPORTS. Installing pi stays the deliberate path — move the pin
+  # in a PR, prove it with a canary build, then scripts/deploy-builder.sh.
+  pi-pin:
+    name: pi pin still points somewhere real
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the pin against npm AND the upstream repo
+        id: check
+        env:
+          # Lifts the anonymous GitHub API rate limit, which a shared runner IP
+          # hits often enough to turn this into a flaky UNKNOWN.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          node scripts/check-pi-version.mjs | tee /tmp/pi-pin.txt
+          echo "verdict=$(node scripts/check-pi-version.mjs --json | node -p 'JSON.parse(require("fs").readFileSync(0)).verdict')" >> "$GITHUB_OUTPUT"
+
+      # Same one-issue-at-a-time handling as the suite above, and for the same
+      # reason: nobody is watching this tab, and a second issue per run would
+      # bury the first.
+      - name: Report drift
+        if: steps.check.outputs.verdict != 'CURRENT'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          VERDICT: ${{ steps.check.outputs.verdict }}
+        run: |
+          TITLE="pi pin needs attention: $VERDICT"
+          BODY=$(printf '%s\n\n```\n%s\n```\n\n%s' \
+            "The nightly pin check reported \`$VERDICT\`: $RUN_URL" \
+            "$(cat /tmp/pi-pin.txt)" \
+            "Upgrading pi is pin -> dry-run -> canary -> smoke -> promote -> record; see the \`dependency-upgrades\` skill. Do not \`npm i -g\` on the box — it overwrites in place, so there is nothing to roll back to.")
+          EXISTING=$(gh issue list --state open --limit 200 \
+            --json number,title --jq "[.[] | select(.title == \"$TITLE\")][0].number")
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "Still $VERDICT: $RUN_URL"
+            echo "commented on existing issue #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+            echo "opened a new issue"
+          fi
