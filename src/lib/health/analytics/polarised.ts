@@ -12,6 +12,16 @@ export type PolarisedResult = {
   totalMinutes: number;
 };
 
+/**
+ * What "polarised" costs: at least this share of the time easy, AND at least
+ * this share genuinely hard. Named because the verdict, the moves list and the
+ * experiment that chases it all have to mean the same two numbers.
+ */
+export const POLARISED_EASY_PCT = 80;
+export const POLARISED_HARD_PCT = 10;
+/** Over this share in Z3 is the junk middle — the real trap. */
+export const JUNK_MIDDLE_PCT = 50;
+
 export function computePolarised(workouts: ZoneDurations[]): MetricResult<PolarisedResult> {
   if (workouts.length === 0) {
     return {
@@ -40,8 +50,8 @@ export function computePolarised(workouts: ZoneDurations[]): MetricResult<Polari
   const midPct = (mid / total) * 100;
   const hardPct = (hard / total) * 100;
   const verdict: PolarisedResult['verdict'] =
-    midPct > 50 ? 'junk-middle' :
-    easyPct >= 80 && hardPct >= 10 ? 'polarised' :
+    midPct > JUNK_MIDDLE_PCT ? 'junk-middle' :
+    easyPct >= POLARISED_EASY_PCT && hardPct >= POLARISED_HARD_PCT ? 'polarised' :
     easyPct >= 70 && midPct >= 15 ? 'pyramid' :
     'pyramid';
   return {

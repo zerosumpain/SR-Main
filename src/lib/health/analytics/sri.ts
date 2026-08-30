@@ -9,6 +9,13 @@ export type SleepInterval = {
 const MINUTES_PER_DAY = 24 * 60;
 
 /**
+ * The regularity of someone who goes to bed and gets up at the same time.
+ * 0 is random, 100 is minute-identical nightly, and 85 is the practical
+ * target — the number the sleep-window move is aiming at.
+ */
+export const SRI_TARGET = 85;
+
+/**
  * Phillips 2017 Sleep Regularity Index.
  * For each minute m in [0, 1440), compute the fraction of pairs (i,j) where
  * day_i and day_j have the same sleep state at minute m. Average over all

@@ -12,6 +12,22 @@ export type ACWRResult = {
   zone: ACWRZone;
 };
 
+/**
+ * The band edges, named once. Read them rather than repeating the numbers:
+ * the tripwire table and the coach both quote "below 0.5 is detraining", and a
+ * threshold that lives in three files eventually means three things.
+ */
+export const ACWR_BANDS = {
+  /** Below this, the base is going backwards. */
+  detraining: 0.5,
+  /** Below this, there is room to add — the planner reads it as licence. */
+  undertraining: 0.8,
+  /** Up to this, fitness builds without breaking. */
+  optimal: 1.3,
+  /** Above this is the band injuries come from. */
+  caution: 1.5,
+} as const;
+
 export function computeACWR(days: LoadDay[]): MetricResult<ACWRResult> {
   if (days.length < 14) {
     return {
@@ -27,10 +43,10 @@ export function computeACWR(days: LoadDay[]): MetricResult<ACWRResult> {
   const chronic = ewma(loads, 28);
   const ratio = chronic === 0 ? 0 : acute / chronic;
   const zone: ACWRZone =
-    ratio < 0.5 ? 'detraining' :
-    ratio < 0.8 ? 'undertraining' :
-    ratio <= 1.3 ? 'optimal' :
-    ratio <= 1.5 ? 'caution' : 'danger';
+    ratio < ACWR_BANDS.detraining ? 'detraining' :
+    ratio < ACWR_BANDS.undertraining ? 'undertraining' :
+    ratio <= ACWR_BANDS.optimal ? 'optimal' :
+    ratio <= ACWR_BANDS.caution ? 'caution' : 'danger';
   return {
     value: { acuteEWMA: acute, chronicEWMA: chronic, ratio, zone },
     sufficiency: sorted.length >= 28 ? 'ok' : 'partial',

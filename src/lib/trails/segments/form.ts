@@ -65,7 +65,14 @@ const RECENT_WINDOW = 3;
 /** How many efforts before that make "then". */
 const EARLIER_WINDOW = 6;
 /** Inside this band the change is noise, not a direction. */
-const HOLDING_BAND_PCT = 2;
+export const HOLDING_BAND_PCT = 2;
+/**
+ * How close the recent best has to sit to the all-time PB before the record is
+ * worth an attempt, as a fraction. The same 0.03 `gapScore` in coach.ts
+ * inflects at — the coach's scoring curve and the dashboard's "gettable"
+ * judgement have to mean the same thing by the same number.
+ */
+export const GETTABLE_GAP_PCT = 0.03;
 const SPARK_MAX = 12;
 
 function median(xs: number[]): number | null {
