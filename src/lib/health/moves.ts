@@ -211,6 +211,13 @@ function longEasyDay(i: MovesInput): Draft | null {
     clauses.unshift(
       `takes weekly volume from ${trim(vol.weekKm)} km toward the ${trim(vol.medianKm)} km median`,
     );
+    // Every move on this page states what it buys — the second column is the
+    // one that decides. This branch filled the instruments and the rationale
+    // and pushed nothing here, so on an ACWR-optimal, low-volume week the card
+    // shipped with an empty BUYS paragraph under the heading.
+    buys.push(
+      `Weekly volume ${trim(vol.weekKm)}→${trim(vol.medianKm)} km, back on the twelve-week median.`,
+    );
   }
   if (!instruments.length) return null;
 

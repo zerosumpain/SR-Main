@@ -21,7 +21,7 @@
 // All copy here is DERIVED. No LLM, same as ledes.ts.
 
 import type { MetricResult } from './analytics/types';
-import type { DayPoint } from './analytics/rolling';
+import { dayNumber, type DayPoint } from './analytics/rolling';
 import { ACWR_BANDS, type ACWRResult } from './analytics/acwr';
 import {
   SLEEP_DEBT_FLAG_MIN,
@@ -397,12 +397,29 @@ function usable<T>(m: MetricResult<T> | null | undefined): m is MetricResult<T> 
   return !!m && m.sufficiency !== 'insufficient';
 }
 
-/** How many trailing days in a row satisfy `hit`, counting back from the end. */
+/**
+ * How many trailing CALENDAR DAYS in a row satisfy `hit`, counting back from the
+ * last reading.
+ *
+ * Days, not array entries. The Whoop daily series is not zero-filled — a night
+ * the strap was off is simply absent — so an entry-counted streak reads "three
+ * in a row" across a fortnight with three scattered readings in it, and the
+ * recovery-red, resting-HR and HRV-crossing wires all trip on ground that never
+ * happened. A missing day breaks the run, which is the honest answer: nothing
+ * measured it, so nothing is known to have continued through it.
+ */
 function trailingStreak(series: DayPoint[], hit: (v: number) => boolean): number {
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   let n = 0;
-  for (let k = series.length - 1; k >= 0; k--) {
-    if (!hit(series[k].value)) break;
+  let expected: number | null = null;
+  for (let k = sorted.length - 1; k >= 0; k--) {
+    const day = dayNumber(sorted[k].date);
+    // Two rows on one date: the same day, already counted, never a second step.
+    if (expected != null && day === expected + 1) continue;
+    if (expected != null && day !== expected) break;
+    if (!hit(sorted[k].value)) break;
     n++;
+    expected = day - 1;
   }
   return n;
 }

@@ -55,6 +55,12 @@ export function trailingMean(
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-function dayNumber(date: string): number {
+/**
+ * A `YYYY-MM-DD` as a whole number of days since the epoch — the unit every
+ * window in this subsystem counts in. Exported because a trailing STREAK has
+ * the same gap problem a trailing window does: these series are not zero-filled,
+ * so counting array entries silently steps over the days with no reading.
+ */
+export function dayNumber(date: string): number {
   return Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000);
 }

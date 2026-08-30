@@ -247,3 +247,138 @@ describe('computeTripwires — the edges', () => {
     expect(rows.find((r) => r.id === 'weekly-volume')!.state).toBe('ARMED');
   });
 });
+
+// ——— gaps in the series ————————————————————————————————————————
+//
+// The Whoop daily series is NOT zero-filled: a night the strap was off is
+// simply absent from it. A streak counted in array entries therefore steps
+// straight over the missing days and reports "three in a row" from three
+// readings scattered across a fortnight — on the three wires that speak in
+// consecutive days, which are the three most alarming rows on the table.
+
+/** Days from explicit `[date, value]` pairs, so a gap can be written down. */
+function gapped(pairs: Array<[string, number]>): DayPoint[] {
+  return pairs.map(([date, value]) => ({ date, value }));
+}
+
+describe('computeTripwires — streaks count DAYS, not readings', () => {
+  it('does not call three reds either side of a gap three in a row', () => {
+    // Three reds, but the 27th is missing: two consecutive days, then a hole.
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      recovery: gapped([
+        ['2026-08-24', 70],
+        ['2026-08-25', 70],
+        ['2026-08-26', 25],
+        ['2026-08-28', 25],
+        ['2026-08-29', 25],
+      ]),
+    });
+    const r = rows.find((r) => r.id === 'recovery-reds')!;
+    expect(r.state).toBe('CLOSE');
+    expect(r.now).toBe('2 · 25% today');
+  });
+
+  it('still trips on three reds that really are consecutive', () => {
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      recovery: gapped([
+        ['2026-08-26', 70],
+        ['2026-08-27', 25],
+        ['2026-08-28', 25],
+        ['2026-08-29', 25],
+      ]),
+    });
+    const r = rows.find((r) => r.id === 'recovery-reds')!;
+    expect(r.state).toBe('TRIPPED');
+    expect(r.meaning).toContain('3 reds in a row');
+  });
+
+  it('does not call resting HR elevated for three days across a two-day hole', () => {
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      rhr: {
+        daily: gapped([
+          ['2026-08-24', 50],
+          ['2026-08-25', 55],
+          ['2026-08-28', 55],
+          ['2026-08-29', 55],
+        ]),
+        rolling7: days(28, () => 50),
+        latest7: 55,
+        baseline28: 50,
+      },
+    });
+    const r = rows.find((r) => r.id === 'resting-hr')!;
+    expect(r.state).toBe('CLOSE');
+    expect(r.meaning).toContain('for 2 days');
+  });
+
+  it('still trips resting HR on three consecutive mornings over the mark', () => {
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      rhr: {
+        daily: gapped([
+          ['2026-08-26', 50],
+          ['2026-08-27', 55],
+          ['2026-08-28', 55],
+          ['2026-08-29', 55],
+        ]),
+        rolling7: days(28, () => 50),
+        latest7: 55,
+        baseline28: 50,
+      },
+    });
+    expect(rows.find((r) => r.id === 'resting-hr')!.state).toBe('TRIPPED');
+  });
+
+  it('does not read an HRV crossing across a missing day', () => {
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      hrv: {
+        daily: days(28, () => 38),
+        rolling7: gapped([
+          ['2026-08-26', 44],
+          ['2026-08-27', 38],
+          ['2026-08-29', 38],
+        ]),
+        latest7: 38,
+        baseline28: 44,
+      },
+    });
+    const r = rows.find((r) => r.id === 'hrv-crossing')!;
+    expect(r.state).toBe('CLOSE');
+  });
+
+  it('still reads a crossing over two consecutive days under the noise band', () => {
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      hrv: {
+        daily: days(28, () => 38),
+        rolling7: gapped([
+          ['2026-08-26', 44],
+          ['2026-08-28', 38],
+          ['2026-08-29', 38],
+        ]),
+        latest7: 38,
+        baseline28: 44,
+      },
+    });
+    const r = rows.find((r) => r.id === 'hrv-crossing')!;
+    expect(r.state).toBe('TRIPPED');
+    expect(r.meaning).toContain('2 days running');
+  });
+
+  it('is not fooled by an unsorted series or two readings on one date', () => {
+    const rows = computeTripwires({
+      ...prototypeInput(),
+      recovery: gapped([
+        ['2026-08-29', 25],
+        ['2026-08-27', 25],
+        ['2026-08-28', 25],
+        ['2026-08-28', 25],
+      ]),
+    });
+    expect(rows.find((r) => r.id === 'recovery-reds')!.state).toBe('TRIPPED');
+  });
+});

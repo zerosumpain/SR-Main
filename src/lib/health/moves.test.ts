@@ -84,6 +84,51 @@ describe('computeMoves — the volume move', () => {
     });
     expect(moves.find((m) => m.id === 'long-easy-day')).toBeUndefined();
   });
+
+  // The path where the move is carried by volume ALONE: ACWR is inside the
+  // band so it contributes nothing, and VO₂max and the easy share are quiet.
+  // The volume branch filled the rationale and left `buys` empty, which the
+  // card renders as a blank paragraph under the BUYS heading.
+  function volumeOnlyInput(): MovesInput {
+    return {
+      ...prototypeInput(),
+      acwr: ok({ acuteEWMA: 10, chronicEWMA: 10, ratio: 1.05, zone: 'optimal' }),
+      vo2: ok({ current: 41.2, trendSlopePerMonth: 0.08, percentile: 63, band: 'excellent' as const }),
+      polarised: ok({ easyPct: 60, midPct: 25, hardPct: 15, verdict: 'pyramid' as const, totalMinutes: 210 }),
+      volume: { weekKm: 7.7, medianKm: 20 },
+    };
+  }
+
+  it('still says what it buys when volume is the ONLY instrument behind it', () => {
+    const m = computeMoves(volumeOnlyInput()).find((x) => x.id === 'long-easy-day')!;
+    expect(m.instruments).toEqual(['WEEKLY VOLUME']);
+    expect(m.buys.length).toBeGreaterThan(0);
+    expect(m.buys.join(' ')).not.toBe('');
+    // Derived from the same two figures the rationale quotes, not a new claim.
+    expect(m.buys.join(' ')).toContain('7.7');
+    expect(m.buys.join(' ')).toContain('20');
+    expect(m.buys.join(' ')).not.toContain('ACWR');
+  });
+
+  it('never emits a move with nothing in its BUYS column, on any of these paths', () => {
+    const inputs: MovesInput[] = [
+      prototypeInput(),
+      volumeOnlyInput(),
+      { ...volumeOnlyInput(), sri: ok(90) },
+      {
+        ...volumeOnlyInput(),
+        readiness: { score: 88, label: 'Primed' },
+        recoveryDebt: ok({ sleepDebtMin: 10, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      },
+      { ...prototypeInput(), volume: { weekKm: 7.7, medianKm: 20 }, autonomic: null },
+    ];
+    for (const input of inputs) {
+      for (const m of computeMoves(input)) {
+        expect(m.buys.length, `${m.id} shipped with an empty BUYS`).toBeGreaterThan(0);
+        expect(m.costs.length, `${m.id} shipped with an empty COSTS`).toBeGreaterThan(0);
+      }
+    }
+  });
 });
 
 describe('computeMoves — the mix move and its gate', () => {
