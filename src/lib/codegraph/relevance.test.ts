@@ -142,13 +142,19 @@ describe('the budget is what enforces atrophy', () => {
 describe('resolving what a serve was worth', () => {
   it('counts a green gate as helpful', () => {
     expect(
-      resolveServe({ servedFor: ['typecheck:TS2345'], nextFingerprints: [], nextGatePassed: true }),
+      resolveServe({
+        outcome: 'served',
+        servedFor: ['typecheck:TS2345'],
+        nextFingerprints: [],
+        nextGatePassed: true,
+      }),
     ).toBe('helpful');
   });
 
   it('counts the same failure recurring as unhelpful', () => {
     expect(
       resolveServe({
+        outcome: 'served',
         servedFor: ['typecheck:TS2345'],
         nextFingerprints: ['typecheck:TS2345', 'vitest:AssertionError'],
         nextGatePassed: false,
@@ -159,6 +165,7 @@ describe('resolving what a serve was worth', () => {
   it('counts a DIFFERENT failure as helpful — that is progress', () => {
     expect(
       resolveServe({
+        outcome: 'served',
         servedFor: ['typecheck:TS2345'],
         nextFingerprints: ['vitest:AssertionError'],
         nextGatePassed: false,
@@ -170,11 +177,76 @@ describe('resolving what a serve was worth', () => {
     // A wrong "helpful" is indistinguishable from a real one afterwards and
     // would poison the ranking permanently.
     expect(
-      resolveServe({ servedFor: ['x'], nextFingerprints: null, nextGatePassed: null }),
+      resolveServe({
+        outcome: 'served',
+        servedFor: ['x'],
+        nextFingerprints: null,
+        nextGatePassed: null,
+      }),
     ).toBe('unresolved');
+  });
+
+  /*
+   * The defect this file did not cover, found in production 2026-08-30.
+   *
+   * `resolveServe` opened with `if (nextGatePassed === true) return 'helpful'`,
+   * ABOVE its fingerprint check, so a file-set serve was credited whenever the
+   * next gate happened to be green. Every one of the 11 serves ever marked
+   * helpful had `servedFor: []`, and nine belonged to a build that failed after
+   * 11 iterations. The old suite tested `nextGatePassed: false` for the
+   * fingerprint-less case and never the `true` branch, which is the only one
+   * that could reach the bug.
+   */
+  it('does NOT credit a fingerprint-less serve on a green gate', () => {
     expect(
-      resolveServe({ servedFor: [], nextFingerprints: [], nextGatePassed: false }),
+      resolveServe({
+        outcome: 'served',
+        servedFor: [],
+        nextFingerprints: [],
+        nextGatePassed: true,
+      }),
+    ).toBe('unattributable');
+  });
+
+  it('closes a fingerprint-less serve rather than re-examining it forever', () => {
+    expect(
+      resolveServe({
+        outcome: 'served',
+        servedFor: [],
+        nextFingerprints: [],
+        nextGatePassed: false,
+      }),
+    ).toBe('unattributable');
+  });
+
+  it('leaves a serve that carried no text open', () => {
+    // `empty` was never a candidate, so there is nothing to close. This matches
+    // `resolveCompletedBuildServes`, which also only closes `served` rows.
+    expect(
+      resolveServe({
+        outcome: 'empty',
+        servedFor: [],
+        nextFingerprints: [],
+        nextGatePassed: true,
+      }),
     ).toBe('unresolved');
+  });
+
+  it('agrees with serveIsAttributable on every shape', () => {
+    // The two resolvers disagreeing is the actual bug class here, so pin the
+    // one predicate to the one function that consumes it.
+    for (const outcome of ['served', 'empty', 'failed']) {
+      for (const servedFor of [[], ['typecheck:TS2345']]) {
+        const attributable = serveIsAttributable({ outcome, servedFor });
+        const verdict = resolveServe({
+          outcome,
+          servedFor,
+          nextFingerprints: [],
+          nextGatePassed: true,
+        });
+        expect(verdict === 'helpful').toBe(attributable);
+      }
+    }
   });
 });
 

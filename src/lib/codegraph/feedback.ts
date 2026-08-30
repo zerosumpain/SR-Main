@@ -30,7 +30,7 @@ import { resolveServe, serveIsAttributable } from './relevance';
 
 export interface ResolveResult {
   resolved: number;
-  outcome: 'helpful' | 'unhelpful' | 'unresolved' | 'none';
+  outcome: 'helpful' | 'unhelpful' | 'unresolved' | 'unattributable' | 'none';
   lessons: number;
   episodes: number;
   /** Serves closed without being counted, because nothing was being fixed. */
@@ -71,16 +71,31 @@ export async function resolveBuildServes(input: {
   let resolved = 0;
   let lessons = 0;
   let episodes = 0;
+  let unattributable = 0;
   let lastOutcome: ResolveResult['outcome'] = 'unresolved';
 
   for (const q of pending) {
     const outcome = resolveServe({
+      outcome: q.outcome,
       servedFor: (q.servedFor as string[]) ?? [],
       nextFingerprints,
       nextGatePassed,
     });
     lastOutcome = outcome;
     if (outcome === 'unresolved') continue;
+    if (outcome === 'unattributable') {
+      // Closed so it stops being re-examined every iteration, but never folded
+      // into a counter — a file-set serve was made before anything had failed,
+      // so a green gate says nothing about it. `resolveCompletedBuildServes`
+      // does the same on the success path; this branch is what stops the two
+      // halves disagreeing.
+      await db
+        .update(codegraphQueries)
+        .set({ resolution: 'unattributable', resolvedAt: new Date() })
+        .where(eq(codegraphQueries.id, q.id));
+      unattributable++;
+      continue;
+    }
 
     const lessonIds = (q.lessonIds as string[]) ?? [];
     const episodeIds = (q.episodeIds as string[]) ?? [];
@@ -118,7 +133,7 @@ export async function resolveBuildServes(input: {
     resolved++;
   }
 
-  return { resolved, outcome: lastOutcome, lessons, episodes };
+  return { resolved, outcome: lastOutcome, lessons, episodes, unattributable };
 }
 
 /**
