@@ -69,6 +69,18 @@ export interface WeeklyVolumeRead {
 }
 
 export interface OwnerHealthData {
+  /**
+   * Where the numbers came from, straight off `getHealthSeries30d`.
+   *
+   * `seriesIsMock` is the one flag on this payload that changes what the page
+   * MEANS: with no real day in the window, the whole 30-day series, the
+   * workouts and the rings are replaced by a deterministic fake so the page
+   * still renders on a cold start or through a sync outage. It is plausible and
+   * indistinguishable from real without this flag, so the dashboard says so out
+   * loud rather than presenting fabricated figures as measurements.
+   */
+  provenance: { seriesIsMock: boolean; correlationsAreIllustrative: boolean };
+
   // ——— section A ————————————————————————————————————————————————
   today: HealthDay | null;
   series: HealthDay[];

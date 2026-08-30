@@ -40,6 +40,15 @@
   /** Twelve hours without a reading and "live" is a claim, not a fact. */
   const stale = $derived(data.syncedAgoSeconds > 12 * 3600);
 
+  // With no real day in the 30-day window, `getHealthSeries30d` substitutes a
+  // deterministic MOCK series — and the workouts and rings with it — so the page
+  // still renders through a cold start or a sync outage. It is plausible and
+  // indistinguishable from real data by eye. The anonymous landing has said so
+  // since it shipped; this branch did not, so an owner in exactly that state was
+  // shown fabricated numbers laid out as measurements, under a header claiming a
+  // live sync. Nothing below the banner is a reading when this is set.
+  const seriesIsMock = $derived(data.provenance?.seriesIsMock === true);
+
   const meta = $derived.by((): string[] => {
     const out: string[] = [];
     if (data.segments) {
@@ -60,7 +69,7 @@
     { href: '/health/routes', label: 'Routes' },
     { href: '/health/record', label: 'Record' },
   ]}
-  live={stale ? null : 'Whoop · Apple · Strava'}
+  live={stale || seriesIsMock ? null : 'Whoop · Apple · Strava'}
   {meta}
   footer={[
     'strangeramblings.com/health · full read · sections A–I',
@@ -68,6 +77,12 @@
     'Advisory only · not medical advice',
   ]}
 >
+  {#if seriesIsMock}
+    <p class="hd-provenance">
+      Sample data — no readings have synced into this window yet. Nothing below is a measurement.
+    </p>
+  {/if}
+
   <StateOfPlay
     today={data.today}
     series={data.series}
@@ -111,3 +126,21 @@
 
   <VerdictSection verdict={data.verdict} />
 </HealthShell>
+
+<style>
+  /* The one loud thing on this page, and deliberately: it is the difference
+     between a dashboard and a mock-up. Same warn tokens and same copy as the
+     anonymous landing's banner, so the two states read identically wherever
+     the reader meets them. */
+  .hd-provenance {
+    margin: 0;
+    padding: 12px clamp(20px, 3vw, 44px);
+    background: var(--warn-bg);
+    border-bottom: 1px solid var(--warn-border);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+</style>

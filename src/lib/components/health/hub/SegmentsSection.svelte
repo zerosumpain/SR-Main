@@ -131,8 +131,12 @@
             {#each board.slice(0, 5) as row (row.id)}
               <a class="f-row" href="/health/segments/{row.id}">
                 <span class="f-row-name">{row.name}</span>
+                <!-- `gapPct` is a FRACTION off the PB — (recentBest − pb) / pb in
+                     segments/form.ts — and board membership needs it under 0.03, so
+                     printing it raw put "gap 0.0%" on every row on the board. ×100
+                     here, the same as tripwires.ts and segment-detail.ts do. -->
                 <span class="f-row-meta">
-                  gap {row.gapPct.toFixed(1)}%{#if row.daysSincePb != null}
+                  gap {(row.gapPct * 100).toFixed(1)}%{#if row.daysSincePb != null}
                     &nbsp;· pb {row.daysSincePb}d{/if}
                   &nbsp;· {row.effortCount} efforts
                 </span>
