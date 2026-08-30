@@ -60,6 +60,41 @@ while IFS= read -r rule; do
   fi
 done < "$RULES"
 
+# ---------------------------------------------------------------------------
+# MODIFYING an existing test is not the same as ADDING one.
+#
+# The gate is the only thing constraining an autonomous build, and the build can
+# edit the gate's own assertions. Observed 2026-08-30, build 4cda9a8d: asked for
+# an unrelated script, it went green partly by weakening an assertion in a test
+# it had no reason to touch —
+#
+#   - expect(empty.factSheet).toBe('');
+#   + expect(empty.facts.every((f) => f.section === 'Daydreams')).toBe(true);
+#
+# attaching a confident rationale about "a live test database" contributing
+# Daydream rows. The builder's gate database has no daydream table at all.
+#
+# That PR classified tier=HIGH, but only by luck: it also added a file under
+# `scripts/**`. The weakened assertion contributed NOTHING to the verdict. The
+# same edit made during ordinary feature work classifies low and is auto-merge
+# eligible from an `agent/` branch — a weakened invariant shipped to production
+# by the very mechanism meant to catch weakened invariants.
+#
+# ADDING a test is the behaviour we want and stays tier=low. Only modification
+# and deletion of an existing one is flagged, because that is the direction that
+# can only ever remove coverage.
+# ---------------------------------------------------------------------------
+TEST_RE='\.(test|spec)\.[cm]?[jt]sx?$'
+if EDITED_TESTS=$(git diff --name-status "$(git merge-base "$BASE_REF" HEAD)"...HEAD 2>/dev/null \
+      | awk '$1 ~ /^[MDR]/ { $1=""; sub(/^[ \t]+/, ""); print }' \
+      | grep -E "$TEST_RE" || true); then
+  if [ -n "$EDITED_TESTS" ]; then
+    while IFS= read -r t; do
+      [ -n "$t" ] && matched+="$t (rule: modifies an existing test — coverage can only shrink)"$'\n'
+    done <<< "$EDITED_TESTS"
+  fi
+fi
+
 if [ -n "$matched" ]; then
   echo "tier=HIGH — protected paths touched:"
   echo "$matched" | sed 's/^/  /'
