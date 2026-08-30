@@ -9,6 +9,7 @@
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
   import CalendarBoard from '$lib/components/jkai/daydream/CalendarBoard.svelte';
   import EvidenceList from '$lib/components/jkai/daydream/EvidenceList.svelte';
+  import LoopScoreboard from '$lib/components/jkai/daydream/LoopScoreboard.svelte';
   import {
     familyOf,
     groupByFamily,
@@ -24,7 +25,7 @@
   type Place = PageData['places'][number];
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
-  // One hub, six rooms. The tab rides the URL (?tab=) so a room can be linked
+  // One hub, seven rooms. The tab rides the URL (?tab=) so a room can be linked
   // to, and a notification's ?rate= deep-link lands in the Feed with the
   // thought already open — the review found the old cue pointed at a row that
   // might not even render its buttons.
@@ -36,6 +37,7 @@
     { id: 'places', label: 'Places' },
     { id: 'money', label: 'Money' },
     { id: 'engine', label: 'Engine' },
+    { id: 'improvement', label: 'Improvement' },
   ] as const;
   type TabId = (typeof TABS)[number]['id'];
   const initialTab = ((): TabId => {
@@ -2283,6 +2285,16 @@
       {#if bankError}<span class="held">{bankError}</span>{/if}
     </div>
   </section>
+  {/if}
+
+  {#if tab === 'improvement'}
+  <!-- ── IS THE LOOP CLOSING? ───────────────────────────────────────────
+       The scoreboard for folding self-improvement into daydreaming. Two
+       dashboards showed a great deal about that engine — runs, phases,
+       budget, generated code — and neither showed whether anything it built
+       was ever used. On the day the merge started: 33 tools shipped in a
+       fortnight, none ever called. -->
+  <LoopScoreboard health={data.loop} verdict={data.loopVerdict} />
   {/if}
 
   {#if tab === 'engine'}
