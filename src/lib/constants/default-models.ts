@@ -91,8 +91,22 @@ export const DEFAULT_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image';
  * `$lib/models/workloads`, which is deliberately client-importable so the picker
  * renders the same list the server enforces. The env var is still honoured, one
  * layer up in `resolveImageToolModel` where the server actually is.
+ *
+ * CHANGED 2026-08-30. This was `black-forest-labs/flux-1.1-pro`, which
+ * OpenRouter has REMOVED — `/images/generations` answers
+ * `404 No model found` for it. The `image-tool` workload has no pin in
+ * production, so the constant was the live value and every image generation on
+ * the site had been failing: `agent_actions` holds ZERO rows for
+ * `activity: 'image-tool'`, so the jkai tool has never once succeeded either.
+ * Exactly the failure mode the "never hard-code a model constant as the
+ * primary" rule exists for — a dead id fails silently until something tries it.
+ *
+ * Replaced with the cheapest id that actually serves this endpoint, verified by
+ * calling it: gemini-2.5-flash-image $0.039/image, gpt-5-image-mini $0.050,
+ * gemini-3-pro-image $0.135. All three return `{ b64_json, media_type }` and no
+ * `url`, so a reader that only handles `url` gets nothing.
  */
-export const DEFAULT_IMAGE_TOOL_MODEL_ID = 'black-forest-labs/flux-1.1-pro';
+export const DEFAULT_IMAGE_TOOL_MODEL_ID = 'google/gemini-2.5-flash-image';
 
 /** Embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const DEFAULT_EMBEDDING_MODEL_ID = 'openai/text-embedding-3-large';
