@@ -132,8 +132,9 @@
               <a class="f-row" href="/health/segments/{row.id}">
                 <span class="f-row-name">{row.name}</span>
                 <span class="f-row-meta">
-                  gap {row.gapPct.toFixed(1)}%{#if row.daysSincePb != null} · pb {row.daysSincePb}d{/if} ·
-                  {row.effortCount} efforts
+                  gap {row.gapPct.toFixed(1)}%{#if row.daysSincePb != null}
+                    &nbsp;· pb {row.daysSincePb}d{/if}
+                  &nbsp;· {row.effortCount} efforts
                 </span>
               </a>
             {/each}

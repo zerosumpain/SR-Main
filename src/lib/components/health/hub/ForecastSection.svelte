@@ -102,13 +102,21 @@
       projection: string;
       cone: string;
       dot: { x: number; y: number };
-      guides: Array<{ y: number; label: string; below: boolean }>;
-      band: { y: number; height: number; label: string } | null;
+      /** `y` is the line; `labelY` is the baseline the annotation sits on. */
+      guides: Array<{ y: number; labelY: number; label: string }>;
+      band: { y: number; height: number; labelY: number; label: string } | null;
     } | null;
   }
 
   function fmt(value: number, dp: number, suffix: string): string {
     return `${value.toFixed(dp)}${suffix}`;
+  }
+
+  /** Keep a label a line clear of another one already occupying that baseline. */
+  const LABEL_LINE = 11;
+  function clearOf(candidate: number, taken: number | null): number {
+    if (taken == null || Math.abs(candidate - taken) >= LABEL_LINE) return candidate;
+    return taken + LABEL_LINE;
   }
 
   /** The reference marks each metric is read against. ACWR has real band
@@ -176,6 +184,8 @@
           ].join(' ')
         : '';
 
+      const bandLabelY = band ? Math.min(y(band.to), y(band.from)) + 8 : null;
+
       const dir =
         Math.abs(f.slopePerMonth) < 0.005
           ? 'Flat'
@@ -204,15 +214,19 @@
           dot: { x: MID, y: y(f.now) },
           guides: guides.map((g) => ({
             y: y(g.value),
-            label: g.label,
             // A guide near the top of the frame gets its label BELOW the line,
-            // where there is room for it.
-            below: y(g.value) < 16,
+            // where there is room for it. When the band label is already
+            // sitting there — ACWR draws both, and a wide projection squeezes
+            // them together — the guide is pushed clear rather than printed on
+            // top of it.
+            labelY: clearOf(y(g.value) < 16 ? y(g.value) + 12 : y(g.value) - 5, bandLabelY),
+            label: g.label,
           })),
           band: band
             ? {
                 y: Math.min(y(band.to), y(band.from)),
                 height: Math.abs(y(band.from) - y(band.to)),
+                labelY: bandLabelY as number,
                 label: band.label,
               }
             : null,
@@ -237,19 +251,23 @@
             <p class="c-name">{card.name}</p>
             <p class="c-conf">{card.readable ? `${card.confidence}% conf` : 'no read'}</p>
           </div>
-          <p class="c-figure">
-            {card.now} <span class="c-arrow">→</span> <span class="c-then">{card.then}</span>
-          </p>
+          <!-- No read means no figure: `— → —` at 30px Archivo Black paints
+               three coloured rules and reads as a chart, not as an absence. -->
+          {#if card.readable}
+            <p class="c-figure">
+              {card.now} <span class="c-arrow">→</span> <span class="c-then">{card.then}</span>
+            </p>
+          {/if}
 
           {#if card.chart}
             <svg viewBox="-6 -6 312 124" class="c-chart" role="img" aria-label="{card.name}: {card.now} today, {card.then} in ninety days">
               {#if card.chart.band}
                 <rect x="0" y={card.chart.band.y} width={W} height={card.chart.band.height} fill="rgba(138,154,91,0.16)" />
-                <text x="4" y={card.chart.band.y + 8} class="c-axis">{card.chart.band.label}</text>
+                <text x="4" y={card.chart.band.labelY} class="c-axis">{card.chart.band.label}</text>
               {/if}
               {#each card.chart.guides as g, i (i)}
                 <line x1="0" y1={g.y} x2={W} y2={g.y} stroke="rgba(26,16,8,0.14)" stroke-width="1" stroke-dasharray="4 4" />
-                <text x="4" y={g.below ? g.y + 12 : g.y - 5} class="c-axis">{g.label}</text>
+                <text x="4" y={g.labelY} class="c-axis">{g.label}</text>
               {/each}
               {#if card.chart.cone}
                 <path d={card.chart.cone} fill="rgba(196,87,10,0.14)" />

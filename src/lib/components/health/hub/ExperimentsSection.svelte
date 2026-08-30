@@ -89,6 +89,10 @@
     border: 1px solid rgba(237, 228, 212, 0.16);
     padding: 24px;
     min-width: 0;
+    /* The design shows three. With one LIVE and nothing queued, an auto-fit
+       track at `1fr` stretches that single card the full 1400px and it stops
+       reading as a card at all. */
+    max-width: 640px;
   }
   .h-card-head {
     display: flex;

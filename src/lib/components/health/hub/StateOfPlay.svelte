@@ -347,7 +347,9 @@
           {#each tiles as t (t.label)}
             <div class="a-tile">
               <p class="a-tile-label">{t.label}</p>
-              <p class="a-tile-value">{t.value}{#if t.unit}<span class="a-tile-unit">{t.unit}</span>{/if}</p>
+              <!-- An em dash takes no unit: "—h" reads as a broken number rather
+                   than as a missing one. -->
+              <p class="a-tile-value">{t.value}{#if t.unit && t.value !== '—'}<span class="a-tile-unit">{t.unit}</span>{/if}</p>
               {#if t.weekBars}
                 <svg viewBox="0 0 100 26" preserveAspectRatio="none" class="a-spark" aria-hidden="true">
                   {#each bars(t.weekBars, 100, 26, 4) as b, i (i)}

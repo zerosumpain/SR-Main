@@ -7,9 +7,11 @@
   // ARMED rows go olive — the only state on the page where "nothing to report"
   // is the good news.
   //
-  // A wire whose window is too thin to read prints an em dash in NOW and says
-  // so in the last column. It is never rendered as ARMED, because "we cannot
-  // see it" and "it is fine" are different sentences.
+  // A wire whose window is too thin to read prints an em dash in NOW and says so
+  // in the last column. `computeTripwires` still hands it back as ARMED — there
+  // is no fourth state — so the badge goes MUTED rather than olive here: "we
+  // cannot see it" and "it is fine" are different sentences, and only one of
+  // them is good news.
   import type { Tripwire } from '$lib/health/tripwires';
   import SectionHead from './SectionHead.svelte';
   import { countWord } from './format';
@@ -27,7 +29,7 @@
         ? 'Nothing is live right now.'
         : tripped === 1
           ? 'One is live right now.'
-          : `${countWord(tripped)} are live right now.`
+          : `${countWord(tripped).toLowerCase().replace(/^./, (c) => c.toUpperCase())} are live right now.`
     }`,
   );
 </script>
@@ -57,7 +59,9 @@
             {#each tripwires as w (w.id)}
               <tr class:tripped={w.state === 'TRIPPED'}>
                 <td>
-                  <span class="e-badge state-{w.state.toLowerCase()}">{w.state}</span>
+                  <span class="e-badge state-{w.state.toLowerCase()}" class:unread={!w.readable}>
+                    {w.readable ? w.state : 'NO READ'}
+                  </span>
                 </td>
                 <td class="e-signal">
                   {w.signal}<br /><span class="e-window">{w.window}</span>
@@ -143,6 +147,13 @@
   }
   .e-badge.state-armed {
     color: var(--good-on-dark);
+    padding: 3px 0;
+  }
+  .e-badge.unread {
+    background: transparent;
+    border: none;
+    color: rgba(237, 228, 212, 0.45);
+    font-weight: 400;
     padding: 3px 0;
   }
 

@@ -120,10 +120,13 @@
       valueTone: optimal ? 'good' : 'accent',
       verdictTone: optimal ? 'good' : 'accent',
       body: `Acute 7-day EWMA against chronic 28-day. ${tail}`,
+      caption: `${ACWR_BANDS.detraining.toFixed(1)} detrain · ${ACWR_BANDS.undertraining.toFixed(1)} under · ${ACWR_BANDS.optimal.toFixed(1)} optimal · ${ACWR_BANDS.caution.toFixed(1)} caution`,
     };
   });
 
-  /** The five bands, in the proportions the design draws them. */
+  /** The five bands, in the proportions the design draws them. The names sit
+   *  in the panel's caption rather than under each track: at the 12px floor
+   *  this site holds sitewide, `CAUTION` does not fit a 36px column. */
   const ACWR_BAND_LABELS = ['detrain', 'under', 'optimal', 'caution', 'danger'];
   const ACWR_BAND_FR = [22, 20, 34, 12, 12];
   const acwrActive = $derived.by((): number => {
@@ -455,18 +458,13 @@
 
           <!-- Each instrument draws the one chart that suits it; nothing here
                is a generic plot with a different series in it. -->
-          {#if p.id === 'acwr'}
+          {#if p.id === 'acwr' && p.readable}
             <div class="b-bands">
               {#each ACWR_BAND_LABELS as label, i (label)}
                 <div class="b-band" class:on={i === acwrActive} style="flex: {ACWR_BAND_FR[i]}"></div>
               {/each}
             </div>
-            <div class="b-bandlabels">
-              {#each ACWR_BAND_LABELS as label, i (label)}
-                <p class:on={i === acwrActive} style="flex: {ACWR_BAND_FR[i]}">{label}</p>
-              {/each}
-            </div>
-          {:else if p.id === 'monotony'}
+          {:else if p.id === 'monotony' && p.readable}
             <div class="b-weekbars">
               {#each monotonyBars as h, i (i)}
                 <div class="b-weekbar" class:last={i === monotonyBars.length - 1} style="height: {h}%"></div>
@@ -513,12 +511,12 @@
                 </div>
               {/each}
             </div>
-          {:else if p.id === 'debt' && debtChart}
+          {:else if p.id === 'debt' && p.readable && debtChart}
             <svg viewBox="0 0 100 34" preserveAspectRatio="none" class="b-curve" aria-hidden="true">
               <polyline points={debtChart.points} fill="none" stroke="var(--accent-on-dark)" stroke-width="1.8" />
               <line x1="0" y1={debtChart.flagY} x2="100" y2={debtChart.flagY} stroke="rgba(237,228,212,0.4)" stroke-width="0.8" stroke-dasharray="3 3" />
             </svg>
-          {:else if p.id === 'efficiency' && efficiencyChart}
+          {:else if p.id === 'efficiency' && p.readable && efficiencyChart}
             <svg viewBox="0 0 100 30" preserveAspectRatio="none" class="b-curve" aria-hidden="true">
               <line x1="0" y1={efficiencyChart.baseY} x2="100" y2={efficiencyChart.baseY} stroke="rgba(237,228,212,0.4)" stroke-width="0.8" stroke-dasharray="3 3" />
               <polyline points={efficiencyChart.points} fill="none" stroke="var(--accent-on-dark)" stroke-width="1.8" />
@@ -640,12 +638,9 @@
   /* ——— ACWR band gauge ————————————————————————————————————————
      `flex` weights, not percentages: the 2px gaps then come out of the tracks
      instead of pushing the last band off the end of the row. */
-  .b-bands,
-  .b-bandlabels {
+  .b-bands {
     display: flex;
     gap: 2px;
-  }
-  .b-bands {
     margin-bottom: 6px;
   }
   .b-band {
@@ -655,24 +650,6 @@
   .b-band.on {
     background: var(--accent-on-dark);
   }
-  .b-bandlabels {
-    margin-bottom: 14px;
-  }
-  .b-bandlabels p {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: rgba(237, 228, 212, 0.45);
-    margin: 0;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .b-bandlabels p.on {
-    color: var(--accent-on-dark);
-  }
-
   /* ——— monotony week bars ——————————————————————————————————— */
   .b-weekbars {
     display: grid;
