@@ -263,7 +263,7 @@ export function packByRelevance<T>(
  * indistinguishable from a real one afterwards, and it would poison the
  * ranking permanently.
  */
-export type ServeOutcome = 'helpful' | 'unhelpful' | 'unresolved';
+export type ServeOutcome = 'helpful' | 'unhelpful' | 'unresolved' | 'unattributable';
 
 /**
  * Whether a serve is capable of being evidence at all, before asking what it
@@ -289,6 +289,8 @@ export function serveIsAttributable(serve: { outcome: string; servedFor: string[
 }
 
 export function resolveServe(input: {
+  /** The serve's own outcome — `served`, `empty` or `failed`. */
+  outcome: string;
   /** Fingerprints that caused the retrieval. */
   servedFor: string[];
   /** Fingerprints present in the NEXT iteration's gate output. */
@@ -296,10 +298,32 @@ export function resolveServe(input: {
   /** Did the next iteration's gate pass outright? */
   nextGatePassed: boolean | null;
 }): ServeOutcome {
-  const { servedFor, nextFingerprints, nextGatePassed } = input;
-  if (nextGatePassed === true) return 'helpful';
+  const { outcome, servedFor, nextFingerprints, nextGatePassed } = input;
+  // ATTRIBUTABILITY COMES FIRST, and the order is the whole point.
+  //
+  // This used to open with `if (nextGatePassed === true) return 'helpful'`,
+  // above the fingerprint check below it. So a FILE-SET serve — made before any
+  // gate had run, with nothing it could be answering — was credited whenever
+  // the next gate happened to be green. `resolveCompletedBuildServes` had
+  // already been fixed for exactly this and applied `serveIsAttributable`;
+  // this resolver had not, so the same defect survived in the other half.
+  //
+  // Measured in production 2026-08-30: all 11 serves ever marked `helpful`
+  // carried `served_for = []`, and NINE of them belonged to build 42244cc0,
+  // which failed after 11 iterations. 44 of 48 lesson credits and 33 of 36
+  // episode credits in the whole corpus came from those rows.
+  //
+  // Both resolvers now go through the one predicate, so they cannot drift again.
+  if (!serveIsAttributable({ outcome, servedFor })) {
+    // A serve that carried text but no fingerprint can never become evidence,
+    // so close it now. An `empty` or `failed` one is left open, matching
+    // `resolveCompletedBuildServes` — it was never a candidate to begin with.
+    return outcome === 'served' ? 'unattributable' : 'unresolved';
+  }
   if (nextFingerprints === null || nextGatePassed === null) return 'unresolved';
-  if (!servedFor.length) return 'unresolved';
+  // Safe here and only here: the serve answered a specific gate error, so a
+  // green gate means that error is gone.
+  if (nextGatePassed === true) return 'helpful';
   const recurred = servedFor.some((f) => nextFingerprints.includes(f));
   if (recurred) return 'unhelpful';
   // The original failure is gone even though the gate is still red: something
