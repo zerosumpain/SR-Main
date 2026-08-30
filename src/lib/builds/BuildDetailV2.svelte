@@ -387,6 +387,8 @@
     <FailureRecovery
       buildId={build.id}
       failureKind={build.failure?.kind ?? null}
+      failureMessage={build.failure?.message ?? null}
+      diagnostics={build.failure?.diagnostics ?? null}
       origin={build.origin}
       onAfter={refresh}
     />

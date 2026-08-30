@@ -2,11 +2,15 @@
   let {
     buildId,
     failureKind,
+    failureMessage,
+    diagnostics,
     origin,
     onAfter,
   }: {
     buildId: string;
     failureKind: string | null;
+    failureMessage: string | null;
+    diagnostics: string | null;
     // Read-only display data — used only inside replan()'s confirm() text,
     // never copied into local $state (see svelte5-pitfalls: a prop mirrored
     // into $state and then read back is how the prop-sync effect loop
@@ -75,6 +79,11 @@
   <header class="nm-sec-hd">
     <span class="sr-label-tight">Build failed{failureKind ? ` — ${failureKind}` : ''}</span>
   </header>
+  {#if failureMessage}<p class="dim">{failureMessage}</p>{/if}
+  {#if diagnostics}
+    <p class="diagnostics-label">Gate diagnostics</p>
+    <pre class="diagnostics">{diagnostics}</pre>
+  {/if}
   <p class="dim">Recovery options:</p>
   <ul class="dim opts">
     <li><strong>Restart</strong> — pick up from the last good iteration with no new instructions. Use this when a service restart or transient error killed the build mid-flight.</li>
@@ -108,6 +117,8 @@
 </section>
 
 <style>
+  @import '../../../design-system/tokens.css';
+
   .recovery {
     border-left: 3px solid var(--status-error);
     margin-bottom: 1rem;
@@ -116,6 +127,25 @@
     color: var(--text-muted);
     font-size: var(--fs-label);
     margin: 0 0 0.5rem;
+  }
+  .diagnostics-label {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    margin: 0.75rem 0 0.3rem;
+    text-transform: uppercase;
+  }
+  .diagnostics {
+    background: var(--code-bg);
+    color: var(--code-text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    margin: 0;
+    max-height: 16rem;
+    overflow: auto;
+    padding: 0.75rem;
+    white-space: pre-wrap;
   }
   .opts {
     padding-left: 1.2rem;

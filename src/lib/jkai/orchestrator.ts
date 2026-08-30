@@ -31,6 +31,7 @@ import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { BudgetConfig, FailureEnvelope } from './types';
 import { formatRescuePrBody } from './rescue-body';
+import { formatBuildFailureNotification } from './failure-notification';
 import { emitStage } from './stage-events';
 import { notifyAllSubscribers } from '$lib/server/push';
 
@@ -1527,12 +1528,8 @@ class Orchestrator {
         );
         this.consecutiveIdleIterations = wroteSomething ? 0 : this.consecutiveIdleIterations + 1;
         if (this.consecutiveIdleIterations >= idleCap) {
-          // Say WHAT the gate is objecting to. "no_progress" reads as the
-          // agent's failure, and on change request #216 it was not: the work
-          // was finished and two one-line type errors were outstanding, neither
-          // of which the agent had ever been shown. A reader who sees the
-          // diagnostic here can fix it in a minute instead of re-running the
-          // build to find out.
+          // Keep the summary distinct from the diagnostics. The latter is
+          // rendered as its own rescue-PR block and added to the push alert.
           const blocker = testResult.diagnostics
             ? `\n\nThe gate is failing on:\n${testResult.diagnostics.slice(0, 1200)}`
             : '';
@@ -1544,9 +1541,7 @@ class Orchestrator {
           );
           await this.abortBuild(buildId, {
             kind: 'no_progress',
-            message: testResult.diagnostics
-              ? `${this.consecutiveIdleIterations} consecutive iterations changed no files while the gate was still failing: ${testResult.diagnostics.split('\n').find((l) => l.trim())?.slice(0, 200) ?? ''}`
-              : `${this.consecutiveIdleIterations} consecutive iterations changed no files.`,
+            message: `${this.consecutiveIdleIterations} consecutive iterations changed no files while the gate was still failing.`,
             gateCommand: testResult.gateCommand,
             diagnostics: testResult.diagnostics,
             attempts: 1,
@@ -2048,7 +2043,7 @@ class Orchestrator {
     try {
       await notifyAllSubscribers({
         title: 'Build failed',
-        body: (failure.message ?? '').slice(0, 140) || 'jkai build failed',
+        body: formatBuildFailureNotification(failure),
         url: `/jkai/builds/${buildId}`,
       });
     } catch (e) {

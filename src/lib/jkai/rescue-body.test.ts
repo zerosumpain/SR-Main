@@ -16,6 +16,7 @@ describe('formatRescuePrBody', () => {
     expect(body).toContain('Command: `npm run gate`');
     expect(body).toContain('The gate failed in `gate:check`.');
     expect(body).toContain('Error: Expected 2 arguments, but got 1.');
+    expect(body.match(/Error: Expected 2 arguments, but got 1\./g)).toHaveLength(1);
   });
 
   /*
