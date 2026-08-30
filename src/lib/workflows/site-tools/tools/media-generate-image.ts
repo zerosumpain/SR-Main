@@ -86,8 +86,20 @@ export async function handleGenerateImage(
       },
       body: JSON.stringify({
         model,
-        prompt: `${args.prompt}\n\naspect_ratio: ${aspect}`,
+        prompt: args.prompt,
         n: 1,
+        // A TOP-LEVEL parameter, not a line appended to the prompt.
+        //
+        // This used to be `${prompt}\n\naspect_ratio: ${aspect}` and the model
+        // ignored it completely — measured 2026-08-30: every request came back
+        // 1024x1024 whatever was asked for, so the tool's `aspect_ratio`
+        // argument had never done anything. As a parameter it is exact:
+        // 16:9 -> 1344x768, 9:16 -> 768x1344, 4:3 -> 1184x864.
+        //
+        // A model that does not understand the parameter ignores it the same
+        // way it ignored the prompt line, so this is strictly better and never
+        // worse.
+        aspect_ratio: aspect,
       }),
     });
     if (!resp.ok) {
@@ -116,7 +128,9 @@ export async function handleGenerateImage(
       sessionId: ctx.conversationId,
     });
 
-    // OpenRouter image gen returns { data: [{ url, b64_json }] }
+    // OpenRouter image gen returns { data: [{ url, b64_json, media_type }] }.
+    // The current models return b64_json and NO url at all, so the url branch
+    // below is a fallback rather than the main path.
     const item = data.data?.[0];
     if (!item) return { success: false, error: 'OpenRouter returned no image' };
 
@@ -125,6 +139,12 @@ export async function handleGenerateImage(
 
     if (item.b64_json) {
       buf = Buffer.from(item.b64_json, 'base64');
+      // The field is `media_type`, not `mime_type`, and these models do not all
+      // return PNG. Assuming PNG writes a .png file holding JPEG bytes, which
+      // then serves with the wrong Content-Type.
+      if (typeof item.media_type === 'string' && item.media_type.startsWith('image/')) {
+        mime = item.media_type;
+      }
     } else if (item.url) {
       const imgRes = await fetch(item.url);
       if (!imgRes.ok) return { success: false, error: `image download ${imgRes.status}` };
