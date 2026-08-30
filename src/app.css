@@ -1,5 +1,10 @@
 @import 'tailwindcss';
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500&display=swap');
+/* The Google Fonts request lives in src/app.html as <link> tags, NOT here.
+ * Vite strips a bare `@import url(https://…)` out of every built CSS chunk,
+ * so declaring it in this file loaded the fonts in dev and silently loaded
+ * nothing in production — Archivo Black headlines rendered as Impact on the
+ * live site for as long as this line was the only declaration (fixed
+ * 2026-08-30). Change the families or weights in app.html. */
 
 /* Selawik — self-hosted, so jkai reads identically on every device.
  *
