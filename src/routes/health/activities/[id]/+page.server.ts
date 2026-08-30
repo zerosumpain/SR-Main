@@ -34,5 +34,19 @@ export const load: PageServerLoad = async ({ params }) => {
   } catch (err) {
     console.warn('[trails] highlights failed:', (err as Error)?.message);
   }
+  // Everything the redesigned detail page binds is on these four, and all of it
+  // was already here bar `physio.hrMaxSource`:
+  //   activity — splits (trailing split reported at true distance, never
+  //     rounded up), elevation profile, the HR/cadence series, and the whole
+  //     provenance set: source, rawType (reported-as), timezone + startDateLocal
+  //     (local offset), coordinates (whether there is a GPS trace at all).
+  //   physio  — trimp + trimpBasis (the load basis), ef, decouplingPct,
+  //     hrrCurve + hrr60, zones, zoneEdges off hrMax with hrMaxSource beside it,
+  //     mets, minHr, temperatureC, humidityPct, and `typical` — the same-sport
+  //     medians the pace / HR / efficiency comparisons read.
+  //   segments — rankByTime and rankByEfficiency with rankedByTimeOf and
+  //     rankedByEfficiencyOf beside them, so "3rd of 4" can never print as
+  //     "3rd of 19".
+  //   highlights — the whole ordered set for this outing, best first.
   return { activity, physio, segments, highlights };
 };

@@ -5,6 +5,19 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 		<link rel="alternate" type="application/rss+xml" title="Strange Ramblings" href="/rss.xml" />
+		<!-- Google Fonts as LINK TAGS, not an @import in app.css.
+		     Vite drops a bare `@import url(https://…)` from every built CSS chunk
+		     (verified 2026-08-30: 0 of 255 chunks carried it), so Archivo Black,
+		     DM Sans, DM Mono, Fraunces and JetBrains Mono were declared sitewide
+		     and never actually loaded in production — every headline fell through
+		     --font-display to Impact. The URL is byte-identical to the one that
+		     was in app.css, weights included. -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=DM+Mono:wght@400;500&amp;family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&amp;family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+			rel="stylesheet"
+		/>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

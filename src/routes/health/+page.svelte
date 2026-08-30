@@ -23,32 +23,16 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Narrative from '$lib/components/health/v2/Narrative.svelte';
   import PulseGrid from '$lib/components/health/v2/PulseGrid.svelte';
-  import RecoverySignals from '$lib/components/health/v2/RecoverySignals.svelte';
-  import SleepConsistency from '$lib/components/health/v2/SleepConsistency.svelte';
   import Fitness from '$lib/components/health/v2/Fitness.svelte';
-  import Correlations from '$lib/components/health/v2/Correlations.svelte';
   import EpicActivities from '$lib/components/health/v2/EpicActivities.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
+  import HealthDashboard from '$lib/components/health/hub/HealthDashboard.svelte';
   import ChapterLede from '$lib/components/health/ChapterLede.svelte';
   import ReadinessBreakdown from '$lib/components/health/ReadinessBreakdown.svelte';
   import StatRow, { type Stat } from '$lib/components/health/StatRow.svelte';
-  import SignalTiles from '$lib/components/health/SignalTiles.svelte';
-  import TrendCharts from '$lib/components/health/TrendCharts.svelte';
   import BodyTrend from '$lib/components/health/BodyTrend.svelte';
-  import LoadPanel from '$lib/components/health/LoadPanel.svelte';
-  import SegmentsPanel from '$lib/components/health/SegmentsPanel.svelte';
-  import RecentOutings from '$lib/components/health/RecentOutings.svelte';
-  import CoachCard from '$lib/components/health/CoachCard.svelte';
   import { fmtAgo } from '$lib/components/health/v2/utils';
-  import {
-    usable,
-    todayLede,
-    windowLede,
-    directionLede,
-    loadLede,
-    recoveryLede,
-    groundLede,
-  } from '$lib/health/ledes';
+  import { usable, todayLede, windowLede, directionLede } from '$lib/health/ledes';
 
   let { data } = $props();
 
@@ -222,57 +206,6 @@
       ef: owner?.dashboard?.efficiency.ef ?? null,
     }),
   );
-
-  const loadText = $derived(
-    owner?.dashboard
-      ? loadLede({
-          acwr: owner.dashboard.load.trimpAcwr,
-          monotony: owner.monotony,
-          polarised: owner.polarised,
-          daysBanked: owner.dashboard.load.days.length,
-        })
-      : '',
-  );
-
-  // The autonomic result carries a 0–100 score, not a word. The bands are the
-  // ones RecoverySignals draws below, restated here so the lede and the gauge
-  // cannot disagree about what "balanced" means.
-  function autonomicWord(score: number): string {
-    if (score >= 70) return 'fresh';
-    if (score >= 50) return 'balanced';
-    if (score >= 30) return 'leaning tired';
-    return 'strained';
-  }
-
-  const recoveryText = $derived(
-    owner
-      ? recoveryLede({
-          // The result is in MINUTES; the sentence is in hours.
-          debtHours: usable(owner.recoveryDebt)
-            ? (owner.recoveryDebt as { value: { sleepDebtMin: number } }).value.sleepDebtMin / 60
-            : null,
-          autonomicLabel: usable(owner.autonomic)
-            ? autonomicWord((owner.autonomic as { value: { score: number } }).value.score)
-            : null,
-          sleepRegularity:
-            usable(owner.sleepRegularity) && typeof owner.sleepRegularity?.value === 'number'
-              ? owner.sleepRegularity.value
-              : null,
-        })
-      : '',
-  );
-
-  const groundText = $derived(
-    owner
-      ? groundLede({
-          outings: owner.outings.length,
-          distanceM: owner.outings.reduce((n, o) => n + (o.distanceM ?? 0), 0),
-          types: [...new Set(owner.outings.map((o) => o.activityType))],
-          segments: owner.segments?.totals.segments ?? 0,
-          recentPrs: owner.segments?.recentPrs.length ?? 0,
-        })
-      : '',
-  );
 </script>
 
 <svelte:head>
@@ -293,6 +226,11 @@
   {/if}
 </svelte:head>
 
+<!-- Two audiences, two documents. The owner gets the nine-section hub; the
+     anonymous branch below is the public landing page and is UNCHANGED. -->
+{#if owner}
+<HealthDashboard data={owner} />
+{:else}
 <div class="h-root">
   <PageHeader title="HEALTH">
     {#snippet meta()}
@@ -302,16 +240,6 @@
       </span>
     {/snippet}
   </PageHeader>
-
-  {#if owner}
-    <nav class="h-hubnav" aria-label="Health sections">
-      <a href="/health/activities">Activities</a>
-      <a href="/health/segments">Segments</a>
-      <a href="/health/plan">Plan</a>
-      <a href="/health/routes">Routes</a>
-      <a href="/health/record">Record</a>
-    </nav>
-  {/if}
 
   {#if data.provenance?.seriesIsMock}
     <p class="h-provenance">
@@ -374,22 +302,6 @@
     </div>
   </section>
 
-  <!-- ─── 02 · Today's session ────────────────────────────────────── -->
-  {#if showCoach && owner?.coach}
-    <section class="h-chapter tinted">
-      <div class="h-chapter-inner">
-        <div class="h-chapter-head">
-          <div>
-            <p class="h-chapter-num">{num('session')} / THE SESSION</p>
-            <h2 class="h-chapter-title">SO WHAT DO YOU DO ABOUT IT?</h2>
-          </div>
-          <p class="h-chapter-strap">One session, and the figures behind it.</p>
-        </div>
-        <CoachCard plan={owner.coach} onevidence={openEvidence} />
-      </div>
-    </section>
-  {/if}
-
   <!-- ─── 03 · The direction of travel ────────────────────────────── -->
   {#if showDirection}
     <section class="h-chapter">
@@ -403,10 +315,7 @@
         </div>
         <ChapterLede text={directionText} />
 
-        {#if owner?.dashboard}
-          <SignalTiles dashboard={owner.dashboard} scope="body" onevidence={openEvidence} />
-          <TrendCharts dashboard={owner.dashboard} scope="body" />
-        {:else if hasSeries}
+        {#if hasSeries}
           <BodyTrend series={data.series} />
         {/if}
 
@@ -419,129 +328,6 @@
             <Fitness vo2max={data.vo2max} stats={data.stats} onevidence={openEvidence} />
           </div>
         {/if}
-      </div>
-    </section>
-  {/if}
-
-  <!-- ─── 04 · The load ───────────────────────────────────────────── -->
-  {#if showLoad && owner}
-    <section class="h-chapter tinted">
-      <div class="h-chapter-inner">
-        <div class="h-chapter-head">
-          <div>
-            <p class="h-chapter-num">{num('load')} / THE WORK</p>
-            <h2 class="h-chapter-title">TOO MUCH, OR NOT ENOUGH?</h2>
-          </div>
-          <p class="h-chapter-strap">Recent work against the base you built it on.</p>
-        </div>
-        <ChapterLede text={loadText} />
-        <LoadPanel dashboard={owner.dashboard} monotony={owner.monotony} onevidence={openEvidence} />
-
-        <div class="h-sub">
-          <div class="h-sub-hd">
-            <h3 class="h-sub-title">What the work produced</h3>
-            <p class="h-sub-meta">
-              Efficiency, cost and recovery-per-session — outputs of the training above, not
-              measures of the body at rest
-            </p>
-          </div>
-          <SignalTiles dashboard={owner.dashboard} scope="work" onevidence={openEvidence} />
-          <TrendCharts dashboard={owner.dashboard} scope="work" />
-        </div>
-      </div>
-    </section>
-  {/if}
-
-  <!-- ─── 05 · Recovery and sleep ─────────────────────────────────── -->
-  {#if showRecovery && owner}
-    <section class="h-chapter">
-      <div class="h-chapter-inner">
-        <div class="h-chapter-head">
-          <div>
-            <p class="h-chapter-num">{num('recovery')} / RECOVERY &amp; SLEEP</p>
-            <h2 class="h-chapter-title">ARE YOU GETTING IT BACK?</h2>
-          </div>
-          <p class="h-chapter-strap">
-            Training is the stimulus. This is the half where it actually happens.
-          </p>
-        </div>
-        <ChapterLede text={recoveryText} />
-
-        <RecoverySignals
-          recoveryDebt={owner.recoveryDebt}
-          autonomic={owner.autonomic}
-          onevidence={openEvidence}
-        />
-
-        {#if usable(owner.sleepRegularity) || usable(owner.circadian)}
-          <div class="h-sub">
-            <div class="h-sub-hd">
-              <h3 class="h-sub-title">The clock</h3>
-              <p class="h-sub-meta">
-                Duration is half of sleep. Going to bed at the same time is the other half
-              </p>
-            </div>
-            <SleepConsistency
-              sleepRegularity={owner.sleepRegularity}
-              circadian={owner.circadian}
-              onevidence={openEvidence}
-            />
-          </div>
-        {/if}
-      </div>
-    </section>
-  {/if}
-
-  <!-- ─── 06 · The ground ─────────────────────────────────────────── -->
-  {#if showGround && owner}
-    <section class="h-chapter tinted">
-      <div class="h-chapter-inner">
-        <div class="h-chapter-head">
-          <div>
-            <p class="h-chapter-num">{num('ground')} / THE GROUND</p>
-            <h2 class="h-chapter-title">WHERE HAVE YOU BEEN?</h2>
-          </div>
-          <p class="h-chapter-strap">
-            <a href="/health/activities">Every outing →</a>
-          </p>
-        </div>
-        <ChapterLede text={groundText} />
-
-        <RecentOutings outings={owner.outings} />
-
-        {#if owner.segments && owner.segments.totals.segments > 0}
-          <div class="h-sub">
-            <div class="h-sub-hd">
-              <h3 class="h-sub-title">Ground you have covered twice</h3>
-              <p class="h-sub-meta">
-                {owner.segments.totals.segments} stretches · {owner.segments.totals.efforts} efforts
-              </p>
-            </div>
-            <SegmentsPanel
-              segments={owner.segments}
-              chains={owner.chains ?? []}
-              onevidence={openEvidence}
-            />
-          </div>
-        {/if}
-      </div>
-    </section>
-  {/if}
-
-  <!-- ─── 07 · Correlations ───────────────────────────────────────── -->
-  {#if showCorrelations && owner}
-    <section class="h-chapter">
-      <div class="h-chapter-inner">
-        <div class="h-chapter-head">
-          <div>
-            <p class="h-chapter-num">{num('correlations')} / WHAT MOVES WHAT</p>
-            <h2 class="h-chapter-title">LIGHTLY SCIENTIFIC</h2>
-          </div>
-          <p class="h-chapter-strap">
-            N is small. A pinch of salt and a glass of water.
-          </p>
-        </div>
-        <Correlations items={owner.correlations} />
       </div>
     </section>
   {/if}
@@ -580,6 +366,7 @@
   focusId={evidenceFocus}
   onclose={() => (evidenceOpen = false)}
 />
+{/if}
 
 <style>
   /* The design system's only sanctioned shadow is the live dot's --accent-glow.
@@ -600,32 +387,6 @@
     font-family: var(--font-body);
     position: relative;
     overflow-x: hidden;
-  }
-
-  .h-hubnav {
-    display: flex;
-    gap: 0;
-    flex-wrap: wrap;
-    border-bottom: 1px solid var(--line-hair);
-    background: var(--surface-rail);
-    padding: 0 32px;
-  }
-  .h-hubnav a {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    text-decoration: none;
-    padding: 12px 16px;
-    border-right: 1px solid var(--line-hair);
-  }
-  .h-hubnav a:first-child {
-    border-left: 1px solid var(--line-hair);
-  }
-  .h-hubnav a:hover {
-    color: var(--accent);
-    background: var(--accent-tint-04);
   }
 
   .h-provenance {
@@ -690,14 +451,6 @@
     max-width: 340px;
     text-align: right;
   }
-  .h-chapter-strap a {
-    color: var(--accent);
-    text-decoration: none;
-  }
-  .h-chapter-strap a:hover {
-    text-decoration: underline;
-  }
-
   .h-after-hero {
     margin-top: 28px;
   }
@@ -884,7 +637,6 @@
     .h-footer {
       padding: 28px 16px;
     }
-    .h-hubnav,
     .h-provenance {
       padding-left: 16px;
       padding-right: 16px;

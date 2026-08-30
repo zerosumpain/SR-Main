@@ -45,7 +45,7 @@ import { listSegments, type SegmentListRow } from './segments-service';
 import { haversineM } from './track';
 
 // ---------------------------------------------------------------------------
-// Shapes — this is exactly what CoachCard renders.
+// Shapes — this is exactly what the health hub's proposal card renders.
 
 export interface CoachSession {
   sport: CoachSport;

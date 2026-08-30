@@ -1,5 +1,10 @@
 @import 'tailwindcss';
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500&display=swap');
+/* The Google Fonts request lives in src/app.html as <link> tags, NOT here.
+ * Vite strips a bare `@import url(https://…)` out of every built CSS chunk,
+ * so declaring it in this file loaded the fonts in dev and silently loaded
+ * nothing in production — Archivo Black headlines rendered as Impact on the
+ * live site for as long as this line was the only declaration (fixed
+ * 2026-08-30). Change the families or weights in app.html. */
 
 /* Selawik — self-hosted, so jkai reads identically on every device.
  *
@@ -62,6 +67,24 @@
   --accent-tint-20: rgba(196, 87, 10, 0.2);
   --accent-tint-25: rgba(196, 87, 10, 0.25);
   --accent-tint-35: rgba(196, 87, 10, 0.35);
+  --accent-tint-50: rgba(196, 87, 10, 0.5);
+  /* The accent, lightened for use ON DARK. --accent at #c4570a scores 2.6:1 on
+     the #1a1008 full-bleed sections the health hub uses, which is under the
+     floor; this is its partner, not a second accent. Paper keeps --accent. */
+  --accent-on-dark: #e8863a;
+
+  /* "Good" olive — the one hue that means a number is going the right way.
+     Two values because it is used two ways: --good is text on paper, and
+     --good-on-dark is text AND fill on the dark bands, where the paper value
+     sinks into the ground the way #c4570a does.
+     The dark value is measured off the dashboard reference, where it is the
+     only olive used on #1a1008 (20 occurrences); the handoff's token table
+     names #6b7f4a, but every appearance of that shade in the reference set is
+     on PAPER, next to text this token never has to carry. */
+  --good: #55663a;
+  --good-on-dark: #8a9a5b;
+  /* The olive as a hairline: the rhythm badge's border on paper. */
+  --good-line: rgba(107, 127, 74, 0.6);
 
   /* Counter-accent — deep petrol. Sits opposite burnt orange on the wheel at
      the same depth. Editorial counterpoints only: inline links in long-form,

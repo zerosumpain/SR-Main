@@ -49,7 +49,10 @@ export const load: PageServerLoad = async ({ url }) => {
 
     // A Map does not survive SvelteKit's serialisation cleanly, and only the
     // LEAD highlight is shipped: there are around five per activity and this
-    // payload is already 1,100-odd rows wide.
+    // payload is already 1,100-odd rows wide. Each carries its `scope`
+    // (activity | segment | environment | rhythm), which is what decides how
+    // the excellence badge is drawn — a solid fill for `activity`, an accent
+    // outline for `segment` and `environment`, olive for `rhythm`.
     const highlights: Record<string, Highlight> = {};
     if (corpus) {
       for (const row of result.rows) {

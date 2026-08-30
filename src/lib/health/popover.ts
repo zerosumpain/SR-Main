@@ -1,9 +1,10 @@
 // Where a floating panel goes so that all of it stays on screen.
 //
-// Lifted out of ActivityTable so the activity DETAIL page can hang the same
-// corrections menu off a button without importing the whole 1,900-line table
-// to get at one pure function. ActivityTable re-exports these, which is what
-// activity-table.test.ts still imports.
+// Lifted out of the old ActivityTable so the activity DETAIL page could hang
+// the same corrections menu off a button without importing a 1,900-line table
+// to get at one pure function. That table is gone; both the ledger's shared
+// row menu and ActivityCorrections place their panels through this, and
+// $lib/health/activity-list re-exports it so the tests have one import.
 
 /** Gap between the trigger and the panel. */
 export const POP_GAP = 4;
