@@ -27,6 +27,8 @@ import {
 } from '$lib/db/schema';
 import { codegraphServiceAuthorized } from '$lib/codegraph/auth';
 import { familyOf } from '$lib/codegraph/family';
+import { shapeEdges } from '$lib/codegraph/edges';
+import { gateNodePath, isGatePath } from '$lib/codegraph/gates';
 import { pgTextArray } from '$lib/db/sql-array';
 import type { RequestHandler } from './$types';
 
@@ -76,7 +78,9 @@ async function ensureNodes(paths: string[], repo: string): Promise<Map<string, s
       .values(slice.map((p) => ({
         repo,
         canonicalPath: p,
-        kind: p.includes('.') ? 'file' : 'dir',
+        // A gate path (`gate:vitest`) has no dot and would otherwise be filed
+        // as a directory — which is how the `gate:` seed lane stayed empty.
+        kind: isGatePath(p) ? 'gate' : p.includes('.') ? 'file' : 'dir',
         displayName: p.split('/').pop() ?? p,
         // Stamped HERE, never taken from the body. Family is a pure function of
         // the path, so the server can always compute it — and a caller that
@@ -277,7 +281,10 @@ export const POST: RequestHandler = async ({ request }) => {
         resolution: e.resolution?.slice(0, 4000) ?? null,
         verification: e.verification?.slice(0, 1000) ?? null,
         fingerprint: e.fingerprint ?? null,
-        gate: e.gate ?? null,
+        // Normalised, not stored as sent. Production held five values across
+        // 108 episodes and two of them were junk (`cmd`, and a literal `gate`),
+        // so a SELECT DISTINCT over this column would have minted junk nodes.
+        gate: gateNodePath(e.gate).replace(/^gate:/, ''),
         verdict,
         filesTouched: files,
         prNumber: e.prNumber ?? null,
@@ -300,7 +307,20 @@ export const POST: RequestHandler = async ({ request }) => {
       // distinct, and those are different numbers by design.
       counts.episodes += 1;
 
-      const nodeMap = await ensureNodes([...files, ...(e.nodes ?? [])], repo);
+      // THE GATE IS A NODE, and reaches its episodes through the join that
+      // already exists rather than through a new edge kind.
+      //
+      // `gated_by` edges (file -> gate) are the obvious alternative and are
+      // wrong: `vitest` alone would take an edge to every file in 95 episodes
+      // and become the largest hub in the graph by an order of magnitude — the
+      // exact shape `walk()`'s degree cap exists to contain. Going through
+      // `codegraph_node_episodes` also means `retrieve.ts` needs no change at
+      // all: a `gate:` seed resolves to this node, and the episode pick already
+      // joins episodes by node id.
+      const nodeMap = await ensureNodes(
+        [...files, ...(e.nodes ?? []), gateNodePath(e.gate)],
+        repo,
+      );
       const links = [...nodeMap.values()].map((nodeId) => ({ nodeId, episodeId: row.id }));
       if (links.length) await db.insert(codegraphNodeEpisodes).values(links).onConflictDoNothing();
     }
@@ -308,9 +328,23 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // --- Edges -------------------------------------------------------------
   if (edgesIn.length) {
-    const paths = edgesIn.flatMap((e) => [e.source, e.target]);
+    // ENFORCED HERE, not asked of the caller.
+    //
+    // `shapeEdges` puts symmetric kinds into a canonical direction, drops
+    // behavioural edges touching docs and assets, and merges the halves of any
+    // mirrored pair. The backfill scanner already sorted its co_change pairs and
+    // said why in a comment; this route did not check, and the unique index is
+    // on the ORDERED triple — so 408 of 1,410 production co_change rows were the
+    // mirror of another row, each carrying half the weight of one relationship.
+    //
+    // The merge inside `shapeEdges` is not tidiness: canonicalising is what
+    // creates a batch holding two rows with the same conflict key, and Postgres
+    // rejects that outright ("cannot affect row a second time"), failing the
+    // whole insert rather than the duplicate.
+    const shaped = shapeEdges(edgesIn);
+    const paths = shaped.flatMap((e) => [e.source, e.target]);
     const nodeMap = await ensureNodes(paths, repo);
-    const values = edgesIn
+    const values = shaped
       .filter((e) => EDGE_KINDS.has(e.kind) && nodeMap.has(e.source) && nodeMap.has(e.target))
       .map((e) => ({
         sourceId: nodeMap.get(e.source)!,
@@ -352,7 +386,9 @@ export const POST: RequestHandler = async ({ request }) => {
   await db.execute(sql`
     UPDATE codegraph_nodes n SET
       episode_count = (SELECT count(*) FROM codegraph_node_episodes x WHERE x.node_id = n.id),
-      lesson_count  = (SELECT count(*) FROM codegraph_node_lessons  y WHERE y.node_id = n.id)
+      lesson_count  = (SELECT count(*) FROM codegraph_node_lessons  y WHERE y.node_id = n.id),
+      degree        = (SELECT count(*) FROM codegraph_edges e
+                        WHERE e.source_id = n.id OR e.target_id = n.id)
     WHERE n.repo = ${repo}
   `);
 

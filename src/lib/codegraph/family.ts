@@ -46,6 +46,29 @@ const RULES: Array<{ family: string; test: RegExp }> = [
   { family: 'workflow-node', test: /^src\/lib\/workflows\/nodes\/[^/]+\.ts$/ },
   { family: 'site-tool', test: /^src\/lib\/workflows\/site-tools\/tools\/[^/]+\.ts$/ },
 
+  /*
+   * Ambient type declarations are a shape of their own, and must be named
+   * BEFORE `lib-module`: `route-manifest.d.ts` ends in `.ts`, so it matched
+   * `^src/lib/.*\.ts$` and was filed as an ordinary module.
+   */
+  { family: 'types', test: /\.d\.ts$/ },
+
+  /*
+   * A project page's own helper modules.
+   *
+   * The single largest gap in family coverage, measured: of 254 family-less
+   * files under `src/`, about 166 are `src/routes/projects/<slug>/lib/*.ts` —
+   * policy-engine 40, engine-room 29, dfe-data-strategy 26, broads-pilot 18,
+   * and so on. They fell through because `lib-module` is scoped to `src/lib/`.
+   *
+   * They are a genuine family rather than a convenience bucket: someone writing
+   * a new field study's `lib/` module wants to see how other field studies
+   * wrote theirs, and emphatically does not want `src/lib/jkai/orchestrator.ts`
+   * held up as the precedent. Without a family they had no siblings at all, so
+   * the precedent channel could not answer for them.
+   */
+  { family: 'project-lib', test: /^src\/routes\/projects\/[^/]+\/lib\/.*\.[tj]s$/ },
+
   { family: 'component', test: /^src\/lib\/components\/.*\.svelte$/ },
   { family: 'svelte', test: /\.svelte$/ },
   { family: 'db-schema', test: /^src\/lib\/db\/.*\.ts$/ },

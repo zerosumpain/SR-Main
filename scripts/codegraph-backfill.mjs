@@ -103,6 +103,49 @@ function gateOf(cmd) {
   return 'cmd';
 }
 
+/*
+ * Mirrors MATCHERS / assertionMatcherIn in src/lib/codegraph/fingerprint.ts.
+ * Duplicated for the reason the whole classifier is: this runs as plain node on
+ * homeserv with no TS build step. Divergence is caught by fingerprint.test.ts,
+ * which shares the same corpus of cases.
+ *
+ * Specific phrasings FIRST — "to be called 3 times" and "to be greater than"
+ * both contain "to be", so a generic-first check collapses the vocabulary back
+ * into one class and silently undoes the subdivision.
+ */
+const MATCHERS = [
+  ['toHaveBeenCalledTimes', /to be called \d+ times?/i],
+  ['toHaveBeenCalledWith', /to be called with/i],
+  ['toHaveBeenCalled', /to be called\b/i],
+  ['toBeGreaterThan', /to be greater than(?: or equal)?/i],
+  ['toBeLessThan', /to be less than(?: or equal)?/i],
+  ['toBeCloseTo', /to be close to/i],
+  ['toBeTruthy', /to be truthy/i],
+  ['toBeFalsy', /to be falsy/i],
+  ['toBeDefined', /to be defined/i],
+  ['toBeUndefined', /to be undefined\b/i],
+  ['toBeNull', /to be null\b/i],
+  ['toBeInstanceOf', /to be an instance of/i],
+  ['toEqual', /to (?:deeply |strictly )?equal/i],
+  ['toContain', /to contain/i],
+  ['toHaveLength', /to have (?:a )?length/i],
+  ['toHaveProperty', /to have property/i],
+  ['toMatchObject', /to match object/i],
+  ['toMatch', /to match/i],
+  ['toThrow', /to throw/i],
+  ['rejects', /resolved instead of rejected|promise (?:resolved|rejected)/i],
+  ['toBe', /Object\.is equality|to be\b/i],
+];
+
+function assertionMatcherIn(raw) {
+  const t = stripAnsi(raw);
+  const i = t.search(/\bexpected\b/i);
+  if (i === -1) return null;
+  const w = t.slice(i, i + 400);
+  for (const [name, re] of MATCHERS) if (re.test(w)) return name;
+  return null;
+}
+
 function fingerprintOf(raw, cmd = '') {
   const t = stripAnsi(raw);
   if (!t.trim()) return null;
@@ -112,7 +155,15 @@ function fingerprintOf(raw, cmd = '') {
   const sv = t.match(/\b(a11y[_-][a-z_]+)\b/);
   if (sv) return `svelte-check:${sv[1].replace(/-/g, '_')}`;
   const named = t.match(/\b(\w*(?:Error|Exception))\b/);
-  if (named && named[1] !== 'Error') return `${gate}:${named[1]}`;
+  if (named && named[1] !== 'Error') {
+    // `vitest:AssertionError` was 53% of the whole episode corpus. The matcher
+    // is what makes it a key rather than a bucket.
+    if (named[1] === 'AssertionError') {
+      const m = assertionMatcherIn(t);
+      return m ? `${gate}:AssertionError:${m}` : `${gate}:AssertionError`;
+    }
+    return `${gate}:${named[1]}`;
+  }
   const mod = t.match(/Cannot find (?:module|package) ['"]([^'"]+)['"]/);
   if (mod) return `${gate}:missing-module:${mod[1].split('/').slice(0, 2).join('/')}`;
   const ff = t.match(/FAIL\s+(\S+\.(?:test|spec)\.[jt]sx?)/);
@@ -252,6 +303,7 @@ function episodesFrom(events, meta) {
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
     if (e.kind !== 'bash' || !e.failed || !e.verify || !e.fingerprint) continue;
+    let proven = false;
 
     const edits = [];
     // WINDOW. 400 events was far too wide: in a long session it paired a
@@ -294,8 +346,55 @@ function episodesFrom(events, meta) {
         prNumber: pr,
         occurredAt: f.at || e.at || meta.startedAt,
       });
+      proven = true;
       i = j;
       break;
+    }
+
+    /*
+     * A FAILURE FOLLOWED BY EDITS, WITH NO GREEN RUN OBSERVED, IS STILL EVIDENCE.
+     *
+     * These used to be dropped on the floor: the loop above emits only when it
+     * finds a same-gate green run inside the window, so the corpus knew about
+     * struggles that ended in a proven fix and about nothing else. That is why
+     * production held 108 episodes ALL marked `verified` — `verdict` was a
+     * column the ranking multiplies by, holding one value, doing nothing.
+     *
+     * "This error has been hit here before, and these are the files someone
+     * changed next" is worth serving even when the transcript never shows it
+     * going green — the session may simply have ended, or verified in a way we
+     * cannot see. It is weaker evidence, and `relevance.ts` already has the
+     * mechanism to say so: it multiplies by verdict, and `unverified` ranks
+     * below `verified`. Recording it honestly and ranking it lower beats
+     * discarding it.
+     */
+    if (!proven) {
+      const edits2 = [];
+      for (let j = i + 1; j < events.length && j < i + 60; j++) {
+        const f = events[j];
+        if (f.kind === 'edit') edits2.push(f.path);
+        else if (f.kind === 'bash' && f.verify && f.gate === e.gate) break;
+      }
+      if (edits2.length) {
+        const files = [...new Set(edits2)].slice(0, 20);
+        out.push({
+          repo: REPO,
+          sourceKind: 'session',
+          sourceId: meta.sessionId,
+          title: `${e.gate}: ${e.fingerprint}`,
+          problem: e.excerpt,
+          resolution: `Edited ${files.length} file(s) after this failure: ${files.join(', ')}.`,
+          // No verification observed — the column stays null rather than
+          // borrowing a command that proved nothing.
+          verification: null,
+          fingerprint: e.fingerprint,
+          gate: e.gate,
+          verdict: 'unverified',
+          filesTouched: files,
+          prNumber: meta.prNumbers.size === 1 ? [...meta.prNumbers][0] : null,
+          occurredAt: e.at || meta.startedAt,
+        });
+      }
     }
   }
   return out;
@@ -303,9 +402,27 @@ function episodesFrom(events, meta) {
 
 /** Files edited in the same session co-change; files read before editing X
  *  supply its context. Both are counted, not asserted once. */
+/*
+ * Mirrors carriesBehaviouralEdges in src/lib/codegraph/edges.ts. The ingest
+ * enforces this too — it has to, since it is the one write point — but doing it
+ * here as well keeps the pair count down before the cap below is applied, which
+ * is where the useful pairs get squeezed out by the useless ones.
+ *
+ * A plan document under docs/ names every file its plan touches, so a session
+ * following the plan "co-changes" the document with all of them. That records
+ * the table of contents, not an observation, and it was the shape of every
+ * duplicated co_change pair sampled from production.
+ */
+function behavioural(p) {
+  if (!p) return false;
+  if (/\.(md|mdx|txt|json|lock|svg|png|jpe?g|gif|webp|ico|woff2?)$/i.test(p)) return false;
+  if (/^docs\//.test(p) || /^static\//.test(p)) return false;
+  return true;
+}
+
 function edgesFrom(events) {
-  const edited = [...new Set(events.filter((e) => e.kind === 'edit').map((e) => e.path))];
-  const read = [...new Set(events.filter((e) => e.kind === 'read').map((e) => e.path))];
+  const edited = [...new Set(events.filter((e) => e.kind === 'edit').map((e) => e.path))].filter(behavioural);
+  const read = [...new Set(events.filter((e) => e.kind === 'read').map((e) => e.path))].filter(behavioural);
   const out = [];
   // Cap: a 40-file session yields 780 pairs, most of them meaningless. The
   // sessions that edit half the repo are exactly the ones whose pairs mean least.

@@ -131,6 +131,73 @@ export function gateStageIn(text: string): string | null {
   return `${m[1].replace(/^gate:/, 'gate:')}-failed`;
 }
 
+/**
+ * Which matcher an assertion failure came from, e.g. `toBe`, `toHaveLength`.
+ *
+ * WHY THIS EXISTS: `vitest:AssertionError` was **57 of 108 production episodes
+ * — 53%** — and a key that covers half the corpus barely discriminates. The
+ * fingerprint is the hot lane's query key, so a build that trips an assertion
+ * gets handed a bucket containing every assertion this codebase has ever
+ * failed, most of it about something else entirely.
+ *
+ * The subdivision is vitest's OWN output vocabulary, read off the recorded
+ * episodes rather than guessed at. Real examples from production:
+ *
+ *   expected "vi.fn()" to be called 3 times          -> toHaveBeenCalledTimes
+ *   expected +0 to be 1 // Object.is equality        -> toBe
+ *   expected 'IBCA · Data Strategy' to be 'IBCA · …' -> toBe
+ *   expected 2 to be greater than 3                  -> toBeGreaterThan
+ *
+ * ORDER IS LOAD-BEARING. Every specific phrasing contains the generic one —
+ * "to be called 3 times" and "to be greater than" both contain "to be" — so a
+ * naive check for `to be` first would collapse the whole vocabulary back into
+ * one class and undo the change silently.
+ *
+ * Stays LOW CARDINALITY, which is the rule the rest of this file follows: the
+ * matcher is a closed set of about fifteen values, whereas the expected and
+ * received values carry identifiers, paths and numbers and would explode it.
+ */
+const MATCHERS: Array<[string, RegExp]> = [
+  // Specific before generic. Do not reorder without re-reading the note above.
+  ['toHaveBeenCalledTimes', /to be called \d+ times?/i],
+  ['toHaveBeenCalledWith', /to be called with/i],
+  ['toHaveBeenCalled', /to be called\b/i],
+  ['toBeGreaterThan', /to be greater than(?: or equal)?/i],
+  ['toBeLessThan', /to be less than(?: or equal)?/i],
+  ['toBeCloseTo', /to be close to/i],
+  ['toBeTruthy', /to be truthy/i],
+  ['toBeFalsy', /to be falsy/i],
+  ['toBeDefined', /to be defined/i],
+  ['toBeUndefined', /to be undefined\b/i],
+  ['toBeNull', /to be null\b/i],
+  ['toBeInstanceOf', /to be an instance of/i],
+  ['toEqual', /to (?:deeply |strictly )?equal/i],
+  ['toContain', /to contain/i],
+  ['toHaveLength', /to have (?:a )?length/i],
+  ['toHaveProperty', /to have property/i],
+  ['toMatchObject', /to match object/i],
+  ['toMatch', /to match/i],
+  ['toThrow', /to throw/i],
+  ['rejects', /resolved instead of rejected|promise (?:resolved|rejected)/i],
+  // Generic last: `// Object.is equality` is vitest's own marker for toBe, and
+  // a bare "to be" is what remains once every sharper phrasing has declined.
+  ['toBe', /Object\.is equality|to be\b/i],
+];
+
+export function assertionMatcherIn(rawText: string): string | null {
+  const t = stripAnsi(rawText);
+  // Anchor on the assertion itself so an unrelated "to contain" in a test NAME
+  // cannot classify the failure. Vitest always prints `expected …` on the
+  // AssertionError line.
+  const i = t.search(/\bexpected\b/i);
+  if (i === -1) return null;
+  const window = t.slice(i, i + 400);
+  for (const [name, re] of MATCHERS) {
+    if (re.test(window)) return name;
+  }
+  return null;
+}
+
 export function fingerprintOf(rawText: string, command = ''): string | null {
   const t = stripAnsi(rawText);
   if (!t.trim()) return null;
@@ -147,7 +214,15 @@ export function fingerprintOf(rawText: string, command = ''): string | null {
   // Named runtime errors. Take the CLASS, never the message — the message
   // carries identifiers and paths and would explode cardinality.
   const named = t.match(/\b(\w*(?:Error|Exception))\b(?!\s*:\s*$)/);
-  if (named && named[1] !== 'Error') return `${gate}:${named[1]}`;
+  if (named && named[1] !== 'Error') {
+    // An assertion carries its matcher, which is the difference between a key
+    // that covers 53% of the corpus and one that says what actually broke.
+    if (named[1] === 'AssertionError') {
+      const m = assertionMatcherIn(t);
+      return m ? `${gate}:AssertionError:${m}` : `${gate}:AssertionError`;
+    }
+    return `${gate}:${named[1]}`;
+  }
 
   // Module resolution — the package name is the class and is stable.
   const mod = t.match(/Cannot find (?:module|package) ['"]([^'"]+)['"]/);
@@ -190,7 +265,18 @@ export function fingerprintsIn(rawText: string, command = ''): string[] {
     out.add(`${gateOf(command)}:missing-module:${m[1].split('/').slice(0, 2).join('/')}`);
   }
   for (const m of t.matchAll(/\b(\w+(?:Error|Exception))\b/g)) {
-    if (m[1] !== 'Error') out.add(`${gateOf(command)}:${m[1]}`);
+    if (m[1] === 'Error') continue;
+    if (m[1] === 'AssertionError') {
+      // BOTH keys go in: the sharp one so this failure matches other failures
+      // of the same matcher, and the coarse one so an episode recorded before
+      // the subdivision existed is still reachable. `fingerprintsIn` is a query
+      // set, not an identity — widening it costs one OR term.
+      const a = assertionMatcherIn(t);
+      if (a) out.add(`${gateOf(command)}:AssertionError:${a}`);
+      out.add(`${gateOf(command)}:AssertionError`);
+      continue;
+    }
+    out.add(`${gateOf(command)}:${m[1]}`);
   }
 
   if (!out.size) {

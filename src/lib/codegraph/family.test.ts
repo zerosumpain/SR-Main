@@ -86,3 +86,42 @@ describe('dirOf', () => {
     expect(dirOf('a.ts')).toBe('');
   });
 });
+
+/*
+ * The two families that closed the largest measured gap. Of 254 family-less
+ * files under `src/`, ~166 were project `lib/` modules and the rest included
+ * ambient declarations misfiled as ordinary modules.
+ */
+describe('families added after measuring the gap', () => {
+  it('names a project page\'s own helper modules', () => {
+    expect(familyOf('src/routes/projects/policy-engine/lib/format.ts')).toBe('project-lib');
+    expect(familyOf('src/routes/projects/broads-pilot/lib/logbook.svelte.ts')).toBe('project-lib');
+    expect(familyOf('src/routes/projects/data-spine/lib/governance.ts')).toBe('project-lib');
+  });
+
+  it('does not let a project lib swallow a test that lives in one', () => {
+    // `test` is matched first on purpose: a test is a test before it is
+    // anything else, and showing a build a test when it is writing a module is
+    // the most obvious way to get the shape wrong.
+    expect(familyOf('src/routes/projects/policy-engine/lib/format.test.ts')).toBe('test');
+  });
+
+  it('names ambient declarations BEFORE lib-module', () => {
+    // `route-manifest.d.ts` ends in `.ts`, so it matched `^src/lib/.*\.ts$`
+    // and was filed as an ordinary module.
+    expect(familyOf('src/lib/estate/route-manifest.d.ts')).toBe('types');
+    expect(familyOf('src/vendor-shims.d.ts')).toBe('types');
+  });
+
+  it('still refuses to invent a catch-all', () => {
+    // A file with no family has no siblings, and a catch-all would make every
+    // unclassified file a candidate precedent for every other one.
+    expect(familyOf('src/sim/evolve.ts')).toBeNull();
+    expect(familyOf('static/fonts/selawik/OFL.txt')).toBeNull();
+  });
+
+  it('leaves the existing families exactly where they were', () => {
+    expect(familyOf('src/lib/jkai/orchestrator.ts')).toBe('lib-module');
+    expect(familyOf('src/routes/api/jkai/builds/+server.ts')).toBe('api-endpoint');
+  });
+});
