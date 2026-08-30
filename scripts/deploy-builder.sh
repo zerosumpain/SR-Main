@@ -66,7 +66,27 @@ ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "
   if [ \"\$installed\" = \"$PI_VERSION\" ]; then
     echo \"    pi $PI_VERSION already installed.\"
   else
-    echo \"    pi is '\$installed' — installing $PI_VERSION ...\"
+    echo \"    pi is '\$installed' — installing $PI_PACKAGE@$PI_VERSION ...\"
+    # A RENAME needs the previous owner removed first. npm refuses with EEXIST
+    # to overwrite a global bin owned by a different package, and pi has already
+    # been renamed once (@mariozechner -> @earendil-works), so this is not
+    # hypothetical — it is what this deploy hit on 2026-08-30:
+    #
+    #   npm error EEXIST: file already exists
+    #   npm error File exists: /usr/bin/pi
+    #
+    # NEVER take npm's own suggestion of --force here. It overwrites the symlink
+    # while npm's records still credit the OLD package with owning it, so the
+    # next \`npm uninstall\` of that old package deletes the NEW binary and
+    # leaves the host with no pi at all — which assertPiVersion reports as an
+    # unreadable probe, i.e. not a mismatch, i.e. silently.
+    old_owners=\"\$(npm ls -g --depth=0 --parseable 2>/dev/null \
+      | sed -n 's#^.*/node_modules/\(.*pi-coding-agent\)\$#\1#p' \
+      | grep -vx '$PI_PACKAGE' || true)\"
+    for old in \$old_owners; do
+      echo \"    removing the previous owner of the pi binary: \$old\"
+      sudo npm uninstall -g \"\$old\"
+    done
     sudo npm install -g '$PI_PACKAGE@$PI_VERSION'
     now=\"\$(pi --version 2>&1 | head -1)\"
     [ \"\$now\" = \"$PI_VERSION\" ] || { echo \"    ERROR: pi is '\$now' after install, expected $PI_VERSION\"; exit 1; }
