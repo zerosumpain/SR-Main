@@ -288,8 +288,29 @@ async function pickLessons(
     // Scored, too. Substring matching without ranking returns whatever sorts
     // first, which is how a search for "rsync" answered with a note about Azure.
     if (plan.seed.type !== 'topic') {
-      return db.select().from(codegraphLessons).where(base)
-        .orderBy(LESSON_RECENCY).limit(pick.limit);
+      /*
+       * A STRUCTURAL SEED THAT RESOLVED TO NOTHING GETS NOTHING.
+       *
+       * This used to return the N most recently observed lessons in the corpus,
+       * which is not a fallback — it is unrelated content wearing a serve's
+       * clothing. `file:`, `gate:` and `siblings:` all mean "tell me about THIS
+       * thing"; if the graph holds no node for it, the honest answer is that it
+       * knows nothing, and the caller logs `empty`. Returning the newest notes
+       * instead spends a build's context budget on whatever happened to be
+       * written last, and records it as `served` — indistinguishable in the
+       * ledger from a real hit, which is how it went unnoticed.
+       *
+       * Measured on build 4cda9a8d, seeded on a file the task was about to
+       * create: four lessons served — the Landgrab territory game, the jkai
+       * model picker, the nightly conflation detector, pgvector neighbour
+       * ranking. 3,686 characters, nothing to do with the task.
+       *
+       * `planBuildQuery` now declines an unresolvable path before it gets here,
+       * so this is the second line rather than the first. Both are wanted: the
+       * planner stops the bad query being ASKED, and this stops any other caller
+       * — the pull channel takes hand-written CGQL — being answered with noise.
+       */
+      return [];
     }
     return topicLessons(plan.seed.text, base, pick.limit);
   }

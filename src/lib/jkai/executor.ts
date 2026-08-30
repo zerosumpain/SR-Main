@@ -289,18 +289,35 @@ export async function executeIteration(
         );
       }
 
-      const { planBuildQuery, bareNamesInText, dirHintsInText } = await import(
-        '$lib/codegraph/build-context'
-      );
+      const {
+        planBuildQuery,
+        bareNamesInText,
+        dirHintsInText,
+        editedPathsFromActions,
+        pathsInText,
+      } = await import('$lib/codegraph/build-context');
       // Bare filenames need the node table to become paths, so the lookup
       // happens here rather than inside the pure planner. Without it a task
       // that names `orchestrator.ts` instead of `src/lib/jkai/orchestrator.ts`
       // retrieves nothing at all — which is how build f85ed296 ran with no
       // context and no serve recorded.
-      const { lookupNamedFiles } = await import('$lib/codegraph/name-lookup');
+      const { lookupNamedFiles, filterKnownPaths } = await import('$lib/codegraph/name-lookup');
       const named = await lookupNamedFiles(
         bareNamesInText(build.prompt),
         dirHintsInText(build.prompt),
+      );
+      // Which of the paths the prompt NAMES does the graph actually hold?
+      // `pathsInText` verifies nothing, so a task about a file it is going to
+      // create used to plan a file query for a path with no node — and an empty
+      // seed is answered with the newest lessons in the corpus, whatever they
+      // are about. Checked here for the same reason the bare-name lookup is:
+      // `planBuildQuery` stays pure and database-free.
+      const knownPaths = new Set(
+        await filterKnownPaths([
+          ...editedPathsFromActions(prevIteration?.actions ?? null),
+          ...pathsInText(build.prompt),
+          ...named.resolved,
+        ]),
       );
       if (named.ambiguous.length) {
         await emitLog(
@@ -317,6 +334,7 @@ export async function executeIteration(
           previousActions: prevIteration?.actions ?? null,
         },
         named.resolved,
+        knownPaths,
       );
       if (!planned) {
         await emitLog(build.id, 'system', 'Codegraph: nothing to query (no gate error, no file set)', iteration.id);
