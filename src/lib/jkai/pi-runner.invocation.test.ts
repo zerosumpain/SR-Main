@@ -8,6 +8,7 @@ import {
   pinCodexTransport,
   buildToolAllowlist,
   BASE_PI_TOOLS,
+  PI_PACKAGE,
   PI_VERSION,
   assertPiVersion,
   readVersionFrom,
@@ -188,6 +189,44 @@ describe('PI_VERSION pin', () => {
 
   it('is a bare semver, so the Dockerfile can interpolate it into an npm spec', () => {
     expect(PI_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+/*
+ * The pin records a version. It did not record WHICH PACKAGE that version was
+ * of, and that gap cost sixteen weeks.
+ *
+ * pi was renamed from `@mariozechner/pi-coding-agent` to
+ * `@earendil-works/pi-coding-agent`, and the old name's `latest` dist-tag froze
+ * at 0.73.1 — our exact pin. `npm view @mariozechner/pi-coding-agent version`
+ * therefore answered "0.73.1" the whole time, which reads as "up to date",
+ * while upstream shipped eleven minors somewhere else. An abandoned package
+ * does not report itself as abandoned; it just stops moving, and stopped is
+ * indistinguishable from current unless you ask something other than npm.
+ *
+ * So the name is pinned too, with the same guard, and
+ * `scripts/check-pi-version.mjs` corroborates it against the upstream repo.
+ */
+describe('PI_PACKAGE pin', () => {
+  it('matches jkai.piPackage in package.json', async () => {
+    const pkg = JSON.parse(
+      await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
+    );
+    expect(pkg.jkai?.piPackage).toBe(PI_PACKAGE);
+  });
+
+  it('is a bare npm spec with no version, so the install sites can append @<pin>', () => {
+    // A `name@version` here would produce `pkg@1.2.3@0.73.1` at every call site.
+    expect(PI_PACKAGE).toMatch(/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/);
+  });
+
+  it('names an upstream repo for the drift check to corroborate against', async () => {
+    // npm alone cannot see a rename. The repo can, because the GitHub API
+    // answers a moved repo with a redirect to its new name.
+    const pkg = JSON.parse(
+      await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
+    );
+    expect(pkg.jkai?.piUpstreamRepo).toMatch(/^[\w.-]+\/[\w.-]+$/);
   });
 });
 

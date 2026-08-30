@@ -62,6 +62,7 @@ RUN playwright install chromium \
 #
 #   docker build -t jkai-sandbox:latest \
 #     --build-arg PI_VERSION="$(node -p "require('./package.json').jkai.piVersion")" \
+#     --build-arg PI_PACKAGE="$(node -p "require('./package.json').jkai.piPackage")" \
 #     docker/jkai-sandbox
 #
 # The unpinned `npm install -g @mariozechner/pi-coding-agent` this replaces is
@@ -70,9 +71,13 @@ RUN playwright install chromium \
 # assertPiVersion() refuses to run against a mismatch, so a stale image now
 # announces itself instead of silently changing how builds behave.
 ARG PI_VERSION
+# The package NAME is a build arg for the same reason the version is: pi was
+# renamed out from under this line once already.
+ARG PI_PACKAGE
 RUN set -eu; \
     test -n "$PI_VERSION" || { echo "ERROR: --build-arg PI_VERSION is required (see package.json jkai.piVersion)"; exit 1; }; \
-    npm install -g typescript tsx "@mariozechner/pi-coding-agent@${PI_VERSION}"; \
+    test -n "$PI_PACKAGE" || { echo "ERROR: --build-arg PI_PACKAGE is required (see package.json jkai.piPackage)"; exit 1; }; \
+    npm install -g typescript tsx "${PI_PACKAGE}@${PI_VERSION}"; \
     installed="$(pi --version 2>&1 | head -1)"; \
     test "$installed" = "$PI_VERSION" || { echo "ERROR: installed pi '$installed' != requested $PI_VERSION"; exit 1; }
 

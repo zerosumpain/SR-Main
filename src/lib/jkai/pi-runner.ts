@@ -79,6 +79,24 @@ const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 export const PI_VERSION = '0.73.1';
 
 /**
+ * The npm package `PI_VERSION` is a version OF.
+ *
+ * A version pin cannot notice the package moving, and pi moved: upstream
+ * renamed from `@mariozechner/pi-coding-agent` to `@earendil-works/pi-coding-agent`
+ * and stopped publishing under the old name at exactly 0.73.1 — the version we
+ * are pinned to. So `npm view @mariozechner/pi-coding-agent version` answered
+ * `0.73.1` for sixteen weeks while upstream shipped eleven minors elsewhere.
+ * Any freshness check written against the pinned name would have reported us
+ * current the entire time, which is the same silent-degradation shape the
+ * version pin itself exists to prevent.
+ *
+ * Recorded here (a literal copy of `jkai.piPackage`, guarded by the same drift
+ * test as `PI_VERSION`) so the install hints below name the right thing, and so
+ * `scripts/check-pi-version.mjs` has one place to read the pinned identity from.
+ */
+export const PI_PACKAGE = '@mariozechner/pi-coding-agent';
+
+/**
  * `pi --version` for the binary we are actually about to run, cached per
  * process. Container mode asks the container, host mode asks the host — the two
  * are different installs and have drifted before (host 0.72.1 against a sandbox
@@ -154,7 +172,7 @@ export function assertPiVersion(found: string | null): FailureEnvelope | null {
   if (found === null || found === PI_VERSION) return null;
   const where = HOST_MODE ? `the build host` : `the ${CONTAINER_NAME} container`;
   const fix = HOST_MODE
-    ? `sudo npm install -g @mariozechner/pi-coding-agent@${PI_VERSION}`
+    ? `sudo npm install -g ${PI_PACKAGE}@${PI_VERSION}`
     : `rebuild the sandbox image (docker/jkai-sandbox/Dockerfile pins it via ARG PI_VERSION)`;
   return {
     kind: 'tooling_unavailable',
@@ -473,7 +491,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   // Host-mode: run pi directly on the host shell with cwd=workdir. No
   // docker. The pi binary must be installed on the host at the pinned version
-  // (`npm install -g @mariozechner/pi-coding-agent@<jkai.piVersion>`).
+  // (`npm install -g <jkai.piPackage>@<jkai.piVersion>`).
   // scripts/deploy-builder.sh installs it; ci-deploy.sh does NOT — it never
   // syncs packages/ and has no pi step, so a plain merge to master leaves the
   // host binary exactly as it was. assertPiVersion above is what catches the
