@@ -25,6 +25,7 @@ import { acwrSeries, preferredACWR } from '$lib/health/analytics/acwr';
 import { localToday } from '$lib/health/day';
 import { computeForecast } from '$lib/health/analytics/forecast';
 import { GETTABLE_GAP_PCT } from '$lib/trails/segments/form';
+import { formTaxonomy } from '$lib/health/segment-list';
 import { computeMoves } from '$lib/health/moves';
 import { computeTripwires, weeklyVolumeSummary, type GettableSummary } from '$lib/health/tripwires';
 import { computeExperiments } from '$lib/health/experiments';
@@ -83,28 +84,33 @@ const SEGMENT_LIMIT = 1000;
  * row; this only counts it.
  */
 function summariseSegmentForms(rows: SegmentListRow[]) {
-  const withForm = rows.filter((r) => r.form.direction !== 'unknown');
-  const improving = withForm.filter((r) => r.form.direction === 'improving');
+  // The counts come from $lib/health/segment-list, which the segments
+  // explorer's taxonomy tiles read as well. ONE derivation on purpose: the two
+  // pages print the same four numbers about the same corpus, and a second
+  // implementation here is how they would start disagreeing the first time
+  // somebody tidied one of them.
+  const taxonomy = formTaxonomy(rows);
+  const improving = rows.filter((r) => r.form.direction === 'improving');
   const gettable = improving.filter((r) => r.form.gapPct != null && r.form.gapPct < GETTABLE_GAP_PCT);
   const nearest =
     [...improving]
       .filter((r) => r.form.gapPct != null)
       .sort((a, b) => (a.form.gapPct as number) - (b.form.gapPct as number))[0] ?? null;
   const summary: GettableSummary = {
-    gettable: gettable.length,
-    improving: improving.length,
-    withForm: withForm.length,
+    gettable: taxonomy.gettable,
+    improving: taxonomy.improving,
+    withForm: taxonomy.withForm,
     nearest: nearest ? { name: nearest.name, gapPct: nearest.form.gapPct as number } : null,
   };
   return {
     ...summary,
     /** The four form tiles: everything without a read sits in `noRead`. */
     taxonomy: {
-      improving: improving.length,
-      holding: withForm.filter((r) => r.form.direction === 'holding').length,
-      slipping: withForm.filter((r) => r.form.direction === 'slipping').length,
-      noRead: rows.length - withForm.length,
-      total: rows.length,
+      improving: taxonomy.improving,
+      holding: taxonomy.holding,
+      slipping: taxonomy.slipping,
+      noRead: taxonomy.noRead,
+      total: taxonomy.total,
     },
     /** The gettable board itself, closest first — section F's proposed list. */
     board: gettable

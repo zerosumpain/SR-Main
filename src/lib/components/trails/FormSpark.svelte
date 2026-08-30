@@ -26,11 +26,17 @@
       .join(' ');
   });
 
+  // The health hub's vocabulary, not the old page's: improving is the olive
+  // `--good`, slipping is `--accent`. It used to be petrol and rust, which read
+  // fine on the page this component was built for and clashes on the redesigned
+  // one — where the taxonomy tile directly above says "Improving" in olive.
+  // The segments explorer is this component's only consumer, so there is one
+  // palette to keep in step rather than two.
   const stroke = $derived(
     form.direction === 'improving'
-      ? 'var(--accent-ink)'
+      ? 'var(--good)'
       : form.direction === 'slipping'
-        ? 'var(--trend-down)'
+        ? 'var(--accent)'
         : 'var(--text-ghost)',
   );
 
@@ -85,9 +91,9 @@
     white-space: nowrap;
   }
   .fs-text.improving {
-    color: var(--accent-ink);
+    color: var(--good);
   }
   .fs-text.slipping {
-    color: var(--trend-down);
+    color: var(--accent);
   }
 </style>
