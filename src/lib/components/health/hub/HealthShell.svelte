@@ -46,6 +46,14 @@
     note?: string | null;
     /** The mono footer strip — the designs carry three items. */
     footer?: string[];
+    /**
+     * Interactive chrome on the right of the header, after the nav — the
+     * activity page's `···` corrections menu. A snippet rather than another
+     * link shape because what goes here opens a panel; and it renders INSIDE
+     * the sticky header's stacking context, so a popover it opens sits above
+     * the grain rather than under it.
+     */
+    actions?: Snippet;
     children: Snippet;
   }
 
@@ -59,6 +67,7 @@
     maxWidth = 1400,
     note = null,
     footer = [],
+    actions = undefined,
     children,
   }: Props = $props();
 </script>
@@ -88,6 +97,7 @@
       {#each meta as item, i (i)}
         <span class="hs-meta">{item}</span>
       {/each}
+      {#if actions}{@render actions()}{/if}
     </div>
   </header>
 

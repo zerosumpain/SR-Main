@@ -8,6 +8,7 @@
     colourBy = 'none',
     height = '420px',
     offline = false,
+    legend = true,
   }: {
     coordinates: TrackPoint[];
     bounds?: { n: number; s: number; e: number; w: number } | null;
@@ -16,6 +17,12 @@
     height?: string;
     /** Read downloaded tiles from IndexedDB before going to the network. */
     offline?: boolean;
+    /**
+     * The slower→faster ramp key drawn over the map. Off for a caller that
+     * prints its own legend under the frame with the real pace range on it —
+     * two keys for one ramp is one too many.
+     */
+    legend?: boolean;
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
@@ -207,7 +214,7 @@
 {:else}
   <div class="map-frame" style:height>
     <div class="map" bind:this={container}></div>
-    {#if colourBy === 'pace'}
+    {#if colourBy === 'pace' && legend}
       <div class="ramp-legend">
         <span class="ramp-label">slower</span>
         <span class="ramp">
