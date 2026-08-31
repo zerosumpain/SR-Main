@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
+  import ThreadLibrary from '$lib/components/jkai/ThreadLibrary.svelte';
   import ConversationTabs from '$lib/components/jkai/ConversationTabs.svelte';
   import ShareConversationModal from '$lib/components/jkai/ShareConversationModal.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
@@ -30,30 +30,12 @@
   let whatsappThread = $state(data.whatsappThread);
   // The knowledge-graph rail collapses behind a header toggle below 1280px.
   let graphRailOpen = $state(true);
-  let sidebarOpen = $state(false);
-  /**
-   * Desktop sidebar collapsed to an icon rail. Collapsed is the DEFAULT now that
-   * the tab strip carries the working set: the rail is the library, and opening
-   * onto a 236px list of threads you are not in costs the conversation the width.
-   * An explicit choice still wins and still persists — see onMount.
-   */
-  let sidebarCollapsed = $state(true);
-  /**
-   * Deliberately a NEW key. Anyone who had ever used the old toggle has a stored
-   * `'0'`, and that would beat the new default forever — the flip would ship and
-   * appear to have done nothing on exactly the browsers that had used the
-   * feature. Bumping the key resets everyone to the default once; the next
-   * explicit choice persists as before.
-   */
-  const SIDEBAR_COLLAPSED_KEY = 'jkai.sidebarCollapsed.v2';
-  function toggleSidebarCollapsed() {
-    sidebarCollapsed = !sidebarCollapsed;
-    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
-  }
+  // The old permanent left rail has become a centred library. Open work lives
+  // in the tab strip; the archive only takes screen space while it is in use.
+  let libraryOpen = $state(false);
   // Conversation IDs the orchestrator currently has a running job for.
-  // Polled every 10 s; the ConversationSidebar renders a pulsing dot next
-  // to each. Updated whenever the user returns to the page so the UI
-  // reflects work that continued in the background.
+  // Polled every 10 s; the library and tab strip render live state. Updated
+  // whenever the user returns so work continued in the background is visible.
   let liveConversationIds = $state<string[]>([]);
 
   /**
@@ -121,13 +103,6 @@
   );
 
   onMount(() => {
-    // Absent key means "never expressed a preference", which is NOT the same as
-    // "wants it expanded" — reading it as `=== '1'` would silently override the
-    // collapsed default for every visitor who has never touched the toggle.
-    try {
-      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-      if (stored !== null) sidebarCollapsed = stored === '1';
-    } catch { /* ignore */ }
     let resumed = false;
     /**
      * `?new=1` forces a fresh conversation, skipping BOTH resume paths below.
@@ -324,7 +299,7 @@
 
   /** Open a thread in a tab, loading it if this is the first time. */
   function selectConversation(id: string) {
-    sidebarOpen = false;
+    libraryOpen = false;
     if (!openTab(id)) return;
     rememberConversation(id);
     void loadPane(id);
@@ -359,7 +334,7 @@
         };
         openTab(conv.id);
         rememberConversation(conv.id);
-        sidebarOpen = false;
+        libraryOpen = false;
       }
     } catch (err) {
       console.error('Failed to create conversation:', err);
@@ -483,30 +458,6 @@
 </svelte:head>
 
 <div class="thread-shell">
-  <!-- Thread rail (236px). Below 1100px it becomes a slide-over. -->
-  <div class="rail-slot" class:open={sidebarOpen}>
-    <ConversationSidebar
-      conversations={conversationList}
-      {whatsappThread}
-      activeConversationId={activeId}
-      onSelect={selectConversation}
-      onWhatsAppSelect={selectWhatsApp}
-      onDelete={deleteConversation}
-      onRename={renameConversation}
-      onTogglePin={togglePinConversation}
-      onShare={openShare}
-      collapsed={sidebarCollapsed}
-      onToggleCollapse={toggleSidebarCollapsed}
-      {liveConversationIds}
-      openTabIds={openTabs.items.map((t) => t.id)}
-    />
-  </div>
-  {#if sidebarOpen}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="rail-scrim" onclick={() => (sidebarOpen = false)}></div>
-  {/if}
-
   <!-- Conversation column -->
   <div class="chat-slot">
     <!--
@@ -522,7 +473,7 @@
       activeId={activeId}
       canOpenMore={openTabs.items.length < MAX_TABS}
       limitHit={openTabs.limitHit}
-      onToggleRail={() => (sidebarOpen = !sidebarOpen)}
+      onOpenLibrary={() => (libraryOpen = true)}
       onToggleGraph={() => (graphRailOpen = !graphRailOpen)}
       graphOpen={graphRailOpen}
       onActivate={activateTab}
@@ -593,6 +544,24 @@
   {/if}
 </div>
 
+{#if libraryOpen}
+  <ThreadLibrary
+    conversations={conversationList}
+    {whatsappThread}
+    activeConversationId={activeId}
+    onSelect={selectConversation}
+    onWhatsAppSelect={selectWhatsApp}
+    onDelete={deleteConversation}
+    onRename={renameConversation}
+    onTogglePin={togglePinConversation}
+    onShare={openShare}
+    onNew={createConversation}
+    onClose={() => (libraryOpen = false)}
+    {liveConversationIds}
+    openTabIds={openTabs.items.map((t) => t.id)}
+  />
+{/if}
+
 {#if shareModalConv}
   <ShareConversationModal
     conversation={shareModalConv}
@@ -602,18 +571,14 @@
 {/if}
 
 <style>
-  /* Three columns: conversation library · conversation · contextual workspace. */
+  /* Two columns: the conversation and its contextual workspace. The thread
+     archive is a modal library now, so reading width no longer pays for it. */
   .thread-shell {
     position: relative;
     display: flex;
     flex: 1;
     min-height: 0;
     background: var(--bg);
-  }
-  .rail-slot {
-    flex: none;
-    display: flex;
-    min-height: 0;
   }
   .chat-slot {
     flex: 1;
@@ -672,40 +637,14 @@
   .graph-slot.collapsed {
     display: none;
   }
-  .rail-scrim,
   .sheet-scrim {
     display: none;
   }
 
-  /* ≥1280: both rails. 1100–1280: graph rail collapses behind the header
-     toggle unless explicitly reopened. */
+  /* Below 1280px the context workspace collapses behind its strip control. */
   @media (max-width: 1279px) {
     .graph-slot:not(.sheet-open) {
       display: none;
-    }
-  }
-
-  /* 800–1100: the thread rail becomes a slide-over. */
-  @media (max-width: 1099px) {
-    .rail-slot {
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      z-index: 30;
-      transform: translateX(-100%);
-      transition: transform 0.2s ease-out;
-      background: var(--bg);
-    }
-    .rail-slot.open {
-      transform: none;
-    }
-    .rail-scrim {
-      display: block;
-      position: absolute;
-      inset: 0;
-      z-index: 20;
-      background: rgba(26, 16, 8, 0.35);
     }
   }
 

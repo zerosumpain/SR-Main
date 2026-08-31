@@ -88,6 +88,7 @@
     { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
   ]);
   const library: MenuRow[] = [
+    { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
     { label: 'Prompts', href: '/jkai/prompts', meta: 'STACKS' },
     { label: 'Research', href: '/jkai/research', meta: 'DEEP DIVE' },
     { label: 'Briefing', href: '/jkai/briefing', meta: 'DAILY' },

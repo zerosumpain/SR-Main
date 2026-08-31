@@ -10,7 +10,7 @@
     onClose,
     onNew,
     onCycle,
-    onToggleRail,
+    onOpenLibrary,
     onToggleGraph,
     graphOpen = false,
   }: {
@@ -22,10 +22,8 @@
     onClose: (id: string) => void;
     onNew: () => void;
     onCycle: (delta: 1 | -1) => void;
-    /** Show/hide the thread rail. It is off-canvas at ≤1099px and this is the
-     *  only way back to it — the thread header that used to carry the control
-     *  is gone. */
-    onToggleRail?: () => void;
+    /** Open the searchable thread archive. Open work stays in this strip. */
+    onOpenLibrary?: () => void;
     /** Show/hide the contextual workspace for the open thread. */
     onToggleGraph?: () => void;
     graphOpen?: boolean;
@@ -68,14 +66,14 @@
      read as a background gap rather than as the top of the conversation. -->
 <div class="tab-strip" role="tablist" aria-label="Open conversations">
   <div class="strip-row">
-    {#if onToggleRail}
+    {#if onOpenLibrary}
       <button
         type="button"
-        class="strip-btn rail-btn"
-        onclick={onToggleRail}
-        aria-label="Threads"
-        title="Show threads">≡</button
-      >
+        class="strip-btn library-btn"
+        onclick={onOpenLibrary}
+        aria-label="Open thread library"
+        title="Search and manage all threads"
+      ><span aria-hidden="true">▦</span><span class="strip-word">Threads</span></button>
     {/if}
     <div class="cells">
       {#each tabs as tab (tab.id)}
@@ -97,7 +95,7 @@
             type="button"
             class="cell-close"
             aria-label={`Close ${tab.label}`}
-            title="Close this tab. A reply already running carries on — the rail keeps its live dot."
+            title="Close this tab. A reply already running carries on — the thread library keeps its live state."
             onclick={(e) => {
               e.stopPropagation();
               onClose(tab.id);
@@ -110,10 +108,8 @@
     </div>
 
     <!-- Outside `.cells`, so a full strip cannot scroll the way to a new thread
-         out of reach. `.cells` is `flex: 0 1 auto`, so this sits immediately
-         after the last tab while there is room and pins to the right edge once
-         the tabs overflow. It is the only way to start a thread now — the two
-         `+` buttons on the thread rail are gone. -->
+         out of reach. It sits after the last tab while there is room and pins
+         to the right edge once the cells overflow. -->
     <button
       type="button"
       class="cell-new"
@@ -127,6 +123,8 @@
       +
     </button>
 
+    <a class="notes-link" href="/jkai/notes" title="Open notes">Notes <span aria-hidden="true">→</span></a>
+
     {#if onToggleGraph}
       <button
         type="button"
@@ -134,8 +132,8 @@
         class:on={graphOpen}
         onclick={onToggleGraph}
         aria-label="Context workspace for this thread"
-        title="Context workspace for this thread">◆</button
-      >
+        title="Context workspace for this thread"
+      >◆</button>
     {/if}
   </div>
 
@@ -181,13 +179,15 @@
     display: none;
   }
 
-  /* The two controls that used to sit in the thread header under this strip.
-     That row also carried the model, the turn count and the thread cost — all
-     of which the hub header and the ledger rail already say — so the row went
-     and the controls that had no other home came up here. */
+  /* Archive, notes and context live at the edges of the working-set strip. */
   .strip-btn {
     flex: none;
-    width: 38px;
+    min-width: 38px;
+    padding: 0 12px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
     background: transparent;
     border: none;
     font-family: var(--font-mono);
@@ -200,20 +200,29 @@
   .strip-btn:hover {
     color: var(--accent);
   }
-  .rail-btn {
+  .library-btn {
     border-right: 1px solid var(--line-hair);
-    /* Above 1099px the rail is docked and there is nothing to toggle. */
-    display: none;
   }
-  @media (max-width: 1099px) {
-    .rail-btn {
-      display: block;
-    }
+  .strip-word { font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.08em; }
+  .notes-link {
+    flex:none;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-left:auto;
+    padding:0 13px;
+    border-left:1px solid var(--line-hair);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:var(--fs-label-xs);
+    font-weight:600;
+    text-decoration:none;
+    text-transform:uppercase;
+    letter-spacing:.08em;
   }
-  /* Pinned to the far edge rather than sitting against `+`: it acts on the rail
-     on the other side of the pane, not on the tabs. */
+  .notes-link span { color:var(--accent); }
+  .notes-link:hover { background:var(--text-primary); color:var(--bg); }
   .graph-btn {
-    margin-left: auto;
     border-left: 1px solid var(--line-hair);
   }
   .graph-btn.on {
@@ -222,6 +231,9 @@
   /* Phone: the bottom tab bar already carries GRAPH, and there is no rail to
      open — it is a sheet. */
   @media (max-width: 799px) {
+    .strip-word { display:none; }
+    .library-btn { padding:0; width:38px; }
+    .notes-link { padding:0 10px; }
     .graph-btn {
       display: none;
     }

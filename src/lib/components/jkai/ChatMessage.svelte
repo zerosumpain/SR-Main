@@ -372,7 +372,7 @@
     return chunks;
   });
 
-  const roleLabel = $derived(isUser ? 'you' : role === 'system' ? 'system' : 'jkai');
+  const roleLabel = $derived(isUser ? 'you / prompt' : role === 'system' ? 'system' : 'jkai / reply');
 
   // An attachment-only turn (the model returned a file and no prose) would
   // otherwise draw an empty bubble above the attachment block. Skip the bubble
@@ -392,11 +392,9 @@
   });
 </script>
 
-<!-- One ledger row per turn: an 84px mono gutter carrying who and when, the body
-     in the column beside it, and a hairline rule underneath. Assistant turns take
-     a faint accent wash so the two registers separate without a bubble. -->
+<!-- The question and answer use different registers: prompts are compact objects
+     aligned to the right; replies are editorial copy on the left. -->
 <div class="msg-row" class:user={isUser} class:assistant={!isUser} class:bodyless={!hasBody}>
-  <!-- ROLE / TIMESTAMP — the uniform every turn wears, now in the gutter. -->
   <div class="msg-meta">
     <span class="meta-role">{roleLabel}</span>
     {#if clockTime}
@@ -506,38 +504,35 @@
 </div>
 
 <style>
-  /* The transcript is a ledger, not a stack of speech bubbles: every turn is one
-     row with an 84px mono gutter (who / when) and a body column beside it,
-     divided by a hairline. The row is full-bleed so the divider and the
-     assistant wash reach the pane edges, while the content inside stays on the
-     900px reading column via the centring padding. Under 800px the gutter
-     folds into a header line above the body (see the media query below). */
+  /* Prompts are compact objects; replies are the page's reading surface. */
   .msg-row {
-    display: grid;
-    grid-template-columns: 84px minmax(0, 1fr);
-    gap: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
     width: 100%;
-    align-self: stretch;
-    padding: 14px max(20px, calc((100% - 900px) / 2));
+    padding: 0;
   }
-  /* The wash and the divider belong to the whole TURN, not to its prose — a
-     reply's attachments, workflow chips and build pill are part of the same
-     thing the model said. Both live on .msg-slot in ChatArea; an
-     attachment-only turn would otherwise draw an empty band of wash above an
-     attachment sitting on bare page ground. */
-  .msg-row.bodyless {
-    padding-bottom: 0;
-  }
+  .msg-row.user { align-items:flex-end; }
+  .msg-row.bodyless .msg-body { display:none; }
   .msg-body {
     min-width: 0;
+    width:100%;
+  }
+  .msg-row.assistant .msg-body {
+    max-width:76ch;
+    padding-left:18px;
+    border-left:3px solid var(--accent);
+  }
+  .msg-row.user .msg-body {
+    width:auto;
+    max-width:min(82%, 46rem);
   }
 
   .msg-meta {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-    padding-top: 2px;
+    align-items: baseline;
+    gap: 9px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
@@ -549,13 +544,9 @@
     font-weight: 500;
     color: var(--text-ghost);
   }
-  /* Burnt orange is "this one is the machine talking" — the only colour
-     difference between the two registers besides the wash. */
   .msg-row.assistant .meta-role {
     color: var(--accent);
   }
-  /* The wall-clock mark stays quiet until the row is hovered — available for
-     reference without every turn shouting its timestamp. */
   .meta-time {
     opacity: 0;
     font-variant-numeric: tabular-nums;
@@ -566,8 +557,6 @@
     opacity: 1;
   }
 
-  /* No bubble in the assistant register. The element stays so the heartbeat and
-     entity-resolution variants below still have something to dress. */
   .msg-bubble {
     width: 100%;
     padding: 0;
@@ -582,16 +571,13 @@
     font-size: var(--fs-body);
     line-height: 1.6;
   }
-  /* The user turn keeps a bordered block, so a question still reads as an object
-     placed on the page rather than as more prose. */
-  /* Shrink to the question asked — `width: auto` on a block element is 100%,
-     which put a two-word prompt in an empty-looking form field. */
   .msg-row.user .msg-bubble {
     width: fit-content;
     max-width: 100%;
-    padding: 11px 13px;
-    border-color: var(--line);
-    background: var(--surface-sunken);
+    padding: 12px 15px;
+    border-color: var(--text-primary);
+    background: var(--surface-card);
+    line-height:1.5;
   }
   .user-text {
     white-space: pre-wrap;
@@ -717,23 +703,9 @@
     .cost-stamp {
       font-size: var(--fs-label-xs);
     }
-    /* The 84px gutter + 16px gap is ~100px of a ~360px pane — over a quarter
-       of the reading width spent on "who". Fold the meta into a header line so
-       the turn owns the full width, name just inside the top-left. */
-    /* Tighter on a phone: a turn is often two lines, and 16px of air above and
-       below each one meant a third of the screen was gaps. */
-    .msg-row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 6px;
-      padding-top: 10px;
-      padding-bottom: 10px;
-    }
-    .msg-meta {
-      flex-direction: row;
-      align-items: baseline;
-      gap: 8px;
-      padding-top: 0;
-    }
+    .msg-row { gap:6px; }
+    .msg-row.assistant .msg-body { padding-left:12px; border-left-width:2px; }
+    .msg-row.user .msg-body { max-width:92%; }
   }
   .chat-markdown :global(p) {
     margin: 0 0 0.5em;
