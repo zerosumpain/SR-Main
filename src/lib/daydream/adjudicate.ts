@@ -149,6 +149,8 @@ export interface ReviewResult {
   sources: string[];
   tokens: { prompt: number; completion: number };
   toolCalls: number;
+  /** The likelihood contradicted its verdict and was turned round. */
+  likelihoodFlipped: boolean;
   error: string | null;
 }
 
@@ -165,7 +167,9 @@ const SYSTEM = [
   '- verdict "verified": you checked and the claim holds. He will be told.',
   '- verdict "refuted": you checked and it does not. He will NOT be told, and you will be quoted in the weekly letter explaining what you caught.',
   '- verdict "uncertain": the sources cannot settle it. He will not be interrupted for a maybe.',
-  '- likelihood is YOUR probability that the claim is true, not how interesting it is.',
+  '- likelihood is the probability that THE CLAIM IS TRUE, on one 0..1 scale. It is NOT your confidence in your own verdict.',
+  '  If you are 95% sure the claim is FALSE, likelihood is 0.05, not 0.95.',
+  '  A "refuted" must be below 0.5. A "verified" must be above 0.5. Anything else contradicts itself.',
   '- reasoning: two sentences at most, plain, addressed to John. Say what you checked and what it showed.',
   '- narrative: only when the claim needs restating — a better sentence to send him. Null if the original stands.',
   '- sources: what you actually looked at. An empty list with a confident verdict is a contradiction; say "uncertain" instead.',
@@ -248,6 +252,7 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
     sources: [],
     tokens: { prompt: 0, completion: 0 },
     toolCalls: 0,
+    likelihoodFlipped: false,
     error: null,
   };
 
@@ -346,8 +351,10 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
       } catch {
         return { ...empty, tokens: { prompt: promptTokens, completion: completionTokens }, toolCalls, error: 'reviewer did not return JSON' };
       }
+      const v = validate(parsed, checked);
       return {
-        ...validate(parsed, checked),
+        ...v,
+        likelihoodFlipped: v.likelihoodFlipped ?? false,
         tokens: { prompt: promptTokens, completion: completionTokens },
         toolCalls,
         error: null,
@@ -370,12 +377,38 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
 export function validate(
   parsed: Record<string, unknown>,
   checked: string[],
-): Pick<ReviewResult, 'verdict' | 'likelihood' | 'reasoning' | 'narrative' | 'sources'> {
+): Pick<ReviewResult, 'verdict' | 'likelihood' | 'reasoning' | 'narrative' | 'sources'> & {
+  /** True when the likelihood contradicted its verdict and was turned round. */
+  likelihoodFlipped?: boolean;
+} {
   const raw = typeof parsed.verdict === 'string' ? parsed.verdict.trim().toLowerCase() : '';
   const verdict: Verdict = raw === 'verified' || raw === 'refuted' ? raw : 'uncertain';
 
   const n = typeof parsed.likelihood === 'number' ? parsed.likelihood : Number.NaN;
-  const likelihood = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
+  let likelihood = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
+
+  // ── The one scale, kept pointing the same way ────────────────────────────
+  //
+  // `likelihood` is the probability THE CLAIM IS TRUE, because that is the
+  // number the owner asked for — "its own conclusion of the likelihood of that
+  // fact". Models reliably answer a different question: on the first live runs
+  // every refutation came back in the nineties, which is confidence in the
+  // VERDICT, not probability of the claim. Five correct refutations of a real
+  // duplicate-charge false alarm each carried 0.92–0.97, which on the feed
+  // would read as "almost certainly true — refuted".
+  //
+  // The verdict is the outcome and is never touched. Only the number is turned
+  // the right way round, and only when it plainly contradicts the verdict it
+  // arrived with. Reported, not silent: a coercion nobody can see is how a
+  // field quietly comes to mean something other than its name.
+  let flipped = false;
+  if (verdict === 'refuted' && likelihood > 0.5) {
+    likelihood = 1 - likelihood;
+    flipped = true;
+  } else if (verdict === 'verified' && likelihood < 0.5) {
+    likelihood = 1 - likelihood;
+    flipped = true;
+  }
 
   const reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning.trim().slice(0, 600) : '';
   const narrativeRaw = typeof parsed.narrative === 'string' ? parsed.narrative.trim() : '';
@@ -392,9 +425,9 @@ export function validate(
   // exempt: the commonest honest refutation is "the evidence you gave me
   // already contradicts itself", which needs no further source.
   if (verdict === 'verified' && sources.length === 0) {
-    return { verdict: 'uncertain', likelihood, reasoning, narrative, sources };
+    return { verdict: 'uncertain', likelihood, reasoning, narrative, sources, likelihoodFlipped: flipped };
   }
-  return { verdict, likelihood, reasoning, narrative, sources };
+  return { verdict, likelihood, reasoning, narrative, sources, likelihoodFlipped: flipped };
 }
 
 /** Thoughts still waiting on a review, newest first. */
