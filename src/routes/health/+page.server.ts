@@ -366,6 +366,10 @@ export const load: PageServerLoad = async (event) => {
   return {
     mode: 'owner' as const,
     ...shared,
+    // The moment this exact dashboard payload finished being assembled. This
+    // is deliberately different from `syncedAgoSeconds`: a source can have
+    // synced hours ago while a reload has only just recalculated every panel.
+    dashboardUpdatedAt: new Date().toISOString(),
     // Four fields the owner dashboard has no reader for, dropped here rather
     // than shipped and ignored. `recentOutings()` was the expensive one: five
     // rows through `listActivities({ withPolyline: true })` plus the highlight

@@ -69,6 +69,9 @@ export interface WeeklyVolumeRead {
 }
 
 export interface OwnerHealthData {
+  /** When the server finished assembling the values displayed on this page. */
+  dashboardUpdatedAt: string;
+
   /**
    * Where the numbers came from, straight off `getHealthSeries30d`.
    *
