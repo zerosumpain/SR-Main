@@ -10,8 +10,9 @@
     { href: '/blog', label: 'Writing' },
     // One hub. /health is the landing for anonymous visitors and the full
     // consolidated dashboard once signed in; activities, segments, the planner
-    // and the recorder are its owner-only children. A second nav cell under it
-    // could never deactivate, because isActive() is a prefix match.
+    // and the recorder are its owner-only children. A cell for one of those
+    // children is now possible — isActive() resolves most-specific-first — but
+    // one hub is still the intent.
     { href: '/health', label: 'Health' },
     { href: '/live', label: 'Live' },
     { href: '/jkai', label: 'jkai' },
@@ -34,10 +35,29 @@
 
   let menuOpen = $state(false);
 
+  const matchesPath = (href: string, path: string): boolean =>
+    href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
+
+  /**
+   * Most specific cell wins.
+   *
+   * A plain prefix test lights TWO cells whenever one destination nests under
+   * another — on `/jkai/builds` both `Chat` (`/jkai`) and `Builds`
+   * (`/jkai/builds`) matched, so the strip claimed you were in two places at
+   * once. That was always true; it only became visible when the strip went ink
+   * and the current cell started cutting a cream notch out of it.
+   *
+   * Fixed here rather than by special-casing `/jkai`, because the rule is
+   * general: if a longer item in the SAME list also matches, it owns the cell.
+   * That is what lets a hub and its children coexist in one nav — which the
+   * `DEFAULT_ITEMS` comment above had written off as impossible.
+   */
   function isActive(href: string): boolean {
     const path = page.url.pathname;
-    if (href === '/') return path === '/';
-    return path === href || path.startsWith(`${href}/`);
+    if (!matchesPath(href, path)) return false;
+    return !displayItems.some(
+      (i) => i.href !== href && i.href.length > href.length && matchesPath(i.href, path),
+    );
   }
 </script>
 
@@ -49,7 +69,7 @@
 
 <!-- The nav is a cell strip: each destination is a cell of one grid, divided by
      hairlines, and the current one is cut out of the strip — page ground behind
-     it and a 2px accent seam on its bottom edge. That reads as "you are stood
+     it and a 3px accent seam on its bottom edge. That reads as "you are stood
      here" without a filled block shouting it.
 
      z-index lifts above sibling hero content (also z-10) while the phone menu is
@@ -135,20 +155,31 @@
     justify-content: space-between;
   }
 
+  /* Every rule below is written for the INK strip (.site-nav-bar in the root
+     layout). The paper tokens this file used to carry — --line-hair,
+     --text-muted, --accent — are all ink on #1a1008; their lifted partners are
+     cream at an alpha and --accent-on-dark. */
   .nav-brand {
     display: inline-flex;
     align-items: center;
     padding: 0 20px;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     font-size: var(--fs-body-sm);
+    color: var(--bg);
     flex-shrink: 0;
     transition: color 0.2s var(--ease-out);
+  }
+  /* `.brand` is global and paper-facing; the element is this component's, so a
+     scoped rule reaches it — its ::before caret included. */
+  .nav-brand::before {
+    color: var(--accent-on-dark);
+    opacity: 1;
   }
   .nav-brand.hero {
     font-size: 18px;
   }
   .nav-brand:hover {
-    color: var(--accent);
+    color: var(--accent-on-dark);
   }
 
   .nav-cells {
@@ -166,30 +197,34 @@
     align-items: center;
     flex: none;
     padding: 0 16px;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.62);
     text-decoration: none;
     white-space: nowrap;
     transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   }
   /* The brand already owns the left edge; without it the first cell needs one. */
   .nav-strip:not(.with-brand) .nav-cells .nav-cell:first-child {
-    border-left: 1px solid var(--line-hair);
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
   }
   .nav-cell:hover {
-    color: var(--text-primary);
-    background: var(--accent-tint-04);
+    color: var(--bg);
+    background: rgba(232, 134, 58, 0.14);
   }
-  /* Cut out of the strip: page ground behind it, accent seam on the bottom. */
+  /* Cut out of the strip: page ground behind it, accent seam on the bottom.
+     This is the rule the ink ground pays off — on cream it was a subtle shift
+     between two warm tones, and on ink it is a notch of the page punched
+     through the band, so the strip visibly HOLDS the page rather than sitting
+     above it. The seam matches the 3px the editorial rails use. */
   .nav-cell[aria-current='page'] {
     color: var(--text-primary);
     background: var(--bg);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    box-shadow: inset 0 -3px 0 var(--accent);
   }
 
   .burger-wrap {
@@ -198,7 +233,7 @@
     flex-shrink: 0;
     align-items: center;
     padding: 0 12px;
-    border-left: 1px solid var(--line-hair);
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
   }
   .burger {
     display: flex;
@@ -209,14 +244,14 @@
     height: 38px;
     padding: 0 7px;
     background: transparent;
-    border: 1px solid var(--line-strong);
+    border: 1px solid rgba(237, 228, 212, 0.28);
     cursor: pointer;
   }
   .burger span {
     display: block;
     height: 2px;
     width: 100%;
-    background: var(--text-primary);
+    background: var(--bg);
     transition:
       transform 0.2s ease,
       opacity 0.2s ease;

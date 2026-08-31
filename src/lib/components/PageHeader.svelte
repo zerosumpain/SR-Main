@@ -114,11 +114,13 @@
 </header>
 
 <style>
+  /* Written for the INK strip — see the .site-nav-bar rule in the root layout.
+     Every hairline is cream at an alpha, because --line-hair is ink on ink. */
   .hdr-before {
     display: inline-flex;
     align-items: center;
     padding: 0 12px;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     flex: none;
   }
 
@@ -132,25 +134,34 @@
     max-width: min(55vw, 520px);
     margin: 0;
     padding: 0 20px;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     font-size: var(--fs-body-sm);
     line-height: 1;
+    color: var(--bg);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     transition: color 0.2s var(--ease-out);
   }
+  /* `.brand` is global and paper-facing; the element is this component's, so a
+     scoped rule reaches it — the ::before caret included. It is the one orange
+     stroke on the left of the band. */
+  .hdr-title::before {
+    color: var(--accent-on-dark);
+    opacity: 1;
+  }
   a.hdr-title:hover {
-    color: var(--accent);
+    color: var(--accent-on-dark);
   }
 
   .hdr-meta {
     display: none;
     align-items: center;
     padding: 0 16px;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     min-width: 0;
     flex: none;
+    color: rgba(237, 228, 212, 0.62);
   }
 
   /* Pushed to the far edge by SiteNav's own flex:1, so it sits against the
@@ -161,12 +172,12 @@
     gap: 10px;
     flex: none;
     padding: 0 20px;
-    border-left: 1px solid var(--line-hair);
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.7);
     white-space: nowrap;
   }
   .live-txt {
@@ -181,7 +192,8 @@
     height: 6px;
     flex: none;
     border-radius: var(--radius-pill);
-    background: var(--accent);
+    background: var(--accent-on-dark);
+    box-shadow: 0 0 6px rgba(232, 134, 58, 0.55);
     animation: nav-pulse 1.5s ease-in-out infinite;
   }
   @keyframes nav-pulse {

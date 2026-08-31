@@ -59,26 +59,33 @@
     display: flex;
     flex-direction: column;
   }
+  /* The owner's strip sits between the ink nav and the hero, so it is the
+     masthead's SECOND TIER, not a notice pasted onto the page. Cream on ink
+     with an accent seam down the left edge: it continues the band instead of
+     cutting it, which is what a cream-on-tinted strip did to the L the nav and
+     the vitals rail now form. */
   .asb {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px clamp(24px, 5vw, 64px);
-    border-bottom: 1px solid var(--line-strong);
-    background: var(--accent-tint-14, rgba(196, 87, 10, 0.08));
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+    box-shadow: inset 3px 0 0 var(--accent-on-dark);
+    background: var(--text-primary);
     text-decoration: none;
-    color: var(--text-primary);
+    color: var(--bg);
     transition: background 0.15s ease;
   }
   .asb:hover {
-    background: var(--surface-overlay);
+    background: #241608;
   }
   .asb-dot {
     width: 7px;
     height: 7px;
     flex-shrink: 0;
     border-radius: var(--radius-pill, 100px);
-    background: var(--accent, #c4570a);
+    background: var(--accent-on-dark);
+    box-shadow: 0 0 6px rgba(232, 134, 58, 0.55);
   }
   .asb-text {
     font-family: var(--font-mono);
@@ -92,18 +99,21 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: var(--accent, #c4570a);
+    color: var(--accent-on-dark);
     white-space: nowrap;
   }
 
-  /* Ready, not broken. Same geometry, the other half of the site palette. */
+  /* Ready, not broken. Same geometry, the other half of the site palette —
+     petrol lifted for the ink ground the way the accent is (#0e5b66 scores
+     worse than the orange does on #1a1008). */
   .asb--ready {
-    background: var(--accent-ink-tint-06);
+    box-shadow: inset 3px 0 0 #3fa3b0;
   }
   .asb--ready .asb-dot {
-    background: var(--accent-ink);
+    background: #3fa3b0;
+    box-shadow: 0 0 6px rgba(63, 163, 176, 0.5);
   }
   .asb--ready .asb-cta {
-    color: var(--accent-ink);
+    color: #3fa3b0;
   }
 </style>

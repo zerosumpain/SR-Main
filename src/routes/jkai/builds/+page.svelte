@@ -76,9 +76,11 @@
 {/key}
 
 <style>
+  /* Rendered inside the ink `.site-nav-bar`, so cream at an alpha rather than
+     --text-muted, which is ink on ink there. */
   .idx-head-meta {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.62);
   }
 </style>

@@ -787,13 +787,20 @@
     background: var(--accent);
   }
 
-  /* ---- collapsed rail ---- */
+  /* ---- collapsed rail ----
+     INK, and this is the piece that docks the masthead into the page. The
+     header alone was a 46px hat with cream under it; carried down this rail
+     the band becomes an L that FRAMES the conversation column instead of
+     sitting on top of it.
+     Only the collapsed rail — the default state. Expanding it opens the thread
+     library, and a list you read belongs on paper the way the hub dropdown
+     does. */
   .rail {
     width: 44px;
     flex: none;
     height: 100%;
-    border-right: 1px solid var(--line-hair);
-    background: var(--surface-rail);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
+    background: var(--text-primary);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -806,23 +813,28 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sharp);
+    border: 1px solid rgba(237, 228, 212, 0.28);
+    border-radius: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label);
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.72);
     background: none;
     cursor: pointer;
     transition: background 0.2s ease-out, color 0.2s ease-out, border-color 0.2s ease-out;
   }
   .rbtn:hover {
-    color: var(--accent);
-    border-color: var(--accent-tint-35);
+    color: var(--text-primary);
+    background: var(--accent-on-dark);
+    border-color: var(--accent-on-dark);
+  }
+  .rbtn:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
   }
   .rail-sep {
     width: 20px;
     height: 1px;
-    background: var(--line-hair);
+    background: rgba(237, 228, 212, 0.2);
     margin: 2px 0;
   }
   .rail-dots {
@@ -836,20 +848,21 @@
     width: 7px;
     height: 7px;
     border-radius: var(--radius-pill);
-    background: var(--card-border);
+    background: rgba(237, 228, 212, 0.28);
     border: none;
     padding: 0;
     cursor: pointer;
     transition: background 0.2s ease-out;
   }
   .cdot:hover {
-    background: var(--text-muted);
+    background: rgba(237, 228, 212, 0.7);
   }
   .cdot.active {
-    background: var(--accent);
+    background: var(--accent-on-dark);
   }
   .cdot.live {
-    background: var(--accent);
+    background: var(--accent-on-dark);
+    box-shadow: 0 0 6px rgba(232, 134, 58, 0.55);
     animation: rail-pulse 1.5s ease-in-out infinite;
   }
   .rail-spacer {
