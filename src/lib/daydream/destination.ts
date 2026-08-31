@@ -37,9 +37,19 @@ export interface DestinationInput {
 export interface Destination {
   /** Where to go. Same-origin, always. */
   href: string;
-  /** What the link says. Names the THING, not the tab — "Costa Coffee", not
-   *  "Places", because the reader already knows they are on the feed. */
+  /**
+   * What the chip says. TERSE — two or three words.
+   *
+   * These render as one chip in a row of up to seven, inside a 320px column on
+   * a three-column board. The first draft used sentences ("the money it came
+   * from") and every card carrying one spilled its action row onto an extra
+   * line. Where the destination has a NAME, the name is the label, because a
+   * name is both short and the most informative thing available.
+   */
   label: string;
+  /** The sentence the terse label replaced, carried as the chip's tooltip so
+   *  the explanation is a hover away rather than gone. */
+  hint: string;
   /** True when it leaves this hub. The page marks those, so a click that
    *  loses your place on a 3,000px board is never a surprise. */
   external: boolean;
@@ -62,21 +72,21 @@ export function refOf(
  * remembering to edit this file. Anything unmatched returns null rather than
  * a guess — see the rule above.
  */
-export function tabFor(kind: string): { tab: string; label: string } | null {
+export function tabFor(kind: string): { tab: string; label: string; hint: string } | null {
   if (kind.startsWith('spend') || kind.startsWith('offer') || kind.startsWith('renewal')) {
-    return { tab: 'money', label: 'the money it came from' };
+    return { tab: 'money', label: 'In Money', hint: 'The money it came from' };
   }
   if (kind.startsWith('free_window') || kind.startsWith('calendar') || kind.startsWith('plans')) {
-    return { tab: 'calendar', label: 'the diary behind it' };
+    return { tab: 'calendar', label: 'In Calendar', hint: 'The diary behind it' };
   }
   if (kind.startsWith('correlation') || kind.startsWith('hypothesis') || kind.startsWith('musing_')) {
-    return { tab: 'discoveries', label: 'what it was testing' };
+    return { tab: 'discoveries', label: 'In Discoveries', hint: 'What it was testing' };
   }
   if (kind.startsWith('family') || kind.startsWith('context_meets')) {
-    return { tab: 'family', label: 'the household view' };
+    return { tab: 'family', label: 'In Family', hint: 'The household view' };
   }
   if (kind.startsWith('pattern_break') || kind.startsWith('rule_')) {
-    return { tab: 'engine', label: 'the rule that fired it' };
+    return { tab: 'engine', label: 'In Engine', hint: 'The rule that fired it' };
   }
   return null;
 }
@@ -94,7 +104,10 @@ export function thoughtDestination(t: DestinationInput): Destination | null {
   if (t.placeId) {
     return {
       href: `/jkai/daydreams?tab=places#place-${t.placeId}`,
-      label: t.placeLabel ? `${t.placeLabel} in Places` : 'this place in Places',
+      // The place's own name when it has one — short AND the most informative
+      // label available, which is the rare case where those agree.
+      label: t.placeLabel ?? 'In Places',
+      hint: t.placeLabel ? `${t.placeLabel} in Places` : 'This place in Places',
       external: false,
     };
   }
@@ -103,29 +116,29 @@ export function thoughtDestination(t: DestinationInput): Destination | null {
   // every bridged insight, and the extractor writes them on anything woven.
   const entity = refOf(t.evidence, 'intel-entity');
   if (entity) {
-    return { href: `/jkai/intel/entities/${entity}`, label: 'this entity in Intel', external: true };
+    return { href: `/jkai/intel/entities/${entity}`, label: 'In Intel', hint: 'This entity in the knowledge graph', external: true };
   }
 
   // Something the owner endorsed, which has since been read into the graph.
   if (t.intelNoteId) {
-    return { href: `/jkai/intel/notes/${t.intelNoteId}`, label: 'what Intel made of it', external: true };
+    return { href: `/jkai/intel/notes/${t.intelNoteId}`, label: 'In Intel', hint: 'What Intel made of it once you called it useful', external: true };
   }
 
   // The email it was read out of. `email` is the ref kind `resolveEvidence`
   // uses and `mail_read` takes verbatim — the same id, not a search term.
   const email = refOf(t.evidence, 'email');
   if (email) {
-    return { href: `/jkai/intel/notes/${email}`, label: 'the message it read', external: true };
+    return { href: `/jkai/intel/notes/${email}`, label: 'The message', hint: 'The message it was read out of', external: true };
   }
 
   const bridged = refOf(t.evidence, 'intel');
   if (bridged) {
-    return { href: `/jkai/intel`, label: 'the graph finding behind it', external: true };
+    return { href: `/jkai/intel`, label: 'In Intel', hint: 'The graph finding behind it', external: true };
   }
 
   const tab = tabFor(t.kind);
   if (tab) {
-    return { href: `/jkai/daydreams?tab=${tab.tab}`, label: tab.label, external: false };
+    return { href: `/jkai/daydreams?tab=${tab.tab}`, label: tab.label, hint: tab.hint, external: false };
   }
 
   return null;

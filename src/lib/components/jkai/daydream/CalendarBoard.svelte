@@ -112,12 +112,27 @@
     loadError = null;
     try {
       const out = await post({ action: 'calendar_window', from: anchor, to: endOfMonth(anchor) });
-      if (out.error) throw new Error(String(out.error));
+
+      // A reported error is NOT a failed request.
+      //
+      // `calendar_window` returns `{events, exclusions, partial, available,
+      // error}` — those last three exist precisely so a diary that could only
+      // be read in part is never mistaken for an empty one. Throwing on
+      // `out.error` threw the whole payload away with it, including
+      // `exclusions`, which come from OUR database and are unaffected by
+      // whatever iCloud did. Seen with a dead CalDAV credential: the panel
+      // reported "nothing hidden, nothing explained" over a stored rule, which
+      // is not a degraded read but a wrong statement about the owner's own
+      // settings.
+      //
+      // So the error is REPORTED and everything that did arrive is applied.
       events = (out.events ?? []) as BoardEvent[];
       exclusions = (out.exclusions ?? []) as BoardExclusion[];
       partial = out.partial === true;
       truncated = out.truncated === true;
+      if (out.error) loadError = String(out.error);
     } catch (err) {
+      // A genuinely failed request — no payload at all.
       loadError = err instanceof Error ? err.message : String(err);
       events = [];
     } finally {

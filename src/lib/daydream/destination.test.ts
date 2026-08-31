@@ -15,6 +15,14 @@ describe('refOf', () => {
 });
 
 describe('tabFor', () => {
+  it('gives every label a hint — the sentence the terse chip replaced', () => {
+    for (const kind of ['spend_x', 'free_window', 'correlation_x', 'family_x', 'rule_x']) {
+      const t = tabFor(kind)!;
+      expect(t.label.length).toBeLessThanOrEqual(16);
+      expect(t.hint.length).toBeGreaterThan(t.label.length);
+    }
+  });
+
   it('routes by prefix, so a new detector in a family needs no edit here', () => {
     expect(tabFor('spend_duplicate')?.tab).toBe('money');
     expect(tabFor('spend_anything_at_all')?.tab).toBe('money');
@@ -32,11 +40,12 @@ describe('tabFor', () => {
 });
 
 describe('thoughtDestination', () => {
-  it('prefers the place, and names it when it has a name', () => {
+  it('prefers the place, and uses its NAME as the label when it has one', () => {
     const d = thoughtDestination({ kind: 'unknown_place', placeId: 'p1', placeLabel: 'Costa Coffee' });
     expect(d).toEqual({
       href: '/jkai/daydreams?tab=places#place-p1',
-      label: 'Costa Coffee in Places',
+      label: 'Costa Coffee',
+      hint: 'Costa Coffee in Places',
       external: false,
     });
   });
@@ -44,7 +53,26 @@ describe('thoughtDestination', () => {
   it('still links an unnamed place — the map is the point', () => {
     const d = thoughtDestination({ kind: 'unknown_place', placeId: 'p9', placeLabel: null });
     expect(d?.href).toBe('/jkai/daydreams?tab=places#place-p9');
-    expect(d?.label).toBe('this place in Places');
+    expect(d?.label).toBe('In Places');
+  });
+
+  // These render as one chip among up to seven, in a 320px column. Sentences
+  // spilled the action row onto a second line on three cards out of four.
+  it('keeps every label short enough for a chip, and every hint longer', () => {
+    const cases: Parameters<typeof thoughtDestination>[0][] = [
+      { kind: 'unknown_place', placeId: 'p1', placeLabel: 'Costa Coffee' },
+      { kind: 'unknown_place', placeId: 'p1' },
+      { kind: 'intel_broker', evidence: [{ kind: 'intel-entity', id: 'e1' }] },
+      { kind: 'intel_hub', evidence: [{ kind: 'intel', id: 'i1' }] },
+      { kind: 'musing_money', intelNoteId: 'n4' },
+      { kind: 'mail_security', evidence: [{ kind: 'email', id: 'm2' }] },
+      { kind: 'spend_duplicate' },
+    ];
+    for (const c of cases) {
+      const d = thoughtDestination(c)!;
+      expect(d.label.length).toBeLessThanOrEqual(20);
+      expect(d.hint.length).toBeGreaterThan(0);
+    }
   });
 
   it('beats the tab lookup with a named entity', () => {

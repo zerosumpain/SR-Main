@@ -2104,7 +2104,7 @@
                       </button>
                     {/if}
                     {#if dest}
-                      <a class="q link" href={dest.href} title={dest.external ? 'Leaves the daydream hub' : 'Another room of this hub'}>
+                      <a class="q link" href={dest.href} title="{dest.hint}{dest.external ? ' — leaves the daydream hub' : ''}">
                         {dest.label}{#if dest.external}<span class="q-ext">↗</span>{/if}
                       </a>
                     {/if}
@@ -4056,9 +4056,13 @@
     margin-left: 4px;
     opacity: 0.7;
   }
+  /* No `margin-left: auto` here. In a 320px column this row wraps, and an
+     auto margin then strands "Why" alone on a line of its own, right-aligned —
+     which it did on three cards out of four. It reads as the last item in the
+     row, so it should simply BE the last item in the row. */
   .q.more {
-    margin-left: auto;
     color: var(--text-ghost);
+    border-style: dotted;
   }
 
   .card-map {
