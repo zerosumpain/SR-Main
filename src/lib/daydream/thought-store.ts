@@ -35,7 +35,18 @@ import type { Candidate } from './snapshot-types';
  * "I decided this other thing doesn't matter". Snoozes are the same decision
  * with a timer, and an actioned thought is finished business.
  */
-export const PROTECTED_STATUSES = ['dismissed', 'snoozed', 'actioned'] as const;
+/**
+ * `archived` belongs here for exactly the same reason, and its absence was a
+ * real bug for as long as it lasted: filing a card away with OK is a judgement
+ * about that specific finding, and `persistCandidates` runs every ten minutes.
+ * Left unprotected, the detect tick re-derives the same candidate, finds the
+ * row by `dedupeKey`, and rewrites it back to `new` or `suppressed` — so the
+ * button would have looked like it worked and then quietly undone itself
+ * before the page was next opened. Any new "the owner has ruled on this"
+ * status must be added here in the same commit that introduces it, and
+ * `archive.test.ts` asserts that without needing a database.
+ */
+export const PROTECTED_STATUSES = ['dismissed', 'snoozed', 'actioned', 'archived'] as const;
 
 export interface PersistResult {
   created: number;
