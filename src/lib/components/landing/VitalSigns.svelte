@@ -232,12 +232,23 @@
 </aside>
 
 <style>
+  /* The instrument slab.
+   *
+   * The rail wears the cover register the /health owner pages and the daydream
+   * hub open with: an ink ground (#1a1008), cream type, and burnt orange
+   * lifted to --accent-on-dark because #c4570a scores 2.6:1 on this ground.
+   * Petrol has no role here — it is the counter-accent on PAPER, and there is
+   * no paper left in this panel.
+   *
+   * It used to be a cream panel on a cream page, which meant the one live
+   * surface on the front door read as furniture. */
   .vitals {
     display: flex;
     flex-direction: column;
     width: 100%;
-    background: var(--surface-rail);
-    border: 1px solid var(--line-strong);
+    background: var(--text-primary);
+    color: var(--bg);
+    border: 1px solid var(--text-primary);
     /* Reserve the panel's height so the tiles flying in client-side don't shift
        the live-walk banner below them on stacked (mobile) layouts. */
     min-height: 392px;
@@ -249,13 +260,18 @@
     justify-content: space-between;
     gap: 12px;
     padding: 13px 20px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+  }
+  /* The kicker, in the cover's own colour. Scoped past the global
+     `.metric-label` utility, which is written for paper. */
+  .v-head .metric-label {
+    color: var(--accent-on-dark);
   }
   .v-clock {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.42);
     font-variant-numeric: tabular-nums;
   }
 
@@ -265,18 +281,25 @@
      the panel is for. */
   .v-hero {
     display: flex;
-    flex: 1;
-    align-items: flex-end;
+    /* The band takes the panel's slack and CENTRES the numeral in it. Bottom
+       alignment put every one of those pixels above the figure, which on the
+       cream panel was invisible and on ink was a hole the size of the hero
+       type beside it. Centred, the air belongs to the figure. */
+    flex: 1 1 auto;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
     padding: 20px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
   }
   .v-hero-read {
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+  }
+  .v-hero .metric-label {
+    color: rgba(237, 228, 212, 0.55);
   }
   /* The one display-scale numeral on the rail. Everything else is mono. */
   .v-hero-num {
@@ -286,7 +309,7 @@
     line-height: 0.8;
     letter-spacing: -0.05em;
     font-variant-numeric: tabular-nums;
-    color: var(--text-primary);
+    color: var(--bg);
   }
   /* No live reading. Mono and a step down, so the panel says "nothing to
      report" rather than drawing a display-weight em-dash the size of a bar. */
@@ -295,7 +318,7 @@
     font-weight: 400;
     font-size: var(--fs-num-lg);
     letter-spacing: 0;
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.35);
   }
   .v-hero-dot {
     width: 9px;
@@ -303,12 +326,13 @@
     flex: none;
     margin-bottom: 6px;
     border-radius: var(--radius-pill);
-    background: var(--accent);
-    box-shadow: var(--accent-glow);
+    background: var(--accent-on-dark);
+    /* A glow, not elevation — the one sanctioned shadow in this system. */
+    box-shadow: 0 0 8px rgba(232, 134, 58, 0.55);
   }
   .v-hero-dot[data-state='idle'] {
     background: transparent;
-    border: 1.5px solid var(--text-ghost);
+    border: 1.5px solid rgba(237, 228, 212, 0.35);
     box-shadow: none;
   }
   @media (prefers-reduced-motion: no-preference) {
@@ -329,13 +353,18 @@
   }
 
   /* The grid draws its own top/left edges; the panel already has a border, so
-     trim the duplicates and let the cells meet it flush. */
+     trim the duplicates and let the cells meet it flush. The `cellgrid` utility
+     rules the hairlines in --line-strong, which is ink on ink — every cell
+     border has to be relit for the dark ground. */
   .v-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     border-top: none;
     border-left: none;
     flex: none;
     align-content: start;
+  }
+  .v-grid > :global(*) {
+    border-color: rgba(237, 228, 212, 0.16);
   }
   .v-grid > :global(*:nth-child(2n)) {
     border-right: none;
@@ -349,7 +378,10 @@
     gap: 9px;
     margin-top: auto;
     padding: 16px 20px;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid rgba(237, 228, 212, 0.16);
+  }
+  .v-deploys .metric-label {
+    color: rgba(237, 228, 212, 0.55);
   }
   .v-deploys-read {
     margin: 0;
@@ -357,26 +389,26 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.6);
   }
   .v-deploys-n {
-    color: var(--text-primary);
+    color: var(--bg);
     font-variant-numeric: tabular-nums;
     margin-right: 0.5ch;
   }
   .v-sep {
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.3);
     margin: 0 0.5ch;
   }
   .v-deploys-bar {
     display: block;
     height: 4px;
-    background: var(--line);
+    background: rgba(237, 228, 212, 0.16);
   }
   .v-deploys-fill {
     display: block;
     height: 100%;
-    background: var(--accent);
+    background: var(--accent-on-dark);
   }
 
   .v-foot {
@@ -389,32 +421,45 @@
   .vitals:not(:has(.v-deploys)) .v-foot {
     margin-top: auto;
   }
+  /* The `ds-power` shape from the daydream cover: a cream outline that fills
+     with the lifted accent on hover. Radius 0 — the pill belonged to the paper
+     register this panel has left. */
   .v-btn {
     display: inline-flex;
     align-items: center;
     padding: 9px 14px;
-    border: 1px solid var(--accent-ink-tint-35);
-    border-radius: var(--radius-sharp);
+    border: 1px solid rgba(237, 228, 212, 0.3);
+    border-radius: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
-    color: var(--accent-ink);
+    color: var(--bg);
     text-decoration: none;
     white-space: nowrap;
-    transition: background 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+    transition:
+      background var(--t-fast) var(--ease-out),
+      border-color var(--t-fast) var(--ease-out),
+      color var(--t-fast) var(--ease-out);
   }
   .v-btn:hover {
-    background: var(--accent-ink-tint-06);
+    background: var(--accent-on-dark);
+    border-color: var(--accent-on-dark);
+    color: var(--text-primary);
+  }
+  .v-btn:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
   }
   .v-btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
+    background: var(--accent-on-dark);
+    border-color: var(--accent-on-dark);
+    color: var(--text-primary);
   }
   .v-btn.primary:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+    background: var(--bg);
+    border-color: var(--bg);
+    color: var(--text-primary);
   }
 </style>

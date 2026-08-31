@@ -2645,6 +2645,7 @@
     {:else if messages.length === 0}
       <div class="flex items-center justify-center h-full px-4">
         <div class="hero">
+          <p class="hero-kicker">jkai / new thread</p>
           <h1 class="hero-title">What can I help with?</h1>
           <p class="hero-sub">
             Control your smart home, check health data, manage blog posts, start builds, or create workflows — just ask.
@@ -3845,8 +3846,12 @@
   /* Empty-state hero — a centred greeting + tappable starter prompts shown on
    * a fresh conversation. The composer stays docked at the bottom; clicking a
    * chip sends its prompt and the hero gives way to the thread. */
+  /* The one editorial moment on the chat surface: the same lettered kicker →
+     Archivo Black headline → standfirst the /health sections open with, in the
+     column the greeting already occupied. LEFT aligned — centred display type
+     is the one thing the reference set never does. */
   .hero {
-    text-align: center;
+    text-align: left;
     max-width: 34rem;
     animation: hero-in 0.3s ease both;
   }
@@ -3854,45 +3859,66 @@
     from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+  .hero-kicker {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 0 0 0.75rem;
+  }
   .hero-title {
     font-family: var(--font-display);
-    font-size: clamp(1.5rem, 5vw, 2rem);
-    line-height: 1.1;
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
+    line-height: 0.94;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
     color: var(--text-primary);
-    margin: 0 0 0.6rem;
+    margin: 0 0 0.85rem;
   }
   .hero-sub {
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: var(--text-ghost);
-    margin: 0 auto 1.5rem;
-    max-width: 28rem;
+    font-size: var(--fs-body-sm);
+    line-height: 1.55;
+    color: var(--text-secondary);
+    text-wrap: pretty;
+    margin: 0 0 1.5rem;
+    max-width: 46ch;
   }
   .hero-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    justify-content: center;
+    justify-content: flex-start;
   }
+  /* The facet-chip shape: 0 radius, mono, one rule, and the hover INVERTS to
+     ink-on-cream rather than tinting — the same control the segment ledger and
+     the daydream facet bar use. */
   .hero-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: var(--fs-label);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     padding: 8px 14px;
     border: 1px solid var(--line-strong);
-    border-radius: var(--radius-pill);
+    border-radius: 0;
     background: transparent;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
     white-space: nowrap;
   }
   .hero-chip:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg);
+  }
+  .hero-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
   }
   .hero-chip-icon { font-size: var(--fs-nav); }
 

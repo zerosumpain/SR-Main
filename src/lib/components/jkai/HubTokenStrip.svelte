@@ -211,6 +211,11 @@
 </div>
 
 <style>
+  /* The ledger reads on the header's INK ground — the masthead band, not paper.
+     Its one consumer is `HubHeader`, so this has a single register rather than
+     a `dark` prop (`StatDeck` needs one because it renders in both on a page).
+     Every colour here is the cream/lifted-accent partner of the paper token it
+     replaced: --text-muted → cream at 62%, --accent → --accent-on-dark. */
   .strip {
     display: flex;
     align-items: center;
@@ -221,7 +226,7 @@
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.62);
     white-space: nowrap;
   }
   .unit {
@@ -250,10 +255,10 @@
     cursor: pointer;
   }
   .chunk-btn:hover {
-    color: var(--text-primary);
+    color: var(--bg);
   }
   .chunk-btn:focus-visible {
-    outline: 1px solid var(--accent);
+    outline: 1px solid var(--accent-on-dark);
     outline-offset: 2px;
   }
   /* The window this chunk is currently reporting. Quiet — it is the caption,
@@ -266,14 +271,15 @@
   .chunk b {
     font-weight: 500;
     font-variant-numeric: tabular-nums;
-    color: var(--text-primary);
+    color: var(--bg);
   }
   .chunk b.accent {
-    color: var(--accent);
+    color: var(--accent-on-dark);
   }
-  /* Quota exhausted — calls are being refused, not merely running low. */
+  /* Quota exhausted — calls are being refused, not merely running low. The
+     paper --error sinks into #1a1008, so it lifts the way the accent does. */
   .chunk b.accent.warn {
-    color: var(--error);
+    color: #e08b8b;
   }
   .spend .of {
     opacity: 0.75;
@@ -286,22 +292,22 @@
     width: 52px;
     height: 5px;
     flex: none;
-    background: var(--line);
+    background: rgba(237, 228, 212, 0.2);
   }
   .budget-fill {
     display: block;
     height: 100%;
-    background: var(--accent);
+    background: var(--accent-on-dark);
   }
   .budget-fill.warn {
-    background: var(--error);
+    background: #e08b8b;
   }
   .live-dot {
     width: 6px;
     height: 6px;
     flex: none;
     border-radius: var(--radius-pill);
-    background: var(--accent);
+    background: var(--accent-on-dark);
     animation: hub-pulse 1.5s ease-in-out infinite;
   }
   @keyframes hub-pulse {

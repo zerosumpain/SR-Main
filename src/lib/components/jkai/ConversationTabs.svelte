@@ -148,13 +148,17 @@
 </div>
 
 <style>
+  /* The rail under the masthead — the light band the /health and daydream
+     shells put directly beneath their ink cover, closed with a 2px ink rule
+     rather than a hairline. The current tab carries a 3px accent seam, which is
+     the same mark those rails use for the section you are in. */
   .tab-strip {
     flex: none;
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: var(--bg);
-    border-bottom: 1px solid var(--line-strong);
+    background: var(--surface-rail);
+    border-bottom: 2px solid var(--text-primary);
   }
   .strip-row {
     display: flex;
@@ -228,7 +232,7 @@
     display: flex;
     align-items: stretch;
     flex: none;
-    background: var(--surface-rail);
+    background: transparent;
     /* Bounded, not `auto`: a long thread title in an auto track pushes every
        other tab off the strip, and `minmax(0, 1fr)` would collapse the short
        ones to nothing. */
@@ -246,7 +250,7 @@
      the current tab is continuous with the thread underneath it. */
   .cell.current {
     background: var(--bg);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    box-shadow: inset 0 -3px 0 var(--accent);
   }
 
   .cell-open {
