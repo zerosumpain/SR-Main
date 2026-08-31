@@ -1,14 +1,35 @@
 <script lang="ts">
-  // The diary, and what the engine is allowed to see of it.
+  // The diary — what the engine may see of it, and what you can write to it.
   //
   // Reading the calendar is a live CalDAV round trip, so nothing here happens
-  // on page load — the tab fetches a month when it is opened and when the
-  // month changes, and never otherwise. Same rule the ledger loader follows.
+  // on page load: the tab fetches a month when it is opened and when the month
+  // changes, and never otherwise. Same rule the ledger loader follows.
   //
-  // Excluded events are rendered ALONGSIDE the rest, struck through, not
-  // filtered out of the view. A filter you cannot see is a filter you cannot
-  // revise, and the whole point of making exclusion total was that undoing it
-  // is one tap.
+  // Excluded events render ALONGSIDE the rest, struck through, not filtered
+  // out. A filter you cannot see is a filter you cannot revise, and the whole
+  // point of making exclusion total was that undoing it is one tap.
+  //
+  // ── Three things you can do to an entry, and they are genuinely different ─
+  //
+  //   EXPLAIN   — tell the ENGINE what an entry means. Local, never leaves the
+  //               box. "PE day: a reminder to pack the kit, not a commitment."
+  //   DETAIL    — write notes or a location onto the REAL calendar entry, which
+  //               everyone with that calendar then sees. An external write.
+  //   IGNORE    — the entry contributes no busy minutes, reaches no prompt and
+  //               is the reason for no suggestion. Local, and one tap to undo.
+  //
+  // The first two were one control before, and they are not the same thing:
+  // one is a private annotation, the other changes a shared calendar. They are
+  // now separately labelled and separately confirmed.
+  //
+  // ── Buttons ──────────────────────────────────────────────────────────────
+  //
+  // This component predates the hub's editorial chrome and was still wearing
+  // `.row-link` — bare accent text with no hit area, which is why the three
+  // exclude controls read as prose rather than as actions. It uses the hub's
+  // own `.cta` / `.btn` now: solid burnt orange for the thing the section is
+  // about, a ruled outline for everything else. Defined locally because Svelte
+  // scopes CSS per component and the page's copies reach none of this markup.
 
   export interface BoardEvent {
     id: string | null;
@@ -56,11 +77,12 @@
   let partial = $state(false);
   let truncated = $state(false);
 
-  // Which event's exclude panel is open, and what is typed into it.
+  // Which event's panel is open, and what is typed into it.
   let openEvent = $state<string | null>(null);
   let reason = $state('');
   let busy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
+  let actionNote = $state<string | null>(null);
 
   function shiftMonth(by: number) {
     const [y, m] = monthAnchor.split('-').map(Number);
@@ -178,11 +200,11 @@
   /**
    * `hidden` false saves what the entry MEANS without removing it.
    *
-   * The reason box previously had no submit of its own — the only way to
-   * record anything was to press one of the Ignore buttons, which also hid the
-   * event. That is wrong for an entry like a PE day: it is not a real time
-   * commitment, but it IS a reminder to put the kit in the bag, and hiding it
-   * would have hidden the reminder too.
+   * The reason box previously had no submit of its own — the only way to record
+   * anything was to press one of the Ignore buttons, which also hid the event.
+   * That is wrong for an entry like a PE day: it is not a real time commitment,
+   * but it IS a reminder to put the kit in the bag, and hiding it would have
+   * hidden the reminder too.
    */
   async function exclude(
     e: BoardEvent,
@@ -242,24 +264,177 @@
         ? 'this date only'
         : 'anything with this title';
   }
+
+  // ── The calendars this box may write to ────────────────────────────────
+  //
+  // Fetched once, on demand, and only when a write form is opened — a CalDAV
+  // discovery round trip is not worth spending on a month someone is only
+  // reading.
+  type CalendarOption = { value: string; label: string };
+  let calendars = $state<CalendarOption[]>([]);
+  let calendarsLoaded = $state(false);
+  let calendarsError = $state<string | null>(null);
+
+  async function ensureCalendars() {
+    if (calendarsLoaded) return;
+    calendarsError = null;
+    try {
+      const out = await post({ action: 'calendar_list' });
+      if (out.error) throw new Error(String(out.error));
+      calendars = (out.calendars ?? []) as CalendarOption[];
+      calendarsLoaded = true;
+      if (calendars.length && !newCal) newCal = calendars[0].value;
+    } catch (err) {
+      calendarsError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // ── Writing an event ──────────────────────────────────────────────────
+  //
+  // All-day is the default, and that is deliberate. The entries this hub is
+  // about — a term date, a bin day, a thing to remember — are days rather than
+  // meetings, and asking for two ISO date-times before you can write "dentist,
+  // Thursday" is how a create form goes unused.
+  let composeOpen = $state(false);
+  let newCal = $state('');
+  let newTitle = $state('');
+  let newAllDay = $state(true);
+  let newDate = $state(todayKey);
+  let newEndDate = $state('');
+  let newStartTime = $state('09:00');
+  let newEndTime = $state('10:00');
+  let newLocation = $state('');
+  let newNotes = $state('');
+
+  async function openCompose(dayKey?: string) {
+    composeOpen = true;
+    actionNote = null;
+    actionError = null;
+    if (dayKey) newDate = dayKey;
+    await ensureCalendars();
+  }
+
+  /** Local wall-clock date + time as an ISO instant.
+   *
+   *  The box is Europe/London and so is the diary, so the browser's own offset
+   *  is the right one — `new Date('2026-08-31T09:00')` with no zone is parsed
+   *  as LOCAL time by every engine, which is exactly what was typed. Building
+   *  the string by hand and appending 'Z' would silently shift every summer
+   *  event by an hour. */
+  function localIso(date: string, time: string): string {
+    const d = new Date(`${date}T${time}`);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+
+  async function createEvent() {
+    if (!newTitle.trim() || !newCal) return;
+    busy = 'create';
+    actionError = null;
+    actionNote = null;
+    try {
+      const payload: Record<string, unknown> = {
+        action: 'create_event',
+        calendar: newCal,
+        title: newTitle.trim(),
+        location: newLocation.trim(),
+        notes: newNotes.trim(),
+      };
+      if (newAllDay) {
+        payload.allDayStart = newDate;
+        payload.allDayEnd = newEndDate || newDate;
+      } else {
+        payload.start = localIso(newDate, newStartTime);
+        payload.end = localIso(newEndDate || newDate, newEndTime);
+      }
+      const out = await post(payload);
+      if (out.error) throw new Error(String(out.error));
+      actionNote = `“${newTitle.trim()}” is in your calendar.`;
+      newTitle = '';
+      newLocation = '';
+      newNotes = '';
+      composeOpen = false;
+      // The new entry only exists on iCloud until the month is re-read; the
+      // grid is a cache of one CalDAV call.
+      await loadMonth(monthAnchor);
+      onchanged?.();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = null;
+    }
+  }
+
+  // ── Adding detail to a real entry ─────────────────────────────────────
+  //
+  // Separate state from `reason`, and separately labelled, because these two
+  // boxes look identical and do opposite things: one annotates the engine's
+  // copy, the other rewrites a calendar everybody else can see.
+  let detailNotes = $state('');
+  let detailLocation = $state('');
+
+  async function pushDetail(e: BoardEvent) {
+    if (!e.id || !e.calendar) return;
+    if (!detailNotes.trim() && !detailLocation.trim()) return;
+    busy = `${eventKey(e)}:detail`;
+    actionError = null;
+    actionNote = null;
+    try {
+      const out = await post({
+        action: 'update_event',
+        calendar: e.calendar,
+        eventId: e.id,
+        // Only what was typed. The tool preserves omitted fields and treats an
+        // empty string as "clear it", so sending a blank box would delete a
+        // location nobody asked to remove.
+        ...(detailNotes.trim() ? { notes: detailNotes.trim() } : {}),
+        ...(detailLocation.trim() ? { location: detailLocation.trim() } : {}),
+      });
+      if (out.error) throw new Error(String(out.error));
+      actionNote = 'Written to the calendar entry itself.';
+      detailNotes = '';
+      detailLocation = '';
+      await loadMonth(monthAnchor);
+      onchanged?.();
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = null;
+    }
+  }
+
+  function openPanel(e: BoardEvent) {
+    const key = eventKey(e);
+    openEvent = openEvent === key ? null : key;
+    reason = '';
+    detailNotes = '';
+    detailLocation = e.location ?? '';
+    actionNote = null;
+  }
 </script>
 
 <div class="cal-hd">
   <div class="cal-nav">
-    <button class="row-link" onclick={() => shiftMonth(-1)} disabled={loading}>← prev</button>
+    <button type="button" class="btn" onclick={() => shiftMonth(-1)} disabled={loading}>← Prev</button>
     <span class="cal-month">{monthLabel}</span>
-    <button class="row-link" onclick={() => shiftMonth(1)} disabled={loading}>next →</button>
+    <button type="button" class="btn" onclick={() => shiftMonth(1)} disabled={loading}>Next →</button>
   </div>
-  <span class="cal-meta">
-    {#if loading}reading the diary…{:else}{events.length - hiddenThisMonth} shown{#if hiddenThisMonth} · {hiddenThisMonth} ignored{/if}{/if}
-  </span>
+  <div class="cal-hd-right">
+    <span class="cal-meta">
+      {#if loading}reading the diary…{:else}{events.length - hiddenThisMonth} shown{#if hiddenThisMonth} · {hiddenThisMonth} ignored{/if}{/if}
+    </span>
+    <button type="button" class="cta" onclick={() => (composeOpen ? (composeOpen = false) : openCompose())}>
+      {composeOpen ? 'Close' : 'New event'}
+    </button>
+  </div>
 </div>
 
 <p class="sec-lede">
-  Two things you can do to an entry. <b>Explain</b> it — what it actually means — and the
-  engine keeps it and reads your words alongside the diary. Or <b>ignore</b> it, and it
-  contributes no busy minutes, reaches no prompt, and is the reason for no suggestion.
-  Neither deletes anything from your calendar, and both undo in one tap.
+  Three things you can do to an entry. <b>Explain</b> it — what it actually means — and the
+  engine keeps it and reads your words alongside the diary. <b>Add detail</b> and the notes
+  or location go onto the real calendar entry, where everyone who has that calendar sees
+  them. Or <b>ignore</b> it, and it contributes no busy minutes, reaches no prompt, and is
+  the reason for no suggestion. Only the middle one leaves this box, and none of them
+  deletes anything.
 </p>
 
 {#if loadError}
@@ -274,6 +449,78 @@
 {#if actionError}
   <p class="warn-line err">{actionError}</p>
 {/if}
+{#if actionNote}
+  <p class="warn-line good">{actionNote}</p>
+{/if}
+
+<!-- ── Writing a new entry ──────────────────────────────────────────────
+     A real CalDAV write, through the same registry tool the chat surface
+     uses. There is one calendar client in this codebase and this is not a
+     second one. -->
+{#if composeOpen}
+  <div class="cal-panel compose">
+    <p class="panel-kicker">New entry — this writes to your actual calendar</p>
+    {#if calendarsError}
+      <p class="warn-line err">Could not list your calendars: {calendarsError}</p>
+    {/if}
+    <div class="form-grid">
+      <label class="fld">
+        <span class="fld-label">Calendar</span>
+        <select class="text-input" bind:value={newCal}>
+          {#each calendars as c (c.value)}
+            <option value={c.value}>{c.label}</option>
+          {/each}
+          {#if !calendars.length}<option value="">loading…</option>{/if}
+        </select>
+      </label>
+      <label class="fld wide">
+        <span class="fld-label">What is it</span>
+        <input class="text-input" bind:value={newTitle} maxlength="200" placeholder="Dentist" />
+      </label>
+      <label class="fld">
+        <span class="fld-label">Starts</span>
+        <input class="text-input" type="date" bind:value={newDate} />
+      </label>
+      <label class="fld">
+        <span class="fld-label">Ends <span class="dim">(blank = same day)</span></span>
+        <input class="text-input" type="date" bind:value={newEndDate} />
+      </label>
+      {#if !newAllDay}
+        <label class="fld">
+          <span class="fld-label">From</span>
+          <input class="text-input" type="time" bind:value={newStartTime} />
+        </label>
+        <label class="fld">
+          <span class="fld-label">To</span>
+          <input class="text-input" type="time" bind:value={newEndTime} />
+        </label>
+      {/if}
+      <label class="fld">
+        <span class="fld-label">Where</span>
+        <input class="text-input" bind:value={newLocation} maxlength="200" placeholder="optional" />
+      </label>
+      <label class="fld wide">
+        <span class="fld-label">Notes</span>
+        <input class="text-input" bind:value={newNotes} maxlength="500" placeholder="optional" />
+      </label>
+    </div>
+    <div class="cal-actions">
+      <label class="chk">
+        <input type="checkbox" bind:checked={newAllDay} />
+        <span>All day</span>
+      </label>
+      <button
+        type="button"
+        class="cta"
+        disabled={busy === 'create' || !newTitle.trim() || !newCal}
+        onclick={createEvent}
+      >
+        {busy === 'create' ? 'Writing…' : 'Add to calendar'}
+      </button>
+      <button type="button" class="btn" onclick={() => (composeOpen = false)}>Cancel</button>
+    </div>
+  </div>
+{/if}
 
 <div class="tablewrap">
   <div class="cal-grid" role="grid" aria-label="Calendar month">
@@ -284,13 +531,26 @@
       {#each week as cell (cell.key)}
         <div class="cal-cell" class:pad={!cell.inMonth} class:today={cell.key === todayKey}>
           {#if cell.inMonth}
-            <div class="cal-daynum">{cell.day}</div>
+            <div class="cal-dayhd">
+              <span class="cal-daynum">{cell.day}</span>
+              <!-- Adding an entry to the day you are looking at, rather than
+                   opening a form and typing the date back in. -->
+              <button
+                type="button"
+                class="cal-add"
+                title="Add an entry on this day"
+                aria-label="Add an entry on {cell.key}"
+                onclick={() => openCompose(cell.key)}
+              >+</button>
+            </div>
             {#each byDay.get(cell.key) ?? [] as e (eventKey(e))}
               <button
+                type="button"
                 class="cal-ev"
                 class:excluded={e.excluded}
-                onclick={() => { openEvent = openEvent === eventKey(e) ? null : eventKey(e); reason = ''; }}
-                title={e.excluded ? 'Ignored — tap to restore' : 'Tap to ignore'}
+                class:on={openEvent === eventKey(e)}
+                onclick={() => openPanel(e)}
+                title={e.excluded ? 'Ignored — tap to restore' : 'Tap to explain, detail or ignore'}
               >
                 <span class="cal-ev-time">{timeOf(e)}</span>
                 <span class="cal-ev-title">{e.title}</span>
@@ -320,33 +580,30 @@
           The engine cannot see it.
         </p>
         {#if rule}
-          <button class="row-link" disabled={busy === `restore:${rule.id}`} onclick={() => restore(rule.id)}>
-            {busy === `restore:${rule.id}` ? 'Restoring…' : 'Stop ignoring this'}
-          </button>
+          <div class="cal-actions">
+            <button type="button" class="cta" disabled={busy === `restore:${rule.id}`} onclick={() => restore(rule.id)}>
+              {busy === `restore:${rule.id}` ? 'Restoring…' : 'Stop ignoring this'}
+            </button>
+          </div>
         {/if}
       {:else}
         {#if e.note}
           <p class="cal-note">You said: “{e.note}”{#if e.noteScope === 'title'} — about anything called this{:else if e.noteScope === 'series'} — about every occurrence{/if}.</p>
         {/if}
 
+        <!-- 1 · Explain, locally. -->
+        <p class="panel-kicker">Tell the engine what this means <span class="dim">— stays here</span></p>
         <textarea
-          class="note-input"
+          class="text-input area"
           rows="2"
           maxlength="280"
-          placeholder="What is this, really? — e.g. “PE day: a reminder to put the kit in the bag, not a time commitment”."
+          placeholder="e.g. “PE day: a reminder to put the kit in the bag, not a time commitment”."
           bind:value={reason}
         ></textarea>
-
-        <!-- TWO different things, and the difference matters. A note tells the
-             engine what an entry MEANS and leaves it in the diary; ignoring
-             removes it from busy minutes, prompts and suggestions. The box had
-             no submit of its own, so the only way to record anything was to
-             hide the event — the wrong answer for a PE day, which is not a time
-             commitment but IS a reminder to pack the kit. -->
-        <p class="note-hint">Keep it, and tell it what this means:</p>
-        <div class="thought-actions">
+        <div class="cal-actions">
           <button
-            class="row-link"
+            type="button"
+            class="cta"
             disabled={!!busy || !reason.trim()}
             onclick={() => exclude(e, e.uid ? 'series' : 'title', false)}
           >
@@ -354,7 +611,8 @@
           </button>
           {#if e.uid}
             <button
-              class="row-link"
+              type="button"
+              class="btn"
               disabled={!!busy || !reason.trim()}
               onclick={() => exclude(e, 'title', false)}
             >
@@ -363,17 +621,52 @@
           {/if}
         </div>
 
-        <p class="note-hint">Or stop it counting as a commitment at all:</p>
-        <div class="thought-actions">
-          <button class="row-link" disabled={!!busy} onclick={() => exclude(e, 'occurrence')}>
+        <!-- 2 · Detail, on the real entry. A different destination, so a
+             different label and its own confirmation line. -->
+        <p class="panel-kicker">
+          Add detail to the calendar entry
+          <span class="dim">— everyone with this calendar sees it</span>
+        </p>
+        {#if e.id && e.calendar}
+          <div class="form-grid">
+            <label class="fld">
+              <span class="fld-label">Where</span>
+              <input class="text-input" bind:value={detailLocation} maxlength="200" placeholder={e.location ?? 'optional'} />
+            </label>
+            <label class="fld wide">
+              <span class="fld-label">Notes</span>
+              <input class="text-input" bind:value={detailNotes} maxlength="500" placeholder="what this is, who is going, what to bring" />
+            </label>
+          </div>
+          <div class="cal-actions">
+            <button
+              type="button"
+              class="cta"
+              disabled={busy === `${eventKey(e)}:detail` || (!detailNotes.trim() && !detailLocation.trim())}
+              onclick={() => pushDetail(e)}
+            >
+              {busy === `${eventKey(e)}:detail` ? 'Writing…' : 'Write it to the calendar'}
+            </button>
+          </div>
+        {:else}
+          <p class="note-hint">
+            This occurrence carries no calendar resource id, so it cannot be edited from here —
+            only explained or ignored.
+          </p>
+        {/if}
+
+        <!-- 3 · Ignore. -->
+        <p class="panel-kicker">Or stop it counting as a commitment at all</p>
+        <div class="cal-actions">
+          <button type="button" class="btn" disabled={!!busy} onclick={() => exclude(e, 'occurrence')}>
             Ignore this date
           </button>
           {#if e.uid}
-            <button class="row-link" disabled={!!busy} onclick={() => exclude(e, 'series')}>
+            <button type="button" class="btn" disabled={!!busy} onclick={() => exclude(e, 'series')}>
               Ignore every occurrence
             </button>
           {/if}
-          <button class="row-link" disabled={!!busy} onclick={() => exclude(e, 'title')}>
+          <button type="button" class="btn danger" disabled={!!busy} onclick={() => exclude(e, 'title')}>
             Ignore anything called this
           </button>
         </div>
@@ -405,7 +698,7 @@
           <span class="excl-title">{x.title ?? x.uid ?? x.matchKey}</span>
           <span class="mono excl-scope">{scopeWords(x.scope)}</span>
           {#if x.reason}<span class="excl-reason">“{x.reason}”</span>{/if}
-          <button class="row-link" disabled={busy === `restore:${x.id}`} onclick={() => restore(x.id)}>
+          <button type="button" class="btn small" disabled={busy === `restore:${x.id}`} onclick={() => restore(x.id)}>
             {busy === `restore:${x.id}` ? 'Removing…' : x.hidden ? 'Stop ignoring' : 'Forget this note'}
           </button>
         </div>
@@ -415,62 +708,134 @@
 </div>
 
 <style>
-  /* ── Styles this component was BORROWING from the page ─────────────────
-     Svelte scopes CSS per component, so `.row-link`, `.sec-lede`,
-     `.thought-actions` and the rest — all defined in +page.svelte — reached
-     none of the markup here. The three exclude controls rendered as bare
-     unstyled text rather than as actions, which is exactly how it looked.
-     Defined locally, matching the page's values. */
-  .sec-lede { margin: 0 0 0.9rem; font-size: var(--fs-label); line-height: 1.55; color: var(--text-muted); max-width: 68ch; }
-  .warn-line { margin: 0.6rem 0 0; font-size: var(--fs-label); line-height: 1.5; color: var(--warn, #b0892a); }
-  .warn-line.err { color: var(--error, #c44); }
+  /* ── The hub's chrome, defined locally ──────────────────────────────────
+     Svelte scopes CSS per component, so `.cta`, `.btn`, `.text-input` and the
+     rest — all defined in +page.svelte — reach none of the markup here. This
+     component used to borrow `.row-link` and got bare unstyled text instead,
+     which is exactly how the three exclude controls looked. Same values as the
+     page, so the two surfaces stay one design. */
+
+  .sec-lede { margin: 0 0 14px; font-size: var(--fs-body-sm); line-height: 1.6; color: var(--text-secondary); max-width: 90ch; text-wrap: pretty; }
+  .warn-line { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--warn); }
+  .warn-line.err { color: var(--error); }
+  .warn-line.good { color: var(--good); }
   .mono { font-family: var(--font-mono); }
+  .dim { color: var(--text-ghost); }
   .tablewrap { overflow-x: auto; }
   .rows { display: flex; flex-direction: column; gap: 0.5rem; }
   .rows.tight { gap: 0.25rem; }
-  .empty { padding: 1.5rem; text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-ghost); font-style: italic; border: 1px dashed var(--line-strong); line-height: 1.6; }
+  .empty { padding: 1.5rem; text-align: center; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); font-style: italic; border: 1px dashed var(--line-strong); line-height: 1.6; }
 
   .nm-sec-hd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
   .nm-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); }
 
-  .row-link { background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); cursor: pointer; }
-  .row-link:hover:not(:disabled) { text-decoration: underline; }
-  .row-link:disabled { opacity: 0.45; cursor: default; }
-  .thought-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
+  /* Buttons — the hub's pair. Solid burnt orange for the thing the panel is
+     about, a ruled outline for everything else. Square, mono, uppercase. */
+  .cta,
+  .btn {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 9px 16px;
+    border-radius: 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  }
+  .cta { color: var(--bg); background: var(--accent); border: 1px solid var(--accent); }
+  .cta:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn { color: var(--text-primary); background: transparent; border: 1px solid var(--line-strong); }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn.danger:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
+  .btn.small { padding: 5px 10px; }
+  .cta:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cta:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .note-input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-primary); font-family: var(--font-body); font-size: var(--fs-label-sm, 0.875rem); line-height: 1.5; resize: vertical; }
-  .note-hint { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .text-input {
+    font-family: var(--font-body);
+    /* 16px, not smaller: mobile Safari force-zooms the viewport on a sub-16px
+       field and strands the rest of the form off-screen. */
+    font-size: var(--fs-body);
+    color: var(--text-primary);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 9px 12px;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  .text-input:focus { outline: none; border-color: var(--accent); }
+  .text-input.area { resize: vertical; line-height: 1.5; }
 
-  .cal-hd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
-  .cal-nav { display: flex; align-items: baseline; gap: 0.8rem; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 14px; margin: 10px 0 4px; }
+  .fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .fld.wide { grid-column: span 2; }
+  .fld-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); }
+  .chk { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); cursor: pointer; }
+  .chk input { accent-color: var(--accent); }
+
+  .cal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+  .panel-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); margin: 20px 0 8px; }
+  .panel-kicker:first-child { margin-top: 0; }
+  .note-hint { margin: 0.5rem 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.6; color: var(--text-muted); }
+
+  .cal-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .cal-nav { display: flex; align-items: center; gap: 14px; }
+  .cal-hd-right { display: flex; align-items: center; gap: 14px; }
   .cal-month { font-family: var(--font-display); font-size: 1.15rem; font-weight: 900; color: var(--text-primary); }
   .cal-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(96px, 1fr)); gap: 1px; background: var(--line-hair); border: 1px solid var(--line-strong); min-width: 700px; }
   .cal-dow { background: var(--bg); padding: 0.35rem 0.5rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); }
   .cal-cell { background: var(--bg); min-height: 5.5rem; padding: 0.3rem 0.35rem; display: flex; flex-direction: column; gap: 0.15rem; }
-  .cal-cell.pad { background: var(--card-bg); }
+  .cal-cell.pad { background: var(--bg-section); }
   .cal-cell.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cal-dayhd { display: flex; align-items: center; justify-content: space-between; }
   .cal-daynum { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  /* The per-day add. Ghosted until the cell is hovered, so a month grid is not
+     31 competing buttons — but always present for a keyboard, which cannot
+     hover. */
+  .cal-add {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1;
+    padding: 2px 5px;
+    border: 1px solid transparent;
+    background: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--t-fast) var(--ease-out);
+  }
+  .cal-cell:hover .cal-add, .cal-add:focus-visible { opacity: 1; border-color: var(--accent); color: var(--accent); }
 
   .cal-ev { display: flex; gap: 0.35rem; align-items: baseline; width: 100%; text-align: left; background: none; border: none; border-left: 2px solid var(--accent); padding: 0.1rem 0.25rem; cursor: pointer; font-size: var(--fs-label-xs); color: var(--text-secondary); }
-  .cal-ev:hover { background: var(--card-bg); }
+  .cal-ev:hover { background: var(--accent-tint-08); }
+  .cal-ev.on { background: var(--accent-tint-14); color: var(--text-primary); }
   .cal-ev-time { font-family: var(--font-mono); color: var(--text-ghost); flex: none; }
   .cal-ev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-ev.excluded { border-left-color: var(--line-strong); opacity: 0.55; }
   .cal-ev.excluded .cal-ev-title { text-decoration: line-through; }
 
-  .cal-panel { margin-top: 0.8rem; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 0.8rem 0.9rem; background: var(--card-bg); }
+  .cal-panel { margin-top: 0.9rem; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 16px 18px; background: var(--bg-section); }
+  .cal-panel.compose { border-left-width: 4px; }
   .cal-panel-hd { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; justify-content: space-between; margin-bottom: 0.5rem; font-size: var(--fs-label); }
   .cal-panel-hd .mono { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .cal-note { margin: 0 0 0.6rem; font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); border-left: 2px solid var(--accent); padding-left: 0.6rem; }
-  .excl-kind { flex: none; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); }
+  .excl-kind { flex: none; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); font-size: var(--fs-label-xs); }
   .excl-kind.note { color: var(--accent); border-color: var(--accent); }
-  .cal-hidden { margin-top: 1.4rem; }
-  .excl-row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: baseline; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.3rem; }
+  .cal-hidden { margin-top: 1.6rem; }
+  .excl-row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.4rem; }
   .excl-title { color: var(--text-secondary); }
   .excl-scope { color: var(--text-ghost); }
   .excl-reason { color: var(--text-muted); font-style: italic; }
+
+  @media (max-width: 640px) {
+    .fld.wide { grid-column: span 1; }
+  }
 </style>

@@ -217,6 +217,39 @@ async function diaryNoteCards(): Promise<PackInputs['aggregates']> {
   }
 }
 
+/**
+ * What the REVIEWER settled, so the same misreading is not proposed again.
+ *
+ * The half that closes the loop. Ruling on a claim already writes a memory
+ * (see ../rulings.ts), and the snapshot does sweep 200 memories — but with no
+ * ordering guarantee, which is exactly why `noteCards` exists rather than
+ * trusting that sweep. A refutation of the claim this cycle is about to make
+ * again is the single most valuable card in the pack, and it must not be
+ * competing for a slot with a two-year-old note about coffee.
+ *
+ * The owner's example is the specification: having ruled that the two Canva
+ * rows are one payment, it should stop saying there were two charges.
+ */
+async function rulingCardsFor(): Promise<PackInputs['aggregates']> {
+  try {
+    const { rulingCards } = await import('../rulings');
+    const rows = await rulingCards();
+    return rows
+      .filter((r) => r.verdict)
+      .map((r) => ({
+        key: `ruling:${r.id}`,
+        text:
+          r.verdict === 'refuted'
+            ? `A reviewer checked "${r.title}" against the sources and it did NOT hold${r.reasoning ? `: ${r.reasoning}` : ''} Do not propose this again.`
+            : `A reviewer checked "${r.title}" against the sources and found it ${r.verdict}${r.reasoning ? `: ${r.reasoning}` : ''}`,
+      }));
+  } catch {
+    // Garnish. The pack stands without it, and a ruling table that cannot be
+    // read must not cost the cycle.
+    return [];
+  }
+}
+
 async function recentVerdicts(): Promise<PackInputs['verdicts']> {
   try {
     return await db
@@ -373,7 +406,7 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, notes, diaryNotes] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, notes, diaryNotes, rulings] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
@@ -381,6 +414,7 @@ export async function runPonder(
       buildProfileLines(now),
       noteCards(),
       diaryNoteCards(),
+      rulingCardsFor(),
     ]);
     const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
@@ -399,10 +433,11 @@ export async function runPonder(
       lookups: lookups.cards,
       // Hand-written aggregates first, then whatever the registry discovered —
       // the second list is the one that grows without anyone editing this file.
-      // Hand-written aggregates, then the registry, then anything John has
-      // said in his own words. His corrections go LAST so they are the nearest
-      // thing to the instruction when the pack is read.
-      aggregates: [...aggregates, ...signals, ...notes, ...diaryNotes],
+      // Then anything John has said in his own words, and last what the
+      // reviewer has already SETTLED. Those two go nearest the instruction
+      // because they are the two that override: a correction he typed, and a
+      // claim that has been checked against the sources and found wanting.
+      aggregates: [...aggregates, ...signals, ...notes, ...diaryNotes, ...rulings],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
