@@ -35,7 +35,18 @@ import type { Candidate } from './snapshot-types';
  * "I decided this other thing doesn't matter". Snoozes are the same decision
  * with a timer, and an actioned thought is finished business.
  */
-export const PROTECTED_STATUSES = ['dismissed', 'snoozed', 'actioned'] as const;
+/**
+ * `archived` belongs here for exactly the same reason, and its absence was a
+ * real bug for as long as it lasted: filing a card away with OK is a judgement
+ * about that specific finding, and `persistCandidates` runs every ten minutes.
+ * Left unprotected, the detect tick re-derives the same candidate, finds the
+ * row by `dedupeKey`, and rewrites it back to `new` or `suppressed` — so the
+ * button would have looked like it worked and then quietly undone itself
+ * before the page was next opened. Any new "the owner has ruled on this"
+ * status must be added here in the same commit that introduces it, and
+ * `archive.test.ts` asserts that without needing a database.
+ */
+export const PROTECTED_STATUSES = ['dismissed', 'snoozed', 'actioned', 'archived'] as const;
 
 export interface PersistResult {
   created: number;
@@ -248,6 +259,33 @@ export async function wakeSnoozed(now = new Date()): Promise<number> {
     )
     .returning({ id: daydreamThoughts.id });
   return woken.length;
+}
+
+/**
+ * Filed away, with no opinion attached.
+ *
+ * The third thing the owner needs to be able to say about a card, and until now
+ * the only one he could not. `useful` and `not useful` are both VERDICTS: they
+ * move the kind's weight, they count toward the cold-start threshold, and they
+ * are quoted back at the engine as evidence about what is worth saying. Most
+ * cards deserve neither. "Yes, I have seen that, now go away" is the ordinary
+ * response to a true and unremarkable observation, and forcing it through a
+ * thumb means either inflating a kind that was merely correct or punishing one
+ * that did nothing wrong.
+ *
+ * So `archived` is its own status and writes NO feedback. It cannot be folded
+ * into `dismissed`, which `recordFeedback` already writes for *not useful* —
+ * reusing it would silently record a negative verdict the owner explicitly
+ * declined to give.
+ */
+export async function archiveThought(thoughtId: string): Promise<{ kind: string }> {
+  const [row] = await db
+    .update(daydreamThoughts)
+    .set({ status: 'archived', updatedAt: new Date() })
+    .where(eq(daydreamThoughts.id, thoughtId))
+    .returning({ kind: daydreamThoughts.kind });
+  if (!row) throw new Error(`no such thought: ${thoughtId}`);
+  return { kind: row.kind };
 }
 
 /** Record a verdict. `never_kind` also writes the absolute mute — the escape

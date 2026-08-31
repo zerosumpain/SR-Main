@@ -5296,6 +5296,35 @@ export const daydreamThoughts = pgTable(
     noteAt: timestamp('note_at', { withTimezone: true }),
     feedbackNote: text('feedback_note'),
     /**
+     * The `jkai_memories` row written when the REVIEWER ruled on this thought.
+     *
+     * Same argument `note` above makes, applied to the other author. A verdict
+     * that lives only in `review_verdict` is a fact one feature knows; the
+     * owner's ask was that ruling on something in the feed should TEACH it —
+     * "I don't expect it to say there's been 2 charges for Canva any more, now
+     * it knows they're the same thing". Teaching means the store the rest of
+     * jkai reads, and means the ponder pack carding it, which is what actually
+     * stops the claim being re-proposed.
+     *
+     * Written by the caller of `reviewThought`, never by the reviewer itself —
+     * `adjudicate.ts` rule 2 is that the reviewer decides and never acts, and
+     * a memory-writing tool in its hands would be an act.
+     */
+    reviewMemoryId: text('review_memory_id'),
+    /**
+     * The derived `intel_notes` row this thought was extracted into, once the
+     * owner said it was useful.
+     *
+     * `intel-bridge.ts` already carries insights from the graph INTO daydream
+     * as candidates. This is the return leg, and it deliberately runs on a
+     * different trust rule: a bridged insight is a proposal that still has to
+     * clear every delivery gate, whereas a woven thought is something the owner
+     * has explicitly endorsed — which is the admission test `graph_state`
+     * exists to apply.
+     */
+    intelNoteId: text('intel_note_id'),
+    intelWovenAt: timestamp('intel_woven_at', { withTimezone: true }),
+    /**
      * How many detect ticks have re-proposed this exact thing.
      *
      * `persistCandidates` updates a suppressed row in place every ten minutes,

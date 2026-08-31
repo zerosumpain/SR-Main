@@ -558,6 +558,184 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      // ── The third answer ──────────────────────────────────────────────
+      //
+      // Neither useful nor not useful — seen, and filed. Writes no feedback,
+      // so it moves no kind weight and counts toward no threshold. See
+      // `archiveThought` for why it cannot reuse `dismissed`.
+      case 'archive': {
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { archiveThought } = await import('$lib/daydream/thought-store');
+        return json({ ok: true, ...(await archiveThought(id)) });
+      }
+
+      // ── Queue to model ────────────────────────────────────────────────
+      //
+      // The reviewer already runs on a heartbeat over what is pending. This is
+      // the same pass, asked for by hand, on ANY card — including a suppressed
+      // one the automatic sweep would never reach, because it only walks
+      // `new`/`suppressed` rows that are still unreviewed. Re-ruling a card
+      // that already has a verdict is the point: he is asking it to go and
+      // look again.
+      //
+      // The ruling is then written to `jkai_memories`, which is what makes it
+      // stick. The reviewer itself does not do that — see rulings.ts for why
+      // the caller composes the memory and the model never holds the pen.
+      case 'review_now': {
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+
+        const { db } = await import('$lib/db');
+        const { daydreamThoughts } = await import('$lib/db/schema');
+        const { eq } = await import('drizzle-orm');
+        const [row] = await db
+          .select({
+            id: daydreamThoughts.id,
+            kind: daydreamThoughts.kind,
+            title: daydreamThoughts.title,
+            explanation: daydreamThoughts.explanation,
+            narrative: daydreamThoughts.narrative,
+            evidence: daydreamThoughts.evidence,
+          })
+          .from(daydreamThoughts)
+          .where(eq(daydreamThoughts.id, id))
+          .limit(1);
+        if (!row) return json({ error: `no such thought: ${id}` }, { status: 404 });
+
+        const { recordReview, reviewThought } = await import('$lib/daydream/adjudicate');
+        const review = await reviewThought(row);
+        // A reviewer that could not run leaves the thought unreviewed rather
+        // than recording a verdict nobody reached — the same rule the heartbeat
+        // follows, and the safe direction, since an unreviewed thought is
+        // silent.
+        if (review.error) return json({ error: review.error }, { status: 502 });
+
+        await recordReview(id, review);
+        const { recordRulingMemory } = await import('$lib/daydream/rulings');
+        const ruling = await recordRulingMemory(id, {
+          kind: row.kind,
+          title: row.title,
+          verdict: review.verdict,
+          likelihood: review.likelihood,
+          reasoning: review.reasoning,
+          sources: review.sources,
+        });
+
+        return json({
+          ok: true,
+          verdict: review.verdict,
+          likelihood: review.likelihood,
+          reasoning: review.reasoning,
+          sources: review.sources,
+          toolCalls: review.toolCalls,
+          memoryId: ruling.memoryId,
+          memory: ruling.content,
+        });
+      }
+
+      case 'rulings': {
+        const limit = Number(body.limit);
+        const { listRulings } = await import('$lib/daydream/rulings');
+        return json({ rulings: await listRulings(Number.isFinite(limit) ? limit : 50) });
+      }
+
+      // ── Into the graph ────────────────────────────────────────────────
+      //
+      // A separate call rather than a side effect of the vote. `recordFeedback`
+      // is also reached from the WhatsApp reply handler and from the triage
+      // deck thirty rows at a time, and an LLM extraction inside it would put a
+      // model call behind a bulk sorting pass and behind an inbound message.
+      // The vote is the thing this whole loop is starved of; it must never wait
+      // on the graph.
+      case 'weave': {
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { weaveThought } = await import('$lib/daydream/weave');
+        return json({ ok: true, weave: await weaveThought(id) });
+      }
+
+      // ── Writing to the diary ──────────────────────────────────────────
+      //
+      // Everything above this point reads the calendar or records what the
+      // OWNER thinks of an entry. These three write to iCloud, through the same
+      // registry tools the chat surface uses, so there is one CalDAV client and
+      // one set of argument names. The tools are marked `destructive` because a
+      // model calling them needs a confirmation gate; here the button IS the
+      // confirmation, on an owner-gated route, the same shape `run_action`
+      // already has.
+      case 'calendar_list': {
+        const { executeTool } = await import('$lib/workflows/site-tools/registry');
+        const res = await executeTool('apple_calendar_list', { listCalendars: true });
+        if (!res?.success) {
+          return json({ error: String(res?.error ?? 'could not read the calendar list') }, { status: 502 });
+        }
+        return json({ calendars: (res.data as { calendars?: unknown[] })?.calendars ?? [] });
+      }
+
+      case 'create_event': {
+        const calendar = str('calendar');
+        const title = str('title');
+        if (!calendar) return json({ error: 'pick a calendar to write to' }, { status: 400 });
+        if (!title) return json({ error: 'an event needs a title' }, { status: 400 });
+
+        const start = str('start');
+        const end = str('end');
+        const allDayStart = str('allDayStart');
+        const allDayEnd = str('allDayEnd');
+        // One shape or the other, never neither — a create with no times at all
+        // silently lands on today at midnight, which is a wrong entry in a real
+        // calendar rather than an error anyone would see.
+        if (!start && !allDayStart) {
+          return json({ error: 'give it a start time, or an all-day date' }, { status: 400 });
+        }
+
+        const { executeTool } = await import('$lib/workflows/site-tools/registry');
+        const res = await executeTool('apple_calendar_create', {
+          calendar,
+          title,
+          ...(start ? { start } : {}),
+          ...(end ? { end } : {}),
+          // All-day dates travel as a PAIR. `allDayEnd` alone is meaningless
+          // and `allDayStart` alone leaves the end for the server to guess, so
+          // a single-day entry states both and says the same date twice. (The
+          // inner `|| allDayStart` was unreachable while this was two spreads
+          // guarded on `allDayEnd`.)
+          ...(allDayStart ? { allDayStart, allDayEnd: allDayEnd || allDayStart } : {}),
+          ...(str('location') ? { location: str('location') } : {}),
+          ...(str('notes') ? { notes: str('notes') } : {}),
+        });
+        if (!res?.success) {
+          return json({ error: String(res?.error ?? 'the calendar refused that') }, { status: 502 });
+        }
+        return json({ ok: true, event: res.data });
+      }
+
+      case 'update_event': {
+        const calendar = str('calendar');
+        const eventId = str('eventId');
+        if (!calendar || !eventId) {
+          return json({ error: 'calendar and eventId are required' }, { status: 400 });
+        }
+        // Only what was supplied. The tool preserves omitted fields, so sending
+        // an empty string for something the caller did not touch would CLEAR it
+        // — `location: ''` is how the tool spells "remove the location".
+        const patch: Record<string, unknown> = { calendar, eventId };
+        for (const field of ['title', 'start', 'end', 'allDayStart', 'allDayEnd', 'location', 'notes']) {
+          if (typeof body[field] === 'string') patch[field] = (body[field] as string).trim();
+        }
+        if (Object.keys(patch).length === 2) {
+          return json({ error: 'nothing to change' }, { status: 400 });
+        }
+
+        const { executeTool } = await import('$lib/workflows/site-tools/registry');
+        const res = await executeTool('apple_calendar_update', patch);
+        if (!res?.success) {
+          return json({ error: String(res?.error ?? 'the calendar refused that') }, { status: 502 });
+        }
+        return json({ ok: true, event: res.data });
+      }
+
       default:
         return json({ error: `unknown action: ${action || '(none)'}` }, { status: 400 });
     }

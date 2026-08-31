@@ -66,6 +66,15 @@ export interface LedgerThought {
   placeId: string | null;
   /** What John said about this one, in his own words. */
   note: string | null;
+  /** The jkai_memories row the reviewer's ruling was written to, and when it
+   *  ruled. A verdict with no memory behind it is one the engine meets again
+   *  tomorrow with no idea it has already been settled. */
+  reviewMemoryId: string | null;
+  reviewAt: string | null;
+  /** The derived intel_notes row this thought was woven into once the owner
+   *  called it useful. Null until then, and the card's link into the graph. */
+  intelNoteId: string | null;
+  intelWovenAt: string | null;
   status: string;
   suppressedReason: string | null;
   channel: string | null;
@@ -280,6 +289,10 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
       proposedActions: daydreamThoughts.proposedActions,
       placeId: daydreamThoughts.placeId,
       note: daydreamThoughts.note,
+      reviewMemoryId: daydreamThoughts.reviewMemoryId,
+      reviewAt: daydreamThoughts.reviewAt,
+      intelNoteId: daydreamThoughts.intelNoteId,
+      intelWovenAt: daydreamThoughts.intelWovenAt,
       placeLabel: daydreamPlaces.label,
       placeSuggested: daydreamPlaces.suggestedLabel,
       placeAddress: daydreamPlaces.suggestedAddress,
@@ -322,6 +335,10 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     evidence: r.evidence,
     placeId: r.placeId,
     note: r.note,
+    reviewMemoryId: r.reviewMemoryId,
+    reviewAt: r.reviewAt?.toISOString() ?? null,
+    intelNoteId: r.intelNoteId,
+    intelWovenAt: r.intelWovenAt?.toISOString() ?? null,
     status: r.status,
     suppressedReason: r.suppressedReason,
     channel: r.channel,

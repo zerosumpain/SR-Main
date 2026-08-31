@@ -18,6 +18,7 @@
     likelihoodBand,
     type GroupStats,
   } from '$lib/daydream/thought-groups';
+  import { hasMap, thoughtDestination } from '$lib/daydream/destination';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
@@ -65,6 +66,52 @@
     return (TABS.some((t) => t.id === q) ? q : 'feed') as TabId;
   })();
   let tab = $state<TabId>(initialTab);
+
+  /**
+   * Follow the URL when it changes under us.
+   *
+   * `initialTab` runs ONCE, at component init. A link from one room of the hub
+   * to another — `?tab=places#place-x` on a feed card — is a same-route
+   * navigation, so SvelteKit reuses this component, re-runs `load`, and never
+   * re-executes the instance script. Without this the URL changed and the page
+   * did not: every in-hub clickthrough was a no-op that looked like a broken
+   * button.
+   *
+   * Same shape as the `rateId` effect below, and for the same reason: the
+   * tracked read is the URL, the write is untracked, so this cannot re-trigger
+   * on the value it just assigned. `setTab`'s own `replaceState` lands here
+   * too, and assigning `tab` the value it already holds is a no-op.
+   */
+  const urlTab = $derived(page.url.searchParams.get('tab'));
+  $effect(() => {
+    const q = urlTab;
+    untrack(() => {
+      if (q && q !== tab && TABS.some((t) => t.id === q)) {
+        tab = q as TabId;
+        if (q === 'family' && famPositions == null && !famLoading) void loadFamilyMap();
+      }
+    });
+  });
+
+  /**
+   * Scroll to the row a `#place-…` fragment names.
+   *
+   * The browser resolves a fragment at navigation time, which is BEFORE the
+   * Places tab has rendered its list — so the element does not exist yet and
+   * the jump silently does nothing. Re-doing it after the tab has painted is
+   * the fix; `requestAnimationFrame` is enough because the list is already in
+   * the page payload and needs no fetch.
+   */
+  $effect(() => {
+    const hash = page.url.hash;
+    const onTab = tab;
+    untrack(() => {
+      if (!hash.startsWith('#place-') || onTab !== 'places') return;
+      requestAnimationFrame(() => {
+        document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'center' });
+      });
+    });
+  });
 
   function setTab(next: TabId) {
     tab = next;
@@ -286,7 +333,7 @@
   // `all` is the default rather than `new`, because on any normal day nothing
   // is new and a page that opens empty reads as broken. What the owner actually
   // wants to know first is what it has been noticing at all.
-  type Filter = 'all' | 'said' | 'suppressed' | 'ruled';
+  type Filter = 'all' | 'said' | 'suppressed' | 'ruled' | 'archived';
   let filter = $state<Filter>('all');
   let expanded = $state<string | null>(null);
   let busy = $state<string | null>(null);
@@ -816,8 +863,21 @@
   const ruled = $derived(
     thoughts.filter((t) => ['dismissed', 'actioned', 'snoozed'].includes(t.status)),
   );
+  /** Filed with no opinion attached. Kept OUT of `ruled`, because "you ruled on
+   *  it" is a claim about the ledger having a verdict, and an archived card
+   *  deliberately has none. Conflating them would make the count on the chip a
+   *  lie about how much feedback the threshold has actually collected. */
+  const archived = $derived(thoughts.filter((t) => t.status === 'archived'));
   const visible = $derived(
-    filter === 'said' ? said : filter === 'suppressed' ? suppressed : filter === 'ruled' ? ruled : thoughts,
+    filter === 'said'
+      ? said
+      : filter === 'suppressed'
+        ? suppressed
+        : filter === 'ruled'
+          ? ruled
+          : filter === 'archived'
+            ? archived
+            : thoughts,
   );
 
   /** Places worth asking about. The one- and two-visit ones still exist and
@@ -904,6 +964,18 @@
     }
   }
 
+  /** Open the map, or fold it away again. Reassigned rather than mutated —
+   *  `thoughtPlace` is a `$state` record and a `delete` on it is a write the
+   *  markup reading it would not see. */
+  function toggleMap(id: string) {
+    if (!thoughtPlace[id]) {
+      void showOnMap(id);
+      return;
+    }
+    const { [id]: _folded, ...rest } = thoughtPlace;
+    thoughtPlace = rest;
+  }
+
   async function saveNote(t: { id: string }) {
     const text = (noteDraft[t.id] ?? '').trim();
     if (!text) return;
@@ -972,8 +1044,175 @@
   }
 
   async function vote(t: Thought, verdict: 'useful' | 'not_useful' | 'never_kind') {
-    await post({ action: 'feedback', id: t.id, verdict }, `${t.id}:${verdict}`);
+    const ok = await post({ action: 'feedback', id: t.id, verdict }, `${t.id}:${verdict}`);
+    // "Where a user says it's useful, weave that intelligence into the /intel
+    // graph." Fired from HERE rather than from inside `recordFeedback`, which
+    // is also reached by the WhatsApp reply handler and by the triage deck
+    // thirty rows at a time — an LLM extraction in that path would put a model
+    // call behind an inbound message and behind a bulk sorting pass. The vote
+    // is the input this whole loop is starved of and must never wait on the
+    // graph, so the weave runs after it and its failure is reported, not
+    // thrown.
+    if (ok && verdict === 'useful') await weave(t, { quiet: true });
   }
+
+  // ── Filed, with no opinion ────────────────────────────────────────────────
+  // The third answer. Neither verdict moves, so no kind weight shifts and the
+  // cold-start threshold does not count it — see `archiveThought`.
+  async function archiveThought(t: Thought) {
+    await post({ action: 'archive', id: t.id }, `${t.id}:archive`);
+  }
+
+  // ── Into the graph ────────────────────────────────────────────────────────
+  // `quiet` is for the automatic call behind a useful vote: a thought too thin
+  // to extract is an ordinary outcome there and should not put an error on the
+  // page, whereas pressing the button and being told nothing happened is
+  // exactly the silence this hub exists to stop.
+  let weaveNote = $state<Record<string, string>>({});
+  async function weave(t: Thought, opts: { quiet?: boolean } = {}) {
+    busy = `${t.id}:weave`;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'weave', id: t.id }),
+      });
+      const out = (await res.json().catch(() => ({}))) as {
+        weave?: { status: string; entityCount?: number; chars?: number; reason?: string; error?: string };
+        error?: string;
+      };
+      const w = out.weave;
+      const line =
+        out.error
+          ? `Intel refused it: ${out.error}`
+          : w?.status === 'woven'
+            ? `Into the graph — ${w.entityCount ?? 0} entit${w.entityCount === 1 ? 'y' : 'ies'}.`
+            : w?.status === 'unchanged'
+              ? 'Already in the graph, unchanged.'
+              : w?.status === 'too-thin'
+                ? `Too thin to extract (${w.chars ?? 0} characters). Add a note and try again.`
+                : w?.status === 'failed'
+                  ? `Intel could not read it: ${w.error}`
+                  : `Not woven: ${w?.reason ?? w?.status ?? 'unknown'}`;
+      const succeeded = w?.status === 'woven' || w?.status === 'unchanged';
+      if (!opts.quiet || succeeded) weaveNote = { ...weaveNote, [t.id]: line };
+      if (succeeded) await invalidateAll();
+    } catch {
+      if (!opts.quiet) weaveNote = { ...weaveNote, [t.id]: 'Could not reach the graph.' };
+    } finally {
+      busy = null;
+    }
+  }
+
+  // ── Queue to model ────────────────────────────────────────────────────────
+  //
+  // The reviewer, asked for by hand. The heartbeat already runs it over what is
+  // pending, but only over UNREVIEWED `new`/`suppressed` rows — so a held-back
+  // card the sweep has already looked at, or one it never reached, has no way
+  // to be checked at all. This is that way, and it works on any card in the
+  // feed.
+  //
+  // The ruling is written to memory server-side. That is the half that makes it
+  // stick: a verdict in a column stops one message going out, a memory stops
+  // the claim being made again.
+  type ReviewOut = {
+    verdict: string;
+    likelihood: number;
+    reasoning: string;
+    sources: string[];
+    toolCalls: number;
+    memory: string;
+  };
+  let reviewOut = $state<Record<string, ReviewOut>>({});
+  let reviewErr = $state<Record<string, string>>({});
+
+  async function queueToModel(t: Thought) {
+    busy = `${t.id}:review`;
+    reviewErr = { ...reviewErr, [t.id]: '' };
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'review_now', id: t.id }),
+      });
+      const out = (await res.json().catch(() => ({}))) as Partial<ReviewOut> & { error?: string };
+      if (!res.ok || out.error) throw new Error(out.error ?? 'the reviewer could not run');
+      reviewOut = {
+        ...reviewOut,
+        [t.id]: {
+          verdict: out.verdict ?? 'uncertain',
+          likelihood: out.likelihood ?? 0,
+          reasoning: out.reasoning ?? '',
+          sources: out.sources ?? [],
+          toolCalls: out.toolCalls ?? 0,
+          memory: out.memory ?? '',
+        },
+      };
+      // The card is opened on the verdict, because a ruling that lands below
+      // the fold on a three-column board is one nobody reads.
+      expanded = t.id;
+      await invalidateAll();
+      if (rulingsOpen) await loadRulings();
+    } catch (err) {
+      reviewErr = { ...reviewErr, [t.id]: err instanceof Error ? err.message : String(err) };
+    } finally {
+      busy = null;
+    }
+  }
+
+  // ── What it has ruled on ──────────────────────────────────────────────────
+  // "That list of memories should be accessible somewhere." Here, under the
+  // feed the rulings are about, fetched on demand rather than riding the page
+  // payload — the ledger load is already the heaviest thing on this hub.
+  type Ruling = {
+    id: string;
+    kind: string;
+    title: string;
+    verdict: string | null;
+    likelihood: number | null;
+    reasoning: string | null;
+    sources: string[];
+    model: string | null;
+    memoryId: string | null;
+    ruledAt: string | null;
+  };
+  let rulingsOpen = $state(false);
+  let rulingsLoading = $state(false);
+  let rulingsError = $state<string | null>(null);
+  let rulings = $state<Ruling[]>([]);
+  let rulingWho = $state<'all' | 'refuted' | 'verified' | 'uncertain'>('all');
+
+  const rulingsVisible = $derived(
+    rulingWho === 'all' ? rulings : rulings.filter((r) => r.verdict === rulingWho),
+  );
+
+  async function loadRulings() {
+    rulingsOpen = true;
+    rulingsLoading = true;
+    rulingsError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'rulings', limit: 80 }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { rulings?: Ruling[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      rulings = out.rulings ?? [];
+    } catch (err) {
+      rulingsError = err instanceof Error ? err.message : String(err);
+      rulings = [];
+    } finally {
+      rulingsLoading = false;
+    }
+  }
+
+  const rulingFacets = $derived<Facet[]>([
+    { id: 'all', label: 'All', count: rulings.length },
+    { id: 'refuted', label: 'Did not hold', count: rulings.filter((r) => r.verdict === 'refuted').length },
+    { id: 'verified', label: 'Held up', count: rulings.filter((r) => r.verdict === 'verified').length },
+    { id: 'uncertain', label: 'Could not tell', count: rulings.filter((r) => r.verdict === 'uncertain').length },
+  ]);
 
   // One-tap execution of an action a musing proposed. The server re-validates
   // the stored action before anything runs.
@@ -1094,6 +1333,7 @@
     { id: 'said', label: 'Above threshold', count: said.length },
     { id: 'suppressed', label: 'Held back', count: suppressed.length },
     { id: 'ruled', label: 'You ruled on', count: ruled.length },
+    { id: 'archived', label: 'Filed', count: archived.length },
   ]);
 
   const feedOrderFacets = $derived<Facet[]>([
@@ -1727,8 +1967,19 @@
               <p class="group-blurb">{g.blurb}</p>
             {/if}
 
-            <div class="stack">
+            <!-- ── The board ─────────────────────────────────────────────
+                 Three columns, not one long list. The feed is a set of
+                 unrelated observations to be triaged, not a document to be
+                 read top to bottom, and a single column made it look like the
+                 latter — you scrolled a thousand pixels to find out whether
+                 there were four things or forty.
+
+                 An OPEN card takes the full row (`grid-column: 1 / -1`): the
+                 detail carries a map, an evidence list, a components table and
+                 a note box, none of which survive a 320px column. -->
+            <div class="board">
               {#each collapsed[g.key] ? [] : g.items as t (t.id)}
+                {@const dest = thoughtDestination(t)}
                 <article class="card t-{thoughtTone(t)}" class:open={expanded === t.id}>
                   <div class="card-hd">
                     <button type="button" class="card-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
@@ -1785,6 +2036,9 @@
                     {#if t.feedback}
                       <span class="meta-item good">you said {t.feedback.replace('_', ' ')}</span>
                     {/if}
+                    {#if t.intelNoteId}
+                      <span class="meta-item good">in the graph</span>
+                    {/if}
                   </div>
 
                   {#if t.id === rateId}
@@ -1824,6 +2078,100 @@
                         {/if}
                       </span>
                       {#if t.reviewReasoning}<span class="review-why">{t.reviewReasoning}</span>{/if}
+                      {#if t.reviewMemoryId}
+                        <span class="review-mem">remembered — it will not raise this blind again</span>
+                      {/if}
+                    </p>
+                  {/if}
+
+                  <!-- ── The map, on the card ────────────────────────────────
+                       "Suggestions about a location need a map." Not behind an
+                       expand and then behind a second button: one tap on the
+                       card face, because the question a place card asks —
+                       "what is this?" — is answerable from the map and from
+                       nothing else on the card. Coordinates are still fetched
+                       on demand by the owner-gated action; the ledger payload
+                       has never carried a lat/lon and still does not. -->
+                  {#if hasMap(t)}
+                    {#if thoughtPlace[t.id]}
+                      <div class="card-map">
+                        <PlaceMap
+                          lat={thoughtPlace[t.id].lat}
+                          lon={thoughtPlace[t.id].lon}
+                          radiusM={thoughtPlace[t.id].radiusM}
+                          height="180px"
+                        />
+                        {#if thoughtPlace[t.id].suggestedAddress}
+                          <p class="note">{thoughtPlace[t.id].suggestedAddress}</p>
+                        {/if}
+                      </div>
+                    {/if}
+                  {/if}
+
+                  <!-- ── Quick actions, on the card face ─────────────────────
+                       Every one of these used to live inside the expand, or in
+                       a bar that only rendered for a thought that had actually
+                       been delivered. That is why the ledger has thousands of
+                       rows and a few dozen verdicts: the cost of an opinion was
+                       two clicks and a scroll.
+
+                       Rating is still offered only on what actually reached
+                       him — asking "was this useful?" about something suppressed
+                       before it was ever sent trains the weights on something he
+                       never saw. Everything else here works on any card. -->
+                  <div class="quick">
+                    {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
+                      <button type="button" class="q good" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')} title="Useful — and weave it into the Intel graph">
+                        Useful
+                      </button>
+                      <button type="button" class="q" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')} title="Not useful">
+                        Not useful
+                      </button>
+                    {/if}
+                    {#if t.status !== 'archived'}
+                      <button type="button" class="q" disabled={busy?.startsWith(t.id)} onclick={() => archiveThought(t)} title="Seen it. File it away without saying whether it was any good.">
+                        OK
+                      </button>
+                    {/if}
+                    <!-- On ANY card, suppressed included: the automatic sweep
+                         only walks unreviewed new/suppressed rows, so a held-back
+                         card it has already seen has no other route to a check. -->
+                    <button type="button" class="q model" disabled={busy === `${t.id}:review`} onclick={() => queueToModel(t)} title="Send it to the reviewer: it reads the sources and rules, and remembers what it decided">
+                      {busy === `${t.id}:review` ? 'Checking…' : t.reviewVerdict ? 'Check again' : 'Queue to model'}
+                    </button>
+                    {#if hasMap(t)}
+                      <button
+                        type="button"
+                        class="q"
+                        disabled={busy === `${t.id}:map`}
+                        onclick={() => toggleMap(t.id)}
+                      >
+                        {busy === `${t.id}:map` ? 'Loading…' : thoughtPlace[t.id] ? 'Hide map' : 'Map'}
+                      </button>
+                    {/if}
+                    {#if dest}
+                      <a class="q link" href={dest.href} title="{dest.hint}{dest.external ? ' — leaves the daydream hub' : ''}">
+                        {dest.label}{#if dest.external}<span class="q-ext">↗</span>{/if}
+                      </a>
+                    {/if}
+                    {#if t.feedback === 'useful' && !t.intelNoteId}
+                      <!-- Voted useful before this shipped, or the graph was
+                           busy at the time. One tap rather than a re-vote. -->
+                      <button type="button" class="q" disabled={busy === `${t.id}:weave`} onclick={() => weave(t)}>
+                        {busy === `${t.id}:weave` ? 'Weaving…' : 'Weave into Intel'}
+                      </button>
+                    {/if}
+                    <button type="button" class="q more" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
+                      {expanded === t.id ? 'Less' : 'Why'}
+                    </button>
+                  </div>
+
+                  {#if weaveNote[t.id]}<p class="note good">{weaveNote[t.id]}</p>{/if}
+                  {#if reviewErr[t.id]}<p class="err">{reviewErr[t.id]}</p>{/if}
+                  {#if reviewOut[t.id]}
+                    <p class="note good">
+                      Ruled <strong>{reviewOut[t.id].verdict}</strong> after {reviewOut[t.id].toolCalls} source
+                      {reviewOut[t.id].toolCalls === 1 ? 'check' : 'checks'} — and remembered.
                     </p>
                   {/if}
 
@@ -1848,6 +2196,20 @@
                         {/if}
                       </div>
 
+                      <!-- What the reviewer wrote down about it. Shown here in
+                           full rather than only as a verdict chip, because the
+                           memory is the thing that changes what gets said next
+                           and it should be arguable. -->
+                      {#if reviewOut[t.id]?.memory}
+                        <div class="detail-block">
+                          <p class="field-label">What it now remembers</p>
+                          <p class="detail-line said">{reviewOut[t.id].memory}</p>
+                          {#if reviewOut[t.id].sources.length}
+                            <p class="note">Checked: {reviewOut[t.id].sources.join(' · ')}</p>
+                          {/if}
+                        </div>
+                      {/if}
+
                       {#if t.evidence.length}
                         <div class="detail-block">
                           <p class="field-label">What it was looking at</p>
@@ -1868,34 +2230,6 @@
                               </button>
                             {/each}
                           </div>
-                        </div>
-                      {/if}
-
-                      <!-- Somewhere on a map, when the thought is about somewhere.
-                           Coordinates are fetched on demand by an owner-gated
-                           action; they never ride the ledger payload. -->
-                      {#if t.placeId}
-                        <div class="detail-block">
-                          <p class="field-label">Where</p>
-                          {#if thoughtPlace[t.id]}
-                            <PlaceMap
-                              lat={thoughtPlace[t.id].lat}
-                              lon={thoughtPlace[t.id].lon}
-                              radiusM={thoughtPlace[t.id].radiusM}
-                            />
-                            {#if thoughtPlace[t.id].suggestedAddress}
-                              <p class="note">{thoughtPlace[t.id].suggestedAddress}</p>
-                            {/if}
-                          {:else}
-                            <button
-                              type="button"
-                              class="btn"
-                              disabled={busy === `${t.id}:map`}
-                              onclick={() => showOnMap(t.id)}
-                            >
-                              {busy === `${t.id}:map` ? 'Loading the map…' : 'Show it on a map'}
-                            </button>
-                          {/if}
                         </div>
                       {/if}
 
@@ -1935,34 +2269,112 @@
                           <p class="note">Kept as a memory, so it informs what it says next.</p>
                         {/if}
                       </div>
-                    </div>
-                  {/if}
 
-                  <!-- Rating is offered only on what actually reached him. Asking
-                       "was this useful?" about a thought suppressed before it was
-                       ever sent is a question with no answer, and the vote would
-                       train the weights on something he never saw. -->
-                  {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
-                    <div class="card-actions bar">
-                      <span class="ask">Was this any use?</span>
-                      <button type="button" class="cta" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
-                        Useful
-                      </button>
-                      <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>
-                        Not useful
-                      </button>
-                      <button type="button" class="btn danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
-                        Never this kind
-                      </button>
-                      <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
-                        Snooze a week
-                      </button>
+                      <!-- The rarer verdicts live in the expand: `never_kind` is
+                           an absolute, irreversible-feeling mute and does not
+                           belong one mis-tap away on a card face. -->
+                      {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
+                        <div class="card-actions bar">
+                          <span class="ask">Anything stronger?</span>
+                          <button type="button" class="btn danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
+                            Never this kind
+                          </button>
+                          <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
+                            Snooze a week
+                          </button>
+                        </div>
+                      {/if}
                     </div>
                   {/if}
                 </article>
               {/each}
             </div>
           {/each}
+        {/if}
+      </div>
+    </section>
+
+    <!-- ── WHAT IT HAS RULED ON ───────────────────────────────────────────
+         "That list of memories should be accessible somewhere."
+
+         Somewhere is here, under the feed the rulings are about. Every row is
+         a claim a model went and checked against the sources, and every one of
+         them is also a `jkai_memories` row — which is the half that matters.
+         A verdict in a column stops one message going out. A memory stops the
+         claim being MADE again: the ponder pack cards these, refutations
+         first, so the next cycle reads "the two Canva rows are one payment"
+         before it proposes them as two. -->
+    <section class="band" id="dd-rulings">
+      <div class="inner">
+        <SectionHead
+          kicker="C / What it has ruled on"
+          title={['Things it', 'went and checked']}
+          strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict here is also a memory, which is why it does not have to work the same thing out twice."
+        >
+          {#snippet aside()}
+            {#if !rulingsOpen}
+              <button type="button" class="cta" onclick={loadRulings}>Show the rulings</button>
+            {:else}
+              <button type="button" class="btn" onclick={() => { rulingsOpen = false; }}>Close</button>
+            {/if}
+          {/snippet}
+        </SectionHead>
+
+        {#if rulingsOpen}
+          {#if rulingsLoading}
+            <div class="card t-watch"><p class="card-body">Reading what it has settled…</p></div>
+          {:else if rulingsError}
+            <div class="card t-urgent"><p class="card-body">Could not read the rulings: {rulingsError}</p></div>
+          {:else if rulings.length === 0}
+            <div class="card t-quiet">
+              <p class="card-body">
+                Nothing has been ruled on yet. <strong>Queue to model</strong> on any card above
+                sends it to the reviewer — it reads the sources, decides whether the claim is
+                actually true, and writes what it concluded to memory.
+              </p>
+            </div>
+          {:else}
+            <div class="controls">
+              <FacetBar
+                label="Verdict"
+                active={rulingWho}
+                facets={rulingFacets}
+                onpick={(id) => (rulingWho = id as typeof rulingWho)}
+              />
+            </div>
+            <div class="board">
+              {#each rulingsVisible as r (r.id)}
+                <article class="card t-{r.verdict === 'refuted' ? 'urgent' : r.verdict === 'verified' ? 'good' : 'watch'}">
+                  <div class="card-hd">
+                    <span class="card-title as-text">{r.title}</span>
+                    <span class="pill t-{r.verdict === 'refuted' ? 'urgent' : r.verdict === 'verified' ? 'good' : 'watch'}">
+                      {r.verdict === 'refuted' ? 'did not hold' : r.verdict === 'verified' ? 'held up' : 'cannot tell'}
+                    </span>
+                  </div>
+                  {#if r.reasoning}<p class="card-body">{r.reasoning}</p>{/if}
+                  <div class="card-meta">
+                    <span class="tag">{r.kind}</span>
+                    {#if typeof r.likelihood === 'number'}
+                      <span class="meta-item">{Math.round(r.likelihood * 100)}% likely true</span>
+                    {/if}
+                    {#if r.ruledAt}<span class="meta-item">{ago(r.ruledAt)}</span>{/if}
+                    {#if r.model}<span class="meta-item">{r.model}</span>{/if}
+                    <!-- A ruling with no memory behind it changes nothing about
+                         what gets said next, and the page must not let that look
+                         the same as one that does. -->
+                    {#if r.memoryId}
+                      <span class="meta-item good">remembered</span>
+                    {:else}
+                      <span class="meta-item warn">not remembered — check it again to record it</span>
+                    {/if}
+                  </div>
+                  {#if r.sources.length}
+                    <p class="note">Checked: {r.sources.slice(0, 4).join(' · ')}</p>
+                  {/if}
+                </article>
+              {/each}
+            </div>
+          {/if}
         {/if}
       </div>
     </section>
@@ -1976,7 +2388,7 @@
       <section class="band" id="dd-deck">
         <div class="inner">
           <SectionHead
-            kicker="C / What it nearly said"
+            kicker="D / What it nearly said"
             title={['The things', 'it held back']}
             strap="These scored below the bar, so nothing was sent. That bar was set with no evidence at all — rating a few here is the only thing that moves it. None of this counts as a notification."
           >
@@ -2669,7 +3081,11 @@
 
             <div class="stack tight">
               {#each unnamedOrdered as p (p.id)}
-                <div class="card t-{placeTone(p, askAtVisits)} row">
+                <!-- The anchor a feed card's "In Places" link lands on. Without
+                     an id here that link reaches the tab and then leaves you to
+                     find the row yourself, which on a list of thirty is not a
+                     clickthrough. `scroll-margin-top` clears the sticky rail. -->
+                <div id="place-{p.id}" class="card t-{placeTone(p, askAtVisits)} row anchored">
                   <div class="row-id">
                     <!-- The geocoder's guess, marked as a guess. Without it every
                          card in this list reads "somewhere you stop" and the
@@ -2780,7 +3196,7 @@
               </thead>
               <tbody>
                 {#each namedOrdered as p (p.id)}
-                  <tr>
+                  <tr id="place-{p.id}" class="anchored">
                     <td class="cell-lead"><span class="cell-title">{p.label}</span></td>
                     <td>{p.kind}</td>
                     <td class="cell-wrap">{rhythm(p)}</td>
@@ -3576,6 +3992,139 @@
     gap: 8px;
   }
 
+  /* ——— the board ————————————————————————————————————————————————
+     Three columns of cards, which is what the feed always was: a set of
+     unrelated observations to triage, not a document to read top to bottom.
+     One column meant scrolling a thousand pixels to find out whether there
+     were four things or forty.
+
+     `align-items: start` matters — without it every card in a row stretches to
+     the tallest, so one long explanation gives two neighbours a foot of empty
+     paper. Cards are their own height and the row is ragged, which is correct
+     for a board and wrong for a table. */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 14px;
+  }
+  /* An open card takes the whole row. The detail carries a map, an evidence
+     list, a components table and a note box, and none of them survive a 320px
+     column — so the card that is being read stops being a column. */
+  .board > .card.open {
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 1200px) {
+    .board {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 820px) {
+    .board {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ——— quick actions ————————————————————————————————————————————
+     A row of small square chips on the card FACE. These used to live inside
+     the expand, or in a bar that only rendered for a thought that had actually
+     been delivered — which is why the ledger has thousands of rows and a few
+     dozen verdicts: an opinion cost two clicks and a scroll.
+
+     Deliberately smaller and quieter than `.cta`. There are up to seven of
+     them on a card and thirty cards on a board; at CTA weight the page would
+     be a wall of orange and nothing would read as primary. */
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .q {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background-color var(--t-fast) var(--ease-out),
+      border-color var(--t-fast) var(--ease-out),
+      color var(--t-fast) var(--ease-out);
+  }
+  .q:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .q:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .q:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  /* The one that endorses, and the one that spends. Filled, because those two
+     are the actions with consequences — a vote weaves into the graph and a
+     review costs an xhigh model pass. */
+  .q.good {
+    border-color: var(--good);
+    color: var(--good);
+  }
+  .q.good:hover:not(:disabled) {
+    background: var(--good);
+    border-color: var(--good);
+    color: var(--bg);
+  }
+  .q.model {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .q.model:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .q.link {
+    border-style: dashed;
+    color: var(--accent-ink);
+    border-color: var(--accent-ink-tint-35);
+  }
+  .q.link:hover {
+    border-color: var(--accent-ink);
+    color: var(--accent-ink);
+  }
+  .q-ext {
+    margin-left: 4px;
+    opacity: 0.7;
+  }
+  /* No `margin-left: auto` here. In a 320px column this row wraps, and an
+     auto margin then strands "Why" alone on a line of its own, right-aligned —
+     which it did on three cards out of four. It reads as the last item in the
+     row, so it should simply BE the last item in the row. */
+  .q.more {
+    color: var(--text-ghost);
+    border-style: dotted;
+  }
+
+  .card-map {
+    margin-top: 12px;
+  }
+
+  /* A row a fragment can land on. The tab rail is sticky, so without this the
+     scrolled-to row sits underneath it — the same 60px the bands allow for. */
+  .anchored {
+    scroll-margin-top: 72px;
+  }
+
   .card {
     --tone: var(--accent-ink);
     position: relative;
@@ -3654,6 +4203,9 @@
     margin: 0 0 10px;
   }
 
+  .card-title.as-text {
+    cursor: default;
+  }
   .card-title {
     font-family: var(--font-display);
     font-size: var(--fs-body-lg);
@@ -3880,6 +4432,16 @@
   .review-p {
     margin-left: 6px;
     opacity: 0.75;
+  }
+  /* A ruling with a memory behind it changes what gets said next; one without
+     changes nothing. The page must not let those look the same. */
+  .review-mem {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--good);
+    white-space: nowrap;
   }
   .review-why {
     min-width: 0;
