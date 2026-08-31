@@ -22,7 +22,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamHypotheses, daydreamLeadSteps, daydreamLeads } from '$lib/db/schema';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
-import { rankLeads, scoreLead, shouldAbandon, type LeadStats } from './score';
+import { isJudgeable, rankLeads, scoreLead, shouldAbandon, type LeadStats } from './score';
 
 /** How many lines of enquiry advance in one run. */
 export const MAX_LEADS_PER_RUN = 3;
@@ -95,6 +95,23 @@ async function statsFor(
     lastRoundAt: lead.lastRoundAt,
     fromSteer: lead.steerId != null,
   };
+}
+
+
+/**
+ * When the question-asker last produced a verdict for this subject.
+ *
+ * Both halves of the loop need it, and for the same reason: `daydream-explore`
+ * runs hourly while `daydream-hypothesise` runs daily, so between the two there
+ * is nothing a lead could possibly have done. Advancing or judging it in that
+ * gap spends its budget against evidence that cannot exist yet.
+ */
+async function lastQuestionAt(subject: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ latest: sql<Date | null>`max(${daydreamHypotheses.testedAt})` })
+    .from(daydreamHypotheses)
+    .where(eq(daydreamHypotheses.subject, subject));
+  return row?.latest ? new Date(row.latest) : null;
 }
 
 /**
@@ -188,8 +205,15 @@ export async function runExplorationRound(
   // ── Advance the top few. A hard slice, not a judgement call. ──
   const frontier = rankLeads(survivors.map((s) => ({ ...s, roundsRun: s.lead.roundsRun }))).slice(0, maxLeads);
 
+  // A lead whose current round has not been judged yet must not be given
+  // another. `MAX_ROUNDS_PER_LEAD` is 20 and this action runs hourly, so
+  // advancing regardless would spend a lead's entire lifetime in twenty hours
+  // against a question-asker that runs once a day — the same fault as judging
+  // an unjudged round, one counter along.
+  const lastAsked = await lastQuestionAt(subject);
   for (const s of frontier) {
     try {
+      if (!isJudgeable(s.lead.lastRoundAt, lastAsked)) continue;
       const round = s.lead.roundsRun + 1;
       // Barren is measured against what this lead has held SO FAR; the round
       // that follows either adds to it or increments the barren count.
@@ -228,8 +252,39 @@ export async function settleRounds(subject = DEFAULT_SUBJECT): Promise<number> {
     .from(daydreamLeads)
     .where(and(eq(daydreamLeads.subject, subject), eq(daydreamLeads.status, 'open')));
 
+  // When did the question-asker last actually run?
+  //
+  // THE BUG THIS PREVENTS. `daydream-explore` runs HOURLY and
+  // `daydream-hypothesise` runs DAILY, and every explore tick called this
+  // function, which counted a round barren whenever `hypothesesHeld` had not
+  // risen. It cannot rise between hypothesise runs — nothing else proposes a
+  // question. So a new lead collected a barren round every hour against an
+  // `abandonAfterBarrenRounds` of 4 and was ABANDONED FOUR HOURS AFTER BIRTH,
+  // up to twenty hours before the only activity that could have vindicated it
+  // next ran. Measured on the first lead this engine ever opened:
+  // `sleep-recovery-lag`, created 06:46, barrenRounds already 1 by 06:50 with
+  // zero hypotheses spawned.
+  //
+  // This file's own comment names the hazard — "pretending otherwise would
+  // mean counting a round barren before its questions had been answered" —
+  // and splitting the two functions was not enough, because the caller invokes
+  // both on the same tick regardless.
+  const lastAsked = await lastQuestionAt(subject);
+
   let settled = 0;
   for (const lead of open) {
+    // A round is only judgeable once the question-asker has run since it
+    // began. Before that there is no evidence either way, and "no evidence" is
+    // not "no result".
+    // A lead with no round yet has nothing pending, but it also has nothing to
+    // judge — skip it either way rather than crediting a round it never ran.
+    if (lead.lastRoundAt == null || !isJudgeable(lead.lastRoundAt, lastAsked)) {
+      await trace(lead.id, lead.roundsRun, 'judge', 'not judged — no questions asked since this round began', {
+        lastRoundAt: lead.lastRoundAt?.toISOString() ?? null,
+        lastAsked: lastAsked?.toISOString() ?? null,
+      });
+      continue;
+    }
     const stats = await statsFor(lead);
     const gained = stats.hypothesesHeld > lead.hypothesesHeld;
     await db

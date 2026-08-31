@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankLeads, scoreLead, shouldAbandon, STALE_AFTER_DAYS } from './score';
+import { isJudgeable, rankLeads, scoreLead, shouldAbandon, STALE_AFTER_DAYS } from './score';
 
 const now = new Date('2026-08-26T12:00:00Z');
 const base = {
@@ -93,5 +93,36 @@ describe('rankLeads', () => {
       { score: 0.5, roundsRun: 0 },
     ]);
     expect(ranked[0].roundsRun).toBe(0);
+  });
+});
+
+describe('isJudgeable — the four-hour death', () => {
+  const round = new Date('2026-08-31T06:46:00Z');
+
+  it('refuses to judge a round no question has been asked since', () => {
+    // The fault it prevents: explore runs HOURLY and hypothesise DAILY, so a
+    // new lead collected a barren round every hour against a threshold of 4
+    // and died four hours after birth — twelve hours before the only activity
+    // that could have vindicated it next ran.
+    expect(isJudgeable(round, new Date('2026-08-30T22:46:00Z'))).toBe(false);
+  });
+
+  it('judges once the question-asker has run since the round began', () => {
+    expect(isJudgeable(round, new Date('2026-08-31T22:46:00Z'))).toBe(true);
+  });
+
+  it('treats a lead that has never had a round as having nothing pending', () => {
+    expect(isJudgeable(null, null)).toBe(true);
+    expect(isJudgeable(null, new Date('2026-08-31T22:46:00Z'))).toBe(true);
+  });
+
+  it('refuses when nothing has ever been asked', () => {
+    // Exactly the state daydream_leads was in this morning: a lead exists and
+    // the hypothesis engine has produced nothing for it yet.
+    expect(isJudgeable(round, null)).toBe(false);
+  });
+
+  it('is exclusive at the boundary — the same instant is not "since"', () => {
+    expect(isJudgeable(round, new Date(round))).toBe(false);
   });
 });
