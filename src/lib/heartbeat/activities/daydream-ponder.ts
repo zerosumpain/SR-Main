@@ -92,6 +92,10 @@ export const daydreamPonder: ActivityHandler = {
     ];
     // Only when the stage did something: a line reading "0 lookups" on every
     // pulse is noise, but a probe budget spent for no cards is worth seeing.
+    // A near-miss the validator repaired. Visible, because an alias silently
+    // accepted is how entity_id/entityId cost 44% of one toolset's calls while
+    // reading as facts about the estate.
+    if (result.coerced.length > 0) bits.push(`${result.coerced.length} metric name(s) coerced`);
     if (result.lookups.asked > 0) {
       bits.push(
         `looked up ${result.lookups.asked} → ${result.lookups.cards} card(s)` +

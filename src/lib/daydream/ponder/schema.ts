@@ -48,14 +48,49 @@ export interface PonderValidation {
    *  the caller — this file cannot import the rules store without dragging in
    *  the db. */
   actionRules: unknown[];
+  /** Names the model got nearly right, and what they became. Reported rather
+   *  than applied silently — see resolveMetric. */
+  coerced: string[];
   /** One line per refusal. This is the fabrication meter — report it, always. */
   rejected: string[];
 }
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,47}$/;
 
+/**
+ * Map whatever the model called a metric onto the key the sweep actually has.
+ *
+ * Every lead ever proposed in production was rejected for `unknown metrics`,
+ * and the names it offered say exactly why: `Time out`, `Verified spend`,
+ * `Average steps last 7 days`, `sleep_duration`, `Readiness`. Those are the
+ * PACK'S PROSE LABELS. The prompt told it to choose "metrics from the feature
+ * store only" and never said what they were, so it named them the only way it
+ * could — by reading them off the cards in front of it.
+ *
+ * The real fix is the prompt, which now lists the vocabulary. This is the
+ * second line of defence, and it is deliberately narrow: an exact match, or a
+ * match once both sides are reduced to lowercase letters and digits. It will
+ * rescue `sleep_minutes` and `SleepMinutes`; it will NOT rescue `Readiness`
+ * into `recoveryScore`, because that is a guess about meaning rather than a
+ * difference of spelling, and a wrong guess here silently files a line of
+ * enquiry against the wrong series.
+ *
+ * Every coercion is REPORTED. An alias quietly accepted is how
+ * `entity_id`/`entityId` cost 44% of one toolset's calls while looking like
+ * facts about the estate.
+ */
+const METRIC_BY_NORMALISED = new Map<string, string>(
+  (SWEEP_METRICS as readonly string[]).map((m) => [m.toLowerCase().replace(/[^a-z0-9]/g, ''), m]),
+);
+
+export function resolveMetric(raw: string): string | null {
+  const trimmed = raw.trim();
+  if ((SWEEP_METRICS as readonly string[]).includes(trimmed)) return trimmed;
+  return METRIC_BY_NORMALISED.get(trimmed.toLowerCase().replace(/[^a-z0-9]/g, '')) ?? null;
+}
+
 export function validatePonderOutput(parsed: unknown, pack: FactPack): PonderValidation {
-  const out: PonderValidation = { musings: [], leads: [], actionRules: [], rejected: [] };
+  const out: PonderValidation = { musings: [], leads: [], actionRules: [], rejected: [], coerced: [] };
   if (parsed == null || typeof parsed !== 'object') {
     out.rejected.push('output is not an object');
     return out;
@@ -138,16 +173,35 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack): PonderVal
     if (!SLUG_RE.test(leadKey)) { out.rejected.push(`lead: bad key "${leadKey.slice(0, 30)}"`); continue; }
     if (title.length < 3 || title.length > 120) { out.rejected.push(`lead ${leadKey}: bad title`); continue; }
     if (rationale.length < 10 || rationale.length > 400) { out.rejected.push(`lead ${leadKey}: bad rationale`); continue; }
-    const unknown = metrics.filter((mtr) => !(SWEEP_METRICS as readonly string[]).includes(mtr));
-    if (unknown.length) { out.rejected.push(`lead ${leadKey}: unknown metrics ${unknown.join(',')}`); continue; }
-    if (metrics.length < 2 || metrics.length > 6) {
+    const resolved: string[] = [];
+    const unknown: string[] = [];
+    for (const mtr of metrics) {
+      const hit = resolveMetric(mtr);
+      if (!hit) { unknown.push(mtr); continue; }
+      if (hit !== mtr) out.coerced.push(`lead ${leadKey}: "${mtr}" → ${hit}`);
+      resolved.push(hit);
+    }
+    if (unknown.length) {
+      // Name what WAS available. The old message said only what was wrong, and
+      // nothing downstream ever read it back to the model — so the same guess
+      // came round every two hours, fourteen times, for nothing.
+      out.rejected.push(
+        `lead ${leadKey}: unknown metrics ${unknown.join(',')} — the vocabulary is ${SWEEP_METRICS.join(', ')}`,
+      );
+      continue;
+    }
+    // Deduplicate BEFORE counting. Two spellings of one metric resolve to one
+    // metric, and a lead owning one metric owns nothing — counting first let
+    // ["sleepMinutes","sleep_minutes"] through as a two-metric lead.
+    const distinct = [...new Set(resolved)];
+    if (distinct.length < 2 || distinct.length > 6) {
       // A lead owns the hypotheses inside its metric set; fewer than two
       // metrics owns nothing, and a huge set owns everything, which is the
       // same as owning nothing.
       out.rejected.push(`lead ${leadKey}: needs 2..6 metrics`);
       continue;
     }
-    out.leads.push({ leadKey, title, rationale, metrics: [...new Set(metrics)] });
+    out.leads.push({ leadKey, title, rationale, metrics: distinct });
   }
 
   // ── Standing action rules — validated downstream by the rules machinery ──

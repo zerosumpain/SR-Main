@@ -204,3 +204,78 @@ describe('assembleProfile', () => {
     expect(text).toContain('daydream engine');
   });
 });
+
+describe('lead metrics — the fault that kept the frontier empty', () => {
+  // Fourteen leads were proposed on production and every one was rejected for
+  // `unknown metrics`. The names it offered are the pack's own prose labels,
+  // because the prompt told it to pick from a vocabulary it was never shown.
+  const PRODUCTION_REJECTIONS = [
+    ['Time out', 'Verified spend'],
+    ['Readiness', "Last night's sleep"],
+    ['Average steps last 7 days', 'Average time out of the house last 7 days'],
+    ['sleep_percentage', 'sleep_duration', 'time_away_from_home'],
+  ];
+
+  function leadOf(metrics: string[]) {
+    return {
+      musings: [],
+      actionRules: [],
+      leads: [
+        {
+          leadKey: 'a-lead',
+          title: 'Does one thing move the other?',
+          rationale: 'Something plausible has been happening for more than a week now.',
+          metrics,
+        },
+      ],
+    };
+  }
+
+  it('still refuses a label that is a GUESS about meaning, not a spelling', () => {
+    // "Readiness" is not a misspelling of recoveryScore, and mapping it would
+    // file a line of enquiry against a series nobody chose.
+    for (const metrics of PRODUCTION_REJECTIONS.slice(0, 3)) {
+      const v = validatePonderOutput(leadOf(metrics), assemblePack(inputs()));
+      expect(v.leads).toHaveLength(0);
+    }
+  });
+
+  it('names the vocabulary in the rejection, so the reason is actionable', () => {
+    const v = validatePonderOutput(leadOf(['Time out', 'Verified spend']), assemblePack(inputs()));
+    expect(v.rejected[0]).toMatch(/the vocabulary is/);
+    expect(v.rejected[0]).toContain('sleepMinutes');
+  });
+
+  it('accepts the exact keys', () => {
+    const v = validatePonderOutput(leadOf(['sleepMinutes', 'minutesOut']), assemblePack(inputs()));
+    expect(v.leads).toHaveLength(1);
+    expect(v.leads[0].metrics).toEqual(['sleepMinutes', 'minutesOut']);
+    expect(v.coerced).toEqual([]);
+  });
+
+  it('repairs a difference of SPELLING, and says that it did', () => {
+    const v = validatePonderOutput(leadOf(['sleep_minutes', 'MinutesOut']), assemblePack(inputs()));
+    expect(v.leads).toHaveLength(1);
+    expect(v.leads[0].metrics).toEqual(['sleepMinutes', 'minutesOut']);
+    // Silently accepting an alias is how entity_id/entityId cost 44% of a
+    // toolset's calls while reading as facts about the estate.
+    expect(v.coerced).toHaveLength(2);
+    expect(v.coerced[0]).toContain('sleepMinutes');
+  });
+
+  it('deduplicates after resolving, so two spellings of one metric are one', () => {
+    const v = validatePonderOutput(
+      leadOf(['sleepMinutes', 'sleep_minutes', 'minutesOut']),
+      assemblePack(inputs()),
+    );
+    expect(v.leads[0].metrics).toEqual(['sleepMinutes', 'minutesOut']);
+  });
+
+  it('counts metrics AFTER resolving, not before', () => {
+    // Two spellings of one metric is one metric, and a lead owning one metric
+    // owns nothing.
+    const v = validatePonderOutput(leadOf(['sleepMinutes', 'sleep_minutes']), assemblePack(inputs()));
+    expect(v.leads).toHaveLength(0);
+    expect(v.rejected.some((r) => /needs 2\.\.6 metrics/.test(r))).toBe(true);
+  });
+});

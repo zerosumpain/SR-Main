@@ -30,6 +30,8 @@ import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { assemblePack, renderPack, type PackInputs } from './pack';
 import { runLookups, MAX_LOOKUPS_PER_CYCLE } from './lookups';
 import { buildProfileLines } from './profile';
+import { SWEEP_METRICS } from '../stats/sweep';
+import { MIN_PAIRS } from '../stats/tests';
 import {
   MAX_ACTION_RULES,
   MAX_LEADS,
@@ -46,6 +48,9 @@ export interface PonderResult {
   rulesAdmitted: number;
   rulesRefused: number;
   rejected: string[];
+  /** Metric names the model got nearly right, and what they became. On the
+   *  pulse so an alias is visible rather than silently accepted. */
+  coerced: string[];
   /** What the lookup stage did. On the pulse so a probe that never pays for
    *  itself is visible rather than quietly costing a round trip a cycle. */
   lookups: { asked: number; cards: number; failed: number };
@@ -61,6 +66,7 @@ const EMPTY: PonderResult = {
   rulesAdmitted: 0,
   rulesRefused: 0,
   rejected: [],
+  coerced: [],
   lookups: { asked: 0, cards: 0, failed: 0 },
   tokens: { prompt: 0, completion: 0 },
   error: null,
@@ -252,7 +258,64 @@ async function weekAhead(): Promise<PackInputs['weekAhead']> {
   }
 }
 
-function systemPrompt(profileLines: string[]): string {
+
+/**
+ * What the model needs before it can propose a line of enquiry worth running.
+ *
+ * Two things it has never been told, both of which show up in the outcome:
+ *
+ *  • **Which metrics actually have data.** A lead pairing two series that do
+ *    not overlap is dead the moment it is tested — that is what `underpowered`
+ *    means, and production carries 48 of them. The day counts turn the metric
+ *    list from a vocabulary into a menu.
+ *  • **What is already open.** Nothing showed it the frontier, so every cycle
+ *    proposed blind. `onConflictDoNothing` catches an identical `leadKey` and
+ *    nothing catches the same question asked under a new one.
+ */
+async function leadContext(subject: string): Promise<{ open: string[]; menu: string[] }> {
+  const out: { open: string[]; menu: string[] } = { open: [], menu: [] };
+  try {
+    const rows = await db
+      .select({ leadKey: daydreamLeads.leadKey, title: daydreamLeads.title })
+      .from(daydreamLeads)
+      .where(and(eq(daydreamLeads.subject, subject), eq(daydreamLeads.status, 'open')))
+      .limit(20);
+    out.open = rows.map((r) => `${r.leadKey} — ${r.title}`);
+  } catch (err) {
+    console.warn(`[daydream] could not read the frontier: ${errMsg(err)}`);
+  }
+
+  try {
+    // One row, one count per metric. Cheaper than 22 queries and the numbers
+    // must come from the same scan or they describe different days.
+    const counts = SWEEP_METRICS.map(
+      (m) => sql`count(${daydreamDayFeatures[m]})::int as ${sql.raw(`"${m}"`)}`,
+    );
+    const res = await db.execute(
+      sql`select ${sql.join(counts, sql`, `)} from ${daydreamDayFeatures} where ${daydreamDayFeatures.subject} = ${subject}`,
+    );
+    const row = (Array.isArray(res) ? res[0] : (res as { rows?: unknown[] }).rows?.[0]) as
+      | Record<string, unknown>
+      | undefined;
+    if (row) {
+      for (const m of SWEEP_METRICS) {
+        const days = Number(row[m] ?? 0);
+        // The count is a CEILING on any pair that uses this metric, not the
+        // overlap itself — two 250-day series can still share no days. Pairwise
+        // overlap would be 231 numbers and does not fit in a prompt, but the
+        // ceiling is enough to stop the thinnest series being paired at all,
+        // and the thin ones here (minutesOut 30, distinctPlaces 35) are exactly
+        // the metrics the underpowered hypotheses keep naming.
+        out.menu.push(`${m} (${days} days${days < MIN_PAIRS ? ' — TOO FEW, do not use' : ''})`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[daydream] could not count metric coverage: ${errMsg(err)}`);
+  }
+  return out;
+}
+
+function systemPrompt(profileLines: string[], ctx: { open: string[]; menu: string[] }): string {
   return [
     "You are the pondering half of John's second brain. On spare cycles you look across everything it knows — family, diary, money, health, email facts, its own past discoveries — and notice crossings worth surfacing: something happening now that connects to a pattern, something coming up that the past says needs acting on early, a question worth investigating.",
     '',
@@ -265,7 +328,33 @@ function systemPrompt(profileLines: string[]): string {
     '3. CITE OR DIE: every musing must list the fact-card ids ("F12") it is built from. Any number, date, name or amount you mention must appear in a cited card. An uncited or wrongly-cited musing is deleted by the audit, not fixed.',
     '4. Do not restate a single card back as a musing — the value is the CROSSING between cards (now × pattern, upcoming × history, money × diary).',
     `5. Optional actions on a musing: [{"kind":"remind","label":"...","params":{"inHours":N,"text":"..."}}] — the only kind available. Propose one only when acting later is clearly better than reading now.`,
-    `6. A lead = {"leadKey","title","rationale","metrics"} — a line of statistical enquiry worth pursuing over weeks, metrics chosen from the feature store only. At most ${MAX_LEADS}.`,
+    // The metric vocabulary, spelled out.
+    //
+    // This line used to read "metrics chosen from the feature store only" and
+    // never said what those were. Every lead ever proposed on production was
+    // rejected for `unknown metrics`, and the names offered — "Time out",
+    // "Verified spend", "Average steps last 7 days", "Readiness" — are the
+    // PACK'S OWN PROSE LABELS: told to pick from a vocabulary it could not see,
+    // the model named the series off the cards in front of it. Fourteen leads,
+    // none created, and nothing ever read the rejection back to it.
+    //
+    // Position matters as much as presence here, the same way `serves` had to
+    // move ahead of the JSON shape before it was ever populated: the keys sit
+    // WITH the rule that requires them, not in a footnote.
+    `6. A lead = {"leadKey","title","rationale","metrics"} — a line of statistical enquiry worth pursuing over weeks. At most ${MAX_LEADS}.`,
+    `   "metrics" MUST be 2 to 6 of these EXACT keys, copied character for character. Nothing else is a metric, and a label you read off a card above is not one.`,
+    `   The number beside each is how many days it has recorded — the MOST any pair using it could overlap. A pair needs ${MIN_PAIRS} shared days to be testable at all, so prefer metrics with plenty and never pair two thin ones.`,
+    // The menu carries each metric's day count, so a pair that cannot be
+    // tested is visibly not worth proposing. Falls back to the bare vocabulary
+    // if the count query failed — a list without numbers still beats no list.
+    `   ${ctx.menu.length ? ctx.menu.join(', ') : SWEEP_METRICS.join(', ')}`,
+    ...(ctx.open.length
+      ? [
+          `   ALREADY OPEN — do not propose these again, in any wording:`,
+          ...ctx.open.map((l) => `     - ${l}`),
+        ]
+      : []),
+    `   Example: {"leadKey":"sleep-and-time-out","title":"Does time out of the house drive sleep?","rationale":"Sleep has swung 40 minutes across the week while time out of the house doubled on three of those days.","metrics":["sleepMinutes","minutesOut"]}`,
     `7. An actionRule is a STANDING behaviour (fires on its own once approved): the full rule-spec shape with an added "action". Propose at most ${MAX_ACTION_RULES}, and only when a pattern clearly repeats.`,
     `8. At most ${MAX_MUSINGS} musings. Fewer, sharper.`,
   ].join('\n');
@@ -276,7 +365,7 @@ export async function runPonder(
 ): Promise<PonderResult> {
   const now = opts.now ?? new Date();
   const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], lookups: { asked: 0, cards: 0, failed: 0 }, tokens: { prompt: 0, completion: 0 } };
+  const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], coerced: [], lookups: { asked: 0, cards: 0, failed: 0 }, tokens: { prompt: 0, completion: 0 } };
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
@@ -289,6 +378,7 @@ export async function runPonder(
       noteCards(),
       diaryNoteCards(),
     ]);
+    const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
     // read-only first-party tool and cards the answer — see lookups.ts for why
     // the model is not the one choosing. Soft: a failure here costs cards, never
@@ -326,7 +416,7 @@ export async function runPonder(
       temperature: 0.7,
       max_tokens: 1800,
       messages: [
-        { role: 'system', content: systemPrompt(profileLines) },
+        { role: 'system', content: systemPrompt(profileLines, leadCtx) },
         { role: 'user', content: renderPack(pack) },
       ],
     });
@@ -348,6 +438,7 @@ export async function runPonder(
 
     const audit = validatePonderOutput(parsed, pack);
     result.rejected = audit.rejected;
+    result.coerced = audit.coerced;
 
     // ── Musings → the thought ledger ──
     if (audit.musings.length) {
