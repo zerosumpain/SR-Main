@@ -93,8 +93,20 @@ export type SweepMetric = (typeof SWEEP_METRICS)[number];
  * without one, the top of every ranking is occupied by tautologies and the real
  * findings never surface.
  */
-const ENTANGLED: ReadonlySet<string> = new Set(
-  [
+/**
+ * Pairs that are true by definition, as PAIRS.
+ *
+ * `ENTANGLED` below is a lookup set of joined keys, which answers "is this pair
+ * worthless?" and cannot be read back out as a list. The ponder prompt needs
+ * the list: told only the vocabulary, the model spent two of the four metric
+ * slots on its very first lead pairing `sleepMinutes` with `sleepEfficiency`
+ * and `recoveryScore` with `restingHeartRate` — both skipped at test time, so
+ * two of its six pairs were dead before they were run.
+ *
+ * One source, two shapes, so the prompt and the sweep can never disagree about
+ * what counts as a tautology.
+ */
+export const ENTANGLED_PAIRS: ReadonlyArray<readonly [string, string]> = [
     ['recoveryScore', 'restingHeartRate'],
     ['recoveryScore', 'hrvMs'],
     ['recoveryScore', 'sleepPerformance'],
@@ -118,7 +130,10 @@ const ENTANGLED: ReadonlySet<string> = new Set(
     // together. Left in, it would have been the system's first ever discovery,
     // stated four times, and completely empty.
     ['hrvMs', 'restingHeartRate'],
-  ].map((p) => p.slice().sort().join('|')),
+] as const;
+
+const ENTANGLED: ReadonlySet<string> = new Set(
+  ENTANGLED_PAIRS.map((p) => p.slice().sort().join('|')),
 );
 
 /** The list is written in feature-store column names; the registry namespaces

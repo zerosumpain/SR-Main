@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { validateAction, fromProposedAction, toProposedAction } from '../actions';
 import { assemblePack, renderPack, type PackInputs } from './pack';
 import { validatePonderOutput, MAX_MUSINGS } from './schema';
+import { ENTANGLED_PAIRS, isEntangled } from '../stats/sweep';
 import { assembleProfile } from './profile';
 import type { DaydreamSnapshot } from '../snapshot-types';
 
@@ -277,5 +278,24 @@ describe('lead metrics — the fault that kept the frontier empty', () => {
     const v = validatePonderOutput(leadOf(['sleepMinutes', 'sleep_minutes']), assemblePack(inputs()));
     expect(v.leads).toHaveLength(0);
     expect(v.rejected.some((r) => /needs 2\.\.6 metrics/.test(r))).toBe(true);
+  });
+});
+
+describe('the tautology hint', () => {
+  it('names every entangled pair the sweep will skip', () => {
+    // One source, two shapes. If the sweep learns a new tautology and the
+    // prompt does not, the model keeps spending metric slots on it.
+    for (const [a, b] of ENTANGLED_PAIRS) {
+      expect(isEntangled(a, b)).toBe(true);
+    }
+    expect(ENTANGLED_PAIRS.length).toBeGreaterThan(10);
+  });
+
+  it('covers the two pairs the first real lead wasted', () => {
+    // sleep-recovery-lag opened with sleepMinutes, recoveryScore,
+    // sleepEfficiency and restingHeartRate — two of its six pairs were dead
+    // before they ran.
+    expect(isEntangled('sleepMinutes', 'sleepEfficiency')).toBe(true);
+    expect(isEntangled('recoveryScore', 'restingHeartRate')).toBe(true);
   });
 });
