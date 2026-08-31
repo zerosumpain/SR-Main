@@ -17,7 +17,16 @@ vi.mock('$lib/workflows/site-tools/registry', () => ({
 }));
 vi.mock('./evidence', () => ({ resolveEvidence: vi.fn(async () => []) }));
 
-import { validate, reviewTools, REVIEW_TOOL_NAMES, REVIEW_MODEL_ID, REVIEW_EFFORT, MAX_TOOL_CALLS } from './adjudicate';
+import {
+  validate,
+  reviewTools,
+  evidenceLine,
+  SOURCE_GUIDANCE,
+  REVIEW_TOOL_NAMES,
+  REVIEW_MODEL_ID,
+  REVIEW_EFFORT,
+  MAX_TOOL_CALLS,
+} from './adjudicate';
 
 describe('the verdict is coerced, never trusted', () => {
   it('takes the three verdicts it knows', () => {
@@ -124,5 +133,41 @@ describe('the pinned model', () => {
     // settle, and should say uncertain instead.
     expect(MAX_TOOL_CALLS).toBeGreaterThan(2);
     expect(MAX_TOOL_CALLS).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('the reviewer is handed its rows, not sent hunting for them', () => {
+  // First live run: a mail_security thought citing eighteen emails came back
+  // `uncertain` because the reviewer "could not retrieve the cited messages" —
+  // it had searched and found unrelated mail. Those ids ARE intel_notes ids and
+  // mail_read takes exactly that; it searched because mail_read's own
+  // description says the noteId comes "from a mail_search hit". The runtime
+  // knew and the prompt did not.
+  const row = { kind: 'email', id: 'n1', title: 'Microsoft security code', lines: ['from Microsoft'], missing: false };
+
+  it('carries the ref, not just the prose', () => {
+    expect(evidenceLine(row)).toContain('[email:n1]');
+    expect(evidenceLine(row)).toContain('Microsoft security code');
+  });
+
+  it('says plainly when the row it names is gone', () => {
+    // A claim whose evidence has been deleted is exactly the case the reviewer
+    // must be able to refute, and it cannot if the line reads like any other.
+    expect(evidenceLine({ ...row, missing: true })).toContain('THE ROW THIS NAMES IS GONE');
+  });
+
+  it('tells the reviewer the cited id is directly readable', () => {
+    const g = SOURCE_GUIDANCE.join('\n');
+    expect(g).toContain('mail_read({"noteId":"<id>"})');
+    expect(g).toMatch(/Do not use mail_search to find it/);
+  });
+
+  it('reserves searching for what the evidence does not name', () => {
+    expect(SOURCE_GUIDANCE.join(' ')).toMatch(/Searching is for what the evidence does NOT already name/);
+  });
+
+  it('keeps a line short enough not to crowd the prompt', () => {
+    const huge = { ...row, lines: [new Array(2000).join('x')] };
+    expect(evidenceLine(huge).length).toBeLessThanOrEqual(400);
   });
 });
