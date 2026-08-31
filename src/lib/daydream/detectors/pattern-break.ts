@@ -93,6 +93,7 @@ export const patternBreak: Detector = {
       s.trail.map((t) => ({ ts: t.ts, source: t.source })),
       dayStart,
       s.now,
+      s.coverage.pollIntervalMins,
     );
     if (todayCoverage < MIN_COVERAGE) return [];
 

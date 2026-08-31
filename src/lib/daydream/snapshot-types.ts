@@ -135,7 +135,7 @@ export interface DaydreamSnapshot {
   places: PlaceSummary[];
 
   /** Precomputed so every detector gates on the same numbers. */
-  coverage: { last24h: number; last7d: number };
+  coverage: { last24h: number; last7d: number; pollIntervalMins?: number };
 
   health: {
     lastNightSleep: { performance: number; durationMins: number } | null;

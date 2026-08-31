@@ -130,6 +130,7 @@ export const APPLE_AGGREGATION: Record<string, Aggregation> = {
   flights_climbed: 'sum',
   heart_rate: 'mean',
   heart_rate_variability: 'mean',
+  resting_heart_rate: 'mean',
   respiratory_rate: 'mean',
   vo2_max: 'last',
 };

@@ -26,7 +26,7 @@ import { db } from '$lib/db';
 import { daydreamPlaces, daydreamTrail } from '$lib/db/schema';
 import { coverageOf } from '../cluster';
 import { DEFAULT_SUBJECT, LOCAL_TZ } from '../types';
-import { extractFacts } from './facts';
+import { extractFacts, subjectPlaceLabel } from './facts';
 import { evaluateRule } from './evaluate';
 import type { DaydreamSnapshot, PlaceSummary, TrailPoint } from '../snapshot-types';
 import type { Condition, FactKey, RuleSpec } from './spec';
@@ -170,12 +170,12 @@ function snapshotAt(
 }
 
 /**
- * Replay a rule over stored history, hourly.
+ * Replay a rule over stored history at its live ten-minute cadence.
  *
- * Hourly rather than per-fix: the live detect tick is every ten minutes, so an
- * hourly replay under-counts by up to 6×. That is corrected for in
- * `firesPerWeek` rather than left as a hidden discount — an estimate that
- * quietly flatters a rule is worse than no estimate.
+ * What matters is emitted THOUGHTS, not the number of ticks for which a
+ * condition remains true. A three-hour condition with daily dedupe is one
+ * interruption opportunity, not eighteen. The replay therefore carries the
+ * dedupe set exactly as the live detector does.
  */
 export async function backtestRule(
   spec: RuleSpec,
@@ -221,25 +221,28 @@ export async function backtestRule(
   const places = (await db.select().from(daydreamPlaces)) as unknown as PlaceSummary[];
   const firstTs = trail[0].ts;
 
-  let fires = 0;
+  let conditionHits = 0;
   let samples = 0;
-  for (let t = since.getTime(); t <= now.getTime(); t += 3_600_000) {
+  const emitted = new Set<string>();
+  const LIVE_TICK_MS = 10 * 60_000;
+  for (let t = since.getTime(); t <= now.getTime(); t += LIVE_TICK_MS) {
     const snap = snapshotAt(new Date(t), trail, places, firstTs);
     if (snap.trailSpanDays < spec.minTrailDays) continue;
     samples++;
-    if (evaluateRule(spec, extractFacts(snap)).fired) fires++;
+    if (evaluateRule(spec, extractFacts(snap)).fired) {
+      conditionHits++;
+      emitted.add(backtestDedupeKey(spec, snap));
+    }
   }
 
-  // An hourly sample against a ten-minute tick. The correction is applied and
-  // stated rather than silently omitted.
-  const TICKS_PER_SAMPLE = 6;
-  const observedDays = Math.max(1, samples / 24);
-  const firesPerWeek = Math.round((fires / observedDays) * 7 * TICKS_PER_SAMPLE * 10) / 10;
+  const fires = emitted.size;
+  const observedDays = Math.max(1, samples / (24 * 6));
+  const firesPerWeek = Math.round((fires / observedDays) * 7 * 10) / 10;
 
   const lowerBound = missingFacts.length > 0;
   const noteParts = [
-    `${fires} fires across ${samples} hourly samples over ${Math.round(observedDays)} days`,
-    `≈${firesPerWeek}/week once scaled to the 10-minute tick`,
+    `${fires} unique emissions from ${conditionHits} true ticks across ${samples} ten-minute samples over ${Math.round(observedDays)} days`,
+    `≈${firesPerWeek}/week after ${spec.dedupe} dedupe`,
   ];
   if (lowerBound) {
     noteParts.push(
@@ -259,4 +262,33 @@ export async function backtestRule(
     // it can only get worse.
     tooNoisy: firesPerWeek > MAX_FIRES_PER_WEEK,
   };
+}
+
+/** The replay counterpart of rule-driven's live key. Kept pure and exported so
+ * the two shapes can be pinned against the same fixtures. */
+export function backtestDedupeKey(spec: RuleSpec, snapshot: DaydreamSnapshot): string {
+  const placeId = subjectPlaceLabel(snapshot).id ?? '_nowhere';
+  switch (spec.dedupe) {
+    case 'day':
+      return `${spec.kind}:${snapshot.localDate}`;
+    case 'week': {
+      const d = new Date(
+        Date.UTC(
+          snapshot.now.getUTCFullYear(),
+          snapshot.now.getUTCMonth(),
+          snapshot.now.getUTCDate(),
+        ),
+      );
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+      return `${spec.kind}:${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+    }
+    case 'place':
+      return `${spec.kind}:${placeId}`;
+    case 'place-day':
+    default:
+      return `${spec.kind}:${placeId}:${snapshot.localDate}`;
+  }
 }

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   coldStartThreshold,
+  adaptiveThreshold,
+  contextualWeight,
   contextKey,
   decayFactor,
   finalScore,
@@ -116,6 +118,28 @@ describe('coldStartThreshold', () => {
 
   it('treats a negative count as zero rather than inverting', () => {
     expect(coldStartThreshold(-10)).toBe(THRESHOLD_START);
+  });
+});
+
+describe('adaptiveThreshold', () => {
+  it('does not reward a ledger full of negative responses with a lower bar', () => {
+    const negatives = Array.from({ length: 25 }, () => vote('not_useful'));
+    expect(adaptiveThreshold(negatives, NOW)).toBeGreaterThan(coldStartThreshold(25));
+    expect(adaptiveThreshold(negatives, NOW)).toBeGreaterThan(adaptiveThreshold([], NOW));
+  });
+
+  it('ignores never-kind mutes when estimating learning support', () => {
+    expect(adaptiveThreshold(Array.from({ length: 30 }, () => vote('never_kind')), NOW)).toBe(THRESHOLD_START);
+  });
+});
+
+describe('contextualWeight', () => {
+  it('partially pools local evidence instead of letting one context take over', () => {
+    const kind = { useful: 8, notUseful: 0, n: 8 };
+    const local = { useful: 0, notUseful: 2, n: 2 };
+    const weight = contextualWeight(kind, local);
+    expect(weight).toBeLessThan(kindWeight(kind));
+    expect(weight).toBeGreaterThan(kindWeight(local));
   });
 });
 

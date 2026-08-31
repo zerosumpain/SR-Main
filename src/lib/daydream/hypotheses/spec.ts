@@ -141,6 +141,9 @@ export interface HypothesisOutcome {
 
 /** How many usable day-pairs before a verdict means anything. */
 export const MIN_PAIRS_FOR_VERDICT = 20;
+/** Statistical significance without a material effect is not a useful personal
+ * discovery. */
+export const MIN_ABS_R_FOR_VERDICT = 0.2;
 
 /**
  * Turn a corrected test result into a verdict, deterministically.
@@ -172,6 +175,14 @@ export function judge(
       verdict: 'refuted',
       r, p, qValue, n,
       summary: `No relationship worth reporting (${fmt}, q = ${qValue.toFixed(3)}).`,
+    };
+  }
+
+  if (Math.abs(r) < MIN_ABS_R_FOR_VERDICT) {
+    return {
+      verdict: 'refuted',
+      r, p, qValue, n,
+      summary: `Statistically detectable but too small to be useful (${fmt}, minimum |r| = ${MIN_ABS_R_FOR_VERDICT.toFixed(2)}).`,
     };
   }
 

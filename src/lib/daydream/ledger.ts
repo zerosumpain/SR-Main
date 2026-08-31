@@ -23,7 +23,7 @@ import { withinActiveHours as windowOpenAt } from '$lib/heartbeat/schedule';
 import { DETECTORS } from './detectors';
 import { loadProvenance } from './provenance';
 import { listSteers } from './hypotheses/steer';
-import { kindWeight, tallyFeedback, coldStartThreshold, type FeedbackRow } from './scoring';
+import { adaptiveThreshold, kindWeight, tallyFeedback, type FeedbackRow } from './scoring';
 import { mutedKinds, loadFeedback } from './thought-store';
 import type { Readiness, SnapshotSource } from './snapshot-types';
 
@@ -259,7 +259,7 @@ export async function loadRules() {
 /** The current delivery threshold, and what it is derived from. */
 export async function loadThreshold(): Promise<{ value: number; feedbackCount: number }> {
   const feedback = await loadFeedback();
-  return { value: coldStartThreshold(feedback.length), feedbackCount: feedback.length };
+  return { value: adaptiveThreshold(feedback, new Date()), feedbackCount: feedback.length };
 }
 
 export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {

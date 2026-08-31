@@ -12,14 +12,17 @@
 // key genuinely differs by kind: asking twice about the same place is annoying,
 // while a free-window suggestion should recur on a new day.
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
-import { SETTINGS_MUTED_KINDS_KEY } from './types';
+import { LOCAL_TZ, SETTINGS_MUTED_KINDS_KEY } from './types';
 import {
-  coldStartThreshold,
+  adaptiveThreshold,
+  contextKey,
+  contextualWeight,
   finalScore,
+  hourBand,
   kindWeight,
   tallyFeedback,
   type FeedbackRow,
@@ -88,6 +91,7 @@ export async function loadFeedback(sinceDays = 180): Promise<FeedbackRow[]> {
       feedbackAt: daydreamThoughts.feedbackAt,
       placeId: daydreamThoughts.placeId,
       feedbackSource: daydreamThoughts.feedbackSource,
+      createdAt: daydreamThoughts.createdAt,
     })
     .from(daydreamThoughts)
     .where(and(isNotNull(daydreamThoughts.feedback), gte(daydreamThoughts.feedbackAt, since)));
@@ -100,6 +104,13 @@ export async function loadFeedback(sinceDays = 180): Promise<FeedbackRow[]> {
       feedbackAt: r.feedbackAt as Date,
       placeId: r.placeId,
       feedbackSource: r.feedbackSource as FeedbackRow['feedbackSource'],
+      hourBand: hourBand(
+        Number(new Intl.DateTimeFormat('en-GB', {
+          timeZone: LOCAL_TZ,
+          hour: '2-digit',
+          hour12: false,
+        }).format(r.createdAt)) % 24,
+      ),
     }));
 }
 
@@ -107,20 +118,35 @@ export async function loadFeedback(sinceDays = 180): Promise<FeedbackRow[]> {
  *  tick so every candidate is judged against the same numbers. */
 export function buildScoringContext(feedback: FeedbackRow[], now: Date) {
   const byKind = new Map<string, FeedbackRow[]>();
+  const byContext = new Map<string, FeedbackRow[]>();
   for (const f of feedback) {
     const list = byKind.get(f.kind) ?? [];
     list.push(f);
     byKind.set(f.kind, list);
+    if (f.hourBand) {
+      const key = contextKey(f.kind, f.placeId, f.hourBand);
+      const local = byContext.get(key) ?? [];
+      local.push(f);
+      byContext.set(key, local);
+    }
   }
 
-  const weights = new Map<string, number>();
+  const countsByKind = new Map<string, ReturnType<typeof tallyFeedback>>();
   for (const [kind, rows] of byKind) {
-    weights.set(kind, kindWeight(tallyFeedback(rows, now)));
+    countsByKind.set(kind, tallyFeedback(rows, now));
   }
 
   return {
-    weightFor: (kind: string) => weights.get(kind) ?? 1,
-    threshold: coldStartThreshold(feedback.length),
+    weightFor: (kind: string, placeId?: string | null, band?: string) => {
+      const kindCounts = countsByKind.get(kind);
+      if (!kindCounts) return 1;
+      if (!band) return kindWeight(kindCounts);
+      const rows = byContext.get(contextKey(kind, placeId, band));
+      return rows
+        ? contextualWeight(kindCounts, tallyFeedback(rows, now))
+        : kindWeight(kindCounts);
+    },
+    threshold: adaptiveThreshold(feedback, now),
     feedbackCount: feedback.length,
   };
 }
@@ -154,6 +180,7 @@ export async function persistCandidates(
           id: daydreamThoughts.id,
           dedupeKey: daydreamThoughts.dedupeKey,
           status: daydreamThoughts.status,
+          reviewVerdict: daydreamThoughts.reviewVerdict,
         })
         .from(daydreamThoughts)
         .where(inArray(daydreamThoughts.dedupeKey, keys))
@@ -166,17 +193,33 @@ export async function persistCandidates(
       continue;
     }
 
-    const weight = scoring.weightFor(candidate.kind);
+    const localHour = Number(new Intl.DateTimeFormat('en-GB', {
+      timeZone: LOCAL_TZ,
+      hour: '2-digit',
+      hour12: false,
+    }).format(now)) % 24;
+    const weight = scoring.weightFor(candidate.kind, candidate.placeId, hourBand(localHour));
     const { score, components } = finalScore(candidate.rawScore, weight, candidate.components);
 
-    const belowThreshold = score < scoring.threshold;
-    const status = belowThreshold ? 'suppressed' : 'new';
-    const suppressedReason = belowThreshold
-      ? `below_threshold (${score} < ${scoring.threshold})`
-      : null;
-    if (belowThreshold) result.suppressed++;
-
     const found = byKey.get(candidate.dedupeKey);
+    const belowThreshold = score < scoring.threshold;
+    const rejectedByReview =
+      found?.reviewVerdict === 'refuted' || found?.reviewVerdict === 'uncertain';
+    const status = rejectedByReview
+      ? 'suppressed'
+      : found?.reviewVerdict === 'verified'
+        ? 'new'
+        : belowThreshold
+          ? 'suppressed'
+          : 'new';
+    const suppressedReason = rejectedByReview
+      ? found.reviewVerdict === 'refuted'
+        ? 'refuted_by_review'
+        : 'uncertain_after_review'
+      : belowThreshold && found?.reviewVerdict !== 'verified'
+        ? `below_threshold (${score} < ${scoring.threshold})`
+        : null;
+    if (status === 'suppressed') result.suppressed++;
 
     if (found) {
       if ((PROTECTED_STATUSES as readonly string[]).includes(found.status)) {
@@ -235,12 +278,35 @@ export async function persistCandidates(
   return result;
 }
 
-/** Thoughts waiting to be said, best first. Merge 4 reads this. */
+/**
+ * Thoughts waiting to be said, best first.
+ *
+ * A verified review supersedes the cold-start score bar. That invariant used to
+ * exist only inside `chooseChannel`: below-threshold rows had status
+ * `suppressed`, while this query selected only `new`, so the router never got a
+ * chance to apply it. Include exactly that reviewed exception here; an
+ * unreviewed or uncertain suppressed row remains feed-only.
+ */
 export async function listUndelivered(limit = 10) {
   return db
     .select()
     .from(daydreamThoughts)
-    .where(eq(daydreamThoughts.status, 'new'))
+    .where(
+      or(
+        and(
+          eq(daydreamThoughts.status, 'new'),
+          or(
+            isNull(daydreamThoughts.reviewVerdict),
+            eq(daydreamThoughts.reviewVerdict, 'verified'),
+          ),
+        ),
+        and(
+          eq(daydreamThoughts.status, 'suppressed'),
+          eq(daydreamThoughts.reviewVerdict, 'verified'),
+          isNull(daydreamThoughts.deliveredAt),
+        ),
+      ),
+    )
     .orderBy(desc(daydreamThoughts.score))
     .limit(limit);
 }

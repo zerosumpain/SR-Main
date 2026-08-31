@@ -108,10 +108,30 @@ export const daydreamCompose: ActivityHandler = {
 
     for (const thought of considered) {
       const decision = chooseChannel(
-        { kind: thought.kind, score: thought.score },
+        {
+          kind: thought.kind,
+          score: thought.score,
+          // Load-bearing. Omitting this field makes every reviewed thought look
+          // unreviewed at the final gate, so nothing can ever interrupt.
+          reviewVerdict: thought.reviewVerdict,
+        },
         rateState,
         { now, threshold, hasPushSubscriber: pushable, hasWhatsApp: waOwner },
       );
+
+      // Awaiting review is a queue state, not a delivery outcome. Calling
+      // `deliver(..., silent)` here used to rewrite `new` to `suppressed` before
+      // the reviewer ran, leaving the two heartbeats to race each other. Leave
+      // the row live and let the review activity supply the verdict.
+      if (decision.suppressedReason === 'awaiting_review') {
+        outcomes.push({
+          id: thought.id,
+          kind: thought.kind,
+          channel: 'silent',
+          reason: 'awaiting_review',
+        });
+        continue;
+      }
 
       // Nothing that is going to stay silent gets phrased unless the budget is
       // deep enough to be worth spending on the page's readability.

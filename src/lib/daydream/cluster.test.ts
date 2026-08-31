@@ -357,6 +357,11 @@ describe('coverage', () => {
     expect(coverageOf(rows, start, end, EVERY_10)).toBeCloseTo(1 / 6, 5);
   });
 
+  it('counts duplicate fixes in one cadence slot only once', () => {
+    const rows = [1, 1.1, 1.2, 11, 11.1, 11.2].map((m) => ({ ts: at(m), source: 'poll' }));
+    expect(coverageOf(rows, start, end, EVERY_10)).toBeCloseTo(2 / 6, 5);
+  });
+
   it('is 0 for a zero-length or inverted window rather than dividing by zero', () => {
     expect(coverageOf([], start, start, EVERY_10)).toBe(0);
     expect(coverageOf([], end, start, EVERY_10)).toBe(0);

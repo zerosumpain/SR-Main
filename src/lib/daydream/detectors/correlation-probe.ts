@@ -36,6 +36,28 @@ export interface Pairing {
   visits: number;
 }
 
+/** A pass is one contiguous encounter, not one polling row. */
+export function countPassEpisodes(
+  trail: DaydreamSnapshot['trail'],
+  placeId: string,
+  maxGapMins = 20,
+): number {
+  const matching = trail
+    .filter(
+      (t) =>
+        t.placeId === placeId &&
+        (t.mode === 'walking' || t.mode === 'active' || t.mode === 'vehicle'),
+    )
+    .sort((a, b) => a.ts.getTime() - b.ts.getTime());
+  let episodes = 0;
+  let previous: Date | null = null;
+  for (const point of matching) {
+    if (!previous || point.ts.getTime() - previous.getTime() > maxGapMins * 60_000) episodes++;
+    previous = point.ts;
+  }
+  return episodes;
+}
+
 /**
  * Places the owner repeatedly goes past without stopping.
  *
@@ -52,11 +74,7 @@ export function findRepeatedPasses(s: DaydreamSnapshot): Pairing[] {
 
     // Fixes that fell inside the place's radius but belonged to a moving
     // segment — near it, not at it.
-    const passes = s.trail.filter(
-      (t) =>
-        t.placeId === place.id &&
-        (t.mode === 'walking' || t.mode === 'active' || t.mode === 'vehicle'),
-    ).length;
+    const passes = countPassEpisodes(s.trail, place.id);
 
     if (passes < MIN_SUPPORT) continue;
     out.push({ place, passes, visits: place.visitCount });

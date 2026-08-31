@@ -181,6 +181,20 @@ export function pValueForR(r: number, n: number): number {
   return Math.min(1, Math.max(0, p));
 }
 
+/** Effective independent observations after first-order serial correlation.
+ * Daily health and behaviour values are sticky; treating 60 adjacent days as
+ * 60 independent experiments makes ordinary p-values far too optimistic. */
+export function effectiveSampleSize(xs: number[], ys: number[]): number {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 4) return n;
+  const rx = pearson(xs.slice(0, -1), xs.slice(1));
+  const ry = pearson(ys.slice(0, -1), ys.slice(1));
+  // Opposing/negative lag correlation does not justify inventing more samples;
+  // only shared persistence reduces the effective count.
+  const persistence = Math.max(0, Math.min(0.99, rx * ry));
+  return Math.max(3, Math.min(n, Math.floor(n * ((1 - persistence) / (1 + persistence)))));
+}
+
 /** Correlate two aligned series, dropping any index where either is missing. */
 export function correlate(
   xs: Array<number | null>,
@@ -201,7 +215,8 @@ export function correlate(
   const n = a.length;
   if (n < MIN_PAIRS) return { r: 0, p: 1, n };
   const r = method === 'pearson' ? pearson(a, b) : spearman(a, b);
-  return { r, p: pValueForR(r, n), n };
+  const effectiveN = effectiveSampleSize(a, b);
+  return { r, p: pValueForR(r, effectiveN), n };
 }
 
 // ── multiple comparisons ─────────────────────────────────────────────────────

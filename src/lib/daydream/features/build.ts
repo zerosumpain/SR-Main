@@ -484,7 +484,12 @@ export function collapse(b: DayBucket, subject: string) {
     meanHeartRate: plausible('meanHeartRate', appleAgg('heart_rate')),
     hrvMs: plausible('hrvMs', appleAgg('heart_rate_variability')),
 
-    restingHeartRate: plausible('restingHeartRate', recovery?.rhr ?? null),
+    // Apple's device webhook is the owner's canonical HR source. Whoop remains
+    // a fallback for historical rows, never a gate that can hide live Apple HR.
+    restingHeartRate: plausible(
+      'restingHeartRate',
+      appleAgg('resting_heart_rate') ?? recovery?.rhr ?? null,
+    ),
     recoveryScore: plausible('recoveryScore', recovery?.score ?? null),
     strain: plausible('strain', b.strain.length ? aggregate(b.strain, 'max') : null),
 

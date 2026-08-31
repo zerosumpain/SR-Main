@@ -329,12 +329,18 @@ export function coverageOf(
   if (spanMins <= 0) return 0;
 
   const expected = Math.max(1, Math.floor(spanMins / pollIntervalMins));
-  const observed = rows.filter(
-    (r) =>
-      r.source !== 'gap' &&
-      r.ts.getTime() >= windowStart.getTime() &&
-      r.ts.getTime() <= windowEnd.getTime(),
-  ).length;
+  // Count occupied cadence buckets, not rows. Retries and duplicate sensor
+  // writers can produce several fixes in one polling slot; treating each as a
+  // separately observed slice lets a short burst impersonate a full window.
+  const buckets = new Set<number>();
+  const intervalMs = pollIntervalMins * 60_000;
+  for (const r of rows) {
+    const ts = r.ts.getTime();
+    if (r.source === 'gap' || ts < windowStart.getTime() || ts > windowEnd.getTime()) continue;
+    const bucket = Math.min(expected - 1, Math.floor((ts - windowStart.getTime()) / intervalMs));
+    buckets.add(Math.max(0, bucket));
+  }
+  const observed = buckets.size;
 
   return Math.min(1, observed / expected);
 }

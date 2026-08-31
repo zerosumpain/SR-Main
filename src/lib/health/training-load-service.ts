@@ -20,7 +20,7 @@ import type { TrainingLoadResponse } from './types';
  * Calculate the Acute:Chronic Workload Ratio from a daily load history.
  *
  * - acute  = sum of last 7 days of load
- * - chronic = average daily load across all provided days * 7
+ * - chronic = average daily load across the preceding 21 days * 7
  * - ratio  = acute / chronic
  *
  * Returns zeros for empty input.
@@ -32,13 +32,16 @@ export function calculateACWR(
 		return { acute: 0, chronic: 0, ratio: 0 };
 	}
 
-	const totalLoad = history.reduce((sum, d) => sum + d.load, 0);
-
 	// Acute = sum of last 7 days (or all if < 7)
 	const acute = history.slice(-7).reduce((sum, d) => sum + d.load, 0);
 
-	// Chronic = average daily load * 7 (weekly equivalent)
-	const chronic = history.length > 0 ? (totalLoad / history.length) * 7 : 0;
+	// Chronic is the PRIOR baseline. Including the acute week in both numerator
+	// and denominator mechanically pulls every spike back toward 1 and hides the
+	// very change the ratio is meant to expose.
+	const chronicWindow = history.slice(0, Math.max(0, history.length - 7)).slice(-21);
+	const chronic = chronicWindow.length
+		? (chronicWindow.reduce((sum, d) => sum + d.load, 0) / chronicWindow.length) * 7
+		: 0;
 
 	const ratio = chronic > 0 ? acute / chronic : 0;
 
@@ -96,6 +99,7 @@ export async function getTrainingLoad(): Promise<TrainingLoadResponse> {
 	const startDate = new Date(today.getTime() - lookbackMs);
 	const startUnix = Math.floor(startDate.getTime() / 1000);
 	const endUnix = Math.floor(now.getTime() / 1000);
+	const acuteSinceUnix = endUnix - 7 * 24 * 60 * 60;
 
 	// Query Whoop cycles and Strava activities in parallel
 	const [cycles, activities] = await Promise.all([
@@ -118,33 +122,41 @@ export async function getTrainingLoad(): Promise<TrainingLoadResponse> {
 
 	// Build date -> load map
 	const loadMap = new Map<string, number>();
+	// Do not splice two unrelated scales into one time series. WHOOP's 0–21
+	// strain and the Strava duration×intensity estimate are each internally useful
+	// but have no defensible conversion between them. Prefer WHOOP only when it is
+	// current; otherwise build the entire window from Strava.
+	const useWhoop = cycles.some((cycle) => cycle.startDate >= acuteSinceUnix);
 
-	// Whoop cycles: use strain directly
-	for (const cycle of cycles) {
-		const dateKey = cycle.startDateLocal.slice(0, 10); // YYYY-MM-DD
+	// WHOOP cycle strain is already a cumulative day score and is non-additive.
+	// Multiple rows for a local day therefore collapse by max, not sum.
+	if (useWhoop) for (const cycle of cycles) {
+		const dateKey = cycle.startDateLocal.slice(0, 10);
 		const strain = realStrain(cycle.strain);
-		// Accumulate in case of multiple cycles per day
-		loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + strain);
+		loadMap.set(dateKey, Math.max(loadMap.get(dateKey) ?? 0, strain));
 	}
 
-	// Strava activities: only use if no Whoop data for that day
-	for (const activity of activities) {
+	// With no current WHOOP series, sum every Strava activity on the day. The old
+	// `if (!loadMap.has)` retained only the newest activity and silently dropped
+	// doubles, commutes and split sessions.
+	if (!useWhoop) for (const activity of activities) {
 		const dateKey = activity.startDateLocal.slice(0, 10);
-		if (!loadMap.has(dateKey)) {
-			const load = estimateStravaLoad(
-				activity.movingTime,
-				activity.averageHeartrate ?? 0,
-				activity.maxHeartrate ?? 0
-			);
-			loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + load);
-		}
+		const load = estimateStravaLoad(
+			activity.movingTime,
+			activity.averageHeartrate ?? 0,
+			activity.maxHeartrate ?? 0
+		);
+		loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + load);
 	}
 
 	// Build 28-day array (today - 27 through today)
 	const history: Array<{ date: string; load: number }> = [];
 	for (let i = 27; i >= 0; i--) {
-		const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
-		const dateKey = d.toISOString().slice(0, 10);
+		const d = new Date(today);
+		d.setDate(today.getDate() - i);
+		const dateKey = new Intl.DateTimeFormat('en-CA', {
+			year: 'numeric', month: '2-digit', day: '2-digit',
+		}).format(d);
 		history.push({
 			date: dateKey,
 			load: loadMap.get(dateKey) ?? 0,
@@ -160,6 +172,7 @@ export async function getTrainingLoad(): Promise<TrainingLoadResponse> {
 		chronic,
 		ratio,
 		zone,
+		source: useWhoop ? 'whoop' : activities.length ? 'strava' : 'none',
 		history,
 	};
 }

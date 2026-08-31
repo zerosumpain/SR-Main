@@ -8,10 +8,48 @@
  */
 
 import { db } from '$lib/db';
-import { whoopRecovery, whoopSleep } from '$lib/db/schema';
-import { desc, eq, gte } from 'drizzle-orm';
+import { appleHealthMetrics, whoopRecovery, whoopSleep } from '$lib/db/schema';
+import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import type { ReadinessResponse } from './types';
 import { getTrainingLoad } from './training-load-service';
+
+const APPLE_SCALE = 100;
+
+/** Collapse Apple's potentially many samples per local day before forming a
+ * personal baseline. Otherwise a heavily sampled day silently gets more votes
+ * than a lightly sampled one. */
+export function summariseAppleMetric(
+	rows: Array<{ date: number; dateLocal: string; value: number | null }>,
+): { latest: number; averagePreviousDays: number | null; observedAt: string } | null {
+	if (rows.length === 0) return null;
+	const byDay = new Map<string, number[]>();
+	const validRows: Array<{ date: number; dateLocal: string; value: number }> = [];
+	for (const row of rows) {
+		if (row.value == null) continue;
+		validRows.push({ ...row, value: row.value });
+		const value = row.value / APPLE_SCALE;
+		if (!Number.isFinite(value)) continue;
+		const day = /^\d{4}-\d{2}-\d{2}/.exec(row.dateLocal)?.[0]
+			?? new Date(row.date * 1000).toISOString().slice(0, 10);
+		const values = byDay.get(day) ?? [];
+		values.push(value);
+		byDay.set(day, values);
+	}
+	if (byDay.size === 0) return null;
+	const days = [...byDay.entries()]
+		.map(([day, values]) => ({ day, value: values.reduce((a, b) => a + b, 0) / values.length }))
+		.sort((a, b) => a.day.localeCompare(b.day));
+	const latestDay = days[days.length - 1];
+	const previous = days.slice(Math.max(0, days.length - 8), -1);
+	const newestRow = validRows.reduce((a, b) => (a.date > b.date ? a : b));
+	return {
+		latest: latestDay.value,
+		averagePreviousDays: previous.length
+			? previous.reduce((sum, d) => sum + d.value, 0) / previous.length
+			: null,
+		observedAt: new Date(newestRow.date * 1000).toISOString(),
+	};
+}
 
 // ==========================================
 // Pure Functions
@@ -142,11 +180,14 @@ export async function getReadiness(): Promise<ReadinessResponse> {
 	const now = new Date();
 	const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 	const sevenDaysAgo = Math.floor(todayStart.getTime() / 1000) - 7 * 24 * 60 * 60;
+	const freshSince = Math.floor(now.getTime() / 1000) - 48 * 60 * 60;
 
 	// Parallel data fetch
-	const [latestRecoveryArr, recentRecoveries, latestSleepArr, trainingLoad] = await Promise.all([
+	const [latestRecoveryArr, recentRecoveries, latestSleepArr, appleRows, trainingLoad] = await Promise.all([
 		// Latest recovery
-		db.select().from(whoopRecovery).orderBy(desc(whoopRecovery.createdDate)).limit(1),
+		db.select().from(whoopRecovery)
+			.where(gte(whoopRecovery.createdDate, freshSince))
+			.orderBy(desc(whoopRecovery.createdDate)).limit(1),
 
 		// Last 7 recoveries for HRV average
 		db
@@ -160,9 +201,25 @@ export async function getReadiness(): Promise<ReadinessResponse> {
 		db
 			.select()
 			.from(whoopSleep)
-			.where(eq(whoopSleep.nap, false))
+			.where(and(eq(whoopSleep.nap, false), gte(whoopSleep.endDate, freshSince)))
 			.orderBy(desc(whoopSleep.startDate))
 			.limit(1),
+
+		// HR/HRV comes from the Apple webhook for this owner. Whoop remains a
+		// fallback so historical/self-hosted installations keep working.
+		db
+			.select({
+				metricName: appleHealthMetrics.metricName,
+				date: appleHealthMetrics.date,
+				dateLocal: appleHealthMetrics.dateLocal,
+				value: appleHealthMetrics.value,
+			})
+			.from(appleHealthMetrics)
+			.where(and(
+				gte(appleHealthMetrics.date, sevenDaysAgo - 24 * 60 * 60),
+				inArray(appleHealthMetrics.metricName, ['heart_rate_variability', 'resting_heart_rate']),
+			))
+			.orderBy(desc(appleHealthMetrics.date)),
 
 		// Training load (ACWR)
 		getTrainingLoad(),
@@ -175,13 +232,20 @@ export async function getReadiness(): Promise<ReadinessResponse> {
 	const hrvValues = recentRecoveries
 		.map((r) => r.hrvRmssd)
 		.filter((v): v is number => v != null);
-	const hrv7DayAvg =
+	const whoopHrv7DayAvg =
 		hrvValues.length > 0 ? hrvValues.reduce((sum, v) => sum + v, 0) / hrvValues.length : null;
+	const appleHrv = summariseAppleMetric(
+		appleRows.filter((r) => r.metricName === 'heart_rate_variability'),
+	);
 
 	// Compute individual factors
 	const recoveryValue = latestRecovery?.recoveryScore ?? 50;
 
-	const hrvTodayVal = latestRecovery?.hrvRmssd ?? null;
+	const hrvTodayVal = appleHrv?.latest ?? latestRecovery?.hrvRmssd ?? null;
+	const hrv7DayAvg = appleHrv?.averagePreviousDays ?? whoopHrv7DayAvg;
+	const hrvSource = appleHrv ? 'apple' as const : latestRecovery ? 'whoop' as const : undefined;
+	const hrvObservedAt = appleHrv?.observedAt
+		?? (latestRecovery ? new Date(latestRecovery.createdDate * 1000).toISOString() : undefined);
 	const { value: hrvNormalized, direction: hrvDirection } =
 		hrvTodayVal != null && hrv7DayAvg != null
 			? normalizeHrvTrend(hrvTodayVal, hrv7DayAvg)
@@ -207,7 +271,15 @@ export async function getReadiness(): Promise<ReadinessResponse> {
 		recommendation,
 		factors: {
 			recovery: { value: recoveryValue, weight: 0.4 },
-			hrvTrend: { value: hrvNormalized, weight: 0.2, direction: hrvDirection, raw: hrvTodayVal ?? undefined, avg7d: hrv7DayAvg ?? undefined },
+			hrvTrend: {
+				value: hrvNormalized,
+				weight: 0.2,
+				direction: hrvDirection,
+				raw: hrvTodayVal ?? undefined,
+				avg7d: hrv7DayAvg ?? undefined,
+				source: hrvSource,
+				observedAt: hrvObservedAt,
+			},
 			sleepQuality: { value: sleepValue, weight: 0.2 },
 			loadBalance: { value: loadValue, weight: 0.2, zone: loadZone },
 		},

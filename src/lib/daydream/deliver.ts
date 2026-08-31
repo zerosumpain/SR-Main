@@ -60,6 +60,13 @@ export interface RateState {
   lastByKind: Map<string, Date>;
 }
 
+/** Every channel that actually interrupts the owner. Keep this predicate shared
+ * by the persisted rate-state reader and tests: adding a preferred transport
+ * without adding it here silently resets all limits on the next heartbeat. */
+export function isInterruptingChannel(channel: string | null | undefined): boolean {
+  return channel === 'whatsapp' || channel === 'push' || channel === 'chat';
+}
+
 export async function readRateState(now: Date): Promise<RateState> {
   const dayStart = localDayStart(now);
   const since = new Date(Math.min(dayStart.getTime(), now.getTime() - PER_KIND_COOLDOWN_HOURS * 3_600_000));
@@ -78,7 +85,7 @@ export async function readRateState(now: Date): Promise<RateState> {
   // landed on the page has cost the owner nothing and must not use up the day's
   // allowance — otherwise the ledger filling itself in would silence the
   // notifications, which is precisely backwards.
-  const interrupting = rows.filter((r) => r.channel === 'push' || r.channel === 'chat');
+  const interrupting = rows.filter((r) => isInterruptingChannel(r.channel));
 
   const lastByKind = new Map<string, Date>();
   for (const r of interrupting) {

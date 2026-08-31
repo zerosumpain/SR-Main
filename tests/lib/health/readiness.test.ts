@@ -4,7 +4,22 @@ import {
 	classifyLoadBalance,
 	calculateReadinessScore,
 	getReadinessLabel,
+	summariseAppleMetric,
 } from '$lib/health/readiness-service';
+
+describe('summariseAppleMetric', () => {
+	it('gives each local day one vote and exposes freshness', () => {
+		const rows = [
+			{ date: 100, dateLocal: '2026-08-29 08:00:00 +0100', value: 4000 },
+			{ date: 101, dateLocal: '2026-08-29 09:00:00 +0100', value: 6000 },
+			{ date: 200, dateLocal: '2026-08-30 08:00:00 +0100', value: 7000 },
+		];
+		const result = summariseAppleMetric(rows);
+		expect(result?.latest).toBe(70);
+		expect(result?.averagePreviousDays).toBe(50);
+		expect(result?.observedAt).toBe(new Date(200_000).toISOString());
+	});
+});
 
 describe('normalizeHrvTrend', () => {
 	it('returns stable at 50 when avg7d is 0', () => {

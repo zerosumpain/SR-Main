@@ -191,6 +191,37 @@ export function coldStartThreshold(
   return Math.round(t * 1000) / 1000;
 }
 
+/** Effective, provenance- and age-weighted evidence behind the global bar. */
+export function effectiveFeedbackCount(rows: FeedbackRow[], now: Date): number {
+  const counts = tallyFeedback(rows, now);
+  return counts.useful + counts.notUseful;
+}
+
+/** A cold-start bar that responds to observed precision, not merely activity. */
+export function adaptiveThreshold(rows: FeedbackRow[], now: Date): number {
+  const counts = tallyFeedback(rows, now);
+  const effectiveN = counts.useful + counts.notUseful;
+  const learned = coldStartThreshold(effectiveN);
+  const posterior =
+    (counts.useful + PRIOR_USEFUL) /
+    (effectiveN + PRIOR_USEFUL + PRIOR_NOT_USEFUL);
+  // Poor precision adds caution back. Negative/inferred activity can no longer
+  // lower the global bar merely by filling rows in the ledger.
+  const precisionPenalty = Math.max(0, 0.5 - posterior) * 0.6;
+  return Math.round(
+    Math.min(0.9, Math.max(THRESHOLD_FLOOR, learned + precisionPenalty)) * 1000,
+  ) / 1000;
+}
+
+/** Partially pool a sparse place/time preference toward its kind preference. */
+export function contextualWeight(kindCounts: WeightCounts, contextCounts: WeightCounts): number {
+  const base = kindWeight(kindCounts);
+  const localN = contextCounts.useful + contextCounts.notUseful;
+  if (localN <= 0) return base;
+  const blend = localN / (localN + 5);
+  return Math.round((base * (1 - blend) + kindWeight(contextCounts) * blend) * 1000) / 1000;
+}
+
 /**
  * Final score, and why.
  *
