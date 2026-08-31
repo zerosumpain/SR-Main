@@ -102,6 +102,16 @@ export interface LedgerPlace {
   lastSeenAt: string | null;
   status: string;
   hasMemory: boolean;
+  /**
+   * What the background geocoder thinks is there.
+   *
+   * Already on the row and already sent for the naming QUEUE; the list had
+   * never carried it, so an unnamed place arrived at the page as a rhythm and
+   * nothing else and every card in the list read identically. It is a guess
+   * and is labelled as one — only a confirmed name is ever quoted back as fact.
+   */
+  suggestedLabel: string | null;
+  suggestedAddress: string | null;
 }
 
 export interface DetectorRow {
@@ -362,6 +372,8 @@ export async function loadPlaces(): Promise<LedgerPlace[]> {
     lastSeenAt: p.lastSeenAt?.toISOString() ?? null,
     status: p.status,
     hasMemory: p.memoryId != null,
+    suggestedLabel: p.suggestedLabel,
+    suggestedAddress: p.suggestedAddress,
   }));
 }
 
