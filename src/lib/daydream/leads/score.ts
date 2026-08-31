@@ -117,3 +117,24 @@ export function shouldAbandon(stats: LeadStats, abandonAfterBarrenRounds: number
 export function rankLeads<T extends { score: number; roundsRun: number }>(leads: T[]): T[] {
   return leads.slice().sort((a, b) => b.score - a.score || a.roundsRun - b.roundsRun);
 }
+
+/**
+ * Has anything happened that could vindicate this round?
+ *
+ * `daydream-explore` runs HOURLY; `daydream-hypothesise`, the only thing that
+ * asks a lead's questions, runs DAILY. Between the two there is nothing a lead
+ * could possibly have done, so both judging it and advancing it in that gap
+ * spend its budget against evidence that cannot exist yet.
+ *
+ * Measured on the first lead this engine ever opened: `sleep-recovery-lag`,
+ * created 06:46, had already collected a barren round by 06:50 with zero
+ * hypotheses spawned. Against `abandonAfterBarrenRounds` of 4 it would have
+ * been abandoned by 10:50 — twelve hours before the question-asker next ran.
+ *
+ * A lead that has never had a round is judgeable: there is nothing pending.
+ */
+export function isJudgeable(lastRoundAt: Date | null, lastQuestionAt: Date | null): boolean {
+  if (lastRoundAt == null) return true;
+  if (lastQuestionAt == null) return false;
+  return lastQuestionAt > lastRoundAt;
+}
