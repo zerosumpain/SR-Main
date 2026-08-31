@@ -124,15 +124,56 @@ export function isFeedOnly(kind: string): boolean {
 }
 
 export function chooseChannel(
-  thought: { kind: string; score: number },
+  thought: { kind: string; score: number; reviewVerdict?: string | null },
   state: RateState,
   opts: { now: Date; threshold: number; hasPushSubscriber: boolean; hasWhatsApp?: boolean },
 ): DeliveryDecision {
-  const { now, threshold } = opts;
+  const { now } = opts;
+  // `opts.threshold` is deliberately no longer read here. It was the delivery
+  // gate until the reviewer existed; a verified thought now passes regardless
+  // of it, and an unverified one is silent regardless of it, so it gates
+  // nothing. It is still what the feed measures likelihood against, so it
+  // stays on the signature rather than being ripped out of every caller.
 
-  if (thought.score < threshold) {
-    return { channel: 'silent', suppressedReason: `below_threshold (${thought.score} < ${threshold})` };
+  // ── The review decides whether he hears about it at all ─────────────────
+  //
+  // Owner's instruction, 2026-08-31: only a thought a model has checked
+  // against the sources may reach him. Everything upstream of the reviewer
+  // checks that a claim is well FORMED — cites its cards, matches its rule —
+  // and none of it asks whether the claim is RIGHT. "You were charged twice
+  // for Canva" passes every one of those checks while being an invoice and a
+  // bank line describing one payment.
+  //
+  // Unreviewed is silent, not sent. A thought waits for its verdict; the
+  // reviewer runs every few minutes and the interruption budget is 4 a day, so
+  // the wait costs nothing and the alternative is delivering exactly the
+  // unchecked claims this stage exists to stop.
+  if (thought.reviewVerdict === 'refuted') {
+    // Not lost — it stays on the feed with the reviewer's reasoning beside it,
+    // and the Sunday letter reports what was caught. It simply never
+    // interrupts him.
+    return { channel: 'silent', suppressedReason: 'refuted_by_review' };
   }
+  if (thought.reviewVerdict !== 'verified') {
+    return {
+      channel: 'silent',
+      suppressedReason: thought.reviewVerdict === 'uncertain' ? 'uncertain_after_review' : 'awaiting_review',
+    };
+  }
+
+  // Verified overrides the threshold, and ONLY the threshold.
+  //
+  // The threshold was always a proxy for "is this any good" — a cold-start
+  // guess that opens at 0.75 and falls as feedback arrives. A reviewer that has
+  // gone and read the sources answers that question directly and better, so a
+  // verified thought is not held back by a score. Every other gate below
+  // stands: quiet hours, the per-kind cooldown, the daily cap and the minimum
+  // gap are about how often he may be interrupted, which no verdict changes.
+  //
+  // Mutes are not here and must never be moved here: `never_kind` is applied in
+  // `persistCandidates`, so a muted kind never becomes a thought at all. That
+  // ordering is what makes a mute absolute rather than something a confident
+  // model can talk past.
 
   // Checked before the interruption budget, not after: a feed-only thought
   // must not consume a slot it was never going to use.
@@ -173,11 +214,23 @@ export function chooseChannel(
 
 /** Send it, and record what happened. One channel per thought, never two. */
 export async function deliver(
-  thought: { id: string; kind: string; title: string; narrative: string | null; explanation: string },
+  thought: {
+    id: string;
+    kind: string;
+    title: string;
+    narrative: string | null;
+    explanation: string;
+    /** The claim as the reviewer restated it, once it had read the sources. */
+    reviewNarrative?: string | null;
+  },
   decision: DeliveryDecision,
   now: Date,
 ): Promise<{ sent: boolean; error: string | null }> {
-  const body = thought.narrative ?? thought.explanation;
+  // The reviewer's wording wins when it supplied one. It is the only sentence
+  // here written by something that went and checked, so a restatement it made
+  // after reading the invoice must not lose to the phrasing that prompted the
+  // check.
+  const body = thought.reviewNarrative ?? thought.narrative ?? thought.explanation;
   let sent = false;
   let error: string | null = null;
 

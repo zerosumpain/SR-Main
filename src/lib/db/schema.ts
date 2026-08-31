@@ -5189,6 +5189,39 @@ export const daydreamThoughts = pgTable(
      *  a composer that has started refusing everything is visible rather than
      *  looking like a quiet week. */
     narrativeDroppedReason: text('narrative_dropped_reason'),
+
+    // ── The review ────────────────────────────────────────────────────────
+    //
+    // `verified` above records only that the PHRASING was checked against the
+    // cards it cited. It says nothing about whether the thing is TRUE: a
+    // musing can cite its cards perfectly and still be a misreading of them,
+    // which is exactly the "you were charged twice for Canva" case where the
+    // invoice and the bank line are one payment seen twice.
+    //
+    // These columns hold a second, harder question, answered by a model that
+    // is given the thought and sent to the sources to check it. Nullable
+    // because a thought is unreviewed until it is reviewed, and "not yet
+    // looked at" must stay distinguishable from "looked at and found wanting".
+
+    /** 'verified' | 'refuted' | 'uncertain'. Null = not yet reviewed. */
+    reviewVerdict: text('review_verdict'),
+    /** The reviewer's own 0..1 estimate that the claim is true. Kept apart
+     *  from `score`, which is how much the ENGINE wanted to say it — being
+     *  confident and being worth saying are different questions. */
+    reviewLikelihood: doublePrecision('review_likelihood'),
+    /** Why, in its own words. Shown on the feed beside the claim, so a
+     *  refutation can be argued with rather than merely obeyed. */
+    reviewReasoning: text('review_reasoning'),
+    /** The claim restated once the sources have been read. Null when the
+     *  original stood. */
+    reviewNarrative: text('review_narrative'),
+    /** What it actually looked at, so a verdict resting on nothing is
+     *  visible as such. */
+    reviewSources: jsonb('review_sources').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    reviewModel: text('review_model'),
+    reviewAt: timestamp('review_at', { withTimezone: true }),
+    reviewPromptTokens: integer('review_prompt_tokens').notNull().default(0),
+    reviewCompletionTokens: integer('review_completion_tokens').notNull().default(0),
     /**
      * What the phrasing actually cost, in tokens.
      *

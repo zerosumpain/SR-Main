@@ -71,6 +71,12 @@ export const SPENDING_ACTIONS = [
   'daydream-spend',
   'daydream-ponder',
   'daydream-weekly',
+  // The reviewer is xhigh reasoning with a tool loop, on every thought — the
+  // most expensive thing on this list by some distance. Omitting an action here
+  // has happened twice before (hypothesise and spend both ran outside the caps
+  // until 2026-08-27) and the symptom is silence: the quota drains and nothing
+  // reports why.
+  'daydream-review',
 ] as const;
 
 /** @deprecated kept so an older pulse reader still resolves. */

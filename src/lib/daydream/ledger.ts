@@ -37,6 +37,16 @@ export interface LedgerThought {
    *  that nothing checked, which the minimal depth plan produces routinely. */
   verified: boolean | null;
   narrativeDroppedReason: string | null;
+  /** The review — see `$lib/daydream/adjudicate.ts`. `verified` above records
+   *  only that the PHRASING was checked against the cards it cited; these
+   *  record whether the claim survived being checked against the sources. Null
+   *  until a reviewer has looked, which is distinct from having looked and
+   *  found nothing. */
+  reviewVerdict: string | null;
+  reviewLikelihood: number | null;
+  reviewReasoning: string | null;
+  reviewNarrative: string | null;
+  reviewSources: string[];
   promptTokens: number;
   completionTokens: number;
   /** The place's name, when it has one. Joined here rather than looked up in
@@ -243,6 +253,15 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
       narrative: daydreamThoughts.narrative,
       verified: daydreamThoughts.verified,
       narrativeDroppedReason: daydreamThoughts.narrativeDroppedReason,
+      // The review. A refuted thought never reaches WhatsApp, so the feed is
+      // the only place its reasoning can be read — and a verdict you cannot
+      // see is one you cannot argue with, which is the half that makes "unless
+      // overwritten by a user" mean anything.
+      reviewVerdict: daydreamThoughts.reviewVerdict,
+      reviewLikelihood: daydreamThoughts.reviewLikelihood,
+      reviewReasoning: daydreamThoughts.reviewReasoning,
+      reviewNarrative: daydreamThoughts.reviewNarrative,
+      reviewSources: daydreamThoughts.reviewSources,
       promptTokens: daydreamThoughts.promptTokens,
       completionTokens: daydreamThoughts.completionTokens,
       score: daydreamThoughts.score,
@@ -276,6 +295,11 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     narrative: r.narrative,
     verified: r.verified,
     narrativeDroppedReason: r.narrativeDroppedReason,
+    reviewVerdict: r.reviewVerdict,
+    reviewLikelihood: r.reviewLikelihood,
+    reviewReasoning: r.reviewReasoning,
+    reviewNarrative: r.reviewNarrative,
+    reviewSources: (r.reviewSources ?? []) as string[],
     promptTokens: r.promptTokens,
     completionTokens: r.completionTokens,
     placeLabel: r.placeLabel,
