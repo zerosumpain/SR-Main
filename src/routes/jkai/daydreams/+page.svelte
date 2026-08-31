@@ -67,6 +67,52 @@
   })();
   let tab = $state<TabId>(initialTab);
 
+  /**
+   * Follow the URL when it changes under us.
+   *
+   * `initialTab` runs ONCE, at component init. A link from one room of the hub
+   * to another — `?tab=places#place-x` on a feed card — is a same-route
+   * navigation, so SvelteKit reuses this component, re-runs `load`, and never
+   * re-executes the instance script. Without this the URL changed and the page
+   * did not: every in-hub clickthrough was a no-op that looked like a broken
+   * button.
+   *
+   * Same shape as the `rateId` effect below, and for the same reason: the
+   * tracked read is the URL, the write is untracked, so this cannot re-trigger
+   * on the value it just assigned. `setTab`'s own `replaceState` lands here
+   * too, and assigning `tab` the value it already holds is a no-op.
+   */
+  const urlTab = $derived(page.url.searchParams.get('tab'));
+  $effect(() => {
+    const q = urlTab;
+    untrack(() => {
+      if (q && q !== tab && TABS.some((t) => t.id === q)) {
+        tab = q as TabId;
+        if (q === 'family' && famPositions == null && !famLoading) void loadFamilyMap();
+      }
+    });
+  });
+
+  /**
+   * Scroll to the row a `#place-…` fragment names.
+   *
+   * The browser resolves a fragment at navigation time, which is BEFORE the
+   * Places tab has rendered its list — so the element does not exist yet and
+   * the jump silently does nothing. Re-doing it after the tab has painted is
+   * the fix; `requestAnimationFrame` is enough because the list is already in
+   * the page payload and needs no fetch.
+   */
+  $effect(() => {
+    const hash = page.url.hash;
+    const onTab = tab;
+    untrack(() => {
+      if (!hash.startsWith('#place-') || onTab !== 'places') return;
+      requestAnimationFrame(() => {
+        document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'center' });
+      });
+    });
+  });
+
   function setTab(next: TabId) {
     tab = next;
     const url = new URL(page.url);
@@ -3035,7 +3081,11 @@
 
             <div class="stack tight">
               {#each unnamedOrdered as p (p.id)}
-                <div class="card t-{placeTone(p, askAtVisits)} row">
+                <!-- The anchor a feed card's "In Places" link lands on. Without
+                     an id here that link reaches the tab and then leaves you to
+                     find the row yourself, which on a list of thirty is not a
+                     clickthrough. `scroll-margin-top` clears the sticky rail. -->
+                <div id="place-{p.id}" class="card t-{placeTone(p, askAtVisits)} row anchored">
                   <div class="row-id">
                     <!-- The geocoder's guess, marked as a guess. Without it every
                          card in this list reads "somewhere you stop" and the
@@ -3146,7 +3196,7 @@
               </thead>
               <tbody>
                 {#each namedOrdered as p (p.id)}
-                  <tr>
+                  <tr id="place-{p.id}" class="anchored">
                     <td class="cell-lead"><span class="cell-title">{p.label}</span></td>
                     <td>{p.kind}</td>
                     <td class="cell-wrap">{rhythm(p)}</td>
@@ -4067,6 +4117,12 @@
 
   .card-map {
     margin-top: 12px;
+  }
+
+  /* A row a fragment can land on. The tab rail is sticky, so without this the
+     scrolled-to row sits underneath it — the same 60px the bands allow for. */
+  .anchored {
+    scroll-margin-top: 72px;
   }
 
   .card {
