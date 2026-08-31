@@ -87,6 +87,7 @@ export const daydreamReview: ActivityHandler = {
     const before = await readQuotaMark();
     const counts = { verified: 0, refuted: 0, uncertain: 0, failed: 0 };
     let toolCalls = 0;
+    let flipped = 0;
     let promptTokens = 0;
     let completionTokens = 0;
     const caught: string[] = [];
@@ -96,6 +97,7 @@ export const daydreamReview: ActivityHandler = {
       promptTokens += r.tokens.prompt;
       completionTokens += r.tokens.completion;
       toolCalls += r.toolCalls;
+      if (r.likelihoodFlipped) flipped++;
 
       if (r.error) {
         // Deliberately NOT recorded as a verdict. A failed review must leave
@@ -130,6 +132,9 @@ export const daydreamReview: ActivityHandler = {
       `${counts.uncertain} uncertain`,
       ...(counts.failed ? [`${counts.failed} failed`] : []),
       `${toolCalls} source lookup(s)`,
+      // A field quietly coming to mean something other than its name is worth
+      // seeing. Every refutation on the first live runs arrived in the nineties.
+      ...(flipped ? [`${flipped} likelihood(s) turned round`] : []),
     ];
 
     return {
@@ -143,6 +148,7 @@ export const daydreamReview: ActivityHandler = {
         model: REVIEW_MODEL_ID,
         ...counts,
         toolCalls,
+        likelihoodFlipped: flipped,
         caught,
       },
     };

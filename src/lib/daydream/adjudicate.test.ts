@@ -55,10 +55,57 @@ describe('the verdict is coerced, never trusted', () => {
   });
 
   it('clamps the likelihood into 0..1 and defaults a missing one to zero', () => {
-    expect(validate({ verdict: 'refuted', likelihood: 7 }, []).likelihood).toBe(1);
+    // Clamped first, then made coherent with the verdict — 7 becomes 1, which
+    // contradicts a refutation, so it lands at 0.
+    expect(validate({ verdict: 'refuted', likelihood: 7 }, []).likelihood).toBe(0);
     expect(validate({ verdict: 'refuted', likelihood: -3 }, []).likelihood).toBe(0);
     expect(validate({ verdict: 'refuted', likelihood: 'high' }, []).likelihood).toBe(0);
     expect(validate({ verdict: 'refuted' }, []).likelihood).toBe(0);
+    expect(validate({ verdict: 'verified', likelihood: 7, sources: ['x'] }, ['x']).likelihood).toBe(1);
+  });
+
+  // ── One scale, pointing one way ─────────────────────────────────────────
+  //
+  // `likelihood` is the probability THE CLAIM IS TRUE — the number the owner
+  // asked for. Models reliably answer a different question: on the first live
+  // runs EVERY refutation came back in the nineties, which is confidence in the
+  // verdict. Five correct refutations of a real duplicate-charge false alarm
+  // carried 0.92–0.97, which on the feed reads as "almost certainly true —
+  // refuted".
+  describe('the likelihood is turned to face the verdict', () => {
+    it('turns a refutation reported as confidence the right way round', () => {
+      const r = validate({ verdict: 'refuted', likelihood: 0.97 }, []);
+      expect(r.likelihood).toBeCloseTo(0.03);
+      expect(r.likelihoodFlipped).toBe(true);
+    });
+
+    it('turns a verification reported as doubt the right way round', () => {
+      const r = validate({ verdict: 'verified', likelihood: 0.05, sources: ['x'] }, ['x']);
+      expect(r.likelihood).toBeCloseTo(0.95);
+      expect(r.likelihoodFlipped).toBe(true);
+    });
+
+    it('leaves a coherent pair alone', () => {
+      const a = validate({ verdict: 'refuted', likelihood: 0.04 }, []);
+      expect(a.likelihood).toBeCloseTo(0.04);
+      expect(a.likelihoodFlipped).toBe(false);
+
+      const b = validate({ verdict: 'verified', likelihood: 0.96, sources: ['x'] }, ['x']);
+      expect(b.likelihood).toBeCloseTo(0.96);
+      expect(b.likelihoodFlipped).toBe(false);
+    });
+
+    it('never touches the verdict itself — only the number', () => {
+      // The verdict is the outcome. Turning a number round must not turn a
+      // refutation into a verification.
+      expect(validate({ verdict: 'refuted', likelihood: 0.97 }, []).verdict).toBe('refuted');
+    });
+
+    it('leaves an uncertain verdict alone, whichever way it points', () => {
+      // "I cannot tell" carries no claim about the direction.
+      expect(validate({ verdict: 'uncertain', likelihood: 0.9 }, []).likelihood).toBeCloseTo(0.9);
+      expect(validate({ verdict: 'uncertain', likelihood: 0.1 }, []).likelihoodFlipped).toBe(false);
+    });
   });
 
   it('records what it actually called, not only what it says it checked', () => {
