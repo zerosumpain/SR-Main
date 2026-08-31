@@ -7,7 +7,7 @@ import { interestMeetsPlace, recurringInterests } from './interest-meets-place';
 import { contextMeetsHealth } from './context-meets-health';
 import { freeWindow, learnedBusyHour, localDay, localHour } from './free-window';
 import { patternBreak, findRoutines } from './pattern-break';
-import { correlationProbe, findRepeatedPasses, isoWeek, MIN_SUPPORT } from './correlation-probe';
+import { correlationProbe, countPassEpisodes, findRepeatedPasses, isoWeek, MIN_SUPPORT } from './correlation-probe';
 import { looseMatch, positionIsUsable } from './shared';
 import { ruleDriven, setActiveRules, dedupeKeyFor } from './rule-driven';
 import type { RuleSpec } from '../rules/spec';
@@ -438,6 +438,16 @@ describe('free_window', () => {
     expect(freeWindow.detect(s)).toEqual([]);
   });
 
+  it('will not call an afternoon free when the diary is unavailable', () => {
+    const s = snap({
+      trail: arrivalTrail(6),
+      health: { ...snap().health, daysSinceWorkout: 5 },
+      localHour: 12,
+      calendar: { events: [], hiddenCount: 0, partial: false, available: false },
+    });
+    expect(freeWindow.detect(s)).toEqual([]);
+  });
+
   it('stands down when something is already in the diary', () => {
     const s = snap({
       trail: arrivalTrail(6),
@@ -568,6 +578,15 @@ describe('correlation_probe', () => {
     });
     expect(findRepeatedPasses(s)).toHaveLength(0);
     expect(correlationProbe.detect(s)).toEqual([]);
+  });
+
+  it('counts a burst of polling rows as one physical pass', () => {
+    const burst = Array.from({ length: 12 }, (_, i) => ({
+      ...passes(1)[0],
+      id: i,
+      ts: new Date(NOW.getTime() + i * 2 * 60_000),
+    }));
+    expect(countPassEpisodes(burst, 'shop')).toBe(1);
   });
 
   it('needs six weeks of trail regardless of how many passes it sees', () => {

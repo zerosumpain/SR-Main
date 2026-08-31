@@ -132,6 +132,8 @@ describe('health types', () => {
   it('SleepAnalysis has latest and trend fields', () => {
     const sleep: SleepAnalysis = {
       latest: {
+        date: '2026-03-20',
+        endedAt: '2026-03-20T07:00:00.000Z',
         totalDuration: 28800000,
         lightPercent: 50,
         deepPercent: 20,
@@ -146,7 +148,7 @@ describe('health types', () => {
         { date: '2026-03-20', duration: 28800000, performance: 85 },
       ],
     };
-    expect(sleep.latest.deepPercent).toBe(20);
+    expect(sleep.latest?.deepPercent).toBe(20);
     expect(sleep.trend).toHaveLength(2);
   });
 

@@ -34,7 +34,15 @@ export interface ReadinessResponse {
   label: string;
   factors: {
     recovery: { value: number; weight: number };
-    hrvTrend: { value: number; weight: number; direction: 'up' | 'down' | 'stable'; raw?: number; avg7d?: number };
+    hrvTrend: {
+      value: number;
+      weight: number;
+      direction: 'up' | 'down' | 'stable';
+      raw?: number;
+      avg7d?: number;
+      source?: 'apple' | 'whoop';
+      observedAt?: string;
+    };
     sleepQuality: { value: number; weight: number };
     loadBalance: { value: number; weight: number; zone: string };
   };
@@ -46,6 +54,7 @@ export interface TrainingLoadResponse {
   chronic: number;
   ratio: number;
   zone: 'detraining' | 'undertraining' | 'optimal' | 'caution' | 'danger';
+  source?: 'whoop' | 'strava' | 'none';
   history: Array<{ date: string; load: number }>;
 }
 
@@ -66,6 +75,10 @@ export interface TimelineEvent {
 
 export interface SleepAnalysis {
   latest: {
+    /** Local day on which the sleep ended. A consumer must not infer freshness
+     * from array position alone. */
+    date: string;
+    endedAt: string;
     totalDuration: number;
     lightPercent: number;
     deepPercent: number;
@@ -74,7 +87,7 @@ export interface SleepAnalysis {
     performance: number;
     consistency: number;
     efficiency: number;
-  };
+  } | null;
   trend: Array<{ date: string; duration: number; performance: number }>;
 }
 

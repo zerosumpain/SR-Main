@@ -3,6 +3,7 @@ import {
   benjaminiHochberg,
   correlate,
   DEFAULT_FDR,
+  effectiveSampleSize,
   MIN_PAIRS,
   pearson,
   pValueForR,
@@ -90,6 +91,14 @@ describe('correlate', () => {
     expect(res.n).toBeLessThan(MIN_PAIRS);
     expect(res.r).toBe(0);
     expect(res.p).toBe(1);
+  });
+});
+
+describe('time-series effective sample size', () => {
+  it('discounts two persistent daily series', () => {
+    const xs = Array.from({ length: 60 }, (_, i) => i + Math.sin(i) * 0.01);
+    const ys = xs.map((x) => x * 2);
+    expect(effectiveSampleSize(xs, ys)).toBeLessThan(10);
   });
 });
 

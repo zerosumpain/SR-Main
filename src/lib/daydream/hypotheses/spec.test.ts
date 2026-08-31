@@ -84,6 +84,12 @@ describe('judge', () => {
     expect(o.summary).toContain('No relationship');
   });
 
+  it('does not promote a trivial effect merely because it is significant', () => {
+    const o = judge({ direction: 'either' }, { r: 0.1, p: 0.001, qValue: 0.01, n: 500 }, fdr);
+    expect(o.verdict).toBe('refuted');
+    expect(o.summary).toContain('too small');
+  });
+
   // THE case this function exists for. A claim that predicted positive and
   // found a significant NEGATIVE relationship has been refuted, however small
   // the p-value. Reporting it as supported — because something significant

@@ -31,7 +31,7 @@ describe('calculateACWR', () => {
 		expect(result.acute).toBe(70); // last 7: 10*7
 	});
 
-	it('computes chronic as (total / days) * 7', () => {
+	it('computes chronic from the days preceding the acute week', () => {
 		// 14 days of equal load=10 each
 		const history = Array.from({ length: 14 }, (_, i) => ({
 			date: `2026-02-${String(i + 1).padStart(2, '0')}`,
@@ -55,7 +55,7 @@ describe('calculateACWR', () => {
 		expect(result.ratio).toBe(0);
 	});
 
-	it('uses all entries for chronic even if fewer than 28 days', () => {
+	it('does not manufacture a chronic baseline from the acute days', () => {
 		// 3 days: loads 10, 20, 30
 		const history = [
 			{ date: '2026-02-25', load: 10 },
@@ -63,11 +63,21 @@ describe('calculateACWR', () => {
 			{ date: '2026-02-27', load: 30 },
 		];
 		const result = calculateACWR(history);
-		// totalLoad = 60, avgDaily = 20, chronic = 20 * 7 = 140
-		expect(result.chronic).toBe(140);
+		expect(result.chronic).toBe(0);
 		// acute = sum of all 3 (< 7): 60
 		expect(result.acute).toBe(60);
-		expect(result.ratio).toBeCloseTo(60 / 140, 5);
+		expect(result.ratio).toBe(0);
+	});
+
+	it('does not dilute an acute spike by including it in chronic load', () => {
+		const history = [
+			...Array.from({ length: 21 }, (_, i) => ({ date: `base-${i}`, load: 10 })),
+			...Array.from({ length: 7 }, (_, i) => ({ date: `acute-${i}`, load: 20 })),
+		];
+		const result = calculateACWR(history);
+		expect(result.chronic).toBe(70);
+		expect(result.acute).toBe(140);
+		expect(result.ratio).toBe(2);
 	});
 });
 

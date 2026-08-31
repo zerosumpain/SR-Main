@@ -117,7 +117,12 @@ export async function testDueHypotheses(
       h.lagDays === 0
         ? correlate(xs, ys)
         : correlate(xs.slice(0, -1), ys.slice(1));
-    return { item: h, p: res.p, r: res.r, n: res.n };
+    // Alpha spending across repeated looks. Without it, asking the same question
+    // every fortnight eventually manufactures a hit even when every individual
+    // test is valid. Bonferroni over this hypothesis's observed looks is simple,
+    // auditable, and conservative in the safe direction.
+    const looks = Math.max(1, h.retestCount + 1);
+    return { item: h, p: Math.min(1, res.p * looks), r: res.r, n: res.n };
   });
 
   // ONE correction across the whole batch.

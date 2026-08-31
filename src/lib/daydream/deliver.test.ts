@@ -5,6 +5,7 @@ import {
   MIN_GAP_HOURS,
   PER_KIND_COOLDOWN_HOURS,
   QUIET_HOURS,
+  isInterruptingChannel,
   type RateState,
 } from './deliver';
 
@@ -94,6 +95,16 @@ describe('chooseChannel', () => {
     const night = new Date('2026-08-26T02:00:00Z');
     const d = chooseChannel({ kind: 'near_offer', score: 0.9 }, state(), { ...opts, now: night });
     expect(d.suppressedReason).toBe('awaiting_review');
+  });
+});
+
+describe('persisted interruption accounting', () => {
+  it('counts every transport that can buzz the owner', () => {
+    expect(isInterruptingChannel('whatsapp')).toBe(true);
+    expect(isInterruptingChannel('push')).toBe(true);
+    expect(isInterruptingChannel('chat')).toBe(true);
+    expect(isInterruptingChannel('silent')).toBe(false);
+    expect(isInterruptingChannel(null)).toBe(false);
   });
 });
 

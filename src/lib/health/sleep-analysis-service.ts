@@ -12,7 +12,7 @@ export async function getSleepAnalysis(): Promise<SleepAnalysis> {
 
   if (!sleeps.length) {
     return {
-      latest: { totalDuration: 0, lightPercent: 0, deepPercent: 0, remPercent: 0, awakePercent: 0, performance: 0, consistency: 0, efficiency: 0 },
+      latest: null,
       trend: [],
     };
   }
@@ -23,6 +23,10 @@ export async function getSleepAnalysis(): Promise<SleepAnalysis> {
 
   return {
     latest: {
+      // A night belongs to the morning on which it ended. Exposing both the day
+      // and instant prevents callers from calling an old row "last night".
+      date: new Date(latest.endDate * 1000).toISOString().slice(0, 10),
+      endedAt: new Date(latest.endDate * 1000).toISOString(),
       totalDuration: totalInBed,
       lightPercent: Math.round((latest.totalLight || 0) / totalSleep * 100),
       deepPercent: Math.round((latest.totalSlowWave || 0) / totalSleep * 100),

@@ -457,6 +457,13 @@ export async function pendingReview(limit: number): Promise<ThoughtToReview[]> {
 
 /** Record a verdict against a thought. */
 export async function recordReview(id: string, r: ReviewResult): Promise<void> {
+  const reviewStatus = r.verdict === 'verified' ? 'new' : 'suppressed';
+  const reviewReason =
+    r.verdict === 'refuted'
+      ? 'refuted_by_review'
+      : r.verdict === 'uncertain'
+        ? 'uncertain_after_review'
+        : null;
   await db
     .update(daydreamThoughts)
     .set({
@@ -469,6 +476,12 @@ export async function recordReview(id: string, r: ReviewResult): Promise<void> {
       reviewAt: new Date(),
       reviewPromptTokens: r.tokens.prompt,
       reviewCompletionTokens: r.tokens.completion,
+      // Review is the final eligibility gate. Promote a verified thought even
+      // when its cold-start score originally held it below the line; terminally
+      // suppress the other verdicts so the composer does not keep reprocessing
+      // them on every detector refresh.
+      status: reviewStatus,
+      suppressedReason: reviewReason,
       updatedAt: new Date(),
     })
     .where(eq(daydreamThoughts.id, id));

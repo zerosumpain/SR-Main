@@ -60,7 +60,7 @@ export function learnedBusyHour(
       continue;
     } // weekdays only
     const hour = localHourOf(p.ts);
-    const key = `${p.ts.toISOString().slice(0, 10)}`;
+    const key = localDate(p.ts);
     if (key !== prevKey) prevHome = null;
     prevKey = key;
 
@@ -121,12 +121,14 @@ export const freeWindow: Detector = {
 
     // A diary that could not be fully read must never be reported as empty —
     // that is how "your afternoon is free" gets said over a meeting.
-    if (s.calendar.available && !s.calendar.partial) {
+    // A diary we could not read is not an empty diary. This claim is specifically
+    // about a free window, so absence of calendar evidence must fail closed.
+    if (!s.calendar.available || s.calendar.partial) return [];
+    if (!s.calendar.partial) {
       const until = new Date(s.now.getTime() + minutesLeft * 60_000);
       const clash = s.calendar.events.find((e) => e.start < until && e.start >= s.now);
       if (clash) return [];
     }
-    if (s.calendar.partial) return [];
 
     const staleness = ramp(days, MIN_DAYS_SINCE_WORKOUT - 1, 10);
     const room = ramp(minutesLeft, MIN_WINDOW_MINS, 180);
@@ -177,4 +179,13 @@ export function localHour(d: Date): number {
 export function localDay(d: Date): number {
   const wd = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_TZ, weekday: 'short' }).format(d);
   return Math.max(0, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(wd));
+}
+
+export function localDate(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: LOCAL_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
 }

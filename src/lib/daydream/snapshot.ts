@@ -179,7 +179,7 @@ export async function buildSnapshot(
       now,
       pollIntervalMins,
     );
-  const coverage = { last24h: cov(24), last7d: cov(24 * 7) };
+  const coverage = { last24h: cov(24), last7d: cov(24 * 7), pollIntervalMins };
 
   // ── Health ─────────────────────────────────────────────────────────────
   const health: DaydreamSnapshot['health'] = {
@@ -213,6 +213,11 @@ export async function buildSnapshot(
     // started emitting impossible numbers is a fault, and a fault that shows up
     // only as silence is indistinguishable from a quiet week.
     if (sleep?.latest) {
+      const endedAt = new Date(sleep.latest.endedAt);
+      const ageHours = (now.getTime() - endedAt.getTime()) / 3_600_000;
+      if (!Number.isFinite(ageHours) || ageHours < -2 || ageHours > 36) {
+        sleepProblem = `latest sleep ended ${Number.isFinite(ageHours) ? `${Math.round(ageHours)}h ago` : 'at an invalid time'} — not treated as last night`;
+      }
       const duration = checkReading('sleepMinutes', msToMinutes(sleep.latest.totalDuration));
       const performance = checkReading('sleepPerformance', sleep.latest.performance);
       const problems = [duration.problem, performance.problem].filter(Boolean) as string[];
@@ -226,18 +231,24 @@ export async function buildSnapshot(
 
       // Both halves or neither. "You slept well" beside a duration that was
       // thrown away is a claim resting on a number nobody can see.
-      if (duration.value != null && performance.value != null) {
+      if (!sleepProblem && duration.value != null && performance.value != null) {
         health.lastNightSleep = { performance: performance.value, durationMins: duration.value };
       }
     }
     // The owner's OWN recent average, never a population norm. Needs enough
     // nights to mean anything — below that the baseline stays null and the
     // detector that uses it reports itself not ready.
-    const trend = (sleep?.trend ?? []).filter((t) => Number.isFinite(t.performance));
+    const trend = (sleep?.trend ?? []).filter(
+      (t) => Number.isFinite(t.performance) && t.performance > 0 && t.date !== sleep?.latest?.date,
+    );
     if (trend.length >= 7) {
-      const recent = trend.slice(-14);
-      health.sleepBaseline =
-        recent.reduce((a, t) => a + t.performance, 0) / recent.length;
+      // Median of the preceding fortnight: one disrupted or mis-recorded night
+      // should not move the definition of "usual" enough to hide the disruption.
+      const recent = trend.slice(-14).map((t) => t.performance).sort((a, b) => a - b);
+      const mid = Math.floor(recent.length / 2);
+      health.sleepBaseline = recent.length % 2
+        ? recent[mid]
+        : (recent[mid - 1] + recent[mid]) / 2;
     }
     sources.push({
       key: 'sleep',
@@ -287,12 +298,24 @@ export async function buildSnapshot(
     // score, so a score alone is not evidence of data. The HRV factor carries
     // its raw inputs only when a real recovery row existed — that is the gate
     // between "readiness is 50" and "there is nothing to be ready about".
-    const hasRealData = r.factors.hrvTrend.raw != null || r.factors.hrvTrend.avg7d != null;
+    const observedAt = r.factors.hrvTrend.observedAt
+      ? new Date(r.factors.hrvTrend.observedAt)
+      : null;
+    const ageHours = observedAt ? (now.getTime() - observedAt.getTime()) / 3_600_000 : Infinity;
+    const hasRealData =
+      (r.factors.hrvTrend.raw != null || r.factors.hrvTrend.avg7d != null) &&
+      Number.isFinite(ageHours) &&
+      ageHours >= -2 &&
+      ageHours <= 48;
     if (hasRealData) health.readiness = { score: Math.round(r.score), label: r.label };
     sources.push({
       key: 'readiness',
       status: health.readiness ? 'ok' : 'empty',
-      detail: health.readiness ? `${health.readiness.score} (${health.readiness.label})` : 'no recovery data',
+      detail: health.readiness
+        ? `${health.readiness.score} (${health.readiness.label}, ${r.factors.hrvTrend.source ?? 'unknown source'})`
+        : observedAt && Number.isFinite(ageHours)
+          ? `recovery data is stale (${Math.round(ageHours)}h old)`
+          : 'no recovery data',
     });
   } catch (err) {
     sources.push({ key: 'readiness', status: 'failed', detail: errMsg(err) });
