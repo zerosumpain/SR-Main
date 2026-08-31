@@ -260,7 +260,9 @@
     justify-content: space-between;
     gap: 12px;
     padding: 13px 20px;
-    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+    /* No rule: the band below is cream now, so the value change is the edge and
+       a cream-alpha hairline drawn on cream paints nothing anyway. */
+    border-bottom: none;
   }
   /* The kicker, in the cover's own colour. Scoped past the global
      `.metric-label` utility, which is written for paper. */
@@ -278,7 +280,14 @@
   /* The pulse band takes the rail's slack. The rail is as tall as the hero, and
      the alternative was a pool of dead space between the readings and the way
      out — better that the air sits under the signature numeral, which is what
-     the panel is for. */
+     the panel is for.
+     
+     PAPER, inside an ink frame. The band is the tallest thing in the rail, so
+     on ink it was the single biggest solid mass on the front door and the page
+     read as intense. Cream here does two things at once: it takes that mass
+     out, and it makes the signature reading the one lit cell of an otherwise
+     dark instrument. The kicker above it and the deck below it stay ink, so the
+     masthead's L still runs unbroken from the nav down the rail's edge. */
   .v-hero {
     display: flex;
     /* The band takes the panel's slack and CENTRES the numeral in it. Bottom
@@ -290,7 +299,10 @@
     justify-content: space-between;
     gap: 16px;
     padding: 20px;
-    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+    background: var(--bg);
+    color: var(--text-primary);
+    /* Value change is the edge on both sides — no rule above, none below. */
+    border-bottom: none;
   }
   .v-hero-read {
     display: flex;
@@ -299,7 +311,7 @@
     min-width: 0;
   }
   .v-hero .metric-label {
-    color: rgba(237, 228, 212, 0.55);
+    color: var(--text-muted);
   }
   /* The one display-scale numeral on the rail. Everything else is mono. */
   .v-hero-num {
@@ -309,7 +321,7 @@
     line-height: 0.8;
     letter-spacing: -0.05em;
     font-variant-numeric: tabular-nums;
-    color: var(--bg);
+    color: var(--text-primary);
   }
   /* No live reading. Mono and a step down, so the panel says "nothing to
      report" rather than drawing a display-weight em-dash the size of a bar. */
@@ -318,7 +330,7 @@
     font-weight: 400;
     font-size: var(--fs-num-lg);
     letter-spacing: 0;
-    color: rgba(237, 228, 212, 0.35);
+    color: var(--text-ghost);
   }
   .v-hero-dot {
     width: 9px;
@@ -326,13 +338,13 @@
     flex: none;
     margin-bottom: 6px;
     border-radius: var(--radius-pill);
-    background: var(--accent-on-dark);
+    background: var(--accent);
     /* A glow, not elevation — the one sanctioned shadow in this system. */
-    box-shadow: 0 0 8px rgba(232, 134, 58, 0.55);
+    box-shadow: var(--accent-glow);
   }
   .v-hero-dot[data-state='idle'] {
     background: transparent;
-    border: 1.5px solid rgba(237, 228, 212, 0.35);
+    border: 1.5px solid var(--text-ghost);
     box-shadow: none;
   }
   @media (prefers-reduced-motion: no-preference) {
