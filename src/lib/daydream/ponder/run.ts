@@ -30,7 +30,7 @@ import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { assemblePack, renderPack, type PackInputs } from './pack';
 import { runLookups, MAX_LOOKUPS_PER_CYCLE } from './lookups';
 import { buildProfileLines } from './profile';
-import { SWEEP_METRICS } from '../stats/sweep';
+import { SWEEP_METRICS, ENTANGLED_PAIRS } from '../stats/sweep';
 import { MIN_PAIRS } from '../stats/tests';
 import {
   MAX_ACTION_RULES,
@@ -348,6 +348,10 @@ function systemPrompt(profileLines: string[], ctx: { open: string[]; menu: strin
     // tested is visibly not worth proposing. Falls back to the bare vocabulary
     // if the count query failed — a list without numbers still beats no list.
     `   ${ctx.menu.length ? ctx.menu.join(', ') : SWEEP_METRICS.join(', ')}`,
+    // Tautologies, named. The sweep skips these pairs at test time, so a lead
+    // built on one spends a metric slot on a question that can never return an
+    // answer — which the first real lead did twice out of six pairs.
+    `   These pairs are true by definition and are SKIPPED when tested, so a lead built on one buys nothing: ${ENTANGLED_PAIRS.map(([a, b]) => `${a}+${b}`).join(', ')}.`,
     ...(ctx.open.length
       ? [
           `   ALREADY OPEN — do not propose these again, in any wording:`,
