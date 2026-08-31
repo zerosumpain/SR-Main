@@ -1239,6 +1239,28 @@
               <p class="narr-dropped">phrasing dropped — {t.narrativeDroppedReason}</p>
             {/if}
 
+            <!-- ── What the review made of it ───────────────────────────────
+                 A refuted thought never reaches WhatsApp, so this is the only
+                 place its reasoning is ever read. A verdict you cannot see is
+                 one you cannot argue with, and "the outcome unless overwritten
+                 by a user" only means something if the user can see what they
+                 would be overwriting. -->
+            {#if t.reviewVerdict}
+              <p class="review r-{t.reviewVerdict}">
+                <span class="review-tag">
+                  {t.reviewVerdict === 'verified'
+                    ? 'checked · holds up'
+                    : t.reviewVerdict === 'refuted'
+                      ? 'checked · does not hold'
+                      : 'checked · cannot tell'}
+                  {#if typeof t.reviewLikelihood === 'number'}
+                    <span class="review-p mono">{Math.round(t.reviewLikelihood * 100)}%</span>
+                  {/if}
+                </span>
+                {#if t.reviewReasoning}<span class="review-why">{t.reviewReasoning}</span>{/if}
+              </p>
+            {/if}
+
             {#if expanded === t.id}
               <div class="thought-detail">
                 <div class="detail-block">
@@ -2958,6 +2980,36 @@
     letter-spacing: 0.04em; color: var(--status-error, #c0392b); white-space: nowrap;
   }
   .narr-tag.ok { color: var(--text-ghost); }
+  .review {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem 0.6rem;
+    margin: 0.4rem 0 0;
+    padding: 0.4rem 0.6rem;
+    border-left: 2px solid var(--text-muted);
+    background: var(--bg-section);
+    font-size: 0.87rem;
+    line-height: 1.45;
+  }
+  .r-verified { border-left-color: var(--success); }
+  .r-refuted { border-left-color: var(--error); }
+  .r-uncertain { border-left-color: var(--warn); }
+
+  .review-tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    flex: none;
+  }
+  .r-verified .review-tag { color: var(--success); }
+  .r-refuted .review-tag { color: var(--error); }
+  .r-uncertain .review-tag { color: var(--warn); }
+  .review-p { opacity: 0.75; }
+  .review-why { color: var(--text-secondary); }
+
   .narr-dropped {
     margin: 0.4rem 0 0; font-family: var(--font-mono);
     font-size: var(--fs-label-xs); color: var(--text-ghost);

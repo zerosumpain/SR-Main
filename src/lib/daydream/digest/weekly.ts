@@ -16,7 +16,7 @@
 // from the daily digest, which will independently write the same calendar
 // day and must not collide with it on the (subject, day) unique key.
 
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamDigests,
@@ -45,6 +45,15 @@ export interface WeekFacts {
   auditDropped: number;
   spendMinor: number;
   topTitles: string[];
+  /** What the reviewer checked, and what it threw out. A refuted thought never
+   *  interrupts him, so the letter is the ONLY place he ever hears that the
+   *  engine caught itself — and "I nearly told you you were charged twice for
+   *  Canva" is among the more reassuring things it can say. */
+  reviewed: number;
+  reviewRefuted: number;
+  reviewUncertain: number;
+  /** The refutations themselves, best first. Quoted, not counted. */
+  caught: string[];
 }
 
 export function localDayStr(d: Date): string {
@@ -113,8 +122,38 @@ export async function gatherWeek(now: Date): Promise<WeekFacts> {
     .orderBy(sql`${daydreamThoughts.score} desc`)
     .limit(3);
 
+  // What the reviewer did this week. A refuted thought never interrupts him, so
+  // this letter is the only place it is ever mentioned.
+  const [reviewAgg] = await db
+    .select({
+      reviewed: sql<number>`count(*) filter (where ${daydreamThoughts.reviewAt} >= ${since})::int`,
+      refuted: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} = 'refuted' and ${daydreamThoughts.reviewAt} >= ${since})::int`,
+      uncertain: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} = 'uncertain' and ${daydreamThoughts.reviewAt} >= ${since})::int`,
+    })
+    .from(daydreamThoughts);
+
+  // The refutations themselves. Ranked by what the engine most wanted to say,
+  // because the interesting catch is the one it was most confident about.
+  const caughtRows = await db
+    .select({ title: daydreamThoughts.title, reasoning: daydreamThoughts.reviewReasoning })
+    .from(daydreamThoughts)
+    .where(
+      and(
+        eq(daydreamThoughts.reviewVerdict, 'refuted'),
+        gte(daydreamThoughts.reviewAt, since),
+      ),
+    )
+    .orderBy(desc(daydreamThoughts.score))
+    .limit(3);
+
   return {
     weekEnding: localDayStr(now),
+    reviewed: reviewAgg?.reviewed ?? 0,
+    reviewRefuted: reviewAgg?.refuted ?? 0,
+    reviewUncertain: reviewAgg?.uncertain ?? 0,
+    caught: caughtRows
+      .filter((r) => r.reasoning)
+      .map((r) => `${r.title} — ${String(r.reasoning).slice(0, 120)}`),
     raised: thoughtAgg?.raised ?? 0,
     delivered: thoughtAgg?.delivered ?? 0,
     usefulVotes: thoughtAgg?.useful ?? 0,
@@ -143,6 +182,13 @@ export function phraseWeek(f: WeekFacts): string {
   if (f.hypothesesTested) bits.push(`${f.hypothesesTested} question${f.hypothesesTested === 1 ? '' : 's'} tested (${f.hypothesesHeld} held, ${f.hypothesesRefuted} refuted)`);
   if (f.leadsOpened) bits.push(`${f.leadsOpened} line${f.leadsOpened === 1 ? '' : 's'} of enquiry opened`);
   if (f.spendMinor) bits.push(`£${(f.spendMinor / 100).toFixed(2)} evidenced spend`);
+  if (f.reviewed) {
+    bits.push(
+      f.reviewRefuted === 0
+        ? `${f.reviewed} checked against the sources, none thrown out`
+        : `${f.reviewed} checked against the sources, ${f.reviewRefuted} thrown out`,
+    );
+  }
   bits.push(f.auditDropped === 0 ? 'audit clean' : `audit dropped ${f.auditDropped}`);
   return `Week to ${f.weekEnding}: ${bits.join('; ')}.`;
 }
@@ -158,6 +204,13 @@ export function weekFactLines(f: WeekFacts): string[] {
     `Lines of enquiry opened: ${f.leadsOpened}.`,
     `Evidenced spend: £${(f.spendMinor / 100).toFixed(2)} (receipts/bank only — understates cash).`,
     `Citation audit: ${f.auditDropped} musings dropped for bad evidence.`,
+    `Reviewed against the sources: ${f.reviewed} (${f.reviewRefuted} refuted, ${f.reviewUncertain} left uncertain).`,
+    // Quoted rather than summarised. The point of reporting a refutation at all
+    // is that the specific one is interesting — "the invoice and the bank line
+    // are the same payment" tells him something; "3 refuted" tells him nothing.
+    ...(f.caught.length
+      ? [`What the review caught: ${f.caught.map((c) => `"${c}"`).join(' · ')}.`]
+      : []),
     ...(f.topTitles.length ? [`Highest-scoring delivered: ${f.topTitles.map((t) => `"${t}"`).join(' · ')}.`] : []),
   ];
 }
