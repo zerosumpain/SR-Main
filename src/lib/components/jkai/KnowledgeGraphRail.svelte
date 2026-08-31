@@ -13,6 +13,7 @@
     contextFraction = null,
     sheetDetent = 'closed',
     onCloseSheet,
+    embedded = false,
   }: {
     conversationId: string | null;
     threadCostUsd?: number | null;
@@ -21,6 +22,8 @@
      *  full is the desktop rail's content. Ignored on desktop. */
     sheetDetent?: 'closed' | 'peek' | 'full';
     onCloseSheet?: () => void;
+    /** Render inside the contextual rail rather than owning the rail itself. */
+    embedded?: boolean;
   } = $props();
 
   let graph = $state<ThreadGraph>(emptyThreadGraph());
@@ -260,7 +263,7 @@
   );
 </script>
 
-<aside class="graph-rail" data-detent={sheetDetent}>
+<aside class="graph-rail" class:embedded data-detent={sheetDetent}>
   <!-- Phone sheet grab handle (2b). Tapping cycles peek → full → closed. -->
   <button
     type="button"
@@ -505,6 +508,19 @@
     min-height: 0;
     border-left: 1px solid var(--line-hair);
     background: var(--surface-rail);
+  }
+
+  .graph-rail.embedded {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line-hair);
+    background: transparent;
+  }
+
+  .graph-rail.embedded .sheet-handle {
+    display: none;
   }
 
   .rail-label {

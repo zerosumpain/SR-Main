@@ -854,7 +854,27 @@
     // Dock the command-palette trigger in the composer row. This retires the
     // layout's floating bottom-left button, which sat on top of the sidebar's
     // run-stats footer.
-    return dockTrigger();
+    const undock = dockTrigger();
+    /** A chart/entity selection in the contextual rail can be handed back to
+     *  this thread without starting a second conversation. Only the visible
+     *  pane accepts it; background panes remain mounted and would otherwise
+     *  all copy the same prompt into their drafts. */
+    const receiveContextPrompt = (raw: Event) => {
+      const event = raw as CustomEvent<{ conversationId?: string | null; text?: string }>;
+      if (!active || event.detail?.conversationId !== conversationId) return;
+      const text = event.detail.text?.trim();
+      if (!text) return;
+      input = input.trim() ? `${input.trim()}\n\n${text}` : text;
+      tick().then(() => {
+        textareaEl?.focus();
+        textareaEl?.setSelectionRange(input.length, input.length);
+      });
+    };
+    window.addEventListener('jkai:context-prompt', receiveContextPrompt);
+    return () => {
+      undock?.();
+      window.removeEventListener('jkai:context-prompt', receiveContextPrompt);
+    };
   });
 
   $effect(() => {

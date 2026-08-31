@@ -5,8 +5,8 @@
 
   // Phone-only bottom navigation (screen 2a). The desktop `menu ▾` dropdown
   // collapses to five glyph tabs; `more` opens that same menu as a sheet, and
-  // `graph` raises the knowledge-graph bottom sheet (2b) rather than routing —
-  // the graph is *about* the open thread, so leaving it would be wrong.
+  // `context` raises the contextual bottom sheet rather than routing — the
+  // workspace is about the open thread, so leaving it would be wrong.
   const onChat = $derived(page.url.pathname === '/jkai');
 
   async function openGraph() {
@@ -28,7 +28,7 @@
   </a>
   <button type="button" class="tab" class:active={hub.graphSheet !== 'closed'} onclick={openGraph}>
     <span class="glyph" aria-hidden="true">◆</span>
-    <span class="label">graph</span>
+    <span class="label">context</span>
   </button>
   <a class="tab" class:active={page.url.pathname.startsWith('/jkai/intel')} href="/jkai/intel">
     <span class="glyph" aria-hidden="true">#</span>
