@@ -11,9 +11,11 @@ import { resolveDaydreamModel } from '$lib/daydream/compose';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import { executeNoteAction } from '$lib/daydream/notebook/actions';
 import { reviewNote } from '$lib/daydream/notebook/review';
+import { weaveNote } from '$lib/daydream/notebook/cards';
 import {
   markReviewed,
   notesNeedingReview,
+  notesNeedingWeave,
   recordExecuted,
   recordPlanned,
   recordRefused,
@@ -29,9 +31,16 @@ interface NotebookConfig {
   /** Notes per run. Small on purpose: each one is a model call plus up to
    *  three actions, and one of those actions can be a 90-second web search. */
   notesPerRun?: number;
+  /** Notes woven into the graph per run. Cheaper than a review — one extraction
+   *  call, no research — so it can afford a slightly bigger bite. */
+  notesWovenPerRun?: number;
 }
 
-const DEFAULTS: Required<NotebookConfig> = { idleWindowMinutes: 20, notesPerRun: 2 };
+const DEFAULTS: Required<NotebookConfig> = {
+  idleWindowMinutes: 20,
+  notesPerRun: 2,
+  notesWovenPerRun: 3,
+};
 
 /**
  * Reading the notebook on dead cycles.
@@ -83,9 +92,18 @@ export const daydreamNotebook: ActivityHandler = {
 
     // Cheapest question first: is there anything to do at all? A settled
     // notebook must not cost a budget check or a quota read every hour.
-    const due = await notesNeedingReview(cfg.notesPerRun);
-    if (due.length === 0) {
-      return { outcome: 'skipped', summary: 'no note has changed since it was last read' };
+    //
+    // TWO kinds of work, and a run happens if EITHER has any. Weaving was
+    // originally the button's job alone, which meant a note only reached the
+    // knowledge graph if John remembered to press it — and "notes should weave
+    // into intelligence and the knowledge graph" is not something that should
+    // depend on remembering.
+    const [due, toWeave] = await Promise.all([
+      notesNeedingReview(cfg.notesPerRun),
+      notesNeedingWeave(cfg.notesWovenPerRun),
+    ]);
+    if (due.length === 0 && toWeave.length === 0) {
+      return { outcome: 'skipped', summary: 'every note has been read and woven at its current text' };
     }
 
     const model = await resolveDaydreamModel();
@@ -153,6 +171,27 @@ export const daydreamNotebook: ActivityHandler = {
       }
     }
 
+    // ── Into the graph ────────────────────────────────────────────────────
+    //
+    // The candidate list was taken before the reviews ran, so a note that gains
+    // supporting text in THIS pass is woven on the NEXT one — `notesNeedingWeave`
+    // watches `supportingAt` as well as `updatedAt`, which is what makes that
+    // second pass happen at all. An hour's lag on a background enrichment is not
+    // worth a second query per tick.
+    //
+    // Never fatal: a graph that is busy must not turn the run red.
+    let woven = 0;
+    let wovenEntities = 0;
+    for (const note of toWeave) {
+      const res = await weaveNote(note.id);
+      if (res.status === 'woven') {
+        woven++;
+        wovenEntities += res.entityCount;
+      } else if (res.status === 'failed') {
+        errors.push(`weave ${note.id.slice(0, 8)}: ${res.error}`);
+      }
+    }
+
     const after = isCodexModel ? await readQuotaMark() : null;
     const quota = isCodexModel ? attributeSpend(before, after) : { ...ZERO_SPEND };
 
@@ -160,11 +199,12 @@ export const daydreamNotebook: ActivityHandler = {
       `${reviewed}/${due.length} notes read`,
       `${planned} actions planned, ${executed} done${failed ? `, ${failed} failed` : ''}`,
       ...(refused ? [`${refused} refused by the validator`] : []),
+      ...(woven ? [`${woven} woven into the graph (${wovenEntities} entities)`] : []),
     ];
     if (errors.length) bits.push(`errors: ${errors.slice(0, 3).join('; ')}`);
 
     return {
-      outcome: reviewed === 0 && errors.length ? 'error' : 'ok',
+      outcome: reviewed === 0 && woven === 0 && errors.length ? 'error' : 'ok',
       summary: bits.join(' · '),
       promptTokens,
       completionTokens,
@@ -177,6 +217,8 @@ export const daydreamNotebook: ActivityHandler = {
         executed,
         failed,
         refused,
+        woven,
+        wovenEntities,
         errors,
       },
     };

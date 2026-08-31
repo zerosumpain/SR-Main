@@ -323,7 +323,17 @@ export async function recentActions(limit = 20) {
     .limit(limit);
 }
 
-/** Notes not yet in the graph, or changed since they were. */
+/**
+ * Notes not yet in the graph, or whose content has moved since they were.
+ *
+ * "Content" is BOTH halves. `updatedAt` covers John editing the note, and
+ * `supportingAt` covers the model appending background — and the second one is
+ * easy to miss, because `appendSupporting` deliberately does NOT bump
+ * `updatedAt` (that would reorder his list under him and re-trigger the review
+ * on its own output). Without the second clause a note woven once would never
+ * be re-woven no matter how much context was added to it, and the supporting
+ * block is often exactly where the third organisation gets named.
+ */
 export async function notesNeedingWeave(limit: number): Promise<NoteRow[]> {
   const rows = await db
     .select()
@@ -335,6 +345,7 @@ export async function notesNeedingWeave(limit: number): Promise<NoteRow[]> {
         or(
           isNull(daydreamNotebook.intelWovenAt),
           lt(daydreamNotebook.intelWovenAt, daydreamNotebook.updatedAt),
+          sql`${daydreamNotebook.supportingAt} > ${daydreamNotebook.intelWovenAt}`,
         ),
       ),
     )
