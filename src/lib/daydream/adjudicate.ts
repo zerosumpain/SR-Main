@@ -186,6 +186,42 @@ async function runReviewTool(name: string, args: Record<string, unknown>): Promi
   }
 }
 
+/**
+ * One resolved evidence item as the reviewer sees it — REF INCLUDED.
+ *
+ * First live run: a `mail_security` thought citing eighteen emails came back
+ * `uncertain` because the reviewer "could not retrieve the cited messages". It
+ * had gone hunting with `mail_search` and found unrelated mail. Those ids are
+ * `intel_notes` ids and `mail_read` takes exactly that — it searched because
+ * `mail_read`'s own description says the noteId comes "from a mail_search hit",
+ * so nothing had ever told it the ids in front of it were the same thing.
+ *
+ * The runtime knew and the prompt did not, which is the same fault that kept
+ * the lead frontier empty for a fortnight.
+ */
+export function evidenceLine(r: {
+  kind: string;
+  id: string;
+  title: string;
+  lines: string[];
+  missing: boolean;
+}): string {
+  return `- [${r.kind}:${r.id}] ${r.title}${r.missing ? ' [THE ROW THIS NAMES IS GONE]' : ''}: ${r.lines.join(' ')}`.slice(
+    0,
+    400,
+  );
+}
+
+/** How to reach the rows the evidence already names. A reviewer that
+ *  re-searches for a row it was handed finds something else and concludes it
+ *  could not check. */
+export const SOURCE_GUIDANCE: ReadonlyArray<string> = [
+  'Each line above is prefixed with the row it names. Read those rows DIRECTLY rather than searching for them again:',
+  '  [email:<id>] — mail_read({"noteId":"<id>"}) returns that exact message. Do not use mail_search to find it; you already have it.',
+  '  [memory:<id>], [intel-entity:<id>], [place:<id>], [spend:<id>] — the id is the row, and a search is a worse way to reach it.',
+  'Searching is for what the evidence does NOT already name.',
+];
+
 export interface ThoughtToReview {
   id: string;
   kind: string;
@@ -221,9 +257,17 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
     let evidenceLines: string[] = [];
     try {
       const resolved = await resolveEvidence(thought.evidence ?? []);
-      evidenceLines = resolved.map(
-        (r) => `- ${r.title}${r.missing ? ' [THE ROW THIS NAMES IS GONE]' : ''}: ${r.lines.join(' ')}`.slice(0, 400),
-      );
+      // The REF is carried, not just the prose.
+      //
+      // First live run: a `mail_security` thought citing eighteen emails came
+      // back `uncertain` because the reviewer "could not retrieve the cited
+      // messages" — it had gone hunting with `mail_search` and found unrelated
+      // mail. Those ids are `intel_notes` ids, and `mail_read` takes exactly
+      // that; it searched because `mail_read`'s own description says the noteId
+      // comes "from a mail_search hit", so nothing had ever told it the ids in
+      // front of it were the same thing. The runtime knew and the prompt did
+      // not — the same fault that kept the lead frontier empty for a fortnight.
+      evidenceLines = resolved.map(evidenceLine);
     } catch (err) {
       evidenceLines = [`(the evidence could not be resolved: ${errMsg(err)})`];
     }
@@ -242,6 +286,8 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
           '',
           'THE EVIDENCE IT WAS BUILT FROM:',
           ...(evidenceLines.length ? evidenceLines : ['(none recorded)']),
+          '',
+          ...SOURCE_GUIDANCE,
         ]
           .filter(Boolean)
           .join('\n'),
