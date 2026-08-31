@@ -142,7 +142,7 @@
   .link-row button span, .link-row button small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .link-row button span { font-size:var(--fs-body-sm); } .link-row button small { color:var(--text-muted); font-family:var(--font-mono); font-size:var(--fs-label-xs); margin-top:2px; }
   .series-chart { display:block; width:100%; height:148px; overflow:visible; }
-  .series-chart text { fill:var(--text-ghost); font-family:var(--font-mono); font-size:9px; }
+  .series-chart text { fill:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); }
   .series-chart .grid { stroke:var(--line-hair); stroke-width:1; }
   .series-chart circle:focus { stroke:var(--accent); fill:var(--surface-raised); outline:none; }
   .legend { display:flex; gap:12px; padding:0 10px 9px 31px; color:var(--text-muted); font-size:var(--fs-label-xs); }

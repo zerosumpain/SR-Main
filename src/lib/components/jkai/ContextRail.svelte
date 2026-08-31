@@ -128,7 +128,7 @@
   .lenses button { flex:1 0 auto; display:flex; align-items:center; gap:5px; padding:8px 9px; border:0; border-right:1px solid var(--line-hair); background:none; color:var(--text-muted); cursor:pointer; font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; }
   .lenses button:hover { background:var(--surface-overlay); color:var(--text); }
   .lenses button.active { box-shadow:inset 0 -2px var(--accent); color:var(--accent); }
-  .lenses small { color:var(--text-ghost); font-size:9px; }
+  .lenses small { color:var(--text-ghost); font-size:var(--fs-label-xs); }
   .ctx-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
   .cards { display:flex; flex-direction:column; gap:10px; padding:10px; }
   .empty, .error { margin:10px; padding:15px; border:1px solid var(--line-hair); color:var(--text-muted); font-size:var(--fs-body-sm); }
