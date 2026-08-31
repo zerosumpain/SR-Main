@@ -95,13 +95,20 @@ would silently record a negative verdict the owner explicitly declined to give,
 and would move the cold-start threshold. `archived` sets no `feedback`, so it
 touches neither the kind weights nor the threshold count. Reversible.
 
-**D4 — Weave on `useful` only, and never fail the vote.**
-Options: weave everything reviewed / weave on an explicit button / weave on a
-useful verdict. Chosen: on `useful` — that is the owner endorsing the content,
+**D4 — Weave on `useful`, from the PAGE, never inside `recordFeedback`.**
+Options: weave everything reviewed / weave on an explicit button only / weave on
+a useful verdict. Chosen: on `useful` — that is the owner endorsing the content,
 which is exactly the admission test the graph's `graph_state` gate exists to
-apply. The weave is awaited but its failure is swallowed and reported: a graph
-that is busy must never lose a vote. A manual "Weave now" button is offered too,
-for anything voted before this shipped.
+apply.
+
+*Revised during the build.* The first design put the weave inside
+`recordFeedback`. Reading its callers killed that: it is also reached by the
+WhatsApp reply handler and by `recordTriageBatch`, thirty rows at a time. That
+would have put an LLM extraction behind an inbound message and thirty behind one
+button. The vote is the input this whole loop is starved of and must never wait
+on the graph, so the weave is a separate `weave` action the page fires after the
+vote lands, and its failure is reported rather than thrown. A manual button is
+offered too, for anything voted before this shipped.
 
 **D5 — Rulings live as a section on the Feed, not a new tab.**
 The hub already has eight tabs and John's standing note is no over-engineered
@@ -120,3 +127,34 @@ PE-day note the local one exists for.
 `repeat(3, …)` at ≥1200px, two at ≥820px, one below. An open card takes
 `grid-column: 1 / -1` so the detail is full-width rather than a 320px column.
 The hub's rule is that nothing may scroll the page sideways.
+
+**D8 — Terse chip labels, prose in the tooltip.** *Added after live verification.*
+The destination labels were written as sentences ("the money it came from"),
+which is good prose and too wide for one chip among seven in a 320px column:
+three cards out of four spilled `Why` onto a line of its own. The label is terse
+now and the sentence rides as the chip's `title`. Where the destination has a
+name, the name is the label — the rare case where shortest and most informative
+agree. Measured after the change: 0 of 6 rows strand.
+
+**D9 — A partial calendar read keeps what did arrive.** *Bug found by driving
+the built page.* `calendar_window` returns `{events, exclusions, partial,
+available, error}` and the client threw on `error`, discarding `exclusions` —
+which come from our own database and are unaffected by whatever iCloud did. With
+a dead credential the panel stated "nothing hidden, nothing explained" over a
+stored rule. That is not a degraded read; it is a false statement about the
+owner's settings. Fixed in `CalendarBoard`, in scope because the brief is to
+improve calendar manipulation.
+
+## What was verified, and how
+
+| Claim | Evidence |
+|---|---|
+| 3 columns, collapsing | Distinct card x-offsets in a real browser: 3 at 1440, 2 at 1000, 1 at 700 |
+| Nothing scrolls sideways | `.jkai-body` and document overflow both 0 at all three widths |
+| An open card is full-width | Measured at 100% of the board's width |
+| The map opens on the card | Leaflet mounted 398×180 with tiles loaded |
+| Queue to model rules and remembers | Live run: `uncertain`, 1 tool call, memory row written and linked |
+| A useful vote reaches the graph | Live weave: note `source=daydream`, `graph_state=admitted`, 8 entities |
+| OK writes no verdict | `status='archived'`, `feedback IS NULL` |
+| The accent is the brown/orange | Computed `background-color: rgb(196, 87, 10)` = `#c4570a` |
+| The schema push is safe | Scratch DB at master's shape: exit 0, non-interactive, 41 → 44 columns |
