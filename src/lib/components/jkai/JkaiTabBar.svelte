@@ -50,13 +50,17 @@
   }
 
   @media (max-width: 799px) {
+    /* The band the masthead is, closing the page the way it opened it — ink
+       ground, cream glyphs, the accent lifted to --accent-on-dark.
+       SIX columns, not five: the sixth tab (`more`) had been wrapping onto a
+       second row, which is why the bar looked 112px tall on a phone. */
     .tab-bar {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       flex: none;
       height: 56px;
-      background: var(--surface-sunken);
-      border-top: 1px solid var(--line-hair);
+      background: var(--text-primary);
+      border-top: none;
       /* Reserve the home-indicator strip beneath the bar. */
       padding-bottom: env(safe-area-inset-bottom);
       box-sizing: content-box;
@@ -73,12 +77,19 @@
       padding: 0;
       cursor: pointer;
       text-decoration: none;
-      color: rgba(26, 16, 8, 0.5);
+      color: rgba(237, 228, 212, 0.55);
       transition: color 0.2s ease-out, background 0.2s ease-out;
     }
     .tab.active {
-      color: var(--accent);
-      background: rgba(196, 87, 10, 0.1);
+      color: var(--accent-on-dark);
+      background: rgba(232, 134, 58, 0.12);
+      /* A seam, not a fill — the same 3px accent rule the sticky rails use to
+         say which one you are on. */
+      box-shadow: inset 0 -3px 0 var(--accent-on-dark);
+    }
+    .tab:focus-visible {
+      outline: 2px solid var(--accent-on-dark);
+      outline-offset: -3px;
     }
     .glyph {
       font-family: var(--font-mono);

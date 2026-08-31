@@ -49,11 +49,16 @@
     crossorigin="anonymous"
   />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <!-- Cream, not black: the installed PWA's status bar has to continue the
-       page, and the whole surface is #ede4d4. -->
-  <meta name="theme-color" content="#ede4d4" />
+  <!-- Ink, not cream: the installed PWA's status bar has to continue the page,
+       and the page now opens on the masthead band (#1a1008) rather than on the
+       cream it used to. -->
+  <meta name="theme-color" content="#1a1008" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <!-- `black` rather than `default`: the bar sits directly above the ink
+       masthead now, and a white bar with dark glyphs reads as a strip of a
+       different page. `black` does not overlay the content the way
+       `black-translucent` would, so the layout is unchanged. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="jkai" />
   <link rel="apple-touch-icon" href="/jkai-pwa/icon-192.png" />
 </svelte:head>

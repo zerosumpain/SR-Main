@@ -310,14 +310,25 @@
 </header>
 
 <style>
+  /* The masthead band.
+   *
+   * jkai wears the /health cover register as CHROME rather than as sections:
+   * an ink ground with cream type and the accent lifted to --accent-on-dark,
+   * the same band the health hub and the daydream hub open with. It is the
+   * masthead for every jkai surface, which is why none of them mounts one of
+   * its own — `DaydreamShell` says the same thing from the other side.
+   *
+   * Everything inside it is written for the dark ground: the paper tokens
+   * (--text-muted, --line-strong, --accent) are ink on ink here. */
   .hub-hdr {
     flex: none;
     position: relative;
     /* Above the thread rail's slide-over (30) and the phone graph sheet (40),
        below the grain overlay (100) — the menu must escape both. */
     z-index: 60;
-    background: var(--surface-rail);
-    border-bottom: 1px solid var(--line);
+    background: var(--text-primary);
+    color: var(--bg);
+    border-bottom: none;
     padding-top: env(safe-area-inset-top);
   }
   .hdr-row {
@@ -334,15 +345,26 @@
     gap: 16px;
     min-width: 0;
   }
+  /* The site mark, relit. `.brand` is global and written for paper; the
+     element is this component's, so a scoped rule reaches it — including its
+     ::before caret, which is the one orange stroke on the left of the band. */
   .brand {
     flex: none;
     font-size: var(--fs-body);
+    color: var(--bg);
+  }
+  .brand::before {
+    color: var(--accent-on-dark);
+    opacity: 1;
+  }
+  .brand:hover {
+    color: var(--accent-on-dark);
   }
   .hdr-divider {
     width: 1px;
     height: 18px;
     flex: none;
-    background: var(--line-strong);
+    background: rgba(237, 228, 212, 0.22);
   }
   .strip-slot {
     min-width: 0;
@@ -362,28 +384,34 @@
     gap: 7px;
     padding: 5px 9px;
     background: transparent;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sharp);
+    border: 1px solid rgba(237, 228, 212, 0.28);
+    /* Radius 0 — the cover register has no rounded chrome. */
+    border-radius: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.72);
     cursor: pointer;
     transition: color 0.2s ease-out, border-color 0.2s ease-out, background 0.2s ease-out;
   }
   .chip:hover {
     color: var(--text-primary);
-    border-color: var(--accent-tint-35);
+    background: var(--accent-on-dark);
+    border-color: var(--accent-on-dark);
+  }
+  .chip:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
   }
   .menu-btn {
     padding: 5px 10px;
   }
   .menu-btn.open {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
+    background: var(--accent-on-dark);
+    border-color: var(--accent-on-dark);
+    color: var(--text-primary);
   }
   .menu-burger {
     display: none;
@@ -461,9 +489,6 @@
     text-decoration: none;
     gap: 5px;
   }
-  .back-chip:hover {
-    color: var(--accent);
-  }
 
   .spend-pill,
   .mobile-strip {
@@ -487,20 +512,21 @@
       height: 32px;
       padding: 0 10px;
       border-radius: var(--radius-pill);
-      background: rgba(196, 87, 10, 0.1);
-      border: 1px solid var(--accent-tint-25);
+      background: rgba(232, 134, 58, 0.14);
+      border: 1px solid rgba(232, 134, 58, 0.45);
       font-family: var(--font-mono);
       font-size: var(--fs-label);
       font-weight: 500;
-      color: var(--accent);
+      color: var(--accent-on-dark);
       text-decoration: none;
       white-space: nowrap;
     }
-    /* Subscription quota exhausted — Codex calls are being refused. */
+    /* Subscription quota exhausted — Codex calls are being refused. The paper
+       --error is muddy on ink, so it lifts the way the accent does. */
     .spend-pill.warn {
-      background: var(--error-bg);
-      border-color: var(--error);
-      color: var(--error);
+      background: rgba(224, 139, 139, 0.14);
+      border-color: #e08b8b;
+      color: #e08b8b;
     }
     .menu-btn {
       width: 44px;
@@ -510,7 +536,7 @@
       border-color: transparent;
     }
     .menu-btn.open {
-      border-color: var(--accent);
+      border-color: var(--accent-on-dark);
     }
     .menu-word,
     .menu-glyph {
@@ -525,7 +551,7 @@
       padding: 0;
       border-color: transparent;
       font-size: var(--fs-body);
-      color: var(--text-primary);
+      color: var(--bg);
     }
     .back-word {
       display: none;
@@ -537,10 +563,10 @@
       font-weight: 400;
       letter-spacing: 0;
       text-transform: none;
-      color: var(--text-primary);
+      color: var(--bg);
     }
     .menu-btn.open .menu-burger {
-      color: #fff;
+      color: var(--text-primary);
     }
     /* Full-height sheet rather than a dropdown. */
     .menu {
@@ -572,7 +598,7 @@
       align-items: center;
       height: 34px;
       padding: 0 16px;
-      border-top: 1px solid var(--line-hair);
+      border-top: 1px solid rgba(237, 228, 212, 0.14);
       overflow-x: auto;
       overflow-y: hidden;
       scrollbar-width: none;
