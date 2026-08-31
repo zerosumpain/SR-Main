@@ -667,6 +667,13 @@ export async function loadDiscoveries() {
     db
       .select({
         day: daydreamDigests.day,
+        // Load-bearing, not decoration. The Sunday letter is stored under
+        // subject 'weekly' precisely so it cannot collide with the daily row
+        // on (subject, day) — but this query dropped the column, so the page
+        // received two rows sharing a day and its keyed `{#each … (d.day)}`
+        // threw `each_key_duplicate`, taking the whole Discoveries tab with it
+        // the first Sunday the weekly letter ever ran.
+        subject: daydreamDigests.subject,
         summary: daydreamDigests.summary,
         narrative: daydreamDigests.narrative,
         verified: daydreamDigests.verified,
