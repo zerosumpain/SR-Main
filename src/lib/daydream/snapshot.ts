@@ -189,14 +189,47 @@ export async function buildSnapshot(
     daysSinceWorkout: null,
     trainingLoad: null,
   };
+  /** Set when a sleep reading could not possibly be true. Reported on the
+   *  source list below, so the fault is visible rather than merely absent. */
+  let sleepProblem: string | null = null;
   try {
     const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
+    const { checkReading, fileReadingFault, msToMinutes } = await import('./health-quality');
     const sleep = await getSleepAnalysis();
+
+    // ── Units, then plausibility, in that order ────────────────────────────
+    //
+    // `totalDuration` is `whoop_sleep.total_in_bed`, which is MILLISECONDS —
+    // the schema says so on the line above the column. This assigned it
+    // straight into a field called `durationMins`, so 27,841,092 ms of a
+    // perfectly ordinary 7h44m night was carried as 27,841,092 minutes and
+    // rendered on the feed as "464,018 hours of sleep".
+    //
+    // The reviewer caught that one, which is the review stage doing its job and
+    // is also three stages too late: the number had already been through a
+    // detector, a thought, the ponder pack and the rule engine. So the tripwire
+    // the FEATURES pipeline has always had now guards this pipeline too, and a
+    // rejected reading is reported rather than merely absent — a source that has
+    // started emitting impossible numbers is a fault, and a fault that shows up
+    // only as silence is indistinguishable from a quiet week.
     if (sleep?.latest) {
-      health.lastNightSleep = {
-        performance: sleep.latest.performance,
-        durationMins: Math.round(sleep.latest.totalDuration),
-      };
+      const duration = checkReading('sleepMinutes', msToMinutes(sleep.latest.totalDuration));
+      const performance = checkReading('sleepPerformance', sleep.latest.performance);
+      const problems = [duration.problem, performance.problem].filter(Boolean) as string[];
+
+      if (problems.length) {
+        sleepProblem = problems.join('; ');
+        // Nearly always a unit conversion in one place, which is a job the
+        // engine can be asked to do. Idempotent per slug, so a standing fault
+        // files one item rather than one every ten minutes.
+        void fileReadingFault('sleepMinutes', sleepProblem);
+      }
+
+      // Both halves or neither. "You slept well" beside a duration that was
+      // thrown away is a claim resting on a number nobody can see.
+      if (duration.value != null && performance.value != null) {
+        health.lastNightSleep = { performance: performance.value, durationMins: duration.value };
+      }
     }
     // The owner's OWN recent average, never a population norm. Needs enough
     // nights to mean anything — below that the baseline stays null and the
@@ -209,8 +242,12 @@ export async function buildSnapshot(
     }
     sources.push({
       key: 'sleep',
-      status: health.lastNightSleep ? 'ok' : 'empty',
-      detail: health.sleepBaseline == null ? 'no baseline yet' : `baseline ${Math.round(health.sleepBaseline)}`,
+      // A rejected reading is a FAILURE, not an absence. The Engine tab reads
+      // this list, and "empty" there would say the night simply had no data.
+      status: sleepProblem ? 'failed' : health.lastNightSleep ? 'ok' : 'empty',
+      detail:
+        sleepProblem ??
+        (health.sleepBaseline == null ? 'no baseline yet' : `baseline ${Math.round(health.sleepBaseline)}`),
     });
   } catch (err) {
     sources.push({ key: 'sleep', status: 'failed', detail: errMsg(err) });

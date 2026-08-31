@@ -19,6 +19,7 @@
     type GroupStats,
   } from '$lib/daydream/thought-groups';
   import { hasMap, thoughtDestination } from '$lib/daydream/destination';
+  import { SvelteSet } from 'svelte/reactivity';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
@@ -867,7 +868,29 @@
    *  it" is a claim about the ledger having a verdict, and an archived card
    *  deliberately has none. Conflating them would make the count on the chip a
    *  lie about how much feedback the threshold has actually collected. */
-  const archived = $derived(thoughts.filter((t) => t.status === 'archived'));
+  /** Filed in this sitting, before the ledger reload has caught up. A
+   *  `SvelteSet` is reactive in its own right, so it needs no `$state`
+   *  wrapper — and it must be declared above the two deriveds that read it. */
+  const archivedNow = new SvelteSet<string>();
+  const archived = $derived(
+    thoughts.filter((t) => t.status === 'archived' || archivedNow.has(t.id)),
+  );
+  /**
+   * The default view is everything you have NOT filed.
+   *
+   * `OK` sets `archived` and the card then stayed exactly where it was, wearing
+   * a new pill — which is not what "file this away" means to anyone pressing
+   * it. Filing something has to make it leave. So the default excludes them and
+   * the `Filed` chip, with its count, is the way back; nothing is deleted and
+   * one click returns the lot.
+   *
+   * The chip is labelled `Live` rather than `All` for that reason: a facet that
+   * says All and quietly hides a category is worse than one that says what it
+   * is showing.
+   */
+  const live = $derived(
+    thoughts.filter((t) => t.status !== 'archived' && !archivedNow.has(t.id)),
+  );
   const visible = $derived(
     filter === 'said'
       ? said
@@ -877,7 +900,7 @@
           ? ruled
           : filter === 'archived'
             ? archived
-            : thoughts,
+            : live,
   );
 
   /** Places worth asking about. The one- and two-visit ones still exist and
@@ -1059,8 +1082,20 @@
   // ── Filed, with no opinion ────────────────────────────────────────────────
   // The third answer. Neither verdict moves, so no kind weight shifts and the
   // cold-start threshold does not count it — see `archiveThought`.
+  //
+  // The card leaves the board the moment you press it, rather than after the
+  // ledger reload: `invalidateAll` re-reads the heaviest query on this hub, and
+  // a card that sits there for a second after being filed reads as a button
+  // that did not work. `archivedNow` is the optimistic half; the reload then
+  // makes it true, and the set staying populated afterwards costs nothing
+  // because those rows come back `archived` anyway.
   async function archiveThought(t: Thought) {
-    await post({ action: 'archive', id: t.id }, `${t.id}:archive`);
+    archivedNow.add(t.id);
+    if (expanded === t.id) expanded = null;
+    const ok = await post({ action: 'archive', id: t.id }, `${t.id}:archive`);
+    // Put it back on the board if the server refused it, so an optimistic
+    // removal can never outlive the write it was predicting.
+    if (!ok) archivedNow.delete(t.id);
   }
 
   // ── Into the graph ────────────────────────────────────────────────────────
@@ -1329,7 +1364,7 @@
   ]);
 
   const showFacets = $derived<Facet[]>([
-    { id: 'all', label: 'All', count: thoughts.length },
+    { id: 'all', label: 'Live', count: live.length },
     { id: 'said', label: 'Above threshold', count: said.length },
     { id: 'suppressed', label: 'Held back', count: suppressed.length },
     { id: 'ruled', label: 'You ruled on', count: ruled.length },
@@ -1628,6 +1663,30 @@
           'move the threshold, and it costs none of the four-a-day notification budget.',
         cta: 'Sort through them',
         act: () => jumpTo('feed', 'dd-deck', () => { if (!deckOpen) return openDeck(); }),
+      });
+    }
+
+    // ── A source emitting numbers that cannot be true ─────────────────────
+    //
+    // Promoted to the top band rather than left on the Engine tab, because it
+    // is the fault class this hub is worst at showing: the reading is rejected,
+    // so nothing appears anywhere, and a source quietly producing nonsense
+    // looks exactly like a quiet week. It reached the feed once as "you slept
+    // 464,018 hours" — a unit mismatch that had already passed a detector, a
+    // thought, the ponder pack and the rule engine before a model caught it.
+    const badReadings = engine.sources.filter((src) => src.status === 'failed');
+    if (badReadings.length) {
+      out.push({
+        key: 'readings',
+        tone: 'urgent',
+        kicker: badReadings.length === 1 ? 'A reading it refused' : 'Readings it refused',
+        figure: String(badReadings.length),
+        detail:
+          `${badReadings.map((src) => `${src.key}: ${src.detail}`).join(' · ')}. ` +
+          'Nothing was built on it — but a source producing impossible numbers is a fault, ' +
+          'and it has been queued for the improvement engine to go and fix.',
+        cta: 'See what is wired up',
+        act: () => jumpTo('engine', 'dd-sources'),
       });
     }
 
@@ -3458,7 +3517,7 @@
     <!-- ── ENGINE STATE ─────────────────────────────────────────────────
          Everything else is meaningless if the engine has not run, and "quiet"
          and "not wired up" have to be tellable apart. -->
-    <section class="band sunken">
+    <section class="band sunken" id="dd-sources">
       <div class="inner">
         <SectionHead
           kicker="B / Engine state"
