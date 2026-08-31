@@ -1864,16 +1864,21 @@
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Digests</span>
-      <span class="nm-sec-meta">{(discoveries?.digests ?? []).length} days</span>
+      <span class="nm-sec-meta">{(discoveries?.digests ?? []).length} entries</span>
     </div>
     {#if (discoveries?.digests ?? []).length === 0}
       <div class="empty">No digests yet.</div>
     {:else}
       <div class="rows tight">
-        {#each discoveries?.digests ?? [] as d (d.day)}
+        <!-- Keyed on subject AND day. The Sunday letter shares a day with that
+             day's daily digest by design, and keying on the day alone threw
+             `each_key_duplicate` — which does not degrade a row, it kills the
+             component, so the whole tab stopped opening. -->
+        {#each discoveries?.digests ?? [] as d (`${d.subject}-${d.day}`)}
           <details class="digest-row">
             <summary>
               <span class="mono digest-day">{d.day}</span>
+              {#if d.subject === 'weekly'}<span class="digest-kind">weekly</span>{/if}
               <span class="digest-sum">{d.summary}</span>
             </summary>
             {#if d.narrative}
@@ -3129,6 +3134,18 @@
   .digest-row summary { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.55rem 0.8rem; cursor: pointer; list-style: none; }
   .digest-row summary::-webkit-details-marker { display: none; }
   .digest-row summary:hover { background: var(--surface-sunken); }
+  .digest-kind {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    border: 1px solid var(--accent-ink);
+    border-radius: 2px;
+    padding: 0 0.3rem;
+    flex: none;
+  }
+
   .digest-day { color: var(--text-ghost); font-size: var(--fs-label-xs); white-space: nowrap; }
   .digest-sum { font-size: var(--fs-label); color: var(--text-secondary); }
   .digest-row .narrative { margin: 0 0.8rem 0.7rem; }
