@@ -353,8 +353,11 @@
   .hero-copy > :global(*) {
     position: relative;
   }
+  /* No paint. The rail is ink and the copy column is cream, so the value
+     change IS the division; a hairline drawn on top of it only fuzzes the
+     join. The grid column stays so the geometry is unchanged. */
   .hero-divider {
-    background: var(--line-strong);
+    background: none;
   }
   .hero-aside {
     display: flex;

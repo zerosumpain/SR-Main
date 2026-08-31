@@ -328,7 +328,12 @@
     z-index: 60;
     background: var(--text-primary);
     color: var(--bg);
-    border-bottom: none;
+    /* A hairline, not nothing: on every jkai sub-page an ink `.site-nav-bar`
+       now sits directly beneath this, and two ink bands with no rule between
+       them read as one undifferentiated slab. With it they read as a two-tier
+       masthead — hub metrics above, destinations below — which is the shape
+       /health's shell already had. */
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
     padding-top: env(safe-area-inset-top);
   }
   .hdr-row {

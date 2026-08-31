@@ -570,24 +570,27 @@
     margin: 0;
   }
 
+  /* This chip rides inside the ink `.site-nav-bar`. Every colour is the
+     on-dark partner: --text-muted, --warn and --accent are all muddy or
+     under-contrast on #1a1008. */
   .h-sync-meta {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.62);
     display: inline-flex;
     align-items: center;
   }
   .h-sync-meta.stale {
-    color: var(--warn);
+    color: #d8b45e;
   }
   .h-pulse-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--accent);
-    box-shadow: var(--accent-glow);
+    background: var(--accent-on-dark);
+    box-shadow: 0 0 6px rgba(232, 134, 58, 0.55);
     animation: sr-pulse 1.5s ease-in-out infinite;
     display: inline-block;
     margin-right: 8px;

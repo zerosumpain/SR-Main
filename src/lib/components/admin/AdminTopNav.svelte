@@ -45,7 +45,9 @@
 <style>
   /* Admin wears the same cell strip as the site nav: each section is a cell of
      one grid, divided by hairlines, and the current one is cut out with an
-     accent seam. Cells own their own padding — .site-nav-bar has none. */
+     accent seam. Cells own their own padding — .site-nav-bar has none.
+     That strip is INK now, so every paper token here is relit the same way
+     SiteNav and PageHeader were. */
   .admin-wordmark {
     flex-shrink: 0;
     font-size: var(--fs-body-sm);
@@ -53,8 +55,13 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0 20px;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
+    color: var(--bg);
     text-decoration: none;
+  }
+  .admin-wordmark::before {
+    color: var(--accent-on-dark);
+    opacity: 1;
   }
   .admin-tag {
     font-family: var(--font-mono);
@@ -62,7 +69,7 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.22em;
-    color: var(--accent);
+    color: var(--accent-on-dark);
   }
 
   .admin-sections {
@@ -82,24 +89,26 @@
     flex: none;
     padding: 0 16px;
     border: none;
-    border-right: 1px solid var(--line-hair);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     border-radius: 0;
     letter-spacing: var(--tracking-label);
+    color: rgba(237, 228, 212, 0.62);
     white-space: nowrap;
   }
   .admin-sections :global(.nav-link::after) {
     display: none;
   }
   .admin-sections :global(.nav-link:first-child) {
-    border-left: 1px solid var(--line-hair);
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
   }
   .admin-sections :global(.nav-link:hover) {
-    background: var(--accent-tint-04);
+    color: var(--bg);
+    background: rgba(232, 134, 58, 0.14);
   }
   .admin-sections :global(.nav-link[aria-current='page']) {
     color: var(--text-primary);
     background: var(--bg);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    box-shadow: inset 0 -3px 0 var(--accent);
   }
   .admin-sections :global(.nav-link[aria-current='page']::before) {
     color: var(--accent);
@@ -111,19 +120,19 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0 18px;
-    border-left: 1px solid var(--line-hair);
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.7);
     text-decoration: none;
     transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   }
   .view-site:hover {
-    color: var(--accent);
-    background: var(--accent-tint-04);
+    color: var(--bg);
+    background: rgba(232, 134, 58, 0.14);
   }
 
   /* The strip scrolls rather than wrapping on a phone — a second row would

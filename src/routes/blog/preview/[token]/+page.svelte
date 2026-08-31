@@ -27,7 +27,9 @@
 
 <PageHeader title={data.post.title.toUpperCase()} titleHref="/blog">
   {#snippet meta()}
-    <span class="uppercase tracking-[0.2em] px-2 py-0.5 rounded-[var(--radius-round)]" style="font-size: var(--fs-label-xs); font-family: var(--font-mono); background: var(--accent-tint-14); color: var(--accent); border: 1px solid var(--accent);">
+    <!-- Inside the ink `.site-nav-bar`: the accent has to be its on-dark
+         partner or the chip sits at 2.6:1 on #1a1008. -->
+    <span class="uppercase tracking-[0.2em] px-2 py-0.5 rounded-[var(--radius-round)]" style="font-size: var(--fs-label-xs); font-family: var(--font-mono); background: rgba(232, 134, 58, 0.14); color: var(--accent-on-dark); border: 1px solid var(--accent-on-dark);">
       Draft
     </span>
   {/snippet}
