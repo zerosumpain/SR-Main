@@ -40,6 +40,20 @@
   /** Twelve hours without a reading and "live" is a claim, not a fact. */
   const stale = $derived(data.syncedAgoSeconds > 12 * 3600);
 
+  const dashboardUpdated = $derived(
+    new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'Europe/London',
+      timeZoneName: 'short',
+    }).format(new Date(data.dashboardUpdatedAt)),
+  );
+
   // With no real day in the 30-day window, `getHealthSeries30d` substitutes a
   // deterministic MOCK series — and the workouts and rings with it — so the page
   // still renders through a cold start or a sync outage. It is plausible and
@@ -75,6 +89,7 @@
     'strangeramblings.com/health · full read · sections A–I',
     'Whoop · Apple Health · Strava · OSM/Overpass · openrouteservice',
     'Advisory only · not medical advice',
+    `Dashboard updated ${dashboardUpdated}`,
   ]}
 >
   {#if seriesIsMock}

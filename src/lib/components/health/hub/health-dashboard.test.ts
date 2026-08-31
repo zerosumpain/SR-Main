@@ -14,6 +14,7 @@ const BANNER = 'Nothing below is a measurement';
 
 function ownerData(over: Partial<OwnerHealthData> = {}): OwnerHealthData {
   return {
+    dashboardUpdatedAt: '2026-08-31T14:23:45.000Z',
     provenance: { seriesIsMock: false, correlationsAreIllustrative: false },
     today: null,
     series: [],
@@ -45,6 +46,13 @@ function ownerData(over: Partial<OwnerHealthData> = {}): OwnerHealthData {
 }
 
 const html = (data: OwnerHealthData) => render(HealthDashboard, { props: { data } }).body;
+
+describe('HealthDashboard — refresh flag', () => {
+  it('shows when this dashboard payload was assembled in the footer', () => {
+    const body = html(ownerData());
+    expect(body).toContain('Dashboard updated 31 Aug 2026, 15:23:45 BST');
+  });
+});
 
 describe('HealthDashboard — mock-series provenance', () => {
   it('says so, prominently, when the series it is drawing is a fake', () => {
