@@ -4,7 +4,7 @@
   import ShareConversationModal from '$lib/components/jkai/ShareConversationModal.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import BriefingCard from '$lib/components/jkai/BriefingCard.svelte';
-  import KnowledgeGraphRail from '$lib/components/jkai/KnowledgeGraphRail.svelte';
+  import ContextRail from '$lib/components/jkai/ContextRail.svelte';
   import type { ModelContext } from '$lib/server/models/types';
   import { onMount } from 'svelte';
   import { hub, setLiveRuns, closeGraphSheet } from '$lib/jkai/hub-bus.svelte';
@@ -576,9 +576,9 @@
     {/if}
   </div>
 
-  <!-- Knowledge-graph rail (324px) / phone bottom sheet (2b) -->
+  <!-- Contextual workspace / phone bottom sheet. -->
   <div class="graph-slot" class:collapsed={!graphRailOpen} class:sheet-open={hub.graphSheet !== 'closed'}>
-    <KnowledgeGraphRail
+    <ContextRail
       conversationId={activeId}
       threadCostUsd={hub.threadCostUsd}
       contextFraction={hub.contextFraction}
@@ -602,8 +602,7 @@
 {/if}
 
 <style>
-  /* Three columns: 236px rail · conversation · 324px graph. Only the message
-     list and the two rails' inner lists scroll. */
+  /* Three columns: conversation library · conversation · contextual workspace. */
   .thread-shell {
     position: relative;
     display: flex;

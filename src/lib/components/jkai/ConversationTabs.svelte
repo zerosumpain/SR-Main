@@ -26,7 +26,7 @@
      *  only way back to it — the thread header that used to carry the control
      *  is gone. */
     onToggleRail?: () => void;
-    /** Show/hide the knowledge-graph rail for the open thread. */
+    /** Show/hide the contextual workspace for the open thread. */
     onToggleGraph?: () => void;
     graphOpen?: boolean;
   } = $props();
@@ -133,8 +133,8 @@
         class="strip-btn graph-btn"
         class:on={graphOpen}
         onclick={onToggleGraph}
-        aria-label="Knowledge graph for this thread"
-        title="Knowledge graph for this thread">◆</button
+        aria-label="Context workspace for this thread"
+        title="Context workspace for this thread">◆</button
       >
     {/if}
   </div>
