@@ -3,7 +3,7 @@
   import type { PageData } from './$types';
   import { invalidateAll, replaceState } from '$app/navigation';
   import { page } from '$app/state';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import PlaceMap from '$lib/components/jkai/PlaceMap.svelte';
   import FamilyMap, { type FamilyPosition } from '$lib/components/jkai/daydream/FamilyMap.svelte';
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
@@ -18,6 +18,26 @@
     likelihoodBand,
     type GroupStats,
   } from '$lib/daydream/thought-groups';
+  import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
+  import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
+  import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
+  import FacetBar from '$lib/components/jkai/daydream/hub/FacetBar.svelte';
+  import type { DeckTile, Facet, ShellTab } from '$lib/components/jkai/daydream/hub/types';
+  // Colour is priority, and priority is decided in ONE place — see the module
+  // header. Every `t-*` class on this page comes out of one of these.
+  import {
+    TONE_RANK,
+    bandTone,
+    detectorTone,
+    jobTone,
+    leadTone,
+    placeTone,
+    provenanceTone,
+    thoughtRank,
+    thoughtTone,
+    verdictTone,
+    type Tone,
+  } from '$lib/daydream/priority';
 
   let { data }: { data: PageData } = $props();
 
@@ -191,11 +211,11 @@
   }
 
   const grouped = $derived.by(() => {
-    if (groupBy === 'day') return groupByDay(visible);
+    if (groupBy === 'day') return groupByDay(arranged);
     if (groupBy === 'likelihood') {
-      return groupByLikelihood(visible, data.threshold.value).map((g) => ({ ...g, stats: g.stats as GroupStats | null }));
+      return groupByLikelihood(arranged, data.threshold.value).map((g) => ({ ...g, stats: g.stats as GroupStats | null }));
     }
-    return groupByFamily(visible).map((g) => ({ ...g, stats: g.stats as GroupStats | null }));
+    return groupByFamily(arranged).map((g) => ({ ...g, stats: g.stats as GroupStats | null }));
   });
 
   /** Which group headers are collapsed. Keyed by group key. */
@@ -661,9 +681,38 @@
       .map(([subject, n]) => ({ subject, n }));
   });
 
-  const boardVisible = $derived(
-    boardWho === 'all' ? board : board.filter((q) => q.subject === boardWho),
+  /**
+   * The board, filtered by whose it is AND by how it came out, then ordered.
+   *
+   * `unanswered` is a filter value rather than a missing one: a question that
+   * has not been tested yet is a state the board should be readable in, and
+   * `verdict === null` is not something a chip can name without it.
+   */
+  const boardFiltered = $derived(
+    board.filter(
+      (q) =>
+        (boardWho === 'all' || q.subject === boardWho) &&
+        (boardVerdict === 'all' ||
+          (boardVerdict === 'unanswered' ? q.verdict == null : q.verdict === boardVerdict)),
+    ),
   );
+
+  const boardVisible = $derived.by(() => {
+    const rows = [...boardFiltered];
+    if (boardOrder === 'newest') {
+      return rows.sort(
+        (a, b) => new Date(b.proposedAt).getTime() - new Date(a.proposedAt).getTime(),
+      );
+    }
+    if (boardOrder === 'strength') {
+      return rows.sort((a, b) => Math.abs(b.r ?? 0) - Math.abs(a.r ?? 0));
+    }
+    return rows.sort(
+      (a, b) =>
+        TONE_RANK[verdictTone(a.verdict)] - TONE_RANK[verdictTone(b.verdict)] ||
+        Math.abs(b.r ?? 0) - Math.abs(a.r ?? 0),
+    );
+  });
 
   const VERDICT_LABEL: Record<string, string> = {
     supported: 'held up',
@@ -978,2238 +1027,3181 @@
       placeKind = 'other';
     }
   }
+
+  // ══ THE EDITORIAL CHROME ═══════════════════════════════════════════════
+  //
+  // Everything below is presentation: what the masthead reads, what the
+  // action queue contains, and how each list is grouped, filtered and
+  // ordered. No fetch, no payload and no derived FIGURE lives here — the
+  // numbers all come from the ledger above.
+
+  // ── Ordering ──────────────────────────────────────────────────────────────
+  // Every list on the hub can be read three ways, and `priority` is the
+  // default everywhere: the shared tone rank in $lib/daydream/priority puts
+  // what is broken first, what is waiting on you second, and what is merely
+  // true last. The old page had one ordering — insertion — on every list.
+
+  type FeedOrder = 'priority' | 'newest' | 'score';
+  let feedOrder = $state<FeedOrder>('priority');
+
+  type BoardOrder = 'priority' | 'newest' | 'strength';
+  let boardOrder = $state<BoardOrder>('priority');
+  let boardVerdict = $state<string>('all');
+
+  type PlaceOrder = 'priority' | 'days' | 'recent';
+  let placeOrder = $state<PlaceOrder>('priority');
+
+  type DetState = 'all' | 'ready' | 'waiting' | 'muted';
+  let detState = $state<DetState>('all');
+  type DetOrder = 'priority' | 'name' | 'weight' | 'votes';
+  let detOrder = $state<DetOrder>('priority');
+
+  type MoneyOrder = 'newest' | 'largest';
+  let moneyOrder = $state<MoneyOrder>('newest');
+
+  const byNewest = (a: { createdAt: string }, b: { createdAt: string }) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+  /**
+   * The feed, in the order it will be grouped.
+   *
+   * Day grouping merges CONSECUTIVE rows carrying the same date label, so it
+   * can only ever be read in date order: reorder by score and it emits one
+   * group per row with duplicate keys, and `each_key_duplicate` does not
+   * degrade a list — it kills the component, which is how the Discoveries tab
+   * went dark on the first Sunday the weekly letter ran. So `day` pins the
+   * order rather than trusting the chip.
+   */
+  const arranged = $derived.by(() => {
+    const rows = [...visible];
+    if (groupBy === 'day' || feedOrder === 'newest') return rows.sort(byNewest);
+    if (feedOrder === 'score') return rows.sort((a, b) => b.score - a.score || byNewest(a, b));
+    return rows.sort((a, b) => thoughtRank(a) - thoughtRank(b) || b.score - a.score);
+  });
+
+  // ── Facets ────────────────────────────────────────────────────────────────
+  // Counts on every chip, always — including the zeroes. A filter that returns
+  // nothing looks broken unless the chip already said it would.
+
+  const arrangeFacets = $derived<Facet[]>([
+    { id: 'type', label: 'Type' },
+    { id: 'likelihood', label: 'Likelihood' },
+    { id: 'day', label: 'Day' },
+  ]);
+
+  const showFacets = $derived<Facet[]>([
+    { id: 'all', label: 'All', count: thoughts.length },
+    { id: 'said', label: 'Above threshold', count: said.length },
+    { id: 'suppressed', label: 'Held back', count: suppressed.length },
+    { id: 'ruled', label: 'You ruled on', count: ruled.length },
+  ]);
+
+  const feedOrderFacets = $derived<Facet[]>([
+    { id: 'priority', label: 'Priority' },
+    { id: 'newest', label: 'Newest' },
+    { id: 'score', label: 'Score' },
+  ]);
+
+  const boardWhoFacets = $derived<Facet[]>([
+    { id: 'all', label: 'Everyone', count: board.length },
+    ...boardPeople.map((p) => ({ id: p.subject, label: cap(p.subject), count: p.n })),
+  ]);
+
+  const boardVerdictFacets = $derived.by((): Facet[] => {
+    const scope = board.filter((q) => boardWho === 'all' || q.subject === boardWho);
+    const n = (pred: (q: BoardRow) => boolean) => scope.filter(pred).length;
+    return [
+      { id: 'all', label: 'All', count: scope.length },
+      { id: 'supported', label: 'Held up', count: n((q) => q.verdict === 'supported') },
+      { id: 'refuted', label: 'Nothing there', count: n((q) => q.verdict === 'refuted') },
+      { id: 'wrong_direction', label: 'Backwards', count: n((q) => q.verdict === 'wrong_direction') },
+      { id: 'underpowered', label: 'Thin data', count: n((q) => q.verdict === 'underpowered') },
+      { id: 'unanswered', label: 'Unanswered', count: n((q) => q.verdict == null) },
+    ];
+  });
+
+  const boardOrderFacets = $derived<Facet[]>([
+    { id: 'priority', label: 'Priority' },
+    { id: 'newest', label: 'Newest' },
+    { id: 'strength', label: 'Strength' },
+  ]);
+
+  const placeOrderFacets = $derived<Facet[]>([
+    { id: 'priority', label: 'Priority' },
+    { id: 'days', label: 'Most days' },
+    { id: 'recent', label: 'Most recent' },
+  ]);
+
+  const detStateFacets = $derived<Facet[]>([
+    { id: 'all', label: 'All', count: detectors.length },
+    { id: 'ready', label: 'Ready', count: detectors.filter((d) => !d.muted && d.readiness?.ready).length },
+    { id: 'waiting', label: 'Gathering', count: detectors.filter((d) => !d.muted && !d.readiness?.ready).length },
+    { id: 'muted', label: 'Muted', count: mutedCount },
+  ]);
+
+  const detOrderFacets = $derived<Facet[]>([
+    { id: 'priority', label: 'Priority' },
+    { id: 'name', label: 'Name' },
+    { id: 'weight', label: 'Weight' },
+    { id: 'votes', label: 'Votes' },
+  ]);
+
+  const moneyOrderFacets = $derived<Facet[]>([
+    { id: 'newest', label: 'Newest' },
+    { id: 'largest', label: 'Largest' },
+  ]);
+
+  // ── Ordered lists ─────────────────────────────────────────────────────────
+
+  function orderPlaces(list: Place[]): Place[] {
+    const rows = [...list];
+    if (placeOrder === 'days') {
+      return rows.sort((a, b) => (b.distinctDays ?? 0) - (a.distinctDays ?? 0) || b.visitCount - a.visitCount);
+    }
+    if (placeOrder === 'recent') {
+      return rows.sort(
+        (a, b) => new Date(b.lastSeenAt ?? 0).getTime() - new Date(a.lastSeenAt ?? 0).getTime(),
+      );
+    }
+    return rows.sort(
+      (a, b) =>
+        TONE_RANK[placeTone(a, askAtVisits)] - TONE_RANK[placeTone(b, askAtVisits)] ||
+        (b.distinctDays ?? 0) - (a.distinctDays ?? 0),
+    );
+  }
+  const unnamedOrdered = $derived(orderPlaces(unnamed));
+  const namedOrdered = $derived(orderPlaces(named));
+
+  const detectorRows = $derived.by(() => {
+    const rows = detectors.filter((d) => {
+      if (detState === 'all') return true;
+      if (detState === 'muted') return Boolean(d.muted);
+      if (detState === 'ready') return !d.muted && Boolean(d.readiness?.ready);
+      return !d.muted && !d.readiness?.ready;
+    });
+    const sorted = [...rows];
+    if (detOrder === 'name') return sorted.sort((a, b) => a.kind.localeCompare(b.kind));
+    if (detOrder === 'weight') return sorted.sort((a, b) => b.weight - a.weight);
+    if (detOrder === 'votes') {
+      return sorted.sort((a, b) => b.useful + b.notUseful - (a.useful + a.notUseful));
+    }
+    return sorted.sort(
+      (a, b) =>
+        TONE_RANK[detectorTone(a)] - TONE_RANK[detectorTone(b)] || a.kind.localeCompare(b.kind),
+    );
+  });
+
+  /** Jobs, worst first — a failing pass is the loudest thing on the Engine tab. */
+  const jobRows = $derived(
+    [...(telemetry?.jobs ?? [])].sort(
+      (a, b) => TONE_RANK[jobTone(a)] - TONE_RANK[jobTone(b)] || a.name.localeCompare(b.name),
+    ),
+  );
+
+  const moneyRows = $derived.by(() => {
+    const rows = [...(money?.rows ?? [])];
+    if (moneyOrder === 'largest') return rows.sort((a, b) => b.amountMinor - a.amountMinor);
+    return rows.sort((a, b) => b.day.localeCompare(a.day));
+  });
+
+  // ── The masthead ──────────────────────────────────────────────────────────
+
+  const allTimeThoughts = $derived(
+    Object.values(counts.byStatus as Record<string, number>).reduce((a, b) => a + b, 0),
+  );
+
+  /** Thoughts that reached him and have never been rated — the starved input. */
+  const needsRating = $derived(
+    thoughts.filter((t) => !t.feedback && SHOWN_STATUSES.includes(t.status)).length,
+  );
+  const needsNaming = $derived(unnamed.length);
+  const needsRuling = $derived(proposedRules.length);
+  const needsTotal = $derived(needsRating + needsNaming + needsRuling);
+  const failingJobs = $derived((telemetry?.jobs ?? []).filter((j) => jobTone(j) === 'urgent'));
+
+  const shellTabs = $derived<ShellTab[]>([
+    { id: 'feed', label: 'Feed', count: needsRating, tone: 'action' },
+    { id: 'family', label: 'Family' },
+    { id: 'discoveries', label: 'Discoveries' },
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'places', label: 'Places', count: needsNaming, tone: 'action' },
+    { id: 'money', label: 'Money' },
+    { id: 'engine', label: 'Engine', count: needsRuling || failingJobs.length, tone: failingJobs.length ? 'watch' : 'action' },
+    { id: 'improvement', label: 'Improvement' },
+  ]);
+
+  const coverReadout = $derived([
+    { label: 'Last looked', value: hasRun ? ago(engine.lastDetectAt) : 'never' },
+    { label: 'Trail', value: `${engine.trailSpanDays ?? 0} days` },
+    { label: 'Covered 24h', value: pct(engine.coverage?.last24h) },
+  ]);
+
+  const coverTiles = $derived<DeckTile[]>([
+    {
+      key: 'needs',
+      label: 'Waiting on you',
+      value: String(needsTotal),
+      tone: needsTotal ? 'action' : 'good',
+      lit: needsTotal > 0,
+      sub: `${needsNaming} to name · ${needsRuling} to approve · ${needsRating} to rate`,
+    },
+    {
+      key: 'noticed',
+      label: 'Noticed, 7 days',
+      value: String(counts.thoughts7d),
+      tone: 'steady',
+      sub: `${allTimeThoughts} all time · ${suppressedCount} held back`,
+    },
+    {
+      key: 'places',
+      label: 'Places named',
+      value: String(counts.namedPlaces),
+      suffix: `/${counts.places}`,
+      tone: counts.unnamedPlaces ? 'watch' : 'good',
+      sub: `${counts.unnamedPlaces} still unnamed`,
+    },
+    {
+      key: 'detectors',
+      label: 'Detectors ready',
+      value: String(readyCount),
+      suffix: `/${detectors.length}`,
+      tone: readyCount === detectors.length ? 'good' : 'watch',
+      sub: `${mutedCount} muted by you`,
+    },
+  ]);
+
+  // ── The action queue ──────────────────────────────────────────────────────
+  //
+  // The hub's answer to the only question a reader arrives with. Each card
+  // names ONE thing and carries the button that does it; the old page made you
+  // find the tab, then the section, then the row. Ordered by the shared tone
+  // rank, so a failing job outranks a verdict that is merely waiting.
+
+  /**
+   * What an action-queue button actually does.
+   *
+   * Switching tab is not the action — it is the first third of it. A button
+   * that says "sort through them" and leaves you at the top of a 3,000px page
+   * with a closed panel somewhere below is the shape the old page had, and it
+   * is why nothing on it ever got sorted. So: switch, OPEN the panel the card
+   * is about, then put it on screen.
+   */
+  async function jumpTo(next: TabId, anchor: string, open?: () => void | Promise<void>) {
+    setTab(next);
+    if (open) void open();
+    await tick();
+    document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  interface AttentionCard {
+    key: string;
+    tone: Tone;
+    kicker: string;
+    figure: string;
+    detail: string;
+    cta: string;
+    act: () => void;
+  }
+
+  const attention = $derived.by((): AttentionCard[] => {
+    const out: AttentionCard[] = [];
+
+    if (failingJobs.length) {
+      out.push({
+        key: 'jobs',
+        tone: 'urgent',
+        kicker: 'Scheduled passes failing',
+        figure: String(failingJobs.length),
+        detail:
+          `${failingJobs.map((j) => j.name.replace('daydream-', '')).join(', ')} — while one of these is red, ` +
+          'the tab that reads its output is reporting the day before it broke.',
+        cta: 'Open the jobs table',
+        act: () => jumpTo('engine', 'dd-jobs'),
+      });
+    }
+
+    if (!hasRun) {
+      out.push({
+        key: 'never',
+        tone: 'urgent',
+        kicker: 'It has never run',
+        figure: '0',
+        detail:
+          'The detect pass has not completed once, so every zero on this page is about the engine ' +
+          'rather than about your life. The Engine tab says which source is missing.',
+        cta: 'See what is wired up',
+        act: () => jumpTo('engine', 'dd-provenance'),
+      });
+    }
+
+    if (needsNaming) {
+      out.push({
+        key: 'places',
+        tone: 'action',
+        kicker: 'Places with no name',
+        figure: String(needsNaming),
+        detail:
+          'Several detectors stay silent until a place has a name, so this is the highest-leverage ' +
+          'thing on the hub. Each arrives pre-filled with the geocoder’s guess and an address.',
+        cta: 'Name them in one sitting',
+        act: () => jumpTo('places', 'dd-unnamed', () => { if (!sessionOpen) return openSession(); }),
+      });
+    }
+
+    if (needsRuling) {
+      out.push({
+        key: 'rules',
+        tone: 'action',
+        kicker: 'Rules awaiting approval',
+        figure: String(needsRuling),
+        detail:
+          'The model proposed these as data — a condition over a fixed list of facts, never code. ' +
+          'Each has already passed validation and a replay against your history. Nothing fires until you say so.',
+        cta: 'Approve or reject',
+        act: () => jumpTo('engine', 'dd-rules'),
+      });
+    }
+
+    if (needsRating) {
+      out.push({
+        key: 'rate',
+        tone: 'action',
+        kicker: 'Reached you, never rated',
+        figure: String(needsRating),
+        detail:
+          `The confidence bar opened at 0.75 with no evidence behind it and only falls as you answer. ` +
+          `${data.threshold.feedbackCount} response${data.threshold.feedbackCount === 1 ? '' : 's'} so far — ` +
+          'until that number moves, the ranking is a guess.',
+        cta: 'Rate them in the feed',
+        act: () => jumpTo('feed', 'dd-thefeed'),
+      });
+    }
+
+    if (suppressedCount) {
+      out.push({
+        key: 'deck',
+        tone: 'watch',
+        kicker: 'Held back below the bar',
+        figure: String(suppressedCount),
+        detail:
+          'Nothing was sent, so nothing here interrupted you. Sorting a batch is the cheapest way to ' +
+          'move the threshold, and it costs none of the four-a-day notification budget.',
+        cta: 'Sort through them',
+        act: () => jumpTo('feed', 'dd-deck', () => { if (!deckOpen) return openDeck(); }),
+      });
+    }
+
+    if (money?.bank.willSkip) {
+      out.push({
+        key: 'bank',
+        tone: 'watch',
+        kicker: 'Bank pull will skip',
+        figure: '1',
+        detail:
+          'The next run lands outside its own window, so it will skip rather than fail — which reads ' +
+          'exactly like a night that found nothing. It sat in that state for three days once.',
+        cta: 'Look at the rails',
+        act: () => jumpTo('money', 'dd-bank'),
+      });
+    }
+
+    return out.sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone]);
+  });
+
+  const attentionHeadline = $derived(
+    attention.some((a) => a.tone === 'urgent')
+      ? 'Something has stopped'
+      : 'Only you can do these',
+  );
+
+  // ── Decks for the Money and Engine tabs ───────────────────────────────────
+
+  const moneyTiles = $derived<DeckTile[]>([
+    {
+      key: 'spend',
+      label: 'Last 30 days',
+      value: pounds(money?.totalMinor30d ?? 0),
+      tone: 'steady',
+      lit: true,
+      sub: `${(money?.rows ?? []).length} verified rows · understates cash`,
+    },
+    {
+      key: 'offers',
+      label: 'Live offers',
+      value: String((money?.offers ?? []).length),
+      tone: (money?.offers ?? []).length ? 'action' : 'quiet',
+      sub: 'found in your email',
+    },
+    {
+      key: 'renewals',
+      label: 'Dated events, 60d',
+      value: String((money?.renewals ?? []).length),
+      tone: (money?.renewals ?? []).length ? 'watch' : 'quiet',
+      sub: 'renewals · appointments',
+    },
+    {
+      key: 'bank',
+      label: 'Bank rails',
+      value: money?.bank.enabled ? 'Armed' : 'Off',
+      tone: money?.bank.enabled ? (money.bank.willSkip ? 'watch' : 'good') : 'quiet',
+      sub: money?.bank.window ? `window ${money.bank.window}` : 'debits only, deduped on the id',
+    },
+  ]);
+
+  const engineTiles = $derived<DeckTile[]>([
+    {
+      key: 'trail',
+      label: 'Days of trail',
+      value: String(engine.trailSpanDays ?? 0),
+      tone: hasRun ? 'steady' : 'urgent',
+      sub: `observed ${ago(engine.lastObserveAt)}`,
+    },
+    {
+      key: 'coverage',
+      label: 'Covered, 24h',
+      value: pct(engine.coverage?.last24h),
+      tone: (engine.coverage?.last24h ?? 0) >= 0.5 ? 'good' : 'watch',
+      sub: `7d ${pct(engine.coverage?.last7d)}`,
+    },
+    {
+      key: 'detectors',
+      label: 'Detectors ready',
+      value: String(readyCount),
+      suffix: `/${detectors.length}`,
+      tone: readyCount === detectors.length ? 'good' : 'watch',
+      sub: `${mutedCount} muted by you`,
+    },
+    {
+      key: 'places',
+      label: 'Places named',
+      value: String(counts.namedPlaces),
+      suffix: `/${counts.places}`,
+      tone: counts.unnamedPlaces ? 'action' : 'good',
+      sub: `${counts.unnamedPlaces} still unnamed`,
+    },
+  ]);
+
+  const budgetTiles = $derived.by((): DeckTile[] => {
+    if (!budget || !budget.applies) return [];
+    return [
+      {
+        key: 'today',
+        label: 'Of weekly, today',
+        value: String(budget.spentTodayWeeklyPct),
+        suffix: `/${budget.dailyCapPct}%`,
+        tone: budget.spentTodayWeeklyPct > budget.dailyCapPct ? 'urgent' : 'steady',
+        sub: `paced target ${budget.pacedTargetPct}%`,
+      },
+      {
+        key: 'window',
+        label: 'Of this 5h window',
+        value: String(budget.spentThisWindowPct),
+        suffix: `/${budget.fiveHourCapPct}%`,
+        tone: budget.spentThisWindowPct > budget.fiveHourCapPct ? 'urgent' : 'steady',
+        sub: `${budget.remainingWindowPct}% left`,
+      },
+      {
+        key: 'depth',
+        label: 'Working depth',
+        value: String(budget.plan.depth),
+        tone: budget.blocked ? 'urgent' : budget.reachable ? 'good' : 'watch',
+        sub: `${budget.plan.maxCandidates} candidate${budget.plan.maxCandidates === 1 ? '' : 's'}${budget.plan.verify ? ', verified' : ''}`,
+      },
+    ];
+  });
 </script>
 
-<div class="wrap">
-  <header class="page-hdr">
-    <div>
-      <div class="kicker">JKAI · Daydreaming</div>
-      <h1>Daydreams</h1>
-      <p class="sub">
-        Your second brain on spare cycles — watching the household, the diary, the money
-        and its own discoveries, and saying something only when the crossing is worth it.
-        <strong>Every claim cites its evidence; code audits before you see it.</strong>
-      </p>
-    </div>
-    <div class="hdr-links">
-      <button
-        class="power"
-        class:off={!data.enabled}
-        disabled={togglingEnabled}
-        title={data.enabled ? 'Daydreaming is on — click to pause everything' : 'Daydreaming is paused — click to resume'}
-        onclick={toggleEnabled}
-      >
-        <span class="power-dot"></span>
-        {data.enabled ? 'live' : 'paused'}
-      </button>
-      <a class="back-link" href="/jkai">JKAI</a>
-    </div>
-  </header>
+<DaydreamShell
+  path="/jkai/daydreams"
+  kicker="JKAI · Daydreaming"
+  title={['A second brain', 'on spare cycles']}
+  standfirst="It watches the household, the diary, the money and its own discoveries, and says something only when the crossing is worth it. Every claim cites its evidence; code audits it before you ever see it."
+  readout={coverReadout}
+  live={data.enabled}
+  liveBusy={togglingEnabled}
+  ontoggleLive={toggleEnabled}
+  tabs={shellTabs}
+  active={tab}
+  ontab={(id) => setTab(id as TabId)}
+  footer={[
+    'strangeramblings.com/jkai/daydreams',
+    'Owner-gated · nothing here leaves the house',
+    `Threshold ${data.threshold.value} · ${data.threshold.feedbackCount} response${data.threshold.feedbackCount === 1 ? '' : 's'}`,
+  ]}
+>
+  {#snippet masthead()}
+    <StatDeck dark tiles={coverTiles} min={210} />
+  {/snippet}
 
   {#if data.loadError}
-    <div class="nm-sec-error">Could not read the ledger: {data.loadError}</div>
+    <section class="band">
+      <div class="inner">
+        <div class="card t-urgent">
+          <p class="card-kicker">The ledger did not load</p>
+          <p class="card-body">{data.loadError}</p>
+          <p class="note">
+            Every figure on this page is therefore a zero for a reason that has nothing to do
+            with what the engine has been noticing. Reload; if it keeps failing, the server log
+            carries the query error.
+          </p>
+        </div>
+      </div>
+    </section>
   {/if}
 
   {#if !data.enabled}
-    <div class="banner off">
-      Daydreaming is paused — nothing is being observed or noticed. The switch above
-      resumes it.
-    </div>
-  {/if}
-
-  <nav class="tabs" aria-label="Daydream sections">
-    {#each TABS as t (t.id)}
-      <button class="tab" class:on={tab === t.id} onclick={() => setTab(t.id)}>
-        {t.label}
-        {#if t.id === 'feed' && counts.thoughts7d}
-          <span class="tab-n">{counts.thoughts7d}</span>
-        {:else if t.id === 'places' && counts.unnamedPlaces}
-          <span class="tab-n">{counts.unnamedPlaces}</span>
-        {:else if t.id === 'engine' && proposedRules.length}
-          <span class="tab-n">{proposedRules.length}</span>
-        {/if}
-      </button>
-    {/each}
-  </nav>
-
-  {#if tab === 'feed'}
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Steer it</span>
-      <span class="nm-sec-meta">reorders attention · grants no new access</span>
-    </div>
-    <div class="steer-box">
-      <label class="sr-label-tight" for="steer-input">Ask it to look into something</label>
-      <div class="steer-row">
-        <input
-          id="steer-input"
-          class="nm-text-input steer-input"
-          bind:value={steerText}
-          maxlength="280"
-          placeholder="e.g. whether going out late costs me the next morning"
-          onkeydown={(e) => { if (e.key === 'Enter') submitSteer(); }}
-        />
-        <button class="row-link" disabled={steerBusy || !steerText.trim()} onclick={submitSteer}>
-          {steerBusy ? 'Adding…' : 'Add'}
-        </button>
-      </div>
-      {#if steerError}<p class="nm-sec-error">{steerError}</p>{/if}
-      {#if steers.length}
-        <ul class="steer-list">
-          {#each steers as st (st.id)}
-            <li class="steer" class:done={st.status !== 'active'}>
-              <span class="steer-text">{st.text}</span>
-              <span class="steer-meta mono">
-                {st.status === 'active'
-                  ? `${st.batchesInfluenced} batch${st.batchesInfluenced === 1 ? '' : 'es'}`
-                  : st.status}
-              </span>
-              {#if st.status === 'active'}
-                <button class="row-link" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'done' })}>Done</button>
-                <button class="row-link danger" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'dropped' })}>Drop</button>
-              {:else}
-                <button class="row-link" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'active' })}>Reopen</button>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </div>
-
-  </section>
-
-  <!-- ── THOUGHTS ───────────────────────────────────────────────────────── -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Thoughts</span>
-      <span class="nm-sec-meta">
-        {Object.values(counts.byStatus as Record<string, number>).reduce((a, b) => a + b, 0)} all time ·
-        threshold {data.threshold.value} · {data.threshold.feedbackCount} response{data.threshold.feedbackCount === 1 ? '' : 's'}
-      </span>
-    </div>
-
-    <div class="filters">
-      <span class="filter-label">Arrange by</span>
-      <button class="filter" class:on={groupBy === 'type'} onclick={() => (groupBy = 'type')}>Type</button>
-      <button class="filter" class:on={groupBy === 'likelihood'} onclick={() => (groupBy = 'likelihood')}>Likelihood</button>
-      <button class="filter" class:on={groupBy === 'day'} onclick={() => (groupBy = 'day')}>Day</button>
-    </div>
-
-    <div class="filters">
-      <span class="filter-label">Show</span>
-      <button class="filter" class:on={filter === 'all'} onclick={() => (filter = 'all')}>
-        All <span class="n">{thoughts.length}</span>
-      </button>
-      <button class="filter" class:on={filter === 'said'} onclick={() => (filter = 'said')}>
-        Above threshold <span class="n">{said.length}</span>
-      </button>
-      <button class="filter" class:on={filter === 'suppressed'} onclick={() => (filter = 'suppressed')}>
-        Held back <span class="n">{suppressed.length}</span>
-      </button>
-      <button class="filter" class:on={filter === 'ruled'} onclick={() => (filter = 'ruled')}>
-        You ruled on <span class="n">{ruled.length}</span>
-      </button>
-    </div>
-
-    {#if actionError}
-      <p class="warn-line err">{actionError}</p>
-    {/if}
-
-    {#if visible.length === 0}
-      <div class="empty">
-        {#if !hasRun}
-          The detect pass has not run yet.
-        {:else if thoughts.length === 0}
-          Nothing noticed yet. {detectors.length - readyCount} of {detectors.length} detectors are
-          still gathering the history they need — see below for what each is waiting for.
-        {:else}
-          Nothing in this view.
-        {/if}
-      </div>
-    {:else}
-      <div class="rows">
-        {#each grouped as g (g.key)}
-          <!-- A group header that carries its own statistics, so "what is it
-               noticing, how strongly, and how has that landed" is answerable
-               without opening anything. The useful rate is withheld below five
-               votes rather than printed over two — see thought-groups.ts. -->
-          <div class="tl-day">
-            <button class="tl-day-label" onclick={() => toggleGroup(g.key)}>
-              {collapsed[g.key] ? '▸' : '▾'} {g.label}
-              <span class="tl-n">{g.items.length}</span>
-            </button>
-            {#if g.stats}
-              <span class="tl-stats">
-                mean {g.stats.meanScore.toFixed(2)}
-                · {g.stats.delivered} reached you
-                {#if g.stats.held} · {g.stats.held} held{/if}
-                {#if g.stats.usefulRate != null}
-                  · {Math.round(g.stats.usefulRate * 100)}% useful over {g.stats.rated}
-                {:else if g.stats.rated}
-                  · {g.stats.rated} rated
-                {/if}
-              </span>
-            {/if}
-            <span class="tl-day-rule"></span>
-          </div>
-          {#if g.blurb && !collapsed[g.key]}
-            <p class="tl-blurb">{g.blurb}</p>
-          {/if}
-          {#each collapsed[g.key] ? [] : g.items as t (t.id)}
-          <article class="thought st-{t.status}" class:musing={t.kind.startsWith('musing_')}>
-            <div class="thought-hd">
-              <button class="thought-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
-                {headline(t)}
-              </button>
-              {#if isAnswered(t)}
-                <span class="thought-pill answered">answered</span>
-              {:else}
-                <span class="thought-pill">{t.status}</span>
-              {/if}
-            </div>
-
-            <!-- A question about a place that now has a name is finished
-                 business, and saying so stops it reading as still open. The
-                 stored title is kept beneath, because it is what was actually
-                 asked at the time. -->
-            {#if isAnswered(t)}
-              <p class="thought-answered">
-                You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
-                It asked: “{t.title}”
-              </p>
-            {:else}
-              <p class="thought-why">{t.explanation}</p>
-            {/if}
-
-            <div class="thought-meta">
-              {#if kindChip(t).musing}
-                <span class="theme-chip">{kindChip(t).text}</span>
-              {:else}
-                <span class="mono">{kindChip(t).text}</span>
-              {/if}
-              <span class="sep">·</span>
-              {#key data.threshold.value}
-                <span class="band band-{likelihoodBand(t.score, data.threshold.value).id}"
-                      title={likelihoodBand(t.score, data.threshold.value).meaning}>
-                  {likelihoodBand(t.score, data.threshold.value).label}
-                </span>
-              {/key}
-              <span class="sep">·</span>
-              <span class="mono">score {t.score}</span>
-              <span class="sep">·</span>
-              <span>{ago(t.createdAt)}</span>
-              {#if !t.placeLabel && t.placeAddress}
-                <span class="sep">·</span>
-                <span class="place-tag">{t.placeAddress}</span>
-              {/if}
-              {#if !t.placeLabel && t.placeVisits}
-                <span class="sep">·</span>
-                <span class="mono">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
-              {/if}
-              {#if t.suppressedReason}
-                <span class="sep">·</span>
-                <span class="held">held back: {t.suppressedReason}</span>
-              {/if}
-              {#if t.promptTokens + t.completionTokens > 0}
-                <span class="sep">·</span>
-                <span class="mono tok">{t.promptTokens + t.completionTokens} tok</span>
-              {/if}
-              {#if t.feedback}
-                <span class="sep">·</span>
-                <span class="voted">you said {t.feedback.replace('_', ' ')}</span>
-              {/if}
-            </div>
-
-            {#if t.id === rateId}
-              <p class="rate-cue">Opened from a notification — your answer is below.</p>
-            {/if}
-            {#if t.narrative}
-              <!-- The model's phrasing, always shown as the model's. The rule's
-                   own explanation stays directly beneath it, so if this whole
-                   path failed permanently the ledger would still read. -->
-              <p class="narrative" class:unchecked={t.verified === false}>
-                {t.narrative}
-                <span class="narr-tag" class:ok={t.verified === true}>
-                  {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
-                </span>
-              </p>
-            {:else if t.narrativeDroppedReason}
-              <!-- A composer that has quietly started refusing everything looks
-                   exactly like a quiet week unless this is on the page. -->
-              <p class="narr-dropped">phrasing dropped — {t.narrativeDroppedReason}</p>
-            {/if}
-
-            <!-- ── What the review made of it ───────────────────────────────
-                 A refuted thought never reaches WhatsApp, so this is the only
-                 place its reasoning is ever read. A verdict you cannot see is
-                 one you cannot argue with, and "the outcome unless overwritten
-                 by a user" only means something if the user can see what they
-                 would be overwriting. -->
-            {#if t.reviewVerdict}
-              <p class="review r-{t.reviewVerdict}">
-                <span class="review-tag">
-                  {t.reviewVerdict === 'verified'
-                    ? 'checked · holds up'
-                    : t.reviewVerdict === 'refuted'
-                      ? 'checked · does not hold'
-                      : 'checked · cannot tell'}
-                  {#if typeof t.reviewLikelihood === 'number'}
-                    <span class="review-p mono">{Math.round(t.reviewLikelihood * 100)}%</span>
-                  {/if}
-                </span>
-                {#if t.reviewReasoning}<span class="review-why">{t.reviewReasoning}</span>{/if}
-              </p>
-            {/if}
-
-            {#if expanded === t.id}
-              <div class="thought-detail">
-                <div class="detail-block">
-                  <span class="sr-label-tight">Why this came up</span>
-                  {#each rootCause(t) as line, li (li)}
-                    <p class="cause-line">{line}</p>
-                  {/each}
-                  {#if extraComponents(t).length}
-                    <ul class="components">
-                      {#each extraComponents(t) as [k, v] (k)}
-                        <li><span class="ck">{k}</span><span class="cv">{v}</span></li>
-                      {/each}
-                    </ul>
-                  {/if}
-                </div>
-                {#if t.evidence.length}
-                  <div class="detail-block">
-                    <span class="sr-label-tight">What it was looking at</span>
-                    <!-- Resolved on demand: the subject and sender of the
-                         email, the place's rhythm, the transaction — and the
-                         graph entities each source touches. -->
-                    <EvidenceList thoughtId={t.id} count={t.evidence.length} />
-                  </div>
-                {/if}
-                {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
-                  <div class="detail-block">
-                    <span class="sr-label-tight">It suggests</span>
-                    <div class="thought-actions">
-                      {#each t.proposedActions ?? [] as a, i (i)}
-                        <button class="row-link" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
-                          {a.label}
-                        </button>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-
-                <!-- Somewhere on a map, when the thought is about somewhere.
-                     "What is this place you keep going to?" is unanswerable
-                     from a name and a visit count. Coordinates are fetched on
-                     demand by an owner-gated action; they never ride the
-                     ledger payload. -->
-                {#if t.placeId}
-                  <div class="detail-block">
-                    <span class="sr-label-tight">Where</span>
-                    {#if thoughtPlace[t.id]}
-                      <PlaceMap
-                        lat={thoughtPlace[t.id].lat}
-                        lon={thoughtPlace[t.id].lon}
-                        radiusM={thoughtPlace[t.id].radiusM}
-                      />
-                      {#if thoughtPlace[t.id].suggestedAddress}
-                        <p class="geo-line">{thoughtPlace[t.id].suggestedAddress}</p>
-                      {/if}
-                    {:else}
-                      <button
-                        class="row-link"
-                        disabled={busy === `${t.id}:map`}
-                        onclick={() => showOnMap(t.id)}
-                      >
-                        {busy === `${t.id}:map` ? 'Loading the map…' : 'Show it on a map'}
-                      </button>
-                    {/if}
-                  </div>
-                {/if}
-
-                <!-- A verdict says whether it landed; it can never say WHY.
-                     "Good call, but some of those calendar events are rolling
-                     reminders" is the correction that actually changes the next
-                     one, and there was nowhere to put it. Saved verbatim, and
-                     written to memory so the rest of jkai reads it too. -->
-                <div class="detail-block">
-                  <span class="sr-label-tight">Add some depth</span>
-                  {#if t.note && noteDraft[t.id] === undefined}
-                    <p class="note-said">{t.note}</p>
-                    <button class="row-link" onclick={() => { noteDraft[t.id] = t.note ?? ''; }}>
-                      Change what you said
-                    </button>
-                  {:else}
-                    <textarea
-                      class="note-input"
-                      rows="3"
-                      maxlength={MAX_NOTE_CHARS}
-                      placeholder="Anything it should know — what it got wrong, what it missed, what these actually are."
-                      bind:value={noteDraft[t.id]}
-                    ></textarea>
-                    <div class="thought-actions">
-                      <button
-                        class="row-link"
-                        disabled={busy === `${t.id}:note` || !(noteDraft[t.id] ?? '').trim()}
-                        onclick={() => saveNote(t)}
-                      >
-                        {busy === `${t.id}:note` ? 'Saving…' : 'Save this'}
-                      </button>
-                      {#if t.note}
-                        <button class="row-link" onclick={() => { delete noteDraft[t.id]; noteDraft = { ...noteDraft }; }}>
-                          Cancel
-                        </button>
-                      {/if}
-                    </div>
-                    <p class="note-hint">Kept as a memory, so it informs what it says next.</p>
-                  {/if}
-                </div>
-              </div>
-            {/if}
-
-            <!-- Rating is offered only on what actually reached him. Asking
-                 "was this useful?" about a thought that was suppressed before
-                 it was ever sent is a question with no answer, and the vote it
-                 collects would train the weights on something he never saw.
-                 Production had verdict buttons on eight such rows. -->
-            {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
-              <div class="thought-actions">
-                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
-                  Useful
-                </button>
-                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>
-                  Not useful
-                </button>
-                <button class="row-link danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
-                  Never this kind
-                </button>
-                <button class="row-link" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
-                  Snooze a week
-                </button>
-              </div>
-            {/if}
-          </article>
-          {/each}
-        {/each}
-      </div>
-    {/if}
-  </section>
-
-
-  <!-- The sorting deck. Everything about ranking is a random walk until the
-       ledger has feedback in it, and at four interruptions a day the 25
-       responses the threshold needs are never collected. One sitting closes
-       that gap and costs no interruption budget at all. -->
-  {#if suppressedCount}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">What it nearly said</span>
-        <span class="nm-sec-meta">{suppressedCount} held back</span>
-      </div>
-      <p class="sec-lede">
-        These scored below the bar, so nothing was sent. That bar was set with no
-        evidence — rating a few here is what moves it. Nothing you do in this
-        section interrupts you, and none of it counts as a notification.
-      </p>
-
-      <div class="session-bar">
-        {#if !deckOpen}
-          <button class="session-cta" onclick={openDeck}>Sort through them</button>
-          <span class="session-hint">Thirty at a time, most-repeated first.</span>
-        {:else}
-          <button class="row-link" onclick={() => { deckOpen = false; }}>Close</button>
-          {#if verdictCount}
-            <button class="session-cta" disabled={deckSaving} onclick={saveDeck}>
-              {deckSaving ? 'Saving…' : `Save ${verdictCount} verdict${verdictCount === 1 ? '' : 's'}`}
-            </button>
-          {/if}
-        {/if}
-      </div>
-
-      {#if deckDone}
-        <p class="session-done">
-          Recorded {deckDone.recorded}{deckDone.failed ? `, ${deckDone.failed} failed` : ''}.
-          Counted at 0.7 of a considered verdict.
-        </p>
-      {/if}
-      {#if deckError}<p class="nm-sec-error">{deckError}</p>{/if}
-
-      {#if deckOpen}
-        {#if deckLoading}
-          <p class="sec-lede">Loading…</p>
-        {:else if deck.length === 0}
-          <p class="sec-lede">Nothing left to sort.</p>
-        {:else}
-          <div class="session-list">
-            {#each deck as c (c.id)}
-              <div class="deck-card" class:ruled={verdicts[c.id]}>
-                <div class="deck-body">
-                  <div class="deck-hd">
-                    <span class="mono deck-kind">{c.kind}</span>
-                    <span class="sep">·</span>
-                    <span class="mono">score {c.score}</span>
-                    {#if c.recurrenceCount > 1}
-                      <span class="sep">·</span>
-                      <span class="mono deck-rec">proposed {c.recurrenceCount}×</span>
-                    {/if}
-                  </div>
-                  <div class="deck-title">{c.title}</div>
-                  <div class="deck-expl">{c.narrative || c.explanation}</div>
-                </div>
-                <div class="deck-actions">
-                  <button
-                    class="row-link"
-                    class:picked={verdicts[c.id] === 'useful'}
-                    onclick={() => setVerdict(c.id, 'useful')}
-                  >Useful</button>
-                  <button
-                    class="row-link"
-                    class:picked={verdicts[c.id] === 'not_useful'}
-                    onclick={() => setVerdict(c.id, 'not_useful')}
-                  >Not useful</button>
-                  <button
-                    class="row-link danger"
-                    class:picked={verdicts[c.id] === 'never_kind'}
-                    onclick={() => setVerdict(c.id, 'never_kind')}
-                  >Never this kind</button>
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      {/if}
-    </section>
-  {/if}
-
-  {/if}
-
-  {#if tab === 'family'}
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">The household, now</span>
-      <span class="nm-sec-meta">{familyMembers.filter((m) => m.ageMins != null && m.ageMins <= 60).length}/{familyMembers.length} tracked</span>
-    </div>
-    <div class="fam-grid">
-      {#each familyMembers as m (m.subject)}
-        <div class="fam-card" class:stale={m.ageMins == null || m.ageMins > 60}>
-          <div class="fam-hd">
-            <span class="fam-dot" class:home={m.isHome === true} class:out={m.isHome === false}></span>
-            <span class="fam-name">{cap(m.subject)}</span>
-            {#if m.batteryPct != null && m.batteryPct <= 25}
-              <span class="fam-batt mono">🔋{m.batteryPct}%</span>
-            {/if}
-          </div>
-          <div class="fam-where">
-            {#if m.ageMins == null}
-              not tracked right now
-            {:else if m.isHome}
-              at home
-            {:else if m.placeLabel}
-              at {m.placeLabel}
-            {:else if m.distanceHomeKm != null}
-              out · {m.distanceHomeKm} km from home
-            {:else}
-              out
-            {/if}
-          </div>
-          <div class="fam-meta mono">
-            {#if m.ageMins != null}seen {m.ageMins < 5 ? 'just now' : `${m.ageMins}m ago`}{:else}—{/if}
-          </div>
-          <div class="fam-today">
-            <span class="fam-stat"><b>{clock(m.today.firstOutMins)}</b> first out</span>
-            <span class="fam-stat"><b>{m.today.minutesOut >= 60 ? `${Math.round(m.today.minutesOut / 6) / 10}h` : `${m.today.minutesOut}m`}</b> out today</span>
-            <span class="fam-stat"><b>{m.today.placesVisited}</b> places</span>
-          </div>
+    <section class="band">
+      <div class="inner">
+        <div class="card t-watch">
+          <p class="card-kicker">Paused</p>
+          <p class="card-body">
+            Nothing is being observed and nothing is being noticed. The control in the masthead
+            resumes it; everything below is the state it was in when it stopped.
+          </p>
         </div>
-      {/each}
-    </div>
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">On the map</span>
-      <span class="nm-sec-meta">fetched on demand · never cached in the page</span>
-    </div>
-    {#if famLoading}
-      <p class="sec-lede">Locating everyone…</p>
-    {:else if famError}
-      <p class="nm-sec-error">{famError}</p>
-      <button class="row-link" onclick={loadFamilyMap}>Try again</button>
-    {:else if famPositions && famPositions.length}
-      <FamilyMap positions={famPositions} />
-      <div class="thought-actions">
-        <button class="row-link" onclick={loadFamilyMap}>Refresh positions</button>
       </div>
-    {:else if famPositions}
-      <p class="sec-lede">Nobody has a recent position.</p>
-    {:else}
-      <button class="session-cta" onclick={loadFamilyMap}>Show the map</button>
-    {/if}
-  </section>
-
-  <!-- ── EACH PERSON'S OWN WORK ────────────────────────────────────────────
-       This tab was a presence map. Four of the five people in the trail have
-       had a year of position history and a feature store since the family
-       backfill, and nothing had ever asked a question about them, because the
-       sweep and the hypothesis proposer both ran for John alone. Both are
-       per-subject now.
-
-       A suggestion is filed under a person by its CITATIONS — the ponder pack
-       cards each member as `family:<subject>` — never by finding their name in
-       the text, which would file every thought that merely mentions them. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Each person</span>
-      <span class="nm-sec-meta">what the sweep found, and what cited them</span>
-    </div>
-
-    {#each familyMembers as m (m.subject)}
-      {@const d = familyDetail[m.subject]}
-      <div class="person">
-        <button class="person-hd" onclick={() => togglePerson(m.subject)}>
-          <span class="person-caret">{openPerson === m.subject ? '▾' : '▸'}</span>
-          <span class="person-name">{cap(m.subject)}</span>
-          <span class="person-counts mono">
-            {d?.hypotheses?.length ?? 0} question{(d?.hypotheses?.length ?? 0) === 1 ? '' : 's'}
-            · {d?.sweep?.findings?.length ?? 0} finding{(d?.sweep?.findings?.length ?? 0) === 1 ? '' : 's'}
-            · {d?.thoughts?.length ?? 0} suggestion{(d?.thoughts?.length ?? 0) === 1 ? '' : 's'}
-          </span>
-        </button>
-
-        {#if openPerson === m.subject}
-          <div class="person-body">
-            <!-- Questions live on the Discoveries board, which spans the whole
-                 household with a name against each card. A second copy here
-                 would be two places to read the same thing and one of them
-                 would go stale. -->
-            <div class="detail-block">
-              <span class="sr-label-tight">Questions asked about {cap(m.subject)}</span>
-              {#if !d?.hypotheses?.length}
-                <p class="cause-line">
-                  Nothing yet. Questions are proposed nightly per person, and only once there
-                  are enough days of history to answer them.
-                </p>
-              {:else}
-                <p class="cause-line">
-                  {d.hypotheses.length} question{d.hypotheses.length === 1 ? '' : 's'},
-                  {d.hypotheses.filter((h) => h.verdict === 'supported').length} still holding.
-                  They sit on the board with everyone else's.
-                </p>
-                <button class="row-link" onclick={() => openBoardFor(m.subject)}>
-                  Open {cap(m.subject)}'s questions
-                </button>
-              {/if}
-            </div>
-
-            <!-- Statistical findings -->
-            <div class="detail-block">
-              <span class="sr-label-tight">What the sweep found</span>
-              {#if !d?.sweep}
-                <p class="cause-line">The sweep has not run for {cap(m.subject)} yet.</p>
-              {:else}
-                <p class="cause-line">
-                  {d.sweep.testsRun} tests · {d.sweep.naiveHits} would pass an uncorrected p&lt;0.05 ·
-                  <b>{d.sweep.findings.length}</b> survive the false-discovery correction.
-                  {#if d.sweep.errors?.length}<br />{d.sweep.errors[0]}{/if}
-                </p>
-                {#if d.sweep.findings.length}
-                  <div class="rows tight">
-                    {#each d.sweep.findings.slice(0, 6) as f, fi (fi)}
-                      <div class="pq-row">
-                        <span class="pq-q">{(f as Record<string, unknown>).a} ↔ {(f as Record<string, unknown>).b}</span>
-                        <span class="mono pq-stats">
-                          r {Number((f as Record<string, unknown>).r ?? 0).toFixed(2)}
-                          · q {Number((f as Record<string, unknown>).q ?? 0).toFixed(3)}
-                          · n {String((f as Record<string, unknown>).n ?? '—')}
-                        </span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              {/if}
-            </div>
-
-            <!-- Suggestions that cited them -->
-            <div class="detail-block">
-              <span class="sr-label-tight">Suggestions that cited {cap(m.subject)}</span>
-              {#if !d?.thoughts?.length}
-                <p class="cause-line">Nothing has cited {cap(m.subject)} as evidence yet.</p>
-              {:else}
-                <div class="rows tight">
-                  {#each d.thoughts as t (t.id)}
-                    <div class="pq-row">
-                      <a class="pq-q link" href="/jkai/daydreams?tab=feed&rate={t.id}">{t.title}</a>
-                      <span class="mono pq-stats">{kindLabel(t.kind)} · {t.score} · {t.status}</span>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </section>
-  {/if}
-
-  {#if tab === 'discoveries'}
-  <!-- Yesterday, in one card. Quiet days are reported as clearly as busy ones —
-       a digest that only appears when there is news cannot be trusted when it
-       is silent. -->
-  {#if digest}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Yesterday</span>
-        <span class="nm-sec-meta">{digest.day}</span>
-      </div>
-      <p class="digest">{digest.summary}</p>
-      {#if digest.narrative}
-        <p class="narrative" class:unchecked={digest.verified === false}>
-          {digest.narrative}
-          <span class="narr-tag" class:ok={digest.verified === true}>
-            {digest.verified === true ? 'model · checked' : 'model · UNCHECKED'}
-          </span>
-        </p>
-      {/if}
     </section>
   {/if}
 
-  <!-- What it has been wondering about. The model picks the questions; code
-       answers them. Everything asked is shown, however it turned out. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">What it wondered</span>
-      <span class="nm-sec-meta">everyone's questions, and the answers</span>
-    </div>
-    <p class="sec-lede">
-      The assistant chooses what to investigate before it sees any results, then
-      deterministic statistics answer it. A question that came back empty is
-      still worth reading — and is kept here exactly as long as one that held.
-      Questions are proposed per person nightly; the name on each card says whose
-      it is, and the correction is applied within that person, never across the
-      household.
-    </p>
+  <!-- ══ WHAT NEEDS YOU ═══════════════════════════════════════════════════
+       The hub's action queue, above the tabs' content and on every tab,
+       because it is the answer to the only question a reader arrives with.
+       Each card names ONE thing and carries the button that does it — the
+       old page made you find the section, then the sub-section, then the
+       row. Ordered by the shared tone rank, so a broken job outranks a
+       verdict that is merely waiting. -->
+  {#if attention.length}
+    <section class="band sunken attn">
+      <div class="inner">
+        <SectionHead
+          kicker="· / Waiting on you"
+          title={[attentionHeadline]}
+          strap="Everything below is a thing only you can do — a name, a verdict, an approval. The engine will not ask twice, and several of the detectors stay silent until it has an answer."
+        />
+        <div class="grid">
+          {#each attention as a (a.key)}
+            <div class="card t-{a.tone}">
+              <p class="card-kicker">{a.kicker}</p>
+              <p class="card-figure">{a.figure}</p>
+              <p class="card-body">{a.detail}</p>
+              <div class="card-actions">
+                <button type="button" class="cta" onclick={a.act}>{a.cta}</button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    </section>
+  {/if}
 
-    <!-- Reorders what gets asked. Grants no new access: the proposer still sees
-         only the metric list, and a steer reaches it as quoted preference. -->
-    <div class="session-bar">
-      {#if !boardOpen}
-        <button class="session-cta" onclick={openBoard}>Open the board</button>
-      {:else}
-        <button class="row-link" onclick={() => { boardOpen = false; }}>Close</button>
-      {/if}
-    </div>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       FEED
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'feed'}
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / Steer it"
+          title={['Point it at', 'something']}
+          strap="The only owner-authored text the engine has ever read beyond a place name. It reorders what gets attention and grants no new access — the proposer still sees the metric list and nothing else."
+        />
 
-    {#if boardError}<p class="nm-sec-error">{boardError}</p>{/if}
-
-    {#if boardOpen}
-      {#if boardLoading}
-        <p class="sec-lede">Loading…</p>
-      {:else if board.length === 0}
-        <p class="sec-lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
-      {:else}
-        <!-- Every person's questions live here. The proposer runs per subject
-             nightly, so without a name against each card this is five people's
-             questions in one undifferentiated list. -->
-        {#if boardPeople.length > 1}
-          <div class="filters">
-            <span class="filter-label">Whose</span>
-            <button class="filter" class:on={boardWho === 'all'} onclick={() => (boardWho = 'all')}>
-              Everyone <span class="n">{board.length}</span>
+        <div class="steer-row">
+          <label class="field-label" for="steer-input">Ask it to look into something</label>
+          <div class="steer-controls">
+            <input
+              id="steer-input"
+              class="text-input"
+              bind:value={steerText}
+              maxlength="280"
+              placeholder="e.g. whether going out late costs me the next morning"
+              onkeydown={(e) => { if (e.key === 'Enter') submitSteer(); }}
+            />
+            <button type="button" class="cta" disabled={steerBusy || !steerText.trim()} onclick={submitSteer}>
+              {steerBusy ? 'Adding…' : 'Add a steer'}
             </button>
-            {#each boardPeople as p (p.subject)}
-              <button class="filter" class:on={boardWho === p.subject} onclick={() => (boardWho = p.subject)}>
-                {cap(p.subject)} <span class="n">{p.n}</span>
-              </button>
-            {/each}
+          </div>
+          {#if steerError}<p class="err">{steerError}</p>{/if}
+        </div>
+
+        {#if steers.length}
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Steer</th>
+                  <th class="right">Influence</th>
+                  <th class="right">Do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each steers as st (st.id)}
+                  <tr class:dim={st.status !== 'active'}>
+                    <td class="cell-lead">{st.text}</td>
+                    <td class="right">
+                      {st.status === 'active'
+                        ? `${st.batchesInfluenced} batch${st.batchesInfluenced === 1 ? '' : 'es'}`
+                        : st.status}
+                    </td>
+                    <td class="right nowrap">
+                      {#if st.status === 'active'}
+                        <button type="button" class="btn" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'done' })}>Done</button>
+                        <button type="button" class="btn danger" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'dropped' })}>Drop</button>
+                      {:else}
+                        <button type="button" class="btn" onclick={() => steerPost({ action: 'set_steer_status', id: st.id, status: 'active' })}>Reopen</button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
         {/if}
+      </div>
+    </section>
 
-        <div class="session-list">
-          {#each boardVisible as q (q.id)}
-            <div class="hyp" class:held={q.verdict === 'supported'}>
-              <div class="hyp-hd">
-                <span class="who">{cap(q.subject)}</span>
-                <span class="hyp-q">{q.question}</span>
-              </div>
-              <div class="hyp-meta">
-                <span class="mono">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
-                {#if q.lagDays}<span class="sep">·</span><span class="mono">next day</span>{/if}
-                <span class="sep">·</span>
-                <span class="mono">expected {q.direction}</span>
-                {#if q.retestCount > 0}
-                  <span class="sep">·</span><span class="mono">retested {q.retestCount}×</span>
-                {/if}
-                <!-- Rounded. The stored values are raw doubles and the card
-                     was rendering `r -0.11998358323004636`, which reads as
-                     precision the measurement does not have. -->
-                {#if q.r != null}
-                  <span class="sep">·</span><span class="mono">r {q.r.toFixed(2)}</span>
-                {/if}
-                {#if q.qValue != null}
-                  <span class="sep">·</span><span class="mono">q {q.qValue.toFixed(3)}</span>
-                {/if}
-                {#if q.pairs != null}
-                  <span class="sep">·</span><span class="mono">n {q.pairs}</span>
-                {/if}
-              </div>
-              {#if q.verdict}
-                <div class="hyp-verdict v-{q.verdict}">
-                  <span class="hyp-badge">{VERDICT_LABEL[q.verdict] ?? q.verdict}</span>
-                  <span class="hyp-sum">{q.summary}</span>
-                </div>
-                <!-- Nothing is filtered by verdict when choosing what to
-                     retest, so every answer here is provisional. Saying when it
-                     is next checked is what stops "nothing there" reading as a
-                     closed case. -->
-                {#if q.retestInDays !== null}
-                  <div class="hyp-family mono">
-                    {q.retestInDays === 0 ? 'due to be checked again' : `checked again in ${q.retestInDays}d`}
-                  </div>
-                {/if}
-                {#if q.familySize}
-                  <!-- The family size is shown because a q-value cannot be read
-                       without it: q over 4 tests and q over 400 are not the
-                       same number. -->
-                  <div class="hyp-family mono">corrected across {q.familySize} test{q.familySize === 1 ? '' : 's'}</div>
-                {/if}
+    <!-- ── THE FEED ─────────────────────────────────────────────────────── -->
+    <section class="band sunken" id="dd-thefeed">
+      <div class="inner">
+        <SectionHead
+          kicker="B / The feed"
+          title={['Everything it', 'has noticed']}
+          strap="Grouped by what sort of thing it is, how sure it was, or when it landed. Colour is priority, not category: orange is waiting on your verdict, red nearly went out wrong, and grey is finished business."
+        />
+
+        <div class="controls">
+          <FacetBar label="Arrange" active={groupBy} facets={arrangeFacets} onpick={(id) => (groupBy = id as GroupBy)} />
+          <FacetBar label="Show" active={filter} facets={showFacets} onpick={(id) => (filter = id as Filter)} />
+          <FacetBar label="Order" active={groupBy === 'day' ? 'newest' : feedOrder} facets={feedOrderFacets} onpick={(id) => (feedOrder = id as FeedOrder)} />
+        </div>
+        {#if groupBy === 'day'}
+          <p class="note">
+            Arranged by day, so the order is the day's — a timeline that jumped about by score
+            would print the same date as a heading over and over.
+          </p>
+        {/if}
+
+        {#if actionError}<p class="err">{actionError}</p>{/if}
+
+        {#if visible.length === 0}
+          <div class="card t-quiet">
+            <p class="card-body">
+              {#if !hasRun}
+                The detect pass has not run yet, so nothing has been noticed rather than nothing
+                being worth noticing.
+              {:else if thoughts.length === 0}
+                Nothing noticed yet. {detectors.length - readyCount} of {detectors.length} detectors are
+                still gathering the history they need — the Engine tab says what each is waiting for.
               {:else}
-                <div class="hyp-verdict v-untested">
-                  <span class="hyp-badge">not answered yet</span>
-                </div>
+                Nothing in this view. The counts on the chips above say where everything went.
               {/if}
-              <div class="hyp-why">{q.rationale}</div>
-              <div class="hyp-actions">
-                {#if q.feedback}
-                  <span class="voted">you said {q.feedback.replace('_', ' ')}</span>
-                {:else}
-                  <span class="hyp-ask">Worth asking?</span>
-                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
-                  <button class="row-link" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
-                {/if}
-                <button class="row-link" onclick={() => toggleHypDetail(q.id)}>
-                  {hypOpen === q.id ? 'Hide the days' : 'Show the days behind this'}
-                </button>
-              </div>
+            </p>
+          </div>
+        {:else}
+          {#each grouped as g (g.key)}
+            <!-- A group header that carries its own statistics, so "what is it
+                 noticing, how strongly, and how has that landed" is answerable
+                 without opening anything. The useful rate is withheld below five
+                 votes rather than printed over two — see thought-groups.ts. -->
+            <div class="group">
+              <button type="button" class="group-hd" onclick={() => toggleGroup(g.key)}>
+                <span class="group-caret">{collapsed[g.key] ? '▸' : '▾'}</span>
+                <span class="group-label">{g.label}</span>
+                <span class="group-n">{g.items.length}</span>
+              </button>
+              {#if g.stats}
+                <p class="group-stats">
+                  mean {g.stats.meanScore.toFixed(2)}
+                  · {g.stats.delivered} reached you
+                  {#if g.stats.held} · {g.stats.held} held{/if}
+                  {#if g.stats.usefulRate != null}
+                    · {Math.round(g.stats.usefulRate * 100)}% useful over {g.stats.rated}
+                  {:else if g.stats.rated}
+                    · {g.stats.rated} rated
+                  {/if}
+                </p>
+              {/if}
+              <span class="group-rule"></span>
+            </div>
+            {#if g.blurb && !collapsed[g.key]}
+              <p class="group-blurb">{g.blurb}</p>
+            {/if}
 
-              {#if hypOpen === q.id}
-                {@const d = hypDetail[q.id]}
-                <div class="hyp-detail">
-                  {#if hypDetailError[q.id]}
-                    <p class="cause-line err">{hypDetailError[q.id]}</p>
-                  {:else if !d}
-                    <p class="cause-line">Reading the days…</p>
-                  {:else}
-                    <p class="cause-line">
-                      {d.days.length} day{d.days.length === 1 ? '' : 's'} in the window,
-                      <b>{d.days.length - d.unusedCount}</b> with both readings present — that
-                      count is the <span class="mono">n</span> above. Pairwise deletion, never
-                      imputation: a day missing either half is dropped rather than filled in.
-                      {#if d.lagDays}<br />Lagged: <span class="mono">{d.metricA}</span> on a day is paired with <span class="mono">{d.metricB}</span> on the next.{/if}
+            <div class="stack">
+              {#each collapsed[g.key] ? [] : g.items as t (t.id)}
+                <article class="card t-{thoughtTone(t)}" class:open={expanded === t.id}>
+                  <div class="card-hd">
+                    <button type="button" class="card-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
+                      {headline(t)}
+                    </button>
+                    {#if isAnswered(t)}
+                      <span class="pill t-good">answered</span>
+                    {:else}
+                      <span class="pill t-{thoughtTone(t)}">{t.status}</span>
+                    {/if}
+                  </div>
+
+                  <!-- A question about a place that now has a name is finished
+                       business, and saying so stops it reading as still open. The
+                       stored title is kept beneath, because it is what was actually
+                       asked at the time. -->
+                  {#if isAnswered(t)}
+                    <p class="card-body">
+                      You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
+                      It asked: “{t.title}”
                     </p>
-                    <div class="tablewrap">
-                      <table class="hyp-days">
-                        <thead>
-                          <tr>
-                            <th>day</th>
-                            <th>{d.metricA}</th>
-                            <th>{d.metricB}{d.lagDays ? ' (next day)' : ''}</th>
-                          </tr>
-                        </thead>
+                  {:else}
+                    <p class="card-body">{t.explanation}</p>
+                  {/if}
+
+                  <div class="card-meta">
+                    {#if kindChip(t).musing}
+                      <span class="tag accent">{kindChip(t).text}</span>
+                    {:else}
+                      <span class="tag">{kindChip(t).text}</span>
+                    {/if}
+                    {#key data.threshold.value}
+                      <span
+                        class="tag t-{bandTone(likelihoodBand(t.score, data.threshold.value).id)}"
+                        title={likelihoodBand(t.score, data.threshold.value).meaning}
+                      >
+                        {likelihoodBand(t.score, data.threshold.value).label}
+                      </span>
+                    {/key}
+                    <span class="meta-item">score {t.score}</span>
+                    <span class="meta-item">{ago(t.createdAt)}</span>
+                    {#if !t.placeLabel && t.placeAddress}
+                      <span class="meta-item">{t.placeAddress}</span>
+                    {/if}
+                    {#if !t.placeLabel && t.placeVisits}
+                      <span class="meta-item">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
+                    {/if}
+                    {#if t.suppressedReason}
+                      <span class="meta-item warn">held back: {t.suppressedReason}</span>
+                    {/if}
+                    {#if t.promptTokens + t.completionTokens > 0}
+                      <span class="meta-item">{t.promptTokens + t.completionTokens} tok</span>
+                    {/if}
+                    {#if t.feedback}
+                      <span class="meta-item good">you said {t.feedback.replace('_', ' ')}</span>
+                    {/if}
+                  </div>
+
+                  {#if t.id === rateId}
+                    <p class="cue">Opened from a notification — your answer is below.</p>
+                  {/if}
+
+                  {#if t.narrative}
+                    <!-- The model's phrasing, always shown as the model's. The rule's
+                         own explanation stays directly beneath it, so if this whole
+                         path failed permanently the ledger would still read. -->
+                    <blockquote class="quote" class:unchecked={t.verified === false}>
+                      {t.narrative}
+                      <span class="quote-tag" class:ok={t.verified === true}>
+                        {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+                      </span>
+                    </blockquote>
+                  {:else if t.narrativeDroppedReason}
+                    <!-- A composer that has quietly started refusing everything looks
+                         exactly like a quiet week unless this is on the page. -->
+                    <p class="note warn">phrasing dropped — {t.narrativeDroppedReason}</p>
+                  {/if}
+
+                  <!-- ── What the review made of it ───────────────────────────
+                       A refuted thought never reaches WhatsApp, so this is the only
+                       place its reasoning is ever read. A verdict you cannot see is
+                       one you cannot argue with. -->
+                  {#if t.reviewVerdict}
+                    <p class="review r-{t.reviewVerdict}">
+                      <span class="review-tag">
+                        {t.reviewVerdict === 'verified'
+                          ? 'checked · holds up'
+                          : t.reviewVerdict === 'refuted'
+                            ? 'checked · does not hold'
+                            : 'checked · cannot tell'}
+                        {#if typeof t.reviewLikelihood === 'number'}
+                          <span class="review-p">{Math.round(t.reviewLikelihood * 100)}%</span>
+                        {/if}
+                      </span>
+                      {#if t.reviewReasoning}<span class="review-why">{t.reviewReasoning}</span>{/if}
+                    </p>
+                  {/if}
+
+                  {#if expanded === t.id}
+                    <div class="detail">
+                      <div class="detail-block">
+                        <p class="field-label">Why this came up</p>
+                        {#each rootCause(t) as line, li (li)}
+                          <p class="detail-line">{line}</p>
+                        {/each}
+                        {#if extraComponents(t).length}
+                          <div class="tbl-scroll">
+                            <table class="tbl compact">
+                              <thead><tr><th>Component</th><th class="right">Value</th></tr></thead>
+                              <tbody>
+                                {#each extraComponents(t) as [k, v] (k)}
+                                  <tr><td>{k}</td><td class="right">{v}</td></tr>
+                                {/each}
+                              </tbody>
+                            </table>
+                          </div>
+                        {/if}
+                      </div>
+
+                      {#if t.evidence.length}
+                        <div class="detail-block">
+                          <p class="field-label">What it was looking at</p>
+                          <!-- Resolved on demand: the subject and sender of the
+                               email, the place's rhythm, the transaction — and the
+                               graph entities each source touches. -->
+                          <EvidenceList thoughtId={t.id} count={t.evidence.length} />
+                        </div>
+                      {/if}
+
+                      {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
+                        <div class="detail-block">
+                          <p class="field-label">It suggests</p>
+                          <div class="card-actions">
+                            {#each t.proposedActions ?? [] as a, i (i)}
+                              <button type="button" class="cta" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
+                                {a.label}
+                              </button>
+                            {/each}
+                          </div>
+                        </div>
+                      {/if}
+
+                      <!-- Somewhere on a map, when the thought is about somewhere.
+                           Coordinates are fetched on demand by an owner-gated
+                           action; they never ride the ledger payload. -->
+                      {#if t.placeId}
+                        <div class="detail-block">
+                          <p class="field-label">Where</p>
+                          {#if thoughtPlace[t.id]}
+                            <PlaceMap
+                              lat={thoughtPlace[t.id].lat}
+                              lon={thoughtPlace[t.id].lon}
+                              radiusM={thoughtPlace[t.id].radiusM}
+                            />
+                            {#if thoughtPlace[t.id].suggestedAddress}
+                              <p class="note">{thoughtPlace[t.id].suggestedAddress}</p>
+                            {/if}
+                          {:else}
+                            <button
+                              type="button"
+                              class="btn"
+                              disabled={busy === `${t.id}:map`}
+                              onclick={() => showOnMap(t.id)}
+                            >
+                              {busy === `${t.id}:map` ? 'Loading the map…' : 'Show it on a map'}
+                            </button>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      <!-- A verdict says whether it landed; it can never say WHY.
+                           Saved verbatim, and written to memory so the rest of jkai
+                           reads it too. -->
+                      <div class="detail-block">
+                        <p class="field-label">Add some depth</p>
+                        {#if t.note && noteDraft[t.id] === undefined}
+                          <p class="detail-line said">{t.note}</p>
+                          <button type="button" class="btn" onclick={() => { noteDraft[t.id] = t.note ?? ''; }}>
+                            Change what you said
+                          </button>
+                        {:else}
+                          <textarea
+                            class="text-input area"
+                            rows="3"
+                            maxlength={MAX_NOTE_CHARS}
+                            placeholder="Anything it should know — what it got wrong, what it missed, what these actually are."
+                            bind:value={noteDraft[t.id]}
+                          ></textarea>
+                          <div class="card-actions">
+                            <button
+                              type="button"
+                              class="cta"
+                              disabled={busy === `${t.id}:note` || !(noteDraft[t.id] ?? '').trim()}
+                              onclick={() => saveNote(t)}
+                            >
+                              {busy === `${t.id}:note` ? 'Saving…' : 'Save this'}
+                            </button>
+                            {#if t.note}
+                              <button type="button" class="btn" onclick={() => { delete noteDraft[t.id]; noteDraft = { ...noteDraft }; }}>
+                                Cancel
+                              </button>
+                            {/if}
+                          </div>
+                          <p class="note">Kept as a memory, so it informs what it says next.</p>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
+
+                  <!-- Rating is offered only on what actually reached him. Asking
+                       "was this useful?" about a thought suppressed before it was
+                       ever sent is a question with no answer, and the vote would
+                       train the weights on something he never saw. -->
+                  {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
+                    <div class="card-actions bar">
+                      <span class="ask">Was this any use?</span>
+                      <button type="button" class="cta" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>
+                        Useful
+                      </button>
+                      <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>
+                        Not useful
+                      </button>
+                      <button type="button" class="btn danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
+                        Never this kind
+                      </button>
+                      <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
+                        Snooze a week
+                      </button>
+                    </div>
+                  {/if}
+                </article>
+              {/each}
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </section>
+
+    <!-- ── THE SORTING DECK ─────────────────────────────────────────────
+         Everything about ranking is a random walk until the ledger has
+         feedback in it, and at four interruptions a day the 25 responses the
+         threshold needs are never collected. One sitting closes that gap and
+         costs no interruption budget at all. -->
+    {#if suppressedCount}
+      <section class="band" id="dd-deck">
+        <div class="inner">
+          <SectionHead
+            kicker="C / What it nearly said"
+            title={['The things', 'it held back']}
+            strap="These scored below the bar, so nothing was sent. That bar was set with no evidence at all — rating a few here is the only thing that moves it. None of this counts as a notification."
+          >
+            {#snippet aside()}
+              {#if !deckOpen}
+                <button type="button" class="cta" onclick={openDeck}>Sort through {suppressedCount}</button>
+              {:else}
+                {#if verdictCount}
+                  <button type="button" class="cta" disabled={deckSaving} onclick={saveDeck}>
+                    {deckSaving ? 'Saving…' : `Save ${verdictCount} verdict${verdictCount === 1 ? '' : 's'}`}
+                  </button>
+                {/if}
+                <button type="button" class="btn" onclick={() => { deckOpen = false; }}>Close</button>
+              {/if}
+            {/snippet}
+          </SectionHead>
+
+          {#if deckDone}
+            <p class="note good">
+              Recorded {deckDone.recorded}{deckDone.failed ? `, ${deckDone.failed} failed` : ''}.
+              Counted at 0.7 of a considered verdict.
+            </p>
+          {/if}
+          {#if deckError}<p class="err">{deckError}</p>{/if}
+
+          {#if !deckOpen}
+            <p class="lede">Thirty at a time, most-repeated first. Nothing you do here interrupts you.</p>
+          {:else if deckLoading}
+            <p class="lede">Loading…</p>
+          {:else if deck.length === 0}
+            <p class="lede">Nothing left to sort.</p>
+          {:else}
+            <div class="grid">
+              {#each deck as c (c.id)}
+                <div class="card t-{verdicts[c.id] ? 'good' : 'watch'}" class:ruled={verdicts[c.id]}>
+                  <p class="card-kicker">{c.kind} · score {c.score}{c.recurrenceCount > 1 ? ` · proposed ${c.recurrenceCount}×` : ''}</p>
+                  <p class="card-title as-text">{c.title}</p>
+                  <p class="card-body">{c.narrative || c.explanation}</p>
+                  <div class="card-actions bar">
+                    <button
+                      type="button"
+                      class="btn"
+                      class:picked={verdicts[c.id] === 'useful'}
+                      onclick={() => setVerdict(c.id, 'useful')}
+                    >Useful</button>
+                    <button
+                      type="button"
+                      class="btn"
+                      class:picked={verdicts[c.id] === 'not_useful'}
+                      onclick={() => setVerdict(c.id, 'not_useful')}
+                    >Not useful</button>
+                    <button
+                      type="button"
+                      class="btn danger"
+                      class:picked={verdicts[c.id] === 'never_kind'}
+                      onclick={() => setVerdict(c.id, 'never_kind')}
+                    >Never this kind</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </section>
+    {/if}
+  {/if}
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       FAMILY
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'family'}
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / The household, now"
+          title={['Where', 'everyone is']}
+          strap="Read off the trail, not asked for. A card goes grey when the last fix is over an hour old — an unknown position and a position at home are not the same answer."
+        />
+        <div class="grid">
+          {#each familyMembers as m (m.subject)}
+            <div class="card t-{m.ageMins == null || m.ageMins > 60 ? 'quiet' : m.isHome ? 'good' : 'steady'}">
+              <div class="card-hd">
+                <p class="card-title as-text">{cap(m.subject)}</p>
+                {#if m.batteryPct != null && m.batteryPct <= 25}
+                  <span class="pill t-watch">battery {m.batteryPct}%</span>
+                {/if}
+              </div>
+              <p class="card-figure sm">
+                {#if m.ageMins == null}
+                  not tracked
+                {:else if m.isHome}
+                  at home
+                {:else if m.placeLabel}
+                  at {m.placeLabel}
+                {:else if m.distanceHomeKm != null}
+                  {m.distanceHomeKm} km out
+                {:else}
+                  out
+                {/if}
+              </p>
+              <p class="card-kicker">
+                {#if m.ageMins != null}seen {m.ageMins < 5 ? 'just now' : `${m.ageMins}m ago`}{:else}no recent fix{/if}
+              </p>
+              <div class="tbl-scroll">
+                <table class="tbl compact">
+                  <tbody>
+                    <tr><td>First out</td><td class="right">{clock(m.today.firstOutMins)}</td></tr>
+                    <tr><td>Out today</td><td class="right">{m.today.minutesOut >= 60 ? `${Math.round(m.today.minutesOut / 6) / 10}h` : `${m.today.minutesOut}m`}</td></tr>
+                    <tr><td>Places</td><td class="right">{m.today.placesVisited}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead
+          kicker="B / On the map"
+          title={['Everyone,', 'plotted']}
+          strap="Fetched on demand and held only for this render — positions never ride the page payload and are never cached."
+        >
+          {#snippet aside()}
+            {#if famPositions}
+              <button type="button" class="btn" onclick={loadFamilyMap}>Refresh positions</button>
+            {:else}
+              <button type="button" class="cta" onclick={loadFamilyMap}>Show the map</button>
+            {/if}
+          {/snippet}
+        </SectionHead>
+
+        {#if famLoading}
+          <p class="lede">Locating everyone…</p>
+        {:else if famError}
+          <div class="card t-urgent">
+            <p class="card-body">{famError}</p>
+            <div class="card-actions"><button type="button" class="btn" onclick={loadFamilyMap}>Try again</button></div>
+          </div>
+        {:else if famPositions && famPositions.length}
+          <FamilyMap positions={famPositions} />
+        {:else if famPositions}
+          <p class="lede">Nobody has a recent position.</p>
+        {/if}
+      </div>
+    </section>
+
+    <!-- ── EACH PERSON'S OWN WORK ────────────────────────────────────────
+         This tab was a presence map. Four of the five people in the trail have
+         had a year of position history and a feature store since the family
+         backfill, and nothing had ever asked a question about them, because
+         the sweep and the hypothesis proposer both ran for John alone. Both
+         are per-subject now.
+
+         A suggestion is filed under a person by its CITATIONS — the ponder
+         pack cards each member as `family:<subject>` — never by finding their
+         name in the text, which would file every thought that mentions them. -->
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="C / Each person"
+          title={['What the sweep', 'found, per head']}
+          strap="Questions are proposed per person nightly, and the false-discovery correction is applied within that person — never across the household."
+        />
+
+        {#each familyMembers as m (m.subject)}
+          {@const d = familyDetail[m.subject]}
+          <div class="person">
+            <button type="button" class="person-hd" onclick={() => togglePerson(m.subject)}>
+              <span class="group-caret">{openPerson === m.subject ? '▾' : '▸'}</span>
+              <span class="person-name">{cap(m.subject)}</span>
+              <span class="person-counts">
+                {d?.hypotheses?.length ?? 0} question{(d?.hypotheses?.length ?? 0) === 1 ? '' : 's'}
+                · {d?.sweep?.findings?.length ?? 0} finding{(d?.sweep?.findings?.length ?? 0) === 1 ? '' : 's'}
+                · {d?.thoughts?.length ?? 0} suggestion{(d?.thoughts?.length ?? 0) === 1 ? '' : 's'}
+              </span>
+            </button>
+
+            {#if openPerson === m.subject}
+              <div class="person-body">
+                <!-- Questions live on the Discoveries board, which spans the
+                     whole household with a name against each card. A second
+                     copy here would be two places to read the same thing and
+                     one of them would go stale. -->
+                <div class="detail-block">
+                  <p class="field-label">Questions asked about {cap(m.subject)}</p>
+                  {#if !d?.hypotheses?.length}
+                    <p class="detail-line">
+                      Nothing yet. Questions are proposed nightly per person, and only once there
+                      are enough days of history to answer them.
+                    </p>
+                  {:else}
+                    <p class="detail-line">
+                      {d.hypotheses.length} question{d.hypotheses.length === 1 ? '' : 's'},
+                      {d.hypotheses.filter((h) => h.verdict === 'supported').length} still holding.
+                      They sit on the board with everyone else's.
+                    </p>
+                    <button type="button" class="cta" onclick={() => openBoardFor(m.subject)}>
+                      Open {cap(m.subject)}'s questions
+                    </button>
+                  {/if}
+                </div>
+
+                <div class="detail-block">
+                  <p class="field-label">What the sweep found</p>
+                  {#if !d?.sweep}
+                    <p class="detail-line">The sweep has not run for {cap(m.subject)} yet.</p>
+                  {:else}
+                    <p class="detail-line">
+                      {d.sweep.testsRun} tests · {d.sweep.naiveHits} would pass an uncorrected p&lt;0.05 ·
+                      <b>{d.sweep.findings.length}</b> survive the false-discovery correction.
+                      {#if d.sweep.errors?.length}<br />{d.sweep.errors[0]}{/if}
+                    </p>
+                    {#if d.sweep.findings.length}
+                      <div class="tbl-scroll">
+                        <table class="tbl compact">
+                          <thead><tr><th>Pair</th><th class="right">r</th><th class="right">q</th><th class="right">n</th></tr></thead>
+                          <tbody>
+                            {#each d.sweep.findings.slice(0, 6) as f, fi (fi)}
+                              <tr>
+                                <td class="cell-lead">{(f as Record<string, unknown>).a} ↔ {(f as Record<string, unknown>).b}</td>
+                                <td class="right">{Number((f as Record<string, unknown>).r ?? 0).toFixed(2)}</td>
+                                <td class="right">{Number((f as Record<string, unknown>).q ?? 0).toFixed(3)}</td>
+                                <td class="right">{String((f as Record<string, unknown>).n ?? '—')}</td>
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
+
+                <div class="detail-block">
+                  <p class="field-label">Suggestions that cited {cap(m.subject)}</p>
+                  {#if !d?.thoughts?.length}
+                    <p class="detail-line">Nothing has cited {cap(m.subject)} as evidence yet.</p>
+                  {:else}
+                    <div class="tbl-scroll">
+                      <table class="tbl compact">
+                        <thead><tr><th>Suggestion</th><th>Kind</th><th class="right">Score</th><th class="right">Status</th></tr></thead>
                         <tbody>
-                          {#each d.days.filter((x) => x.used).slice(-40).reverse() as row (row.day)}
+                          {#each d.thoughts as t (t.id)}
                             <tr>
-                              <td class="mono">{row.day}</td>
-                              <td class="mono">{row.a}</td>
-                              <td class="mono">{row.b}</td>
+                              <td class="cell-lead"><a class="link" href="/jkai/daydreams?tab=feed&rate={t.id}">{t.title}</a></td>
+                              <td>{kindLabel(t.kind)}</td>
+                              <td class="right">{t.score}</td>
+                              <td class="right">{t.status}</td>
                             </tr>
                           {/each}
                         </tbody>
                       </table>
                     </div>
-                    {#if d.days.length - d.unusedCount > 40}
-                      <p class="note-hint">Most recent 40 of {d.days.length - d.unusedCount} shown.</p>
-                    {/if}
                   {/if}
                 </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
-    {/if}
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Lines of enquiry</span>
-      <span class="nm-sec-meta">{(discoveries?.leads ?? []).filter((l) => l.status === 'open').length} open</span>
-    </div>
-    <p class="sec-lede">
-      Longer arcs the ponder engine has decided to pursue. Each earns its keep from the
-      questions inside its metric set — a line that keeps producing nothing is abandoned
-      by arithmetic, not by mood.
-    </p>
-    {#if (discoveries?.leads ?? []).length === 0}
-      <div class="empty">No lines of enquiry yet. The ponder engine opens them when a pattern deserves weeks, not a sentence.</div>
-    {:else}
-      <div class="rows tight">
-        {#each discoveries?.leads ?? [] as l (l.id)}
-          <div class="lead-row" class:closed={l.status !== 'open'}>
-            <div class="lead-main">
-              <span class="lead-title">{l.title}</span>
-              <span class="lead-why">{l.rationale}</span>
-              <span class="lead-metrics mono">{l.metrics.join(' · ')}</span>
-            </div>
-            <div class="lead-state">
-              <span class="det-badge" class:on={l.status === 'open'}>{l.status}</span>
-              <span class="det-votes mono">score {Math.round(l.score * 100) / 100} · {l.roundsRun} rounds · {l.hypothesesHeld}/{l.hypothesesSpawned} held</span>
-            </div>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
-    {/if}
-  </section>
+    </section>
+  {/if}
 
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">The sweep</span>
-      <span class="nm-sec-meta">{discoveries?.sweep ? ago(String(discoveries.sweep.ts)) : 'never run'}</span>
-    </div>
-    {#if discoveries?.sweep}
-      <p class="sec-lede">{discoveries.sweep.summary}</p>
-    {:else}
-      <p class="sec-lede">The daily every-pair sweep has not reported yet.</p>
-    {/if}
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Digests</span>
-      <span class="nm-sec-meta">{(discoveries?.digests ?? []).length} entries</span>
-    </div>
-    {#if (discoveries?.digests ?? []).length === 0}
-      <div class="empty">No digests yet.</div>
-    {:else}
-      <div class="rows tight">
-        <!-- Keyed on subject AND day. The Sunday letter shares a day with that
-             day's daily digest by design, and keying on the day alone threw
-             `each_key_duplicate` — which does not degrade a row, it kills the
-             component, so the whole tab stopped opening. -->
-        {#each discoveries?.digests ?? [] as d (`${d.subject}-${d.day}`)}
-          <details class="digest-row">
-            <summary>
-              <span class="mono digest-day">{d.day}</span>
-              {#if d.subject === 'weekly'}<span class="digest-kind">weekly</span>{/if}
-              <span class="digest-sum">{d.summary}</span>
-            </summary>
-            {#if d.narrative}
-              <p class="narrative" class:unchecked={d.verified === false}>
-                {d.narrative}
-                <span class="narr-tag" class:ok={d.verified === true}>
-                  {d.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+  <!-- ══════════════════════════════════════════════════════════════════════
+       DISCOVERIES
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'discoveries'}
+    <!-- Yesterday, in one card. Quiet days are reported as clearly as busy
+         ones — a digest that only appears when there is news cannot be
+         trusted when it is silent. -->
+    {#if digest}
+      <section class="band">
+        <div class="inner">
+          <SectionHead kicker="A / Yesterday" title={['The morning', 'card']} strap={digest.day} />
+          <div class="card t-steady">
+            <p class="card-body lead">{digest.summary}</p>
+            {#if digest.narrative}
+              <blockquote class="quote" class:unchecked={digest.verified === false}>
+                {digest.narrative}
+                <span class="quote-tag" class:ok={digest.verified === true}>
+                  {digest.verified === true ? 'model · checked' : 'model · UNCHECKED'}
                 </span>
-              </p>
+              </blockquote>
             {/if}
-          </details>
-        {/each}
-      </div>
-    {/if}
-  </section>
-  {/if}
-
-  {#if tab === 'calendar'}
-  <!-- ── THE DIARY, AND WHAT THE ENGINE MAY SEE OF IT ──────────────────────
-       Your note in August: "some of those calendar events are rolling
-       reminders". A standing reminder is a real event and a fictional
-       commitment at once, and nothing in the data separates them — so this is
-       the control that does. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Calendar</span>
-      <span class="nm-sec-meta">what daydreaming is allowed to reason about</span>
-    </div>
-    <CalendarBoard onchanged={() => invalidateAll()} />
-  </section>
-  {/if}
-
-  {#if tab === 'places'}
-  {#if !unnamed.length && !quietUnnamed && !named.length}
-    <section class="nm-sec">
-      <div class="nm-sec-hd"><span class="sr-label-tight">Places</span></div>
-      <div class="empty">
-        No places yet. They emerge from the household trail — one stay of ten minutes
-        makes a place, three visits makes a question.
-      </div>
-      {#if transitPlaces}
-        <p class="sec-lede">
-          {transitPlaces} {transitPlaces === 1 ? 'cluster is' : 'clusters are'} set aside as
-          transit — points the trail passes through rather than stops at.
-        </p>
-      {/if}
-    </section>
-  {/if}
-  <!-- ── UNNAMED PLACES ─────────────────────────────────────────────────
-       Placed above the thoughts on purpose. Several detectors are inert until
-       a place has a name, so this is the highest-leverage thing on the page
-       and answering one question here unlocks more than any amount of
-       reading below. -->
-  {#if unnamed.length || quietUnnamed}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">What is this place?</span>
-        <span class="nm-sec-meta">{counts.unnamedPlaces} unnamed</span>
-      </div>
-      <p class="sec-lede">
-        A named place turns a coordinate into a fact. Several of the detectors stay
-        silent until one has a name, so this is the highest-leverage thing on the page.
-        {#if transitPlaces}
-          <br />{transitPlaces} more {transitPlaces === 1 ? 'cluster is' : 'clusters are'} set
-          aside as transit — junctions and stretches of road the trail passes through rather
-          than stops at. They are never asked about.
-        {/if}
-        {#if quietUnnamed}
-          <br />{quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} been visited on fewer
-          than {askAtVisits} separate days, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
-          interrupted about — but {quietUnnamed === 1 ? 'it is' : 'they are'} in the session below.
-        {/if}
-      </p>
-
-      <!-- The sit-down. A page the owner opened is attention they have offered,
-           so naming thirty places here costs none of the interruption budget
-           that four-a-day protects. -->
-      <div class="session-bar">
-        {#if !sessionOpen}
-          <button class="session-cta" onclick={openSession}>
-            Name them in one go — {counts.unnamedPlaces} waiting
-          </button>
-          <span class="session-hint">Each one arrives with a suggested name and address.</span>
-        {:else}
-          <button class="row-link" onclick={() => { sessionOpen = false; }}>Close the session</button>
-          {#if draftCount}
-            <button class="session-cta" disabled={sessionSaving} onclick={saveSession}>
-              {sessionSaving ? 'Saving…' : `Save ${draftCount} name${draftCount === 1 ? '' : 's'}`}
-            </button>
-          {/if}
-        {/if}
-      </div>
-
-      {#if sessionDone}
-        <p class="session-done">
-          Named {sessionDone.named}{sessionDone.failed ? `, ${sessionDone.failed} failed` : ''}.
-          {#if sessionDone.thoughtsResolved}
-            Closed {sessionDone.thoughtsResolved} open question{sessionDone.thoughtsResolved === 1 ? '' : 's'}.
-          {/if}
-        </p>
-      {/if}
-      {#if sessionError}
-        <p class="nm-sec-error">{sessionError}</p>
-      {/if}
-
-      {#if sessionOpen}
-        {#if sessionLoading}
-          <p class="sec-lede">Loading the queue…</p>
-        {:else if sessionQueue.length === 0}
-          <p class="sec-lede">Nothing left unnamed.</p>
-        {:else}
-          <div class="session-list">
-            {#each sessionQueue as q (q.id)}
-              {@const draft = drafts[q.id]}
-              <div class="session-row" class:filled={draft && draft.label.trim()}>
-                <div class="session-meta">
-                  <span class="session-rhythm">{q.rhythm}</span>
-                  {#if q.suggestedAddress}
-                    <span class="session-addr">{q.suggestedAddress}</span>
-                  {:else}
-                    <span class="session-addr none">no address found for this spot</span>
-                  {/if}
-                </div>
-                <div class="session-controls">
-                  {#if !draft && q.suggestedLabel}
-                    <button class="suggest-chip" onclick={() => acceptSuggestion(q)}>
-                      {q.suggestedLabel}{q.suggestedKind ? ` · ${q.suggestedKind}` : ''}
-                    </button>
-                    <button
-                      class="row-link"
-                      onclick={() => editDraft(q, 'label', '')}
-                    >Something else</button>
-                  {:else}
-                    <input
-                      class="nm-text-input session-input"
-                      value={draft?.label ?? ''}
-                      placeholder={q.suggestedLabel ?? 'What is it called?'}
-                      oninput={(e) => editDraft(q, 'label', e.currentTarget.value)}
-                    />
-                    <select
-                      class="nm-text-input kind-select"
-                      value={draft?.kind ?? q.suggestedKind ?? 'other'}
-                      onchange={(e) => editDraft(q, 'kind', e.currentTarget.value)}
-                    >
-                      {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
-                    </select>
-                    {#if draft}
-                      <button class="row-link" onclick={() => clearDraft(q.id)}>Skip</button>
-                    {/if}
-                  {/if}
-                  <button
-                    class="row-link danger"
-                    disabled={busy === `ignore:${q.id}`}
-                    onclick={() => post({ action: 'ignore_place', placeId: q.id }, `ignore:${q.id}`)}
-                  >Never ask</button>
-                </div>
-              </div>
-            {/each}
           </div>
-        {/if}
-      {/if}
+        </div>
+      </section>
+    {/if}
 
-      <div class="rows" class:hidden={sessionOpen}>
-        {#each unnamed as p (p.id)}
-          <div class="place-row">
-            <div class="place-id">
-              <span class="place-rhythm">{rhythm(p)}</span>
-            </div>
-            {#if namingPlace === p.id}
-              <div class="naming">
-                <PlaceMap lat={p.lat} lon={p.lon} radiusM={p.radiusM} />
-                <p class="geo-line">
-                  {#if suggesting}
-                    Looking up what is there…
-                  {:else if suggestion?.address}
-                    {suggestion.address}
-                    {#if suggestion.name}<span class="geo-src">· suggested, check it</span>{/if}
-                  {:else}
-                    No address found for this spot — the map is the better guide.
-                  {/if}
-                </p>
-                {#if visits.length}
-                  <div class="visits">
-                    <span class="sr-label-tight">Who was here, and when</span>
-                    <ul class="visit-list">
-                      {#each visits as v (v.startedAt + v.subject)}
-                        <li>
-                          <span class="v-who">{cap(v.subject)}</span>
-                          <span class="v-day">{v.dayName}</span>
-                          <span class="v-date">{v.dateLabel}</span>
-                          <span class="v-time mono">{v.timeLabel}</span>
-                          <span class="v-dwell mono">{v.dwellMins} min</span>
-                        </li>
-                      {/each}
-                    </ul>
-                  </div>
-                {/if}
-                <div class="name-form">
-                  <input
-                    class="nm-text-input"
-                    bind:value={placeLabel}
-                    placeholder="What is it called?"
-                    onkeydown={(e) => { if (e.key === 'Enter') submitName(p.id); }}
-                  />
-                  <select class="nm-text-input kind-select" bind:value={placeKind}>
-                    {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
-                  </select>
-                  <button
-                    class="row-link"
-                    disabled={busy === `name:${p.id}` || !placeLabel.trim()}
-                    onclick={() => submitName(p.id)}
-                  >Save</button>
-                  <button class="row-link" onclick={() => { namingPlace = null; placeLabel = ''; suggestion = null; }}>Cancel</button>
-                </div>
-              </div>
+    <!-- What it has been wondering about. The model picks the questions; code
+         answers them. Everything asked is shown, however it turned out. -->
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead
+          kicker="B / What it wondered"
+          title={['Questions asked', 'before the answers']}
+          strap="The assistant chooses what to investigate before it sees any results, then deterministic statistics answer it. A question that came back empty is kept exactly as long as one that held."
+        >
+          {#snippet aside()}
+            {#if !boardOpen}
+              <button type="button" class="cta" onclick={openBoard}>Open the board</button>
             {:else}
-              <div class="place-actions">
-                <button class="row-link" onclick={() => openNaming(p)}>Name it</button>
-                <button
-                  class="row-link danger"
-                  disabled={busy === `ignore:${p.id}`}
-                  onclick={() => post({ action: 'ignore_place', placeId: p.id }, `ignore:${p.id}`)}
-                >Stop asking</button>
+              <button type="button" class="btn" onclick={() => { boardOpen = false; }}>Close</button>
+            {/if}
+          {/snippet}
+        </SectionHead>
+
+        {#if boardError}<p class="err">{boardError}</p>{/if}
+
+        {#if boardOpen}
+          {#if boardLoading}
+            <p class="lede">Loading…</p>
+          {:else if board.length === 0}
+            <p class="lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
+          {:else}
+            <div class="controls">
+              {#if boardPeople.length > 1}
+                <FacetBar label="Whose" active={boardWho} facets={boardWhoFacets} onpick={(id) => (boardWho = id)} />
+              {/if}
+              <FacetBar label="Verdict" active={boardVerdict} facets={boardVerdictFacets} onpick={(id) => (boardVerdict = id)} />
+              <FacetBar label="Order" active={boardOrder} facets={boardOrderFacets} onpick={(id) => (boardOrder = id as BoardOrder)} />
+            </div>
+
+            {#if boardVisible.length === 0}
+              <div class="card t-quiet">
+                <p class="card-body">No question matches that combination. The counts on the chips say where they all went.</p>
               </div>
             {/if}
-          </div>
-        {/each}
-      </div>
-    </section>
-  {/if}
 
-  <!-- ── NAMED PLACES ───────────────────────────────────────────────────── -->
-  {#if named.length}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Places you have named</span>
-        <span class="nm-sec-meta">{named.length}</span>
-      </div>
-      <div class="rows tight">
-        {#each named as p (p.id)}
-          <div class="place-row named">
-            <div class="place-id">
-              <span class="place-label">{p.label}</span>
-              <span class="place-rhythm">{p.kind} · {rhythm(p)}</span>
-            </div>
-            <span class="det-badge" class:on={p.hasMemory}>
-              {p.hasMemory ? 'in memory' : 'not in memory'}
-            </span>
-          </div>
-        {/each}
-      </div>
-    </section>
-  {/if}
-  {/if}
+            <div class="stack">
+              {#each boardVisible as q (q.id)}
+                <div class="card t-{verdictTone(q.verdict)}">
+                  <div class="card-hd">
+                    <p class="card-title as-text">{q.question}</p>
+                    <span class="pill t-{verdictTone(q.verdict)}">
+                      {q.verdict ? (VERDICT_LABEL[q.verdict] ?? q.verdict) : 'not answered yet'}
+                    </span>
+                  </div>
+                  <p class="card-kicker">{cap(q.subject)}</p>
 
-  {#if tab === 'money'}
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Evidenced spend</span>
-      <span class="nm-sec-meta">receipts{money?.bank.enabled ? ' + bank' : ''} · understates cash</span>
-    </div>
-    <div class="stat-grid">
-      <div class="stat-tile">
-        <div class="stat-num">{pounds(money?.totalMinor30d ?? 0)}</div>
-        <div class="stat-label">last 30 days</div>
-        <div class="stat-sub">{(money?.rows ?? []).length} verified rows</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{(money?.offers ?? []).length}</div>
-        <div class="stat-label">live offers</div>
-        <div class="stat-sub">from your email</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{(money?.renewals ?? []).length}</div>
-        <div class="stat-label">dated events, 60d</div>
-        <div class="stat-sub">renewals · appointments</div>
-      </div>
-    </div>
-    {#if (money?.byDay ?? []).length >= 2}
-      <div class="chart-block">
-        <Sparkline
-          points={(money?.byDay ?? []).map((d) => ({ label: d.day, value: d.minor / 100 }))}
-          format={(v) => `£${v.toFixed(2)}`}
-          height={64}
-        />
-      </div>
-    {/if}
-    {#if (money?.topMerchants ?? []).length}
-      <div class="merchants">
-        {#each money?.topMerchants ?? [] as m (m.merchant)}
-          <span class="merchant-chip"><b>{pounds(m.minor)}</b> {m.merchant}</span>
-        {/each}
-      </div>
-    {/if}
-  </section>
+                  {#if q.summary}<p class="card-body lead">{q.summary}</p>{/if}
+                  <p class="card-body">{q.rationale}</p>
 
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Recent</span>
-      <span class="nm-sec-meta">newest first</span>
-    </div>
-    {#if (money?.rows ?? []).length === 0}
-      <div class="empty">
-        Nothing verified yet. Receipts land as they arrive by email{money?.bank.enabled ? ' and from the bank overnight' : ''}.
-      </div>
-    {:else}
-      <div class="tablewrap">
-        <table class="tele-table">
-          <thead><tr><th>day</th><th>merchant</th><th>amount</th><th>via</th></tr></thead>
-          <tbody>
-            {#each money?.rows ?? [] as r (r.id)}
-              <tr>
-                <td class="mono">{r.day}</td>
-                <td>{r.merchant}</td>
-                <td class="mono amt">{pounds(r.amountMinor)}</td>
-                <td class="mono">{r.source}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {/if}
-  </section>
+                  <div class="card-meta">
+                    <span class="tag">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
+                    {#if q.lagDays}<span class="meta-item">next day</span>{/if}
+                    <span class="meta-item">expected {q.direction}</span>
+                    {#if q.retestCount > 0}<span class="meta-item">retested {q.retestCount}×</span>{/if}
+                    <!-- Rounded. The stored values are raw doubles and the card
+                         was rendering `r -0.11998358323004636`, which reads as
+                         precision the measurement does not have. -->
+                    {#if q.r != null}<span class="meta-item">r {q.r.toFixed(2)}</span>{/if}
+                    {#if q.qValue != null}<span class="meta-item">q {q.qValue.toFixed(3)}</span>{/if}
+                    {#if q.pairs != null}<span class="meta-item">n {q.pairs}</span>{/if}
+                    <!-- Nothing is filtered by verdict when choosing what to
+                         retest, so every answer here is provisional. -->
+                    {#if q.retestInDays !== null}
+                      <span class="meta-item">{q.retestInDays === 0 ? 'due to be checked again' : `checked again in ${q.retestInDays}d`}</span>
+                    {/if}
+                    <!-- The family size is shown because a q-value cannot be
+                         read without it: q over 4 tests and q over 400 are not
+                         the same number. -->
+                    {#if q.familySize}
+                      <span class="meta-item">corrected across {q.familySize} test{q.familySize === 1 ? '' : 's'}</span>
+                    {/if}
+                  </div>
 
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Coming up</span>
-      <span class="nm-sec-meta">from email · next 60 days</span>
-    </div>
-    {#if (money?.renewals ?? []).length === 0}
-      <div class="empty">No dated events found in recent email.</div>
-    {:else}
-      <div class="rows tight">
-        {#each money?.renewals ?? [] as r (r.id)}
-          <div class="renewal-row">
-            <span class="mono renewal-date">{r.date}</span>
-            <span class="renewal-type mono">{r.type}</span>
-            <span class="renewal-title">{r.title}</span>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </section>
+                  <div class="card-actions bar">
+                    {#if q.feedback}
+                      <span class="meta-item good">you said {q.feedback.replace('_', ' ')}</span>
+                    {:else}
+                      <span class="ask">Worth asking?</span>
+                      <button type="button" class="cta" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
+                      <button type="button" class="btn" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
+                    {/if}
+                    <button type="button" class="btn" onclick={() => toggleHypDetail(q.id)}>
+                      {hypOpen === q.id ? 'Hide the days' : 'Show the days behind this'}
+                    </button>
+                  </div>
 
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Offers</span>
-      <span class="nm-sec-meta">expiring first</span>
-    </div>
-    {#if (money?.offers ?? []).length === 0}
-      <div class="empty">No live offers.</div>
-    {:else}
-      <div class="rows tight">
-        {#each money?.offers ?? [] as o (o.id)}
-          <div class="renewal-row">
-            <span class="mono renewal-date">{o.expiresAt ? String(o.expiresAt).slice(0, 10) : 'no expiry'}</span>
-            <span class="renewal-title"><b>{o.merchant}</b> — {o.summary}{o.code ? ` · code ${o.code}` : ''}</span>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Bank rails</span>
-      <span class="nm-sec-meta">{money?.bank.enabled ? 'armed' : 'off'}</span>
-    </div>
-    {#if money?.bank.enabled}
-      <p class="sec-lede">
-        Pulling TrueLayer and PayPal nightly, debits only, deduped on the transaction id.
-        {#if money?.bank.lastRun}Last run: {money.bank.lastRun.summary}{/if}
-      </p>
-    {:else}
-      <p class="sec-lede">
-        Off. Arming it starts a nightly debits-only pull into the same table the email
-        receipt reader writes, so everything downstream reads one set of numbers. It
-        fails loudly rather than quietly if the TrueLayer token has gone stale.
-      </p>
-    {/if}
-
-    <!-- A job that has only ever skipped looks identical to a job that ran and
-         found nothing, unless the page says when it is next due and whether
-         that moment is inside its own window. daydream-bank sat in exactly
-         that state for three days and the only clue was a pulse summary. -->
-    <div class="thought-meta">
-      {#if money?.bank.window}
-        <span class="mono">window {money.bank.window}</span>
-      {/if}
-      {#if money?.bank.nextRunAt}
-        <span class="sep">·</span>
-        <span class="mono">next {new Date(money.bank.nextRunAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })}</span>
-      {/if}
-      {#if money?.bank.willSkip}
-        <span class="sep">·</span>
-        <span class="held">that lands outside the window — it will skip</span>
-      {/if}
-    </div>
-
-    <div class="thought-actions">
-      <button
-        class="row-link"
-        class:danger={money?.bank.enabled}
-        disabled={bankBusy}
-        onclick={toggleBank}
-      >
-        {bankBusy ? 'Saving…' : money?.bank.enabled ? 'Turn the rails off' : 'Arm the rails'}
-      </button>
-      {#if bankError}<span class="held">{bankError}</span>{/if}
-    </div>
-  </section>
-  {/if}
-
-  {#if tab === 'improvement'}
-  <!-- ── IS THE LOOP CLOSING? ───────────────────────────────────────────
-       The scoreboard for folding self-improvement into daydreaming. Two
-       dashboards showed a great deal about that engine — runs, phases,
-       budget, generated code — and neither showed whether anything it built
-       was ever used. On the day the merge started: 33 tools shipped in a
-       fortnight, none ever called. -->
-  <LoopScoreboard health={data.loop} verdict={data.loopVerdict} />
-  {/if}
-
-  {#if tab === 'engine'}
-  <!-- ── WHAT IS ACTUALLY REACHING THE REASONING ─────────────────────────
-       Thirteen green jobs and 242 registered signals say nothing about
-       whether any of it reaches the part that draws conclusions. On the day
-       this was written, 185 Home Assistant sensors were registered and NONE
-       were in the sweep — they had 2 observed days against a 14-day floor —
-       and nothing on the page said so. Every state below is measured: a
-       "flowing" carries the count that proves it, a "waiting" carries
-       have-vs-need, and a closed path carries the reason it is closed. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">What reaches the reasoning</span>
-      <span class="nm-sec-meta">
-        {provenance.sweepable} of {provenance.registered} signals in the sweep
-      </span>
-    </div>
-    <p class="sec-lede">
-      Registering a source is not the same as using it. A series joins the sweep only
-      once it has {provenance.minPairs} observed days, and the question proposer may only
-      ask about a fixed vocabulary — so a sensor can be recording, correlating and still
-      never be the subject of a question. Nothing here is asserted; each line carries the
-      measurement behind it.
-    </p>
-
-    {#if provenance.sources.length === 0}
-      <div class="empty">Nothing measured yet.</div>
-    {:else}
-      <div class="rows">
-        {#each provenance.sources as src (src.key)}
-          <div class="prov">
-            <div class="prov-hd">
-              <span class="prov-name">{src.label}</span>
-              <span class="mono prov-sum">{src.summary}</span>
-            </div>
-            <p class="prov-blurb">{src.blurb}</p>
-            <div class="prov-links">
-              {#each src.links as l, li (li)}
-                <div class="prov-link">
-                  <span class="prov-state s-{l.state}">
-                    {l.state === 'by_design' ? 'not wired' : l.state}
-                  </span>
-                  <span class="prov-to">{l.to}</span>
-                  <span class="prov-detail">{l.detail}</span>
+                  {#if hypOpen === q.id}
+                    {@const d = hypDetail[q.id]}
+                    <div class="detail">
+                      {#if hypDetailError[q.id]}
+                        <p class="err">{hypDetailError[q.id]}</p>
+                      {:else if !d}
+                        <p class="detail-line">Reading the days…</p>
+                      {:else}
+                        <p class="detail-line">
+                          {d.days.length} day{d.days.length === 1 ? '' : 's'} in the window,
+                          <b>{d.days.length - d.unusedCount}</b> with both readings present — that
+                          count is the n above. Pairwise deletion, never imputation: a day missing
+                          either half is dropped rather than filled in.
+                          {#if d.lagDays}<br />Lagged: {d.metricA} on a day is paired with {d.metricB} on the next.{/if}
+                        </p>
+                        <div class="tbl-scroll">
+                          <table class="tbl compact">
+                            <thead>
+                              <tr>
+                                <th>Day</th>
+                                <th class="right">{d.metricA}</th>
+                                <th class="right">{d.metricB}{d.lagDays ? ' (next day)' : ''}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {#each d.days.filter((x) => x.used).slice(-40).reverse() as row (row.day)}
+                                <tr>
+                                  <td>{row.day}</td>
+                                  <td class="right">{row.a}</td>
+                                  <td class="right">{row.b}</td>
+                                </tr>
+                              {/each}
+                            </tbody>
+                          </table>
+                        </div>
+                        {#if d.days.length - d.unusedCount > 40}
+                          <p class="note">Most recent 40 of {d.days.length - d.unusedCount} shown.</p>
+                        {/if}
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>
+          {/if}
+        {:else}
+          <p class="lede">
+            Every question the engine has ever asked, whose it was, and what the data said back —
+            including the ones that came back empty.
+          </p>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="C / Lines of enquiry"
+          title={['Arcs it decided', 'to pursue']}
+          strap="Each earns its keep from the questions inside its metric set — a line that keeps producing nothing is abandoned by arithmetic, not by mood."
+        />
+        {#if (discoveries?.leads ?? []).length === 0}
+          <div class="card t-quiet">
+            <p class="card-body">
+              No lines of enquiry yet. The ponder engine opens one when a pattern deserves weeks
+              rather than a sentence.
+            </p>
           </div>
-        {/each}
-      </div>
-    {/if}
-  </section>
-
-  <!-- ── ENGINE STATE ───────────────────────────────────────────────────
-       Leads the page. Everything below is meaningless if the engine has not
-       run, and "quiet" and "not wired up" have to be tellable apart. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Engine</span>
-      <span class="nm-sec-meta">
-        {#if hasRun}last looked {ago(engine.lastDetectAt)}{:else}has not run yet{/if}
-      </span>
-    </div>
-
-    <div class="stat-grid">
-      <div class="stat-tile">
-        <div class="stat-num">{engine.trailSpanDays ?? 0}</div>
-        <div class="stat-label">days of trail</div>
-        <div class="stat-sub">observed {ago(engine.lastObserveAt)}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{pct(engine.coverage?.last24h)}</div>
-        <div class="stat-label">covered, 24h</div>
-        <div class="stat-sub">7d {pct(engine.coverage?.last7d)}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{readyCount}<span class="of">/{detectors.length}</span></div>
-        <div class="stat-label">detectors ready</div>
-        <div class="stat-sub">{mutedCount} muted by you</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-num">{counts.namedPlaces}<span class="of">/{counts.places}</span></div>
-        <div class="stat-label">places named</div>
-        <div class="stat-sub">{counts.unnamedPlaces} still unnamed</div>
-      </div>
-    </div>
-
-    {#if engine.summary}
-      <p class="engine-summary">{engine.summary}</p>
-    {/if}
-
-    {#if engine.pausedActions.length}
-      <p class="warn-line">
-        Not running: {engine.pausedActions.join(', ')}
-      </p>
-    {/if}
-
-    {#if engine.sources.some((s) => s.status === 'failed')}
-      <p class="warn-line">
-        Sources that failed last tick:
-        {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
-      </p>
-    {/if}
-
-    {#if delivery?.hasWhatsApp}
-      <p class="sec-lede">
-        Delivering over <strong>WhatsApp</strong> — reply 👍 / 👎 / "never" to any
-        thought within 12 hours and it counts as feedback.
-      </p>
-    {:else if delivery && !delivery.hasPushSubscriber}
-      <!-- The documented root cause of the empty feedback ledger: with nowhere
-           to push, every thought falls back to a chat note whose feedback link
-           is rarely followed, so the learning loop never gets an input. -->
-      <p class="warn-line">
-        No WhatsApp number and no push subscriber — thoughts fall back to chat notes, and
-        without feedback the confidence threshold never relaxes.
-      </p>
-    {/if}
-
-    <div class="thought-actions">
-      <button class="row-link" disabled={backfilling} onclick={runBackfill}>
-        {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
-      </button>
-    </div>
-    {#if backfillNote}
-      <p class="sec-lede">{backfillNote}</p>
-    {/if}
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Budget</span>
-      <span class="nm-sec-meta">
-        {#if budget}{budget.modelId}{:else}unavailable{/if}
-      </span>
-    </div>
-
-    {#if !budget}
-      <p class="sec-lede">Could not read the model or the usage meter.</p>
-    {:else if !budget.applies}
-      <p class="sec-lede">
-        Running on <strong>{budget.provider}</strong>, so the subscription caps do not apply —
-        this spend is cash, and nothing here limits it.
-      </p>
-    {:else}
-      <div class="stat-grid">
-        <div class="stat-tile">
-          <div class="stat-num">{budget.spentTodayWeeklyPct}<span class="of">/{budget.dailyCapPct}%</span></div>
-          <div class="stat-label">of weekly, today</div>
-          <div class="stat-sub">paced target {budget.pacedTargetPct}%</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-num">{budget.spentThisWindowPct}<span class="of">/{budget.fiveHourCapPct}%</span></div>
-          <div class="stat-label">of this 5h window</div>
-          <div class="stat-sub">{budget.remainingWindowPct}% left</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-num">{budget.plan.depth}</div>
-          <div class="stat-label">working depth</div>
-          <div class="stat-sub">
-            {budget.plan.maxCandidates} candidate{budget.plan.maxCandidates === 1 ? '' : 's'}{budget.plan.verify ? ', verified' : ''}
+        {:else}
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Line</th>
+                  <th>Metrics</th>
+                  <th class="right">Score</th>
+                  <th class="right">Rounds</th>
+                  <th class="right">Held</th>
+                  <th class="right">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each discoveries?.leads ?? [] as l (l.id)}
+                  <tr class:dim={l.status !== 'open'}>
+                    <td class="cell-lead">
+                      <span class="cell-title">{l.title}</span>
+                      <span class="cell-sub">{l.rationale}</span>
+                    </td>
+                    <td class="cell-wrap">{l.metrics.join(' · ')}</td>
+                    <td class="right">{Math.round(l.score * 100) / 100}</td>
+                    <td class="right">{l.roundsRun}</td>
+                    <td class="right">{l.hypothesesHeld}/{l.hypothesesSpawned}</td>
+                    <td class="right"><span class="pill t-{leadTone(l.status)}">{l.status}</span></td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead
+          kicker="D / The sweep"
+          title={['Every pair,', 'every night']}
+          strap={discoveries?.sweep ? `Last reported ${ago(String(discoveries.sweep.ts))}` : 'The daily every-pair sweep has not reported yet.'}
+        />
+        <div class="card t-{discoveries?.sweep ? 'steady' : 'watch'}">
+          <p class="card-body">
+            {discoveries?.sweep
+              ? discoveries.sweep.summary
+              : 'Nothing to report. The sweep tests every pair of series it has enough days for, corrects for how many tests that was, and keeps only what survives.'}
+          </p>
         </div>
       </div>
-      {#if budget.blocked}
-        <p class="warn-line">Paused: {budget.blockedReason}</p>
-      {:else if !budget.reachable}
-        <p class="warn-line">
-          Usage meter unreachable — working at minimum depth rather than stopping.
-        </p>
-      {/if}
-      <p class="sec-lede budget-note">
-        Spare budget buys more <strong>thinking</strong>, never more notifications: extra
-        headroom adds a verification pass and more candidates considered. What reaches your
-        phone is capped separately at {delivery?.maxPerDay ?? 4} a day.
-      </p>
-    {/if}
+    </section>
 
-  </section>
-
-  <!-- ── MODEL-AUTHORED RULES ───────────────────────────────────────────
-       The mesh. The model writes the rule; deterministic code evaluates it;
-       nothing fires until it is approved here. A proposal has already passed
-       validation and a backtest by the time it appears. -->
-  {#if proposedRules.length || activeRules.length}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Rules jkai wrote</span>
-        <span class="nm-sec-meta">
-          {proposedRules.length} awaiting you · {activeRules.length} live
-        </span>
-      </div>
-      <p class="sec-lede">
-        The model proposes rules as data — a condition over a fixed list of facts, never
-        code. Each is validated and replayed against your history before it reaches you.
-        <strong>Nothing fires until you approve it.</strong>
-      </p>
-
-      <div class="rows">
-        {#each proposedRules as r (r.id)}
-          <article class="thought st-new">
-            <div class="thought-hd">
-              <span class="thought-title as-text">{r.spec?.description ?? r.kind}</span>
-              <span class="thought-pill">{r.proposalKind}</span>
-            </div>
-            <p class="thought-why">{r.rationale}</p>
-            <div class="thought-meta">
-              <span class="mono">{r.kind}</span>
-              <span class="sep">·</span>
-              <span class="mono">
-                {#if r.backtestNote}{r.backtestNote}{:else}not backtested{/if}
-              </span>
-            </div>
-            {#if r.backtestLowerBound}
-              <p class="warn-line">
-                Estimate is a floor, not a count — the replay could not rebuild every fact
-                this rule uses, so it will fire more often than shown.
-              </p>
-            {/if}
-            <div class="thought-actions">
-              <button class="row-link" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'approve' }, `rule:${r.id}`)}>
-                Approve
-              </button>
-              <button class="row-link danger" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'reject' }, `rule:${r.id}`)}>
-                Reject
-              </button>
-            </div>
-          </article>
-        {/each}
-
-        {#each activeRules as r (r.id)}
-          <div class="det-row">
-            <div class="det-main">
-              <span class="det-kind mono">{r.kind}</span>
-              <span class="det-desc">{r.spec?.description ?? ''}</span>
-            </div>
-            <div class="det-state">
-              <span class="det-badge on">live</span>
-              <span class="det-votes mono">{r.firedCount} fired · {r.usefulCount}↑ {r.notUsefulCount}↓</span>
-              <button class="row-link danger" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'deprecate' }, `rule:${r.id}`)}>
-                Retire
-              </button>
-            </div>
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="E / Digests"
+          title={['Every morning', 'card it wrote']}
+          strap="{(discoveries?.digests ?? []).length} entries. The Sunday letter shares a day with that day's daily digest by design."
+        />
+        {#if (discoveries?.digests ?? []).length === 0}
+          <div class="card t-quiet"><p class="card-body">No digests yet.</p></div>
+        {:else}
+          <div class="stack tight">
+            <!-- Keyed on subject AND day. The Sunday letter shares a day with
+                 that day's daily digest, and keying on the day alone threw
+                 `each_key_duplicate` — which does not degrade a row, it kills
+                 the component, so the whole tab stopped opening. -->
+            {#each discoveries?.digests ?? [] as d (`${d.subject}-${d.day}`)}
+              <details class="disclose">
+                <summary>
+                  <span class="disclose-day">{d.day}</span>
+                  {#if d.subject === 'weekly'}<span class="pill t-action">weekly</span>{/if}
+                  <span class="disclose-sum">{d.summary}</span>
+                </summary>
+                {#if d.narrative}
+                  <blockquote class="quote" class:unchecked={d.verified === false}>
+                    {d.narrative}
+                    <span class="quote-tag" class:ok={d.verified === true}>
+                      {d.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+                    </span>
+                  </blockquote>
+                {/if}
+              </details>
+            {/each}
           </div>
-        {/each}
+        {/if}
       </div>
     </section>
   {/if}
 
-  <!-- ── DETECTORS ──────────────────────────────────────────────────────
-       Every detector appears, ready or not. One missing would be
-       indistinguishable from one that is merely quiet — the same conflation
-       the readiness gate exists to prevent. -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Detectors</span>
-      <span class="nm-sec-meta">{readyCount} of {detectors.length} ready</span>
-    </div>
-    <p class="sec-lede">
-      Each declares what it needs before it may speak, and returns nothing below that.
-      A weight of 1.00 means the ledger has no opinion about it yet.
-    </p>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       CALENDAR
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'calendar'}
+    <!-- ── THE DIARY, AND WHAT THE ENGINE MAY SEE OF IT ──────────────────
+         Your note in August: "some of those calendar events are rolling
+         reminders". A standing reminder is a real event and a fictional
+         commitment at once, and nothing in the data separates them — so this
+         is the control that does. -->
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / The diary"
+          title={['What it may', 'reason about']}
+          strap="A standing reminder is a real event and a fictional commitment at once, and nothing in the data separates them. This is the control that does."
+        />
+        <CalendarBoard onchanged={() => invalidateAll()} />
+      </div>
+    </section>
+  {/if}
 
-    <div class="rows tight">
-      {#each detectors as d (d.kind)}
-        <div class="det-row" class:muted={d.muted}>
-          <div class="det-main">
-            <span class="det-kind mono">{d.kind}</span>
-            <span class="det-desc">{d.description}</span>
-          </div>
-          <div class="det-state">
-            {#if d.muted}
-              <span class="det-badge off">muted</span>
-              <button class="row-link" disabled={busy === `unmute:${d.kind}`} onclick={() => post({ action: 'unmute_kind', kind: d.kind }, `unmute:${d.kind}`)}>
-                Un-mute
-              </button>
-            {:else if d.readiness?.ready}
-              <span class="det-badge on">ready</span>
-            {:else}
-              <span class="det-badge wait">{d.readiness?.reason ?? 'not yet assessed'}</span>
-            {/if}
-            <span class="det-weight mono" title="Learned multiplier from your feedback">
-              ×{d.weight.toFixed(2)}
-            </span>
-            {#if d.useful || d.notUseful}
-              <span class="det-votes mono">{d.useful}↑ {d.notUseful}↓</span>
-            {/if}
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PLACES
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'places'}
+    {#if !unnamed.length && !quietUnnamed && !named.length}
+      <section class="band">
+        <div class="inner">
+          <SectionHead kicker="A / Places" title={['Nothing has', 'a name yet']} strap="Places emerge from the household trail — one stay of ten minutes makes a place, three separate days makes a question." />
+          <div class="card t-quiet">
+            <p class="card-body">
+              No places yet.
+              {#if transitPlaces}
+                {transitPlaces} {transitPlaces === 1 ? 'cluster is' : 'clusters are'} set aside as
+                transit — points the trail passes through rather than stops at.
+              {/if}
+            </p>
           </div>
         </div>
-      {/each}
-    </div>
-  </section>
-
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Coverage, 30 days</span>
-      <span class="nm-sec-meta">share of each day the trail could see</span>
-    </div>
-    {#if (telemetry?.coverage ?? []).length >= 2}
-      <Sparkline
-        points={(telemetry?.coverage ?? []).map((c) => ({ label: c.day, value: c.coverage }))}
-        max={1}
-        format={(v) => `${Math.round(v * 100)}%`}
-        height={72}
-      />
-    {:else}
-      <p class="sec-lede">Not enough day rows yet.</p>
+      </section>
     {/if}
-  </section>
 
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Ponder telemetry</span>
-      <span class="nm-sec-meta">the fabrication meter lives here</span>
-    </div>
-    {#if (telemetry?.ponderRuns ?? []).length === 0}
-      <p class="sec-lede">No ponder cycles yet.</p>
-    {:else}
-      <div class="tablewrap">
-        <table class="tele-table">
-          <thead>
-            <tr><th>when</th><th>cards in</th><th>musings</th><th>kept</th><th>held</th><th>audit dropped</th><th>leads</th></tr>
-          </thead>
-          <tbody>
-            {#each telemetry?.ponderRuns ?? [] as r (String(r.ts))}
-              <tr>
-                <td class="mono">{ago(String(r.ts))}</td>
-                <td class="mono">{r.cards ?? '—'}</td>
-                <td class="mono">{r.proposed ?? '—'}</td>
-                <td class="mono">{r.created ?? '—'}</td>
-                <td class="mono">{r.suppressed ?? '—'}</td>
-                <td class="mono" class:bad={(r.dropped ?? 0) > 0}>{r.dropped ?? '—'}</td>
-                <td class="mono">{r.leads ?? '—'}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-      <p class="sec-lede">
-        “Audit dropped” counts musings deleted for citing evidence that does not exist.
-        A rising number means the model is reaching; zero means the wide view is holding.
-      </p>
+    <!-- ── UNNAMED PLACES ──────────────────────────────────────────────
+         First on the tab on purpose. Several detectors are inert until a place
+         has a name, so this is the highest-leverage thing on the whole hub. -->
+    {#if unnamed.length || quietUnnamed}
+      <section class="band" id="dd-unnamed">
+        <div class="inner">
+          <SectionHead
+            kicker="A / What is this place?"
+            title={['A name turns', 'a dot into a fact']}
+            strap="Several detectors stay silent until a place has one. A page you opened is attention you offered, so naming thirty here costs none of the interruption budget four-a-day protects."
+          >
+            {#snippet aside()}
+              {#if !sessionOpen}
+                <button type="button" class="cta" onclick={openSession}>
+                  Name them in one go — {counts.unnamedPlaces} waiting
+                </button>
+              {:else}
+                {#if draftCount}
+                  <button type="button" class="cta" disabled={sessionSaving} onclick={saveSession}>
+                    {sessionSaving ? 'Saving…' : `Save ${draftCount} name${draftCount === 1 ? '' : 's'}`}
+                  </button>
+                {/if}
+                <button type="button" class="btn" onclick={() => { sessionOpen = false; }}>Close the session</button>
+              {/if}
+            {/snippet}
+          </SectionHead>
+
+          <p class="lede">
+            Each one arrives with a suggested name and address the background geocoder wrote hours
+            ago — the difference between a confirmation and a memory test.
+            {#if transitPlaces}
+              {transitPlaces} more {transitPlaces === 1 ? 'cluster is' : 'clusters are'} set aside as
+              transit — never asked about.
+            {/if}
+            {#if quietUnnamed}
+              {quietUnnamed} of them {quietUnnamed === 1 ? 'has' : 'have'} been visited on fewer than
+              {askAtVisits} separate days, so {quietUnnamed === 1 ? 'it is' : 'they are'} never
+              interrupted about — but {quietUnnamed === 1 ? 'it is' : 'they are'} in the session.
+            {/if}
+          </p>
+
+          {#if sessionDone}
+            <p class="note good">
+              Named {sessionDone.named}{sessionDone.failed ? `, ${sessionDone.failed} failed` : ''}.
+              {#if sessionDone.thoughtsResolved}
+                Closed {sessionDone.thoughtsResolved} open question{sessionDone.thoughtsResolved === 1 ? '' : 's'}.
+              {/if}
+            </p>
+          {/if}
+          {#if sessionError}<p class="err">{sessionError}</p>{/if}
+
+          {#if sessionOpen}
+            {#if sessionLoading}
+              <p class="lede">Loading the queue…</p>
+            {:else if sessionQueue.length === 0}
+              <p class="lede">Nothing left unnamed.</p>
+            {:else}
+              <div class="stack tight">
+                {#each sessionQueue as q (q.id)}
+                  {@const draft = drafts[q.id]}
+                  <div class="card t-{draft && draft.label.trim() ? 'good' : 'action'} row">
+                    <div class="row-id">
+                      <p class="card-kicker">{q.rhythm}</p>
+                      {#if q.suggestedAddress}
+                        <p class="card-body sm">{q.suggestedAddress}</p>
+                      {:else}
+                        <p class="card-body sm dim">no address found for this spot</p>
+                      {/if}
+                    </div>
+                    <div class="row-controls">
+                      {#if !draft && q.suggestedLabel}
+                        <button type="button" class="cta" onclick={() => acceptSuggestion(q)}>
+                          {q.suggestedLabel}{q.suggestedKind ? ` · ${q.suggestedKind}` : ''}
+                        </button>
+                        <button type="button" class="btn" onclick={() => editDraft(q, 'label', '')}>Something else</button>
+                      {:else}
+                        <input
+                          class="text-input"
+                          value={draft?.label ?? ''}
+                          placeholder={q.suggestedLabel ?? 'What is it called?'}
+                          oninput={(e) => editDraft(q, 'label', e.currentTarget.value)}
+                        />
+                        <select
+                          class="text-input select"
+                          value={draft?.kind ?? q.suggestedKind ?? 'other'}
+                          onchange={(e) => editDraft(q, 'kind', e.currentTarget.value)}
+                        >
+                          {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
+                        </select>
+                        {#if draft}
+                          <button type="button" class="btn" onclick={() => clearDraft(q.id)}>Skip</button>
+                        {/if}
+                      {/if}
+                      <button
+                        type="button"
+                        class="btn danger"
+                        disabled={busy === `ignore:${q.id}`}
+                        onclick={() => post({ action: 'ignore_place', placeId: q.id }, `ignore:${q.id}`)}
+                      >Never ask</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {:else}
+            <div class="controls">
+              <FacetBar label="Order" active={placeOrder} facets={placeOrderFacets} onpick={(id) => (placeOrder = id as PlaceOrder)} />
+            </div>
+
+            <div class="stack tight">
+              {#each unnamedOrdered as p (p.id)}
+                <div class="card t-{placeTone(p, askAtVisits)} row">
+                  <div class="row-id">
+                    <!-- The geocoder's guess, marked as a guess. Without it every
+                         card in this list reads "somewhere you stop" and the
+                         question is a memory test rather than a confirmation. -->
+                    <p class="card-title as-text">
+                      {p.suggestedLabel ?? p.suggestedAddress ?? 'Somewhere you stop'}
+                    </p>
+                    <p class="card-kicker">
+                      {rhythm(p)}{p.suggestedLabel ? ' · suggested, check it' : ''}
+                    </p>
+                  </div>
+                  {#if namingPlace !== p.id}
+                    <div class="row-controls">
+                      <button type="button" class="cta" onclick={() => openNaming(p)}>Name it</button>
+                      <button
+                        type="button"
+                        class="btn danger"
+                        disabled={busy === `ignore:${p.id}`}
+                        onclick={() => post({ action: 'ignore_place', placeId: p.id }, `ignore:${p.id}`)}
+                      >Stop asking</button>
+                    </div>
+                  {/if}
+
+                  {#if namingPlace === p.id}
+                    <div class="detail wide">
+                      <PlaceMap lat={p.lat} lon={p.lon} radiusM={p.radiusM} />
+                      <p class="note">
+                        {#if suggesting}
+                          Looking up what is there…
+                        {:else if suggestion?.address}
+                          {suggestion.address}
+                          {#if suggestion.name}<span class="dim"> · suggested, check it</span>{/if}
+                        {:else}
+                          No address found for this spot — the map is the better guide.
+                        {/if}
+                      </p>
+                      {#if visits.length}
+                        <div class="detail-block">
+                          <p class="field-label">Who was here, and when</p>
+                          <div class="tbl-scroll">
+                            <table class="tbl compact">
+                              <thead><tr><th>Who</th><th>Day</th><th>Date</th><th class="right">At</th><th class="right">Stayed</th></tr></thead>
+                              <tbody>
+                                {#each visits as v (v.startedAt + v.subject)}
+                                  <tr>
+                                    <td>{cap(v.subject)}</td>
+                                    <td>{v.dayName}</td>
+                                    <td>{v.dateLabel}</td>
+                                    <td class="right">{v.timeLabel}</td>
+                                    <td class="right">{v.dwellMins} min</td>
+                                  </tr>
+                                {/each}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      {/if}
+                      <div class="row-controls">
+                        <input
+                          class="text-input"
+                          bind:value={placeLabel}
+                          placeholder="What is it called?"
+                          onkeydown={(e) => { if (e.key === 'Enter') submitName(p.id); }}
+                        />
+                        <select class="text-input select" bind:value={placeKind}>
+                          {#each PLACE_KINDS as k (k)}<option value={k}>{k}</option>{/each}
+                        </select>
+                        <button
+                          type="button"
+                          class="cta"
+                          disabled={busy === `name:${p.id}` || !placeLabel.trim()}
+                          onclick={() => submitName(p.id)}
+                        >Save</button>
+                        <button type="button" class="btn" onclick={() => { namingPlace = null; placeLabel = ''; suggestion = null; }}>Cancel</button>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </section>
     {/if}
-  </section>
 
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Jobs</span>
-      <span class="nm-sec-meta">{(telemetry?.jobs ?? []).length} scheduled</span>
-    </div>
-    <div class="tablewrap">
-      <table class="tele-table">
-        <thead>
-          <tr><th>job</th><th>every</th><th>last outcome</th><th>said</th></tr>
-        </thead>
-        <tbody>
-          {#each telemetry?.jobs ?? [] as j (j.name)}
-            <tr class:jobbad={j.consecutiveFailures > 0 || j.pulse?.outcome === 'error'}>
-              <td class="mono">{j.name.replace('daydream-', '')}</td>
-              <td class="mono">{cadence(j.cadenceSeconds)}</td>
-              <td class="mono">
-                <span class="pulse-dot" class:ok={j.pulse?.outcome === 'ok'} class:skip={j.pulse?.outcome === 'skipped'} class:err={j.pulse?.outcome === 'error'}></span>
-                {j.pulse ? `${j.pulse.outcome} · ${ago(String(j.pulse.ts))}` : 'never'}
-              </td>
-              <td class="job-summary">{j.pulse?.summary ?? '—'}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-  </section>
+    <!-- ── NAMED PLACES ────────────────────────────────────────────────── -->
+    {#if named.length}
+      <section class="band sunken">
+        <div class="inner">
+          <SectionHead
+            kicker="B / Named"
+            title={['Ground it', 'already knows']}
+            strap="A named place is quoted back as fact, so it is only ever written from your answer — never from the geocoder's guess."
+          />
+          <div class="controls">
+            <FacetBar label="Order" active={placeOrder} facets={placeOrderFacets} onpick={(id) => (placeOrder = id as PlaceOrder)} />
+          </div>
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Place</th>
+                  <th>Kind</th>
+                  <th>Rhythm</th>
+                  <th class="right">Days</th>
+                  <th class="right">In memory</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each namedOrdered as p (p.id)}
+                  <tr>
+                    <td class="cell-lead"><span class="cell-title">{p.label}</span></td>
+                    <td>{p.kind}</td>
+                    <td class="cell-wrap">{rhythm(p)}</td>
+                    <td class="right">{p.distinctDays}</td>
+                    <td class="right">
+                      <span class="pill t-{p.hasMemory ? 'good' : 'watch'}">{p.hasMemory ? 'yes' : 'no'}</span>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    {/if}
   {/if}
-</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MONEY
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'money'}
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / Evidenced spend"
+          title={['Only what', 'left a receipt']}
+          strap="Receipts{money?.bank.enabled ? ' and the nightly bank pull' : ''}, deduped on the transaction id. It understates cash and always will — nothing here is a budget."
+        />
+        <StatDeck tiles={moneyTiles} min={220} />
+
+        {#if (money?.byDay ?? []).length >= 2}
+          <div class="chart">
+            <Sparkline
+              points={(money?.byDay ?? []).map((d) => ({ label: d.day, value: d.minor / 100 }))}
+              format={(v) => `£${v.toFixed(2)}`}
+              height={64}
+            />
+          </div>
+        {/if}
+
+        {#if (money?.topMerchants ?? []).length}
+          <div class="chips">
+            {#each money?.topMerchants ?? [] as m (m.merchant)}
+              <span class="chip-stat"><b>{pounds(m.minor)}</b> {m.merchant}</span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead kicker="B / Recent" title={['Every verified', 'row']} strap="Nothing on this table was inferred; each row came from a receipt or a bank line with an id behind it." />
+        {#if (money?.rows ?? []).length === 0}
+          <div class="card t-quiet">
+            <p class="card-body">
+              Nothing verified yet. Receipts land as they arrive by email{money?.bank.enabled ? ' and from the bank overnight' : ''}.
+            </p>
+          </div>
+        {:else}
+          <div class="controls">
+            <FacetBar label="Order" active={moneyOrder} facets={moneyOrderFacets} onpick={(id) => (moneyOrder = id as MoneyOrder)} />
+          </div>
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead><tr><th>Day</th><th>Merchant</th><th class="right">Amount</th><th class="right">Via</th></tr></thead>
+              <tbody>
+                {#each moneyRows as r (r.id)}
+                  <tr>
+                    <td>{r.day}</td>
+                    <td class="cell-lead">{r.merchant}</td>
+                    <td class="right num">{pounds(r.amountMinor)}</td>
+                    <td class="right">{r.source}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="inner">
+        <SectionHead kicker="C / Coming up" title={['Dates found', 'in the post']} strap="Renewals and appointments pulled out of email, next 60 days. Read as a prompt, not a diary — the diary is on the Calendar tab." />
+        {#if (money?.renewals ?? []).length === 0}
+          <div class="card t-quiet"><p class="card-body">No dated events found in recent email.</p></div>
+        {:else}
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead><tr><th>Date</th><th>Type</th><th>What</th></tr></thead>
+              <tbody>
+                {#each money?.renewals ?? [] as r (r.id)}
+                  <tr><td class="nowrap">{r.date}</td><td>{r.type}</td><td class="cell-lead">{r.title}</td></tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead kicker="D / Offers" title={['Money left', 'on the table']} strap="Expiring first. Extracted from email and never acted on — the engine has no permission to spend anything." />
+        {#if (money?.offers ?? []).length === 0}
+          <div class="card t-quiet"><p class="card-body">No live offers.</p></div>
+        {:else}
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead><tr><th>Expires</th><th>Merchant</th><th>Offer</th><th class="right">Code</th></tr></thead>
+              <tbody>
+                {#each money?.offers ?? [] as o (o.id)}
+                  <tr>
+                    <td class="nowrap">{o.expiresAt ? String(o.expiresAt).slice(0, 10) : 'no expiry'}</td>
+                    <td class="cell-lead">{o.merchant}</td>
+                    <td class="cell-wrap">{o.summary}</td>
+                    <td class="right">{o.code ?? '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band" id="dd-bank">
+      <div class="inner">
+        <SectionHead
+          kicker="E / Bank rails"
+          title={['The nightly', 'debits pull']}
+          strap="TrueLayer and PayPal, debits only, deduped on the transaction id and written into the same table the email receipt reader uses — so everything downstream reads one set of numbers."
+        >
+          {#snippet aside()}
+            <button
+              type="button"
+              class={money?.bank.enabled ? 'btn danger' : 'cta'}
+              disabled={bankBusy}
+              onclick={toggleBank}
+            >
+              {bankBusy ? 'Saving…' : money?.bank.enabled ? 'Turn the rails off' : 'Arm the rails'}
+            </button>
+          {/snippet}
+        </SectionHead>
+
+        <!-- A job that has only ever skipped looks identical to a job that ran
+             and found nothing, unless the page says when it is next due and
+             whether that moment is inside its own window. daydream-bank sat in
+             exactly that state for three days and the only clue was a pulse
+             summary. -->
+        <div class="card t-{money?.bank.enabled ? (money?.bank.willSkip ? 'watch' : 'good') : 'quiet'}">
+          <p class="card-kicker">{money?.bank.enabled ? 'Armed' : 'Off'}</p>
+          <p class="card-body">
+            {#if money?.bank.enabled}
+              Pulling nightly.
+              {#if money?.bank.lastRun}Last run: {money.bank.lastRun.summary}{/if}
+              It fails loudly rather than quietly if the TrueLayer token has gone stale.
+            {:else}
+              Off. Arming it starts the nightly pull; nothing is read until you do.
+            {/if}
+          </p>
+          <div class="card-meta">
+            {#if money?.bank.window}<span class="meta-item">window {money.bank.window}</span>{/if}
+            {#if money?.bank.nextRunAt}
+              <span class="meta-item">next {new Date(money.bank.nextRunAt).toLocaleString('en-GB', { timeZone: 'Europe/London' })}</span>
+            {/if}
+            {#if money?.bank.willSkip}
+              <span class="meta-item warn">that lands outside the window — it will skip</span>
+            {/if}
+          </div>
+          {#if bankError}<p class="err">{bankError}</p>{/if}
+        </div>
+      </div>
+    </section>
+  {/if}
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       IMPROVEMENT
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'improvement'}
+    <!-- ── IS THE LOOP CLOSING? ─────────────────────────────────────────
+         The scoreboard for folding self-improvement into daydreaming. Two
+         dashboards showed a great deal about that engine — runs, phases,
+         budget, generated code — and neither showed whether anything it built
+         was ever used. On the day the merge started: 33 tools shipped in a
+         fortnight, none ever called. -->
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / Is the loop closing?"
+          title={['What it built,', 'and what it used']}
+          strap="Two dashboards showed everything about the self-improvement engine except whether a single thing it built was ever called. On the day this merged: 33 tools shipped, none used."
+        />
+        <LoopScoreboard health={data.loop} verdict={data.loopVerdict} />
+      </div>
+    </section>
+  {/if}
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ENGINE
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'engine'}
+    <!-- ── WHAT IS ACTUALLY REACHING THE REASONING ───────────────────────
+         Thirteen green jobs and 242 registered signals say nothing about
+         whether any of it reaches the part that draws conclusions. On the day
+         this was written, 185 Home Assistant sensors were registered and NONE
+         were in the sweep — they had 2 observed days against a 14-day floor —
+         and nothing on the page said so. -->
+    <section class="band" id="dd-provenance">
+      <div class="inner">
+        <SectionHead
+          kicker="A / What reaches the reasoning"
+          title={['Registered is not', 'the same as used']}
+          strap="A series joins the sweep only once it has {provenance.minPairs} observed days, and the proposer may only ask about a fixed vocabulary — so a sensor can be recording, correlating and still never be the subject of a question."
+        />
+        <p class="lede">
+          {provenance.sweepable} of {provenance.registered} registered signals are in the sweep.
+          Nothing below is asserted; each line carries the measurement behind it, and a path closed
+          on purpose is drawn differently from one that is broken.
+        </p>
+
+        {#if provenance.sources.length === 0}
+          <div class="card t-quiet"><p class="card-body">Nothing measured yet.</p></div>
+        {:else}
+          <div class="stack">
+            {#each provenance.sources as src (src.key)}
+              <div class="card t-steady">
+                <div class="card-hd">
+                  <p class="card-title as-text">{src.label}</p>
+                  <span class="pill t-steady">{src.summary}</span>
+                </div>
+                <p class="card-body">{src.blurb}</p>
+                <div class="tbl-scroll">
+                  <table class="tbl compact">
+                    <thead><tr><th>State</th><th>Reaches</th><th>Measurement</th></tr></thead>
+                    <tbody>
+                      {#each src.links as l, li (li)}
+                        <tr>
+                          <td class="nowrap">
+                            <span class="pill t-{provenanceTone(l.state)}">
+                              {l.state === 'by_design' ? 'not wired' : l.state}
+                            </span>
+                          </td>
+                          <td class="cell-lead">{l.to}</td>
+                          <td class="cell-wrap">{l.detail}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <!-- ── ENGINE STATE ─────────────────────────────────────────────────
+         Everything else is meaningless if the engine has not run, and "quiet"
+         and "not wired up" have to be tellable apart. -->
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead
+          kicker="B / Engine state"
+          title={['Has it actually', 'been running?']}
+          strap={hasRun ? `Last looked ${ago(engine.lastDetectAt)}.` : 'It has never run. Everything below is therefore a zero about the engine, not about your life.'}
+        >
+          {#snippet aside()}
+            <button type="button" class="btn" disabled={backfilling} onclick={runBackfill}>
+              {backfilling ? 'Pulling history…' : 'Backfill from Home Assistant'}
+            </button>
+          {/snippet}
+        </SectionHead>
+
+        <StatDeck tiles={engineTiles} min={210} />
+
+        {#if engine.summary}<p class="lede">{engine.summary}</p>{/if}
+        {#if backfillNote}<p class="note good">{backfillNote}</p>{/if}
+
+        {#if engine.pausedActions.length}
+          <div class="card t-watch">
+            <p class="card-kicker">Not running</p>
+            <p class="card-body">{engine.pausedActions.join(', ')}</p>
+          </div>
+        {/if}
+
+        {#if engine.sources.some((s) => s.status === 'failed')}
+          <div class="card t-urgent">
+            <p class="card-kicker">Sources that failed last tick</p>
+            <p class="card-body">
+              {engine.sources.filter((s) => s.status === 'failed').map((s) => `${s.key} (${s.detail})`).join('; ')}
+            </p>
+          </div>
+        {/if}
+
+        {#if delivery?.hasWhatsApp}
+          <div class="card t-good">
+            <p class="card-kicker">Delivery</p>
+            <p class="card-body">
+              Over <strong>WhatsApp</strong> — reply 👍 / 👎 / “never” to any thought within 12 hours
+              and it counts as feedback.
+            </p>
+          </div>
+        {:else if delivery && !delivery.hasPushSubscriber}
+          <!-- The documented root cause of the empty feedback ledger: with
+               nowhere to push, every thought falls back to a chat note whose
+               feedback link is rarely followed, so the learning loop never gets
+               an input. -->
+          <div class="card t-urgent">
+            <p class="card-kicker">Nowhere to deliver</p>
+            <p class="card-body">
+              No WhatsApp number and no push subscriber, so thoughts fall back to chat notes — and
+              without feedback the confidence threshold never relaxes. The sorting deck on the Feed
+              tab is the way round it.
+            </p>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="C / Budget"
+          title={['What thinking', 'is allowed to cost']}
+          strap={budget ? `Running ${budget.modelId}.` : 'Could not read the model or the usage meter.'}
+        />
+
+        {#if !budget}
+          <div class="card t-urgent"><p class="card-body">Could not read the model or the usage meter.</p></div>
+        {:else if !budget.applies}
+          <div class="card t-steady">
+            <p class="card-body">
+              Running on <strong>{budget.provider}</strong>, so the subscription caps do not apply —
+              this spend is cash, and nothing here limits it.
+            </p>
+          </div>
+        {:else}
+          <StatDeck tiles={budgetTiles} min={230} />
+          {#if budget.blocked}
+            <div class="card t-urgent">
+              <p class="card-kicker">Paused</p>
+              <p class="card-body">{budget.blockedReason}</p>
+            </div>
+          {:else if !budget.reachable}
+            <div class="card t-watch">
+              <p class="card-kicker">Usage meter unreachable</p>
+              <p class="card-body">Working at minimum depth rather than stopping.</p>
+            </div>
+          {/if}
+          <p class="lede">
+            Spare budget buys more <strong>thinking</strong>, never more notifications: extra
+            headroom adds a verification pass and more candidates considered. What reaches your
+            phone is capped separately at {delivery?.maxPerDay ?? 4} a day.
+          </p>
+        {/if}
+      </div>
+    </section>
+
+    <!-- ── MODEL-AUTHORED RULES ─────────────────────────────────────────
+         The mesh. The model writes the rule; deterministic code evaluates it;
+         nothing fires until it is approved here. A proposal has already passed
+         validation and a backtest by the time it appears. -->
+    {#if proposedRules.length || activeRules.length}
+      <section class="band sunken" id="dd-rules">
+        <div class="inner">
+          <SectionHead
+            kicker="D / Rules jkai wrote"
+            title={['Proposed as data,', 'never as code']}
+            strap="A condition over a fixed list of facts. Each is validated and replayed against your history before it reaches you, and nothing fires until you approve it."
+          />
+
+          {#if proposedRules.length}
+            <div class="stack">
+              {#each proposedRules as r (r.id)}
+                <article class="card t-action">
+                  <div class="card-hd">
+                    <p class="card-title as-text">{r.spec?.description ?? r.kind}</p>
+                    <span class="pill t-action">{r.proposalKind}</span>
+                  </div>
+                  <p class="card-body">{r.rationale}</p>
+                  <div class="card-meta">
+                    <span class="tag">{r.kind}</span>
+                    <span class="meta-item">{r.backtestNote ? r.backtestNote : 'not backtested'}</span>
+                  </div>
+                  {#if r.backtestLowerBound}
+                    <p class="note warn">
+                      Estimate is a floor, not a count — the replay could not rebuild every fact this
+                      rule uses, so it will fire more often than shown.
+                    </p>
+                  {/if}
+                  <div class="card-actions bar">
+                    <button type="button" class="cta" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'approve' }, `rule:${r.id}`)}>
+                      Approve
+                    </button>
+                    <button type="button" class="btn danger" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'reject' }, `rule:${r.id}`)}>
+                      Reject
+                    </button>
+                  </div>
+                </article>
+              {/each}
+            </div>
+          {/if}
+
+          {#if activeRules.length}
+            <div class="tbl-scroll">
+              <table class="tbl">
+                <thead>
+                  <tr><th>Rule</th><th>What it says</th><th class="right">Fired</th><th class="right">Votes</th><th class="right">Do</th></tr>
+                </thead>
+                <tbody>
+                  {#each activeRules as r (r.id)}
+                    <tr>
+                      <td class="nowrap">{r.kind}</td>
+                      <td class="cell-lead">{r.spec?.description ?? ''}</td>
+                      <td class="right">{r.firedCount}</td>
+                      <td class="right nowrap">{r.usefulCount}↑ {r.notUsefulCount}↓</td>
+                      <td class="right">
+                        <button type="button" class="btn danger" disabled={busy === `rule:${r.id}`} onclick={() => post({ action: 'decide_rule', ruleId: r.id, decision: 'deprecate' }, `rule:${r.id}`)}>
+                          Retire
+                        </button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </section>
+    {/if}
+
+    <!-- ── DETECTORS ────────────────────────────────────────────────────
+         Every detector appears, ready or not. One missing would be
+         indistinguishable from one that is merely quiet — the same conflation
+         the readiness gate exists to prevent. -->
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="E / Detectors"
+          title={['What each one', 'is waiting for']}
+          strap="Each declares the history it needs before it may speak and returns nothing below that. A weight of 1.00 means the ledger has no opinion about it yet."
+        />
+        <div class="controls">
+          <FacetBar label="State" active={detState} facets={detStateFacets} onpick={(id) => (detState = id as DetState)} />
+          <FacetBar label="Order" active={detOrder} facets={detOrderFacets} onpick={(id) => (detOrder = id as DetOrder)} />
+        </div>
+
+        {#if detectorRows.length === 0}
+          <div class="card t-quiet"><p class="card-body">No detector is in that state.</p></div>
+        {:else}
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Detector</th>
+                  <th>What it looks for</th>
+                  <th>State</th>
+                  <th class="right">Weight</th>
+                  <th class="right">Votes</th>
+                  <th class="right">Do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each detectorRows as d (d.kind)}
+                  <tr class:dim={d.muted}>
+                    <td class="nowrap">{d.kind}</td>
+                    <td class="cell-lead cell-wrap">{d.description}</td>
+                    <td>
+                      <span class="pill t-{detectorTone(d)}">
+                        {d.muted ? 'muted' : d.readiness?.ready ? 'ready' : (d.readiness?.reason ?? 'not yet assessed')}
+                      </span>
+                    </td>
+                    <td class="right num" title="Learned multiplier from your feedback">×{d.weight.toFixed(2)}</td>
+                    <td class="right nowrap">{d.useful || d.notUseful ? `${d.useful}↑ ${d.notUseful}↓` : '—'}</td>
+                    <td class="right">
+                      {#if d.muted}
+                        <button type="button" class="btn" disabled={busy === `unmute:${d.kind}`} onclick={() => post({ action: 'unmute_kind', kind: d.kind }, `unmute:${d.kind}`)}>
+                          Un-mute
+                        </button>
+                      {:else}
+                        <span class="dim">—</span>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken">
+      <div class="inner">
+        <SectionHead kicker="F / Coverage" title={['How much of', 'each day it saw']} strap="Thirty days. A low figure is a phone that stopped reporting, not a day nobody moved — the two are the same shape in the data and only this line separates them." />
+        {#if (telemetry?.coverage ?? []).length >= 2}
+          <div class="chart">
+            <Sparkline
+              points={(telemetry?.coverage ?? []).map((c) => ({ label: c.day, value: c.coverage }))}
+              max={1}
+              format={(v) => `${Math.round(v * 100)}%`}
+              height={72}
+            />
+          </div>
+        {:else}
+          <div class="card t-quiet"><p class="card-body">Not enough day rows yet.</p></div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="G / Ponder telemetry"
+          title={['The fabrication', 'meter']}
+          strap="“Audit dropped” counts musings deleted for citing evidence that does not exist. A rising number means the model is reaching; zero means the wide view is holding."
+        />
+        {#if (telemetry?.ponderRuns ?? []).length === 0}
+          <div class="card t-quiet"><p class="card-body">No ponder cycles yet.</p></div>
+        {:else}
+          <div class="tbl-scroll">
+            <table class="tbl">
+              <thead>
+                <tr><th>When</th><th class="right">Cards in</th><th class="right">Musings</th><th class="right">Kept</th><th class="right">Held</th><th class="right">Audit dropped</th><th class="right">Leads</th></tr>
+              </thead>
+              <tbody>
+                {#each telemetry?.ponderRuns ?? [] as r (String(r.ts))}
+                  <tr>
+                    <td class="nowrap">{ago(String(r.ts))}</td>
+                    <td class="right num">{r.cards ?? '—'}</td>
+                    <td class="right num">{r.proposed ?? '—'}</td>
+                    <td class="right num">{r.created ?? '—'}</td>
+                    <td class="right num">{r.suppressed ?? '—'}</td>
+                    <td class="right num" class:bad={(r.dropped ?? 0) > 0}>{r.dropped ?? '—'}</td>
+                    <td class="right num">{r.leads ?? '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken" id="dd-jobs">
+      <div class="inner">
+        <SectionHead
+          kicker="H / Jobs"
+          title={['Every scheduled', 'pass, and its last word']}
+          strap="A job that has only ever skipped looks exactly like a job that ran and found nothing. The outcome column is the difference, and a failing streak outranks everything else on this page."
+        />
+        <div class="tbl-scroll">
+          <table class="tbl">
+            <thead>
+              <tr><th>Job</th><th>Every</th><th>Last outcome</th><th>Said</th></tr>
+            </thead>
+            <tbody>
+              {#each jobRows as j (j.name)}
+                <tr>
+                  <td class="nowrap">{j.name.replace('daydream-', '')}</td>
+                  <td class="nowrap">{cadence(j.cadenceSeconds)}</td>
+                  <td class="nowrap">
+                    <span class="pill t-{jobTone(j)}">{j.pulse ? j.pulse.outcome : 'never'}</span>
+                    <span class="meta-item">{j.pulse ? ago(String(j.pulse.ts)) : ''}</span>
+                  </td>
+                  <td class="cell-lead cell-wrap">{j.pulse?.summary ?? '—'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {/if}
+</DaydreamShell>
 
 <style>
-  /* Explicit width, not auto: inside the jkai shell's horizontal scroll
-     container an auto-width block stretches to its widest descendant (the
-     nowrap tab bar), which put a 640px page in a 390px phone. width:100%
-     pins the page to the scrollport and lets the tab bar scroll itself. */
-  .wrap { max-width: 980px; width: 100%; box-sizing: border-box; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
-  .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
-  .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
-  .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; line-height: 1.05; }
-  .sub { margin: 0.6rem 0 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
-  .sub strong { color: var(--text-primary); font-weight: 700; }
-  .hdr-links { display: flex; gap: 1rem; }
-  .back-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; white-space: nowrap; }
-  .back-link:hover { text-decoration: underline; }
+  /* ══ The daydream hub, in the /health editorial system ═══════════════════
+     Radii 0 (pills 100 only), no shadows, no springs, 12px mono floor. Colour
+     is PRIORITY, not category: every card, pill and tag reads its hue from one
+     `--tone` set by the `t-*` class the page put on it, and those classes come
+     from `$lib/daydream/priority.ts` rather than from whatever word the
+     database happened to store.
 
-  .banner { padding: 0.7rem 0.9rem; margin-bottom: 1.25rem; border-left: 3px solid var(--warn, #b0892a); background: var(--card-bg); font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); }
-  .banner code { font-family: var(--font-code); color: var(--text-primary); }
+     jkai keeps its own reading face (Selawik/Segoe) — see the type scope in
+     app.css. `--font-display` and `--font-mono` are unchanged inside jkai, so
+     the editorial voice carries without touching the body token. */
 
-  .sec-lede { margin: 0 0 0.9rem; font-size: var(--fs-label); line-height: 1.55; color: var(--text-muted); max-width: 68ch; }
+  /* ——— bands ————————————————————————————————————————————————————— */
 
-  /* Engine */
-  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; }
-  .stat-tile { border: 1px solid var(--line-strong); padding: 0.85rem 0.95rem; background: var(--bg); }
-  .stat-num { font-family: var(--font-display); font-size: 1.9rem; font-weight: 900; line-height: 1; color: var(--text-primary); }
-  .stat-num .of { font-size: 1rem; color: var(--text-ghost); }
-  .stat-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-top: 0.4rem; }
-  .stat-sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 0.25rem; }
-  .engine-summary { margin: 0.9rem 0 0; font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); }
-  .warn-line { margin: 0.6rem 0 0; font-size: var(--fs-label); line-height: 1.5; color: var(--warn, #b0892a); }
-  .warn-line.err { color: var(--error, #c44); }
-
-  /* Filters */
-  .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
-  .filter { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.4rem 0.7rem; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-secondary); cursor: pointer; }
-  .filter:hover { border-color: var(--accent); color: var(--accent); }
-  .filter.on { border-color: var(--text-primary); color: var(--text-primary); background: var(--surface-sunken); }
-  .filter .n { color: var(--text-ghost); margin-left: 0.35rem; }
-
-  /* Thoughts */
-  .rows { display: flex; flex-direction: column; gap: 0.5rem; }
-  .rows.tight { gap: 0.3rem; }
-  .thought { border: 1px solid var(--line-strong); border-left: 3px solid var(--text-muted); background: var(--surface-sunken); padding: 0.85rem 1rem 0.75rem; }
-  .thought.st-new { border-left-color: var(--accent); }
-  .thought.st-delivered { border-left-color: var(--success, #2d7a3a); }
-  .thought.st-actioned { border-left-color: var(--success, #2d7a3a); }
-  .thought.st-suppressed { border-left-color: var(--text-ghost); }
-  .thought.st-dismissed { border-left-color: var(--error, #c44); }
-  .thought.st-snoozed { border-left-color: var(--warn, #b0892a); }
-
-  .thought-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
-  .thought-title { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font: inherit; font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); cursor: pointer; overflow-wrap: anywhere; }
-  .thought-title:hover { color: var(--accent); }
-  .thought-title.as-text { cursor: default; }
-  .thought-title.as-text:hover { color: var(--text-primary); }
-  .thought-pill { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.15rem 0.45rem; border: 1px solid var(--line-strong); color: var(--text-secondary); white-space: nowrap; }
-  .thought-why { margin: 0 0 0.55rem; font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-secondary); }
-  .thought-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .mono { font-family: var(--font-mono); }
-  .sep { color: var(--card-border); }
-  .held { color: var(--text-muted); }
-  .voted { color: var(--accent-ink); }
-
-  .thought-detail { margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid var(--line-hair); display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-  .detail-block { min-width: 0; }
-  .components, .evidence { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
-  .components li, .evidence li { display: flex; justify-content: space-between; gap: 0.75rem; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.15rem; }
-  .ck { font-family: var(--font-mono); color: var(--text-muted); }
-  .cv { font-family: var(--font-mono); color: var(--text-primary); text-align: right; overflow-wrap: anywhere; }
-
-  .thought-actions, .place-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.7rem; }
-  .row-link { background: none; border: none; padding: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); cursor: pointer; }
-  .row-link:hover:not(:disabled) { text-decoration: underline; }
-  .row-link:disabled { opacity: 0.45; cursor: default; }
-  .row-link.danger { color: var(--error, #c44); }
-
-  /* Places */
-  .place-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.6rem 0.75rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
-  .naming { flex: 1 1 100%; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
-  .note-input {
-    width: 100%;
-    font: inherit;
-    font-size: var(--fs-label-sm, 0.875rem);
-    color: var(--text-primary);
-    background: var(--surface-2, transparent);
-    border: 1px solid var(--line-hair);
-    border-radius: 2px;
-    padding: 0.5rem;
-    resize: vertical;
+  .band {
+    padding: clamp(28px, 3.4vw, 52px) clamp(18px, 3vw, 44px);
+    border-top: 1px solid var(--line-hair);
+    /* The tab rail is sticky, so anything scrolled to by the action queue would
+       land underneath it without this. */
+    scroll-margin-top: 60px;
   }
-  .note-said {
-    margin: 0 0 0.35rem;
-    font-size: var(--fs-label-sm, 0.875rem);
-    color: var(--text-primary);
-    border-left: 2px solid var(--accent);
-    padding-left: 0.6rem;
-  }
-  .note-hint { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .visits { display: flex; flex-direction: column; gap: 0.35rem; }
-  .visit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
-  .visit-list li { display: grid; grid-template-columns: 4.2rem 5.5rem 1fr 3.5rem 4.5rem; gap: 0.5rem; font-size: var(--fs-label-xs); padding: 0.2rem 0; border-bottom: 1px solid var(--line-hair); }
-  .v-who { color: var(--text-primary); font-weight: 500; }
-  .v-day { color: var(--text-secondary); }
-  .v-date { color: var(--text-secondary); }
-  .v-time, .v-dwell { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
-  @media (max-width: 560px) {
-    .visit-list li { grid-template-columns: 3.8rem 4.5rem 1fr 3.2rem; }
-    .v-dwell { display: none; }
-  }
-  .geo-line { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); }
-  .geo-src { color: var(--text-ghost); }
-  .place-row.named { background: none; border-color: var(--line-hair); }
-  .place-id { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
-  .place-label { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); }
-  .place-rhythm { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .name-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-  .name-form .nm-text-input { width: auto; min-width: 12rem; }
-  .kind-select { min-width: 7rem; }
-
-  /* The naming session */
-  .session-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.75rem 0 0.5rem; }
-  .session-cta {
-    font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.02em;
-    padding: 0.5rem 0.9rem; cursor: pointer;
-    background: var(--accent); color: var(--accent-ink);
-    border: 1px solid var(--accent);
-  }
-  .session-cta:hover:not(:disabled) { filter: brightness(1.08); }
-  .session-cta:disabled { opacity: 0.55; cursor: default; }
-  .session-hint { font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .session-done { margin: 0 0 0.5rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
-  .session-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
-  .session-row {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: 0.6rem 1rem; padding: 0.55rem 0.75rem;
-    border: 1px solid var(--line-hair); background: var(--surface-sunken);
-    border-left: 3px solid transparent;
-  }
-  /* An answered row reads as done at a glance, so a long session has a
-     visible floor rising under it rather than looking untouched throughout. */
-  .session-row.filled { border-left-color: var(--accent); }
-  .session-meta { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-  .session-rhythm { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
-  .session-addr { font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .session-addr.none { color: var(--text-ghost); font-style: italic; }
-  .session-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-  .session-input { width: auto; min-width: 11rem; }
-  /* The suggestion IS the button — accepting it is the commonest action, so it
-     costs one tap and does not require reading a separate control first. */
-  .suggest-chip {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    padding: 0.35rem 0.65rem; cursor: pointer; text-align: left;
-    background: none; color: var(--text-primary);
-    border: 1px dashed var(--line-strong);
-  }
-  .suggest-chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); }
-  .rows.hidden { display: none; }
-  @media (max-width: 560px) {
-    .session-row { flex-direction: column; align-items: stretch; }
-    .session-input { min-width: 0; width: 100%; }
-  }
-
-  .rate-cue {
-    margin: 0.4rem 0 0; font-family: var(--font-mono);
-    font-size: var(--fs-label-xs); color: var(--accent);
-  }
-
-  .thought-pill.answered { color: var(--accent); border-color: var(--accent); }
-  .thought-answered {
-    margin: 0.3rem 0 0; font-size: var(--fs-label-xs); line-height: 1.55;
-    color: var(--text-secondary);
-  }
-  .thought-answered strong { color: var(--text-primary); }
-
-  /* Yesterday, and steering */
-  .digest {
-    margin: 0; padding: 0.7rem 0.9rem;
-    font-size: var(--fs-body-sm); line-height: 1.6; color: var(--text-primary);
-    background: var(--surface-sunken); border-left: 3px solid var(--accent);
-  }
-  .steer-box { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.6rem 0 0.9rem; }
-  .steer-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-  .steer-input { flex: 1 1 22rem; min-width: 0; }
-  .steer-list { list-style: none; margin: 0.2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
-  .steer {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
-    padding: 0.4rem 0.6rem; border: 1px solid var(--line-hair);
-    background: var(--surface-sunken); border-left: 2px solid var(--accent);
-  }
-  .steer.done { border-left-color: var(--line-hair); opacity: 0.6; }
-  .steer-text { flex: 1 1 18rem; min-width: 0; font-size: var(--fs-label-xs); color: var(--text-primary); }
-  .steer-meta { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-
-  /* The propositions board */
-  .hyp {
-    display: flex; flex-direction: column; gap: 0.35rem;
-    padding: 0.7rem 0.85rem;
-    border: 1px solid var(--line-hair); background: var(--surface-sunken);
-    border-left: 3px solid var(--line-strong);
-  }
-  .hyp.held { border-left-color: var(--accent); }
-  .hyp-q { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); max-width: 70ch; }
-  .hyp-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .hyp-verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
-  .hyp-badge {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    letter-spacing: 0.06em; text-transform: uppercase;
-    padding: 0.15rem 0.4rem; border: 1px solid currentColor; white-space: nowrap;
-  }
-  /* A refuted question is not a failure and is not styled as one. It is an
-     answer, and reading it is the point of keeping it. */
-  .v-supported .hyp-badge { color: var(--accent); }
-  .v-refuted .hyp-badge, .v-underpowered .hyp-badge, .v-untested .hyp-badge { color: var(--text-ghost); }
-  .v-wrong_direction .hyp-badge { color: var(--status-error, #c0392b); }
-  .hyp-sum { font-size: var(--fs-label-xs); color: var(--text-secondary); }
-  .hyp-family { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .hyp-why { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 70ch; }
-  .hyp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.15rem; }
-  .hyp-ask { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  /* Provenance. States are words, never colour alone — "waiting" and
-     "flowing" have to be tellable apart in a screenshot and by anyone who
-     does not see the accent hue. */
-  .prov { border: 1px solid var(--line-strong); padding: 0.7rem 0.85rem; }
-  .prov-hd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
-  .prov-name { font-family: var(--font-display); font-weight: 900; font-size: 1rem; color: var(--text-primary); }
-  .prov-sum { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .prov-blurb { margin: 0.2rem 0 0.5rem; font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 74ch; }
-  .prov-links { display: flex; flex-direction: column; gap: 0.3rem; }
-  .prov-link { display: grid; grid-template-columns: 6.5rem 8rem 1fr; gap: 0.6rem; align-items: baseline; font-size: var(--fs-label-xs); }
-  @media (max-width: 700px) { .prov-link { grid-template-columns: 6.5rem 1fr; } }
-  .prov-state { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; text-align: center; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); }
-  .prov-state.s-flowing { color: var(--accent-ink, var(--accent)); border-color: var(--accent-ink, var(--accent)); }
-  .prov-state.s-waiting { color: var(--warn, #b0892a); border-color: var(--warn, #b0892a); }
-  .prov-state.s-stalled { color: var(--error, #c44); border-color: var(--error, #c44); }
-  .prov-to { font-family: var(--font-mono); color: var(--text-secondary); }
-  .prov-detail { color: var(--text-muted); line-height: 1.5; }
-
-  .hyp-hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
-  /* The name, not a colour: five people need to be told apart at a glance and
-     the palette has one accent. A chip reads at any size and in both themes. */
-  .who { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); border: 1px solid var(--accent); padding: 0 0.35rem; }
-  .hyp-detail { margin-top: 0.5rem; border-top: 1px solid var(--line-hair); padding-top: 0.5rem; }
-  .hyp-days { border-collapse: collapse; font-size: var(--fs-label-xs); min-width: 22rem; }
-  .hyp-days th { text-align: left; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); font-weight: 400; padding: 0.15rem 0.9rem 0.15rem 0; border-bottom: 1px solid var(--line-strong); }
-  .hyp-days td { padding: 0.12rem 0.9rem 0.12rem 0; color: var(--text-secondary); border-bottom: 1px solid var(--line-hair); }
-  /* Values right-aligned with tabular figures so the decimal points line up.
-     The numbers themselves are NOT rounded — this is the provenance table, and
-     its job is to show exactly what was correlated. Rounding belongs on the
-     summary statistic above, where 17 decimal places implied a precision the
-     measurement does not have. */
-  .hyp-days td:not(:first-child), .hyp-days th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-  .cause-line.err { color: var(--error, #c44); }
-
-  /* The sorting deck */
-  .deck-card {
-    display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
-    gap: 0.6rem 1rem; padding: 0.6rem 0.75rem;
-    border: 1px solid var(--line-hair); background: var(--surface-sunken);
-    border-left: 3px solid transparent;
-  }
-  .deck-card.ruled { border-left-color: var(--accent); }
-  .deck-body { min-width: 0; flex: 1 1 22rem; display: flex; flex-direction: column; gap: 0.2rem; }
-  .deck-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .deck-kind { color: var(--text-secondary); }
-  /* Something proposed forty times and never said is a better question than
-     something noticed once, so the count is the thing that stands out. */
-  .deck-rec { color: var(--accent); }
-  .deck-title { font-size: var(--fs-body-sm); font-weight: 700; color: var(--text-primary); }
-  .deck-expl { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 68ch; }
-  .deck-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-  .deck-actions .row-link.picked {
-    background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
-  }
-
-  /* Model phrasing, and how much of it to trust */
-  .narrative {
-    margin: 0.4rem 0 0; padding: 0.5rem 0.7rem;
-    font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-primary);
-    background: var(--surface-sunken); border-left: 2px solid var(--line-strong);
-  }
-  /* Unchecked prose does not get to look like checked prose. The minimal depth
-     plan produces it routinely, and until now nothing on the page said so. */
-  .narrative.unchecked { border-left-color: var(--status-error, #c0392b); }
-  .narr-tag {
-    display: inline-block; margin-left: 0.4rem;
-    font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    letter-spacing: 0.04em; color: var(--status-error, #c0392b); white-space: nowrap;
-  }
-  .narr-tag.ok { color: var(--text-ghost); }
-  .review {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.4rem 0.6rem;
-    margin: 0.4rem 0 0;
-    padding: 0.4rem 0.6rem;
-    border-left: 2px solid var(--text-muted);
+  .band.sunken {
     background: var(--bg-section);
-    font-size: 0.87rem;
-    line-height: 1.45;
   }
-  .r-verified { border-left-color: var(--success); }
-  .r-refuted { border-left-color: var(--error); }
-  .r-uncertain { border-left-color: var(--warn); }
+  .band.attn {
+    border-top: 0;
+    border-bottom: 2px solid var(--text-primary);
+  }
+  .inner {
+    max-width: 1500px;
+    margin: 0 auto;
+    min-width: 0;
+  }
 
-  .review-tag {
+  /* ——— type ————————————————————————————————————————————————————— */
+
+  .lede {
+    font-size: var(--fs-body-sm);
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 90ch;
+    text-wrap: pretty;
+    margin: 0 0 20px;
+  }
+  .note {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    line-height: 1.65;
     letter-spacing: 0.05em;
+    color: var(--text-muted);
+    max-width: 96ch;
+    margin: 12px 0 0;
+  }
+  .note.warn {
+    color: var(--warn);
+  }
+  .note.good {
+    color: var(--good);
+  }
+  .err {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.6;
+    letter-spacing: 0.05em;
+    color: var(--error);
+    margin: 12px 0 0;
+  }
+  .field-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+  }
+  .dim {
+    color: var(--text-ghost);
+  }
+  .link {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .link:hover {
+    text-decoration: underline;
+  }
+
+  /* ——— controls ————————————————————————————————————————————————— */
+
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 0 20px;
+    border-top: 1px solid var(--line-hair);
+    border-bottom: 1px solid var(--line-hair);
+    margin-bottom: 22px;
+  }
+
+  .cta,
+  .btn {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 9px 16px;
+    border-radius: 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background-color var(--t-fast) var(--ease-out),
+      border-color var(--t-fast) var(--ease-out),
+      color var(--t-fast) var(--ease-out);
+  }
+  /* The primary. Solid, so there is never a question which button does the
+     thing the section is about. */
+  .cta {
+    color: var(--bg);
+    background: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .cta:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+  .btn {
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid var(--line-strong);
+  }
+  .btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn.danger:hover:not(:disabled) {
+    border-color: var(--error);
+    color: var(--error);
+  }
+  /* A verdict already cast, in a deck where the row stays editable. */
+  .btn.picked {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg);
+  }
+  .btn.danger.picked {
+    background: var(--error);
+    border-color: var(--error);
+    color: var(--bg);
+  }
+  .cta:disabled,
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .cta:focus-visible,
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .text-input {
+    font-family: var(--font-body);
+    /* 16px, not smaller: mobile Safari force-zooms the viewport on a sub-16px
+       field and strands the rest of the form off-screen. */
+    font-size: var(--fs-body);
+    color: var(--text-primary);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 9px 12px;
+    min-width: 0;
+    flex: 1 1 220px;
+  }
+  .text-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .text-input.area {
+    width: 100%;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .text-input.select {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    text-transform: lowercase;
+  }
+
+  .steer-row {
+    margin-bottom: 22px;
+  }
+  .steer-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* ——— cards ———————————————————————————————————————————————————
+     One shape, six tones. The left rule is the whole colour system: a 3px
+     stripe in `--tone`, which is also the kicker and the pill. */
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .stack.tight {
+    gap: 8px;
+  }
+
+  .card {
+    --tone: var(--accent-ink);
+    position: relative;
+    background: var(--surface-card);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--tone);
+    border-radius: 0;
+    padding: 18px 20px;
+    min-width: 0;
+  }
+  .card.t-urgent {
+    --tone: var(--error);
+    background: var(--error-bg);
+  }
+  .card.t-action {
+    --tone: var(--accent);
+    background: var(--accent-tint-04);
+  }
+  .card.t-watch {
+    --tone: var(--warn);
+  }
+  .card.t-good {
+    --tone: var(--good);
+  }
+  .card.t-steady {
+    --tone: var(--accent-ink);
+  }
+  .card.t-quiet {
+    --tone: var(--text-ghost);
+    background: transparent;
+  }
+  .card.open {
+    border-color: var(--tone);
+  }
+  .card.ruled {
+    opacity: 0.72;
+  }
+
+  /* The naming rows and the session rows: identity on the left, the controls
+     that act on it on the right, wrapping to two lines on a phone. */
+  .card.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .row-id {
+    min-width: 0;
+    flex: 1 1 320px;
+  }
+  .row-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .card-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .card-kicker {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--tone, var(--text-muted));
+    margin: 0 0 10px;
+  }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-body-lg);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-align: left;
+    color: var(--text-primary);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    min-width: 0;
+    transition: color var(--t-fast) var(--ease-out);
+  }
+  .card-title:hover {
+    color: var(--accent);
+  }
+  .card-title:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* Same type, no affordance — a heading that opens nothing. */
+  .card-title.as-text {
+    cursor: default;
+  }
+  .card-title.as-text:hover {
+    color: var(--text-primary);
+  }
+
+  /* The one big number a card is allowed. */
+  .card-figure {
+    font-family: var(--font-display);
+    font-size: 34px;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    color: var(--tone);
+    margin: 0 0 10px;
+    overflow-wrap: anywhere;
+  }
+  .card-figure.sm {
+    font-size: 22px;
+  }
+
+  .card-body {
+    font-size: var(--fs-body-sm);
+    line-height: 1.55;
     color: var(--text-secondary);
-    flex: none;
+    text-wrap: pretty;
+    margin: 0;
   }
-  .r-verified .review-tag { color: var(--success); }
-  .r-refuted .review-tag { color: var(--error); }
-  .r-uncertain .review-tag { color: var(--warn); }
-  .review-p { opacity: 0.75; }
-  .review-why { color: var(--text-secondary); }
-
-  .narr-dropped {
-    margin: 0.4rem 0 0; font-family: var(--font-mono);
-    font-size: var(--fs-label-xs); color: var(--text-ghost);
+  .card-body.lead {
+    color: var(--text-primary);
   }
-  .place-tag { color: var(--text-secondary); }
-  .tok { color: var(--text-ghost); }
-
-  /* Detectors */
-  .det-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.55rem 0; border-bottom: 1px solid var(--line-hair); }
-  .det-row.muted { opacity: 0.6; }
-  .det-main { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
-  .det-kind { font-size: var(--fs-label); color: var(--text-primary); }
-  .det-desc { font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-muted); max-width: 62ch; }
-  .det-state { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
-  .det-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .det-badge.on { color: var(--success, #2d7a3a); }
-  .det-badge.wait { color: var(--text-muted); }
-  .det-badge.off { color: var(--error, #c44); }
-  .det-weight { font-size: var(--fs-label-xs); color: var(--text-secondary); }
-  .det-votes { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-
-  .budget-note { margin-top: 0.9rem; margin-bottom: 0; }
-  .budget-note strong { color: var(--text-primary); font-weight: 700; }
-
-  .empty { padding: 1.5rem; text-align: center; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-ghost); font-style: italic; border: 1px dashed var(--line-strong); line-height: 1.6; }
-
-  @media (max-width: 640px) {
-    .page-hdr { flex-direction: column; align-items: flex-start; }
-    .det-row { flex-direction: column; }
-    .thought-detail { grid-template-columns: 1fr; }
+  .card-body.sm {
+    font-size: var(--fs-nav);
+  }
+  .card-body + .card-body {
+    margin-top: 10px;
   }
 
-  /* ── Tabs ─────────────────────────────────────────────────────────────── */
-  .tabs {
-    position: sticky; top: 0; z-index: 5;
-    display: flex; gap: 0.25rem; flex-wrap: nowrap; overflow-x: auto;
-    margin: 0 0 1.5rem; padding: 0.4rem 0;
-    background: var(--bg); border-bottom: 1px solid var(--line-strong);
-    scrollbar-width: none;
-  }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab {
-    font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase;
-    letter-spacing: 0.1em; padding: 0.5rem 0.85rem; border: none; background: none;
-    color: var(--text-muted); cursor: pointer; white-space: nowrap;
-    border-bottom: 2px solid transparent; transition: color 120ms ease, border-color 120ms ease;
-  }
-  .tab:hover { color: var(--text-primary); }
-  .tab.on { color: var(--text-primary); border-bottom-color: var(--accent); }
-  .tab-n {
-    display: inline-block; min-width: 1.2em; margin-left: 0.4rem; padding: 0 0.3em;
-    background: var(--accent); color: var(--bg); border-radius: 100px;
-    font-size: var(--fs-label-xs); text-align: center; font-variant-numeric: tabular-nums;
-  }
-
-  /* ── Header power toggle ──────────────────────────────────────────────── */
-  .power {
-    display: inline-flex; align-items: center; gap: 0.45rem;
-    font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase;
-    letter-spacing: 0.12em; padding: 0.35rem 0.7rem; cursor: pointer;
-    border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-secondary);
-  }
-  .power:hover { border-color: var(--accent); }
-  .power-dot { width: 8px; height: 8px; border-radius: 100px; background: #3a8a56; box-shadow: 0 0 0 3px color-mix(in srgb, #3a8a56 25%, transparent); }
-  .power.off .power-dot { background: var(--text-ghost); box-shadow: none; }
-  .power.off { color: var(--text-ghost); }
-
-  /* ── Feed timeline ────────────────────────────────────────────────────── */
-  .tl-day { display: flex; align-items: center; gap: 0.75rem; margin: 0.6rem 0 0.1rem; }
-  .tl-day:first-child { margin-top: 0; }
-  .tl-day-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); white-space: nowrap; background: none; border: none; padding: 0; cursor: pointer; }
-  .tl-day-label:hover { color: var(--text-primary); }
-  .tl-n { display: inline-block; margin-left: 0.35rem; padding: 0 0.3rem; border: 1px solid var(--line-strong); color: var(--text-ghost); }
-  .tl-stats { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tl-blurb { margin: 0 0 0.5rem; font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); max-width: 72ch; }
-  .tl-day-rule { flex: 1; height: 1px; background: var(--line-strong); opacity: 0.6; }
-
-  /* Likelihood, relative to the engine's own moving bar — never a fixed
-     cut-off on the raw score. See thought-groups.ts. */
-  .band { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); }
-  .band-strong { color: var(--accent-ink, var(--accent)); border-color: var(--accent); }
-  .band-likely { color: var(--text-secondary); }
-  .band-marginal { color: var(--text-muted); }
-  .band-held { color: var(--warn, #b0892a); border-color: var(--warn, #b0892a); }
-
-  .person { border: 1px solid var(--line-strong); margin-bottom: 0.5rem; }
-  .person-hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; width: 100%; text-align: left; background: none; border: none; padding: 0.6rem 0.8rem; cursor: pointer; }
-  .person-hd:hover { background: var(--card-bg); }
-  .person-caret { color: var(--text-ghost); }
-  .person-name { font-family: var(--font-display); font-weight: 900; font-size: 1.05rem; color: var(--text-primary); }
-  .person-counts { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .person-body { padding: 0 0.8rem 0.8rem; border-top: 1px solid var(--line-hair); }
-
-  /* Per-person rows in the Family tab. Prefixed `pq-` and NOT `hyp-`: the
-     Discoveries board already owns `.hyp-q` and `.hyp-verdict`, and reusing
-     those names redefined them further down the sheet, which put a border box
-     and uppercase text around every verdict on the board and muted every
-     question. One stylesheet, one namespace per component. */
-  .pq-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-hair); padding-bottom: 0.25rem; }
-  .pq-q { flex: 1 1 16rem; color: var(--text-secondary); }
-  a.pq-q.link { color: var(--accent); text-decoration: none; }
-  a.pq-q.link:hover { text-decoration: underline; }
-  .pq-stats { color: var(--text-ghost); white-space: nowrap; }
-  .pq-verdict { text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.3rem; border: 1px solid var(--line-strong); }
-  .pq-verdict.v-supported { color: var(--accent-ink, var(--accent)); border-color: var(--accent); }
-  .pq-verdict.v-refuted, .pq-verdict.v-wrong_direction { color: var(--text-muted); }
-  .pq-verdict.v-open, .pq-verdict.v-underpowered { color: var(--warn, #b0892a); }
-
-  .cause-line { margin: 0.3rem 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: var(--text-secondary); max-width: 74ch; }
-  .filter-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); align-self: center; margin-right: 0.15rem; }
-  .thought.musing { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 3%, var(--surface-sunken)); }
-  .theme-chip {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
-    letter-spacing: 0.1em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-    padding: 0.05rem 0.45rem; border-radius: 100px;
-  }
-
-  /* ── Family ───────────────────────────────────────────────────────────── */
-  .fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.6rem; }
-  .fam-card { border: 1px solid var(--line-strong); background: var(--bg); padding: 0.85rem 0.95rem; transition: border-color 120ms ease; }
-  .fam-card:hover { border-color: var(--accent); }
-  .fam-card.stale { opacity: 0.65; }
-  .fam-hd { display: flex; align-items: center; gap: 0.5rem; }
-  .fam-dot { width: 9px; height: 9px; border-radius: 100px; background: var(--text-ghost); flex: 0 0 auto; }
-  .fam-dot.home { background: #3a8a56; box-shadow: 0 0 0 3px color-mix(in srgb, #3a8a56 20%, transparent); }
-  .fam-dot.out { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
-  .fam-name { font-family: var(--font-display); font-weight: 900; font-size: 1.05rem; }
-  .fam-batt { margin-left: auto; font-size: var(--fs-label-xs); color: var(--warn, #b0892a); }
-  .fam-where { margin-top: 0.4rem; font-size: var(--fs-body-sm); color: var(--text-secondary); }
-  .fam-meta { margin-top: 0.15rem; font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .fam-today { display: flex; gap: 0.7rem; margin-top: 0.65rem; padding-top: 0.55rem; border-top: 1px solid var(--card-border); flex-wrap: wrap; }
-  .fam-stat { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .fam-stat b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-
-  /* ── Telemetry & money tables ─────────────────────────────────────────── */
-  .tablewrap { overflow-x: auto; }
-  .tele-table { width: 100%; border-collapse: collapse; font-size: var(--fs-label); }
-  .tele-table th {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
-    letter-spacing: 0.1em; color: var(--text-muted); text-align: left; font-weight: 500;
-    padding: 0.35rem 0.9rem 0.35rem 0; border-bottom: 1px solid var(--line-strong);
-  }
-  .tele-table td { padding: 0.45rem 0.9rem 0.45rem 0; border-bottom: 1px solid var(--card-border); vertical-align: top; }
-  .tele-table td.amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tele-table td.bad { color: var(--error, #c44); font-weight: 700; }
-  .tele-table tr.jobbad td { color: var(--error, #c44); }
-  .job-summary { color: var(--text-muted); font-size: var(--fs-label-xs); max-width: 42ch; }
-  .pulse-dot { display: inline-block; width: 7px; height: 7px; border-radius: 100px; background: var(--text-ghost); margin-right: 0.35rem; }
-  .pulse-dot.ok { background: #3a8a56; }
-  .pulse-dot.skip { background: var(--warn, #b0892a); }
-  .pulse-dot.err { background: var(--error, #c44); }
-  .chart-block { margin-top: 1rem; }
-  .merchants { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.9rem; }
-  .merchant-chip {
-    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
-    border: 1px solid var(--card-border); padding: 0.25rem 0.55rem; background: var(--bg);
-  }
-  .merchant-chip b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-
-  /* ── Discoveries: leads, digests ──────────────────────────────────────── */
-  .lead-row { display: flex; justify-content: space-between; gap: 1rem; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); background: var(--surface-sunken); padding: 0.75rem 0.95rem; }
-  .lead-row.closed { border-left-color: var(--text-ghost); opacity: 0.7; }
-  .lead-main { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
-  .lead-title { font-weight: 700; font-size: var(--fs-body-sm); }
-  .lead-why { font-size: var(--fs-label); color: var(--text-muted); }
-  .lead-metrics { font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .lead-state { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; white-space: nowrap; }
-  .digest-row { border: 1px solid var(--card-border); background: var(--bg); }
-  .digest-row summary { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.55rem 0.8rem; cursor: pointer; list-style: none; }
-  .digest-row summary::-webkit-details-marker { display: none; }
-  .digest-row summary:hover { background: var(--surface-sunken); }
-  .digest-kind {
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px 14px;
+    flex-wrap: wrap;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-top: 14px;
+  }
+  .meta-item.warn {
+    color: var(--warn);
+  }
+  .meta-item.good {
+    color: var(--good);
+  }
+
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  /* The rating bar: a rule above it, because it is a different act from
+     reading the card. */
+  .card-actions.bar {
+    padding-top: 14px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .ask {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
     text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+
+  /* ——— pills and tags ——————————————————————————————————————————— */
+
+  .pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding: 3px 10px;
+    border: 1px solid currentcolor;
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+  }
+  .pill.t-urgent {
+    color: var(--error);
+  }
+  .pill.t-action {
+    color: var(--accent);
+    background: var(--accent-tint-08);
+  }
+  .pill.t-watch {
+    color: var(--warn);
+  }
+  .pill.t-good {
+    color: var(--good);
+  }
+  .pill.t-steady {
     color: var(--accent-ink);
-    border: 1px solid var(--accent-ink);
-    border-radius: 2px;
-    padding: 0 0.3rem;
-    flex: none;
+  }
+  .pill.t-quiet {
+    color: var(--text-ghost);
   }
 
-  .digest-day { color: var(--text-ghost); font-size: var(--fs-label-xs); white-space: nowrap; }
-  .digest-sum { font-size: var(--fs-label); color: var(--text-secondary); }
-  .digest-row .narrative { margin: 0 0.8rem 0.7rem; }
-
-  /* ── Money extras ─────────────────────────────────────────────────────── */
-  .renewal-row { display: flex; gap: 0.8rem; align-items: baseline; padding: 0.45rem 0; border-bottom: 1px solid var(--card-border); font-size: var(--fs-label); }
-  .renewal-date { color: var(--text-ghost); font-size: var(--fs-label-xs); white-space: nowrap; }
-  .renewal-type { color: var(--accent); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
-  .renewal-title { color: var(--text-secondary); }
-
-  @media (prefers-reduced-motion: reduce) {
-    .tab, .fam-card, .power { transition: none; }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid var(--card-border);
+    border-radius: 0;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .tag.accent {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  .tag.t-action {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  .tag.t-watch {
+    border-color: var(--warn-border);
+    color: var(--warn);
+  }
+  .tag.t-steady {
+    border-color: var(--accent-ink-tint-35);
+    color: var(--accent-ink);
   }
 
+  /* ——— quotes and reviews ——————————————————————————————————————
+     The model's phrasing is always shown AS the model's, and an unchecked one
+     is drawn differently from a checked one — a composer that has quietly
+     started refusing everything looks exactly like a quiet week otherwise. */
+
+  .quote {
+    font-size: var(--fs-body-sm);
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--accent-ink-tint-06);
+    border-left: 2px solid var(--accent-ink);
+    border-radius: 0;
+    padding: 14px 16px;
+    margin: 14px 0 0;
+    text-wrap: pretty;
+  }
+  .quote.unchecked {
+    background: var(--warn-bg);
+    border-left-color: var(--warn);
+  }
+  .quote-tag {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--warn);
+    margin-top: 10px;
+  }
+  .quote-tag.ok {
+    color: var(--good);
+  }
+
+  .review {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: var(--fs-nav);
+    line-height: 1.55;
+    border-top: 1px solid var(--line-hair);
+    padding-top: 12px;
+    margin: 14px 0 0;
+    color: var(--text-secondary);
+  }
+  .review-tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+  .review.r-verified .review-tag {
+    color: var(--good);
+  }
+  .review.r-refuted .review-tag {
+    color: var(--error);
+  }
+  .review-p {
+    margin-left: 6px;
+    opacity: 0.75;
+  }
+  .review-why {
+    min-width: 0;
+  }
+
+  .cue {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 12px 0 0;
+  }
+
+  /* ——— the expanded detail ——————————————————————————————————————— */
+
+  .detail {
+    border-top: 1px solid var(--line-hair);
+    margin-top: 16px;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .detail.wide {
+    flex-basis: 100%;
+    width: 100%;
+  }
+  .detail-block {
+    min-width: 0;
+  }
+  .detail-line {
+    font-size: var(--fs-nav);
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 92ch;
+    text-wrap: pretty;
+    margin: 0 0 8px;
+  }
+  .detail-line.said {
+    color: var(--text-primary);
+    border-left: 2px solid var(--accent-tint-35);
+    padding-left: 12px;
+  }
+
+  /* ——— feed groups ——————————————————————————————————————————————
+     The header carries its own statistics, so "what is it noticing, how
+     strongly, and how has that landed" is answerable without opening a thing. */
+
+  .group {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 30px 0 6px;
+  }
+  .group:first-of-type {
+    margin-top: 0;
+  }
+  .group-hd {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease-out);
+  }
+  .group-hd:hover {
+    color: var(--accent);
+  }
+  .group-hd:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  .group-caret {
+    color: var(--accent);
+  }
+  .group-n {
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .group-stats {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .group-rule {
+    flex: 1 1 40px;
+    height: 1px;
+    background: var(--line);
+  }
+  .group-blurb {
+    font-size: var(--fs-nav);
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-width: 92ch;
+    text-wrap: pretty;
+    margin: 0 0 14px;
+  }
+
+  /* ——— per-person disclosure ————————————————————————————————————— */
+
+  .person {
+    border-top: 1px solid var(--line-hair);
+  }
+  .person:last-child {
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .person-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    width: 100%;
+    text-align: left;
+    padding: 16px 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    cursor: pointer;
+  }
+  .person-hd:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .person-name {
+    font-family: var(--font-display);
+    font-size: var(--fs-body-lg);
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+  .person-counts {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+  .person-body {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 0 0 24px;
+  }
+
+  /* ——— tables ————————————————————————————————————————————————————
+     Every table on the hub is this one: mono, hairline rows, headings in
+     uppercase muted mono, numbers right-aligned in the code face so columns
+     line up (Selawik has no tnum, which is why the numeric cells name
+     --font-code rather than --font-mono). */
+
+  .tbl-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--card-border);
+    margin-top: 14px;
+  }
+  .tbl {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+  .tbl thead tr {
+    background: var(--card-bg);
+    border-bottom: 2px solid rgba(26, 16, 8, 0.2);
+  }
+  .tbl th {
+    padding: 11px 12px;
+    text-align: left;
+    white-space: nowrap;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .tbl th.right {
+    text-align: right;
+  }
+  .tbl tbody tr {
+    border-bottom: 1px solid var(--line-hair);
+    transition: background-color var(--t-fast) var(--ease-out);
+  }
+  .tbl tbody tr:last-child {
+    border-bottom: none;
+  }
+  /* Hover is a tint. No fade, no lift. */
+  .tbl tbody tr:hover {
+    background: rgba(26, 16, 8, 0.05);
+  }
+  .tbl tbody tr.dim {
+    color: var(--text-ghost);
+  }
+  .tbl td {
+    padding: 10px 12px;
+    vertical-align: middle;
+    color: var(--text-secondary);
+  }
+  .tbl.compact th,
+  .tbl.compact td {
+    padding: 7px 10px;
+  }
+  .tbl th.right,
+  .tbl td.right {
+    text-align: right;
+    /* Shrink-to-fit, so the slack in a four-column table lands in the column
+       carrying the words rather than being shared out evenly and leaving a
+       60px hole between a merchant and its amount. */
+    width: 1%;
+    white-space: nowrap;
+  }
+  .tbl td.num {
+    font-family: var(--font-code);
+    font-variant-numeric: tabular-nums;
+  }
+  .tbl td.nowrap {
+    white-space: nowrap;
+  }
+  .tbl td.cell-wrap {
+    min-width: 22ch;
+  }
+  .tbl td.bad {
+    color: var(--error);
+    font-weight: 700;
+  }
+  .cell-lead {
+    color: var(--text-primary);
+  }
+  .cell-title {
+    display: block;
+    font-family: var(--font-display);
+    font-size: var(--fs-label);
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  .cell-sub {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: var(--text-muted);
+    max-width: 60ch;
+    margin-top: 4px;
+  }
+
+  /* ——— odds and ends ——————————————————————————————————————————— */
+
+  .chart {
+    border: 1px solid var(--card-border);
+    background: var(--surface-card);
+    padding: 16px;
+    margin-top: 18px;
+  }
+
+  .chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+  .chip-stat {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    padding: 6px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: 0;
+    color: var(--text-secondary);
+  }
+  .chip-stat b {
+    color: var(--accent);
+    margin-right: 6px;
+  }
+
+  .disclose {
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--accent-ink);
+    border-radius: 0;
+    background: var(--surface-card);
+    padding: 12px 16px;
+  }
+  .disclose summary {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    cursor: pointer;
+    font-size: var(--fs-nav);
+    color: var(--text-secondary);
+  }
+  .disclose summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  .disclose-day {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .disclose-sum {
+    min-width: 0;
+  }
+
+  @media (max-width: 700px) {
+    .card-title {
+      font-size: var(--fs-body);
+    }
+    .card.row {
+      align-items: flex-start;
+    }
+  }
 </style>
