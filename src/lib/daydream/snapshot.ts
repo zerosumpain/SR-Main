@@ -194,7 +194,7 @@ export async function buildSnapshot(
   let sleepProblem: string | null = null;
   try {
     const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
-    const { checkReading, fileReadingFault, msToMinutes } = await import('./health-quality');
+    const { checkReading, msToMinutes } = await import('./health-quality');
     const sleep = await getSleepAnalysis();
 
     // ── Units, then plausibility, in that order ────────────────────────────
@@ -217,13 +217,12 @@ export async function buildSnapshot(
       const performance = checkReading('sleepPerformance', sleep.latest.performance);
       const problems = [duration.problem, performance.problem].filter(Boolean) as string[];
 
-      if (problems.length) {
-        sleepProblem = problems.join('; ');
-        // Nearly always a unit conversion in one place, which is a job the
-        // engine can be asked to do. Idempotent per slug, so a standing fault
-        // files one item rather than one every ten minutes.
-        void fileReadingFault('sleepMinutes', sleepProblem);
-      }
+      // Reported here and now, on the source list the hub's attention band
+      // reads. Going and FIXING it is the nightly improvement run's job, which
+      // pulls the same check via `collectHealthFaults` — pushing from a
+      // ten-minute snapshot would have closed a module cycle, and the gate was
+      // right to refuse it.
+      if (problems.length) sleepProblem = problems.join('; ');
 
       // Both halves or neither. "You slept well" beside a duration that was
       // thrown away is a claim resting on a number nobody can see.

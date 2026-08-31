@@ -38,9 +38,12 @@
 // that has started emitting impossible numbers is a FAULT, and a fault that
 // only ever manifests as absence looks exactly like a quiet week. So a rejected
 // reading is reported on the snapshot's source list — the same list the Engine
-// tab renders — and files itself as a self-improvement item, because the fix is
-// nearly always a unit conversion in one place and that is a job the engine can
-// be asked to do.
+// tab and the hub's attention band read — and is offered to the nightly
+// improvement run as a backlog idea, because the fix is nearly always a unit
+// conversion in one place and that is a job the engine can be asked to do.
+//
+// That second half is PULLED by selfimprove rather than pushed from here; see
+// `collectHealthFaults` for why the boundary gate was right about that.
 
 import { PLAUSIBLE, plausible } from './features/normalise';
 import { errMsg } from './types';
@@ -87,42 +90,81 @@ export function checkReading(key: string, value: number | null | undefined): Rea
 }
 
 /**
- * Ask the self-improvement engine to go and fix the source of a bad reading.
+ * Health readings that cannot be true, as backlog ideas.
  *
- * Only ever called from the rejected branch, so in a healthy system this never
- * runs at all. `addIdeas` is idempotent per slug and carries its own
- * twelve-a-night cap, so a fault that persists produces ONE backlog item rather
- * than one every ten minutes.
+ * ── Why this is PULLED and not pushed ──────────────────────────────────────
  *
- * Never throws. A backlog that is unreachable must not take the snapshot down
- * with it — the reading has already been rejected by the time we get here, and
- * that is the part that protects the owner.
+ * The first cut had `snapshot.ts` calling `addIdeas` the moment it rejected a
+ * reading. The boundary gate refused it, correctly: `selfimprove/analyze.ts`
+ * already imports `$lib/daydream/starvation`, so a daydream → selfimprove
+ * import closes a cycle and neither module can then be understood or moved
+ * alone.
+ *
+ * Inverting it is also the better design, which is usually how that gate reads.
+ * Filing a backlog item from inside a snapshot that rebuilds every ten minutes
+ * was always slightly wrong — the nightly improvement run is the right place to
+ * notice "a health source is emitting nonsense", and it is the place that
+ * already asks daydream what it could not settle. So this is shaped exactly
+ * like `collectStarvation`, sits beside it in the same call site, and the
+ * dependency points the way it already pointed.
+ *
+ * The OWNER-facing half does not wait for the night: the reading is rejected
+ * immediately and reported on the snapshot's source list, which the hub's
+ * attention band reads. This is only the "and go and fix it" half.
  */
-export async function fileReadingFault(key: string, problem: string): Promise<boolean> {
+export interface HealthFaultIdea {
+  title: string;
+  detail: string;
+  kind: 'feature';
+  priority: number;
+  /** The measurement behind it, so the ledger can show WHY without re-deriving. */
+  evidence: string;
+}
+
+/** Every reading the snapshot would refuse right now. Empty in a healthy
+ *  system, which is the point — this costs one read and usually returns []. */
+export async function collectHealthFaults(): Promise<HealthFaultIdea[]> {
+  const faults: HealthFaultIdea[] = [];
   try {
-    const { addIdeas } = await import('$lib/selfimprove/backlog');
-    const added = await addIdeas([
-      {
-        title: `Health reading "${key}" is arriving impossible`,
-        detail: [
-          `The daydream snapshot rejected a ${key} reading: ${problem}.`,
-          '',
-          'This is almost always a UNIT mismatch rather than bad data at the',
-          'source. The known example: whoop_sleep.total_in_bed is milliseconds',
-          '(the schema says so directly above the column) and was being assigned',
-          'to a field called durationMins, turning 7h44m into 464,018 hours.',
-          '',
-          'Find where this value is read, check the stored unit against the field',
-          'name it lands in, and convert at the point of read. Bounds live in one',
-          'place: PLAUSIBLE in src/lib/daydream/features/normalise.ts.',
-        ].join('\n'),
-        kind: 'feature',
-        priority: 2,
-      },
-    ]);
-    return added.length > 0;
+    const { getSleepAnalysis } = await import('$lib/health/sleep-analysis-service');
+    const sleep = await getSleepAnalysis();
+    if (sleep?.latest) {
+      for (const [key, raw] of [
+        ['sleepMinutes', msToMinutes(sleep.latest.totalDuration)],
+        ['sleepPerformance', sleep.latest.performance],
+      ] as const) {
+        const { problem } = checkReading(key, raw);
+        if (problem) faults.push(faultIdea(key, problem));
+      }
+    }
   } catch (err) {
-    console.warn(`[daydream] could not file a reading fault for ${key}:`, errMsg(err));
-    return false;
+    // A source that cannot be read is a different fault, already reported on
+    // the snapshot's own source list. Never take the nightly run down for it.
+    console.warn('[daydream] could not check health readings:', errMsg(err));
   }
+  return faults;
+}
+
+/** One rejected reading, as an idea the toolsmith can act on. The detail names
+ *  the known instance, because a unit bug is far easier to find when you have
+ *  seen one. */
+export function faultIdea(key: string, problem: string): HealthFaultIdea {
+  return {
+    title: `Health reading "${key}" is arriving impossible`,
+    detail: [
+      `The daydream snapshot rejected a ${key} reading: ${problem}.`,
+      '',
+      'This is almost always a UNIT mismatch rather than bad data at the source.',
+      'The known instance: whoop_sleep.total_in_bed is milliseconds — the schema',
+      'says so directly above the column — and was being assigned to a field',
+      'called durationMins, turning 7h44m into 464,018 hours on the feed.',
+      '',
+      'Find where this value is read, check the stored unit against the field',
+      'name it lands in, and convert at the point of read. Bounds live in ONE',
+      'place: PLAUSIBLE in src/lib/daydream/features/normalise.ts.',
+    ].join('\n'),
+    kind: 'feature',
+    priority: 2,
+    evidence: problem,
+  };
 }

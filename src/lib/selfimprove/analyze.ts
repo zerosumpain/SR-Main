@@ -22,6 +22,7 @@ import {
 import type { Budget } from './run';
 import { addIdeas } from './backlog';
 import { collectStarvation } from '$lib/daydream/starvation';
+import { collectHealthFaults } from '$lib/daydream/health-quality';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -255,7 +256,21 @@ export async function learnInsights(
   } catch (err) {
     console.error('[selfimprove] starvation collection failed:', errMsg(err));
   }
-  for (const s of starving) {
+
+  // A health source emitting numbers that cannot be true. Empty in a healthy
+  // system, so this usually costs one read and adds nothing — but when a unit
+  // mismatch appears it is the difference between a card saying "you slept
+  // 464,018 hours" and a job to go and fix where that value is read.
+  //
+  // Pulled from here rather than pushed from the snapshot: this file already
+  // imports daydream, and the reverse direction closes a cycle.
+  let healthFaults: Awaited<ReturnType<typeof collectHealthFaults>> = [];
+  try {
+    healthFaults = await collectHealthFaults();
+  } catch (err) {
+    console.error('[selfimprove] health fault collection failed:', errMsg(err));
+  }
+  for (const s of [...starving, ...healthFaults]) {
     actions.push({
       kind: 'insight',
       detail: `${s.title} — ${s.evidence}`,
@@ -272,7 +287,7 @@ export async function learnInsights(
 
   try {
     const added = await addIdeas([
-      ...starving.map((s) => ({
+      ...[...healthFaults, ...starving].map((s) => ({
         title: s.title,
         detail: s.detail,
         kind: s.kind,
