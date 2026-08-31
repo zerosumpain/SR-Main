@@ -696,8 +696,12 @@ export const POST: RequestHandler = async ({ request }) => {
           title,
           ...(start ? { start } : {}),
           ...(end ? { end } : {}),
-          ...(allDayStart ? { allDayStart } : {}),
-          ...(allDayEnd ? { allDayEnd: allDayEnd || allDayStart } : {}),
+          // All-day dates travel as a PAIR. `allDayEnd` alone is meaningless
+          // and `allDayStart` alone leaves the end for the server to guess, so
+          // a single-day entry states both and says the same date twice. (The
+          // inner `|| allDayStart` was unreachable while this was two spreads
+          // guarded on `allDayEnd`.)
+          ...(allDayStart ? { allDayStart, allDayEnd: allDayEnd || allDayStart } : {}),
           ...(str('location') ? { location: str('location') } : {}),
           ...(str('notes') ? { notes: str('notes') } : {}),
         });
