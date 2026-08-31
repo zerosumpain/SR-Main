@@ -5365,6 +5365,123 @@ export type NewDaydreamThought = typeof daydreamThoughts.$inferInsert;
  * not state a date, which is a different thing from "does not expire" and is
  * scored lower rather than assumed generous.
  */
+/**
+ * The notebook — a middleground place for ideas.
+ *
+ * Deliberately NOT a thought. A `daydream_thought` is something the engine
+ * proposed and must justify; a note is something John typed, and it is never
+ * scored, ranked, thresholded or delivered. It sits between "a passing idea"
+ * and "a blog post that exists", which is exactly the gap the ledger could not
+ * hold: everything in daydreaming until now was machine-originated.
+ *
+ * `folder` is a plain string rather than a table. "Simple structuring" does not
+ * need a hierarchy with its own create/rename/delete/merge surface before the
+ * first note can be filed; the UI offers a datalist of the folders already in
+ * use, which gives foldering with no management screen at all.
+ */
+export const daydreamNotebook = pgTable(
+  'daydream_notebook',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    title: text('title').notNull().default(''),
+    /** Markdown, verbatim. NOTHING writes to this column except the owner —
+     *  see `supporting` below for where the model's contribution goes. */
+    body: text('body').notNull().default(''),
+    /** Free-text grouping. Empty string means unfiled, which is a real state
+     *  and must not be conflated with null. */
+    folder: text('folder').notNull().default(''),
+    tags: jsonb('tags').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** 'active' | 'archived'. Archiving hides it from the notebook and stops it
+     *  being reviewed; it is never deleted by the engine. */
+    status: text('status').notNull().default('active'),
+    pinned: boolean('pinned').notNull().default(false),
+
+    /**
+     * What the model added, kept APART from the body.
+     *
+     * The rule this column exists to enforce: the model never edits what John
+     * wrote. Supporting information is appended here, rendered as the model's
+     * and separately clearable, so if the whole review path failed permanently
+     * every note would still read exactly as typed. Merging it into `body`
+     * would make "what did I actually write" unanswerable.
+     */
+    supporting: text('supporting'),
+    supportingAt: timestamp('supporting_at', { withTimezone: true }),
+
+    /** When the review last looked at it, and at what version of the text —
+     *  an unchanged note does not need re-reviewing, and re-reading it every
+     *  idle cycle would spend the cap on nothing. */
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedHash: text('reviewed_hash'),
+    reviewCount: integer('review_count').notNull().default(0),
+
+    /** The derived intel note this was extracted into, so a note reaches the
+     *  knowledge graph the same way a file or a chat thread does. */
+    intelNoteId: text('intel_note_id'),
+    intelWovenAt: timestamp('intel_woven_at', { withTimezone: true }),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('daydream_notebook_status_idx').on(t.status),
+    index('daydream_notebook_folder_idx').on(t.folder),
+    index('daydream_notebook_updated_idx').on(t.updatedAt),
+    // The review's own query: active notes that have not been looked at since
+    // they last changed, oldest first.
+    index('daydream_notebook_reviewed_idx').on(t.status, t.reviewedAt),
+  ],
+);
+
+export type DaydreamNote = typeof daydreamNotebook.$inferSelect;
+export type NewDaydreamNote = typeof daydreamNotebook.$inferInsert;
+
+/**
+ * What the model PLANNED against a note, and what actually happened.
+ *
+ * Two stamps rather than one status word, because "it decided to look this up"
+ * and "it looked this up" are different facts and the page must never present
+ * the first as the second. A plan that was refused by the validator is recorded
+ * too — a vocabulary the model keeps reaching past is a thing worth seeing.
+ */
+export const daydreamNotebookActions = pgTable(
+  'daydream_notebook_actions',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    noteId: text('note_id')
+      .notNull()
+      .references(() => daydreamNotebook.id, { onDelete: 'cascade' }),
+    /** The closed vocabulary in $lib/daydream/notebook/actions. */
+    kind: text('kind').notNull(),
+    /** One line, as the model phrased it — what it thinks this will get. */
+    title: text('title').notNull(),
+    /** The validated parameters, as data. */
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    /** 'planned' | 'done' | 'failed' | 'refused' */
+    status: text('status').notNull().default('planned'),
+    /** Why the validator refused it, or why execution failed. */
+    error: text('error'),
+    /** What it produced, in words, for the note's action list. */
+    result: text('result'),
+    /** Where the result LIVES, when it lives somewhere — a research session, an
+     *  intel entity. `refKind` names the table so the page can build a link
+     *  without guessing from the id's shape. */
+    refKind: text('ref_kind'),
+    refId: text('ref_id'),
+    plannedAt: timestamp('planned_at', { withTimezone: true }).notNull().defaultNow(),
+    executedAt: timestamp('executed_at', { withTimezone: true }),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+  },
+  (t) => [
+    index('daydream_notebook_actions_note_idx').on(t.noteId),
+    index('daydream_notebook_actions_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamNoteAction = typeof daydreamNotebookActions.$inferSelect;
+
+
 export const daydreamOffers = pgTable(
   'daydream_offers',
   {

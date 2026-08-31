@@ -34,6 +34,10 @@
     <span class="glyph" aria-hidden="true">#</span>
     <span class="label">intel</span>
   </a>
+  <a class="tab" class:active={page.url.pathname.startsWith('/jkai/notes')} href="/jkai/notes">
+    <span class="glyph" aria-hidden="true">✎</span>
+    <span class="label">notes</span>
+  </a>
   <a class="tab" class:active={page.url.pathname.startsWith('/jkai/codegraph')} href="/jkai/codegraph">
     <span class="glyph" aria-hidden="true">⌗</span>
     <span class="label">code</span>

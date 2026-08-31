@@ -250,6 +250,48 @@ async function rulingCardsFor(): Promise<PackInputs['aggregates']> {
   }
 }
 
+/**
+ * The notebook, and what the engine has already done about it.
+ *
+ * The owner's requirement was that notes reach "future ponders, daydreams,
+ * suggestions" — all three of which are this engine, so all three are this one
+ * card list. Two halves, and the second is the one that matters:
+ *
+ *   the NOTES themselves — his own words, carded verbatim and cited like any
+ *     other card, which makes them the highest-value material in the pack.
+ *   the finished ACTIONS — what was already looked up about them. Without this
+ *     the next cycle reads the same note, has the same idea and proposes the
+ *     same research a third time, which is exactly the complaint that produced
+ *     the rulings memory on the feed.
+ */
+async function notebookCards(): Promise<PackInputs['aggregates']> {
+  try {
+    const [{ noteCard, actionCard }, { listNotes, recentActions }] = await Promise.all([
+      import('../notebook/cards'),
+      import('../notebook/store'),
+    ]);
+    const [notes, actions] = await Promise.all([listNotes(), recentActions(12)]);
+    return [
+      ...notes.slice(0, 15).map(noteCard),
+      ...actions.map((a) =>
+        actionCard({
+          id: a.id,
+          noteTitle: a.noteTitle,
+          kind: a.kind,
+          title: a.title,
+          result: a.result,
+          refKind: a.refKind,
+          refId: a.refId,
+        }),
+      ),
+    ];
+  } catch {
+    // Garnish. The pack stands without it, and a notebook that cannot be read
+    // must not cost the cycle.
+    return [];
+  }
+}
+
 async function recentVerdicts(): Promise<PackInputs['verdicts']> {
   try {
     return await db
@@ -406,7 +448,7 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, notes, diaryNotes, rulings] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, notes, diaryNotes, rulings, notebook] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
@@ -415,6 +457,7 @@ export async function runPonder(
       noteCards(),
       diaryNoteCards(),
       rulingCardsFor(),
+      notebookCards(),
     ]);
     const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
@@ -437,7 +480,7 @@ export async function runPonder(
       // reviewer has already SETTLED. Those two go nearest the instruction
       // because they are the two that override: a correction he typed, and a
       // claim that has been checked against the sources and found wanting.
-      aggregates: [...aggregates, ...signals, ...notes, ...diaryNotes, ...rulings],
+      aggregates: [...aggregates, ...signals, ...notebook, ...notes, ...diaryNotes, ...rulings],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
