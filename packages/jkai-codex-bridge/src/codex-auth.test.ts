@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jwtExpiryMs, needsRefresh, isUnusable } from './codex-auth';
+import { jwtExpiryMs, needsRefresh, isUnusable, rejectedTokenIsCurrent } from './codex-auth';
 
 /**
  * The clock arithmetic behind the credential.
@@ -77,5 +77,35 @@ describe('isUnusable', () => {
 
   it('an unreadable expiry is not treated as unusable', () => {
     expect(isUnusable(null, now)).toBe(false);
+  });
+});
+
+describe('rejectedTokenIsCurrent', () => {
+  /**
+   * The predicate that decides whether a 401 forces a refresh. It exists
+   * because the clock cannot see a token revoked early: on 2026-08-31 the VPS
+   * held a token the API rejected as `token_expired` a week before its own
+   * claim ran out, and the bridge re-sent it on every retry until a human
+   * intervened.
+   */
+  it('is false when nothing was rejected — the ordinary call, which must not rotate', () => {
+    expect(rejectedTokenIsCurrent(undefined, 'tok-a')).toBe(false);
+  });
+
+  it('is true when the token the server refused is still the one on disk', () => {
+    expect(rejectedTokenIsCurrent('tok-a', 'tok-a')).toBe(true);
+  });
+
+  it('is false once the file has moved on — another process already refreshed', () => {
+    // Refreshing again here would rotate a live credential for nothing.
+    expect(rejectedTokenIsCurrent('tok-a', 'tok-b')).toBe(false);
+  });
+
+  it('is false when the file has no access token, leaving that to toAuth to report', () => {
+    expect(rejectedTokenIsCurrent('tok-a', undefined)).toBe(false);
+  });
+
+  it('does not treat two absent tokens as a match', () => {
+    expect(rejectedTokenIsCurrent(undefined, undefined)).toBe(false);
   });
 });

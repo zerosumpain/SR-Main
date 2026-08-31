@@ -105,6 +105,26 @@ export function isUnusable(expiresAt: number | null, at: number): boolean {
   return expiresAt - at < HARD_EXPIRY_MARGIN_MS;
 }
 
+/**
+ * The server refused a token. Is the copy now on disk that same dead one?
+ *
+ * This is the question `exp` cannot answer. A token can be refused long before
+ * it expires — revoked, rotated on another host, or a session invalidated
+ * server-side — and the claim still reads healthy, so `needsRefresh` says no
+ * and we hand back the same corpse on every retry. That is not hypothetical:
+ * on 2026-08-31 the VPS held a token the API rejected as `token_expired` while
+ * its own claim had a week left, and the bridge re-sent it for hours because
+ * nothing could talk it into refreshing.
+ *
+ * Compared against the file rather than our cache on purpose: if the token on
+ * disk has already moved on, another process refreshed while we were failing
+ * and theirs is the one to use — refreshing again would rotate a live
+ * credential for nothing.
+ */
+export function rejectedTokenIsCurrent(rejected: string | undefined, current: string | undefined): boolean {
+  return rejected !== undefined && current !== undefined && rejected === current;
+}
+
 let cached: { auth: CodexAuth; mtimeMs: number } | null = null;
 let inFlight: Promise<CodexAuth> | null = null;
 
@@ -180,21 +200,30 @@ function toAuth(file: AuthFile): CodexAuth {
  * window must produce ONE refresh, not one per turn — the token endpoint
  * rotates the refresh token, so a stampede would have racers writing each
  * other's tokens over the file and invalidating the survivor.
+ *
+ * Pass `rejectedToken` when the API has answered 401 for a token, to refresh a
+ * credential the clock still believes in. Give it the exact token that failed,
+ * never a bare flag: a 401 from a stale in-flight request must not rotate a
+ * token some other turn has already replaced.
  */
-export async function getCodexAuth(): Promise<CodexAuth> {
+export async function getCodexAuth(opts: { rejectedToken?: string } = {}): Promise<CodexAuth> {
   const pending = inFlight;
   if (pending) return pending;
 
   const { file, mtimeMs } = await readAuthFile();
 
+  // The server has overruled the expiry claim, so the clock no longer gets a
+  // vote: refresh even though `needsRefresh` would say we are fine.
+  const refused = rejectedTokenIsCurrent(opts.rejectedToken, file.tokens?.access_token);
+
   // Someone else (the `codex` CLI, another process) may have refreshed since we
   // last looked; the file always wins over our cache.
-  if (cached && cached.mtimeMs === mtimeMs && !needsRefresh(cached.auth.expiresAt, now())) {
+  if (!refused && cached && cached.mtimeMs === mtimeMs && !needsRefresh(cached.auth.expiresAt, now())) {
     return cached.auth;
   }
 
   const current = toAuth(file);
-  if (!needsRefresh(current.expiresAt, now())) {
+  if (!refused && !needsRefresh(current.expiresAt, now())) {
     cached = { auth: current, mtimeMs };
     return current;
   }
@@ -210,8 +239,10 @@ export async function getCodexAuth(): Promise<CodexAuth> {
     } catch (err) {
       // A refresh failure is not automatically fatal — the token we already
       // hold is usually good for hours yet, and the next call will try again.
-      // Only a token that is actually dead stops the request.
-      if (isUnusable(current.expiresAt, now())) throw err;
+      // Only a token that is actually dead stops the request, and one the
+      // server has just refused is dead whatever its claim says: carrying on
+      // with it would return the same 401 while hiding the reason.
+      if (refused || isUnusable(current.expiresAt, now())) throw err;
       console.warn(
         '[codex-auth] refresh failed, continuing on the existing token:',
         err instanceof Error ? err.message : err,

@@ -133,8 +133,8 @@ function buildBody(req: ResponsesRunRequest): Record<string, unknown> {
   };
 }
 
-async function openStream(req: ResponsesRunRequest, retryOn401 = true): Promise<Response> {
-  const auth = await getCodexAuth();
+async function openStream(req: ResponsesRunRequest, rejectedToken?: string): Promise<Response> {
+  const auth = await getCodexAuth(rejectedToken === undefined ? {} : { rejectedToken });
   const res = await fetch(RESPONSES_URL, {
     method: 'POST',
     headers: {
@@ -151,13 +151,17 @@ async function openStream(req: ResponsesRunRequest, retryOn401 = true): Promise<
     ...(req.signal ? { signal: req.signal } : {}),
   });
 
-  if (res.status === 401 && retryOn401) {
-    // Our cached token was stale in a way the expiry claim did not predict —
-    // revoked, rotated elsewhere, or clock skew. Drop it and let the next read
-    // refresh from disk. Once only: a genuine auth failure must surface rather
-    // than spin.
+  if (res.status === 401 && rejectedToken === undefined) {
+    // Our token was stale in a way the expiry claim did not predict — revoked,
+    // rotated on another host, or a session invalidated server-side.
+    //
+    // Dropping the cache is NOT enough on its own, which is how this went wrong
+    // in production: the next read finds the same token still on disk, its
+    // claim still looks healthy, so the refresh rule declines to act and we
+    // re-send the token the server just refused. Naming it is what forces the
+    // refresh. Once only: a genuine auth failure must surface rather than spin.
     invalidateCodexAuth();
-    return openStream(req, false);
+    return openStream(req, auth.accessToken);
   }
 
   if (!res.ok || !res.body) {
