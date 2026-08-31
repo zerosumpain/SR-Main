@@ -128,8 +128,6 @@
     useIntelContext?: boolean;
     activeBuild?: { id: string; status: string } | null;
     approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
-    /** Raise the thread rail's slide-over (below 1100px it is off-canvas). */
-    /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
     /**
      * False when this pane is a background tab — mounted and streaming, but not
      * the one on screen. It suppresses the things that only make sense for the
@@ -851,9 +849,7 @@
     void fetchMentionIndex().then((list) => {
       entityMentions = list;
     });
-    // Dock the command-palette trigger in the composer row. This retires the
-    // layout's floating bottom-left button, which sat on top of the sidebar's
-    // run-stats footer.
+    // Dock the command-palette trigger in the composer row.
     const undock = dockTrigger();
     /** A chart/entity selection in the contextual rail can be handed back to
      *  this thread without starting a second conversation. Only the visible
@@ -2659,17 +2655,18 @@
     {#if !conversationId}
       <div class="flex items-center justify-center h-full">
         <p class="text-sm" style="color: var(--text-ghost);">
-          Start a new conversation or select one from the sidebar.
+          Start a new conversation or open one from the thread library.
         </p>
       </div>
     {:else if messages.length === 0}
-      <div class="flex items-center justify-center h-full px-4">
+      <div class="new-thread-state">
         <div class="hero">
-          <p class="hero-kicker">jkai / new thread</p>
-          <h1 class="hero-title">What can I help with?</h1>
+          <p class="hero-kicker"><span>Live workspace</span> jkai / new thread</p>
+          <h1 class="hero-title">Bring me the thing in front of you.</h1>
           <p class="hero-sub">
-            Control your smart home, check health data, manage blog posts, start builds, or create workflows — just ask.
+            Ask plainly. I can pull in your systems, notes, health data and working context, then act from the same conversation.
           </p>
+          <div class="hero-rule"><span>Start somewhere</span></div>
           <div class="hero-chips">
             {#each EXAMPLE_PROMPTS as p (p.label)}
               <button type="button" class="hero-chip" onclick={() => usePrompt(p.text)}>
@@ -3449,7 +3446,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 18px 20px;
+    padding: 0;
   }
   /* Grown by `maintainPin` while a turn is anchored, back to zero when it is
      not. It carries no content and no border — it is scrollable room, nothing
@@ -3457,19 +3454,14 @@
   .tail-spacer {
     height: 0;
   }
-  /* Full-width grid rather than a centred 900px block: a 900px reading column
-     with a gutter either side. Everything lands in the centre column — which is
-     the old geometry, unchanged — but a user turn is additionally allowed to
-     span the right gutter, so on a wide window it sits against the pane edge
-     instead of starting near the middle of the screen. Below 900px the gutters
-     collapse to zero and this behaves exactly as it did. */
+  /* One reading column, with the question/reply rhythm expressed inside each
+     turn. Context gets the right rail; the transcript gets uninterrupted
+     measure rather than a second, decorative gutter. */
   .msg-stack {
     display: grid;
-    grid-template-columns: 1fr min(900px, 100%) 1fr;
-    /* Message rows carry their own hairline divider now, so consecutive turns
-       sit flush and read as one continuous ledger. The cards between them
-       (plans, trays, reasoning panels) bring their own margins. */
+    grid-template-columns: 1fr min(880px, calc(100% - 40px)) 1fr;
     row-gap: 0;
+    padding: 8px 0 40px;
   }
   /* :global because most children are component roots (ChatMessage's wrapper,
      WorkerTray, Artifact…) and so never carry this component's scope class. */
@@ -3477,27 +3469,19 @@
     grid-column: 2;
     min-width: 0;
   }
-  /* A turn is full-bleed: its divider and the assistant wash reach both pane
-     edges, and ChatMessage's own centring padding keeps the words on the 900px
-     reading column. This replaces the old right-gutter span for user turns —
-     the two registers are told apart by the wash and the gutter label now, not
-     by which side of the pane they hug. */
+  /* Questions begin a conversational beat; replies close it with a rule. */
   .msg-stack > .msg-slot {
-    grid-column: 1 / -1;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--line-hair);
+    grid-column: 2;
+    min-width:0;
+    padding: 12px 0 30px;
+    border-bottom: 1px solid var(--line-strong);
   }
-  /* The assistant register is the wash — that, and the accent role label in the
-     gutter, is what replaces the bubble. It covers the whole slot so a reply's
-     attachments and chips sit inside the same band as its words. */
-  .msg-stack > .msg-slot:not(.user-turn) {
-    background: rgba(196, 87, 10, 0.035);
+  .msg-stack > .msg-slot.user-turn {
+    padding: 28px 0 10px;
+    border-bottom: 0;
   }
-  /* Only the message row itself is full-bleed. Everything else in the slot —
-     origin tags above it, workflow chips / attachments / build pills below —
-     lines up with the same reading column the words sit on. */
   .msg-slot > :global(:not(.msg-row)) {
-    padding-inline: max(20px, calc((100% - 900px) / 2));
+    max-width: 72ch;
   }
 
   /* Extraction-in-flight footer. Deliberately the quietest thing in the stack:
@@ -3518,7 +3502,7 @@
   }
   .composer-inner {
     position: relative;
-    max-width: 900px;
+    max-width: 880px;
     margin: 0 auto;
   }
 
@@ -3863,16 +3847,18 @@
   }
   .approval-reason { font-size: var(--fs-label); color: var(--text-secondary); margin-bottom: 4px; }
 
-  /* Empty-state hero — a centred greeting + tappable starter prompts shown on
-   * a fresh conversation. The composer stays docked at the bottom; clicking a
-   * chip sends its prompt and the hero gives way to the thread. */
-  /* The one editorial moment on the chat surface: the same lettered kicker →
-     Archivo Black headline → standfirst the /health sections open with, in the
-     column the greeting already occupied. LEFT aligned — centred display type
-     is the one thing the reference set never does. */
+  /* /health's dark cover becomes the opening page of an empty thread. */
+  .new-thread-state {
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    padding:clamp(28px, 6vw, 72px);
+    background:var(--text-primary);
+    color:var(--bg);
+  }
   .hero {
     text-align: left;
-    max-width: 34rem;
+    width:min(760px, 100%);
     animation: hero-in 0.3s ease both;
   }
   @keyframes hero-in {
@@ -3885,26 +3871,30 @@
     font-weight: 500;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--text-secondary);
-    margin: 0 0 0.75rem;
+    color: rgba(237,228,212,.62);
+    margin: 0 0 1.1rem;
   }
+  .hero-kicker span { margin-right:12px; color:var(--accent-on-dark); }
   .hero-title {
     font-family: var(--font-display);
-    font-size: clamp(1.75rem, 5vw, 2.5rem);
-    line-height: 0.94;
-    letter-spacing: -0.02em;
+    font-size: clamp(2.65rem, 7vw, 5.6rem);
+    line-height: 0.88;
+    letter-spacing: -0.045em;
     text-transform: uppercase;
-    color: var(--text-primary);
-    margin: 0 0 0.85rem;
+    color: var(--bg);
+    margin: 0 0 1.25rem;
+    text-wrap:balance;
   }
   .hero-sub {
-    font-size: var(--fs-body-sm);
-    line-height: 1.55;
-    color: var(--text-secondary);
+    font-size:var(--fs-body);
+    line-height: 1.6;
+    color: rgba(237,228,212,.72);
     text-wrap: pretty;
-    margin: 0 0 1.5rem;
-    max-width: 46ch;
+    margin: 0 0 1.8rem;
+    max-width: 58ch;
   }
+  .hero-rule { display:flex; align-items:center; gap:12px; margin-bottom:12px; color:rgba(237,228,212,.46); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:var(--tracking-label); }
+  .hero-rule::after { content:''; flex:1; height:1px; background:rgba(237,228,212,.2); }
   .hero-chips {
     display: flex;
     flex-wrap: wrap;
@@ -3923,18 +3913,18 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     padding: 8px 14px;
-    border: 1px solid var(--line-strong);
+    border: 1px solid rgba(237,228,212,.26);
     border-radius: 0;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--bg);
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
     white-space: nowrap;
   }
   .hero-chip:hover {
-    background: var(--text-primary);
-    border-color: var(--text-primary);
-    color: var(--bg);
+    background: var(--bg);
+    border-color: var(--bg);
+    color: var(--text-primary);
   }
   .hero-chip:focus-visible {
     outline: 2px solid var(--accent);
@@ -3949,9 +3939,7 @@
     padding-top: 10px;
     margin-bottom: 0;
   }
-  /* Origin tags used to mirror the message's side; every turn is a left-aligned
-     ledger row now, so the tag stays with the gutter. */
-  .src-tag-row.justify-end { justify-content: flex-start; }
+  .src-tag-row.justify-end { justify-content: flex-end; margin-left:auto; }
   .src-tag {
     display: inline-flex;
     align-items: center;
@@ -4617,7 +4605,18 @@
   /* ── Phone (2a) ───────────────────────────────────────────────────────── */
   @media (max-width: 799px) {
     .msg-list {
-      padding: 12px 16px;
+      padding: 0;
+    }
+    .msg-stack {
+      grid-template-columns: 16px minmax(0, 1fr) 16px;
+      padding-top:4px;
+    }
+    .new-thread-state {
+      padding:32px 20px;
+      align-items:flex-start;
+    }
+    .hero-title {
+      font-size:clamp(2.5rem, 15vw, 4rem);
     }
     .thread-tools {
       top: 6px;
