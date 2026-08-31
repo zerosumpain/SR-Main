@@ -35,7 +35,13 @@ import { embedNote } from './embed';
  * (intel-bridge turns an insight into a candidate); this closes the loop in the
  * other direction, and only ever on something the owner has endorsed.
  */
-export type AutoKind = 'file' | 'research' | 'chat' | 'daydream';
+/**
+ * `note` is the fifth: a page from John's notebook. Unlike the other four it is
+ * something he WROTE rather than something that arrived, which makes it the
+ * highest-signal text the graph gets — it names the people, places and
+ * organisations he is actually thinking about.
+ */
+export type AutoKind = 'file' | 'research' | 'chat' | 'daydream' | 'note';
 
 export interface AutoExtractInput {
   kind: AutoKind;
