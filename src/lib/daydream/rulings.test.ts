@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_RULING_CHARS, rulingContent } from './rulings';
+import { MAX_RULING_CHARS, refutedBlock, rulingContent } from './rulings';
 
 const base = {
   kind: 'spend_duplicate',
@@ -72,5 +72,37 @@ describe('rulingContent', () => {
       reasoning: 'x'.repeat(5_000),
     });
     expect(out.length).toBeLessThanOrEqual(MAX_RULING_CHARS);
+  });
+});
+
+describe('refutedBlock — the rules the pack cannot skim past', () => {
+  const r = (title: string, reasoning: string | null = null) => ({ title, reasoning });
+
+  it('is empty when nothing has been refuted, so the prompt gains no dead heading', () => {
+    expect(refutedBlock([])).toEqual([]);
+  });
+
+  it('names the claims verbatim and forbids the rewording', () => {
+    const out = refutedBlock([
+      r('Canva appears to have charged twice', 'One payment seen from two sides.'),
+    ]).join('\n');
+    expect(out).toContain('ALREADY CHECKED AND FOUND FALSE');
+    expect(out).toContain('Canva appears to have charged twice');
+    expect(out).toContain('One payment seen from two sides.');
+    // The whole point: the model renamed the slug eight times.
+    expect(out).toContain('Rewording one of these is still proposing it');
+  });
+
+  it('neutralises a quote in a title rather than breaking out of its own quoting', () => {
+    expect(refutedBlock([r('The "duplicate" Canva charge')]).join('\n')).toContain(
+      "The 'duplicate' Canva charge",
+    );
+  });
+
+  it('caps the list, so a long backlog cannot become the prompt', () => {
+    const many = Array.from({ length: 30 }, (_, i) => r(`claim ${i}`));
+    const out = refutedBlock(many).join('\n');
+    expect(out).toContain('claim 11');
+    expect(out).not.toContain('claim 12');
   });
 });

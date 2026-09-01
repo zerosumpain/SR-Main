@@ -142,6 +142,80 @@ export async function recordRulingMemory(
   return { memoryId: memory.id, content };
 }
 
+/**
+ * Verdicts that were reached but never remembered.
+ *
+ * This module shipped with only one caller — the by-hand `review` action on the
+ * thoughts endpoint — while the twenty-minute activity that produces almost
+ * every verdict recorded the review and stopped there. The result on production
+ * was 66 rulings and exactly ONE memory, which is the same as no memory at all:
+ * `rulingCards` filters on `review_memory_id is not null`, so the pack read
+ * nothing, the ponder cycle learned nothing, and the Canva misreading came
+ * round eight times under eight names.
+ *
+ * The writer is now in the activity, and this is how the ones already on the
+ * ledger catch up: a bounded slice per tick, no model call, oldest first so the
+ * backlog drains in a predictable order rather than by luck.
+ */
+export async function unrememberedRulings(limit = 10): Promise<
+  Array<RulingInput & { id: string }>
+> {
+  const rows = await db
+    .select({
+      id: daydreamThoughts.id,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      verdict: daydreamThoughts.reviewVerdict,
+      likelihood: daydreamThoughts.reviewLikelihood,
+      reasoning: daydreamThoughts.reviewReasoning,
+      sources: daydreamThoughts.reviewSources,
+    })
+    .from(daydreamThoughts)
+    .where(
+      and(
+        isNotNull(daydreamThoughts.reviewAt),
+        isNotNull(daydreamThoughts.reviewVerdict),
+        sql`${daydreamThoughts.reviewMemoryId} is null`,
+      ),
+    )
+    .orderBy(daydreamThoughts.reviewAt)
+    .limit(Math.max(1, Math.min(100, limit)));
+
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    verdict: r.verdict as RulingVerdict,
+    likelihood: r.likelihood,
+    reasoning: r.reasoning ?? '',
+    sources: (r.sources ?? []) as string[],
+  }));
+}
+
+/**
+ * The refutations, as a block of prompt text the ponder cycle cannot miss.
+ *
+ * The pack already cards these, but a card is material to reason over and sits
+ * among a hundred others. The leads frontier learned this lesson the expensive
+ * way: "metrics chosen from the feature store" produced fourteen rejected leads
+ * until the vocabulary was spelled out IN THE RULES, next to the rule that
+ * needed it. `ALREADY OPEN — do not propose these again, in any wording` is
+ * what fixed it, and this is the same block for claims.
+ *
+ * Pure, so the wording is testable without a database.
+ */
+export function refutedBlock(rulings: Array<{ title: string; reasoning: string | null }>): string[] {
+  if (rulings.length === 0) return [];
+  return [
+    'ALREADY CHECKED AND FOUND FALSE — do not propose any of these again, in any wording:',
+    ...rulings
+      .slice(0, 12)
+      .map((r) => `  - "${r.title.replace(/"/g, "'")}"${r.reasoning ? ` — ${r.reasoning}` : ''}`),
+    '  Rewording one of these is still proposing it. If the only thing you have to say about',
+    '  those facts is what was already refuted, say nothing about them.',
+  ];
+}
+
 export interface RulingRow {
   id: string;
   kind: string;

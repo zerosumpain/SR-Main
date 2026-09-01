@@ -23,6 +23,7 @@ import {
   reviewThought,
   REVIEW_MODEL_ID,
 } from '$lib/daydream/adjudicate';
+import { recordRulingMemory, unrememberedRulings } from '$lib/daydream/rulings';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
@@ -35,9 +36,39 @@ interface ReviewConfig {
   /** Skip if the owner has been busy — the same spare-cycles contract the
    *  composer and the ponderer keep. */
   idleWindowMinutes?: number;
+  /** Verdicts already on the ledger with no memory behind them, caught up per
+   *  tick. Pure database work — no model, no quota — so this is a politeness
+   *  bound rather than a cost one. */
+  backfillPerRun?: number;
 }
 
-const DEFAULTS: Required<ReviewConfig> = { maxPerRun: 4, idleWindowMinutes: 10 };
+const DEFAULTS: Required<ReviewConfig> = { maxPerRun: 4, idleWindowMinutes: 10, backfillPerRun: 10 };
+
+/**
+ * Write the memory for verdicts that were reached before there was a writer.
+ *
+ * Bounded, silent about the rows it succeeds on, and loud about the ones it
+ * cannot: a backfill that swallows its own failures is a backfill that reports
+ * a drained backlog it never drained.
+ */
+async function catchUpMemory(limit: number): Promise<number> {
+  if (limit <= 0) return 0;
+  let done = 0;
+  try {
+    const pending = await unrememberedRulings(limit);
+    for (const r of pending) {
+      try {
+        await recordRulingMemory(r.id, r);
+        done++;
+      } catch (err) {
+        console.warn(`[daydream] backfill: could not remember ${r.id}: ${errMsg(err)}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[daydream] backfill: could not read the unremembered rulings: ${errMsg(err)}`);
+  }
+  return done;
+}
 
 export const daydreamReview: ActivityHandler = {
   name: NAME,
@@ -65,13 +96,27 @@ export const daydreamReview: ActivityHandler = {
       return { outcome: 'skipped', summary: 'owner active in the last few minutes' };
     }
 
+    // ── Catching up the memory ────────────────────────────────────────────
+    //
+    // Before the budget gate on purpose. This is a database write over fields
+    // a reviewer already returned — no model, no quota — and it is the half of
+    // the loop that was missing: production reached 66 verdicts with exactly
+    // one memory behind them, so `rulingCards` read nothing and the same Canva
+    // misreading was proposed eight times under eight names. A backfill parked
+    // behind a quota block would leave that broken for as long as the quota is.
+    const backfilled = await catchUpMemory(cfg.backfillPerRun);
+
     // The reviewer is pinned to Codex, so it spends the same weekly quota as
     // every other daydream model call and answers to the same caps. "Spare
     // budget buys THINKING, never talking" was written for exactly this — the
     // reviewer only ever decides whether to say less.
     const budget = await budgetStatus({ now, isCodexModel: true });
     if (budget.blocked) {
-      return { outcome: 'skipped', summary: `budget: ${budget.blockedReason}`, details: { budget } };
+      return {
+        outcome: 'skipped',
+        summary: `budget: ${budget.blockedReason}${backfilled ? ` · ${backfilled} ruling(s) remembered` : ''}`,
+        details: { budget, backfilled },
+      };
     }
 
     let queue;
@@ -81,11 +126,16 @@ export const daydreamReview: ActivityHandler = {
       return { outcome: 'error', summary: `could not read the queue: ${errMsg(err)}` };
     }
     if (queue.length === 0) {
-      return { outcome: 'ok', summary: 'nothing waiting on a verdict' };
+      return {
+        outcome: 'ok',
+        summary: `nothing waiting on a verdict${backfilled ? ` · ${backfilled} ruling(s) remembered` : ''}`,
+        details: { backfilled },
+      };
     }
 
     const before = await readQuotaMark();
     const counts = { verified: 0, refuted: 0, uncertain: 0, failed: 0 };
+    let remembered = 0;
     let toolCalls = 0;
     let flipped = 0;
     let promptTokens = 0;
@@ -117,6 +167,30 @@ export const daydreamReview: ActivityHandler = {
         continue;
       }
       counts[r.verdict]++;
+
+      // The verdict stops this message going out. The MEMORY stops the claim
+      // being made again — it is a `jkai_memories` row, the ponder pack cards
+      // it refutations-first, and `persistCandidates` refuses a candidate built
+      // on rows already ruled against. Composed here from fields the reviewer
+      // returned rather than by the reviewer itself, which is what keeps
+      // `adjudicate.ts` rule 2 true: it decides, and never acts.
+      //
+      // Soft: a memory that cannot be written must not cost a verdict that was
+      // correctly reached. The row is left with `review_memory_id` null, the
+      // page marks it "not remembered", and the backfill above retries it.
+      try {
+        await recordRulingMemory(thought.id, {
+          kind: thought.kind,
+          title: thought.title,
+          verdict: r.verdict,
+          likelihood: r.likelihood,
+          reasoning: r.reasoning,
+          sources: r.sources,
+        });
+        remembered++;
+      } catch (err) {
+        console.warn(`[daydream] could not remember the ruling for ${thought.id}: ${errMsg(err)}`);
+      }
       // Name what it caught, not just how many. A refutation is the most
       // interesting thing this activity produces and a bare count buries it.
       if (r.verdict === 'refuted') caught.push(`${thought.title.slice(0, 60)} — ${r.reasoning.slice(0, 90)}`);
@@ -131,6 +205,9 @@ export const daydreamReview: ActivityHandler = {
       `${counts.refuted} refuted`,
       `${counts.uncertain} uncertain`,
       ...(counts.failed ? [`${counts.failed} failed`] : []),
+      // The number that says whether the loop closes. A verdict nobody
+      // remembered is one the engine will pay to reach again.
+      `${remembered + backfilled} remembered`,
       `${toolCalls} source lookup(s)`,
       // A field quietly coming to mean something other than its name is worth
       // seeing. Every refutation on the first live runs arrived in the nineties.
@@ -147,6 +224,8 @@ export const daydreamReview: ActivityHandler = {
         quota,
         model: REVIEW_MODEL_ID,
         ...counts,
+        remembered,
+        backfilled,
         toolCalls,
         likelihoodFlipped: flipped,
         caught,
