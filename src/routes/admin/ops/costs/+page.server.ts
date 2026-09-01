@@ -159,6 +159,7 @@ export const load: PageServerLoad = async ({ url }) => {
     windowTotals,
     perDay,
     byModel,
+    modelUsage,
     byActivityModel,
     topSessions,
     firstTagged,
@@ -227,6 +228,20 @@ export const load: PageServerLoad = async ({ url }) => {
       .where(inWindow)
       .groupBy(agentActions.provider, agentActions.model)
       .orderBy(sql`coalesce(sum(${agentActions.costUsd}), 0) desc`),
+
+    /**
+     * How often each model has actually been used, over a FIXED 90 days rather
+     * than the selected window. It orders the switcher's list, and an ordering
+     * that reshuffles when you click "today" is not an ordering the operator
+     * can learn — a model that ran 40,000 times last month is still the
+     * familiar one on a morning when nothing has called it yet.
+     */
+    db
+      .select({ model: agentActions.model, calls: CALLS })
+      .from(agentActions)
+      .where(and(IS_LLM, gte(agentActions.createdAt, since(90)), isNotNull(agentActions.model)))
+      .groupBy(agentActions.model)
+      .orderBy(sql`count(*) desc`),
 
     // Grouped by activity AND model, because that is the unit a swap applies
     // to: one role can have run on three models across the window, and the
@@ -423,6 +438,11 @@ export const load: PageServerLoad = async ({ url }) => {
       unpriced: n(m.unpriced),
     })),
     byActivity,
+    /** Model id → calls in the last 90 days. Ranks the switcher's options so
+     *  the models this site already runs on come before the rest. */
+    modelUsage: modelUsage
+      .filter((m): m is { model: string; calls: number } => typeof m.model === 'string')
+      .map((m) => ({ id: m.model, calls: n(m.calls) })),
     topSessions: topSessions.map((s) => ({
       sessionId: s.sessionId,
       cost: n(s.cost),

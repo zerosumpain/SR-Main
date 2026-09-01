@@ -6,6 +6,8 @@
   import WorkloadModelSwitch from '$lib/components/admin/WorkloadModelSwitch.svelte';
   import { allActivities, activityLabel } from '$lib/costs/activities';
   import { describeMix } from '$lib/costs/analysis';
+  import type { SwapSuggestion } from '$lib/costs/analysis';
+  import { saveWorkloadModel } from '$lib/models/save-model';
   import type { WorkloadState } from '$lib/models/workloads';
   import type { PageData } from './$types';
 
@@ -153,6 +155,48 @@
 
   let expanded = $state<string | null>(null);
   const toggle = (k: string) => (expanded = expanded === k ? null : k);
+
+  /** Which row's model picker is open. The panel renders in a full-width row
+   *  beneath the activity rather than in the last cell — in the cell it pushed
+   *  the table 775px wider than its own scroller and the Save button sat off
+   *  the right edge. */
+  let switching = $state<string | null>(null);
+  const toggleSwitch = (k: string) => (switching = switching === k ? null : k);
+
+  // ── Applying a recommendation ─────────────────────────────────────────────
+  /** The site roles a suggestion can actually be applied to. A swap on an
+   *  untagged `source:` key is a chat turn or a canvas node, which chooses its
+   *  model per call — a button there would be a button that lies. */
+  const workloadById = $derived(new Map(data.workloads.site.map((w) => [w.id, w])));
+
+  /** Model id → calls over a fixed 90 days, so the switcher can put the models
+   *  this site already runs on above the other three hundred. */
+  const modelUsage = $derived(data.modelUsage);
+
+  const swapKey = (s: SwapSuggestion) =>
+    `${s.activity}|${s.currentModelId}|${s.candidateModelId}`;
+
+  let applying = $state<string | null>(null);
+  let applyErrs = $state<Record<string, string>>({});
+
+  /**
+   * One press instead of "read the slug, find the row, hunt the dropdown".
+   * Writes through the same guarded endpoint the switcher uses, so a candidate
+   * the server refuses is refused here too, with its reason.
+   */
+  async function applySwap(s: SwapSuggestion) {
+    const key = swapKey(s);
+    applying = key;
+    applyErrs = { ...applyErrs, [key]: '' };
+    try {
+      await saveWorkloadModel(s.activity, s.candidateModelId);
+      await invalidateAll();
+    } catch (e) {
+      applyErrs = { ...applyErrs, [key]: e instanceof Error ? e.message : 'save failed' };
+    } finally {
+      applying = null;
+    }
+  }
 </script>
 
 <PageWrap width="wide">
@@ -382,18 +426,40 @@
               <td class="num mono small">{r.tokensIn + r.tokensOut > 0 ? describeMix(r.tokensIn, r.tokensOut) : '—'}</td>
               <td>
                 {#if r.switchable}
-                  <WorkloadModelSwitch
-                    workload={r.workload}
-                    catalogue={data.catalogue}
-                    tokensIn={r.tokensIn}
-                    tokensOut={r.tokensOut}
-                    onchanged={() => invalidateAll()}
-                  />
+                  <button
+                    class="nm-link-btn"
+                    onclick={() => toggleSwitch(r.key)}
+                    aria-expanded={switching === r.key}
+                  >
+                    {switching === r.key ? 'close' : 'change model'}
+                  </button>
                 {:else}
                   <span class="per-call">per-call</span>
                 {/if}
               </td>
             </tr>
+            {#if switching === r.key && r.switchable}
+              <tr class="detail switch-row">
+                <td colspan="6">
+                  <WorkloadModelSwitch
+                    workload={r.workload}
+                    catalogue={data.catalogue}
+                    currentModelId={r.effectiveModelId}
+                    tokensIn={r.tokensIn}
+                    tokensOut={r.tokensOut}
+                    usage={modelUsage}
+                    seenModelIds={(spendByKey.get(r.key)?.models ?? [])
+                      .map((m) => m.model)
+                      .filter((m): m is string => !!m)}
+                    onchanged={() => {
+                      switching = null;
+                      void invalidateAll();
+                    }}
+                    onclose={() => (switching = null)}
+                  />
+                </td>
+              </tr>
+            {/if}
             {#if expanded === r.key}
               <tr class="detail">
                 <td colspan="6">
@@ -428,6 +494,12 @@
       neither are OpenRouter's <code class="inline">:free</code> variants, which win every price
       comparison and then rate-limit the site to a standstill by mid-morning.
     </p>
+    <p class="sec-lede">
+      <strong>Apply</strong> switches that role to the candidate immediately, through the same guard
+      the row above uses. The suggestion does not disappear when you take it — it is computed from
+      what the window already spent, so it stands until the ledger has enough calls on the new model
+      to stop recommending it. The <em>in use</em> marker is the live state.
+    </p>
 
     {#if data.swaps.length === 0}
       <p class="empty-note">
@@ -438,10 +510,10 @@
       <div class="nm-table-scroll">
         <table class="nm-table">
           <thead>
-            <tr><th>Activity</th><th>Now</th><th>Instead</th><th class="num">Saving</th><th>Why</th></tr>
+            <tr><th>Activity</th><th>Now</th><th>Instead</th><th class="num">Saving</th><th>Why</th><th></th></tr>
           </thead>
           <tbody>
-            {#each data.swaps as s (`${s.activity}|${s.currentModelId}|${s.candidateModelId}`)}
+            {#each data.swaps as s (swapKey(s))}
               <tr>
                 <td>{activityLabel(s.activity, activityIndex)}</td>
                 <td><code>{s.currentModelId}</code></td>
@@ -451,6 +523,26 @@
                   <span class="sub">{Math.round(s.savingShare * 100)}% · {usd((s.savingUsd / Math.max(data.days, 1)) * 365, 2)}/yr</span>
                 </td>
                 <td class="rationale">{s.rationale}</td>
+                <td class="apply-cell">
+                  {#if !workloadById.has(s.activity)}
+                    <!-- Chat turns and canvas nodes pick their model per call,
+                         so there is no setting here to move. -->
+                    <span class="per-call">per-call</span>
+                  {:else if workloadById.get(s.activity)!.effectiveModelId === s.candidateModelId}
+                    <span class="nm-pill" data-state="active">in use</span>
+                  {:else}
+                    <button
+                      class="nm-save-btn"
+                      onclick={() => applySwap(s)}
+                      disabled={applying !== null}
+                    >
+                      {applying === swapKey(s) ? 'Applying…' : 'Apply'}
+                    </button>
+                  {/if}
+                  {#if applyErrs[swapKey(s)]}
+                    <span class="apply-err">{applyErrs[swapKey(s)]}</span>
+                  {/if}
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -667,7 +759,10 @@
     color: var(--text-ghost);
     font-weight: 400;
   }
-  .rationale { font-size: var(--fs-body-sm); color: var(--text-muted); max-width: 42ch; }
+  /* 36ch, not 42: the Apply column costs the row ~5rem and at 42ch the table
+     outgrew its own scroller, putting the button the column exists for just
+     past the right edge. */
+  .rationale { font-size: var(--fs-body-sm); color: var(--text-muted); max-width: 36ch; }
 
   .routes tr.idle td { color: var(--text-ghost); }
   .routes tr.idle code { opacity: 0.7; }
@@ -690,11 +785,36 @@
   tr.detail p { margin: 0 0 0.4rem; max-width: 76ch; }
   tr.detail p:last-child { margin-bottom: 0; }
   .reason strong { color: var(--text-secondary); }
+  /* The detail row styling is built for prose; the picker is a control strip,
+     so it keeps the tinted background and drops the muted body colour. */
+  tr.switch-row td {
+    color: var(--text-primary);
+    font-size: var(--fs-body);
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+  }
   .per-call {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     letter-spacing: 0.08em;
+  }
+
+  /* ── Apply a recommendation ─────────────────────────────────────────── */
+  .apply-cell {
+    white-space: nowrap;
+    text-align: right;
+  }
+  .apply-err {
+    display: block;
+    margin-top: 0.3rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--error);
+    /* The endpoint's refusal is a sentence, not a code — let it wrap rather
+       than stretching the table off the page. */
+    white-space: normal;
+    max-width: 18rem;
   }
 
   /* ── Signals ────────────────────────────────────────────────────────── */
