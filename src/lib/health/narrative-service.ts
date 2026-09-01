@@ -1,5 +1,6 @@
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveHealthModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import type { HealthDay } from './series-30d-service';
 import { voiceBlock } from '$lib/voice/block';
 
@@ -117,19 +118,21 @@ export async function getNarrative(
   const fallback = templated(stats);
   let text = '';
   try {
-    const ctx = await resolveDefaultModel();
+    const ctx = await resolveHealthModel();
     const { client, model } = await getLLMClient(ctx);
     const userPayload = JSON.stringify(stats);
     const completion = await Promise.race([
-      client.chat.completions.create({
-        model,
-        temperature: 0.9,
-        max_tokens: 220,
-        messages: [
-          { role: 'system', content: systemPrompt() },
-          { role: 'user', content: userPayload },
-        ],
-      }),
+      withActivity('health', () =>
+        client.chat.completions.create({
+          model,
+          temperature: 0.9,
+          max_tokens: 220,
+          messages: [
+            { role: 'system', content: systemPrompt() },
+            { role: 'user', content: userPayload },
+          ],
+        }),
+      ),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('llm timeout')), 8000)),
     ]);
     const out = completion.choices?.[0]?.message?.content?.trim() ?? '';

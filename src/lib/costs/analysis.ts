@@ -39,6 +39,7 @@ export type ActivityRequirement =
   | 'image-input'
   | 'audio-input'
   | 'image-output'
+  | 'openrouter'
   | null;
 
 /** OpenRouter encodes modality as `inputs->outputs`, e.g. `text+image->text`. */
@@ -65,6 +66,12 @@ function outputsOf(modality: string | null | undefined): string {
  */
 export function canServe(m: CatalogueModel, requires: ActivityRequirement): boolean {
   switch (requires) {
+    // Every row in this catalogue IS an OpenRouter model — it is read from the
+    // `openrouter_models` table — so this requirement excludes nothing here. It
+    // is enforced where it can actually bite, in `workloadBlockReason`, against
+    // a `codex/` slug typed in by hand.
+    case 'openrouter':
+      return true;
     case 'tools':
       return m.toolsSupported;
     case 'image-input':

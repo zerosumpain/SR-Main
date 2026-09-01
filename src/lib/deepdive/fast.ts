@@ -25,6 +25,7 @@ import { emit, emitLog, emitStats, throwIfStopped, beat } from './worker';
 import { emitArtefact } from './desk-events';
 import { coerceScope, scopeToSearchOptions, scopeAdmits, credibilityBonus, describeScope } from './scope';
 import { depthPreset, SYNTHESIS_MAX_TOKENS } from './depth';
+import { resolveResearchFastModel } from '$lib/server/models/workload-settings';
 import type { ResearchBudget } from './budget';
 import type { SessionStats, ResearchReport } from './types';
 
@@ -101,6 +102,9 @@ export async function runInstant(
   budget: ResearchBudget,
 ): Promise<void> {
   const preset = depthPreset('instant');
+  // The tier's role, resolved through the workload registry: a pin in
+  // `jkai.research.fast_model`, else RESEARCH_FAST_MODEL, else the constant.
+  const model = (await resolveResearchFastModel()).modelId;
   const goals = (session.goals ?? []) as string[];
   const grounding = coerceGrounding(session.grounding);
   const question =
@@ -110,7 +114,7 @@ export async function runInstant(
     emitLog(sessionId, '\u{1F4AC}', 'Answering from model knowledge — no sources consulted.');
 
     const { text } = await streamCompletion(UNGROUNDED_RULES, question, {
-      model: preset.pinnedModel ?? undefined,
+      model,
       maxTokens: SYNTHESIS_MAX_TOKENS,
       signal: budget.signalFor('synthesis'),
       ...streamHandlers(sessionId),
@@ -137,7 +141,7 @@ export async function runInstant(
 
   const { text, citations } = await groundedCompletion(GROUNDED_RULES, question, {
     mode: grounding,
-    model: preset.pinnedModel ?? undefined,
+    model,
     maxTokens: SYNTHESIS_MAX_TOKENS,
     signal: budget.signalFor('synthesis'),
     onToken: streamHandlers(sessionId).onToken,
@@ -181,7 +185,7 @@ export async function runScan(
   budget: ResearchBudget,
 ): Promise<void> {
   const preset = depthPreset('scan');
-  const model = preset.pinnedModel ?? undefined;
+  const model = (await resolveResearchFastModel()).modelId;
   const scope = coerceScope(session.scope);
   const goals = (session.goals ?? []) as string[];
   const topic = session.topic;

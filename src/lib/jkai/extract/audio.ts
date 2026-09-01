@@ -1,6 +1,7 @@
 // src/lib/jkai/extract/audio.ts
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveAudioModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { ExtractError, type ExtractResult, type ExtractOptions } from './types';
 import { isLocalSttAvailable, transcribeLocally } from './stt-local';
 
@@ -36,16 +37,22 @@ export async function extractAudio(
     }
   }
 
-  const modelCtx = await resolveDefaultModel();
+  // The AUDIO role, not the site default — this only needs the client, and the
+  // site default may be a codex/ id whose bridge has no transcriptions endpoint
+  // at all. Resolving the role that already means "a model that can hear" picks
+  // an OpenRouter client every time.
+  const modelCtx = await resolveAudioModel();
   const { client } = await getLLMClient(modelCtx);
 
   try {
     const file = new File([new Uint8Array(buffer)], filename || 'audio.bin', { type: mimeType || 'audio/mpeg' });
-    const response = await client.audio.transcriptions.create({
-      model: 'whisper-1',
-      file,
-      ...(options?.language ? { language: options.language } : {}),
-    });
+    const response = await withActivity('audio', () =>
+      client.audio.transcriptions.create({
+        model: 'whisper-1',
+        file,
+        ...(options?.language ? { language: options.language } : {}),
+      }),
+    );
     const text = response.text ?? '';
     return {
       text,

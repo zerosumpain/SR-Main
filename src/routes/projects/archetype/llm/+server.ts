@@ -33,7 +33,8 @@ import type { RequestHandler } from './$types';
 import { error, json } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 
 // --- Limits -----------------------------------------------------------------
 // Sized for what the lab actually sends: one system prompt describing the objective and the
@@ -129,7 +130,21 @@ interface IncomingMessage {
   content: unknown;
 }
 
-export const POST: RequestHandler = async (event) => {
+/**
+ * Tagged as the `project-chat` workload, so this page's spend lands on the row
+ * that also carries its model switch.
+ *
+ * Wrapped at the HANDLER rather than at the LLM call: the answer is streamed
+ * from inside a `ReadableStream` `start()`, which the constructor runs
+ * synchronously in this async context, so one wrapper covers every call the
+ * request makes without touching the streaming code.
+ */
+export const POST: RequestHandler = (event) =>
+  // `async` so the callback returns a Promise: a RequestHandler may return a
+  // bare Response, and `withActivity` takes an async function.
+  withActivity('project-chat', async () => handlePost(event));
+
+const handlePost: RequestHandler = async (event) => {
   // Same visibility gate as the bundle itself: if the project is private, its relay 404s for the
   // public exactly as its assets do.
   await requireProjectPublic('archetype', event);
@@ -178,9 +193,9 @@ export const POST: RequestHandler = async (event) => {
 
   try {
     // The client and model both come from the site's own gateway — the caller's `model` field is
-    // read by nobody. resolveDefaultModel() is the same setting the rest of the site chats on, so
+    // read by nobody. resolveProjectChatModel() is the same setting the rest of the site chats on, so
     // the adviser follows the site's model choice without a second place to keep in step.
-    const { client, model } = await getLLMClient(await resolveDefaultModel());
+    const { client, model } = await getLLMClient(await resolveProjectChatModel());
 
     const completion = await client.chat.completions.create(
       {

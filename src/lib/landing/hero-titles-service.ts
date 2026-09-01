@@ -2,7 +2,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heroTitles } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveLandingModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import {
   enumerateUnits,
   snapToBuckets,
@@ -313,23 +314,25 @@ async function callBatchLLM(
   prompt: { system: string; user: string },
   unitCount: number,
 ): Promise<string | null> {
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveLandingModel();
   const { client, model } = await getLLMClient(ctx);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
   try {
-    const completion = await client.chat.completions.create(
-      {
-        model,
-        messages: [
-          { role: 'system', content: prompt.system },
-          { role: 'user', content: prompt.user },
-        ],
-        temperature: 0.9,
-        // Sized to the batch — ~260 tokens per entry plus headroom, capped.
-        max_tokens: Math.min(16000, 400 + unitCount * 260),
-      },
-      { signal: controller.signal },
+    const completion = await withActivity('landing', () =>
+      client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: prompt.system },
+            { role: 'user', content: prompt.user },
+          ],
+          temperature: 0.9,
+          // Sized to the batch — ~260 tokens per entry plus headroom, capped.
+          max_tokens: Math.min(16000, 400 + unitCount * 260),
+        },
+        { signal: controller.signal },
+      ),
     );
     const text = completion.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text) {

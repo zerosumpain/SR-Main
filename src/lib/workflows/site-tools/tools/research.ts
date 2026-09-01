@@ -252,10 +252,10 @@ register({
       : JSON.stringify(session.report);
 
     const { getLLMClient } = await import('$lib/llm/client');
-    const { resolveDefaultModel } = await import('$lib/server/models/settings');
+    const { resolveResearchDeepModel } = await import('$lib/server/models/workload-settings');
     const { currentSessionModel } = await import('$lib/context/chat');
     const { client, model } = await getLLMClient(
-      currentSessionModel() ?? (await resolveDefaultModel()),
+      currentSessionModel() ?? (await resolveResearchDeepModel()),
     );
 
     const systemPrompt = `You are answering a question using ONLY the research findings provided below. Do not use any external knowledge.
@@ -396,10 +396,10 @@ register({
     if (!instruction) return { success: false, error: `Unknown format: ${format}. Use: blog_draft, build_prompt, workflow_description, or summary` };
 
     const { getLLMClient } = await import('$lib/llm/client');
-    const { resolveDefaultModel } = await import('$lib/server/models/settings');
+    const { resolveResearchDeepModel } = await import('$lib/server/models/workload-settings');
     const { currentSessionModel } = await import('$lib/context/chat');
     const { client, model } = await getLLMClient(
-      currentSessionModel() ?? (await resolveDefaultModel()),
+      currentSessionModel() ?? (await resolveResearchDeepModel()),
     );
 
     const systemPrompt = `Research Topic: ${session.topic}\n\nResearch Findings:\n${reportText}\n\n${instruction}${focus ? `\n\nFocus specifically on: ${focus}` : ''}`;

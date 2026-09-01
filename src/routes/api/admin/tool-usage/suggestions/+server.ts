@@ -4,7 +4,8 @@ import { clampDays } from '$lib/selfimprove/call-efficiency';
 import { getToolAudit } from '$lib/server/tool-audit';
 import { getTools } from '$lib/workflows/site-tools/registry';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveToolSuggestionsModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 
 // Owner-only (all /api/admin/* is owner-gated by hooks.server.ts). Feeds the
 // tool-usage audit for the window to the model and returns a forensic,
@@ -42,20 +43,22 @@ export const POST: RequestHandler = async ({ request }) => {
     'the raw data, no fluff. ~250–400 words.';
   const user = `Tool-usage telemetry (last ${days} days):\n\n${JSON.stringify(summary, null, 2)}`;
 
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveToolSuggestionsModel();
   const { client, model } = await getLLMClient(ctx);
 
   // max_tokens generous so GLM's reasoning budget doesn't truncate the answer
   // (see feedback_glm_reasoning_tokens: reasoning deducts from max_tokens).
-  const resp = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    max_tokens: 4000,
-    temperature: 0.4,
-  });
+  const resp = await withActivity('tool-suggestions', () =>
+    client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      max_tokens: 4000,
+      temperature: 0.4,
+    }),
+  );
 
   const suggestions = resp.choices?.[0]?.message?.content?.trim() || 'No suggestions were generated.';
   return json({ suggestions, model });

@@ -830,22 +830,25 @@ export async function generateBrief(context: BriefContext): Promise<BriefResult>
     throw new Error('a brief needs at least one resolvable subject');
   }
 
-  const { resolveDefaultModel } = await import('$lib/server/models/settings');
+  const { resolveIntelAnalysisModel } = await import('$lib/server/models/workload-settings');
   const { getLLMClient } = await import('$lib/llm/client');
+  const { withActivity } = await import('$lib/context/activity');
 
-  const modelCtx = await resolveDefaultModel();
+  const modelCtx = await resolveIntelAnalysisModel();
   const { client, model } = await getLLMClient(modelCtx);
   const prompt = buildBriefPrompt(context);
 
-  const response = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    max_tokens: BRIEF_MAX_TOKENS,
-    messages: [
-      { role: 'system', content: prompt.system },
-      { role: 'user', content: prompt.user },
-    ],
-  });
+  const response = await withActivity('intel-analysis', () =>
+    client.chat.completions.create({
+      model,
+      temperature: 0.2,
+      max_tokens: BRIEF_MAX_TOKENS,
+      messages: [
+        { role: 'system', content: prompt.system },
+        { role: 'user', content: prompt.user },
+      ],
+    }),
+  );
 
   const raw = (response.choices[0]?.message?.content ?? '').trim();
   if (!raw) throw new Error('the model returned an empty brief');

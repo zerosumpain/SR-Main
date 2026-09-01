@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBlogModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { getLLMClient } from '$lib/llm/client';
 import { runAssistant } from '$lib/blog/assistant/runner';
 import { loadHistory } from '$lib/blog/assistant/messages';
@@ -24,7 +25,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
   const pendingHints = Array.isArray(body?.pending) ? (body.pending as string[]).slice(0, 6) : [];
 
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveBlogModel();
   const { client, model } = await getLLMClient(ctx);
   const history = await loadHistory(postId);
 
@@ -36,17 +37,19 @@ export const POST: RequestHandler = async ({ params, request }) => {
   let errorMsg: string | null = null;
 
   try {
-    for await (const ev of runAssistant({
-      postId,
-      userMessage: trigger,
-      history,
-      client,
-      model,
-      autoReview: true,
-    })) {
-      if (ev.type === 'proposal') proposals.push(ev.proposal);
-      else if (ev.type === 'error') errorMsg = ev.message;
-    }
+    await withActivity('blog', async () => {
+      for await (const ev of runAssistant({
+        postId,
+        userMessage: trigger,
+        history,
+        client,
+        model,
+        autoReview: true,
+      })) {
+        if (ev.type === 'proposal') proposals.push(ev.proposal);
+        else if (ev.type === 'error') errorMsg = ev.message;
+      }
+    });
   } catch (e) {
     errorMsg = e instanceof Error ? e.message : 'unknown error';
   }

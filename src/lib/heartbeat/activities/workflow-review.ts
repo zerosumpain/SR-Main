@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { workflowRuns, workflows, nodeExecutions, heartbeatPulses } from '$lib/db/schema';
 import { and, desc, eq, gt, isNotNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'workflow-review';
@@ -107,7 +107,7 @@ export const workflowReview: ActivityHandler = {
       .filter(Boolean)
       .join('\n');
 
-    const model = await resolveDefaultModel();
+    const model = await resolveHeartbeatModel();
     const { client, model: modelId } = await getLLMClient(model);
 
     const prompt = `You are reviewing a single workflow run for a personal automation site. Be terse and concrete.

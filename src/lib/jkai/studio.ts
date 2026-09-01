@@ -13,7 +13,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 import type { ModelContext } from '$lib/server/models/types';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { BudgetConfig } from './types';
@@ -97,7 +97,7 @@ export async function createStudioBuild({
     );
   }
 
-  const ctx = modelContext ?? (await resolveDefaultModel());
+  const ctx = modelContext ?? (await resolveBuilderModel());
   const priceSnapshot = await snapshotPrice(ctx);
 
   const [build] = await db

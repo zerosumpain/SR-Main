@@ -15,7 +15,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, workflows } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { ModelContext } from '$lib/server/models/types';
 import { publishedLink } from '$lib/builds/published-link';
@@ -108,7 +108,7 @@ export const builderChatExecutor: NodeExecutor = {
     if (provider === 'openrouter' && modelId) {
       ctx = { provider, modelId };
     } else {
-      ctx = await resolveDefaultModel();
+      ctx = await resolveBuilderModel();
     }
 
     const priceSnapshot = await snapshotPrice(ctx);

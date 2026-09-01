@@ -1,5 +1,6 @@
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveDoctorModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import type { HealingContext, HealingDiagnosis, NodeDefinition } from '../types';
 
 export function buildHealingPrompt(context: HealingContext): string {
@@ -106,7 +107,11 @@ export async function diagnoseAndFix(
   context: HealingContext,
   onProgress?: (text: string) => void,
 ): Promise<HealingDiagnosis> {
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
+  // The DOCTOR role, not the site default. This diagnoses a failing canvas
+  // node, which is the workflow doctor's job done at runtime instead of at
+  // 05:00 — so the two ran the same task on different models purely because
+  // one had a settings key and the other did not.
+  const { client, model } = await getLLMClient(await resolveDoctorModel());
 
   const userPrompt = buildHealingPrompt(context);
   onProgress?.(`Diagnosing: ${context.error.slice(0, 100)}`);
@@ -114,16 +119,18 @@ export async function diagnoseAndFix(
   let response;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: HEALING_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 2048,
-        response_format: { type: 'json_object' },
-      });
+      response = await withActivity('doctor', () =>
+        client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: HEALING_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 2048,
+          response_format: { type: 'json_object' },
+        }),
+      );
       break;
     } catch (err: any) {
       if (err?.status === 429 && attempt < 2) {

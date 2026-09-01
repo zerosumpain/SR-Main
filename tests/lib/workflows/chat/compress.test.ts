@@ -12,7 +12,9 @@ vi.mock('$lib/datastore', () => ({
   upsertRecord: (...a: unknown[]) => upsertRecord(...a),
   getRecordByKey: (...a: unknown[]) => getRecordByKey(...a),
 }));
-vi.mock('$lib/server/models/settings', () => ({ resolveDefaultModel: async () => ({ provider: 'openrouter', modelId: 'm' }) }));
+vi.mock('$lib/server/models/workload-settings', () => ({
+  resolveChatMaintenanceModel: async () => ({ provider: 'openrouter', modelId: 'm' }),
+}));
 vi.mock('$lib/llm/client', () => ({
   getLLMClient: async () => ({ client: { chat: { completions: { create: (...a: unknown[]) => create(...a) } } }, model: 'm' }),
 }));

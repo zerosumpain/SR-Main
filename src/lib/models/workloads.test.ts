@@ -55,3 +55,53 @@ describe('emitsImages', () => {
     expect(emitsImages('image')).toBe(false);
   });
 });
+
+/**
+ * The tag and the registry must agree.
+ *
+ * `withActivity('<id>')` writes a bare string into the ledger, and
+ * `activityKey()` returns it verbatim. A typo therefore does not throw and does
+ * not show up as an error — it opens a NEW activity key that no row on
+ * /admin/ops/costs knows how to name or switch, and the spend quietly
+ * disappears into it. That is the same shape as the tools that shipped and were
+ * never called: working code, no signal.
+ *
+ * So this walks the source for every literal tag and checks it against the
+ * registry. `research-fast` / `research-deep` are also reached through
+ * `DepthPreset.modelRole`, which is why they must be ids and not free strings.
+ */
+describe('activity tags match the registry', () => {
+  it('every withActivity() id in the source is a registered workload', async () => {
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const name of readdirSync(dir)) {
+        if (name === 'node_modules' || name.startsWith('.')) continue;
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) walk(full, out);
+        else if (/\.(ts|svelte)$/.test(full) && !full.endsWith('.test.ts')) out.push(full);
+      }
+      return out;
+    };
+
+    const ids = new Set(WORKLOADS.map((w) => w.id));
+    const bad: string[] = [];
+    for (const file of walk('src')) {
+      const src = readFileSync(file, 'utf8');
+      for (const m of src.matchAll(/withActivity\(\s*'([^']+)'/g)) {
+        if (!ids.has(m[1])) bad.push(`${file}: '${m[1]}'`);
+      }
+    }
+    expect(bad, `unregistered activity tags:\n${bad.join('\n')}`).toEqual([]);
+  });
+
+  it('registers both research tiers, which DepthPreset.modelRole names', () => {
+    expect(ids()).toContain('research-fast');
+    expect(ids()).toContain('research-deep');
+  });
+});
+
+function ids(): string[] {
+  return WORKLOADS.map((w) => w.id);
+}

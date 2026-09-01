@@ -2,7 +2,8 @@ import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
@@ -44,7 +45,18 @@ export interface HeartbeatTurnResult {
  */
 const MAX_TOOL_ROUNDS = 3;
 
-export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
+/**
+ * One heartbeat turn, tagged as the `heartbeat` workload.
+ *
+ * Wrapped at the turn rather than at each `create` because a turn is a tool
+ * LOOP — up to MAX_TOOL_ROUNDS calls plus the final reply — and tagging some of
+ * them would split one turn's spend across two rows.
+ */
+export function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
+  return withActivity('heartbeat', () => heartbeatTurn(opts));
+}
+
+async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
   // Belt and braces: callers should hand us a bare uuid, but a `chat_`-prefixed
   // id here reads as "conversation not found" and writes here are rejected
   // outright by orchestrator_chats' FK. Normalise so no caller can reintroduce it.
@@ -55,7 +67,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
   const ctx = opts.model ?? (
     conv.modelProvider && conv.modelId
       ? coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId })
-      : await resolveDefaultModel()
+      : await resolveHeartbeatModel()
   );
   const { client, model } = await getLLMClient(ctx);
 

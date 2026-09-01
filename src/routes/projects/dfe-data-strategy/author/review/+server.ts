@@ -9,7 +9,8 @@ import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { retrieve } from '../../lib/retrieval.server';
 import { coerceJson } from '$lib/dfe-data-strategy/jsonsafe';
 import { validateReview } from '../../lib/author/reviewValidate';
@@ -37,7 +38,21 @@ interface InSection {
 const SECTION_CHAR_CAP = 3200;
 const TOTAL_CHAR_CAP = 26_000;
 
-export const POST: RequestHandler = async (event) => {
+/**
+ * Tagged as the `project-chat` workload, so this page's spend lands on the row
+ * that also carries its model switch.
+ *
+ * Wrapped at the HANDLER rather than at the LLM call: the answer is streamed
+ * from inside a `ReadableStream` `start()`, which the constructor runs
+ * synchronously in this async context, so one wrapper covers every call the
+ * request makes without touching the streaming code.
+ */
+export const POST: RequestHandler = (event) =>
+  // `async` so the callback returns a Promise: a RequestHandler may return a
+  // bare Response, and `withActivity` takes an async function.
+  withActivity('project-chat', async () => handlePost(event));
+
+const handlePost: RequestHandler = async (event) => {
   await requireProjectPublic('dfe-data-strategy', event);
   const ip = event.getClientAddress?.() ?? 'unknown';
   if (rateLimited(ip)) throw error(429, 'Too many reviews — give it a minute.');
@@ -72,7 +87,7 @@ export const POST: RequestHandler = async (event) => {
   const nonEmpty = sections.filter((s) => s.text.trim().length > 0);
   if (!nonEmpty.length) throw error(400, 'The draft is empty — write something first.');
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
+  const { client, model } = await getLLMClient(await resolveProjectChatModel());
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

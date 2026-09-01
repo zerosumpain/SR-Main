@@ -18,7 +18,8 @@ import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { releases, releaseItems, type Release } from '$lib/db/schema';
 import { jsonCompletion } from '$lib/deepdive/ai';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveReleasesModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { pLimit } from '$lib/llm/resilience';
 import {
   RELEASE_ITEM_KINDS,
@@ -343,11 +344,14 @@ export async function summariseRelease(id: number, opts: { force?: boolean } = {
     return 'ok';
   }
 
+  // Resolved AND passed to the call below. It used to be resolved here and only
+  // written into the row for display, while `jsonCompletion` picked its own
+  // model — so the release log named one model and the bill carried another.
   let model = 'unknown';
   try {
-    model = (await resolveDefaultModel()).modelId;
+    model = (await resolveReleasesModel()).modelId;
   } catch {
-    /* keep 'unknown' — only used for display */
+    /* keep 'unknown' — the call then falls back to the deepdive default */
   }
 
   // Two passes: full evidence, then compact. The compact retry exists because
@@ -358,10 +362,13 @@ export async function summariseRelease(id: number, opts: { force?: boolean } = {
   let lastError = 'unknown';
   for (const compact of [false, true]) {
     try {
-      const raw = await jsonCompletion<unknown>(systemPrompt(), buildSummaryPrompt(row, compact), {
-        temperature: 0.2,
-        maxTokens: compact ? 3500 : 6000,
-      });
+      const raw = await withActivity('releases', () =>
+        jsonCompletion<unknown>(systemPrompt(), buildSummaryPrompt(row, compact), {
+          temperature: 0.2,
+          maxTokens: compact ? 3500 : 6000,
+          ...(model === 'unknown' ? {} : { model }),
+        }),
+      );
       const summary = normaliseSummary(raw, evidence);
       if (!summary.items.length) throw new Error('model returned no usable items');
       await writeSummary(id, summary, model, 'ok');

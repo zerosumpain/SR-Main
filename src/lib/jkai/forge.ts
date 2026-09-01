@@ -15,7 +15,7 @@ import { DEFAULT_BUILD_BUDGET } from './budget';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 
 // The Forge may only ever drive the brass-and-rails game repo.
@@ -48,7 +48,7 @@ export async function createForgeBuild({
   prompt: string;
   trigger?: string;
 }): Promise<{ buildId: string }> {
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveBuilderModel();
   const priceSnapshot = await snapshotPrice(ctx);
 
   const title = trigger

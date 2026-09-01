@@ -11,7 +11,8 @@ import type { JsonSchema, WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflow
 import { resolveUpstreamSchema, schemaToVariablePaths } from '$lib/workflows/schema-propagation';
 import { computeUpstreamFields } from '$lib/canvas/upstream-fields';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveMappingModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { getDefinition } from '$lib/workflows/registry-client';
 import type { EdgeMappingProposal, MappingContext } from './types';
 import { edgeCompatibility, heuristicMapping } from './compatibility';
@@ -186,19 +187,21 @@ export async function proposeEdgeMapping(params: {
   // Try the LLM; on any failure, fall back to the deterministic heuristic.
   try {
     const { system, user, targetKeys: keys } = buildPrompt(ctx, `${compat.level} (${compat.reasons[0] ?? ''})`);
-    const model = (await resolveDefaultModel()).modelId;
-    const res = await resilientChatCompletion(
-      model,
-      {
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0.2,
-        max_tokens: 1200,
-        response_format: { type: 'json_object' },
-      },
-      { signal: params.signal },
+    const model = (await resolveMappingModel()).modelId;
+    const res = await withActivity('mapping', () =>
+      resilientChatCompletion(
+        model,
+        {
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          temperature: 0.2,
+          max_tokens: 1200,
+          response_format: { type: 'json_object' },
+        },
+        { signal: params.signal },
+      ),
     );
     const content = res.choices[0]?.message?.content ?? '';
     const parsed = parseLooseJson(content);

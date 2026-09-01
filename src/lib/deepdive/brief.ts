@@ -34,6 +34,7 @@ import { emitArtefact } from './desk-events';
 import { pLimit } from './concurrency';
 import { coerceScope, scopeToSearchOptions, scopeAdmits, credibilityBonus, describeScope } from './scope';
 import { depthPreset, SYNTHESIS_MAX_TOKENS } from './depth';
+import { resolveResearchFastModel } from '$lib/server/models/workload-settings';
 import type { ResearchBudget } from './budget';
 import type { SessionStats, ResearchReport } from './types';
 
@@ -74,7 +75,7 @@ export async function runBrief(
   budget: ResearchBudget,
 ): Promise<void> {
   const preset = depthPreset('brief');
-  const model = preset.pinnedModel ?? undefined;
+  const model = (await resolveResearchFastModel()).modelId;
   const scope = coerceScope(session.scope);
   const goals = (session.goals ?? []) as string[];
   const topic = session.topic;
