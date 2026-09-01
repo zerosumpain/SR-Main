@@ -62,20 +62,24 @@
 
 <style>
   /* A cell of the vitals rail, not a card: the grid draws the borders, so the
-     tile brings only its contents and a hover wash. */
+     tile brings only its contents and a hover wash.
+     Written for the INK ground the rail now sits on — the panel is the cover
+     band from /health, and this component has exactly one consumer, so the
+     dark register is the only one it has (`StatDeck` carries a `dark` prop
+     because it renders in both on a single page; this never does). */
   .tile {
     display: flex;
     flex-direction: column;
     gap: 6px;
     text-decoration: none;
-    color: var(--text-primary);
+    color: var(--bg);
     position: relative;
     overflow: hidden;
     min-width: 0;
     transition: background var(--t-base) var(--ease-out);
   }
   .tile:hover {
-    background: var(--accent-tint-04);
+    background: rgba(232, 134, 58, 0.09);
   }
 
   .tile-hd {
@@ -90,7 +94,10 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label-wide);
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.55);
+  }
+  .tile[data-state='live'] .tile-label {
+    color: var(--accent-on-dark);
   }
 
   .dot {
@@ -98,20 +105,20 @@
     height: 7px;
     border-radius: var(--radius-pill);
     flex-shrink: 0;
-    background: var(--accent);
+    background: var(--accent-on-dark);
   }
   .dot[data-state='live'] {
-    box-shadow: var(--accent-glow);
+    box-shadow: 0 0 8px rgba(232, 134, 58, 0.55);
   }
   .dot[data-state='idle'] {
     background: transparent;
-    border: 1.5px solid var(--text-ghost);
+    border: 1.5px solid rgba(237, 228, 212, 0.35);
   }
   .dot[data-state='stale'] {
-    background: var(--text-ghost);
+    background: rgba(237, 228, 212, 0.35);
   }
   .dot[data-state='loading'] {
-    background: var(--text-ghost);
+    background: rgba(237, 228, 212, 0.35);
     opacity: 0.5;
   }
 
@@ -129,15 +136,16 @@
     font-size: var(--fs-num-md);
     line-height: 1.05;
     letter-spacing: -0.01em;
-    color: var(--text-primary);
+    color: var(--bg);
     font-variant-numeric: tabular-nums;
   }
-  /* A live reading is the one figure on the deck that shouts. */
+  /* A live reading is the one figure on the deck that shouts — the same rule
+     the daydream deck's `lit` tile follows. */
   .tile[data-state='live'] .num {
-    color: var(--accent);
+    color: var(--accent-on-dark);
   }
   .num.muted {
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.35);
   }
   .unit {
     font-family: var(--font-mono);
@@ -145,14 +153,14 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.4);
   }
 
   .tile-sub {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.02em;
-    color: var(--text-muted);
+    color: rgba(237, 228, 212, 0.55);
     margin: 0;
     white-space: nowrap;
     overflow: hidden;
@@ -160,7 +168,7 @@
   }
   .tile[data-state='idle'] .tile-sub,
   .tile[data-state='loading'] .tile-sub {
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.35);
   }
 
   /* The live dot only breathes when motion is welcome. */
