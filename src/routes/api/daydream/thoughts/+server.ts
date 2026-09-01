@@ -640,6 +640,51 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ rulings: await listRulings(Number.isFinite(limit) ? limit : 50) });
       }
 
+      // ── What it knows, and what each memory does ──────────────────────
+      //
+      // A sibling of `rulings` rather than a replacement. That one lists what
+      // the REVIEWER settled, read off the thought rows; this lists the store
+      // itself, which three other writers also fill — a note John typed, a
+      // place he named, and whatever the chat chose to keep. "What has it
+      // checked" and "what does it know" are different questions.
+      case 'memories': {
+        const limit = Number(body.limit);
+        const { listDaydreamMemories } = await import('$lib/daydream/memories.server');
+        return json({ memories: await listDaydreamMemories(Number.isFinite(limit) ? limit : 200) });
+      }
+
+      // ── How a line of enquiry is going ────────────────────────────────
+      //
+      // The trace `run.ts` has always written and nothing ever read. Fetched on
+      // demand: a lead can carry two hundred steps, and the Discoveries tab
+      // already loads the heaviest query on the hub.
+      case 'lead_detail': {
+        const leadId = str('leadId');
+        if (!leadId) return json({ error: 'leadId is required' }, { status: 400 });
+        const { loadLeadDetail } = await import('$lib/daydream/leads/detail');
+        const detail = await loadLeadDetail(leadId);
+        if (!detail) return json({ error: 'no such lead' }, { status: 404 });
+        return json({ detail });
+      }
+
+      // ── The relevance dial ────────────────────────────────────────────
+      //
+      // Deliberately NOT folded into `feedback`. That action writes a status
+      // (`actioned` or `dismissed`) and a verdict on the SUGGESTION; this one
+      // writes neither, because how much a subject matters is a different
+      // question from whether an interruption was worth having, and conflating
+      // them would record an opinion John did not give. `null` clears it.
+      case 'set_relevance': {
+        const id = str('id');
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const raw = body.relevance;
+        if (raw !== null && typeof raw !== 'number') {
+          return json({ error: 'relevance must be a number 1..5, or null' }, { status: 400 });
+        }
+        const { setRelevance } = await import('$lib/daydream/thought-store');
+        return json({ ok: true, ...(await setRelevance(id, raw)) });
+      }
+
       // ── Into the graph ────────────────────────────────────────────────
       //
       // A separate call rather than a side effect of the vote. `recordFeedback`

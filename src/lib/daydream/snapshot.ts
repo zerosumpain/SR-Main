@@ -416,6 +416,14 @@ export async function buildSnapshot(
       .select({ id: jkaiMemories.id, category: jkaiMemories.category, content: jkaiMemories.content })
       .from(jkaiMemories)
       .where(sql`${jkaiMemories.supersededBy} is null`)
+      // Newest first, and not decoration: `pack.ts` takes `slice(0, 16)` of
+      // this array, so without an ORDER BY *which* sixteen memories reached a
+      // pack was whatever order the planner happened to return — stable enough
+      // to look deliberate and arbitrary enough that a memory written this
+      // morning might never be read. The Memory tab now states which sixteen
+      // they are, and a page may not state something the query does not
+      // guarantee.
+      .orderBy(desc(jkaiMemories.createdAt))
       .limit(200);
     sources.push({ key: 'memories', status: memories.length ? 'ok' : 'empty', detail: `${memories.length} live` });
   } catch (err) {

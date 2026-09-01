@@ -25,9 +25,14 @@ import {
   finalScore,
   hourBand,
   kindWeight,
+  mergeCounts,
   tallyFeedback,
+  tallyRelevance,
+  RELEVANCE_MAX,
+  RELEVANCE_MIN,
   type FeedbackRow,
   type FeedbackSource,
+  type RelevanceRow,
 } from './scoring';
 import type { Candidate } from './snapshot-types';
 
@@ -120,9 +125,99 @@ export async function loadFeedback(sinceDays = 180): Promise<FeedbackRow[]> {
     }));
 }
 
+/**
+ * Every relevance rating that still matters.
+ *
+ * A sibling of `loadFeedback` rather than a widening of it, because the two
+ * answer different questions and the merge belongs where the weights are built:
+ * folding relevance into `FeedbackRow` would have forced a fake verdict onto
+ * every rating and made `tallyFeedback` — which the detector rows, the
+ * threshold and three tests all read — silently mean something else.
+ */
+export async function loadRelevanceRows(sinceDays = 180): Promise<RelevanceRow[]> {
+  const since = new Date(Date.now() - sinceDays * 86_400_000);
+  const rows = await db
+    .select({
+      kind: daydreamThoughts.kind,
+      relevance: daydreamThoughts.relevance,
+      relevanceAt: daydreamThoughts.relevanceAt,
+      placeId: daydreamThoughts.placeId,
+      createdAt: daydreamThoughts.createdAt,
+    })
+    .from(daydreamThoughts)
+    .where(and(isNotNull(daydreamThoughts.relevance), gte(daydreamThoughts.relevanceAt, since)));
+
+  return rows
+    .filter((r) => r.relevanceAt != null && r.relevance != null)
+    .map((r) => ({
+      kind: r.kind,
+      relevance: r.relevance as number,
+      relevanceAt: r.relevanceAt as Date,
+      placeId: r.placeId,
+      // Banded off when the THOUGHT landed, exactly as feedback is — the
+      // per-context weight asks "is this kind worth hearing here, at this hour",
+      // and the hour that matters is the one it arrived in.
+      hourBand: hourBand(
+        Number(new Intl.DateTimeFormat('en-GB', {
+          timeZone: LOCAL_TZ,
+          hour: '2-digit',
+          hour12: false,
+        }).format(r.createdAt)) % 24,
+      ),
+    }));
+}
+
+/**
+ * Set the owner's relevance for one thought.
+ *
+ * Writes NO status, on purpose. That is what keeps this clear of both traps
+ * this table has already sprung: it cannot collide with `PROTECTED_STATUSES`
+ * (so a rating never freezes a live row out of re-detection), and it cannot be
+ * mistaken for the negative verdict `archived` exists specifically to avoid
+ * recording. Rate a card and then file it, or rate it and leave it in the
+ * feed — both are coherent, and neither is a verdict on the suggestion.
+ *
+ * `null` clears it, so a mis-tap is undoable without inventing a sixth value.
+ */
+export async function setRelevance(
+  thoughtId: string,
+  relevance: number | null,
+): Promise<{ kind: string; relevance: number | null }> {
+  let value: number | null = null;
+  if (relevance != null) {
+    if (!Number.isFinite(relevance)) throw new Error('relevance must be a number');
+    const rounded = Math.round(relevance);
+    if (rounded < RELEVANCE_MIN || rounded > RELEVANCE_MAX) {
+      throw new Error(`relevance must be ${RELEVANCE_MIN}..${RELEVANCE_MAX}`);
+    }
+    value = rounded;
+  }
+
+  const now = new Date();
+  const [row] = await db
+    .update(daydreamThoughts)
+    .set({
+      relevance: value,
+      // Cleared with the value. A timestamp left behind on a null rating would
+      // survive into `loadRelevanceRows`' window filter and describe a rating
+      // that no longer exists.
+      relevanceAt: value == null ? null : now,
+      updatedAt: now,
+    })
+    .where(eq(daydreamThoughts.id, thoughtId))
+    .returning({ kind: daydreamThoughts.kind });
+
+  if (!row) throw new Error(`no such thought: ${thoughtId}`);
+  return { kind: row.kind, relevance: value };
+}
+
 /** Learned multiplier per kind, plus the global threshold, computed once per
  *  tick so every candidate is judged against the same numbers. */
-export function buildScoringContext(feedback: FeedbackRow[], now: Date) {
+export function buildScoringContext(
+  feedback: FeedbackRow[],
+  now: Date,
+  relevance: RelevanceRow[] = [],
+) {
   const byKind = new Map<string, FeedbackRow[]>();
   const byContext = new Map<string, FeedbackRow[]>();
   for (const f of feedback) {
@@ -137,9 +232,33 @@ export function buildScoringContext(feedback: FeedbackRow[], now: Date) {
     }
   }
 
+  // Same two buckets, filled from the other instrument. Kept in their own maps
+  // so a kind that has ONLY relevance ratings still gets a weight — keying off
+  // `byKind` alone would have made the dial do nothing at all until the same
+  // kind had also been given a verdict, which is most of them.
+  const relByKind = new Map<string, RelevanceRow[]>();
+  const relByContext = new Map<string, RelevanceRow[]>();
+  for (const r of relevance) {
+    const list = relByKind.get(r.kind) ?? [];
+    list.push(r);
+    relByKind.set(r.kind, list);
+    if (r.hourBand) {
+      const key = contextKey(r.kind, r.placeId, r.hourBand);
+      const local = relByContext.get(key) ?? [];
+      local.push(r);
+      relByContext.set(key, local);
+    }
+  }
+
   const countsByKind = new Map<string, ReturnType<typeof tallyFeedback>>();
-  for (const [kind, rows] of byKind) {
-    countsByKind.set(kind, tallyFeedback(rows, now));
+  for (const kind of new Set([...byKind.keys(), ...relByKind.keys()])) {
+    countsByKind.set(
+      kind,
+      mergeCounts(
+        tallyFeedback(byKind.get(kind) ?? [], now),
+        tallyRelevance(relByKind.get(kind) ?? [], now),
+      ),
+    );
   }
 
   return {
@@ -147,11 +266,20 @@ export function buildScoringContext(feedback: FeedbackRow[], now: Date) {
       const kindCounts = countsByKind.get(kind);
       if (!kindCounts) return 1;
       if (!band) return kindWeight(kindCounts);
-      const rows = byContext.get(contextKey(kind, placeId, band));
-      return rows
-        ? contextualWeight(kindCounts, tallyFeedback(rows, now))
-        : kindWeight(kindCounts);
+      const key = contextKey(kind, placeId, band);
+      const rows = byContext.get(key);
+      const relRows = relByContext.get(key);
+      if (!rows && !relRows) return kindWeight(kindCounts);
+      return contextualWeight(
+        kindCounts,
+        mergeCounts(tallyFeedback(rows ?? [], now), tallyRelevance(relRows ?? [], now)),
+      );
     },
+    // The global bar stays a measure of feedback alone. It answers "how
+    // cautious should the system be about INTERRUPTING", and a rating given on
+    // a card that was never sent is not evidence about that — see the cold-start
+    // note in scoring.ts. Relevance moves the per-kind weight instead, which is
+    // the lever that actually reorders the feed.
     threshold: adaptiveThreshold(feedback, now),
     feedbackCount: feedback.length,
   };
@@ -176,8 +304,13 @@ export async function persistCandidates(
   if (candidates.length === 0) return result;
 
   const muted = await mutedKinds();
-  const feedback = await loadFeedback();
-  const scoring = buildScoringContext(feedback, now);
+  // Both instruments, read together. This is the only place the relevance dial
+  // reaches the future: a kind John keeps marking relevant earns a higher
+  // multiplier here, so the NEXT candidate of that kind scores higher and
+  // clears the delivery bar more often. Without this line the dial would be a
+  // number the page stored and nothing read.
+  const [feedback, relevance] = await Promise.all([loadFeedback(), loadRelevanceRows()]);
+  const scoring = buildScoringContext(feedback, now, relevance);
   // The rows a reviewer has already ruled against. Loaded once per call and
   // soft: a guard that cannot read its own table must not cost the tick, which
   // is the same contract the ruling cards keep in the ponder pack.

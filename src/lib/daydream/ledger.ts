@@ -23,8 +23,17 @@ import { withinActiveHours as windowOpenAt } from '$lib/heartbeat/schedule';
 import { DETECTORS } from './detectors';
 import { loadProvenance } from './provenance';
 import { listSteers } from './hypotheses/steer';
-import { adaptiveThreshold, kindWeight, tallyFeedback, type FeedbackRow } from './scoring';
-import { mutedKinds, loadFeedback } from './thought-store';
+import {
+  adaptiveThreshold,
+  kindWeight,
+  meanRelevance,
+  mergeCounts,
+  tallyFeedback,
+  tallyRelevance,
+  type FeedbackRow,
+  type RelevanceRow,
+} from './scoring';
+import { mutedKinds, loadFeedback, loadRelevanceRows } from './thought-store';
 import type { Readiness, SnapshotSource } from './snapshot-types';
 
 export interface LedgerThought {
@@ -80,6 +89,11 @@ export interface LedgerThought {
   channel: string | null;
   deliveredAt: string | null;
   feedback: string | null;
+  /** The owner's own dial, 1..5, on how much the SUBJECT matters — distinct
+   *  from `feedback`, which rules on whether the suggestion was worth having.
+   *  Null until he has said. See `relevance` in schema.ts. */
+  relevance: number | null;
+  relevanceAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,10 +141,20 @@ export interface DetectorRow {
   kind: string;
   description: string;
   readiness: Readiness | null;
-  /** Learned multiplier. 1 means the ledger has no opinion yet. */
+  /** Learned multiplier. 1 means the ledger has no opinion yet.
+   *
+   *  Computed from BOTH instruments — verdicts and relevance ratings — because
+   *  this column is the page's account of why a kind ranks where it does, and
+   *  `persistCandidates` scores with both. A weight here that omitted relevance
+   *  would be a number on the page that disagrees with the number in the
+   *  ledger, which is the exact failure the "never show an unexplained number"
+   *  rule exists to prevent. */
   weight: number;
   useful: number;
   notUseful: number;
+  /** What he has said about the SUBJECT, plainly. Null when nothing of this
+   *  kind has been rated — which reads differently from a mean of 3. */
+  relevance: { mean: number; n: number } | null;
   muted: boolean;
 }
 
@@ -197,10 +221,11 @@ export async function loadEngineState(): Promise<EngineState> {
  * which is the same conflation the readiness gate exists to prevent.
  */
 export async function loadDetectorRows(): Promise<DetectorRow[]> {
-  const [detect, muted, feedback] = await Promise.all([
+  const [detect, muted, feedback, relevance] = await Promise.all([
     lastPulse('daydream-detect'),
     mutedKinds(),
     loadFeedback(),
+    loadRelevanceRows(),
   ]);
 
   const details = (detect?.details ?? {}) as Record<string, unknown>;
@@ -212,11 +237,20 @@ export async function loadDetectorRows(): Promise<DetectorRow[]> {
     list.push(f);
     byKind.set(f.kind, list);
   }
+  const relByKind = new Map<string, RelevanceRow[]>();
+  for (const r of relevance) {
+    const list = relByKind.get(r.kind) ?? [];
+    list.push(r);
+    relByKind.set(r.kind, list);
+  }
 
   const now = new Date();
   return DETECTORS.map((d) => {
     const rows = byKind.get(d.kind) ?? [];
-    const counts = tallyFeedback(rows, now);
+    const relRows = relByKind.get(d.kind) ?? [];
+    // The same merge `buildScoringContext` does, so this column and the score
+    // the engine actually assigns cannot drift apart.
+    const counts = mergeCounts(tallyFeedback(rows, now), tallyRelevance(relRows, now));
     return {
       kind: d.kind,
       description: d.description,
@@ -224,6 +258,7 @@ export async function loadDetectorRows(): Promise<DetectorRow[]> {
       weight: kindWeight(counts),
       useful: rows.filter((r) => r.feedback === 'useful').length,
       notUseful: rows.filter((r) => r.feedback === 'not_useful').length,
+      relevance: meanRelevance(relRows),
       muted: muted.has(d.kind),
     };
   });
@@ -302,6 +337,8 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
       channel: daydreamThoughts.channel,
       deliveredAt: daydreamThoughts.deliveredAt,
       feedback: daydreamThoughts.feedback,
+      relevance: daydreamThoughts.relevance,
+      relevanceAt: daydreamThoughts.relevanceAt,
       createdAt: daydreamThoughts.createdAt,
       updatedAt: daydreamThoughts.updatedAt,
     })
@@ -344,6 +381,8 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     channel: r.channel,
     deliveredAt: r.deliveredAt?.toISOString() ?? null,
     feedback: r.feedback,
+    relevance: r.relevance,
+    relevanceAt: r.relevanceAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   }));

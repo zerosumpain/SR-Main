@@ -22,6 +22,12 @@
     type GroupStats,
   } from '$lib/daydream/thought-groups';
   import { hasMap, thoughtDestination } from '$lib/daydream/destination';
+  import {
+    MEMORIES_PER_PACK,
+    ORIGIN_LABEL,
+    groupByCategory,
+    memoryUse,
+  } from '$lib/daydream/memories';
   import { SvelteSet } from 'svelte/reactivity';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
@@ -353,7 +359,16 @@
   // wants to know first is what it has been noticing at all.
   type Filter = 'all' | 'said' | 'suppressed' | 'ruled' | 'archived';
   let filter = $state<Filter>('all');
-  let expanded = $state<string | null>(null);
+  /**
+   * The thought whose detail overlay is open. Null when none is.
+   *
+   * This was an inline fold that took the full board row. The fold had to carry
+   * a map, an evidence list, a components table and a note box, so an open card
+   * pushed everything else off the screen — and the board, three columns built
+   * precisely so you can see whether there are four things or forty, stopped
+   * being a board the moment you looked at anything.
+   */
+  let openId = $state<string | null>(null);
   let busy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
 
@@ -652,6 +667,71 @@
     }
   }
 
+  // ── How a line of enquiry is going ────────────────────────────────────────
+  //
+  // "On discoveries, I want to be able to click into the suggestions and see
+  // how the discoveries are going."
+  //
+  // Same shape as `toggleHypDetail` directly above, one level up the tree: that
+  // one opens a verdict onto the days behind it, this opens a lead onto the
+  // rounds behind it. Fetched on demand — a lead can carry two hundred steps,
+  // and the Discoveries tab already loads the heaviest query on the hub.
+  type LeadDetailRow = {
+    id: string;
+    title: string;
+    rationale: string;
+    status: string;
+    metrics: string[];
+    score: number;
+    scoreComponents: Record<string, number>;
+    roundsRun: number;
+    barrenRounds: number;
+    abandonAfterBarrenRounds: number;
+    hypothesesSpawned: number;
+    hypothesesHeld: number;
+    fromSteer: boolean;
+    createdAt: string;
+    lastRoundAt: string | null;
+    steps: Array<{ round: number; kind: string; note: string; tokens: number; at: string }>;
+    questions: Array<{
+      id: string;
+      question: string;
+      verdict: string | null;
+      summary: string | null;
+      r: number | null;
+      qValue: number | null;
+      pairs: number | null;
+      proposedAt: string;
+      testedAt: string | null;
+    }>;
+    tokens: number;
+    traceMissing: boolean;
+  };
+  let leadOpen = $state<string | null>(null);
+  let leadDetail = $state<Record<string, LeadDetailRow>>({});
+  let leadError = $state<Record<string, string>>({});
+
+  async function toggleLead(id: string) {
+    if (leadOpen === id) {
+      leadOpen = null;
+      return;
+    }
+    leadOpen = id;
+    if (leadDetail[id]) return;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'lead_detail', leadId: id }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { detail?: LeadDetailRow; error?: string };
+      if (out.error) throw new Error(out.error);
+      if (out.detail) leadDetail = { ...leadDetail, [id]: out.detail };
+    } catch (err) {
+      leadError = { ...leadError, [id]: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   const digest = $derived(data.digest);
   type Steer = { id: string; text: string; status: string; batchesInfluenced: number };
   let steers = $state<Steer[]>([]);
@@ -858,12 +938,12 @@
    */
   const rateId = $derived(page.url.searchParams.get('rate'));
 
-  // A notification deep-link should land ON the thought, expanded, not near a
+  // A notification deep-link should land ON the thought, open, not near a
   // cue line that points at nothing.
   $effect(() => {
     const id = rateId;
     untrack(() => {
-      if (id && expanded !== id) expanded = id;
+      if (id && openId !== id) openId = id;
     });
   });
 
@@ -955,6 +1035,7 @@
   /** Has the engine ever actually run? Distinguishes "quiet" from "not wired". */
   const hasRun = $derived(engine.lastDetectAt != null);
 
+
   function ago(iso: string | null): string {
     if (!iso) return 'never';
     const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -963,6 +1044,160 @@
     const hours = Math.round(mins / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.round(hours / 24)}d ago`;
+  }
+
+  /**
+   * When it landed, said outright.
+   *
+   * `ago` is the scannable one and it stays, but it answers a question nobody
+   * asked twice: "17d ago" is fine for one card and useless the moment you want
+   * to line a thought up against a bank row, a calendar entry or a night's
+   * sleep — all of which this hub shows elsewhere with real dates. Pinned to
+   * `Europe/London`, the same zone `groupByDay` already uses, because the
+   * server runs UTC and a thought at 00:40 BST would otherwise be filed under
+   * the previous day on the card and the current one in its group heading.
+   */
+  const STAMP_FMT = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  function stamp(iso: string | null): string {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    // en-GB gives "Sun, 31 Aug, 14:05"; the comma after the weekday is noise on
+    // a meta row already full of separators.
+    return STAMP_FMT.format(d).replace(/^(\w{3}),/, '$1');
+  }
+
+  // ── Relevance ─────────────────────────────────────────────────────────────
+  //
+  // "Each card needs an ability to set the relevance of the point. The model
+  // should learn to show more relevant items in the feed."
+  //
+  // A dial, not a fourth verdict. `useful` / `not useful` rules on whether the
+  // SUGGESTION was worth having and can only honestly be asked of something
+  // that reached him; this asks how much the SUBJECT matters, which is a
+  // question you can answer about a card that was held back. It writes no
+  // status, so it can never be mistaken for the negative verdict `archived`
+  // exists to avoid recording.
+  //
+  // Where it goes: `loadRelevanceRows` → `buildScoringContext` → the per-kind
+  // multiplier `persistCandidates` applies on the next detect tick. The card
+  // shows that multiplier back, so the loop is observable rather than asserted.
+  const RELEVANCE_STEPS = [1, 2, 3, 4, 5] as const;
+  const RELEVANCE_HINT: Record<number, string> = {
+    1: 'Not my concern — push this kind of subject down',
+    2: 'Marginal',
+    3: 'Ordinary — no opinion either way',
+    4: 'Worth my attention',
+    5: 'This is what I care about — push this kind of subject up',
+  };
+  /** The card's read-out. TERSE, because a card is one of three in a 320px
+   *  column and the sentence above wrapped to two lines on every rated card —
+   *  the same rule `destination.ts` follows for its chips. The sentence rides
+   *  in the `title` and is printed in full in the overlay, where there is
+   *  room for it. */
+  const RELEVANCE_TERSE: Record<number, string> = {
+    1: 'not my concern',
+    2: 'marginal',
+    3: 'ordinary',
+    4: 'worth attention',
+    5: 'what I care about',
+  };
+  /** Optimistic local overrides, so a tap lands in ~0ms rather than after the
+   *  hub's heaviest query re-runs. Same device `archivedNow` uses. */
+  let relevanceNow = $state<Record<string, number | null>>({});
+  function relevanceOf(t: Thought): number | null {
+    return t.id in relevanceNow ? relevanceNow[t.id] : (t.relevance ?? null);
+  }
+
+  /** How many of the loaded thoughts carry a rating. On the ORDER chip: sorting
+   *  by a dial almost nothing has been given reads as a broken sort unless the
+   *  chip says how many rows it can actually order. */
+  const ratedCount = $derived(thoughts.filter((t) => relevanceOf(t) != null).length);
+
+  // ── The detail overlay ────────────────────────────────────────────────────
+  //
+  // "Make the cards more of a summary, with a neater on-click detail. Could use
+  // a modal, to keep the view neat."
+  //
+  // Shell copied from `RelationshipModal` on the Intel surface — local portal
+  // action, backdrop click and Escape to dismiss, an OPAQUE panel — so the two
+  // overlays in jkai read as the same object. `--surface-elevated` rather than
+  // `--card-bg`, which is a 7% tint and lets the board show through.
+  //
+  // Kept inline in the page rather than extracted: the detail reads a dozen
+  // pieces of page state and calls seven handlers, all of which would have to
+  // be drilled through props for no reuse anywhere.
+  const openThoughtRow = $derived(openId ? (thoughts.find((t) => t.id === openId) ?? null) : null);
+
+  function openThought(id: string) {
+    openId = id;
+  }
+  function closeThought() {
+    openId = null;
+  }
+
+  /**
+   * Move the node to `<body>` and take it away again.
+   *
+   * NOT `$lib/canvas/portal` — that one re-appends on destroy and leaves a dead
+   * overlay behind, which is a stuck-open modal with a ✕ that does nothing.
+   */
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  $effect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeThought();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  async function setRelevance(t: Thought, value: number) {
+    // Tapping the current value clears it — a mis-tap has to be undoable
+    // without inventing a sixth position on a five-position dial.
+    const next = relevanceOf(t) === value ? null : value;
+    relevanceNow = { ...relevanceNow, [t.id]: next };
+    busy = `${t.id}:rel`;
+    actionError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'set_relevance', id: t.id, relevance: next }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok || out.error) throw new Error(out.error ?? 'could not save that');
+    } catch (err) {
+      // Put it back. A dial that shows a value the ledger does not hold is
+      // worse than one that refused, because the next page load silently
+      // disagrees with what you just saw.
+      const { [t.id]: _dropped, ...rest } = relevanceNow;
+      relevanceNow = rest;
+      actionError = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = null;
+    }
+  }
+
+  /** What the ledger has learned about this kind, for the modal. `weight` is
+   *  the multiplier `finalScore` applies, so this is the actual lever. */
+  function learningFor(kind: string) {
+    return detectors.find((d) => d.kind === kind) ?? null;
   }
 
   function pct(n: number | null | undefined): string {
@@ -1108,7 +1343,7 @@
   // because those rows come back `archived` anyway.
   async function archiveThought(t: Thought) {
     archivedNow.add(t.id);
-    if (expanded === t.id) expanded = null;
+    if (openId === t.id) openId = null;
     const ok = await post({ action: 'archive', id: t.id }, `${t.id}:archive`);
     // Put it back on the board if the server refused it, so an optimistic
     // removal can never outlive the write it was predicting.
@@ -1202,13 +1437,123 @@
       };
       // The card is opened on the verdict, because a ruling that lands below
       // the fold on a three-column board is one nobody reads.
-      expanded = t.id;
+      openId = t.id;
       await invalidateAll();
       if (rulingsOpen) await loadRulings();
     } catch (err) {
       reviewErr = { ...reviewErr, [t.id]: err instanceof Error ? err.message : String(err) };
     } finally {
       busy = null;
+    }
+  }
+
+  // ── What it knows ─────────────────────────────────────────────────────────
+  //
+  // The rulings list below answers "what has it CHECKED", read off the thought
+  // rows. This answers "what does it KNOW", read off the store itself — and
+  // three writers other than the reviewer fill that store: a note John typed on
+  // a card, a place he named, and whatever a conversation chose to keep. Both
+  // rooms are wanted; neither is the other.
+  type Memory = {
+    id: string;
+    category: string;
+    content: string;
+    confidence: string;
+    createdAt: string;
+    origin: 'ruling' | 'note' | 'place' | 'elsewhere';
+    thoughtId: string | null;
+    thoughtTitle: string | null;
+    thoughtKind: string | null;
+    verdict: string | null;
+    likelihood: number | null;
+    placeLabel: string | null;
+  };
+  let memoriesOpen = $state(false);
+  let memoriesLoading = $state(false);
+  let memoriesError = $state<string | null>(null);
+  let memories = $state<Memory[]>([]);
+  let memCategory = $state('all');
+  let memOrigin = $state('all');
+
+  /**
+   * Position by age, which is position in the pack.
+   *
+   * `listDaydreamMemories` orders newest-first and `pack.ts` takes the first
+   * sixteen, so the index IS whether this memory is read at all. A Map rather
+   * than `indexOf` inside the loop: this renders once per card and the list
+   * runs to two hundred.
+   */
+  const memRank = $derived(new Map(memories.map((m, i) => [m.id, i])));
+  function memoryReach(m: Memory): boolean {
+    return (memRank.get(m.id) ?? Number.MAX_SAFE_INTEGER) < MEMORIES_PER_PACK;
+  }
+
+  const memoriesVisible = $derived(
+    memories.filter(
+      (m) =>
+        (memCategory === 'all' || m.category === memCategory) &&
+        (memOrigin === 'all' || m.origin === memOrigin),
+    ),
+  );
+  const memoryGroups = $derived(groupByCategory(memoriesVisible));
+
+  const memCategoryFacets = $derived.by((): Facet[] => {
+    const scope = memories.filter((m) => memOrigin === 'all' || m.origin === memOrigin);
+    return [
+      { id: 'all', label: 'All', count: scope.length },
+      ...groupByCategory(scope).map((g) => ({
+        id: g.category,
+        label: cap(g.category),
+        count: g.items.length,
+      })),
+    ];
+  });
+
+  const memOriginFacets = $derived.by((): Facet[] => {
+    const scope = memories.filter((m) => memCategory === 'all' || m.category === memCategory);
+    const n = (origin: Memory['origin']) => scope.filter((m) => m.origin === origin).length;
+    return [
+      { id: 'all', label: 'All', count: scope.length },
+      { id: 'ruling', label: 'It checked', count: n('ruling') },
+      { id: 'note', label: 'You told it', count: n('note') },
+      { id: 'place', label: 'A place', count: n('place') },
+      { id: 'elsewhere', label: 'A conversation', count: n('elsewhere') },
+    ];
+  });
+
+  /**
+   * Load on entering the room, exactly as the rulings do.
+   *
+   * Tracked read is the tab, the fetch is untracked, so this cannot re-fire on
+   * the state it sets. Same shape as the Family map's lazy load and, for the
+   * same reason, NOT in the page payload: the ledger load is already the
+   * heaviest thing on this hub and most visits never open this tab.
+   */
+  $effect(() => {
+    const onTab = tab;
+    untrack(() => {
+      if (onTab === 'memory' && !memoriesOpen && !memoriesLoading) void loadMemories();
+    });
+  });
+
+  async function loadMemories() {
+    memoriesOpen = true;
+    memoriesLoading = true;
+    memoriesError = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'memories', limit: 200 }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { memories?: Memory[]; error?: string };
+      if (out.error) throw new Error(out.error);
+      memories = out.memories ?? [];
+    } catch (err) {
+      memoriesError = err instanceof Error ? err.message : String(err);
+      memories = [];
+    } finally {
+      memoriesLoading = false;
     }
   }
 
@@ -1359,7 +1704,7 @@
   // what is broken first, what is waiting on you second, and what is merely
   // true last. The old page had one ordering — insertion — on every list.
 
-  type FeedOrder = 'priority' | 'newest' | 'score';
+  type FeedOrder = 'priority' | 'newest' | 'score' | 'relevance';
   let feedOrder = $state<FeedOrder>('priority');
 
   type BoardOrder = 'priority' | 'newest' | 'strength';
@@ -1394,6 +1739,14 @@
     const rows = [...visible];
     if (groupBy === 'day' || feedOrder === 'newest') return rows.sort(byNewest);
     if (feedOrder === 'score') return rows.sort((a, b) => b.score - a.score || byNewest(a, b));
+    if (feedOrder === 'relevance') {
+      // What HE said, not what the engine worked out. Unrated cards sort last
+      // rather than in the middle: an absent opinion is not a middling one, and
+      // burying the rated ones among them defeats the point of asking.
+      return rows.sort(
+        (a, b) => (relevanceOf(b) ?? -1) - (relevanceOf(a) ?? -1) || b.score - a.score || byNewest(a, b),
+      );
+    }
     return rows.sort((a, b) => thoughtRank(a) - thoughtRank(b) || b.score - a.score);
   });
 
@@ -1419,6 +1772,7 @@
     { id: 'priority', label: 'Priority' },
     { id: 'newest', label: 'Newest' },
     { id: 'score', label: 'Score' },
+    { id: 'relevance', label: 'Relevance', count: ratedCount },
   ]);
 
   const boardWhoFacets = $derived<Facet[]>([
@@ -1562,7 +1916,13 @@
   const coverTiles = $derived<DeckTile[]>([
     {
       key: 'needs',
-      label: 'Waiting on you',
+      // Named for what it COUNTS, not for what it wants from you. The band
+      // this phrase used to head has gone entirely (owner's instruction); a
+      // masthead tile still carrying "Waiting on you" would be the same nag in
+      // a smaller typeface. The number is worth keeping — it is the same
+      // population the tab badges show — so the tile stays and the address
+      // does not.
+      label: 'Undecided',
       value: String(needsTotal),
       tone: needsTotal ? 'action' : 'good',
       lit: needsTotal > 0,
@@ -1601,174 +1961,6 @@
       sub: `${mutedCount} muted by you`,
     },
   ]);
-
-  // ── The action queue ──────────────────────────────────────────────────────
-  //
-  // The hub's answer to the only question a reader arrives with. Each card
-  // names ONE thing and carries the button that does it; the old page made you
-  // find the tab, then the section, then the row. Ordered by the shared tone
-  // rank, so a failing job outranks a verdict that is merely waiting.
-
-  /**
-   * What an action-queue button actually does.
-   *
-   * Switching tab is not the action — it is the first third of it. A button
-   * that says "sort through them" and leaves you at the top of a 3,000px page
-   * with a closed panel somewhere below is the shape the old page had, and it
-   * is why nothing on it ever got sorted. So: switch, OPEN the panel the card
-   * is about, then put it on screen.
-   */
-  async function jumpTo(next: TabId, anchor: string, open?: () => void | Promise<void>) {
-    setTab(next);
-    if (open) void open();
-    await tick();
-    document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  interface AttentionCard {
-    key: string;
-    tone: Tone;
-    kicker: string;
-    figure: string;
-    detail: string;
-    cta: string;
-    act: () => void;
-  }
-
-  const attention = $derived.by((): AttentionCard[] => {
-    const out: AttentionCard[] = [];
-
-    if (failingJobs.length) {
-      out.push({
-        key: 'jobs',
-        tone: 'urgent',
-        kicker: 'Scheduled passes failing',
-        figure: String(failingJobs.length),
-        detail:
-          `${failingJobs.map((j) => j.name.replace('daydream-', '')).join(', ')} — while one of these is red, ` +
-          'the tab that reads its output is reporting the day before it broke.',
-        cta: 'Open the jobs table',
-        act: () => jumpTo('engine', 'dd-jobs'),
-      });
-    }
-
-    if (!hasRun) {
-      out.push({
-        key: 'never',
-        tone: 'urgent',
-        kicker: 'It has never run',
-        figure: '0',
-        detail:
-          'The detect pass has not completed once, so every zero on this page is about the engine ' +
-          'rather than about your life. The Engine tab says which source is missing.',
-        cta: 'See what is wired up',
-        act: () => jumpTo('engine', 'dd-provenance'),
-      });
-    }
-
-    if (needsNaming) {
-      out.push({
-        key: 'places',
-        tone: 'action',
-        kicker: 'Places with no name',
-        figure: String(needsNaming),
-        detail:
-          'Several detectors stay silent until a place has a name, so this is the highest-leverage ' +
-          'thing on the hub. Each arrives pre-filled with the geocoder’s guess and an address.',
-        cta: 'Name them in one sitting',
-        act: () => jumpTo('places', 'dd-unnamed', () => { if (!sessionOpen) return openSession(); }),
-      });
-    }
-
-    if (needsRuling) {
-      out.push({
-        key: 'rules',
-        tone: 'action',
-        kicker: 'Rules awaiting approval',
-        figure: String(needsRuling),
-        detail:
-          'The model proposed these as data — a condition over a fixed list of facts, never code. ' +
-          'Each has already passed validation and a replay against your history. Nothing fires until you say so.',
-        cta: 'Approve or reject',
-        act: () => jumpTo('engine', 'dd-rules'),
-      });
-    }
-
-    if (needsRating) {
-      out.push({
-        key: 'rate',
-        tone: 'action',
-        kicker: 'Reached you, never rated',
-        figure: String(needsRating),
-        detail:
-          `The confidence bar opened at 0.75 with no evidence behind it and only falls as you answer. ` +
-          `${data.threshold.feedbackCount} response${data.threshold.feedbackCount === 1 ? '' : 's'} so far — ` +
-          'until that number moves, the ranking is a guess.',
-        cta: 'Rate them in the feed',
-        act: () => jumpTo('feed', 'dd-thefeed'),
-      });
-    }
-
-    if (suppressedCount) {
-      out.push({
-        key: 'deck',
-        tone: 'watch',
-        kicker: 'Held back below the bar',
-        figure: String(suppressedCount),
-        detail:
-          'Nothing was sent, so nothing here interrupted you. Sorting a batch is the cheapest way to ' +
-          'move the threshold, and it costs none of the four-a-day notification budget.',
-        cta: 'Sort through them',
-        act: () => jumpTo('feed', 'dd-deck', () => { if (!deckOpen) return openDeck(); }),
-      });
-    }
-
-    // ── A source emitting numbers that cannot be true ─────────────────────
-    //
-    // Promoted to the top band rather than left on the Engine tab, because it
-    // is the fault class this hub is worst at showing: the reading is rejected,
-    // so nothing appears anywhere, and a source quietly producing nonsense
-    // looks exactly like a quiet week. It reached the feed once as "you slept
-    // 464,018 hours" — a unit mismatch that had already passed a detector, a
-    // thought, the ponder pack and the rule engine before a model caught it.
-    const badReadings = engine.sources.filter((src) => src.status === 'failed');
-    if (badReadings.length) {
-      out.push({
-        key: 'readings',
-        tone: 'urgent',
-        kicker: badReadings.length === 1 ? 'A reading it refused' : 'Readings it refused',
-        figure: String(badReadings.length),
-        detail:
-          `${badReadings.map((src) => `${src.key}: ${src.detail}`).join(' · ')}. ` +
-          'Nothing was built on it — but a source producing impossible numbers is a fault, ' +
-          'and it has been queued for the improvement engine to go and fix.',
-        cta: 'See what is wired up',
-        act: () => jumpTo('engine', 'dd-sources'),
-      });
-    }
-
-    if (money?.bank.willSkip) {
-      out.push({
-        key: 'bank',
-        tone: 'watch',
-        kicker: 'Bank pull will skip',
-        figure: '1',
-        detail:
-          'The next run lands outside its own window, so it will skip rather than fail — which reads ' +
-          'exactly like a night that found nothing. It sat in that state for three days once.',
-        cta: 'Look at the rails',
-        act: () => jumpTo('money', 'dd-bank'),
-      });
-    }
-
-    return out.sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone]);
-  });
-
-  const attentionHeadline = $derived(
-    attention.some((a) => a.tone === 'urgent')
-      ? 'Something has stopped'
-      : 'Only you can do these',
-  );
 
   // ── Decks for the Money and Engine tabs ───────────────────────────────────
 
@@ -1914,37 +2106,6 @@
             Nothing is being observed and nothing is being noticed. The control in the masthead
             resumes it; everything below is the state it was in when it stopped.
           </p>
-        </div>
-      </div>
-    </section>
-  {/if}
-
-  <!-- ══ WHAT NEEDS YOU ═══════════════════════════════════════════════════
-       The hub's action queue, above the tabs' content and on every tab,
-       because it is the answer to the only question a reader arrives with.
-       Each card names ONE thing and carries the button that does it — the
-       old page made you find the section, then the sub-section, then the
-       row. Ordered by the shared tone rank, so a broken job outranks a
-       verdict that is merely waiting. -->
-  {#if attention.length}
-    <section class="band sunken attn">
-      <div class="inner">
-        <SectionHead
-          kicker="· / Waiting on you"
-          title={[attentionHeadline]}
-          strap="Everything below is a thing only you can do — a name, a verdict, an approval. The engine will not ask twice, and several of the detectors stay silent until it has an answer."
-        />
-        <div class="grid">
-          {#each attention as a (a.key)}
-            <div class="card t-{a.tone}">
-              <p class="card-kicker">{a.kicker}</p>
-              <p class="card-figure">{a.figure}</p>
-              <p class="card-body">{a.detail}</p>
-              <div class="card-actions">
-                <button type="button" class="cta" onclick={a.act}>{a.cta}</button>
-              </div>
-            </div>
-          {/each}
         </div>
       </div>
     </section>
@@ -2132,9 +2293,9 @@
             <div class="board">
               {#each collapsed[g.key] ? [] : g.items as t (t.id)}
                 {@const dest = thoughtDestination(t)}
-                <article class="card t-{thoughtTone(t)}" class:open={expanded === t.id}>
+                <article class="card t-{thoughtTone(t)}">
                   <div class="card-hd">
-                    <button type="button" class="card-title" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
+                    <button type="button" class="card-title" onclick={() => openThought(t.id)}>
                       {headline(t)}
                     </button>
                     {#if isAnswered(t)}
@@ -2144,17 +2305,22 @@
                     {/if}
                   </div>
 
-                  <!-- A question about a place that now has a name is finished
-                       business, and saying so stops it reading as still open. The
-                       stored title is kept beneath, because it is what was actually
-                       asked at the time. -->
+                  <!-- The summary, and only the summary.
+                       `explanation` rather than `narrative` on purpose: the
+                       deterministic line is always present and always true of
+                       the rule that produced it, whereas the model's phrasing
+                       must never appear without the checked/UNCHECKED tag that
+                       rides with it. Putting unchecked prose here as plain body
+                       text would drop that marker at exactly the place most
+                       people stop reading. It is two lines away in the overlay,
+                       with its tag. -->
                   {#if isAnswered(t)}
-                    <p class="card-body">
+                    <p class="card-body clamp">
                       You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
                       It asked: “{t.title}”
                     </p>
                   {:else}
-                    <p class="card-body">{t.explanation}</p>
+                    <p class="card-body clamp">{t.explanation}</p>
                   {/if}
 
                   <div class="card-meta">
@@ -2172,18 +2338,15 @@
                       </span>
                     {/key}
                     <span class="meta-item">score {t.score}</span>
+                    <!-- The date and time it landed, said outright. `ago` is
+                         beside it because the two answer different questions
+                         and neither replaces the other: one is scannable, the
+                         other lines this card up against a diary entry, a bank
+                         row or a night's sleep. -->
+                    <span class="meta-item stamp">{stamp(t.createdAt)}</span>
                     <span class="meta-item">{ago(t.createdAt)}</span>
-                    {#if !t.placeLabel && t.placeAddress}
-                      <span class="meta-item">{t.placeAddress}</span>
-                    {/if}
-                    {#if !t.placeLabel && t.placeVisits}
-                      <span class="meta-item">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
-                    {/if}
                     {#if t.suppressedReason}
                       <span class="meta-item warn">held back: {t.suppressedReason}</span>
-                    {/if}
-                    {#if t.promptTokens + t.completionTokens > 0}
-                      <span class="meta-item">{t.promptTokens + t.completionTokens} tok</span>
                     {/if}
                     {#if t.feedback}
                       <span class="meta-item good">you said {t.feedback.replace('_', ' ')}</span>
@@ -2191,86 +2354,83 @@
                     {#if t.intelNoteId}
                       <span class="meta-item good">in the graph</span>
                     {/if}
+                    {#if t.reviewVerdict}
+                      <span class="meta-item {t.reviewVerdict === 'refuted' ? 'warn' : t.reviewVerdict === 'verified' ? 'good' : ''}">
+                        {t.reviewVerdict === 'verified'
+                          ? 'checked · holds up'
+                          : t.reviewVerdict === 'refuted'
+                            ? 'checked · does not hold'
+                            : 'checked · cannot tell'}
+                      </span>
+                    {/if}
+                    {#if t.note}<span class="meta-item good">you added a note</span>{/if}
                   </div>
 
                   {#if t.id === rateId}
                     <p class="cue">Opened from a notification — your answer is below.</p>
                   {/if}
 
-                  {#if t.narrative}
-                    <!-- The model's phrasing, always shown as the model's. The rule's
-                         own explanation stays directly beneath it, so if this whole
-                         path failed permanently the ledger would still read. -->
-                    <blockquote class="quote" class:unchecked={t.verified === false}>
-                      {t.narrative}
-                      <span class="quote-tag" class:ok={t.verified === true}>
-                        {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
-                      </span>
-                    </blockquote>
-                  {:else if t.narrativeDroppedReason}
-                    <!-- A composer that has quietly started refusing everything looks
-                         exactly like a quiet week unless this is on the page. -->
-                    <p class="note warn">phrasing dropped — {t.narrativeDroppedReason}</p>
-                  {/if}
+                  <!-- ── The relevance dial ─────────────────────────────────
+                       Not a second verdict. `Useful` rules on whether the
+                       SUGGESTION was worth having and is only offered on
+                       something that actually reached him; this asks how much
+                       the SUBJECT matters, which is answerable about a card
+                       that was held back before it was ever sent. It writes no
+                       status, so it can never be read as the negative verdict
+                       `OK` exists specifically to avoid recording.
 
-                  <!-- ── What the review made of it ───────────────────────────
-                       A refuted thought never reaches WhatsApp, so this is the only
-                       place its reasoning is ever read. A verdict you cannot see is
-                       one you cannot argue with. -->
-                  {#if t.reviewVerdict}
-                    <p class="review r-{t.reviewVerdict}">
-                      <span class="review-tag">
-                        {t.reviewVerdict === 'verified'
-                          ? 'checked · holds up'
-                          : t.reviewVerdict === 'refuted'
-                            ? 'checked · does not hold'
-                            : 'checked · cannot tell'}
-                        {#if typeof t.reviewLikelihood === 'number'}
-                          <span class="review-p">{Math.round(t.reviewLikelihood * 100)}%</span>
-                        {/if}
-                      </span>
-                      {#if t.reviewReasoning}<span class="review-why">{t.reviewReasoning}</span>{/if}
-                      {#if t.reviewMemoryId}
-                        <span class="review-mem">remembered — it will not raise this blind again</span>
+                       It reaches the future through the per-kind multiplier:
+                       `loadRelevanceRows` → `buildScoringContext` → the score
+                       the next candidate of this kind is given. The overlay
+                       shows that multiplier back. -->
+                  <div class="rel">
+                    <span class="rel-label">Relevance</span>
+                    <div class="rel-dial" role="group" aria-label="How relevant is this subject?">
+                      {#each RELEVANCE_STEPS as step (step)}
+                        <button
+                          type="button"
+                          class="rel-step"
+                          class:on={(relevanceOf(t) ?? 0) >= step}
+                          class:set={relevanceOf(t) === step}
+                          disabled={busy === `${t.id}:rel`}
+                          aria-pressed={relevanceOf(t) === step}
+                          title={RELEVANCE_HINT[step]}
+                          onclick={() => setRelevance(t, step)}
+                        >{step}</button>
+                      {/each}
+                    </div>
+                    <span class="rel-read" title={relevanceOf(t) == null ? '' : RELEVANCE_HINT[relevanceOf(t) as number]}>
+                      {relevanceOf(t) == null
+                        ? 'not said'
+                        : RELEVANCE_TERSE[relevanceOf(t) as number]}
+                    </span>
+                  </div>
+
+                  <!-- ── The map, still on the card face ────────────────────
+                       Deliberately not moved into the overlay. "Suggestions
+                       about a location need a map" was an explicit ask, and the
+                       question a place card poses — "what IS this?" — is
+                       answerable from the map and from nothing else here. It
+                       is opt-in, so a feed of place cards is still a summary
+                       until you ask one of them where it is. -->
+                  {#if hasMap(t) && thoughtPlace[t.id]}
+                    <div class="card-map">
+                      <PlaceMap
+                        lat={thoughtPlace[t.id].lat}
+                        lon={thoughtPlace[t.id].lon}
+                        radiusM={thoughtPlace[t.id].radiusM}
+                        height="180px"
+                      />
+                      {#if thoughtPlace[t.id].suggestedAddress}
+                        <p class="note">{thoughtPlace[t.id].suggestedAddress}</p>
                       {/if}
-                    </p>
+                    </div>
                   {/if}
 
-                  <!-- ── The map, on the card ────────────────────────────────
-                       "Suggestions about a location need a map." Not behind an
-                       expand and then behind a second button: one tap on the
-                       card face, because the question a place card asks —
-                       "what is this?" — is answerable from the map and from
-                       nothing else on the card. Coordinates are still fetched
-                       on demand by the owner-gated action; the ledger payload
-                       has never carried a lat/lon and still does not. -->
-                  {#if hasMap(t)}
-                    {#if thoughtPlace[t.id]}
-                      <div class="card-map">
-                        <PlaceMap
-                          lat={thoughtPlace[t.id].lat}
-                          lon={thoughtPlace[t.id].lon}
-                          radiusM={thoughtPlace[t.id].radiusM}
-                          height="180px"
-                        />
-                        {#if thoughtPlace[t.id].suggestedAddress}
-                          <p class="note">{thoughtPlace[t.id].suggestedAddress}</p>
-                        {/if}
-                      </div>
-                    {/if}
-                  {/if}
-
-                  <!-- ── Quick actions, on the card face ─────────────────────
-                       Every one of these used to live inside the expand, or in
-                       a bar that only rendered for a thought that had actually
-                       been delivered. That is why the ledger has thousands of
-                       rows and a few dozen verdicts: the cost of an opinion was
-                       two clicks and a scroll.
-
-                       Rating is still offered only on what actually reached
-                       him — asking "was this useful?" about something suppressed
-                       before it was ever sent trains the weights on something he
-                       never saw. Everything else here works on any card. -->
+                  <!-- Quick actions stay on the FACE. That is why this ledger
+                       has verdicts at all: the cost of an opinion used to be
+                       two clicks and a scroll. Everything rarer, and everything
+                       that needs room, is in the overlay. -->
                   <div class="quick">
                     {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
                       <button type="button" class="q good" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')} title="Useful — and weave it into the Intel graph">
@@ -2285,12 +2445,6 @@
                         OK
                       </button>
                     {/if}
-                    <!-- On ANY card, suppressed included: the automatic sweep
-                         only walks unreviewed new/suppressed rows, so a held-back
-                         card it has already seen has no other route to a check. -->
-                    <button type="button" class="q model" disabled={busy === `${t.id}:review`} onclick={() => queueToModel(t)} title="Send it to the reviewer: it reads the sources and rules, and remembers what it decided">
-                      {busy === `${t.id}:review` ? 'Checking…' : t.reviewVerdict ? 'Check again' : 'Queue to model'}
-                    </button>
                     {#if hasMap(t)}
                       <button
                         type="button"
@@ -2306,138 +2460,13 @@
                         {dest.label}{#if dest.external}<span class="q-ext">↗</span>{/if}
                       </a>
                     {/if}
-                    {#if t.feedback === 'useful' && !t.intelNoteId}
-                      <!-- Voted useful before this shipped, or the graph was
-                           busy at the time. One tap rather than a re-vote. -->
-                      <button type="button" class="q" disabled={busy === `${t.id}:weave`} onclick={() => weave(t)}>
-                        {busy === `${t.id}:weave` ? 'Weaving…' : 'Weave into Intel'}
-                      </button>
-                    {/if}
-                    <button type="button" class="q more" onclick={() => (expanded = expanded === t.id ? null : t.id)}>
-                      {expanded === t.id ? 'Less' : 'Why'}
+                    <button type="button" class="q more" onclick={() => openThought(t.id)}>
+                      Open
                     </button>
                   </div>
 
                   {#if weaveNote[t.id]}<p class="note good">{weaveNote[t.id]}</p>{/if}
                   {#if reviewErr[t.id]}<p class="err">{reviewErr[t.id]}</p>{/if}
-                  {#if reviewOut[t.id]}
-                    <p class="note good">
-                      Ruled <strong>{reviewOut[t.id].verdict}</strong> after {reviewOut[t.id].toolCalls} source
-                      {reviewOut[t.id].toolCalls === 1 ? 'check' : 'checks'} — and remembered.
-                    </p>
-                  {/if}
-
-                  {#if expanded === t.id}
-                    <div class="detail">
-                      <div class="detail-block">
-                        <p class="field-label">Why this came up</p>
-                        {#each rootCause(t) as line, li (li)}
-                          <p class="detail-line">{line}</p>
-                        {/each}
-                        {#if extraComponents(t).length}
-                          <div class="tbl-scroll">
-                            <table class="tbl compact">
-                              <thead><tr><th>Component</th><th class="right">Value</th></tr></thead>
-                              <tbody>
-                                {#each extraComponents(t) as [k, v] (k)}
-                                  <tr><td>{k}</td><td class="right">{v}</td></tr>
-                                {/each}
-                              </tbody>
-                            </table>
-                          </div>
-                        {/if}
-                      </div>
-
-                      <!-- What the reviewer wrote down about it. Shown here in
-                           full rather than only as a verdict chip, because the
-                           memory is the thing that changes what gets said next
-                           and it should be arguable. -->
-                      {#if reviewOut[t.id]?.memory}
-                        <div class="detail-block">
-                          <p class="field-label">What it now remembers</p>
-                          <p class="detail-line said">{reviewOut[t.id].memory}</p>
-                          {#if reviewOut[t.id].sources.length}
-                            <p class="note">Checked: {reviewOut[t.id].sources.join(' · ')}</p>
-                          {/if}
-                        </div>
-                      {/if}
-
-                      {#if t.evidence.length}
-                        <div class="detail-block">
-                          <p class="field-label">What it was looking at</p>
-                          <!-- Resolved on demand: the subject and sender of the
-                               email, the place's rhythm, the transaction — and the
-                               graph entities each source touches. -->
-                          <EvidenceList thoughtId={t.id} count={t.evidence.length} />
-                        </div>
-                      {/if}
-
-                      {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
-                        <div class="detail-block">
-                          <p class="field-label">It suggests</p>
-                          <div class="card-actions">
-                            {#each t.proposedActions ?? [] as a, i (i)}
-                              <button type="button" class="cta" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
-                                {a.label}
-                              </button>
-                            {/each}
-                          </div>
-                        </div>
-                      {/if}
-
-                      <!-- A verdict says whether it landed; it can never say WHY.
-                           Saved verbatim, and written to memory so the rest of jkai
-                           reads it too. -->
-                      <div class="detail-block">
-                        <p class="field-label">Add some depth</p>
-                        {#if t.note && noteDraft[t.id] === undefined}
-                          <p class="detail-line said">{t.note}</p>
-                          <button type="button" class="btn" onclick={() => { noteDraft[t.id] = t.note ?? ''; }}>
-                            Change what you said
-                          </button>
-                        {:else}
-                          <textarea
-                            class="text-input area"
-                            rows="3"
-                            maxlength={MAX_NOTE_CHARS}
-                            placeholder="Anything it should know — what it got wrong, what it missed, what these actually are."
-                            bind:value={noteDraft[t.id]}
-                          ></textarea>
-                          <div class="card-actions">
-                            <button
-                              type="button"
-                              class="cta"
-                              disabled={busy === `${t.id}:note` || !(noteDraft[t.id] ?? '').trim()}
-                              onclick={() => saveNote(t)}
-                            >
-                              {busy === `${t.id}:note` ? 'Saving…' : 'Save this'}
-                            </button>
-                            {#if t.note}
-                              <button type="button" class="btn" onclick={() => { delete noteDraft[t.id]; noteDraft = { ...noteDraft }; }}>
-                                Cancel
-                              </button>
-                            {/if}
-                          </div>
-                          <p class="note">Kept as a memory, so it informs what it says next.</p>
-                        {/if}
-                      </div>
-
-                      <!-- The rarer verdicts live in the expand: `never_kind` is
-                           an absolute, irreversible-feeling mute and does not
-                           belong one mis-tap away on a card face. -->
-                      {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
-                        <div class="card-actions bar">
-                          <span class="ask">Anything stronger?</span>
-                          <button type="button" class="btn danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
-                            Never this kind
-                          </button>
-                          <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
-                            Snooze a week
-                          </button>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
                 </article>
               {/each}
             </div>
@@ -2536,10 +2565,166 @@
        and checked, what it concluded, and — the half that matters — whether
        that conclusion was written somewhere the engine reads it back. -->
   {#if tab === 'memory'}
-    <section class="band" id="dd-rulings">
+    <!-- ── WHAT IT KNOWS ────────────────────────────────────────────────
+         "I want the memories page cards to be categorised, and for them to
+         highlight the key attributes that are being remembered (ie how are
+         these being woven into future daydreams?) I'm not sure if it's the
+         specific fact that's remembered, or the concept."
+
+         It is the specific fact, verbatim, and this room says so rather than
+         leaving it to be inferred. `pack.ts` does one thing with a memory:
+
+             add('past', {kind:'memory', id}, `Known (${category}): ${content}`)
+
+         One card per memory, holding the exact sentence. Nothing generalises
+         it, nothing summarises it, no embedding stands between the sentence and
+         the prompt — so a memory is only ever as good as its sentence, which is
+         why every writer here composes a whole quotable claim. -->
+    <section class="band" id="dd-memories">
       <div class="inner">
         <SectionHead
-          kicker="A / What it has ruled on"
+          kicker="A / What it knows"
+          title={['Everything it', 'remembers']}
+          strap="The store the engine reads back before it thinks. Four things write into it — a verdict it went and checked, a note you typed on a card, a place you named, and anything a conversation chose to keep — and all four are read the same way."
+        >
+          {#snippet aside()}
+            <button type="button" class="btn" disabled={memoriesLoading} onclick={loadMemories}>
+              {memoriesLoading ? 'Reading…' : 'Refresh'}
+            </button>
+          {/snippet}
+        </SectionHead>
+
+        <!-- The answer to the question, in one card, before any list. -->
+        <div class="card t-steady">
+          <p class="card-body">
+            <strong>The specific sentence is what is remembered</strong> — not the concept behind
+            it. Each memory below is pasted into the daydream prompt exactly as written, prefixed
+            with its category: <code class="inline-code">Known (situations): …</code>. Nothing
+            generalises it and nothing summarises it, so a vague memory teaches the engine
+            something vague.
+          </p>
+          {#if memories.length}
+            <p class="card-body">
+              {Math.min(MEMORIES_PER_PACK, memories.length)} of {memories.length} reach any one
+              pass — the newest {MEMORIES_PER_PACK}, in the order below.
+              {#if memories.length > MEMORIES_PER_PACK}
+                The other {memories.length - MEMORIES_PER_PACK} are held but not read, so a
+                memory that matters and is old enough is a memory the engine no longer has.
+              {/if}
+            </p>
+          {/if}
+        </div>
+
+        {#if memoriesLoading}
+          <div class="card t-watch"><p class="card-body">Reading what it knows…</p></div>
+        {:else if memoriesError}
+          <div class="card t-urgent"><p class="card-body">Could not read the memories: {memoriesError}</p></div>
+        {:else if memories.length === 0}
+          <div class="card t-quiet">
+            <p class="card-body">
+              Nothing remembered yet. <strong>Queue to model</strong> on any feed card writes the
+              first one, and so does adding a note to a card or naming a place.
+            </p>
+          </div>
+        {:else}
+          <div class="controls">
+            <FacetBar
+              label="Category"
+              active={memCategory}
+              facets={memCategoryFacets}
+              onpick={(id) => (memCategory = id)}
+            />
+            <FacetBar
+              label="Written by"
+              active={memOrigin}
+              facets={memOriginFacets}
+              onpick={(id) => (memOrigin = id)}
+            />
+          </div>
+
+          {#if memoriesVisible.length === 0}
+            <div class="card t-quiet">
+              <p class="card-body">Nothing in this view. The counts on the chips say where they all went.</p>
+            </div>
+          {/if}
+
+          {#each memoryGroups as g (g.category)}
+            <div class="group">
+              <span class="group-label">{g.category}</span>
+              <span class="group-n">{g.items.length}</span>
+              <span class="group-rule"></span>
+            </div>
+            <div class="board">
+              {#each g.items as m (m.id)}
+                {@const use = memoryUse(m)}
+                {@const reaches = memoryReach(m)}
+                <article class="card t-{use.binding ? 'urgent' : reaches ? 'good' : 'quiet'}">
+                  <div class="card-hd">
+                    <span class="card-kicker">{ORIGIN_LABEL[m.origin]}</span>
+                    {#if use.binding}
+                      <span class="pill t-urgent">binding</span>
+                    {:else if reaches}
+                      <span class="pill t-good">in the next pass</span>
+                    {:else}
+                      <span class="pill t-quiet">held, not read</span>
+                    {/if}
+                  </div>
+
+                  <!-- The sentence, verbatim and marked as such. This IS the
+                       card the model gets; showing a tidied version here would
+                       misrepresent the one thing this room exists to show. -->
+                  <p class="mem-sentence">Known ({m.category}): {m.content}</p>
+
+                  <div class="card-meta">
+                    <span class="tag">{m.category}</span>
+                    <span class="meta-item">{m.confidence} confidence</span>
+                    <span class="meta-item stamp">{stamp(m.createdAt)}</span>
+                    {#if m.thoughtKind}<span class="meta-item">from a {kindLabel(m.thoughtKind)}</span>{/if}
+                    {#if m.verdict}
+                      <span class="meta-item {m.verdict === 'refuted' ? 'warn' : 'good'}">
+                        {m.verdict === 'refuted' ? 'did not hold' : m.verdict === 'verified' ? 'held up' : 'could not tell'}
+                        {#if typeof m.likelihood === 'number'} · {Math.round(m.likelihood * 100)}%{/if}
+                      </span>
+                    {/if}
+                    {#if m.placeLabel}<span class="meta-item">{m.placeLabel}</span>{/if}
+                  </div>
+
+                  {#if m.thoughtTitle}
+                    <p class="note">About: “{m.thoughtTitle}”</p>
+                  {/if}
+
+                  <!-- How it is woven in. Two mechanisms, and they are not
+                       equal: being carded is MATERIAL the proposer may ignore;
+                       the refutation block is an INSTRUCTION it may not. The
+                       Canva misreading came round eight times under eight names
+                       while only the first was in place, so the page prints the
+                       difference rather than implying both are the same
+                       promise. -->
+                  <div class="mem-use">
+                    <p class="field-label">How this reaches a daydream</p>
+                    {#each use.lines as line, li (li)}
+                      <p class="detail-line">{line}</p>
+                    {/each}
+                    {#if !reaches}
+                      <p class="note warn">
+                        Ranked {(memRank.get(m.id) ?? 0) + 1} of {memories.length} by age, and only
+                        the newest {MEMORIES_PER_PACK} are read — so as things stand this one
+                        changes nothing about what gets said next.
+                      </p>
+                    {/if}
+                  </div>
+                </article>
+              {/each}
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </section>
+
+    <section class="band sunken" id="dd-rulings">
+      <div class="inner">
+        <SectionHead
+          kicker="B / What it has ruled on"
           title={['Things it', 'went and checked']}
           strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict here is also a memory — the ponder cycle reads them refutations-first, and a new claim built on rows already ruled against is never written as new."
         >
@@ -3007,6 +3192,13 @@
             </p>
           </div>
         {:else}
+          <!-- Every row opens. The five numbers on a line — score, rounds,
+               spawned, held, state — are a summary of a process `run.ts` has
+               been recording in full the whole time (a `daydream_lead_steps`
+               row at every plan, spawn, read, judge and prune, with the
+               reasoning and the tokens attached), and nothing has ever read
+               that table. A summary of an audit trail nobody can open is a
+               claim, not a record. -->
           <div class="tbl-scroll">
             <table class="tbl">
               <thead>
@@ -3017,6 +3209,7 @@
                   <th class="right">Rounds</th>
                   <th class="right">Held</th>
                   <th class="right">State</th>
+                  <th class="right">Do</th>
                 </tr>
               </thead>
               <tbody>
@@ -3031,7 +3224,166 @@
                     <td class="right">{l.roundsRun}</td>
                     <td class="right">{l.hypothesesHeld}/{l.hypothesesSpawned}</td>
                     <td class="right"><span class="pill t-{leadTone(l.status)}">{l.status}</span></td>
+                    <td class="right nowrap">
+                      <button type="button" class="btn" onclick={() => toggleLead(l.id)}>
+                        {leadOpen === l.id ? 'Hide' : 'Progress'}
+                      </button>
+                    </td>
                   </tr>
+                  {#if leadOpen === l.id}
+                    <tr class="lead-detail-row">
+                      <td colspan="7">
+                        {#if leadError[l.id]}
+                          <p class="err">{leadError[l.id]}</p>
+                        {:else if !leadDetail[l.id]}
+                          <p class="detail-line">Reading the rounds…</p>
+                        {:else}
+                          {@const d = leadDetail[l.id]}
+                          <div class="detail">
+                            <div class="detail-block">
+                              <p class="field-label">Where it stands</p>
+                              <p class="detail-line">
+                                {d.roundsRun} round{d.roundsRun === 1 ? '' : 's'} run,
+                                {d.hypothesesSpawned} question{d.hypothesesSpawned === 1 ? '' : 's'} asked,
+                                <b>{d.hypothesesHeld}</b> held.
+                                {#if d.status === 'open'}
+                                  {d.barrenRounds} barren round{d.barrenRounds === 1 ? '' : 's'} in a
+                                  row — it is abandoned at {d.abandonAfterBarrenRounds}, so it has
+                                  {Math.max(0, d.abandonAfterBarrenRounds - d.barrenRounds)} left
+                                  to produce something.
+                                {:else}
+                                  Closed as <b>{d.status}</b>.
+                                {/if}
+                                {#if d.fromSteer} Opened from one of your steers.{/if}
+                                {#if d.lastRoundAt} Last round {stamp(d.lastRoundAt)}.{/if}
+                                {#if d.tokens} {d.tokens} tokens across the trace.{/if}
+                              </p>
+                              {#if Object.keys(d.scoreComponents).length}
+                                <div class="tbl-scroll">
+                                  <table class="tbl compact">
+                                    <thead><tr><th>Score component</th><th class="right">Value</th></tr></thead>
+                                    <tbody>
+                                      {#each Object.entries(d.scoreComponents) as [k, v] (k)}
+                                        <tr><td>{k}</td><td class="right">{Math.round(Number(v) * 1000) / 1000}</td></tr>
+                                      {/each}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              {/if}
+                            </div>
+
+                            <div class="detail-block">
+                              <p class="field-label">What it did, round by round</p>
+                              {#if d.traceMissing}
+                                <!-- Said out loud rather than rendered as an
+                                     empty list. A lead that advanced without
+                                     tracing did its thinking somewhere nobody
+                                     can review, which is a fault in the loop
+                                     and not a quiet week. -->
+                                <p class="note warn">
+                                  {d.roundsRun} rounds ran and wrote no trace. The reasoning behind
+                                  them is not recoverable — that is a gap in the loop, not an empty
+                                  week.
+                                </p>
+                              {:else if d.steps.length === 0}
+                                <p class="detail-line">
+                                  Nothing yet. The explore pass writes the first step when this line
+                                  is next advanced.
+                                </p>
+                              {:else}
+                                <div class="tbl-scroll">
+                                  <table class="tbl compact">
+                                    <thead>
+                                      <tr>
+                                        <th class="right">Round</th>
+                                        <th>Step</th>
+                                        <th>What happened</th>
+                                        <th class="right">Tokens</th>
+                                        <th class="right">When</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {#each d.steps as st, si (si)}
+                                        <tr>
+                                          <td class="right">{st.round}</td>
+                                          <td><span class="tag">{st.kind}</span></td>
+                                          <td class="cell-wrap">{st.note}</td>
+                                          <td class="right">{st.tokens || '—'}</td>
+                                          <td class="right nowrap">{stamp(st.at)}</td>
+                                        </tr>
+                                      {/each}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              {/if}
+                            </div>
+
+                            <div class="detail-block">
+                              <p class="field-label">The questions inside its range</p>
+                              {#if d.questions.length === 0}
+                                <p class="detail-line">
+                                  None yet. A lead owns the questions whose metric pair sits inside
+                                  its own allow-list — derived, never claimed, so a line cannot
+                                  inflate its own record.
+                                </p>
+                                {#if d.hypothesesSpawned > 0}
+                                  <!-- The stored counter and the derived list
+                                       disagree. `statsFor` recounts from the
+                                       allow-list every round, so this means the
+                                       lead's metrics have been narrowed since
+                                       those questions were asked — they are
+                                       still on the board, they are simply no
+                                       longer inside this line. Saying so beats
+                                       printing "6 asked" over an empty list. -->
+                                  <p class="note warn">
+                                    The row above counts {d.hypothesesSpawned}, so its metric list has
+                                    narrowed since those were asked. They are still on the board;
+                                    they are no longer inside this line's range.
+                                  </p>
+                                {/if}
+                              {:else}
+                                <div class="tbl-scroll">
+                                  <table class="tbl compact">
+                                    <thead>
+                                      <tr>
+                                        <th>Question</th>
+                                        <th class="right">Verdict</th>
+                                        <th class="right">r</th>
+                                        <th class="right">n</th>
+                                        <th class="right">Asked</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {#each d.questions as q (q.id)}
+                                        <tr>
+                                          <td class="cell-lead cell-wrap">
+                                            <span class="cell-title">{q.question}</span>
+                                            {#if q.summary}<span class="cell-sub">{q.summary}</span>{/if}
+                                          </td>
+                                          <td class="right">
+                                            <span class="pill t-{verdictTone(q.verdict)}">
+                                              {q.verdict ? (VERDICT_LABEL[q.verdict] ?? q.verdict) : 'not answered yet'}
+                                            </span>
+                                          </td>
+                                          <td class="right">{q.r != null ? q.r.toFixed(2) : '—'}</td>
+                                          <td class="right">{q.pairs ?? '—'}</td>
+                                          <td class="right nowrap">{stamp(q.proposedAt)}</td>
+                                        </tr>
+                                      {/each}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <p class="note">
+                                  Every question here is also on the board above, where its days can
+                                  be opened one by one.
+                                </p>
+                              {/if}
+                            </div>
+                          </div>
+                        {/if}
+                      </td>
+                    </tr>
+                  {/if}
                 {/each}
               </tbody>
             </table>
@@ -3949,6 +4301,321 @@
   {/if}
 </DaydreamShell>
 
+<!-- ══════════════════════════════════════════════════════════════════════
+     ONE THOUGHT, IN FULL
+     Everything that used to unfold inside the card. It sat in a three-column
+     board and had to carry a map, an evidence list, a components table and a
+     note box, so opening one card pushed the other thirty off the screen —
+     which defeats the only thing a board is for. Portalled to <body> so the
+     hub's sticky tab rail cannot sit on top of it.
+     ═══════════════════════════════════════════════════════════════════ -->
+{#if openThoughtRow}
+  {@const t = openThoughtRow}
+  {@const dest = thoughtDestination(t)}
+  {@const learned = learningFor(t.kind)}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="dm-backdrop" use:portal onclick={closeThought}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="dm-panel t-{thoughtTone(t)}"
+      role="dialog"
+      tabindex="-1"
+      aria-label={headline(t)}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <header class="dm-hd">
+        <div class="dm-hd-left">
+          <span class="dm-kicker">{kindChip(t).text}</span>
+          {#if isAnswered(t)}
+            <span class="pill t-good">answered</span>
+          {:else}
+            <span class="pill t-{thoughtTone(t)}">{t.status}</span>
+          {/if}
+        </div>
+        <div class="dm-hd-right">
+          {#if dest}
+            <a class="dm-chip" href={dest.href} title={dest.hint}>
+              {dest.label}{#if dest.external}<span class="q-ext">↗</span>{/if}
+            </a>
+          {/if}
+          <button type="button" class="dm-chip" onclick={closeThought} aria-label="Close">✕</button>
+        </div>
+      </header>
+
+      <div class="dm-body">
+        <h3 class="dm-title">{headline(t)}</h3>
+
+        <div class="card-meta">
+          {#key data.threshold.value}
+            <span
+              class="tag t-{bandTone(likelihoodBand(t.score, data.threshold.value).id)}"
+              title={likelihoodBand(t.score, data.threshold.value).meaning}
+            >
+              {likelihoodBand(t.score, data.threshold.value).label}
+            </span>
+          {/key}
+          <span class="meta-item">score {t.score}</span>
+          <span class="meta-item stamp">{stamp(t.createdAt)}</span>
+          <span class="meta-item">{ago(t.createdAt)}</span>
+          {#if t.deliveredAt}
+            <span class="meta-item good">sent {stamp(t.deliveredAt)}{t.channel ? ` · ${t.channel}` : ''}</span>
+          {/if}
+          {#if !t.placeLabel && t.placeAddress}
+            <span class="meta-item">{t.placeAddress}</span>
+          {/if}
+          {#if !t.placeLabel && t.placeVisits}
+            <span class="meta-item">{t.placeVisits} visit{t.placeVisits === 1 ? '' : 's'}</span>
+          {/if}
+          {#if t.suppressedReason}
+            <span class="meta-item warn">held back: {t.suppressedReason}</span>
+          {/if}
+          {#if t.promptTokens + t.completionTokens > 0}
+            <span class="meta-item">{t.promptTokens + t.completionTokens} tok</span>
+          {/if}
+          {#if t.feedback}
+            <span class="meta-item good">you said {t.feedback.replace('_', ' ')}</span>
+          {/if}
+          {#if t.intelNoteId}
+            <span class="meta-item good">in the graph</span>
+          {/if}
+        </div>
+
+        {#if isAnswered(t)}
+          <p class="card-body">
+            You named this <strong>{t.placeLabel}</strong>{t.placeVisits ? ` · ${t.placeVisits} visits` : ''}.
+            It asked: “{t.title}”
+          </p>
+        {:else}
+          <p class="card-body">{t.explanation}</p>
+        {/if}
+
+        {#if t.narrative}
+          <!-- The model's phrasing, always shown as the model's — and only
+               here, never as the card's plain summary, because the tag has to
+               travel with it. -->
+          <blockquote class="quote" class:unchecked={t.verified === false}>
+            {t.narrative}
+            <span class="quote-tag" class:ok={t.verified === true}>
+              {t.verified === true ? 'model · checked' : 'model · UNCHECKED'}
+            </span>
+          </blockquote>
+        {:else if t.narrativeDroppedReason}
+          <p class="note warn">phrasing dropped — {t.narrativeDroppedReason}</p>
+        {/if}
+
+        <!-- What the review made of it. A refuted thought never reaches
+             WhatsApp, so this is the only place its reasoning is ever read. -->
+        {#if t.reviewVerdict}
+          <p class="review r-{t.reviewVerdict}">
+            <span class="review-tag">
+              {t.reviewVerdict === 'verified'
+                ? 'checked · holds up'
+                : t.reviewVerdict === 'refuted'
+                  ? 'checked · does not hold'
+                  : 'checked · cannot tell'}
+              {#if typeof t.reviewLikelihood === 'number'}
+                <span class="review-p">{Math.round(t.reviewLikelihood * 100)}%</span>
+              {/if}
+            </span>
+            {#if t.reviewReasoning}<span class="review-why">{t.reviewReasoning}</span>{/if}
+            {#if t.reviewMemoryId}
+              <span class="review-mem">remembered — it will not raise this blind again</span>
+            {/if}
+          </p>
+        {/if}
+
+        <div class="detail">
+          <div class="detail-block">
+            <p class="field-label">Why this came up</p>
+            {#each rootCause(t) as line, li (li)}
+              <p class="detail-line">{line}</p>
+            {/each}
+            {#if extraComponents(t).length}
+              <div class="tbl-scroll">
+                <table class="tbl compact">
+                  <thead><tr><th>Component</th><th class="right">Value</th></tr></thead>
+                  <tbody>
+                    {#each extraComponents(t) as [k, v] (k)}
+                      <tr><td>{k}</td><td class="right">{v}</td></tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+          </div>
+
+          <!-- ── What your dial has actually done ────────────────────────
+               The half that makes the ask "the model should learn to show
+               more relevant items" checkable rather than a promise. `weight`
+               is the multiplier `finalScore` applies to every future
+               candidate of this kind, computed from verdicts and relevance
+               ratings together — so if this number has not moved, the dial
+               has not worked, and the page says so instead of implying
+               otherwise. -->
+          <div class="detail-block">
+            <p class="field-label">What it has learned about “{kindChip(t).text}”</p>
+            {#if learned}
+              <p class="detail-line">
+                Every future {kindChip(t).text} scores
+                <strong>×{learned.weight.toFixed(3)}</strong>
+                {learned.weight > 1
+                  ? '— above neutral, so this kind is being pushed up the feed.'
+                  : learned.weight < 1
+                    ? '— below neutral, so this kind is being pushed down.'
+                    : '— exactly neutral: nothing you have said has moved it yet.'}
+              </p>
+              <p class="note">
+                From {learned.useful} useful and {learned.notUseful} unhelpful
+                {learned.useful + learned.notUseful === 1 ? 'verdict' : 'verdicts'}{learned.relevance
+                  ? `, and ${learned.relevance.n} relevance rating${learned.relevance.n === 1 ? '' : 's'} averaging ${learned.relevance.mean}`
+                  : ', and no relevance ratings yet'}. It reaches the next
+                detect pass, not this card — nothing here is rewritten
+                retrospectively.
+              </p>
+            {:else}
+              <p class="detail-line">
+                No detector owns this kind any more, so there is no weight to move. It stays on
+                the ledger as a record of something that was once noticed.
+              </p>
+            {/if}
+          </div>
+
+          {#if t.evidence.length}
+            <div class="detail-block">
+              <p class="field-label">What it was looking at</p>
+              <EvidenceList thoughtId={t.id} count={t.evidence.length} />
+            </div>
+          {/if}
+
+          {#if reviewOut[t.id]?.memory}
+            <div class="detail-block">
+              <p class="field-label">What it now remembers</p>
+              <p class="detail-line said">{reviewOut[t.id].memory}</p>
+              {#if reviewOut[t.id].sources.length}
+                <p class="note">Checked: {reviewOut[t.id].sources.join(' · ')}</p>
+              {/if}
+            </div>
+          {/if}
+
+          {#if (t.proposedActions ?? []).length && t.status !== 'actioned'}
+            <div class="detail-block">
+              <p class="field-label">It suggests</p>
+              <div class="card-actions">
+                {#each t.proposedActions ?? [] as a, i (i)}
+                  <button type="button" class="cta" disabled={busy === `${t.id}:act${i}`} onclick={() => runAction(t, i)}>
+                    {a.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- A verdict says whether it landed; it can never say WHY. Saved
+               verbatim, and written to memory so the rest of jkai reads it. -->
+          <div class="detail-block">
+            <p class="field-label">Add some depth</p>
+            {#if t.note && noteDraft[t.id] === undefined}
+              <p class="detail-line said">{t.note}</p>
+              <button type="button" class="btn" onclick={() => { noteDraft[t.id] = t.note ?? ''; }}>
+                Change what you said
+              </button>
+            {:else}
+              <textarea
+                class="text-input area"
+                rows="3"
+                maxlength={MAX_NOTE_CHARS}
+                placeholder="Anything it should know — what it got wrong, what it missed, what these actually are."
+                bind:value={noteDraft[t.id]}
+              ></textarea>
+              <div class="card-actions">
+                <button
+                  type="button"
+                  class="cta"
+                  disabled={busy === `${t.id}:note` || !(noteDraft[t.id] ?? '').trim()}
+                  onclick={() => saveNote(t)}
+                >
+                  {busy === `${t.id}:note` ? 'Saving…' : 'Save this'}
+                </button>
+                {#if t.note}
+                  <button type="button" class="btn" onclick={() => { delete noteDraft[t.id]; noteDraft = { ...noteDraft }; }}>
+                    Cancel
+                  </button>
+                {/if}
+              </div>
+              <p class="note">Kept as a memory, so it informs what it says next.</p>
+            {/if}
+          </div>
+        </div>
+
+        {#if reviewErr[t.id]}<p class="err">{reviewErr[t.id]}</p>{/if}
+        {#if reviewOut[t.id]}
+          <p class="note good">
+            Ruled <strong>{reviewOut[t.id].verdict}</strong> after {reviewOut[t.id].toolCalls} source
+            {reviewOut[t.id].toolCalls === 1 ? 'check' : 'checks'} — and remembered.
+          </p>
+        {/if}
+        {#if weaveNote[t.id]}<p class="note good">{weaveNote[t.id]}</p>{/if}
+      </div>
+
+      <footer class="dm-ft">
+        <div class="rel">
+          <span class="rel-label">Relevance</span>
+          <div class="rel-dial" role="group" aria-label="How relevant is this subject?">
+            {#each RELEVANCE_STEPS as step (step)}
+              <button
+                type="button"
+                class="rel-step"
+                class:on={(relevanceOf(t) ?? 0) >= step}
+                class:set={relevanceOf(t) === step}
+                disabled={busy === `${t.id}:rel`}
+                aria-pressed={relevanceOf(t) === step}
+                title={RELEVANCE_HINT[step]}
+                onclick={() => setRelevance(t, step)}
+              >{step}</button>
+            {/each}
+          </div>
+          <span class="rel-read">
+            {relevanceOf(t) == null ? 'not said' : RELEVANCE_HINT[relevanceOf(t) as number]}
+          </span>
+        </div>
+
+        <div class="dm-actions">
+          {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
+            <button type="button" class="q good" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'useful')}>Useful</button>
+            <button type="button" class="q" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'not_useful')}>Not useful</button>
+          {/if}
+          <button type="button" class="q model" disabled={busy === `${t.id}:review`} onclick={() => queueToModel(t)} title="Send it to the reviewer: it reads the sources and rules, and remembers what it decided">
+            {busy === `${t.id}:review` ? 'Checking…' : t.reviewVerdict ? 'Check again' : 'Queue to model'}
+          </button>
+          {#if t.feedback === 'useful' && !t.intelNoteId}
+            <button type="button" class="q" disabled={busy === `${t.id}:weave`} onclick={() => weave(t)}>
+              {busy === `${t.id}:weave` ? 'Weaving…' : 'Weave into Intel'}
+            </button>
+          {/if}
+          {#if t.status !== 'archived'}
+            <button type="button" class="q" disabled={busy?.startsWith(t.id)} onclick={() => { void archiveThought(t); closeThought(); }}>
+              OK, file it
+            </button>
+          {/if}
+          <!-- The rarer verdicts live down here, not on the card face:
+               `never_kind` is an absolute, irreversible-feeling mute and does
+               not belong one mis-tap away in a board of thirty. -->
+          {#if !t.feedback && SHOWN_STATUSES.includes(t.status)}
+            <button type="button" class="btn danger" disabled={busy?.startsWith(t.id)} onclick={() => vote(t, 'never_kind')}>
+              Never this kind
+            </button>
+            <button type="button" class="btn" disabled={busy?.startsWith(t.id)} onclick={() => post({ action: 'snooze', id: t.id, days: 7 }, `${t.id}:snooze`)}>
+              Snooze a week
+            </button>
+          {/if}
+        </div>
+      </footer>
+    </div>
+  </div>
+{/if}
+
 <style>
   /* ══ The daydream hub, in the /health editorial system ═══════════════════
      Radii 0 (pills 100 only), no shadows, no springs, 12px mono floor. Colour
@@ -3972,10 +4639,6 @@
   }
   .band.sunken {
     background: var(--bg-section);
-  }
-  .band.attn {
-    border-top: 0;
-    border-bottom: 2px solid var(--text-primary);
   }
   .improvement-ledger {
     margin-top: clamp(28px, 4vw, 56px);
@@ -4187,12 +4850,11 @@
     align-items: start;
     gap: 14px;
   }
-  /* An open card takes the whole row. The detail carries a map, an evidence
-     list, a components table and a note box, and none of them survive a 320px
-     column — so the card that is being read stops being a column. */
-  .board > .card.open {
-    grid-column: 1 / -1;
-  }
+  /* Nothing takes the whole row any more. The detail that used to force that
+     — a map, an evidence list, a components table and a note box — is in the
+     overlay, so every card in the board is the same shape and the board can do
+     the one job it exists for: showing at a glance whether there are four
+     things here or forty. */
   @media (max-width: 1200px) {
     .board {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4447,6 +5109,92 @@
     margin-top: 10px;
   }
 
+  /* ——— the summary line ————————————————————————————————————————
+     Two lines, hard. A feed card is a thing you triage, not a thing you read,
+     and an unclamped explanation runs to six lines on some kinds and one on
+     others — which makes a three-column board of ragged heights that is harder
+     to scan than the single list it replaced. The full text is one tap away. */
+  .card-body.clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+
+  /* ——— the relevance dial ——————————————————————————————————————
+     Five squares, not stars: this is the same warm-brutalist vocabulary as the
+     facet chips, and a star rating reads as a review score for a product. The
+     filled run to the left of the chosen step is what makes it a dial rather
+     than five unrelated buttons. */
+  .rel {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .rel-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+  .rel-dial {
+    display: flex;
+    gap: 3px;
+  }
+  .rel-step {
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-ghost);
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+      border-color var(--t-fast) var(--ease-out);
+  }
+  .rel-step:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .rel-step.on {
+    background: var(--accent-tint-20);
+    border-color: var(--accent-tint-35);
+    color: var(--text-primary);
+  }
+  .rel-step.set {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    font-weight: 700;
+  }
+  .rel-step:disabled {
+    cursor: progress;
+    opacity: 0.6;
+  }
+  .rel-read {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+  /* The absolute stamp is the one meta item that must never wrap mid-date. */
+  .meta-item.stamp {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+
   .card-meta {
     display: flex;
     align-items: center;
@@ -4635,7 +5383,171 @@
     margin: 12px 0 0;
   }
 
-  /* ——— the expanded detail ——————————————————————————————————————— */
+  /* ——— the memory room ————————————————————————————————————————————
+     The sentence is shown as the model receives it, monospaced, because this
+     room's whole claim is that nothing is reworded between the store and the
+     prompt — and a paraphrase set in body copy would quietly contradict that. */
+  .mem-sentence {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border-left: 2px solid var(--line-strong);
+    background: rgba(26, 16, 8, 0.04);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    line-height: 1.55;
+    color: var(--text-primary);
+    text-wrap: pretty;
+  }
+  .mem-use {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .mem-use .detail-line + .detail-line {
+    margin-top: 6px;
+  }
+  .inline-code {
+    font-family: var(--font-mono);
+    /* Relative so it sits down inside body copy, floored so it can never fall
+       under 12px whatever it is nested in — the gate enforces exactly this. */
+    font-size: max(0.92em, var(--fs-label-xs));
+    padding: 1px 4px;
+    background: rgba(26, 16, 8, 0.06);
+  }
+
+  /* ——— the detail overlay ————————————————————————————————————————
+     Shell mirrors RelationshipModal on the Intel surface so the two overlays in
+     jkai read as one object. The panel background must be OPAQUE:
+     `--card-bg` is a 7% tint and the board would show straight through it. */
+  .dm-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(12px, 3vw, 32px);
+    background: rgba(26, 16, 8, 0.45);
+  }
+  .dm-panel {
+    display: flex;
+    flex-direction: column;
+    width: min(820px, 100%);
+    max-height: 100%;
+    background: var(--surface-elevated);
+    border: 2px solid rgba(26, 16, 8, 0.22);
+    /* The tone stripe the card wore, kept — closing and reopening should not
+       change what colour the thing is. */
+    border-left-width: 4px;
+    border-radius: 0;
+  }
+  .dm-hd,
+  .dm-ft {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 16px;
+  }
+  .dm-hd {
+    /* Wraps. At 390px the kicker, the status pill, a destination chip and the
+       close button do not fit on one line, and a non-wrapping header pushed the
+       ✕ 21px off the panel — measured, not eyeballed: the button was reachable
+       only by scrolling an overlay that has no horizontal scrollbar. */
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .dm-hd-left {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .dm-hd-right {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .dm-ft {
+    flex-wrap: wrap;
+    border-top: 2px solid var(--text-primary);
+    background: var(--bg-section);
+  }
+  .dm-ft .rel {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+  .dm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .dm-hd-left,
+  .dm-hd-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dm-hd-left .dm-kicker {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dm-kicker {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--text-ghost);
+  }
+  .dm-chip {
+    padding: 3px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+  }
+  .dm-chip:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+  .dm-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .dm-title {
+    margin: 0 0 10px;
+    font-family: var(--font-display);
+    font-size: var(--fs-display-xs);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    text-wrap: balance;
+  }
+  .dm-body .card-meta {
+    margin-bottom: 12px;
+  }
+  @media (max-width: 640px) {
+    .dm-backdrop {
+      padding: 0;
+    }
+    .dm-panel {
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+    }
+  }
+
+  /* ——— the detail, in the overlay ————————————————————————————————— */
 
   .detail {
     border-top: 1px solid var(--line-hair);
@@ -4717,6 +5629,19 @@
     letter-spacing: 0.05em;
     color: var(--text-muted);
     margin: 0;
+  }
+  /* A heading that is NOT a toggle. The feed's groups collapse, so their label
+     lives inside `.group-hd` and inherits from it; the memory room's are fixed
+     categories with nothing to fold, and a button that does nothing is worse
+     than a heading. Scoped to a direct child so it cannot override the feed's
+     hover colour. */
+  .group > .group-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-primary);
   }
   .group-rule {
     flex: 1 1 40px;
@@ -4851,6 +5776,18 @@
   }
   .tbl td.cell-wrap {
     min-width: 22ch;
+  }
+  /* The drill-in row. It spans the whole table and must not inherit the row
+     hover tint, which over a nested table reads as a selection. */
+  .lead-detail-row > td {
+    padding: 0 12px 14px;
+    background: var(--bg-section);
+  }
+  .tbl tbody tr.lead-detail-row:hover {
+    background: var(--bg-section);
+  }
+  .lead-detail-row .detail {
+    margin-top: 0;
   }
   .tbl td.bad {
     color: var(--error);
