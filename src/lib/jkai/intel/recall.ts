@@ -2,8 +2,9 @@ import { db } from '$lib/db';
 import { intelNotes, intelAlerts } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveIntelAnalysisModel } from '$lib/server/models/workload-settings';
 import { currentSessionModel } from '$lib/context/chat';
+import { withActivity } from '$lib/context/activity';
 
 interface SimilarNote {
   id: string;
@@ -81,7 +82,7 @@ async function evaluateConnections(
 ): Promise<EvaluatedConnection[]> {
   if (similarNotes.length === 0 && similarEntities.length === 0) return [];
 
-  const modelCtx = currentSessionModel() ?? (await resolveDefaultModel());
+  const modelCtx = currentSessionModel() ?? (await resolveIntelAnalysisModel());
   const { client, model } = await getLLMClient(modelCtx);
 
   const notesContext = similarNotes
@@ -92,7 +93,8 @@ async function evaluateConnections(
     .map((e) => `- ${e.name} (${e.typeName}, similarity: ${(1 - e.distance).toFixed(2)}): ${e.summary ?? 'no summary'}`)
     .join('\n');
 
-  const response = await client.chat.completions.create({
+  const response = await withActivity('intel-analysis', () =>
+    client.chat.completions.create({
     model,
     temperature: 0.3,
     max_tokens: 1500,
@@ -123,7 +125,8 @@ Rules:
         content: `NEW NOTE:\n${noteContent.slice(0, 2000)}\n\nSIMILAR EXISTING NOTES:\n${notesContext || '(none)'}\n\nRELATED ENTITIES:\n${entitiesContext || '(none)'}\n\nWhat genuine connections exist between the new note and existing knowledge?`,
       },
     ],
-  });
+    }),
+  );
 
   const raw = response.choices[0]?.message?.content ?? '[]';
   const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();

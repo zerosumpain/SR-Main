@@ -11,12 +11,23 @@
  *     production, so it silently ran the code fallback;
  *  2. roles hardcoded as module constants with NO settings key at all —
  *     self-improve and the workflow doctor, both pinned to
- *     `deepseek/deepseek-v4-flash` in their `types.ts`.
+ *     `deepseek/deepseek-v4-flash` in their `types.ts`;
+ *  3. tasks that DID follow the site default, but had no key, no name and no
+ *     row of their own — so on the spend page they arrived as one
+ *     `source:gateway` bucket, and "follows the default" was indistinguishable
+ *     from "cannot be changed" (John, 2026-09-01, reading /admin/ops/costs).
  *
  * A carve-out is legitimate — several here are load-bearing, and the `reason`
  * field records why — but an INVISIBLE carve-out is not, because the only way
  * to discover one was to read the source. Every role now names itself here,
  * says what runs on it, and can be changed from the model picker.
+ *
+ * The bar for a row here is "a distinct kind of work with one model choice".
+ * That deliberately excludes the two genuinely per-call spenders — a chat turn
+ * (pinned per conversation at creation) and a canvas LLM node (a model field in
+ * its own config) — because a switch on those would be a button that lies.
+ * Both of those start from the SITE DEFAULT, which is settable in the same
+ * places as everything here.
  *
  * This module is deliberately client-importable (plain data, no `$lib/server`
  * imports) so the picker renders the same list the server enforces — same rule
@@ -32,6 +43,7 @@ import {
   DEFAULT_EMBEDDING_MODEL_ID,
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_ART_DIRECTOR_MODEL_ID,
+  DEFAULT_RESEARCH_FAST_MODEL_ID,
 } from '$lib/constants/default-models';
 
 /** Where the setting lives, which decides how a change is applied. */
@@ -58,6 +70,16 @@ export type WorkloadRequirement =
   | 'audio-input'
   /** Emits images as OUTPUT (generation). */
   | 'image-output'
+  /**
+   * Must be an OpenRouter model, not a `codex/` id.
+   *
+   * Not a capability of the model so much as of the route to it: the budgeted
+   * research tiers stream through OpenRouter's client directly (and the Instant
+   * tier through OpenRouter's web plugin), so a Codex pick would be sent to the
+   * wrong base URL as an unknown slug. Refused at save time rather than
+   * discovered at call time on a tier that has 30 seconds to answer.
+   */
+  | 'openrouter'
   | null;
 
 /**
@@ -174,7 +196,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     id: 'doctor',
     scope: 'site',
     label: 'Workflow doctor',
-    blurb: 'The 05:00 workflow doctor that diagnoses failing canvas nodes.',
+    blurb: 'Diagnosing failing canvas nodes — the 05:00 doctor and the runtime self-heal.',
     key: 'jkai.workflowdoctor.model',
     fallbackModelId: DEFAULT_DOCTOR_MODEL_ID,
     requires: 'tools',
@@ -268,6 +290,229 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'none',
     reason:
       "Needs the /v1/embeddings endpoint, which Codex has no equivalent of. OpenRouter's model feed omits embedding models, so there is nothing here to pick from a list — set the slug by hand.",
+  },
+
+  // ── The rest of the site's LLM tasks ─────────────────────────────────────
+  //
+  // Added 2026-09-01 (John, reading /admin/ops/costs: "deep research is locked
+  // to using a specific model as are a few others… I want to be able to define
+  // a model for EVERY type of task").
+  //
+  // Only the first of these was pinned to a constant. The others all followed
+  // the site default already — but "follows the default" and "cannot be changed"
+  // are indistinguishable when there is no key, and on the spend page they read
+  // as one undifferentiated `source:gateway` bucket. Registering them costs
+  // nothing at runtime (`fallbackModelId: null` resolves exactly as before) and
+  // buys two things: a switch per task, and a spend row per task so the switch
+  // has evidence behind it.
+  {
+    id: 'research-fast',
+    scope: 'site',
+    label: 'Research — fast tiers',
+    blurb: 'The budgeted research tiers: Instant, Scan and Brief.',
+    key: 'jkai.research.fast_model',
+    envKey: 'RESEARCH_FAST_MODEL',
+    fallbackModelId: DEFAULT_RESEARCH_FAST_MODEL_ID,
+    requires: 'openrouter',
+    catalogue: 'tools',
+    reason:
+      'These tiers promise an answer inside a wall clock (30s / 90s / 110s), so they must NOT inherit the site default: a reasoning model spends the budget thinking before it emits a token, and a codex/ id costs ~10s on the first call and cannot stream at all. Pick something fast and non-reasoning here, or the tier stops meaning what its label says.',
+  },
+  {
+    id: 'research-deep',
+    scope: 'site',
+    label: 'Research — Investigation',
+    blurb: 'The unbudgeted full research desk: breadth search, extraction, red-team, clustering.',
+    key: 'jkai.research.deep_model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'The one tier with no clock to protect, so it follows the site default and takes whatever quality that buys. It is also the most expensive thing on the site per run — worth pinning UP rather than down if the default ever moves cheap.',
+  },
+  {
+    id: 'builder',
+    scope: 'site',
+    label: 'Autonomous builder',
+    blurb: 'The pi coding agent and the orchestrator planner behind /jkai/builds.',
+    key: 'jkai.builder.model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default. Note a build PINS its model at creation from whatever this resolves to, so changing it affects new builds only — the same rule chat conversations follow.',
+  },
+  {
+    id: 'heartbeat',
+    scope: 'site',
+    label: 'Heartbeat turns',
+    blurb: 'Scheduled heartbeat turns that continue a conversation unattended.',
+    key: 'jkai.heartbeat.model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default. Worth knowing before changing it: these run unattended on a timer, so a slow or expensive pick here is spent without anyone watching.',
+  },
+  {
+    id: 'briefing',
+    scope: 'site',
+    label: 'Daily briefing',
+    blurb: 'The scheduled briefing that assembles the day from verified sources.',
+    key: 'jkai.briefing.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'blog',
+    scope: 'site',
+    label: 'Blog assistant',
+    blurb: 'The editor assistant, auto-review and claim-checking on /admin/blog.',
+    key: 'jkai.blog.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'chat-maintenance',
+    scope: 'site',
+    label: 'Chat housekeeping',
+    blurb: 'History compression and memory review — the background work on a long thread.',
+    key: 'jkai.chat.maintenance_model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Nobody reads this output directly; it only has to be faithful. A cheap fast model is the obvious pin, and it is separated from the chat turn itself precisely so pinning one does not move the other.',
+  },
+  {
+    id: 'intel-analysis',
+    scope: 'site',
+    label: 'Intel analysis',
+    blurb: 'Note preprocessing, entity briefs, recall and conflation repair in the intel graph.',
+    key: 'jkai.intel.analysis_model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Distinct from Entity extraction, which is the latency-critical post-reply pass. This is the read side — briefs and recall a person waits on deliberately — so it can afford a better model than extraction can.',
+  },
+  {
+    id: 'notebook',
+    scope: 'site',
+    label: 'Notebook research',
+    blurb: 'The scan / brief passes behind /jkai/notes.',
+    key: 'jkai.notebook.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'project-chat',
+    scope: 'site',
+    label: 'Project page chats',
+    blurb: 'The study chats and authoring aids on /projects (policy engine, data spine, DfE, ARCHETYPE).',
+    key: 'jkai.projects.chat_model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'trails',
+    scope: 'site',
+    label: 'Trails interpretation',
+    blurb: 'Turning a recorded route into prose on /trails.',
+    key: 'jkai.trails.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'landing',
+    scope: 'site',
+    label: 'Landing hero titles',
+    blurb: 'The rotating hero titles generated for the landing page.',
+    key: 'jkai.landing.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'delegation',
+    scope: 'site',
+    label: 'Agent delegation',
+    blurb: 'Sub-agents from the agent team, when one is dispatched without its own model.',
+    key: 'jkai.delegation.model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'An agent row may name its own model, which still wins. This is what a team member with no model of its own runs on.',
+  },
+  {
+    id: 'rag',
+    scope: 'site',
+    label: 'RAG answering',
+    blurb: 'Answers synthesised over a document collection, with citations.',
+    key: 'jkai.rag.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'The ANSWER model, not the embedding model — those are separate roles because they are separately consequential: changing this one is free, and changing Embeddings invalidates every stored vector.',
+  },
+  {
+    id: 'mapping',
+    scope: 'site',
+    label: 'Canvas edge mapping',
+    blurb: 'Proposing the field mapping when two canvas nodes are wired together.',
+    key: 'jkai.mapping.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Falls back to a deterministic heuristic on any failure, so this is the one role where a bad pick degrades rather than breaks — which also means a broken pick here is easy to miss.',
+  },
+  {
+    id: 'health',
+    scope: 'site',
+    label: 'Health narratives',
+    blurb: 'The narrative and hero copy over the health metrics on /health.',
+    key: 'jkai.health.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
+  },
+  {
+    id: 'releases',
+    scope: 'site',
+    label: 'Release summaries',
+    blurb: 'Turning a deploy diff into the release log entry.',
+    key: 'jkai.releases.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Runs against a whole diff, so it is context-hungry: the largest releases already blow the gateway\'s 90s non-streaming ceiling on a reasoning model and fall back to a compact second pass. Pin something fast with a large window rather than something clever.',
+  },
+  {
+    id: 'tool-suggestions',
+    scope: 'site',
+    label: 'Tool-usage suggestions',
+    blurb: 'The admin tool-usage audit that proposes toolchain changes.',
+    key: 'jkai.tooling.suggestions_model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason: null,
   },
 ];
 

@@ -10,7 +10,8 @@ import { error } from '@sveltejs/kit';
 import { extractText, synthesize } from '$lib/jkai/extract';
 import { isOwnerEmail } from '$lib/server/access';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { MATURITY_DIMENSIONS } from '$lib/dfe-data-strategy/maturity';
 import { PRESSURES } from '$lib/dfe-data-strategy/pressures';
 import { POSTURE_AXES } from '../lib/postures';
@@ -45,7 +46,21 @@ function parseJson(s: string): any {
   return JSON.parse(t);
 }
 
-export const POST: RequestHandler = async (event) => {
+/**
+ * Tagged as the `project-chat` workload, so this page's spend lands on the row
+ * that also carries its model switch.
+ *
+ * Wrapped at the HANDLER rather than at the LLM call: the answer is streamed
+ * from inside a `ReadableStream` `start()`, which the constructor runs
+ * synchronously in this async context, so one wrapper covers every call the
+ * request makes without touching the streaming code.
+ */
+export const POST: RequestHandler = (event) =>
+  // `async` so the callback returns a Promise: a RequestHandler may return a
+  // bare Response, and `withActivity` takes an async function.
+  withActivity('project-chat', async () => handlePost(event));
+
+const handlePost: RequestHandler = async (event) => {
   await requireOwner(event);
 
   // ---- export mode ----
@@ -93,7 +108,7 @@ For posture nudges, value is −1…1 (−1=left label, +1=right label). For all
 VOCABULARY:
 ${vocab()}`;
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
+  const { client, model } = await getLLMClient(await resolveProjectChatModel());
   let parsed: any;
   try {
     const completion = await client.chat.completions.create(

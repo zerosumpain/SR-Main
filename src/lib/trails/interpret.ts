@@ -5,7 +5,8 @@
 // request that names no distance must not have one invented for it.
 
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveTrailsModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { ORS_PROFILES, type PlannerSport } from './ors';
 
 export interface InterpretedCommission {
@@ -116,19 +117,21 @@ export function parseCommissionJson(raw: string): InterpretedCommission {
 }
 
 export async function interpretCommission(text: string): Promise<InterpretedCommission> {
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveTrailsModel();
   const { client, model } = await getLLMClient(ctx);
 
   const completion = await Promise.race([
-    client.chat.completions.create({
-      model,
-      temperature: 0,
-      max_tokens: 300,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: text },
-      ],
-    }),
+    withActivity('trails', () =>
+      client.chat.completions.create({
+        model,
+        temperature: 0,
+        max_tokens: 300,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: text },
+        ],
+      }),
+    ),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new InterpretError('The model took too long')), 12_000),
     ),

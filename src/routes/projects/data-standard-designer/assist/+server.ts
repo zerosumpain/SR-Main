@@ -12,7 +12,8 @@
 import { json, error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { IDENTIFIERS, CATALOG } from '../lib/knowledge';
 import { CODELISTS } from '../lib/codelists';
 import { LEGAL_LEAVES } from '../lib/legalBasis';
@@ -58,7 +59,21 @@ const DESIGN_SHAPE = `Return STRICT JSON:
 }
 Prefer reusing identifierIds and codelistIds over bespoke fields. Always include a record id and a date/reference-period field. Keep the mandatory core lean. For children's or special-category data set the flags and a DPIA-aware legalBasis.`;
 
-export const POST: RequestHandler = async (event) => {
+/**
+ * Tagged as the `project-chat` workload, so this page's spend lands on the row
+ * that also carries its model switch.
+ *
+ * Wrapped at the HANDLER rather than at the LLM call: the answer is streamed
+ * from inside a `ReadableStream` `start()`, which the constructor runs
+ * synchronously in this async context, so one wrapper covers every call the
+ * request makes without touching the streaming code.
+ */
+export const POST: RequestHandler = (event) =>
+  // `async` so the callback returns a Promise: a RequestHandler may return a
+  // bare Response, and `withActivity` takes an async function.
+  withActivity('project-chat', async () => handlePost(event));
+
+const handlePost: RequestHandler = async (event) => {
   await requireProjectPublic('data-standard-designer', event);
   const ip = event.getClientAddress?.() ?? 'unknown';
   if (rateLimited(ip)) throw error(429, 'Too many requests — give it a minute.');
@@ -79,7 +94,7 @@ export const POST: RequestHandler = async (event) => {
     : body.mode === 'find-standards' ? 'find-standards'
     : 'design';
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
+  const { client, model } = await getLLMClient(await resolveProjectChatModel());
 
   let system: string;
   let user: string;

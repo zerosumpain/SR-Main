@@ -4,7 +4,7 @@
 // through the agent's persona. Shared findings flow through the team-memory
 // datastore collection (all agents are the `jkai` actor).
 import { generalChat } from '$lib/workflows/chat/general-chat';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveDelegationModel } from '$lib/server/models/workload-settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { currentSessionModel, currentSessionThinkingLevel } from '$lib/context/chat';
@@ -43,7 +43,9 @@ export async function delegateToAgent(
   const sessionModel = currentSessionModel();
   const modelContext = agent.model
     ? coerceModelContext({ provider: 'openrouter', modelId: agent.model })
-    : (sessionModel ?? (await resolveDefaultModel()));
+    // Agent's own model, then the session's pin, then the `delegation` workload
+    // (which follows the site default until pinned).
+    : (sessionModel ?? (await resolveDelegationModel()));
 
   const whitelist = agent.allowedTools?.length
     ? [...new Set([...agent.allowedTools, ...META_TOOLS])]

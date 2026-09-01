@@ -2,7 +2,8 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from '$lib/llm/keys';
 import { getLLMClient, getGroundedCodexClient } from '$lib/llm/client';
 import { readCitations, type Citation } from './grounding';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveResearchDeepModel } from '$lib/server/models/workload-settings';
+import { coerceModelContext } from '$lib/constants/default-models';
 import { currentSessionModel } from '$lib/context/chat';
 import {
   isRateLimitError,
@@ -43,21 +44,26 @@ export { isRateLimitError };
 
 /**
  * Primary client + model: the chat session's pinned model when a pinned thread
- * started this run, otherwise the admin-configured site default (OpenRouter).
+ * started this run, otherwise the `research-deep` workload.
  *
  * A budgeted `research_start` runs synchronously inside the chat turn, so the
  * ambient pin reaches it; an unbounded one is spawned from the turn and inherits
  * the same async context. Both are work the owner kicked off from a thread whose
  * model they chose. Every other entry point — the research pages, the scheduled
- * runs, `runResearchSync` from a route — has no chat context at all and resolves
- * the site default exactly as before.
+ * runs, `runResearchSync` from a route — has no chat context at all and falls
+ * through to the role.
+ *
+ * That role is the Investigation tier: the only tier with no clock to protect,
+ * and therefore the only one with no business pinning a fast model. Unset it
+ * follows the site default, so this is identical to the site-default lookup it
+ * replaced until someone pins it from the picker.
  *
  * Embeddings are untouched: `generateEmbedding` resolves its own model through
  * `getEmbeddingModel()` and asserts the vector width, because a chat model is
  * not an embedding model in any circumstance.
  */
 async function getPrimary(): Promise<{ client: import('openai').default; model: string }> {
-  return getLLMClient(currentSessionModel() ?? (await resolveDefaultModel()));
+  return getLLMClient(currentSessionModel() ?? (await resolveResearchDeepModel()));
 }
 
 // GLM-class reasoning models spend a lot of reasoning time: a medium 2k-token
@@ -207,8 +213,12 @@ export async function jsonCompletion<T>(
   // tiers pin a fast non-reasoning id precisely because the site default may be
   // slow, and silently falling back to `getPrimary()` would hand them back the
   // latency they pinned to avoid.
+  //
+  // Routed through `getLLMClient` rather than straight at OpenRouter's client:
+  // the pinned id now comes from a workload role an operator can set, and a
+  // `codex/` pick posted to OpenRouter is an unknown slug, not a Codex call.
   const { client, model } = options?.model
-    ? { client: await getOpenRouterClient(), model: options.model }
+    ? await getLLMClient(coerceModelContext({ modelId: options.model }))
     : await getPrimary();
   const jsonSystemPrompt = systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.';
   const messages = [
@@ -359,7 +369,7 @@ export async function streamCompletion(
   // An explicitly-passed model is the caller's deliberate choice — no fallback.
   const explicitModel = !!options?.model;
   const { client, model } = explicitModel
-    ? { client: await getOpenRouterClient(), model: options!.model! }
+    ? await getLLMClient(coerceModelContext({ modelId: options!.model! }))
     : await getPrimary();
   const messages = [
     { role: 'system' as const, content: systemPrompt },

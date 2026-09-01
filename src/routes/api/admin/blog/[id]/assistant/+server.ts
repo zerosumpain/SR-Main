@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBlogModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { getLLMClient } from '$lib/llm/client';
 import { runAssistant } from '$lib/blog/assistant/runner';
 import { appendMessage, loadHistory } from '$lib/blog/assistant/messages';
@@ -15,7 +16,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   console.log(`[blog-assistant] post=${postId} user=${userMessage.slice(0, 80).replace(/\n/g, ' ')}`);
 
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveBlogModel();
   const { client, model } = await getLLMClient(ctx);
   const history = await loadHistory(postId);
 
@@ -32,15 +33,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
       let assistantText = '';
       const counts = { text: 0, proposal: 0, error: 0 };
       try {
-        for await (const ev of runAssistant({ postId, userMessage, history, client, model })) {
-          send(ev);
-          if (ev.type === 'text') { assistantText += ev.delta; counts.text++; }
-          if (ev.type === 'proposal') {
-            counts.proposal++;
-            await appendMessage(postId, 'proposal', JSON.stringify(ev.proposal));
+        // The whole iteration, not each call: the assistant is a generator that
+        // may make several LLM calls per turn, and its `next()` runs inside this
+        // context, so one wrapper tags all of them.
+        await withActivity('blog', async () => {
+          for await (const ev of runAssistant({ postId, userMessage, history, client, model })) {
+            send(ev);
+            if (ev.type === 'text') { assistantText += ev.delta; counts.text++; }
+            if (ev.type === 'proposal') {
+              counts.proposal++;
+              await appendMessage(postId, 'proposal', JSON.stringify(ev.proposal));
+            }
+            if (ev.type === 'error') counts.error++;
           }
-          if (ev.type === 'error') counts.error++;
-        }
+        });
       } catch (e) {
         send({ type: 'error', message: e instanceof Error ? e.message : 'unknown error' });
         console.error(`[blog-assistant] post=${postId} stream error:`, e);

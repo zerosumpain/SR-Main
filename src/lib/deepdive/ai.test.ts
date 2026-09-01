@@ -15,14 +15,19 @@ const mockFallbackCreate = vi.fn();
 let primaryModel = 'z-ai/glm-5.2';
 let fallbackModel = 'google/gemini-3.1-flash-lite-preview';
 
+// Echoes the context back as the model, so a test can prove an EXPLICIT model
+// reached the client rather than only that some call was made.
 vi.mock('$lib/llm/client', () => ({
-  getLLMClient: vi.fn(async () => ({
+  getLLMClient: vi.fn(async (ctx?: { modelId?: string }) => ({
     client: { chat: { completions: { create: mockPrimaryCreate } } },
-    model: primaryModel,
+    model: ctx?.modelId ?? primaryModel,
   })),
 }));
-vi.mock('$lib/server/models/settings', () => ({
-  resolveDefaultModel: vi.fn(async () => ({ provider: 'openrouter', modelId: primaryModel })),
+// `getPrimary()` resolves the `research-deep` workload, not the bare site
+// default — unset, that role follows the default, so the value under test is
+// unchanged; only the module it comes from moved.
+vi.mock('$lib/server/models/workload-settings', () => ({
+  resolveResearchDeepModel: vi.fn(async () => ({ provider: 'openrouter', modelId: primaryModel })),
 }));
 vi.mock('$lib/llm/keys', () => ({
   getOpenRouterClient: async () => ({ chat: { completions: { create: mockFallbackCreate } } }),
@@ -332,10 +337,12 @@ describe('streamCompletion', () => {
   });
 
   it('does NOT apply fallback when the caller explicitly chose a model', async () => {
-    // When options.model is set, streamCompletion uses getOpenRouterClient()
-    // directly with that model. A 429 from that path must NOT trigger a second
-    // (fallback) attempt.
-    mockFallbackCreate.mockRejectedValueOnce(rate429());
+    // An explicit model now routes through getLLMClient() like every other
+    // call, so that a `codex/` pin from the research workloads reaches the
+    // bridge instead of being posted to OpenRouter as an unknown slug. What
+    // must NOT change is the no-fallback rule: a 429 on a model the caller
+    // chose deliberately is surfaced, never quietly re-run on another model.
+    mockPrimaryCreate.mockRejectedValueOnce(rate429());
 
     const promise = streamCompletion('sys', 'user', { model: 'anthropic/claude-opus-4' });
     const settled = promise.then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
@@ -343,8 +350,9 @@ describe('streamCompletion', () => {
     const result = await settled;
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.e.status).toBe(429);
-    // Called once (the explicit-model call), never a second time as fallback
-    expect(mockFallbackCreate).toHaveBeenCalledOnce();
-    expect(mockPrimaryCreate).not.toHaveBeenCalled();
+    // Called once with the model the caller asked for, and never re-run.
+    expect(mockPrimaryCreate).toHaveBeenCalledOnce();
+    expect(mockPrimaryCreate.mock.calls[0][0].model).toBe('anthropic/claude-opus-4');
+    expect(mockFallbackCreate).not.toHaveBeenCalled();
   });
 });

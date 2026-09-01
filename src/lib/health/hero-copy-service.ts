@@ -1,4 +1,5 @@
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveHealthModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { getLLMClient } from '$lib/llm/client';
 
 export interface HeroCopy {
@@ -128,27 +129,29 @@ function tryParseJson(s: string): unknown {
 }
 
 async function callLLM(input: HeroCopyInput): Promise<HeroCopy | null> {
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveHealthModel();
   const { client, model } = await getLLMClient(ctx);
   const { system, user } = buildPrompt(input);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const completion = await client.chat.completions.create(
-      {
-        model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0.9,
-        // The default model (a GLM) consumes reasoning tokens out of max_tokens
-        // before any visible output — 800 was getting truncated mid-strap.
-        // Reasoning often eats 700-1500 tokens on its own; give it room for both.
-        max_tokens: 3000,
-      },
-      { signal: controller.signal },
+    const completion = await withActivity('health', () =>
+      client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          temperature: 0.9,
+          // The default model (a GLM) consumes reasoning tokens out of max_tokens
+          // before any visible output — 800 was getting truncated mid-strap.
+          // Reasoning often eats 700-1500 tokens on its own; give it room for both.
+          max_tokens: 3000,
+        },
+        { signal: controller.signal },
+      ),
     );
     const text = completion.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text) {

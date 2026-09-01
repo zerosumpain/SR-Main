@@ -14,7 +14,8 @@ import { db } from '$lib/db';
 import { researchSessions, facts, sources, jkaiBuilds } from '$lib/db/schema';
 import { eq, and, ne, inArray } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveNotebookModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { emitLog } from './log-emitter';
 import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
@@ -672,21 +673,23 @@ async function synthesiseBrief(
 
   // getLLMClient is async and takes a full ModelContext ({ provider, modelId }),
   // returning { client, model } — NOT a bare client keyed by a model id string.
-  // resolveDefaultModel() already returns a coerced ModelContext (see
+  // resolveNotebookModel() already returns a coerced ModelContext (see
   // $lib/deepdive/ai.ts's getPrimary(), which does exactly this), so it is
   // passed straight through rather than picking modelId back out of it.
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveNotebookModel();
   const { client, model } = await getLLMClient(ctx);
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: CONVERT_PROMPT },
-      { role: 'user', content: `Topic: ${challenge}\n\nFACTS:\n${factsForPrompt}`.slice(0, 120_000) },
-    ],
-    temperature: 0.3,
-    max_tokens: 8192,
-    response_format: { type: 'json_object' },
-  });
+  const completion = await withActivity('notebook', () =>
+    client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: CONVERT_PROMPT },
+        { role: 'user', content: `Topic: ${challenge}\n\nFACTS:\n${factsForPrompt}`.slice(0, 120_000) },
+      ],
+      temperature: 0.3,
+      max_tokens: 8192,
+      response_format: { type: 'json_object' },
+    }),
+  );
   // Record spend against the build, not just this ad-hoc research session.
   // maxCostUsd (see studio.ts's STUDIO_BUDGET) is the hard backstop on a
   // studio build's total spend — same recordBuildUsage/parseUsage pairing

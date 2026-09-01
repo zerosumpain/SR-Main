@@ -5,7 +5,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { getBuildList } from '$lib/jkai/queries';
 import { builderClient } from '$lib/jkai/builder-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { ModelContext } from '$lib/server/models/types';
 import { resolveGitTarget, ALLOWED_GIT_TARGETS } from '$lib/jkai/git-targets';
@@ -86,7 +86,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (modelProvider && modelId) {
     ctx = { provider: modelProvider, modelId };
   } else {
-    ctx = await resolveDefaultModel();
+    ctx = await resolveBuilderModel();
   }
 
   const priceSnapshot = await snapshotPrice(ctx);

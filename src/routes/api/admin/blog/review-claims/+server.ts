@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBlogModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';
 import { plainTextFromHtml } from '$lib/blog/readability';
@@ -58,17 +59,19 @@ function safeJSON<T>(raw: string): T | null {
 }
 
 async function extractClaims(plain: string): Promise<ClaimSeed[]> {
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
-  const res = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: EXTRACT_SYSTEM },
-      { role: 'user', content: `BLOG POST:\n\n${plain}` },
-    ],
-    temperature: 0.2,
-    max_tokens: 1800,
-    response_format: { type: 'json_object' },
-  });
+  const { client, model } = await getLLMClient(await resolveBlogModel());
+  const res = await withActivity('blog', () =>
+    client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: EXTRACT_SYSTEM },
+        { role: 'user', content: `BLOG POST:\n\n${plain}` },
+      ],
+      temperature: 0.2,
+      max_tokens: 1800,
+      response_format: { type: 'json_object' },
+    }),
+  );
   const raw = res.choices[0]?.message?.content ?? '';
   const parsed = safeJSON<{ claims: ClaimSeed[] }>(raw);
   const claims = parsed?.claims ?? [];

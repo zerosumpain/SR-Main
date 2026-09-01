@@ -4,8 +4,9 @@ import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiMemories } from '$lib/db/schema';
 import { eq, and, isNull, lt, desc, gt, or } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveChatMaintenanceModel } from '$lib/server/models/workload-settings';
 import { currentSessionModel } from '$lib/context/chat';
+import { withActivity } from '$lib/context/activity';
 
 const REVIEW_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // conversation idle for 30 min
@@ -75,20 +76,22 @@ async function reviewConversation(conversationId: string): Promise<number> {
 
   // Call LLM for extraction
   const { client, model } = await getLLMClient(
-    currentSessionModel() ?? (await resolveDefaultModel()),
+    currentSessionModel() ?? (await resolveChatMaintenanceModel()),
   );
 
   let response;
   try {
-    response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: conversationText },
-      ],
-      temperature: 0.3,
-      max_tokens: 1024,
-    });
+    response = await withActivity('chat-maintenance', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: conversationText },
+        ],
+        temperature: 0.3,
+        max_tokens: 1024,
+      }),
+    );
   } catch (err) {
     console.error(`[memory-review] LLM call failed for conversation ${conversationId}:`, err instanceof Error ? err.message : err);
     return 0;

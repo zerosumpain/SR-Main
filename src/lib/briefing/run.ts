@@ -4,7 +4,9 @@
 import { ownerPhone } from '$lib/config/owner';
 import { randomUUID } from 'crypto';
 import { ensureCollection, updateCollection, upsertRecord } from '$lib/datastore';
-import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
+import { getSetting } from '$lib/server/models/settings';
+import { resolveBriefingModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { gatherBriefingSignals, type BriefingSignals } from './gather';
 import {
   BRIEFINGS_COLLECTION,
@@ -72,7 +74,7 @@ function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = 
 }
 
 async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{ markdown: string; llmCalls: number; costUsd: number }> {
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveBriefingModel();
   const { getLLMClient } = await import('$lib/llm/client');
   const { client, model } = await getLLMClient(ctx);
 
@@ -89,15 +91,17 @@ async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{
     'You are the user\'s personal chief-of-staff writing their briefing. Be concise, warm, and useful. ' +
     'Output GitHub-flavoured markdown only — no preamble, no code fences around the whole thing.';
 
-  const resp = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: buildPrompt(signals, topics, feedbackLine) },
-    ],
-    max_tokens: 2000,
-    temperature: 0.4,
-  });
+  const resp = await withActivity('briefing', () =>
+    client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: buildPrompt(signals, topics, feedbackLine) },
+      ],
+      max_tokens: 2000,
+      temperature: 0.4,
+    }),
+  );
 
   const markdown = resp.choices[0]?.message?.content?.trim() || '(no briefing generated)';
   const tin = resp.usage?.prompt_tokens ?? 0;

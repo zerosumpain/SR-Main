@@ -1,7 +1,8 @@
 import { ensureCollection, upsertRecord, getRecordByKey } from '$lib/datastore';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveChatMaintenanceModel } from '$lib/server/models/workload-settings';
 import { currentSessionModel } from '$lib/context/chat';
+import { withActivity } from '$lib/context/activity';
 import type { HistoryMessage } from './conversation-history';
 
 /**
@@ -131,19 +132,23 @@ async function summarise(text: string, previous: string | null): Promise<string 
     // The session's pin first. Compaction rewrites the thread's own history —
     // running it on a different model than the thread is the one place a
     // mismatch actively rewrites what the pinned model gets to read next turn.
-    const ctx = currentSessionModel() ?? (await resolveDefaultModel());
+    // Unpinned, the `chat-maintenance` role answers rather than the bare site
+    // default, so this background work can be moved somewhere cheap on its own.
+    const ctx = currentSessionModel() ?? (await resolveChatMaintenanceModel());
     const { client, model } = await getLLMClient(ctx);
     const user = previous
       ? `Digest so far (fold the new messages into it, keeping what still matters):\n\n${previous}\n\n---\n\nNew messages that just fell out of the window:\n\n${text}`
       : text;
-    const res = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: PROMPT },
-        { role: 'user', content: user },
-      ],
-      max_tokens: 1500,
-    });
+    const res = await withActivity('chat-maintenance', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: PROMPT },
+          { role: 'user', content: user },
+        ],
+        max_tokens: 1500,
+      }),
+    );
     const out = res.choices?.[0]?.message?.content?.trim() ?? '';
     return out.length > 40 ? out : null;
   } catch (err) {

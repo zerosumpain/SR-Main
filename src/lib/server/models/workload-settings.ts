@@ -242,6 +242,75 @@ export const resolveAudioModel = () => resolveById('audio');
 /** Deck slide art direction. */
 export const resolveArtDirectorModel = () => resolveById('art-director');
 
+/**
+ * The budgeted research tiers (instant / scan / brief).
+ *
+ * Reads the legacy `RESEARCH_FAST_MODEL` env var below the pin, the same
+ * precedence `resolveImageToolModel` uses: setting the model from the page has
+ * to beat a variable in a `.env` nobody has looked at since it was written.
+ * Never falls through to the site default — the whole point of this role is
+ * that a tier with a wall clock must not inherit a reasoning model.
+ */
+export async function resolveResearchFastModel(): Promise<ModelContext> {
+  const def = SITE_WORKLOADS.find((w) => w.id === 'research-fast')!;
+  const pinned = await getSetting<{ modelId?: string } | null>(def.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  const fromEnv = envModelFor(def);
+  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
+  return coerceModelContext({ modelId: def.fallbackModelId! });
+}
+
+/** The unbudgeted Investigation tier. Follows the site default until pinned. */
+export const resolveResearchDeepModel = () => resolveById('research-deep');
+
+/** The autonomous builder — pi runs and the orchestrator planner. */
+export const resolveBuilderModel = () => resolveById('builder');
+
+/** Unattended heartbeat turns. */
+export const resolveHeartbeatModel = () => resolveById('heartbeat');
+
+/** The scheduled daily briefing. */
+export const resolveBriefingModel = () => resolveById('briefing');
+
+/** The blog editor assistant, auto-review and claim checks. */
+export const resolveBlogModel = () => resolveById('blog');
+
+/** Chat history compression and memory review. */
+export const resolveChatMaintenanceModel = () => resolveById('chat-maintenance');
+
+/** Intel's read side: preprocessing, briefs, recall and conflation repair. */
+export const resolveIntelAnalysisModel = () => resolveById('intel-analysis');
+
+/** The notebook's scan / brief passes. */
+export const resolveNotebookModel = () => resolveById('notebook');
+
+/** The study chats and authoring aids on /projects. */
+export const resolveProjectChatModel = () => resolveById('project-chat');
+
+/** Route interpretation on /trails. */
+export const resolveTrailsModel = () => resolveById('trails');
+
+/** The landing page's rotating hero titles. */
+export const resolveLandingModel = () => resolveById('landing');
+
+/** A delegated sub-agent that names no model of its own. */
+export const resolveDelegationModel = () => resolveById('delegation');
+
+/** RAG answer synthesis. NOT the embedding model — see `resolveEmbeddingModel`. */
+export const resolveRagModel = () => resolveById('rag');
+
+/** Canvas edge field-mapping proposals. */
+export const resolveMappingModel = () => resolveById('mapping');
+
+/** Health narratives and hero copy. */
+export const resolveHealthModel = () => resolveById('health');
+
+/** Release-log summaries. */
+export const resolveReleasesModel = () => resolveById('releases');
+
+/** The admin tool-usage audit's suggestions. */
+export const resolveToolSuggestionsModel = () => resolveById('tool-suggestions');
+
 function sourceFor(def: WorkloadDef, set: string | null): WorkloadSource {
   if (set) return 'pinned';
   if (envModelFor(def)) return 'env';
@@ -314,6 +383,11 @@ export async function workloadBlockReason(
       return getModelCapabilities(ctx).image
         ? null
         : `${modelId} cannot accept images, so it cannot serve ${def.label}. It would answer the prompt and ignore the picture.`;
+
+    case 'openrouter':
+      return ctx.provider === 'openrouter'
+        ? null
+        : `${def.label} streams through OpenRouter directly, so a ${ctx.provider} model cannot serve it — the id would be sent to the wrong endpoint.`;
 
     case 'audio-input':
       return getModelCapabilities(ctx).audio

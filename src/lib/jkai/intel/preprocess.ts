@@ -1,5 +1,6 @@
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveVisionModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
 
@@ -8,10 +9,16 @@ export async function ocrHandwriting(attachment: JkaiAttachment): Promise<string
   const base64 = buffer.toString('base64');
   const mimeType = attachment.mimeType || 'image/jpeg';
 
-  const modelCtx = await resolveDefaultModel();
+  // The VISION role, not the site default. This call sends an image_url part,
+  // and the site default may be text-only (any codex/ id is) — which does not
+  // fail, it answers the prompt and ignores the picture. That is the exact
+  // failure `jkai.vision.model` exists to prevent; this call site was simply
+  // never moved onto it.
+  const modelCtx = await resolveVisionModel();
   const { client, model } = await getLLMClient(modelCtx);
 
-  const response = await client.chat.completions.create({
+  const response = await withActivity('vision', () =>
+    client.chat.completions.create({
     model,
     max_tokens: 4096,
     messages: [
@@ -29,7 +36,8 @@ export async function ocrHandwriting(attachment: JkaiAttachment): Promise<string
         ],
       },
     ],
-  });
+    }),
+  );
 
   return response.choices[0]?.message?.content ?? '';
 }

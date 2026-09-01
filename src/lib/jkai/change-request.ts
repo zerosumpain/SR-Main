@@ -17,7 +17,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveBuilderModel } from '$lib/server/models/workload-settings';
 import type { ModelContext } from '$lib/server/models/types';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
@@ -127,12 +127,13 @@ export async function createChangeRequest({
     labels: labels ?? ['change-request'],
   });
 
-  // The asking session's pin, then the site default. A thread pinned to a model
-  // now re-tasks the builder it starts, which is the behaviour the picker always
-  // implied and never had — before this, a change request raised from a thread
-  // running on one model built on whichever model happened to be the site
-  // default when the build began.
-  const ctx = modelContext ?? (await resolveDefaultModel());
+  // The asking session's pin, then the `builder` workload. A thread pinned to a
+  // model now re-tasks the builder it starts, which is the behaviour the picker
+  // always implied and never had — before this, a change request raised from a
+  // thread running on one model built on whichever model happened to be the
+  // site default when the build began. With no pin the role answers, and the
+  // role follows the site default until someone points it elsewhere.
+  const ctx = modelContext ?? (await resolveBuilderModel());
   const priceSnapshot = await snapshotPrice(ctx);
 
   // Whichever of those two it was, the agent runtime has to recognise the id.

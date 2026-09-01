@@ -7,7 +7,8 @@ import { workflowFiles, ragCollections } from '$lib/db/schema';
 import { readBuffer } from '$lib/file-store/storage';
 import { extractText, kindFromMime } from '$lib/jkai/extract';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveRagModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import type { ModelContext } from '$lib/server/models/types';
 import { chunkText } from './chunk';
 import { embedBatch, embedQuery } from './embed';
@@ -232,8 +233,10 @@ export async function answer(
     ? `${block}\n\n--- Question ---\n${question}`
     : `The document index returned no relevant excerpts for this question.\n\n--- Question ---\n${question}`;
 
-  const ctx = opts.model ?? (await resolveDefaultModel());
-  const text = await streamAnswer(ctx, SYSTEM_PROMPT, userPrompt, { onToken: opts.onToken, signal: opts.signal });
+  const ctx = opts.model ?? (await resolveRagModel());
+  const text = await withActivity('rag', () =>
+    streamAnswer(ctx, SYSTEM_PROMPT, userPrompt, { onToken: opts.onToken, signal: opts.signal }),
+  );
 
   return { text, citations: block ? citations : [], usedContext: !!block };
 }

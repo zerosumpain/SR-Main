@@ -7,6 +7,7 @@ import {
   BRIEF_BUDGET_MS,
   DEFAULT_FAST_MODEL,
 } from './depth';
+import { WORKLOADS } from '$lib/models/workloads';
 
 describe('coerceDepth', () => {
   it('passes through every known depth', () => {
@@ -116,17 +117,29 @@ describe('depthPreset', () => {
   // Fast tiers must not inherit the site default: it may be a reasoning model
   // (reasoning tokens eat max_tokens and add tens of seconds) or a codex/ id
   // (~10s on the first call). Either would blow a 110s budget on its own.
-  it('pins a model on the fast tiers and leaves investigation on the site default', () => {
-    expect(depthPreset('instant').pinnedModel).toBeTruthy();
-    expect(depthPreset('scan').pinnedModel).toBeTruthy();
-    expect(depthPreset('brief').pinnedModel).toBeTruthy();
-    expect(depthPreset('investigation').pinnedModel).toBeNull();
+  it('puts the fast tiers on their own role and investigation on the deep one', () => {
+    expect(depthPreset('instant').modelRole).toBe('research-fast');
+    expect(depthPreset('scan').modelRole).toBe('research-fast');
+    expect(depthPreset('brief').modelRole).toBe('research-fast');
+    expect(depthPreset('investigation').modelRole).toBe('research-deep');
   });
 
-  it('never pins a codex model on a budgeted tier', () => {
-    for (const d of ['instant', 'scan', 'brief'] as const) {
-      expect(depthPreset(d).pinnedModel).not.toMatch(/^codex\//);
-    }
+  // The tier no longer names a model id, so "never a codex id on a budgeted
+  // tier" is enforced where the id is now chosen: `research-fast` declares
+  // `requires: 'openrouter'`, which `workloadBlockReason` refuses a codex/ pick
+  // against at save time. Asserted here too, because the CONSTANT is still the
+  // value every unpinned install runs on.
+  it('never defaults a budgeted tier onto a codex model', () => {
+    expect(DEFAULT_FAST_MODEL).not.toMatch(/^codex\//);
+  });
+
+  it('keeps the fast role refusing codex at save time', () => {
+    const fast = WORKLOADS.find((w) => w.id === 'research-fast')!;
+    expect(fast.requires).toBe('openrouter');
+    expect(fast.fallbackModelId).toBe(DEFAULT_FAST_MODEL);
+    // The legacy env var must stay declared on the registry, or the picker and
+    // the resolver disagree about what is actually answering.
+    expect(fast.envKey).toBe('RESEARCH_FAST_MODEL');
   });
 
   // Regression: the pin was originally derived from getFallbackModel(), which
@@ -135,8 +148,7 @@ describe('depthPreset', () => {
   // 110s budget and returned an empty answer — reasoning tokens consume
   // max_tokens before any content is emitted. The pin must not track a setting
   // that exists for a different purpose.
-  it('pins a fixed fast model rather than tracking the rate-limit fallback', () => {
-    expect(depthPreset('brief').pinnedModel).toBe(DEFAULT_FAST_MODEL);
+  it('defaults to a fixed fast model rather than tracking the rate-limit fallback', () => {
     expect(DEFAULT_FAST_MODEL).not.toMatch(/glm|reason|thinking/i);
   });
 

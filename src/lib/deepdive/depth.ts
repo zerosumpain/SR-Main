@@ -11,15 +11,20 @@
  * the existing phases already understand, plus three things they did not have:
  * a wall-clock budget, a phase list, and a pinned model.
  *
- * On the pinned model: the fast tiers must NOT inherit the site default. It may
- * be a reasoning model (reasoning tokens eat `max_tokens` and add tens of
- * seconds before the first content token) or a `codex/` id (~10s on the first
- * call, and it cannot stream reasoning at all). Either would spend most of a
- * 110-second budget before saying anything. `investigation` has no clock to
- * protect, so it keeps the site default and whatever quality that buys.
+ * On the model: the fast tiers must NOT inherit the site default. It may be a
+ * reasoning model (reasoning tokens eat `max_tokens` and add tens of seconds
+ * before the first content token) or a `codex/` id (~10s on the first call, and
+ * it cannot stream reasoning at all). Either would spend most of a 110-second
+ * budget before saying anything. `investigation` has no clock to protect, so it
+ * takes whatever quality the operator's pick buys.
+ *
+ * A tier names its ROLE here rather than a model id. Both roles are entries in
+ * the workload registry (`$lib/models/workloads`), so the model behind either
+ * is settable from the model picker and from /admin/ops/costs — which is the
+ * whole point: this used to be a constant plus an env var, i.e. a model the
+ * spend page could name and no screen could change.
  */
 import type { SessionConfig } from './types';
-import { env } from '$env/dynamic/private';
 
 export const RESEARCH_DEPTHS = ['instant', 'scan', 'brief', 'investigation'] as const;
 export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number];
@@ -81,8 +86,15 @@ export interface DepthPreset {
   budgetMs: number | null;
   /** Milliseconds carved off the tail so synthesis always gets to speak. */
   reserves: { synthesis?: number };
-  /** Model id to force, or null to use the admin-configured site default. */
-  pinnedModel: string | null;
+  /**
+   * The workload role this tier's LLM calls run under.
+   *
+   * Resolve it with `resolveResearchFastModel()` / `resolveResearchDeepModel()`
+   * from `$lib/server/models/workload-settings`. Deliberately NOT resolved here:
+   * this preset is read on page loads and in the API handler purely for its
+   * labels and budgets, and none of those need a database round-trip.
+   */
+  modelRole: 'research-fast' | 'research-deep';
   /** Upper bound on sources; 0 for tiers that do not search. */
   maxSources: number;
   /** The knobs the existing phase code already reads. */
@@ -122,24 +134,23 @@ export function coerceDepth(value: unknown): ResearchDepth {
 }
 
 /**
- * The fast-tier model.
+ * The fast-tier model when nothing is pinned.
  *
- * Hardcoded rather than derived from `getFallbackModel()`, which was the first
- * attempt and was wrong: that setting is the RATE-LIMIT fallback, and this
+ * Re-exported rather than restated — the literal lives beside the other
+ * per-role defaults in `$lib/constants/default-models`, which is also what the
+ * `research-fast` workload reads, so the picker and the runner cannot disagree.
+ *
+ * It was hardcoded rather than derived from `getFallbackModel()`, which was the
+ * first attempt and was wrong: that setting is the RATE-LIMIT fallback, and this
  * install had it configured to `z-ai/glm-5-turbo` — a reasoning model. A brief
  * run on it spent its entire 110s budget and produced an empty answer, because
  * reasoning tokens consume `max_tokens` before any content is emitted. Pinning
  * to a field someone else tunes for a different purpose is not pinning.
  *
- * The requirement is narrow and worth stating: fast, non-reasoning, and not a
- * `codex/` id (those cost ~10s on the first call and cannot stream reasoning).
- * `RESEARCH_FAST_MODEL` overrides it without a deploy.
+ * `RESEARCH_FAST_MODEL` still overrides it without a deploy, now read below the
+ * `jkai.research.fast_model` pin rather than instead of it.
  */
-export const DEFAULT_FAST_MODEL = 'google/gemini-3.5-flash';
-
-function fastModel(): string {
-  return env.RESEARCH_FAST_MODEL || DEFAULT_FAST_MODEL;
-}
+export { DEFAULT_RESEARCH_FAST_MODEL_ID as DEFAULT_FAST_MODEL } from '$lib/constants/default-models';
 
 export function depthPreset(depth: ResearchDepth): DepthPreset {
   const d = coerceDepth(depth);
@@ -156,7 +167,7 @@ export function depthPreset(depth: ResearchDepth): DepthPreset {
         phases: [],
         budgetMs: 30_000,
         reserves: { synthesis: 25_000 },
-        pinnedModel: fastModel(),
+        modelRole: 'research-fast',
         maxSources: 0,
         config: {
           maxSources: 0,
@@ -178,7 +189,7 @@ export function depthPreset(depth: ResearchDepth): DepthPreset {
         phases: [],
         budgetMs: 90_000,
         reserves: { synthesis: 25_000 },
-        pinnedModel: fastModel(),
+        modelRole: 'research-fast',
         maxSources: 12,
         config: {
           maxSources: 12,
@@ -201,7 +212,7 @@ export function depthPreset(depth: ResearchDepth): DepthPreset {
         phases: [],
         budgetMs: BRIEF_BUDGET_MS,
         reserves: { synthesis: 25_000 },
-        pinnedModel: fastModel(),
+        modelRole: 'research-fast',
         maxSources: 15,
         config: {
           maxSources: 15,
@@ -225,7 +236,7 @@ export function depthPreset(depth: ResearchDepth): DepthPreset {
         phases: ['phase1', 'phase2', 'phase3', 'post'],
         budgetMs: null,
         reserves: {},
-        pinnedModel: null,
+        modelRole: 'research-deep',
         maxSources: 40,
         config: {
           maxSources: 40,

@@ -121,6 +121,23 @@ export const DEFAULT_AUDIO_MODEL_ID = 'google/gemini-2.0-flash-001';
  *  loop, so quality is worth the latency here. */
 export const DEFAULT_ART_DIRECTOR_MODEL_ID = 'z-ai/glm-5.2';
 
+/**
+ * The budgeted research tiers (instant / scan / brief).
+ *
+ * The requirement is narrow and worth restating where the literal lives: fast,
+ * NON-reasoning, and not a `codex/` id. Reasoning tokens are billed out of
+ * `max_tokens` and arrive before any content, and a Codex id costs ~10s on the
+ * first call and cannot stream reasoning at all — either would spend most of a
+ * 110-second budget before the reader sees a word. An earlier attempt derived
+ * this from `getFallbackModel()` and got `z-ai/glm-5-turbo`, a reasoning model:
+ * a brief run burned the whole budget and returned an empty answer.
+ *
+ * Moved here from `$lib/deepdive/depth.ts` on 2026-09-01 so there is one
+ * literal per role beside the others, and so the `research-fast` workload can
+ * read the same value the picker shows.
+ */
+export const DEFAULT_RESEARCH_FAST_MODEL_ID = 'google/gemini-3.5-flash';
+
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client
 // localStorage) can still carry bare ids; coerce instead of 400ing at OpenRouter.

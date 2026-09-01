@@ -8,7 +8,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { keystoneIntel, keystoneIntelRuns } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
 import { STRATEGIES } from './strategies';
 import { PRESSURES } from './pressures';
 import { VALID_REFS } from './policy';
@@ -196,7 +196,7 @@ STRATEGY INDEX:
 ${strategyIndex()}`;
   const user = `NEW ITEM:\nTitle: ${c.title}\nPublisher: ${c.publisher ?? '—'}\nType: ${c.docType ?? '—'}\nDate: ${c.publishedAt?.toISOString()?.slice(0, 10) ?? '—'}\nDescription: ${c.description ?? '—'}\nURL: ${c.url}`;
   try {
-    const { client, model } = await getLLMClient(await resolveDefaultModel());
+    const { client, model } = await getLLMClient(await resolveProjectChatModel());
     const res = await client.chat.completions.create(
       {
         model,

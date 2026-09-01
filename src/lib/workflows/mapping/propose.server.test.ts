@@ -54,8 +54,8 @@ vi.mock('$lib/workflows', () => ({
   },
 }));
 
-vi.mock('$lib/server/models/settings', () => ({
-  resolveDefaultModel: vi.fn().mockResolvedValue({ modelId: 'test-model' }),
+vi.mock('$lib/server/models/workload-settings', () => ({
+  resolveMappingModel: vi.fn().mockResolvedValue({ modelId: 'test-model' }),
 }));
 
 vi.mock('$lib/llm/workflow-gateway', () => ({

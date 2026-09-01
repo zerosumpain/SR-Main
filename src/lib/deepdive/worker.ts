@@ -12,6 +12,7 @@ import { linkSessionEntitiesToGlobal } from './cross-session';
 import { extractResearchIntoIntel } from './intel-bridge';
 import { disposeArtefacts, flushArtefacts } from './desk-events';
 import { coerceDepth, depthPreset } from './depth';
+import { withActivity } from '$lib/context/activity';
 import { createBudget, NO_BUDGET } from './budget';
 import { runInstant, runScan } from './fast';
 import { runBrief } from './brief';
@@ -326,7 +327,10 @@ async function runResearchPhases(sessionId: string): Promise<void> {
         preset.runner === 'instant' ? runInstant : preset.runner === 'scan' ? runScan : runBrief;
       await updateSessionStatus(sessionId, 'phase1');
       emitStatus(sessionId, 'phase1');
-      await run(sessionId, session, budget);
+      // Tagged with the tier's workload role so the spend lands on the row that
+      // carries the switch for it. Without this every research call arrives as
+      // `source:research` — one bucket for four tiers on two different models.
+      await withActivity(preset.modelRole, () => run(sessionId, session, budget));
       flushArtefacts(sessionId);
       await finish(sessionId, startTime, priorMs);
       return;
@@ -394,7 +398,10 @@ async function runResearchPhases(sessionId: string): Promise<void> {
       emitStatus(sessionId, 'phase1');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 1: Lead Generation');
       try {
-        await runPhase1(sessionId, session, isTimeUp);
+        // Tagged per phase rather than around the whole chain: the chain's body
+        // returns early on pause and stop, so one wrapper would have to be an
+        // extracted function. Four call sites is the smaller change.
+        await withActivity('research-deep', () => runPhase1(sessionId, session, isTimeUp));
       } catch (err: any) {
         if (err?.name === 'AbortError' || shouldStop(sessionId) || shouldPause(sessionId)) {
           emitLog(sessionId, '\u2139\uFE0F', 'Phase 1 stopped.');
@@ -418,7 +425,7 @@ async function runResearchPhases(sessionId: string): Promise<void> {
       emitStatus(sessionId, 'phase2');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 2: Deep Research');
       try {
-        await runPhase2(sessionId, session, isTimeUp);
+        await withActivity('research-deep', () => runPhase2(sessionId, session, isTimeUp));
       } catch (err: any) {
         if (err?.name === 'AbortError' || shouldStop(sessionId) || shouldPause(sessionId)) {
           emitLog(sessionId, '\u2139\uFE0F', 'Phase 2 stopped.');
@@ -442,7 +449,7 @@ async function runResearchPhases(sessionId: string): Promise<void> {
       emitStatus(sessionId, 'phase3');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 3: Red Teaming');
       try {
-        await runPhase3(sessionId, session, isTimeUp);
+        await withActivity('research-deep', () => runPhase3(sessionId, session, isTimeUp));
       } catch (err: any) {
         if (err?.name === 'AbortError' || shouldStop(sessionId) || shouldPause(sessionId)) {
           emitLog(sessionId, '\u2139\uFE0F', 'Phase 3 stopped.');
@@ -463,7 +470,7 @@ async function runResearchPhases(sessionId: string): Promise<void> {
     emitStatus(sessionId, 'post_processing');
     emitLog(sessionId, '\u2139\uFE0F', 'Starting post-processing');
     try {
-      await runPostProcessing(sessionId, session, isTimeUp);
+      await withActivity('research-deep', () => runPostProcessing(sessionId, session, isTimeUp));
     } catch (err: any) {
       console.error('[deepdive] Post-processing error:', err);
       emitLog(sessionId, '\u26A0\uFE0F', `Post-processing error: ${err.message ?? 'unknown'}`);
