@@ -60,7 +60,7 @@ export interface PonderResult {
 
 const EMPTY: PonderResult = {
   cards: 0,
-  musings: { created: 0, updated: 0, suppressed: 0, muted: 0, protectedSkipped: 0, createdKeys: [], proposed: 0 },
+  musings: { created: 0, updated: 0, suppressed: 0, muted: 0, alreadyRefuted: 0, protectedSkipped: 0, createdKeys: [], proposed: 0 },
   leadsCreated: 0,
   leadsDuplicate: 0,
   rulesAdmitted: 0,
@@ -230,23 +230,32 @@ async function diaryNoteCards(): Promise<PackInputs['aggregates']> {
  * The owner's example is the specification: having ruled that the two Canva
  * rows are one payment, it should stop saying there were two charges.
  */
-async function rulingCardsFor(): Promise<PackInputs['aggregates']> {
+async function rulingCardsFor(): Promise<{
+  cards: PackInputs['aggregates'];
+  /** The refutations as prompt rules, not as cards. One query feeds both: they
+   *  are the same rows read for two different purposes, and two queries would
+   *  let the pack and the rules disagree about what has been settled. */
+  refutedLines: string[];
+}> {
   try {
-    const { rulingCards } = await import('../rulings');
+    const { rulingCards, refutedBlock } = await import('../rulings');
     const rows = await rulingCards();
-    return rows
-      .filter((r) => r.verdict)
-      .map((r) => ({
-        key: `ruling:${r.id}`,
-        text:
-          r.verdict === 'refuted'
-            ? `A reviewer checked "${r.title}" against the sources and it did NOT hold${r.reasoning ? `: ${r.reasoning}` : ''} Do not propose this again.`
-            : `A reviewer checked "${r.title}" against the sources and found it ${r.verdict}${r.reasoning ? `: ${r.reasoning}` : ''}`,
-      }));
+    return {
+      cards: rows
+        .filter((r) => r.verdict)
+        .map((r) => ({
+          key: `ruling:${r.id}`,
+          text:
+            r.verdict === 'refuted'
+              ? `A reviewer checked "${r.title}" against the sources and it did NOT hold${r.reasoning ? `: ${r.reasoning}` : ''} Do not propose this again.`
+              : `A reviewer checked "${r.title}" against the sources and found it ${r.verdict}${r.reasoning ? `: ${r.reasoning}` : ''}`,
+        })),
+      refutedLines: refutedBlock(rows.filter((r) => r.verdict === 'refuted')),
+    };
   } catch {
     // Garnish. The pack stands without it, and a ruling table that cannot be
     // read must not cost the cycle.
-    return [];
+    return { cards: [], refutedLines: [] };
   }
 }
 
@@ -390,12 +399,25 @@ async function leadContext(subject: string): Promise<{ open: string[]; menu: str
   return out;
 }
 
-function systemPrompt(profileLines: string[], ctx: { open: string[]; menu: string[] }): string {
+function systemPrompt(
+  profileLines: string[],
+  ctx: { open: string[]; menu: string[] },
+  refuted: string[],
+): string {
   return [
     "You are the pondering half of John's second brain. On spare cycles you look across everything it knows — family, diary, money, health, email facts, its own past discoveries — and notice crossings worth surfacing: something happening now that connects to a pattern, something coming up that the past says needs acting on early, a question worth investigating.",
     '',
     'WHO HE IS, FROM HIS OWN TRACES:',
     ...profileLines,
+    // What a reviewer went and checked, and found false.
+    //
+    // These already ride in the pack as cards, and that was not enough: a card
+    // is material to reason over, sitting among a hundred others. The leads
+    // frontier taught this the expensive way — fourteen leads rejected for
+    // "unknown metrics" until the vocabulary moved out of a footnote and INTO
+    // the rule that needed it. `ALREADY OPEN` is what fixed leads; this is the
+    // same block for claims, and it sits above the rules for the same reason.
+    ...(refuted.length ? ['', ...refuted] : []),
     '',
     'HARD RULES:',
     '1. Reply with ONE JSON object only: {"musings": [], "leads": [], "actionRules": []}. No prose outside it. Empty arrays are a good answer — most cycles find nothing worth saying.',
@@ -480,7 +502,7 @@ export async function runPonder(
       // reviewer has already SETTLED. Those two go nearest the instruction
       // because they are the two that override: a correction he typed, and a
       // claim that has been checked against the sources and found wanting.
-      aggregates: [...aggregates, ...signals, ...notebook, ...notes, ...diaryNotes, ...rulings],
+      aggregates: [...aggregates, ...signals, ...notebook, ...notes, ...diaryNotes, ...rulings.cards],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
@@ -498,7 +520,7 @@ export async function runPonder(
       temperature: 0.7,
       max_tokens: 1800,
       messages: [
-        { role: 'system', content: systemPrompt(profileLines, leadCtx) },
+        { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines) },
         { role: 'user', content: renderPack(pack) },
       ],
     });

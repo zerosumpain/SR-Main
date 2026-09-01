@@ -16,7 +16,8 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'dri
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
-import { LOCAL_TZ, SETTINGS_MUTED_KINDS_KEY } from './types';
+import { LOCAL_TZ, SETTINGS_MUTED_KINDS_KEY, errMsg } from './types';
+import { echoOf, loadRefutedClaims, type RefutedClaim } from './refutations';
 import {
   adaptiveThreshold,
   contextKey,
@@ -60,6 +61,10 @@ export interface PersistResult {
   suppressed: number;
   /** Dropped before writing because the kind is muted outright. */
   muted: number;
+  /** Written but silenced because a reviewer has already refuted a claim built
+   *  on the same rows. Counted apart from `suppressed` because it is the one
+   *  number that says whether the ruling memory is doing any work. */
+  alreadyRefuted: number;
   /** Dedupe keys inserted (not updated) this run — what lets a caller act
    *  exactly once per NEW thought instead of once per tick. */
   createdKeys: string[];
@@ -71,6 +76,7 @@ export const EMPTY_PERSIST: PersistResult = {
   protectedSkipped: 0,
   suppressed: 0,
   muted: 0,
+  alreadyRefuted: 0,
   createdKeys: [],
 };
 
@@ -172,6 +178,15 @@ export async function persistCandidates(
   const muted = await mutedKinds();
   const feedback = await loadFeedback();
   const scoring = buildScoringContext(feedback, now);
+  // The rows a reviewer has already ruled against. Loaded once per call and
+  // soft: a guard that cannot read its own table must not cost the tick, which
+  // is the same contract the ruling cards keep in the ponder pack.
+  let refuted: RefutedClaim[] = [];
+  try {
+    refuted = await loadRefutedClaims();
+  } catch (err) {
+    console.warn(`[daydream] could not read the refutations: ${errMsg(err)}`);
+  }
 
   const keys = candidates.map((c) => c.dedupeKey);
   const existing = keys.length
@@ -205,7 +220,19 @@ export async function persistCandidates(
     const belowThreshold = score < scoring.threshold;
     const rejectedByReview =
       found?.reviewVerdict === 'refuted' || found?.reviewVerdict === 'uncertain';
-    const status = rejectedByReview
+    // The same claim under a new name.
+    //
+    // Checked before the threshold and after the mute, which is the ordering
+    // that matters: a mute is the owner's and outranks everything, while the
+    // threshold is a score and this is a verdict somebody reached by going and
+    // reading the sources. A candidate whose rows have already been ruled on
+    // never reaches `new`, so it never reaches the reviewer for a second xhigh
+    // pass and never reaches WhatsApp — however it is worded.
+    //
+    // A row carrying a verdict of its own has been judged directly and keeps
+    // that judgement, `verified` included; the echo test is for the rest.
+    const echo = found?.reviewVerdict ? null : echoOf(candidate, refuted);
+    const status = rejectedByReview || echo
       ? 'suppressed'
       : found?.reviewVerdict === 'verified'
         ? 'new'
@@ -216,10 +243,13 @@ export async function persistCandidates(
       ? found.reviewVerdict === 'refuted'
         ? 'refuted_by_review'
         : 'uncertain_after_review'
-      : belowThreshold && found?.reviewVerdict !== 'verified'
-        ? `below_threshold (${score} < ${scoring.threshold})`
-        : null;
+      : echo
+        ? `already_refuted (${echo.title.slice(0, 80)})`
+        : belowThreshold && found?.reviewVerdict !== 'verified'
+          ? `below_threshold (${score} < ${scoring.threshold})`
+          : null;
     if (status === 'suppressed') result.suppressed++;
+    if (echo) result.alreadyRefuted++;
 
     if (found) {
       if ((PROTECTED_STATUSES as readonly string[]).includes(found.status)) {

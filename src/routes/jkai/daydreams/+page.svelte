@@ -53,6 +53,10 @@
   // might not even render its buttons.
   const TABS = [
     { id: 'feed', label: 'Feed' },
+    // Its own room rather than a fold at the bottom of the Feed. The rulings
+    // are what stops a claim being MADE again, which is a different question
+    // from what is being said today.
+    { id: 'memory', label: 'Memory' },
     { id: 'family', label: 'Family' },
     { id: 'discoveries', label: 'Discoveries' },
     { id: 'calendar', label: 'Calendar' },
@@ -310,6 +314,14 @@
 
     if (t.suppressedReason === 'feed_only') {
       lines.push('This kind never pushes by design — it lands here and waits for you, rather than interrupting.');
+    } else if (t.suppressedReason?.startsWith('already_refuted')) {
+      // Said in words, because the raw reason carries the settled claim in
+      // brackets and "already refuted (Canva appears to have charged twice)"
+      // reads as a category rather than as an explanation.
+      const of = t.suppressedReason.match(/\((.*)\)$/)?.[1];
+      lines.push(
+        `Built on rows a reviewer has already ruled against${of ? ` — it settled “${of}”` : ''}. It was not sent and was not reviewed again; the ruling is on the Memory tab.`,
+      );
     } else if (t.suppressedReason && t.suppressedReason !== 'below_threshold') {
       lines.push(`Not delivered because of ${t.suppressedReason.replace(/_/g, ' ')}.`);
     }
@@ -1221,6 +1233,33 @@
     rulingWho === 'all' ? rulings : rulings.filter((r) => r.verdict === rulingWho),
   );
 
+  /**
+   * Verdicts with no memory behind them.
+   *
+   * On the tab badge as well as in the room, because this is the number that
+   * says whether the loop closes at all: `rulingCards` reads only remembered
+   * rulings, so an unremembered one changes nothing about what gets proposed
+   * next and the engine will pay to reach the same conclusion again.
+   */
+  const unrememberedCount = $derived(rulings.filter((r) => !r.memoryId).length);
+
+  /**
+   * Load the rulings when the room is opened.
+   *
+   * The list used to sit behind a Show button at the bottom of the Feed, which
+   * is why the answer to "where is the memory feature" was "nowhere anybody
+   * looked". A tab that arrives empty until you press something has the same
+   * problem in a smaller way. Same shape as the Family map's lazy load: the
+   * tracked read is the tab, the fetch is untracked, so this cannot re-fire on
+   * the state it sets.
+   */
+  $effect(() => {
+    const onTab = tab;
+    untrack(() => {
+      if (onTab === 'memory' && !rulingsOpen && !rulingsLoading) void loadRulings();
+    });
+  });
+
   async function loadRulings() {
     rulingsOpen = true;
     rulingsLoading = true;
@@ -1496,6 +1535,7 @@
 
   const shellTabs = $derived<ShellTab[]>([
     { id: 'feed', label: 'Feed', count: needsRating, tone: 'action' },
+    { id: 'memory', label: 'Memory', count: unrememberedCount, tone: 'watch' },
     { id: 'family', label: 'Family' },
     { id: 'discoveries', label: 'Discoveries' },
     { id: 'calendar', label: 'Calendar' },
@@ -2353,91 +2393,6 @@
       </div>
     </section>
 
-    <!-- ── WHAT IT HAS RULED ON ───────────────────────────────────────────
-         "That list of memories should be accessible somewhere."
-
-         Somewhere is here, under the feed the rulings are about. Every row is
-         a claim a model went and checked against the sources, and every one of
-         them is also a `jkai_memories` row — which is the half that matters.
-         A verdict in a column stops one message going out. A memory stops the
-         claim being MADE again: the ponder pack cards these, refutations
-         first, so the next cycle reads "the two Canva rows are one payment"
-         before it proposes them as two. -->
-    <section class="band" id="dd-rulings">
-      <div class="inner">
-        <SectionHead
-          kicker="C / What it has ruled on"
-          title={['Things it', 'went and checked']}
-          strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict here is also a memory, which is why it does not have to work the same thing out twice."
-        >
-          {#snippet aside()}
-            {#if !rulingsOpen}
-              <button type="button" class="cta" onclick={loadRulings}>Show the rulings</button>
-            {:else}
-              <button type="button" class="btn" onclick={() => { rulingsOpen = false; }}>Close</button>
-            {/if}
-          {/snippet}
-        </SectionHead>
-
-        {#if rulingsOpen}
-          {#if rulingsLoading}
-            <div class="card t-watch"><p class="card-body">Reading what it has settled…</p></div>
-          {:else if rulingsError}
-            <div class="card t-urgent"><p class="card-body">Could not read the rulings: {rulingsError}</p></div>
-          {:else if rulings.length === 0}
-            <div class="card t-quiet">
-              <p class="card-body">
-                Nothing has been ruled on yet. <strong>Queue to model</strong> on any card above
-                sends it to the reviewer — it reads the sources, decides whether the claim is
-                actually true, and writes what it concluded to memory.
-              </p>
-            </div>
-          {:else}
-            <div class="controls">
-              <FacetBar
-                label="Verdict"
-                active={rulingWho}
-                facets={rulingFacets}
-                onpick={(id) => (rulingWho = id as typeof rulingWho)}
-              />
-            </div>
-            <div class="board">
-              {#each rulingsVisible as r (r.id)}
-                <article class="card t-{r.verdict === 'refuted' ? 'urgent' : r.verdict === 'verified' ? 'good' : 'watch'}">
-                  <div class="card-hd">
-                    <span class="card-title as-text">{r.title}</span>
-                    <span class="pill t-{r.verdict === 'refuted' ? 'urgent' : r.verdict === 'verified' ? 'good' : 'watch'}">
-                      {r.verdict === 'refuted' ? 'did not hold' : r.verdict === 'verified' ? 'held up' : 'cannot tell'}
-                    </span>
-                  </div>
-                  {#if r.reasoning}<p class="card-body">{r.reasoning}</p>{/if}
-                  <div class="card-meta">
-                    <span class="tag">{r.kind}</span>
-                    {#if typeof r.likelihood === 'number'}
-                      <span class="meta-item">{Math.round(r.likelihood * 100)}% likely true</span>
-                    {/if}
-                    {#if r.ruledAt}<span class="meta-item">{ago(r.ruledAt)}</span>{/if}
-                    {#if r.model}<span class="meta-item">{r.model}</span>{/if}
-                    <!-- A ruling with no memory behind it changes nothing about
-                         what gets said next, and the page must not let that look
-                         the same as one that does. -->
-                    {#if r.memoryId}
-                      <span class="meta-item good">remembered</span>
-                    {:else}
-                      <span class="meta-item warn">not remembered — check it again to record it</span>
-                    {/if}
-                  </div>
-                  {#if r.sources.length}
-                    <p class="note">Checked: {r.sources.slice(0, 4).join(' · ')}</p>
-                  {/if}
-                </article>
-              {/each}
-            </div>
-          {/if}
-        {/if}
-      </div>
-    </section>
-
     <!-- ── THE SORTING DECK ─────────────────────────────────────────────
          Everything about ranking is a random walk until the ledger has
          feedback in it, and at four interruptions a day the 25 responses the
@@ -2447,7 +2402,7 @@
       <section class="band" id="dd-deck">
         <div class="inner">
           <SectionHead
-            kicker="D / What it nearly said"
+            kicker="C / What it nearly said"
             title={['The things', 'it held back']}
             strap="These scored below the bar, so nothing was sent. That bar was set with no evidence at all — rating a few here is the only thing that moves it. None of this counts as a notification."
           >
@@ -2513,6 +2468,106 @@
         </div>
       </section>
     {/if}
+  {/if}
+
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MEMORY
+       ═══════════════════════════════════════════════════════════════════ -->
+  <!-- "There was the feature of a memory that would guide and influence new
+       suggestions. Where is it?"
+
+       It was here, folded into the bottom of the Feed behind a Show button, on
+       a tab that already has five sections above it. A control nobody can find
+       is a control that does not exist, so it gets a room: what a reviewer went
+       and checked, what it concluded, and — the half that matters — whether
+       that conclusion was written somewhere the engine reads it back. -->
+  {#if tab === 'memory'}
+    <section class="band" id="dd-rulings">
+      <div class="inner">
+        <SectionHead
+          kicker="A / What it has ruled on"
+          title={['Things it', 'went and checked']}
+          strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict here is also a memory — the ponder cycle reads them refutations-first, and a new claim built on rows already ruled against is never written as new."
+        >
+          {#snippet aside()}
+            <button type="button" class="btn" disabled={rulingsLoading} onclick={loadRulings}>
+              {rulingsLoading ? 'Reading…' : 'Refresh'}
+            </button>
+          {/snippet}
+        </SectionHead>
+
+        <!-- The number that says whether the loop closes.
+             A verdict nobody remembered is one the engine will pay to reach
+             again: production ran to 66 rulings with one memory behind them,
+             and the same Canva misreading was proposed eight times under eight
+             names. This says so on the page rather than in a log. -->
+        {#if rulings.length && unrememberedCount}
+          <div class="card t-watch">
+            <p class="card-body">
+              <strong>{unrememberedCount} of {rulings.length}</strong> rulings have no memory behind
+              them yet. Only a remembered ruling reaches the ponder pack; the review activity writes
+              the missing ones ten at a time as it runs.
+            </p>
+          </div>
+        {/if}
+
+        {#if rulingsLoading}
+          <div class="card t-watch"><p class="card-body">Reading what it has settled…</p></div>
+        {:else if rulingsError}
+          <div class="card t-urgent"><p class="card-body">Could not read the rulings: {rulingsError}</p></div>
+        {:else if rulings.length === 0}
+          <div class="card t-quiet">
+            <p class="card-body">
+              Nothing has been ruled on yet. <strong>Queue to model</strong> on any card in the Feed
+              sends it to the reviewer — it reads the sources, decides whether the claim is
+              actually true, and writes what it concluded to memory.
+            </p>
+          </div>
+        {:else}
+          <div class="controls">
+            <FacetBar
+              label="Verdict"
+              active={rulingWho}
+              facets={rulingFacets}
+              onpick={(id) => (rulingWho = id as typeof rulingWho)}
+            />
+          </div>
+          <div class="board">
+            {#each rulingsVisible as r (r.id)}
+              <article class="card t-{r.verdict === 'refuted' ? 'urgent' : r.verdict === 'verified' ? 'good' : 'watch'}">
+                <div class="card-hd">
+                  <span class="card-title as-text">{r.title}</span>
+                  <span class="pill t-{r.verdict === 'refuted' ? 'urgent' : r.verdict === 'verified' ? 'good' : 'watch'}">
+                    {r.verdict === 'refuted' ? 'did not hold' : r.verdict === 'verified' ? 'held up' : 'cannot tell'}
+                  </span>
+                </div>
+                {#if r.reasoning}<p class="card-body">{r.reasoning}</p>{/if}
+                <div class="card-meta">
+                  <span class="tag">{r.kind}</span>
+                  {#if typeof r.likelihood === 'number'}
+                    <span class="meta-item">{Math.round(r.likelihood * 100)}% likely true</span>
+                  {/if}
+                  {#if r.ruledAt}<span class="meta-item">{ago(r.ruledAt)}</span>{/if}
+                  {#if r.model}<span class="meta-item">{r.model}</span>{/if}
+                  <!-- A ruling with no memory behind it changes nothing about
+                       what gets said next, and the page must not let that look
+                       the same as one that does. -->
+                  {#if r.memoryId}
+                    <span class="meta-item good">remembered</span>
+                  {:else}
+                    <span class="meta-item warn">not remembered yet</span>
+                  {/if}
+                </div>
+                {#if r.sources.length}
+                  <p class="note">Checked: {r.sources.slice(0, 4).join(' · ')}</p>
+                {/if}
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </section>
   {/if}
 
   <!-- ══════════════════════════════════════════════════════════════════════

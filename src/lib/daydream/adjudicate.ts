@@ -448,6 +448,16 @@ export async function pendingReview(limit: number): Promise<ThoughtToReview[]> {
         // Only what is still live. A thought the owner has already actioned or
         // dismissed does not need a verdict.
         or(eq(daydreamThoughts.status, 'new'), eq(daydreamThoughts.status, 'suppressed')),
+        // And not a claim already settled under a different name.
+        //
+        // `suppressed` is deliberately IN the queue: a thought held back by the
+        // cold-start score still deserves a verdict, because `verified` is what
+        // lifts it over that bar. `already_refuted` is the one suppression that
+        // must not be — the rows behind it have been read, and reviewing it
+        // would spend a second xhigh pass reaching the conclusion that produced
+        // the suppression. Six of those is the bill this whole change exists to
+        // stop paying.
+        sql`coalesce(${daydreamThoughts.suppressedReason}, '') not like 'already_refuted%'`,
       ),
     )
     .orderBy(sql`${daydreamThoughts.score} desc, ${daydreamThoughts.createdAt} desc`)
