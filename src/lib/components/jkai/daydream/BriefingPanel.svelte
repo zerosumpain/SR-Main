@@ -185,13 +185,33 @@
         {running ? 'Starting…' : 'Run now'}
       </button>
       <button class="br-cfg-toggle" onclick={() => (showConfig = !showConfig)} aria-expanded={showConfig}>
-        {showConfig ? 'Hide settings' : 'Settings'}
+        {showConfig ? 'Close profile' : 'Manage profile'}
       </button>
     </div>
   </div>
 
   {#if msg || err}
     <p class="br-flash">{#if msg}<span class="br-ok">{msg}</span>{/if}{#if err}<span class="br-err">⚠ {err}</span>{/if}</p>
+  {/if}
+
+  {#if !showConfig && latest}
+    <section class="br-profile-summary">
+      <div class="br-profile-copy">
+        <p class="sr-label-tight">Briefing profile</p>
+        <h2>{activeSourceCount} sources selected <span>· {readySourceCount} ready now</span></h2>
+        <p>
+          {data.topics.length
+            ? data.topics.join(' · ')
+            : 'Every connected capability may contribute when it has something useful.'}
+        </p>
+      </div>
+      <dl class="br-profile-facts">
+        <div><dt>Memory window</dt><dd>{profile.memoryLookbackHours}h</dd></div>
+        <div><dt>Memory limit</dt><dd>{profile.memoryLimit}</dd></div>
+        <div><dt>Available next</dt><dd>{addableSourceCount}</dd></div>
+      </dl>
+      <button class="br-profile-open" onclick={() => (showConfig = true)}>Review sources →</button>
+    </section>
   {/if}
 
   {#if showConfig || !latest}
@@ -314,12 +334,12 @@
       </div>
     </section>
 
-    {#if learnedMemories.length}
-      <section class="br-sec br-memory-share">
-        <div class="br-sec-hd">
-          <span class="sr-label-tight">What JKAI learned</span>
-          <span class="br-when">new shared memories · now part of the briefing</span>
-        </div>
+    <section class="br-sec br-memory-share" class:empty={!learnedMemories.length}>
+      <div class="br-sec-hd">
+        <span class="sr-label-tight">What JKAI learned</span>
+        <span class="br-when">new shared memories · now part of the briefing</span>
+      </div>
+      {#if learnedMemories.length}
         <p class="br-memory-intro">These are the durable facts added since the configured cutoff. They also feed the daydreaming context used for future observations.</p>
         <ul class="br-memory-list">
           {#each learnedMemories as memory (memory.id)}
@@ -333,8 +353,13 @@
           {/each}
         </ul>
         <a class="br-link br-memory-link" href="/jkai/daydreams?tab=memory">Open shared memory →</a>
-      </section>
-    {/if}
+      {:else}
+        <p class="br-memory-intro br-memory-empty">
+          This saved briefing predates shared-memory notes, or no new durable memories landed inside its configured window. The next run will show them here when there is something grounded to carry forward.
+        </p>
+        <a class="br-link br-memory-link" href="/jkai/daydreams?tab=memory">Review shared memory →</a>
+      {/if}
+    </section>
 
     <!-- ——— Where you are ——— -->
     {#if location}
@@ -499,6 +524,17 @@
   .br-when { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .br-config { border: 1px solid var(--line-strong); padding: clamp(16px, 2.5vw, 28px); display: flex; flex-direction: column; gap: 24px; background: color-mix(in srgb, var(--surface-elevated) 55%, transparent); }
+  .br-profile-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: clamp(16px, 3vw, 34px); padding: clamp(16px, 2.3vw, 24px); border: 1px solid var(--line-strong); border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--surface-elevated) 55%, transparent); }
+  .br-profile-copy { min-width: 0; }
+  .br-profile-copy h2 { margin: 5px 0 7px; font-family: var(--font-display); font-size: clamp(22px, 2.8vw, 34px); line-height: 1; text-transform: uppercase; }
+  .br-profile-copy h2 span { color: var(--text-muted); }
+  .br-profile-copy > p:last-child { max-width: 66ch; margin: 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.45; }
+  .br-profile-facts { display: grid; grid-template-columns: repeat(3, auto); gap: 16px; margin: 0; }
+  .br-profile-facts div { min-width: 72px; }
+  .br-profile-facts dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em; }
+  .br-profile-facts dd { margin: 3px 0 0; font-family: var(--font-display); font-size: 22px; color: var(--text-primary); }
+  .br-profile-open { padding: 9px 12px; border: 1px solid var(--line-strong); background: transparent; color: var(--accent-ink, var(--accent)); font-family: var(--font-mono); font-size: var(--fs-label); cursor: pointer; white-space: nowrap; }
+  .br-profile-open:hover { border-color: var(--accent); }
   .br-config-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line-strong); }
   .br-config-head h2 { margin: 5px 0 8px; font-family: var(--font-display); font-size: clamp(24px, 3vw, 38px); line-height: 1; text-transform: uppercase; }
   .br-config-head p { max-width: 64ch; margin: 0; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
@@ -556,7 +592,9 @@
   .br-warn-line { margin: 8px 0 0; font-size: var(--fs-label); color: var(--warn, #b0892a); }
 
   .br-memory-share { padding: 18px; border: 1px solid var(--accent); background: var(--accent-tint-04); }
+  .br-memory-share.empty { border-color: var(--line-strong); background: color-mix(in srgb, var(--surface-elevated) 40%, transparent); }
   .br-memory-intro { max-width: 68ch; margin: 0 0 14px; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
+  .br-memory-empty { margin-bottom: 0; }
   .br-memory-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
   .br-memory-list li { padding: 10px 12px; border: 1px solid var(--line-strong); background: var(--bg); display: flex; flex-direction: column; gap: 5px; }
   .br-memory-category { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-ink, var(--accent)); }
@@ -615,6 +653,9 @@
   .br-past-title { font-size: var(--fs-nav); color: var(--text-primary); }
 
   @media (max-width: 620px) {
+    .br-profile-summary { grid-template-columns: 1fr; }
+    .br-profile-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .br-profile-open { justify-self: start; }
     .br-config-head, .br-source-head { align-items: stretch; flex-direction: column; }
     .br-master-toggle { min-width: 0; }
     .br-config-priorities { grid-template-columns: 1fr; }
