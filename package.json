@@ -37,6 +37,8 @@
     "gate:build": "NODE_OPTIONS=--max-old-space-size=6144 vite build",
     "build:codex-bridge": "node packages/jkai-codex-bridge/build.mjs",
     "gate:test:scoped": "./scripts/gate-test-scoped.sh",
+    "validate:change": "./scripts/validate-change.sh",
+    "deploy:status": "./scripts/deploy-status.sh",
     "build:wa-worker": "node packages/jkai-wa-worker/build.mjs"
   },
   "devDependencies": {

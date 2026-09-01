@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'path';
 
 /**
@@ -56,5 +59,94 @@ describe('the prebuild/release split across two machines', () => {
   it('ci-prebuild.sh no longer writes to the VPS — it runs on a different box', () => {
     const prebuild = readFileSync(join(ROOT, 'scripts/ci-prebuild.sh'), 'utf8');
     expect(prebuild).not.toContain('VPS_DIR');
+  });
+
+  it('reuses only a tree-addressed candidate from a successful PR gate', () => {
+    const workflow = ci();
+    expect(job('build')).toContain('candidate-${{ steps.source.outputs.tree }}');
+    expect(job('build')).toContain('ci-prebuild.sh');
+    expect(job('build')).not.toContain('SR_GATE_STUB_ADAPTER');
+    expect(job('level')).toContain("gate?.conclusion !== 'success'");
+    expect(job('level')).toContain('candidate-${tree}');
+    expect(job('prebuild')).toContain('ci-promote-candidate.sh');
+    expect(workflow).toContain("candidate_certified != 'true'");
+  });
+
+  it('verifies both the commit and tree before staging on the VPS', () => {
+    const stage = readFileSync(join(ROOT, 'scripts/ci-stage-release.sh'), 'utf8');
+    expect(stage).toContain('artifact was built from');
+    expect(stage).toContain('artifact tree is');
+  });
+
+  it('cancels superseded PR runs but never master releases', () => {
+    expect(ci()).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
+  });
+});
+
+describe('the local fast path', () => {
+  it('scopes local tests to origin/master and supplies the Svelte public env', () => {
+    const scoped = readFileSync(join(ROOT, 'scripts/gate-test-scoped.sh'), 'utf8');
+    const validate = readFileSync(join(ROOT, 'scripts/validate-change.sh'), 'utf8');
+    expect(scoped).toContain('BASE=origin/master');
+    expect(validate).toContain('PUBLIC_VAPID_PUBLIC_KEY');
+    expect(validate).toContain('gate-test-scoped.sh "$BASE"');
+    expect(validate).not.toContain('gate:build');
+  });
+});
+
+describe('candidate promotion', () => {
+  function fixture(stampedEnv?: string) {
+    const root = mkdtempSync(join(tmpdir(), 'candidate-promotion-'));
+    mkdirSync(join(root, 'scripts'));
+    mkdirSync(join(root, 'build'));
+    cpSync(join(ROOT, 'scripts/ci-promote-candidate.sh'), join(root, 'scripts/ci-promote-candidate.sh'));
+    writeFileSync(join(root, '.gitignore'), '.env\nbuild\npackages/*/dist\n');
+    writeFileSync(join(root, 'source.txt'), 'gated source\n');
+    writeFileSync(join(root, '.env'), 'PUBLIC_VALUE=production\n');
+    writeFileSync(join(root, 'build/handler.js'), 'export {};\n');
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 'ci@example.invalid'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 'CI'], { cwd: root });
+    execFileSync('git', ['add', '.gitignore', 'source.txt'], { cwd: root });
+    execFileSync('git', ['commit', '-qm', 'fixture'], { cwd: root });
+    const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' }).trim();
+    const envHash = createHash('sha256').update('PUBLIC_VALUE=production\n').digest('hex');
+    writeFileSync(
+      join(root, 'build/.deploy-sha'),
+      `sha=old\nshort=old\ntree=${tree}\nbuild_env_sha256=${stampedEnv ?? envHash}\nbuilt_at=2026-09-01T20:00:00Z\n`,
+    );
+    return root;
+  }
+
+  it('restamps an exact tree and environment for the merge commit', () => {
+    const root = fixture();
+    try {
+      const output = join(root, 'output');
+      execFileSync('bash', ['scripts/ci-promote-candidate.sh'], {
+        cwd: root,
+        env: { ...process.env, GITHUB_OUTPUT: output },
+      });
+      const stamp = readFileSync(join(root, 'build/.deploy-sha'), 'utf8');
+      expect(stamp).toContain(`sha=${execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()}`);
+      expect(stamp).toContain('via=github-actions-promoted');
+      expect(readFileSync(output, 'utf8')).toContain('promoted=true');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to a fresh build when the environment differs', () => {
+    const root = fixture('wrong-environment-hash');
+    try {
+      const output = join(root, 'output');
+      execFileSync('bash', ['scripts/ci-promote-candidate.sh'], {
+        cwd: root,
+        env: { ...process.env, GITHUB_OUTPUT: output },
+      });
+      expect(readFileSync(output, 'utf8')).toContain('promoted=false');
+      expect(() => readFileSync(join(root, 'build/handler.js'))).toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

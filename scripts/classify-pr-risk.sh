@@ -21,7 +21,8 @@ RULES="$HERE/.github/protected-paths.txt"
 
 # Merge-base diff, so we classify what the PR ADDS rather than everything that
 # has landed on master since it branched.
-if ! CHANGED=$(git diff --name-only "$(git merge-base "$BASE_REF" HEAD)"...HEAD 2>/dev/null); then
+MB="$(git merge-base "$BASE_REF" HEAD)"
+if ! CHANGED=$(git diff --name-only "$MB" -- 2>/dev/null); then
   echo "could not diff against $BASE_REF" >&2
   exit 2
 fi
@@ -85,7 +86,7 @@ done < "$RULES"
 # can only ever remove coverage.
 # ---------------------------------------------------------------------------
 TEST_RE='\.(test|spec)\.[cm]?[jt]sx?$'
-if EDITED_TESTS=$(git diff --name-status "$(git merge-base "$BASE_REF" HEAD)"...HEAD 2>/dev/null \
+if EDITED_TESTS=$(git diff --name-status "$MB" -- 2>/dev/null \
       | awk '$1 ~ /^[MDR]/ { $1=""; sub(/^[ \t]+/, ""); print }' \
       | grep -E "$TEST_RE" || true); then
   if [ -n "$EDITED_TESTS" ]; then

@@ -18,6 +18,7 @@
     workflowCount,
     workflowLiveCount,
     workflowFailedToday = 0,
+    buildVersion = 'development',
   }: {
     tokensToday: number;
     spendTodayUsd: number;
@@ -32,6 +33,7 @@
     workflowCount: number;
     workflowLiveCount: number;
     workflowFailedToday?: number;
+    buildVersion?: string;
   } = $props();
 
   /**
@@ -282,6 +284,7 @@
                 {/each}
               </div>
             {/if}
+            <div class="build-version" title="Deployment identity">build {buildVersion}</div>
           </div>
         {/if}
       </div>
@@ -485,6 +488,16 @@
      colour nothing else on the surface used. */
   .menu-meta.warn {
     color: var(--accent);
+  }
+
+  .build-version {
+    padding: 7px 12px;
+    border-top: 1px solid var(--line-hair);
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
   .back-chip {

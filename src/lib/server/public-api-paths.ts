@@ -45,6 +45,9 @@
 export const PUBLIC_API_PATHS = [
   '/api/biome/state',
   '/api/landing/ecg-telemetry',
+  // Public repository commit/tree ids only. Used to distinguish a stale PWA
+  // from a release that genuinely did not reach production.
+  '/api/version',
 ] as const;
 
 export function isPublicApiPath(pathname: string): boolean {
