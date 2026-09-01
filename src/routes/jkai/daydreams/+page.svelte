@@ -10,6 +10,9 @@
   import CalendarBoard from '$lib/components/jkai/daydream/CalendarBoard.svelte';
   import EvidenceList from '$lib/components/jkai/daydream/EvidenceList.svelte';
   import LoopScoreboard from '$lib/components/jkai/daydream/LoopScoreboard.svelte';
+  import BriefingPanel from '$lib/components/jkai/daydream/BriefingPanel.svelte';
+  import MonitorsPanel from '$lib/components/jkai/daydream/MonitorsPanel.svelte';
+  import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
   import {
     familyOf,
     groupByFamily,
@@ -47,7 +50,7 @@
   type Place = PageData['places'][number];
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
-  // One hub, seven rooms. The tab rides the URL (?tab=) so a room can be linked
+  // One hub, eleven rooms. The tab rides the URL (?tab=) so a room can be linked
   // to, and a notification's ?rate= deep-link lands in the Feed with the
   // thought already open — the review found the old cue pointed at a row that
   // might not even render its buttons.
@@ -57,6 +60,8 @@
     // are what stops a claim being MADE again, which is a different question
     // from what is being said today.
     { id: 'memory', label: 'Memory' },
+    { id: 'briefing', label: 'Briefing' },
+    { id: 'watches', label: 'Watches' },
     { id: 'family', label: 'Family' },
     { id: 'discoveries', label: 'Discoveries' },
     { id: 'calendar', label: 'Calendar' },
@@ -1531,11 +1536,14 @@
   const needsNaming = $derived(unnamed.length);
   const needsRuling = $derived(proposedRules.length);
   const needsTotal = $derived(needsRating + needsNaming + needsRuling);
+  const activeWatches = $derived(data.monitors.filter((monitor) => monitor.enabled).length);
   const failingJobs = $derived((telemetry?.jobs ?? []).filter((j) => jobTone(j) === 'urgent'));
 
   const shellTabs = $derived<ShellTab[]>([
     { id: 'feed', label: 'Feed', count: needsRating, tone: 'action' },
     { id: 'memory', label: 'Memory', count: unrememberedCount, tone: 'watch' },
+    { id: 'briefing', label: 'Briefing' },
+    { id: 'watches', label: 'Watches', count: activeWatches, tone: 'quiet' },
     { id: 'family', label: 'Family' },
     { id: 'discoveries', label: 'Discoveries' },
     { id: 'calendar', label: 'Calendar' },
@@ -1566,6 +1574,15 @@
       value: String(counts.thoughts7d),
       tone: 'steady',
       sub: `${allTimeThoughts} all time · ${suppressedCount} held back`,
+    },
+    {
+      key: 'watches',
+      label: 'Active watches',
+      value: String(activeWatches),
+      tone: activeWatches ? 'steady' : 'quiet',
+      sub: data.briefing?.briefings[0]
+        ? `briefed ${ago(data.briefing.briefings[0].startedAt)}`
+        : 'no briefing recorded yet',
     },
     {
       key: 'places',
@@ -1852,9 +1869,9 @@
 
 <DaydreamShell
   path="/jkai/daydreams"
-  kicker="JKAI · Daydreaming"
-  title={['A second brain', 'on spare cycles']}
-  standfirst="It watches the household, the diary, the money and its own discoveries, and says something only when the crossing is worth it. Every claim cites its evidence; code audits it before you ever see it."
+  kicker="JKAI · Background intelligence"
+  title={['Notice quietly,', 'act with evidence']}
+  standfirst="Briefings, deliberate watches, household patterns and the system’s own learning now share one evidence trail. It stays quiet until a crossing is worth it, and every claim shows what it rests on."
   readout={coverReadout}
   live={data.enabled}
   liveBusy={togglingEnabled}
@@ -1929,6 +1946,42 @@
             </div>
           {/each}
         </div>
+      </div>
+    </section>
+  {/if}
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       BRIEFING
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'briefing'}
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / What matters today"
+          title={['The morning', 'briefing']}
+          strap="The scheduled digest now lives beside the observations that feed it: source-traced, gap-aware, and ready to rerun without leaving the background-intelligence workspace."
+        />
+        {#if data.briefing}
+          <BriefingPanel data={data.briefing} embedded />
+        {:else}
+          <div class="card t-urgent"><p class="card-body">The briefing ledger could not be read.</p></div>
+        {/if}
+      </div>
+    </section>
+  {/if}
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       WATCHES
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if tab === 'watches'}
+    <section class="band">
+      <div class="inner">
+        <SectionHead
+          kicker="A / Things worth interrupting for"
+          title={['Watch quietly,', 'speak on change']}
+          strap="A watch is the deliberate counterpart to a daydream: you name the condition, a scheduled workflow checks it, and only a new match earns an interruption."
+        />
+        <MonitorsPanel data={{ monitors: data.monitors }} embedded />
       </div>
     </section>
   {/if}
@@ -3506,6 +3559,13 @@
           strap="Two dashboards showed everything about the self-improvement engine except whether a single thing it built was ever called. On the day this merged: 33 tools shipped, none used."
         />
         <LoopScoreboard health={data.loop} verdict={data.loopVerdict} />
+        {#if data.improvement}
+          <div class="improvement-ledger">
+            <ImprovementPanel data={data.improvement} embedded />
+          </div>
+        {:else}
+          <div class="card t-urgent"><p class="card-body">The improvement ledger could not be read.</p></div>
+        {/if}
       </div>
     </section>
   {/if}
@@ -3916,6 +3976,11 @@
   .band.attn {
     border-top: 0;
     border-bottom: 2px solid var(--text-primary);
+  }
+  .improvement-ledger {
+    margin-top: clamp(28px, 4vw, 56px);
+    padding-top: clamp(24px, 3vw, 40px);
+    border-top: 2px solid var(--text-primary);
   }
   .inner {
     max-width: 1500px;

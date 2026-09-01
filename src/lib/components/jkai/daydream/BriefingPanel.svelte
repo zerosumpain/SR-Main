@@ -4,7 +4,7 @@
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
 
-  let { data }: {
+  let { data, embedded = false }: {
     data: {
       briefings: BriefingData[];
       enabled: boolean;
@@ -12,6 +12,7 @@
       workflowId: string | null;
       schedule: { display: string; expr: string | null };
     };
+    embedded?: boolean;
   } = $props();
 
   const briefings = $derived(data.briefings ?? []);
@@ -109,11 +110,11 @@
   }
 </script>
 
-<svelte:head><title>Briefing · JKAI</title></svelte:head>
+<svelte:head><title>{embedded ? 'Daydreams · JKAI' : 'Briefing · JKAI'}</title></svelte:head>
 
-<JkaiPageTitle title="BRIEFING" />
+{#if !embedded}<JkaiPageTitle title="BRIEFING" />{/if}
 
-<main class="br">
+<main class="br" class:embedded>
   <div class="br-bar">
     <p class="br-sub">
       Every claim below is traced to the source that produced it · {data.schedule.display} + WhatsApp
@@ -333,6 +334,7 @@
 
 <style>
   .br { max-width: 900px; margin: 0 auto; padding: 24px 20px 80px; color: var(--text-primary); }
+  .br.embedded { max-width: none; padding: 0; }
   .br-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
   .br-bar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .br-sub { margin: 0; color: var(--text-muted); font-size: var(--fs-nav); }

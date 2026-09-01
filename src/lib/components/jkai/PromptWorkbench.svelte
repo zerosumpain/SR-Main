@@ -4,7 +4,7 @@
 
   type LoadedStack = PromptStack & { approxTokens: number };
 
-  let { data }: { data: { stacks: LoadedStack[] } } = $props();
+  let { data, embedded = false }: { data: { stacks: LoadedStack[] }; embedded?: boolean } = $props();
 
   // Open on the first file of the chat stack — the one that actually shapes
   // replies — falling back to whatever stack has files.
@@ -118,11 +118,11 @@
 
 </script>
 
-<svelte:head><title>Prompts · JKAI</title></svelte:head>
+<svelte:head><title>{embedded ? 'Agent Team · JKAI' : 'Prompts · JKAI'}</title></svelte:head>
 
-<JkaiPageTitle title="PROMPTS" />
+{#if !embedded}<JkaiPageTitle title="PROMPTS" />{/if}
 
-<div class="pw">
+<div class="pw" class:embedded>
   <p class="pw-intro">
     Every prompt that actually runs, grouped by what executes it. Chat replies and workflow generation
     are driven by <strong>different</strong> stacks — editing one does not change the other.
@@ -244,6 +244,7 @@
 
 <style>
   .pw { max-width: 1200px; margin: 0 auto; padding: 20px 20px 60px; color: var(--text-primary); }
+  .pw.embedded { max-width: none; padding: 0; }
   .pw-intro { margin: 0 0 18px; font-size: var(--fs-nav); color: var(--text-muted); max-width: 70ch; }
   .pw-intro strong { color: var(--text-primary); }
 

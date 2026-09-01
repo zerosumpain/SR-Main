@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
 
   // Today's digest, surfaced where the day starts. The briefing engine has run
-  // every morning for a while, but /jkai/briefing was palette-only so it went
+  // every morning for a while, but /jkai/daydreams?tab=briefing was palette-only so it went
   // unread. Dismissal is per-briefing and local — a new digest reappears.
   let {
     briefing,
@@ -45,7 +45,7 @@
       <span class="bc-title">{briefing.title}</span>
       <div class="bc-actions">
         <button class="bc-btn" onclick={() => (expanded = !expanded)}>{expanded ? 'Collapse' : 'Read'}</button>
-        <a class="bc-btn" href="/jkai/briefing">Open</a>
+        <a class="bc-btn" href="/jkai/daydreams?tab=briefing">Open</a>
         <button class="bc-btn bc-x" onclick={dismiss} aria-label="Dismiss today's briefing">✕</button>
       </div>
     </header>

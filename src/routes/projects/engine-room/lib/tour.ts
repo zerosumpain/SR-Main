@@ -247,7 +247,7 @@ export const SURFACES: Surface[] = [
     id: 'briefing',
     tier: 'work',
     label: 'Morning briefing',
-    route: '/jkai/briefing',
+    route: '/jkai/daydreams?tab=briefing',
     kicker: 'Owner only',
     open: false,
     line: 'Seven every morning, on the phone, before the kettle. Weather, sleep, the house, the inbox — and a line under each one saying exactly which source coughed it up.',

@@ -64,7 +64,7 @@
         rows: [
           { label: 'Chat', href: '/jkai', meta: 'THREAD' },
           { label: 'Canvas', href: '/jkai/canvas', meta: 'WORKFLOWS' },
-          { label: 'Research', href: '/jkai/research', meta: 'DEEP DIVE' },
+          { label: 'Research', href: '/research', meta: 'DEEP DIVE' },
           { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
         ],
       },

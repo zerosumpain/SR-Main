@@ -31,7 +31,7 @@
   const ACTIONS: NavItem[] = [
     { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
     { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
-    { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/monitors') },
+    { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/daydreams?tab=watches') },
     { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel/search') },
   ];
 
@@ -42,7 +42,7 @@
         { code: 'CHT', label: 'Chat', href: '/jkai', desc: 'The orchestrator chat hub', keywords: 'home talk ask' },
         { code: 'CVS', label: 'Canvas', href: '/jkai/canvas', desc: 'Visual workflow builder', keywords: 'workflow nodes flow automation' },
         { code: 'BLD', label: 'Builds', href: '/jkai/builds', desc: 'Autonomous builder', keywords: 'build autonomous app' },
-        { code: 'RES', label: 'Research', href: '/jkai/research', desc: 'Deep research desk', keywords: 'deep dive gather synthesize' },
+        { code: 'RES', label: 'Research', href: '/research', desc: 'Deep research desk', keywords: 'deep dive gather synthesize' },
       ],
     },
     {
@@ -51,22 +51,18 @@
         { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Knowledge graph, notes & alerts', keywords: 'graph entities relationships' },
         { code: 'CG', label: 'Codegraph', href: '/jkai/codegraph', desc: 'What building this codebase has already taught us', keywords: 'code graph build history episodes lessons precedent relevance' },
         { code: 'KN', label: 'Recall', href: '/jkai/intel/search', desc: 'Search notes, entities, files, research, memory & datastore', keywords: 'recall search @knowledge unified knowledge' },
-        { code: 'AG', label: 'Agents', href: '/jkai/agents', desc: 'Your specialist agent team', keywords: 'delegate specialist team persona' },
-        { code: 'PR', label: 'Prompts', href: '/jkai/prompts', desc: 'The prompts that actually run', keywords: 'prompt workbench system soul' },
+        { code: 'AG', label: 'Agent team', href: '/jkai/agents', desc: 'Specialists, prompts and shared memory', keywords: 'delegate specialist team persona prompt workbench system soul' },
       ],
     },
     {
       section: 'Proactive',
       items: [
-        { code: 'MON', label: 'Monitors', href: '/jkai/monitors', desc: 'Watch X, tell me when Y', keywords: 'watch alert notify schedule' },
-        { code: 'BR', label: 'Briefing', href: '/jkai/briefing', desc: 'Your daily digest', keywords: 'digest daily morning summary' },
-        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams', desc: 'What it noticed on spare cycles', keywords: 'daydream notice pattern idle location places suggestions' },
+        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams', desc: 'Briefings, watches and spare-cycle learning', keywords: 'daydream notice pattern idle location places suggestions monitor watch alert digest briefing improvement ledger' },
       ],
     },
     {
       section: 'Ops',
       items: [
-        { code: 'IMP', label: 'Improvement', href: '/jkai/improvement', desc: 'Self-improvement ledger', keywords: 'ledger self improve nightly' },
         { code: 'DOC', label: 'Doctor', href: '/jkai/doctor', desc: 'Why your workflows are failing', keywords: 'doctor failed workflow fix repair triage' },
       ],
     },

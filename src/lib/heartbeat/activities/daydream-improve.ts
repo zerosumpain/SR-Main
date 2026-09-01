@@ -23,7 +23,7 @@
 // start and the 04:00 model-routing job (see `$lib/selfimprove/types.ts`), and
 // every phase already self-limits against `timeLeftMs()`. Splitting them into
 // four heartbeat rows would fragment the run record that `narrative.ts`,
-// `/jkai/improvement` and `/admin/ai/improvement` all read, and buy nothing:
+// `/jkai/daydreams?tab=improvement` and `/admin/ai/improvement` all read, and buy nothing:
 // the point of the merge is to have one scheduler, not to re-cut the phases.
 
 import os from 'os';

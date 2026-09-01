@@ -2,7 +2,7 @@
   import type { MonitorStatus } from '$lib/monitors/monitors.server';
   import { invalidateAll } from '$app/navigation';
 
-  let { data }: { data: { monitors: MonitorStatus[] } } = $props();
+  let { data, embedded = false }: { data: { monitors: MonitorStatus[] }; embedded?: boolean } = $props();
   const monitors = $derived(data.monitors ?? []);
 
   let desc = $state('');
@@ -69,15 +69,15 @@
   }
 </script>
 
-<svelte:head><title>Monitors · JKAI</title></svelte:head>
+<svelte:head><title>{embedded ? 'Daydreams · JKAI' : 'Monitors · JKAI'}</title></svelte:head>
 
-<main class="mo">
-  <header class="mo-hdr">
+<main class="mo" class:embedded>
+  {#if !embedded}<header class="mo-hdr">
     <div class="mo-kicker">JKAI · Watch</div>
     <h1>Monitors</h1>
     <p class="mo-sub">"Watch X, tell me when Y." Each monitor is a scheduled workflow that checks a source, keeps only new items, and messages you.</p>
     <a class="mo-back" href="/jkai">← back to jkai</a>
-  </header>
+  </header>{/if}
 
   <section class="mo-sec">
     <div class="mo-sec-hd"><span class="sr-label-tight">New monitor</span></div>
@@ -145,6 +145,7 @@
 
 <style>
   .mo { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; color: var(--text-primary); }
+  .mo.embedded { max-width: none; padding: 0; }
   .mo-hdr { border-bottom: 2px solid var(--line-strong); padding-bottom: 16px; margin-bottom: 20px; }
   .mo-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
   .mo-hdr h1 { font-family: var(--font-display, var(--font-sans)); font-size: 2.125rem; margin: 4px 0 2px; }

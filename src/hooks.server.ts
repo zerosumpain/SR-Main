@@ -332,6 +332,27 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
   }
 
+  // JKAI's small ambient/configuration pages were folded into the two places
+  // they conceptually belong: background intelligence lives in Daydreams,
+  // while prompts live beside the agents they shape. Keep exact redirects for
+  // old bookmarks and notification payloads, but only the destination pages
+  // are presented as features. Existing query parameters are retained unless
+  // they would override the destination tab.
+  const retiredJkaiPage = new Map<string, string>([
+    ['/jkai/briefing', '/jkai/daydreams?tab=briefing'],
+    ['/jkai/monitors', '/jkai/daydreams?tab=watches'],
+    ['/jkai/improvement', '/jkai/daydreams?tab=improvement'],
+    ['/jkai/prompts', '/jkai/agents?tab=prompts'],
+    ['/jkai/research', '/research'],
+  ]).get(pathname);
+  if (retiredJkaiPage) {
+    const destination = new URL(retiredJkaiPage, event.url.origin);
+    for (const [key, value] of event.url.searchParams) {
+      if (key !== 'tab') destination.searchParams.append(key, value);
+    }
+    throw redirect(308, destination.pathname + destination.search);
+  }
+
   // /trails folded into /health. Before the auth gate on purpose — /trails is no
   // longer a route at all, so falling through would 302 a stale bookmark to
   // /login with a callbackUrl that leads nowhere.
