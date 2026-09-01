@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { clientsClaim } from 'workbox-core';
 import { registerRoute } from 'workbox-routing';
 import { NetworkFirst, StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
@@ -7,8 +8,19 @@ import { ExpirationPlugin } from 'workbox-expiration';
 declare const self: ServiceWorkerGlobalScope;
 
 self.skipWaiting();
+clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
+
+// Authenticated JKAI pages are live operational views, not an offline shell.
+// A previous worker cached their navigation responses for 24 hours. That cache
+// can survive a hard refresh and serve HTML which imports an older set of
+// hashed chunks even after the server has deployed a newer release. Purge the
+// legacy runtime cache as soon as this worker activates; future navigations are
+// left to the browser/network and therefore cannot silently fall back to it.
+self.addEventListener('activate', (event) => {
+	event.waitUntil(self.caches.delete('jkai-navigation'));
+});
 
 registerRoute(
 	({ url }) => url.pathname.startsWith('/api/jkai/conversations'),
@@ -27,30 +39,6 @@ registerRoute(
 );
 
 registerRoute(({ request }) => request.method !== 'GET', new NetworkOnly());
-
-// jkai navigations: network-first, with a cached shell for going offline.
-//
-// The age here is load-bearing and used to be 30 days, which is far longer than
-// it can safely be. A cached HTML shell names HASHED chunk files; a later deploy
-// publishes new hashes and `cleanupOutdatedCaches` removes the old ones. A shell
-// that outlives its chunks is a page that loads and then silently runs the wrong
-// code — which is exactly what happened on 2026-08-26: after three deploys in an
-// hour, /jkai/daydreams rendered the naming form from a build that predated the
-// map, so the map "was not rendering" when in fact it was not in the bundle the
-// browser had.
-//
-// One day keeps the offline shell useful (that is the point of caching a
-// navigation at all) while bounding how long a stale one can mislead. Network
-// still wins whenever it answers inside the timeout.
-registerRoute(
-	({ request, url }) =>
-		request.mode === 'navigate' && url.pathname.startsWith('/jkai'),
-	new NetworkFirst({
-		cacheName: 'jkai-navigation',
-		networkTimeoutSeconds: 5,
-		plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 })],
-	}),
-);
 
 // Broads Pilot (/projects/broads-pilot): cache the small static datasets so the
 // planner + routing work offline, the page navigations network-first, and map

@@ -17,7 +17,7 @@
     "build:builder": "node packages/jkai-builder/build.mjs",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "NODE_OPTIONS=--max-old-space-size=8192 svelte-kit sync && NODE_OPTIONS=--max-old-space-size=8192 svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "test": "vitest run",
     "test:watch": "vitest",
