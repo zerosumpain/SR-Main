@@ -63,6 +63,12 @@ export const briefingComposeDef: NodeDefinition = {
 - \`indoor\` — a \`home-assistant\` query_state output
 - \`email\` — a \`gmail-search\` output
 - \`knowledge\` — an \`intel-query\` output
+- \`briefingSources\` — a generic array from any capability: \`[{ key, label, status, detail, facts: [{ label, value, source }] }]\`. Use this for calendar, research, files, web results, finance, monitors, or future node types without changing this composer.
+
+The owner-facing briefing profile controls which sources are included and which
+ones are required. The composer also reads recent shared JKAI memories and
+daydream activity directly, so learning completed outside the canvas is visible
+in the next briefing.
 
 **Returns** \`{ briefing, facts[], gaps[], sources[], factSheet, gapSheet, headline, availableCount, gapCount }\`.
 
