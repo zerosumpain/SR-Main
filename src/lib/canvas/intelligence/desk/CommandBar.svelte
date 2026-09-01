@@ -59,7 +59,7 @@
 
 <header class="cmdbar">
   <div class="left">
-    <a class="mono-mark" href="/jkai/research" title="Back to research launcher">sr.</a>
+    <a class="mono-mark" href="/research" title="Back to research launcher">sr.</a>
     <h1 class="topic" title={topic}>{topic}</h1>
   </div>
 

@@ -1,18 +1,44 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { page } from '$app/state';
+  import { replaceState } from '$app/navigation';
   import type { AgentDef } from '$lib/agents/types';
   import { invalidateAll } from '$app/navigation';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
+  import type { ShellTab } from '$lib/components/jkai/daydream/hub/types';
+  import PromptsPanel from '$lib/components/jkai/PromptWorkbench.svelte';
+  import type { PageData } from './$types';
 
   type LiveStep = { toolCallId: string; tool: string; args: Record<string, unknown>; result?: unknown; status: 'running' | 'done' | 'error'; summary?: string; expanded?: boolean };
   type LiveAgent = { agentId: string; task: string; status: 'running' | 'done' | 'error'; summary?: string; liveTokens: string; toolSteps: LiveStep[]; startedAt?: number };
 
   import type { TeamMemoryEntry } from '$lib/agents/store';
 
-  let { data }: { data: { agents: AgentDef[]; teamMemory: TeamMemoryEntry[] } } = $props();
-  const agents = $derived(data.agents ?? []);
-  const teamMemory = $derived(data.teamMemory ?? []);
+  let { data }: { data: PageData } = $props();
+  const agents = $derived<AgentDef[]>(data.agents ?? []);
+  const teamMemory = $derived<TeamMemoryEntry[]>(data.teamMemory ?? []);
+
+  type TeamTab = 'agents' | 'prompts';
+  const TEAM_TABS = $derived<ShellTab[]>([
+    { id: 'agents', label: 'Agents', count: agents.length, tone: 'quiet' },
+    { id: 'prompts', label: 'Prompts', count: data.stacks.length, tone: 'quiet' },
+  ]);
+  let tab = $state<TeamTab>(page.url.searchParams.get('tab') === 'prompts' ? 'prompts' : 'agents');
+  const urlTab = $derived(page.url.searchParams.get('tab'));
+  $effect(() => {
+    const next = urlTab;
+    untrack(() => {
+      if (next === 'agents' || next === 'prompts') tab = next;
+    });
+  });
+  function setTab(next: TeamTab) {
+    tab = next;
+    const url = new URL(page.url);
+    url.searchParams.set('tab', next);
+    replaceState(url, {});
+  }
 
   async function forgetMemory(id: string) {
     await fetch(`/api/jkai/agents/memory?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -158,13 +184,22 @@
 
 <svelte:head><title>Agent Team · JKAI</title></svelte:head>
 
+<DaydreamShell
+  path="/jkai/agents"
+  kicker="JKAI · Agent team"
+  title={['The people,', 'and their playbook']}
+  standfirst="Named specialists, the instructions that shape them, and the memory they share — one place to decide who does the work and what they are told."
+  tabs={TEAM_TABS}
+  active={tab}
+  ontab={(id) => setTab(id as TeamTab)}
+  footer={[
+    'strangeramblings.com/jkai/agents',
+    `${agents.length} specialist${agents.length === 1 ? '' : 's'} · ${data.stacks.length} prompt stack${data.stacks.length === 1 ? '' : 's'}`,
+    'Owner-gated · edits take effect on the next run',
+  ]}
+>
+{#if tab === 'agents'}
 <main class="ag">
-  <header class="ag-hdr">
-    <div class="ag-kicker">JKAI · Team</div>
-    <h1>Agent Team</h1>
-    <p class="ag-sub">Named specialists JKai delegates to — each with its own persona, allowed tools, and shared team memory.</p>
-    <a class="ag-back" href="/jkai">← back to jkai</a>
-  </header>
 
   <!-- Delegate / test -->
   <section class="ag-sec">
@@ -254,9 +289,16 @@
     </div>
   </div>
 {/if}
+{:else}
+  <section class="team-panel">
+    <PromptsPanel data={{ stacks: data.stacks }} embedded />
+  </section>
+{/if}
+</DaydreamShell>
 
 <style>
-  .ag { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; color: var(--text-primary); }
+  .ag { max-width: 1100px; margin: 0 auto; padding: clamp(28px, 3.4vw, 52px) clamp(18px, 3vw, 44px) 80px; color: var(--text-primary); }
+  .team-panel { max-width: 1500px; margin: 0 auto; padding: clamp(28px, 3.4vw, 52px) clamp(18px, 3vw, 44px) 80px; }
   .ag-hdr { border-bottom: 2px solid var(--line-strong); padding-bottom: 16px; margin-bottom: 20px; }
   .ag-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
   .ag-hdr h1 { font-family: var(--font-display, var(--font-sans)); font-size: 2.125rem; margin: 4px 0 2px; }

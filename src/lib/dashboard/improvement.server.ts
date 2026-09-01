@@ -1,4 +1,3 @@
-import type { PageServerLoad } from './$types';
 import {
   DatastoreError,
   getCollectionBySlug,
@@ -129,7 +128,7 @@ const ACTION_KINDS = [
   'proposal',
 ] as const;
 
-export const load: PageServerLoad = async () => {
+export async function loadImprovementDashboard() {
   const [runs, attempts, insights, apiStatus, efficiency, policyVersions, backlog, toolHealth] =
     await Promise.all([
       loadRuns(),
@@ -208,4 +207,7 @@ export const load: PageServerLoad = async () => {
     schedule: await improvementSchedule(),
     running: getImprovementStatus().running,
   };
-};
+}
+
+
+export type ImprovementDashboardData = Awaited<ReturnType<typeof loadImprovementDashboard>>;

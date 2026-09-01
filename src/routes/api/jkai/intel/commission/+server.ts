@@ -142,7 +142,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         await record({
           kind,
           id: created.monitor?.workflowId,
-          url: '/jkai/monitors',
+          url: '/jkai/daydreams?tab=watches',
           label: 'Monitor created',
           started: true,
         }),

@@ -15,7 +15,7 @@ function asStack(v: unknown): StackId {
 }
 
 /**
- * Workbench API for /jkai/prompts. Owner-gated by hooks (the whole /api/jkai
+ * Workbench API for /jkai/agents?tab=prompts. Owner-gated by hooks (the whole /api/jkai
  * tree is). `?resolve=<stack>` returns the assembled prompt, `?versions=<stack>
  * &file=<name>` the edit history; no query returns every stack.
  */

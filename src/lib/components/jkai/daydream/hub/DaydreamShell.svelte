@@ -29,9 +29,9 @@
     /** Mono lines on the right of the masthead — last run, coverage, span. */
     readout?: { label: string; value: string }[];
     /** The engine's on/off, as a control rather than a banner. */
-    live: boolean;
+    live?: boolean;
     liveBusy?: boolean;
-    ontoggleLive: () => void;
+    ontoggleLive?: () => void;
     tabs: ShellTab[];
     active: string;
     ontab: (id: string) => void;
@@ -50,9 +50,9 @@
     title,
     standfirst,
     readout = [],
-    live,
+    live = true,
     liveBusy = false,
-    ontoggleLive,
+    ontoggleLive = undefined,
     tabs,
     active,
     ontab,
@@ -79,20 +79,22 @@
         </div>
 
         <div class="ds-cover-right">
-          <button
-            type="button"
-            class="ds-power"
-            class:off={!live}
-            disabled={liveBusy}
-            aria-pressed={live}
-            title={live
-              ? 'Daydreaming is on — pause everything'
-              : 'Daydreaming is paused — resume it'}
-            onclick={ontoggleLive}
-          >
-            <span class="ds-dot"></span>
-            {liveBusy ? 'saving…' : live ? 'live' : 'paused'}
-          </button>
+          {#if ontoggleLive}
+            <button
+              type="button"
+              class="ds-power"
+              class:off={!live}
+              disabled={liveBusy}
+              aria-pressed={live}
+              title={live
+                ? 'Daydreaming is on — pause everything'
+                : 'Daydreaming is paused — resume it'}
+              onclick={ontoggleLive}
+            >
+              <span class="ds-dot"></span>
+              {liveBusy ? 'saving…' : live ? 'live' : 'paused'}
+            </button>
+          {/if}
           {#each readout as r (r.label)}
             <p class="ds-readout"><span class="ds-readout-k">{r.label}</span>{r.value}</p>
           {/each}
@@ -107,7 +109,7 @@
 
   <!-- ——— the rail ————————————————————————————————————————————————
        Sticky at the top of the jkai scroll container. Horizontally scrollable
-       on a phone rather than wrapping to three rows: eight tabs wrapped is a
+       on a phone rather than wrapping to three rows: ten tabs wrapped is a
        block of chrome taller than the first card under it. -->
   <nav class="ds-rail" aria-label="Daydream sections">
     <div class="ds-inner ds-rail-inner">

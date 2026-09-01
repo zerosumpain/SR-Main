@@ -1,11 +1,10 @@
-<svelte:head><title>Self-Improvement — JKAI</title></svelte:head>
 <script lang="ts">
-  import type { PageData } from './$types';
+  import type { ImprovementDashboardData } from '$lib/dashboard/improvement.server';
 
-  let { data }: { data: PageData } = $props();
+  let { data, embedded = false }: { data: ImprovementDashboardData; embedded?: boolean } = $props();
 
-  type Run = PageData['runs'][number];
-  type Attempt = PageData['attempts'][number];
+  type Run = ImprovementDashboardData['runs'][number];
+  type Attempt = ImprovementDashboardData['attempts'][number];
 
   let expandedRun = $state<string | null>(null);
   let expandedAttempt = $state<string | null>(null);
@@ -151,8 +150,10 @@
   const kindOrder = ['insight', 'api_verified', 'api_registered', 'tool_created', 'tool_rejected', 'proposal'];
 </script>
 
-<div class="wrap">
-  <header class="page-hdr">
+<svelte:head><title>{embedded ? 'Daydreams — JKAI' : 'Self-Improvement — JKAI'}</title></svelte:head>
+
+<div class="wrap" class:embedded>
+  {#if !embedded}<header class="page-hdr">
     <div>
       <div class="kicker">JKAI · Self-Improvement</div>
       <h1>The Ledger</h1>
@@ -167,7 +168,7 @@
       <a class="back-link" href="/jkai">JKAI</a>
       <a class="back-link" href="/admin/ai/improvement">Controls →</a>
     </div>
-  </header>
+  </header>{/if}
 
   <!-- ── PRIME OUTCOME ──────────────────────────────────────────────────
        Leads the page: every other number here is a means to this end. -->
@@ -725,6 +726,7 @@
   .status-pill.s-none { background: var(--line); }
 
   .wrap { max-width: 980px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+  .wrap.embedded { max-width: none; margin: 0; padding: 0; }
   .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
   .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
   .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; line-height: 1.05; }

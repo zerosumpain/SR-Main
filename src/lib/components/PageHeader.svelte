@@ -44,14 +44,12 @@
     { href: '/', label: 'Home' },
     { href: '/jkai', label: 'Chat' },
     { href: '/jkai/intel', label: 'Intel' },
-    { href: '/jkai/research', label: 'Research' },
+    { href: '/research', label: 'Research' },
     { href: '/jkai/builds', label: 'Builds' },
     { href: '/jkai/canvas', label: 'Canvases' },
-    { href: '/jkai/briefing', label: 'Briefing' },
     { href: '/jkai/daydreams', label: 'Daydreams' },
-    { href: '/jkai/improvement', label: 'Improvement' },
+    { href: '/jkai/agents', label: 'Agent team' },
     { href: '/jkai/doctor', label: 'Doctor' },
-    { href: '/jkai/prompts', label: 'Prompts' },
   ];
 
   let resolvedItems = $derived.by(() => {

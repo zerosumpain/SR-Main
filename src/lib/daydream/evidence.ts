@@ -466,7 +466,7 @@ async function resolveInterests(ids: string[], fill: Fill): Promise<void> {
     if (found.has(id)) continue;
     fill('interest', id, {
       lines: ['A research session — see the research surface for the full trail.'],
-      href: '/jkai/research',
+      href: '/research',
     });
   }
 }

@@ -4,6 +4,9 @@ import { getSetting } from '$lib/server/models/settings';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/daydream/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
+import { listMonitors } from '$lib/monitors/monitors.server';
+import { loadBriefingDashboard } from '$lib/briefing/dashboard.server';
+import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only).
 //
@@ -14,10 +17,22 @@ import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 
 export const load: PageServerLoad = async () => {
   try {
-    const [ledger, enabled, loop] = await Promise.all([
+    const [ledger, enabled, loop, monitors, briefing, improvement] = await Promise.all([
       loadLedger(),
       getSetting<boolean>(SETTINGS_ENABLED_KEY),
       loadLoopHealth(MIN_PAIRS),
+      listMonitors().catch((err) => {
+        console.error('[daydream] monitors load failed:', errMsg(err));
+        return [];
+      }),
+      loadBriefingDashboard().catch((err) => {
+        console.error('[daydream] briefing load failed:', errMsg(err));
+        return null;
+      }),
+      loadImprovementDashboard().catch((err) => {
+        console.error('[daydream] improvement load failed:', errMsg(err));
+        return null;
+      }),
     ]);
     // Unset/null means enabled, matching the self-improvement engine.
     return {
@@ -25,6 +40,9 @@ export const load: PageServerLoad = async () => {
       enabled: enabled !== false,
       loop,
       loopVerdict: loopVerdict(loop),
+      monitors,
+      briefing,
+      improvement,
       loadError: null,
     };
   } catch (err) {
@@ -72,6 +90,9 @@ export const load: PageServerLoad = async () => {
         error: errMsg(err),
       },
       loopVerdict: { state: 'unknown' as const, line: 'Could not read the loop\u2019s state.' },
+      monitors: [],
+      briefing: null,
+      improvement: null,
       loadError: errMsg(err),
     };
   }

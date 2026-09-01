@@ -739,7 +739,7 @@ export async function assembleBriefContext(
     id: r.externalId ?? r.commissionId,
     topic: truncate(r.topic ?? r.payload, 160),
     status: r.sessionStatus ?? r.status,
-    url: r.externalUrl ?? (r.externalId ? `/deepdive/${r.externalId}` : '/jkai/research'),
+    url: r.externalUrl ?? (r.externalId ? `/deepdive/${r.externalId}` : '/research'),
     createdAt: r.createdAt.toISOString(),
   }));
 

@@ -88,7 +88,7 @@ async function ensureVersions(): Promise<void> {
     VERSIONS_COLLECTION,
     {
       name: 'Prompt versions',
-      description: 'Every save made through the /jkai/prompts workbench, for diff + restore',
+      description: 'Every save made through the /jkai/agents?tab=prompts workbench, for diff + restore',
       isSystem: true,
       defaultPermissions: { read: ['owner', 'jkai'], write: ['owner'], delete: ['owner'] },
     },

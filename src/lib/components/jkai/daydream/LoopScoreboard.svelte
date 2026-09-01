@@ -87,7 +87,6 @@
     <p class="load-err">The loop’s state could not be read: {health.error}</p>
   {/if}
 
-  <a class="row-link" href="/jkai/improvement">Open the full improvement ledger →</a>
 </section>
 
 <style>

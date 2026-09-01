@@ -1,4 +1,3 @@
-import type { PageServerLoad } from './$types';
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { db } from '$lib/db';
@@ -28,7 +27,7 @@ function describeCron(expr: string | null): string {
 // Owner-gated by hooks. The briefing is produced by the `canvas:morning-briefing`
 // workflow, which writes every run into the `briefings` collection; this page is
 // the detail surface behind the WhatsApp summary.
-export const load: PageServerLoad = async () => {
+export async function loadBriefingDashboard() {
   let briefings: BriefingData[] = [];
   if (await getCollectionBySlug(BRIEFINGS_COLLECTION)) {
     const { records } = await queryRecords(
@@ -54,4 +53,4 @@ export const load: PageServerLoad = async () => {
     workflowId: wf?.id ?? null,
     schedule: { display: describeCron(cron), expr: cron },
   };
-};
+}

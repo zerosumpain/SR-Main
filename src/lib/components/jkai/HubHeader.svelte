@@ -89,15 +89,11 @@
   ]);
   const library: MenuRow[] = [
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
-    { label: 'Prompts', href: '/jkai/prompts', meta: 'STACKS' },
-    { label: 'Research', href: '/jkai/research', meta: 'DEEP DIVE' },
-    { label: 'Briefing', href: '/jkai/briefing', meta: 'DAILY' },
-    { label: 'Monitors', href: '/jkai/monitors', meta: 'WATCHES' },
-    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'NOTICING' },
+    { label: 'Research', href: '/research', meta: 'DEEP DIVE' },
+    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'BRIEF · WATCH · LEARN' },
   ];
   const system = $derived<MenuRow[]>([
-    { label: 'Agent team', href: '/jkai/agents', meta: 'DELEGATES' },
-    { label: 'Improvement', href: '/jkai/improvement', meta: 'NIGHTLY' },
+    { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },
     { label: 'Doctor', href: '/jkai/doctor', meta: 'TRIAGE' },
     { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },
     {

@@ -1,7 +1,7 @@
 // Natural-language Monitors — "watch X, tell me when Y". createMonitor turns a
 // description into a SCHEDULED workflow (via the existing generator), attaches a
 // cron schedule (the generate path does not create the schedule row itself), and
-// records a marker in the `monitors` datastore collection so the /jkai/monitors
+// records a marker in the `monitors` datastore collection so the /jkai/daydreams?tab=watches
 // page can list + manage them. SERVER ONLY (generator + DB + scheduler).
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowSchedules, workflowRuns, nodeExecutions } from '$lib/db/schema';
@@ -245,7 +245,7 @@ export async function setMonitorEnabled(workflowId: string, enabled: boolean): P
 
 /**
  * Snooze a monitor for N hours: disable its schedule and stamp snoozeUntil on
- * the marker. Re-enabling is LAZY — checked on listMonitors (the /jkai/monitors
+ * the marker. Re-enabling is LAZY — checked on listMonitors (the /jkai/daydreams?tab=watches
  * page load). Passing hours <= 0 clears the snooze and re-enables now.
  */
 export async function snoozeMonitor(workflowId: string, hours: number): Promise<{ ok: boolean; snoozeUntil: string | null }> {
