@@ -232,23 +232,15 @@
 </aside>
 
 <style>
-  /* The instrument slab.
-   *
-   * The rail wears the cover register the /health owner pages and the daydream
-   * hub open with: an ink ground (#1a1008), cream type, and burnt orange
-   * lifted to --accent-on-dark because #c4570a scores 2.6:1 on this ground.
-   * Petrol has no role here — it is the counter-accent on PAPER, and there is
-   * no paper left in this panel.
-   *
-   * It used to be a cream panel on a cream page, which meant the one live
-   * surface on the front door read as furniture. */
+  /* The instrument, drawn on the page rather than sat on it: no ground of its
+     own, so the hero's ECG (or biome) reads straight through the rail and the
+     panel is hairlines, type and one signature numeral. */
   .vitals {
     display: flex;
     flex-direction: column;
     width: 100%;
-    background: var(--text-primary);
-    color: var(--bg);
-    border: 1px solid var(--text-primary);
+    background: transparent;
+    border: 1px solid var(--line-strong);
     /* Reserve the panel's height so the tiles flying in client-side don't shift
        the live-walk banner below them on stacked (mobile) layouts. */
     min-height: 392px;
@@ -260,58 +252,36 @@
     justify-content: space-between;
     gap: 12px;
     padding: 13px 20px;
-    /* No rule: the band below is cream now, so the value change is the edge and
-       a cream-alpha hairline drawn on cream paints nothing anyway. */
-    border-bottom: none;
-  }
-  /* The kicker, in the cover's own colour. Scoped past the global
-     `.metric-label` utility, which is written for paper. */
-  .v-head .metric-label {
-    color: var(--accent-on-dark);
+    border-bottom: 1px solid var(--line);
   }
   .v-clock {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
-    color: rgba(237, 228, 212, 0.42);
+    color: var(--text-ghost);
     font-variant-numeric: tabular-nums;
   }
 
   /* The pulse band takes the rail's slack. The rail is as tall as the hero, and
      the alternative was a pool of dead space between the readings and the way
      out — better that the air sits under the signature numeral, which is what
-     the panel is for.
-     
-     PAPER, inside an ink frame. The band is the tallest thing in the rail, so
-     on ink it was the single biggest solid mass on the front door and the page
-     read as intense. Cream here does two things at once: it takes that mass
-     out, and it makes the signature reading the one lit cell of an otherwise
-     dark instrument. The kicker above it and the deck below it stay ink, so the
-     masthead's L still runs unbroken from the nav down the rail's edge. */
+     the panel is for. */
   .v-hero {
     display: flex;
-    /* The band takes the panel's slack and CENTRES the numeral in it. Bottom
-       alignment put every one of those pixels above the figure, which on the
-       cream panel was invisible and on ink was a hole the size of the hero
-       type beside it. Centred, the air belongs to the figure. */
+    /* The band takes the panel's slack and CENTRES the numeral in it: bottom
+       alignment put every one of those pixels above the figure. */
     flex: 1 1 auto;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     padding: 20px;
-    background: var(--bg);
-    color: var(--text-primary);
-    /* Value change is the edge on both sides — no rule above, none below. */
-    border-bottom: none;
+    border-bottom: 1px solid var(--line);
   }
   .v-hero-read {
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-width: 0;
-  }
-  .v-hero .metric-label {
-    color: var(--text-muted);
   }
   /* The one display-scale numeral on the rail. Everything else is mono. */
   .v-hero-num {
@@ -339,7 +309,6 @@
     margin-bottom: 6px;
     border-radius: var(--radius-pill);
     background: var(--accent);
-    /* A glow, not elevation — the one sanctioned shadow in this system. */
     box-shadow: var(--accent-glow);
   }
   .v-hero-dot[data-state='idle'] {
@@ -365,18 +334,13 @@
   }
 
   /* The grid draws its own top/left edges; the panel already has a border, so
-     trim the duplicates and let the cells meet it flush. The `cellgrid` utility
-     rules the hairlines in --line-strong, which is ink on ink — every cell
-     border has to be relit for the dark ground. */
+     trim the duplicates and let the cells meet it flush. */
   .v-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     border-top: none;
     border-left: none;
     flex: none;
     align-content: start;
-  }
-  .v-grid > :global(*) {
-    border-color: rgba(237, 228, 212, 0.16);
   }
   .v-grid > :global(*:nth-child(2n)) {
     border-right: none;
@@ -390,10 +354,7 @@
     gap: 9px;
     margin-top: auto;
     padding: 16px 20px;
-    border-top: 1px solid rgba(237, 228, 212, 0.16);
-  }
-  .v-deploys .metric-label {
-    color: rgba(237, 228, 212, 0.55);
+    border-top: 1px solid var(--line);
   }
   .v-deploys-read {
     margin: 0;
@@ -401,26 +362,26 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: rgba(237, 228, 212, 0.6);
+    color: var(--text-muted);
   }
   .v-deploys-n {
-    color: var(--bg);
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     margin-right: 0.5ch;
   }
   .v-sep {
-    color: rgba(237, 228, 212, 0.3);
+    color: var(--text-ghost);
     margin: 0 0.5ch;
   }
   .v-deploys-bar {
     display: block;
     height: 4px;
-    background: rgba(237, 228, 212, 0.16);
+    background: var(--line);
   }
   .v-deploys-fill {
     display: block;
     height: 100%;
-    background: var(--accent-on-dark);
+    background: var(--accent);
   }
 
   .v-foot {
@@ -433,45 +394,36 @@
   .vitals:not(:has(.v-deploys)) .v-foot {
     margin-top: auto;
   }
-  /* The `ds-power` shape from the daydream cover: a cream outline that fills
-     with the lifted accent on hover. Radius 0 — the pill belonged to the paper
-     register this panel has left. */
   .v-btn {
     display: inline-flex;
     align-items: center;
     padding: 9px 14px;
-    border: 1px solid rgba(237, 228, 212, 0.3);
-    border-radius: 0;
+    border: 1px solid var(--accent-ink-tint-35);
+    border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
-    color: var(--bg);
+    color: var(--accent-ink);
     text-decoration: none;
     white-space: nowrap;
-    transition:
-      background var(--t-fast) var(--ease-out),
-      border-color var(--t-fast) var(--ease-out),
-      color var(--t-fast) var(--ease-out);
+    transition: background 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
   }
   .v-btn:hover {
-    background: var(--accent-on-dark);
-    border-color: var(--accent-on-dark);
-    color: var(--text-primary);
+    background: var(--accent-ink-tint-06);
   }
   .v-btn:focus-visible {
-    outline: 2px solid var(--accent-on-dark);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
   .v-btn.primary {
-    background: var(--accent-on-dark);
-    border-color: var(--accent-on-dark);
-    color: var(--text-primary);
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
   }
   .v-btn.primary:hover {
-    background: var(--bg);
-    border-color: var(--bg);
-    color: var(--text-primary);
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
 </style>
