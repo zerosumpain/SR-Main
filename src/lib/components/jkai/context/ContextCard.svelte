@@ -118,9 +118,10 @@
 </section>
 
 <style>
-  .ctx-card { border: 1px solid var(--line-hair); background: var(--surface-raised); min-width: 0; }
-  header { display:flex; justify-content:space-between; gap:10px; padding:12px 12px 9px; border-bottom:1px solid var(--line-hair); }
-  h3 { margin:0; color:var(--text); font-size:var(--fs-body-sm); font-weight:600; }
+  .ctx-card { position:relative; border:1px solid var(--line-strong); background:var(--surface-card); min-width:0; }
+  .ctx-card::before { content:''; position:absolute; z-index:1; inset:-1px auto auto -1px; width:42px; height:3px; background:var(--accent); }
+  header { display:flex; justify-content:space-between; gap:10px; padding:15px 13px 10px; border-bottom:1px solid var(--line-hair); }
+  h3 { margin:0; color:var(--text-primary); font-family:var(--font-display); font-size:var(--fs-body-sm); font-weight:400; letter-spacing:-.01em; text-transform:uppercase; }
   header p { margin:3px 0 0; color:var(--text-muted); font-size:var(--fs-label-xs); line-height:1.35; }
   header a, .link-row > a { color:var(--accent); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-decoration:none; white-space:nowrap; }
   .metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -128,7 +129,7 @@
   .metric:nth-child(even) { border-right:0; }
   .metric span, .metric small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .metric span { color:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.08em; }
-  .metric strong { display:block; margin-top:4px; font-size:var(--fs-title-sm); font-variant-numeric:tabular-nums; }
+  .metric strong { display:block; margin-top:4px; color:var(--text-primary); font-family:var(--font-display); font-size:var(--fs-display-xs); font-weight:400; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
   .metric small { margin-top:2px; color:var(--text-muted); font-size:var(--fs-label-xs); }
   .metric.good strong { color:var(--success); } .metric.warn strong { color:var(--warn); } .metric.bad strong { color:var(--error); }
   button:hover { background:var(--surface-overlay); }
@@ -144,7 +145,7 @@
   .series-chart { display:block; width:100%; height:148px; overflow:visible; }
   .series-chart text { fill:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); }
   .series-chart .grid { stroke:var(--line-hair); stroke-width:1; }
-  .series-chart circle:focus { stroke:var(--accent); fill:var(--surface-raised); outline:none; }
+  .series-chart circle:focus { stroke:var(--accent); fill:var(--surface-card); outline:none; }
   .legend { display:flex; gap:12px; padding:0 10px 9px 31px; color:var(--text-muted); font-size:var(--fs-label-xs); }
   .legend span { display:flex; align-items:center; gap:4px; } .legend i { width:12px; height:2px; }
   .note, .empty { margin:0; padding:13px; color:var(--text-muted); font-size:var(--fs-body-sm); line-height:1.5; }

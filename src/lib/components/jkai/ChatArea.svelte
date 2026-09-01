@@ -1733,6 +1733,12 @@
     { icon: 'bolt', label: "What's running?", text: 'What workflows and scheduled tasks do I have running right now?' },
     { icon: 'spark', label: 'What can you do?', text: 'What can you help me with? Give me a short tour of your capabilities.' },
   ] as const;
+  const LANDING_DIRECTIONS = [
+    { index: '01', label: 'Build', href: '/jkai/builds/new', note: 'Turn an idea into working software', metric: '0 → 1' },
+    { index: '02', label: 'Daydream', href: '/jkai/daydreams', note: 'Let patterns and possibilities surface', metric: 'always on' },
+    { index: '03', label: 'Research', href: '/research', note: 'Choose the depth, follow the evidence', metric: '4 depths' },
+    { index: '04', label: 'Canvas', href: '/jkai/canvas', note: 'Shape repeatable visual workflows', metric: 'visual' },
+  ] as const;
   function usePrompt(text: string) {
     input = text;
     void send();
@@ -2661,12 +2667,31 @@
     {:else if messages.length === 0}
       <div class="new-thread-state">
         <div class="hero">
-          <p class="hero-kicker"><span>Live workspace</span> jkai / new thread</p>
-          <h1 class="hero-title">Bring me the thing in front of you.</h1>
+          <p class="hero-kicker"><span>Live workspace</span> jkai / start anywhere</p>
+          <h1 class="hero-title">What are we making today?</h1>
           <p class="hero-sub">
-            Ask plainly. I can pull in your systems, notes, health data and working context, then act from the same conversation.
+            Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
           </p>
-          <div class="hero-rule"><span>Start somewhere</span></div>
+          <div class="direction-grid" aria-label="Workspace directions">
+            {#each LANDING_DIRECTIONS as direction (direction.label)}
+              <a class="direction-card" href={direction.href}>
+                <span class="direction-index">{direction.index}</span>
+                <span class="direction-copy">
+                  <strong>{direction.label}</strong>
+                  <small>{direction.note}</small>
+                </span>
+                <span class="direction-meta">{direction.metric}</span>
+                <span class="direction-arrow" aria-hidden="true">↗</span>
+              </a>
+            {/each}
+          </div>
+          <div class="hero-metrics" aria-label="Current workspace status">
+            <span><small>Routes</small><strong>04</strong></span>
+            <span><small>Model</small><strong>{shortModelLabel(currentModel.modelId)}</strong></span>
+            <span><small>Context</small><strong>{contextTokens === null ? 'ready' : `${Math.round(contextTokens / 1000)}k`}</strong></span>
+            <span><small>Build</small><strong>{activeBuild?.status ?? 'ready'}</strong></span>
+          </div>
+          <div class="hero-rule"><span>Or ask now</span></div>
           <div class="hero-chips">
             {#each EXAMPLE_PROMPTS as p (p.label)}
               <button type="button" class="hero-chip" onclick={() => usePrompt(p.text)}>
@@ -3462,6 +3487,11 @@
     grid-template-columns: 1fr min(880px, calc(100% - 40px)) 1fr;
     row-gap: 0;
     padding: 8px 0 40px;
+    animation: thread-arrive var(--t-slow) var(--ease-out) both;
+  }
+  @keyframes thread-arrive {
+    from { opacity:0; transform:translateY(8px); }
+    to { opacity:1; transform:translateY(0); }
   }
   /* :global because most children are component roots (ChatMessage's wrapper,
      WorkerTray, Artifact…) and so never carry this component's scope class. */
@@ -3852,13 +3882,13 @@
     min-height:100%;
     display:flex;
     align-items:center;
-    padding:clamp(28px, 6vw, 72px);
+    padding:clamp(24px, 4vw, 56px);
     background:var(--text-primary);
     color:var(--bg);
   }
   .hero {
     text-align: left;
-    width:min(760px, 100%);
+    width:min(940px, 100%);
     animation: hero-in 0.3s ease both;
   }
   @keyframes hero-in {
@@ -3877,12 +3907,12 @@
   .hero-kicker span { margin-right:12px; color:var(--accent-on-dark); }
   .hero-title {
     font-family: var(--font-display);
-    font-size: clamp(2.65rem, 7vw, 5.6rem);
-    line-height: 0.88;
+    font-size: clamp(2.5rem, 5.5vw, 4.9rem);
+    line-height: 0.9;
     letter-spacing: -0.045em;
     text-transform: uppercase;
     color: var(--bg);
-    margin: 0 0 1.25rem;
+    margin: 0 0 1rem;
     text-wrap:balance;
   }
   .hero-sub {
@@ -3890,11 +3920,31 @@
     line-height: 1.6;
     color: rgba(237,228,212,.72);
     text-wrap: pretty;
-    margin: 0 0 1.8rem;
+    margin: 0 0 1.35rem;
     max-width: 58ch;
   }
   .hero-rule { display:flex; align-items:center; gap:12px; margin-bottom:12px; color:rgba(237,228,212,.46); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:var(--tracking-label); }
   .hero-rule::after { content:''; flex:1; height:1px; background:rgba(237,228,212,.2); }
+  .direction-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-top:1px solid rgba(237,228,212,.25); border-left:1px solid rgba(237,228,212,.25); }
+  .direction-card { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:11px; min-height:86px; padding:14px 42px 14px 14px; border-right:1px solid rgba(237,228,212,.25); border-bottom:1px solid rgba(237,228,212,.25); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
+  .direction-card:hover { background:var(--bg); color:var(--text-primary); }
+  .direction-index { padding-top:3px; color:var(--accent-on-dark); font-family:var(--font-mono); font-size:var(--fs-label-xs); font-variant-numeric:tabular-nums; }
+  .direction-card:hover .direction-index { color:var(--accent); }
+  .direction-copy { min-width:0; }
+  .direction-copy strong { display:block; font-family:var(--font-display); font-size:var(--fs-display-xs); font-weight:400; line-height:1; text-transform:uppercase; }
+  .direction-copy small { display:block; margin-top:6px; color:rgba(237,228,212,.62); font-size:var(--fs-label-xs); line-height:1.3; }
+  .direction-card:hover .direction-copy small { color:var(--text-muted); }
+  .direction-meta { align-self:end; color:rgba(237,228,212,.48); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; white-space:nowrap; }
+  .direction-card:hover .direction-meta { color:var(--text-muted); }
+  .direction-arrow { position:absolute; top:12px; right:14px; color:var(--accent-on-dark); font-size:var(--fs-body-lg); transition:transform var(--t-fast) var(--ease-out); }
+  .direction-card:hover .direction-arrow { color:var(--accent); transform:translate(2px,-2px); }
+  .direction-card:focus-visible { z-index:1; outline:2px solid var(--accent-on-dark); outline-offset:-2px; }
+  .hero-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:10px 0 18px; border:1px solid rgba(237,228,212,.14); }
+  .hero-metrics > span { min-width:0; padding:8px 10px; border-right:1px solid rgba(237,228,212,.14); }
+  .hero-metrics > span:last-child { border-right:0; }
+  .hero-metrics small, .hero-metrics strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hero-metrics small { color:rgba(237,228,212,.42); font-family:var(--font-mono); font-size:var(--fs-label-xs); letter-spacing:.1em; text-transform:uppercase; }
+  .hero-metrics strong { margin-top:3px; color:rgba(237,228,212,.82); font-family:var(--font-mono); font-size:var(--fs-label-xs); font-weight:600; text-transform:uppercase; }
   .hero-chips {
     display: flex;
     flex-wrap: wrap;
@@ -4618,6 +4668,11 @@
     .hero-title {
       font-size:clamp(2.5rem, 15vw, 4rem);
     }
+    .direction-grid { grid-template-columns:1fr; }
+    .direction-card { min-height:74px; }
+    .hero-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .hero-metrics > span:nth-child(2) { border-right:0; }
+    .hero-metrics > span:nth-child(-n+2) { border-bottom:1px solid rgba(237,228,212,.14); }
     .thread-tools {
       top: 6px;
       right: 12px;
@@ -4655,6 +4710,10 @@
       width: 48px;
       height: 48px;
     }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .hero, .msg-stack { animation:none; }
+    .direction-card, .direction-arrow { transition:none; }
   }
 
 </style>
