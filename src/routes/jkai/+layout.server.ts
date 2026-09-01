@@ -6,6 +6,7 @@ import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
 import { getCodexUsage } from '$lib/server/models/codex-usage';
+import { getDeployVersion } from '$lib/server/deploy-version';
 
 /** Fallback spend ceiling, used ONLY when OpenRouter can't tell us the real
  *  credit balance. Overridable from app_settings so it can be raised without a
@@ -90,6 +91,7 @@ export const load: LayoutServerLoad = async () => {
       : DEFAULT_DAILY_BUDGET_USD);
 
   return {
+    deploy: getDeployVersion(),
     hub: {
       tokensToday: today?.tokens ?? 0,
       spendTodayUsd: today?.spendUsd ?? 0,

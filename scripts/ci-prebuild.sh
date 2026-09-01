@@ -16,9 +16,12 @@
 set -euo pipefail
 
 SHA="$(git rev-parse HEAD)"
+TREE="$(git rev-parse 'HEAD^{tree}')"
+[ -f .env ] || { echo ".env missing — build-time public environment cannot be fingerprinted" >&2; exit 1; }
+BUILD_ENV_SHA256="$(sha256sum .env | cut -d' ' -f1)"
 
 [ -d build ] || { echo "no build/ directory — did the build step run?" >&2; exit 1; }
-[ -f build/handler.js ] || { echo "build/handler.js missing — the adapter did not package a server bundle. Is SR_GATE_STUB_ADAPTER set? It must never be set here." >&2; exit 1; }
+[ -f build/handler.js ] || { echo "build/handler.js missing — the adapter did not package a server bundle" >&2; exit 1; }
 
 # Some faults exist only after bundling and are invisible to every unit test —
 # pdf.js losing its worker file took every PDF in production down for four days
@@ -31,7 +34,9 @@ node scripts/check-built-extract.mjs
 echo "==> Stamping deploy provenance into build/.deploy-sha..."
 {
   echo "sha=$SHA"
-  echo "short=$(git rev-parse --short HEAD)"
+	  echo "short=$(git rev-parse --short HEAD)"
+	  echo "tree=$TREE"
+	  echo "build_env_sha256=$BUILD_ENV_SHA256"
   echo "branch=$(git rev-parse --abbrev-ref HEAD)"
   echo "dirty=$([ -n "$(git status --porcelain)" ] && echo yes || echo no)"
   echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

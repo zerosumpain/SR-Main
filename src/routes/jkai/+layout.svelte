@@ -3,6 +3,7 @@
   import { registerJkaiSW } from '$lib/jkai/pwa/register';
   import { startAutoSync } from '$lib/jkai/pwa/syncManager';
   import OfflineBanner from '$lib/components/jkai/OfflineBanner.svelte';
+  import AppUpdateNotice from '$lib/components/jkai/AppUpdateNotice.svelte';
   import PushOptInCard from '$lib/components/jkai/PushOptInCard.svelte';
   import JkaiLauncher from '$lib/components/jkai/JkaiLauncher.svelte';
   import ActivityStrip from '$lib/components/jkai/ActivityStrip.svelte';
@@ -18,7 +19,12 @@
   // button is gone: the header carries the trigger on every surface now.
 
   onMount(() => {
-    void registerJkaiSW();
+    let disposePwa: (() => void) | undefined;
+    let unmounted = false;
+    void registerJkaiSW(data.deploy.sha).then((dispose) => {
+      if (unmounted) dispose();
+      else disposePwa = dispose;
+    });
     const dispose = startAutoSync();
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
@@ -28,6 +34,8 @@
     };
     window.addEventListener('keydown', onKey);
     return () => {
+      unmounted = true;
+      disposePwa?.();
       dispose();
       window.removeEventListener('keydown', onKey);
     };
@@ -65,6 +73,7 @@
 
 <div class="jkai-root">
   <OfflineBanner />
+  <AppUpdateNotice currentVersion={data.deploy.short} />
   <PushOptInCard vapidPublicKey={PUBLIC_VAPID_PUBLIC_KEY} />
   <ActivityStrip />
 
@@ -79,6 +88,7 @@
     workflowCount={data.hub.workflowCount}
     workflowLiveCount={data.hub.workflowLiveCount}
     workflowFailedToday={data.hub.workflowFailedToday}
+    buildVersion={data.deploy.short}
   />
 
   <div class="jkai-body">

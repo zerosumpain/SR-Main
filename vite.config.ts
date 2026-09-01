@@ -14,7 +14,9 @@ export default defineConfig({
 		routeManifest(),
 		sveltekit(),
 		SvelteKitPWA({
-			registerType: 'autoUpdate',
+				// Long-lived chat sessions may contain unsent text. Download updates in
+				// the background, then let the user choose the safe moment to reload.
+				registerType: 'prompt',
 			injectRegister: false,
 			scope: '/jkai/',
 			strategies: 'generateSW',

@@ -140,9 +140,7 @@ if [ "$GATE_EC" -ne 0 ]; then
 fi
 
 # ── the build, on request ────────────────────────────────────────────────────
-# The REAL adapter, not SR_GATE_STUB_ADAPTER. That flag is a CI-gate-only
-# shortcut that swaps adapter-node for a no-op to save ~93s, and it must never be
-# set where the output is inspected. Building for real here is worth having:
+# The real adapter. Building for real here is worth having:
 # on homeserv the packaging step dies under the Bash sandbox with "Could not
 # resolve entry module .svelte-kit/adapter-node/index.js", so this lane is the
 # one place a full adapter-node build can be proved outside CI.

@@ -41,7 +41,7 @@
  * answer, including when that answer is "run everything".
  *
  * Usage:
- *   node scripts/select-tests.mjs [BASE_REF]        # defaults to HEAD^
+ *   node scripts/select-tests.mjs [BASE_REF]        # defaults to origin/master
  *   SELECT_TESTS_FILES=$'a\nb' node scripts/select-tests.mjs   # injected, for tests
  */
 import { execFileSync } from 'node:child_process';
@@ -73,10 +73,13 @@ try {
 	if (process.env.SELECT_TESTS_FILES !== undefined) {
 		changed = process.env.SELECT_TESTS_FILES.split('\n').filter(Boolean);
 	} else {
-		const base = process.argv[2] || 'HEAD^';
-		const out = execFileSync('git', ['-C', ROOT, 'diff', '--name-status', `${base}...HEAD`], {
-			encoding: 'utf8',
-		});
+			const base = process.argv[2] || 'origin/master';
+			const mergeBase = execFileSync('git', ['-C', ROOT, 'merge-base', base, 'HEAD'], {
+				encoding: 'utf8',
+			}).trim();
+			const out = execFileSync('git', ['-C', ROOT, 'diff', '--name-status', mergeBase, '--'], {
+				encoding: 'utf8',
+			});
 		// A deletion or rename breaks the reasoning: a deleted module can break
 		// importers that no longer appear in the diff at all.
 		if (/^(D|R\d*)\t/m.test(out)) full('change set contains a deletion or rename');

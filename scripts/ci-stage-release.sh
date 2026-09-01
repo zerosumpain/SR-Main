@@ -27,6 +27,9 @@ RELEASE_DIR="$VPS_DIR/releases/$SHA"
 # would ship one commit's code under another commit's name.
 STAMPED="$(sed -n 's/^sha=//p' build/.deploy-sha | head -1)"
 [ "$STAMPED" = "$SHA" ] || { echo "artifact was built from $STAMPED but this checkout is $SHA" >&2; exit 1; }
+STAMPED_TREE="$(sed -n 's/^tree=//p' build/.deploy-sha | head -1)"
+TREE="$(git rev-parse 'HEAD^{tree}')"
+[ "$STAMPED_TREE" = "$TREE" ] || { echo "artifact tree is $STAMPED_TREE but this checkout tree is $TREE" >&2; exit 1; }
 
 # Copy to .partial and rename. A release directory either exists complete or
 # does not exist — a half-copied one must never be mistaken for shippable, and

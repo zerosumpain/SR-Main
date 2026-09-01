@@ -1,17 +1,16 @@
 name: CI
 
-# Gate on a GitHub-hosted runner; build + deploy on the self-hosted runner that
-# lives ON the VPS. Splitting them is deliberate:
+# Gate and build release candidates on disposable GitHub-hosted runners; promote
+# or rebuild on the separate builder; deploy on the VPS. Splitting them is
+# deliberate:
 #
-#  - The gate runs untrusted-ish PR code, so it belongs in a disposable hosted
-#    VM, never on the production box. It needs no secrets (only one test file
-#    touches a DB, and it skips without one), so a hosted runner is enough.
-#  - The build does NOT fit a hosted runner: it peaks at ~5.3GB RSS (measured
-#    2026-07-25), and private-repo hosted runners are 2-core/7GB. It runs on the
-#    VPS instead, which builds where it deploys — no artifact transfer and no
-#    SSH deploy key in GitHub secrets. The runner unit is capped at MemoryMax=7G
-#    so a runaway build is cgroup-killed instead of the kernel OOM-killer
-#    picking the production node process.
+#  - PR code belongs in a disposable VM, never on either self-hosted machine.
+#    This public repository's hosted runner can package the measured ~5.3GB
+#    build, and the build needs only public bundle variables, not secrets.
+#  - The PR artifact is content-addressed by Git tree. Master promotes it only
+#    after verifying the source tree, production public-env hash, and successful
+#    gate. Otherwise porkserv performs the known-safe fresh-build fallback.
+#  - The VPS only downloads, stages and atomically selects a verified payload.
 #
 # `needs: gate` is what enforces the gate at the workflow level: a red gate
 # cannot reach the deploy job regardless of anything configured server-side.
@@ -31,8 +30,8 @@ on:
     branches: [master]
   workflow_dispatch:
 
-# Never let two deploys touch the VPS at once. Do not cancel in progress: a
-# half-finished deploy is worse than a queued one.
+# Never let two deploys touch the VPS at once. Master cannot be cancelled in
+# progress; superseded PR runs can and should be.
 #
 # KEY IT ON THE REF. A single global group put every pull-request gate in the
 # same queue as the production deploy, and with cancel-in-progress: false
@@ -48,10 +47,14 @@ on:
 # behind each other for no reason.
 concurrency:
   group: sr-main-deploy-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded PR commits only consume hosted-runner slots and delay the commit
+  # anyone can still merge. Master is different: cancelling a release midway
+  # can strand a staged build, so production runs always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   # ── the cheap classifier every expensive job hangs off ────────────────────────
@@ -71,6 +74,9 @@ jobs:
     outputs:
       level: ${{ steps.level.outputs.level }}
       shards: ${{ steps.level.outputs.shards }}
+      candidate_certified: ${{ steps.candidate.outputs.certified }}
+      candidate_run_id: ${{ steps.candidate.outputs.run_id }}
+      candidate_name: ${{ steps.candidate.outputs.name }}
     steps:
       # Enough history to diff against a base, and no more. `fetch-depth: 0`
       # would be the obvious choice and is the wrong one: a full clone costs
@@ -140,10 +146,53 @@ jobs:
           npm run gate:schema-imports &&
           npm run gate:boundaries
 
+      # A squash merge has a new commit SHA but, when it contains exactly the
+      # gated PR content, the same Git TREE. Find a candidate by that immutable
+      # content id and accept it only when the Gate job in its own PR run passed.
+      # A direct push, red PR, expired artifact or API failure emits no
+      # certificate, which makes master run the full checks and fresh build.
+      - name: Find a gate-certified release candidate
+        id: candidate
+        if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tree = require('child_process')
+              .execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' })
+              .trim();
+            const name = `candidate-${tree}`;
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { owner: context.repo.owner, repo: context.repo.repo, name, per_page: 100 }
+            );
+            for (const artifact of artifacts.sort((a, b) => b.id - a.id)) {
+              if (artifact.expired || !artifact.workflow_run?.id) continue;
+              const runId = artifact.workflow_run.id;
+              const run = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner, repo: context.repo.repo, run_id: runId
+              });
+              if (run.data.event !== 'pull_request') continue;
+              const jobs = await github.paginate(
+                github.rest.actions.listJobsForWorkflowRun,
+                { owner: context.repo.owner, repo: context.repo.repo, run_id: runId, per_page: 100 }
+              );
+              const gate = jobs.find((job) => job.name === 'Gate (check + test)');
+              if (gate?.conclusion !== 'success') continue;
+              core.setOutput('certified', 'true');
+              core.setOutput('run_id', String(runId));
+              core.setOutput('name', name);
+              core.summary.addRaw(`Reusing gate-certified candidate \`${name}\` from run ${runId}.`);
+              await core.summary.write();
+              return;
+            }
+            core.setOutput('certified', 'false');
+            core.notice(`No green PR candidate found for tree ${tree}; master will run the full fallback path.`);
+
   # ── the type check ───────────────────────────────────────────────────────────
   #
-  # NEVER SCOPED, at any level. A changed type signature breaks its consumers,
-  # not itself, so narrowing it would miss exactly what it exists to catch.
+  # NEVER SCOPED within a source gate. A changed type signature breaks its
+  # consumers, not itself, so narrowing it would miss exactly what it exists to
+  # catch. A master run may reuse the completed result for the exact gated tree.
   #
   # Measured at ~94s in CI (from L2 runs, where the test half is scoped down to a
   # few dozen files and the pair's wall clock is therefore this job alone). That
@@ -152,7 +201,7 @@ jobs:
   typecheck:
     name: Type check
     needs: level
-    if: needs.level.outputs.level != 'L1'
+    if: needs.level.outputs.level != 'L1' && needs.level.outputs.candidate_certified != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -207,7 +256,7 @@ jobs:
   test:
     name: Tests
     needs: level
-    if: needs.level.outputs.level != 'L1'
+    if: needs.level.outputs.level != 'L1' && needs.level.outputs.candidate_certified != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -302,28 +351,16 @@ jobs:
 
   # ── the build ────────────────────────────────────────────────────────────────
   #
-  # The build is a PROOF here, not an artifact — the job deletes it. It used to
-  # run at the END of the gate job, adding ~99s to every PR after the tests had
-  # already finished. Nothing in it depends on the tests passing, so it is its own
-  # job and overlaps them.
-  #
-  # On a master push that proof is redundant: the VPS rebuilds the identical tree
-  # minutes later in `prebuild`, and its Build step runs BEFORE ci-release.sh,
-  # whose first write to production is an rsync. A broken build therefore fails
-  # the deploy with production untouched.
-  #
-  # The guard is `!= push`, deliberately, so that a workflow_dispatch re-run still
-  # builds. Writing it as `== pull_request` would leave a manual dispatch with no
-  # build check from EITHER job.
+  # The PR build is also a release candidate. It carries the real adapter and is
+  # keyed by Git tree rather than commit SHA, allowing a squash-merge commit with
+  # identical content to promote it. Master verifies the tree, the gate result,
+  # and a hash of the build-time public environment before reuse.
   build:
     name: Build
     needs: level
-    if: github.event_name != 'push' && needs.level.outputs.level != 'L1'
+    if: github.event_name == 'pull_request' && needs.level.outputs.level != 'L1'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # See the note in `typecheck`. Per-job, deliberately.
-      PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
     steps:
       - uses: actions/checkout@v4
 
@@ -334,14 +371,46 @@ jobs:
 
       - run: npm ci
 
-      # SR_GATE_STUB_ADAPTER swaps adapter-node for a no-op, cutting ~93s. The
-      # bundle is still built and checked — only the packaging of a server bundle
-      # nobody reads is skipped. See svelte.config.js. Deliberately set here and
-      # nowhere else: on the VPS this flag would deploy an empty build.
-      - name: Build
-        run: npm run gate:build
+      - name: Provide build-time public env
         env:
-          SR_GATE_STUB_ADAPTER: '1'
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+          PUBLIC_VAPID_PUBLIC_KEY: ${{ vars.PUBLIC_VAPID_PUBLIC_KEY }}
+        run: |
+          {
+            echo "PUBLIC_SITE_URL=${PUBLIC_SITE_URL:-https://strangeramblings.com}"
+            echo "PUBLIC_VAPID_PUBLIC_KEY=${PUBLIC_VAPID_PUBLIC_KEY:-ci-gate-placeholder}"
+          } > .env
+
+      - name: Build the real release candidate
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      - name: Verify and stamp the candidate
+        run: ./scripts/ci-prebuild.sh
+
+      - name: Build candidate sidecars
+        run: |
+          npm run build:builder      || echo "::warning::build:builder failed — the previous jkai-builder bundle stays live"
+          npm run build:codex-bridge || echo "::warning::build:codex-bridge failed — the previous bundle stays live"
+          npm run build:wa-worker    || echo "::warning::build:wa-worker failed — the previous bundle stays live"
+
+      - name: Identify source tree
+        id: source
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ steps.source.outputs.tree }}
+          path: |
+            build/
+            packages/jkai-builder/dist/start.js
+            packages/jkai-codex-bridge/dist/start.js
+            packages/jkai-wa-worker/dist/start.js
+          retention-days: 3
+          if-no-files-found: error
+          include-hidden-files: true
 
   # ── the verdict ──────────────────────────────────────────────────────────────
   #
@@ -370,6 +439,7 @@ jobs:
           R_TEST: ${{ needs.test.result }}
           R_BUILD: ${{ needs.build.result }}
           EVENT: ${{ github.event_name }}
+          CERTIFIED: ${{ needs.level.outputs.candidate_certified }}
         run: |
           FAIL=0
 
@@ -405,13 +475,13 @@ jobs:
 
           # L1 is documentation only — the two linters in the level job ARE the
           # gate, and they already ran unconditionally.
-          if [ "$LEVEL" = "L1" ]; then SKIP_OK=yes; else SKIP_OK=no; fi
+          if [ "$LEVEL" = "L1" ] || [ "$CERTIFIED" = "true" ]; then SKIP_OK=yes; else SKIP_OK=no; fi
           require "type check" "$R_TYPECHECK" "$SKIP_OK"
           require "tests"      "$R_TEST"      "$SKIP_OK"
 
-          # The build is additionally skipped on a master push, where prebuild
-          # rebuilds the identical tree before anything reaches production.
-          if [ "$LEVEL" = "L1" ] || [ "$EVENT" = "push" ]; then
+          # PR documentation changes have no candidate build. Master builds or
+          # promotes in prebuild, so it never needs this separate proof job.
+          if [ "$LEVEL" = "L1" ] || [ "$EVENT" != "pull_request" ]; then
             BUILD_SKIP_OK=yes
           else
             BUILD_SKIP_OK=no
@@ -448,6 +518,7 @@ jobs:
     # master guard above. A job that also ran on `pull_request` would let any
     # stranger open a PR and execute arbitrary code on that box, so `gate` must
     # never be pointed at it — and gate is free on GitHub-hosted anyway.
+    needs: level
     runs-on: [self-hosted, builder]
     timeout-minutes: 30
     steps:
@@ -457,8 +528,6 @@ jobs:
 
       - name: Runtime versions
         run: node --version && npm --version
-
-      - run: npm ci
 
       # `$env/static/public` values are INLINED INTO THE BUNDLE at build time,
       # and the runner's checkout has no .env — so without this the production
@@ -489,10 +558,30 @@ jobs:
           } > .env
           echo "public vars provided: $(grep -c '^PUBLIC_' .env)"
 
-      # The REAL adapter. SR_GATE_STUB_ADAPTER is a gate-only flag and must
-      # never reach here — ci-prebuild.sh asserts handler.js exists for exactly
-      # that reason.
+      - name: Download the gate-certified candidate
+        id: candidate_download
+        if: needs.level.outputs.candidate_certified == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.level.outputs.candidate_name }}
+          run-id: ${{ needs.level.outputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: .
+
+      - name: Verify and promote the candidate
+        id: promote
+        if: needs.level.outputs.candidate_certified == 'true'
+        run: ./scripts/ci-promote-candidate.sh
+
+      - name: Install dependencies for a fresh build
+        if: steps.promote.outputs.promoted != 'true'
+        run: npm ci
+
+      # The real adapter. A candidate promotion skips this; every fallback build
+      # still produces the complete runnable server bundle.
       - name: Build
+        if: steps.promote.outputs.promoted != 'true'
         run: npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
@@ -503,6 +592,7 @@ jobs:
       # that job has no node_modules by design. It also stamps
       # build/.deploy-sha, so this must precede the upload.
       - name: Verify and stamp the build
+        if: steps.promote.outputs.promoted != 'true'
         run: ./scripts/ci-prebuild.sh
 
       # Every bundle is built HERE, because this is now the only job with
@@ -514,6 +604,7 @@ jobs:
       # tolerance they have always had. Failing the whole job here would be
       # stricter than the behaviour this replaces.
       - name: Build the sidecar bundles
+        if: steps.promote.outputs.promoted != 'true'
         run: |
           npm run build:builder      || echo "::warning::build:builder failed — the previous jkai-builder bundle stays live"
           npm run build:codex-bridge || echo "::warning::build:codex-bridge failed — the previous bundle stays live"

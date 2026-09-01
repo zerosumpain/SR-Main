@@ -68,7 +68,11 @@ else
   [ -n "$MB" ] || { REASON="empty merge-base against $BASE_REF"; emit; }
   # --diff-filter is NOT used to exclude deletions here; we want to SEE them so
   # they can force L3 rather than silently vanishing from the list.
-  STATUSES="$(git -C "$HERE" diff --name-status "$MB"...HEAD 2>/dev/null)" || { REASON="cannot diff against $BASE_REF"; emit; }
+  # Compare the merge base with the working tree, not only HEAD. CI checkouts
+  # are clean so the answer is identical there; locally this also sees staged
+  # and unstaged edits (and validate-change uses a temporary index for untracked
+  # files) instead of declaring active work "no files changed".
+  STATUSES="$(git -C "$HERE" diff --name-status "$MB" -- 2>/dev/null)" || { REASON="cannot diff against $BASE_REF"; emit; }
   CHANGED="$(printf '%s\n' "$STATUSES" | awk 'NF{print $NF}')"
 fi
 

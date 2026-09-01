@@ -70,6 +70,7 @@
 /api/space-lander/scores
 /api/space-lander/session
 /api/trails/segments
+/api/version
 /api/whatsapp/inbound
 /auth-error
 /blog

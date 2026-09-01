@@ -16,7 +16,18 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BASE="${1:-HEAD^}"
+# Local branches must compare with the merge base of origin/master. HEAD^ only
+# describes the last commit, so a multi-commit branch can accidentally retest
+# earlier work or miss files from the current change set. CI passes HEAD^
+# explicitly because its pull_request checkout is GitHub's synthetic merge
+# commit, whose first parent is exactly the base tip.
+if [ -n "${1:-}" ]; then
+  BASE="$1"
+elif git rev-parse --verify origin/master >/dev/null 2>&1; then
+  BASE=origin/master
+else
+  BASE=HEAD^
+fi
 OUT="$(node scripts/select-tests.mjs "$BASE" 2>&1)"
 SELECTOR_EC=$?
 
