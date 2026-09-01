@@ -4,10 +4,15 @@
 // self-improvement harness (host/kill gates, datastore dogfooding), trimmed to a
 // single gather→synthesise→deliver flow.
 
+import type { BriefingMemoryRow } from '$lib/constants/briefing';
+export {
+  SETTINGS_ENABLED_KEY,
+  SETTINGS_TOPICS_KEY,
+  type BriefingMemoryRow,
+} from '$lib/constants/briefing';
+
 export const BRIEFINGS_COLLECTION = 'briefings';
 export const FEEDBACK_COLLECTION = 'briefing-feedback';
-export const SETTINGS_ENABLED_KEY = 'briefing.enabled';
-export const SETTINGS_TOPICS_KEY = 'briefing.topics';
 
 export const CRON_EXPR = '30 6 * * *'; // 06:30 daily
 export const CRON_TZ = 'Europe/London';
@@ -65,6 +70,8 @@ export interface BriefingDetail {
     sameSpot: boolean;
   } | null;
   knowledge: { query: string | null; context: string } | null;
+  /** Memories learned inside the configured recency window, newest first. */
+  memories?: BriefingMemoryRow[];
   facts: BriefingFactRow[];
   gaps: Array<{ section: string; reason: string }>;
   sources: BriefingSourceRow[];

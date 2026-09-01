@@ -36,7 +36,6 @@
     // and the recorder are its owner-only children. A second nav cell under it
     // could never deactivate, because isActive() is a prefix match.
     { href: '/health', label: 'Health' },
-    { href: '/live', label: 'Live' },
     { href: '/jkai', label: 'jkai' },
     { href: '/drive', label: 'Drive' },
   ];

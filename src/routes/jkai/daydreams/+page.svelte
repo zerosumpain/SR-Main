@@ -2081,7 +2081,7 @@
     <StatDeck dark tiles={coverTiles} min={210} />
   {/snippet}
 
-  {#if data.loadError}
+  {#if data.loadError && tab !== 'briefing'}
     <section class="band">
       <div class="inner">
         <div class="card t-urgent">

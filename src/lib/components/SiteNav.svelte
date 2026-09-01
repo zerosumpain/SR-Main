@@ -14,7 +14,6 @@
     // children is now possible — isActive() resolves most-specific-first — but
     // one hub is still the intent.
     { href: '/health', label: 'Health' },
-    { href: '/live', label: 'Live' },
     { href: '/jkai', label: 'jkai' },
     { href: '/drive', label: 'Drive' },
   ];

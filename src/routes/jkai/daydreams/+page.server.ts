@@ -16,6 +16,13 @@ import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 // there is no data.
 
 export const load: PageServerLoad = async () => {
+  // The briefing is an independently useful surface. Keep its load promise
+  // outside the main ledger try/catch so a stale detector/daydream schema does
+  // not erase an otherwise healthy briefing profile and source configuration.
+  const briefingPromise = loadBriefingDashboard().catch((err) => {
+    console.error('[daydream] briefing load failed:', errMsg(err));
+    return null;
+  });
   try {
     const [ledger, enabled, loop, monitors, briefing, improvement] = await Promise.all([
       loadLedger(),
@@ -25,10 +32,7 @@ export const load: PageServerLoad = async () => {
         console.error('[daydream] monitors load failed:', errMsg(err));
         return [];
       }),
-      loadBriefingDashboard().catch((err) => {
-        console.error('[daydream] briefing load failed:', errMsg(err));
-        return null;
-      }),
+      briefingPromise,
       loadImprovementDashboard().catch((err) => {
         console.error('[daydream] improvement load failed:', errMsg(err));
         return null;
@@ -91,7 +95,7 @@ export const load: PageServerLoad = async () => {
       },
       loopVerdict: { state: 'unknown' as const, line: 'Could not read the loop\u2019s state.' },
       monitors: [],
-      briefing: null,
+      briefing: await briefingPromise,
       improvement: null,
       loadError: errMsg(err),
     };

@@ -1,8 +1,10 @@
 import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { db } from '$lib/db';
-import { workflows } from '$lib/db/schema';
+import { workflowNodes, workflows } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { BRIEFING_SOURCE_CATALOG } from '$lib/constants/briefing';
+import { getBriefingProfile } from '$lib/server/briefing-profile';
 import {
   BRIEFINGS_COLLECTION,
   SETTINGS_ENABLED_KEY,
@@ -45,11 +47,55 @@ export async function loadBriefingDashboard() {
     .limit(1);
 
   const cron = (wf?.trigger as { config?: { expression?: string } } | null)?.config?.expression ?? null;
+  const nodes = wf
+    ? await db
+        .select({ type: workflowNodes.type, config: workflowNodes.config })
+        .from(workflowNodes)
+        .where(eq(workflowNodes.workflowId, wf.id))
+    : [];
+  const profile = await getBriefingProfile();
+  const nodeTypes = new Set(nodes.map((node) => node.type));
+  const healthOps = new Set(
+    nodes
+      .filter((node) => node.type === 'health-query')
+      .map((node) => String((node.config as Record<string, unknown>)?.operation ?? '')),
+  );
+  const weatherCount = nodes.filter((node) => node.type === 'weather-brief').length;
+
+  const isDirectlyConnected = (key: string, nodeTypesForSource: string[]): boolean => {
+    if (key === 'weather-home') return weatherCount >= 1;
+    if (key === 'weather-here') return weatherCount >= 2;
+    if (key === 'sleep' || key === 'readiness') return healthOps.has(key);
+    return nodeTypesForSource.some((type) => nodeTypes.has(type));
+  };
+
+  const sourceCatalog = BRIEFING_SOURCE_CATALOG.map((source) => {
+    const directlyConnected = isDirectlyConnected(source.key, source.nodeTypes);
+    const genericConnected = nodes.some((node) => {
+      if (node.type !== 'transform') return false;
+      const expression = String((node.config as Record<string, unknown>)?.expression ?? '');
+      return expression.includes('briefingSources') && expression.includes(source.key);
+    });
+    const connection: 'native' | 'connected' | 'available' | 'missing' = source.mode === 'native'
+      ? 'native'
+      : directlyConnected || genericConnected
+        ? 'connected'
+        : source.mode === 'extension'
+          ? 'available'
+          : 'missing';
+    return {
+      ...source,
+      preference: profile.sources[source.key],
+      connection,
+    };
+  });
 
   return {
     briefings,
     enabled: (await getSetting<boolean>(SETTINGS_ENABLED_KEY)) !== false,
     topics: (await getSetting<string[]>(SETTINGS_TOPICS_KEY)) ?? [],
+    profile,
+    sourceCatalog,
     workflowId: wf?.id ?? null,
     schedule: { display: describeCron(cron), expr: cron },
   };

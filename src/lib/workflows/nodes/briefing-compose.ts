@@ -1,4 +1,11 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import {
+  SETTINGS_TOPICS_KEY,
+  type BriefingMemoryRow,
+  type BriefingSourceKey,
+} from '$lib/constants/briefing';
+import { getBriefingProfile } from '$lib/server/briefing-profile';
+import { getSetting } from '$lib/server/models/settings';
 
 export { briefingComposeDef } from './briefing-compose.def';
 
@@ -155,10 +162,25 @@ export const briefingComposeExecutor: NodeExecutor = {
     const timezone = str(config.timezone) ?? 'Europe/London';
     const titlePrefix = str(config.titlePrefix) ?? 'Briefing';
     const now = new Date();
+    const profile = await getBriefingProfile();
+    const sourceEnabled = (key: string): boolean =>
+      profile.sources[key as BriefingSourceKey]?.enabled !== false;
 
     const facts: BriefingFact[] = [];
     const gaps: BriefingGap[] = [];
     const sources: BriefingSource[] = [];
+    const sectionSourceKeys = new Map<string, string>([
+      ['Location', 'location'],
+      ['Weather · home', 'weather-home'],
+      ['Weather · where you are', 'weather-here'],
+      ['Sleep', 'sleep'],
+      ['Readiness', 'readiness'],
+      ['Home', 'indoor'],
+      ['Email', 'email'],
+      ['Knowledge graph', 'knowledge'],
+      ['Daydreams', 'daydreams'],
+      ['New memories', 'memories'],
+    ]);
 
     // A gap means "this section produced no usable value", so only `failed` and
     // `empty` qualify. `stale` still yielded data (an old GPS fix, a partially
@@ -173,6 +195,20 @@ export const briefingComposeExecutor: NodeExecutor = {
     const recordLedgerOnly = (key: string, label: string, detail: string, error?: string | null) => {
       sources.push({ key, label, status: 'failed', detail, error: error ?? null });
     };
+
+    // User-declared priorities are themselves verified input. The former
+    // settings UI saved these but the canvas workflow never read them, so they
+    // had no effect on a briefing produced by the real scheduled path.
+    const topics = (await getSetting<string[]>(SETTINGS_TOPICS_KEY)) ?? [];
+    const cleanTopics = topics.filter((topic): topic is string => typeof topic === 'string' && !!topic.trim()).slice(0, 20);
+    if (cleanTopics.length) {
+      facts.push({
+        section: 'Briefing focus',
+        label: 'Keep in view',
+        value: cleanTopics.join(' · ').slice(0, 1000),
+        source: 'briefing settings',
+      });
+    }
 
     // ---- Location -------------------------------------------------------
     const loc = obj(input.location);
@@ -396,6 +432,105 @@ export const briefingComposeExecutor: NodeExecutor = {
       record('daydreams', 'Daydreams', 'failed', err instanceof Error ? err.message : String(err));
     }
 
+    // ---- New shared memories --------------------------------------------
+    // Daydream reviews, notes and confirmed places all end up in the shared
+    // memory table. Feeding the newest live rows back into the briefing makes
+    // that learning visible instead of leaving it buried in the Memory tab.
+    let memoryRows: BriefingMemoryRow[] = [];
+    if (sourceEnabled('memories')) {
+      try {
+        const { db } = await import('$lib/db');
+        const { jkaiMemories } = await import('$lib/db/schema');
+        const { and, desc, gte, isNull, sql } = await import('drizzle-orm');
+        const since = new Date(now.getTime() - profile.memoryLookbackHours * 3_600_000);
+        const rows = await db
+          .select({
+            id: jkaiMemories.id,
+            category: jkaiMemories.category,
+            content: jkaiMemories.content,
+            confidence: jkaiMemories.confidence,
+            createdAt: jkaiMemories.createdAt,
+          })
+          .from(jkaiMemories)
+          .where(and(isNull(jkaiMemories.supersededBy), gte(jkaiMemories.createdAt, since)))
+          .orderBy(
+            sql`case ${jkaiMemories.confidence} when 'high' then 0 when 'medium' then 1 else 2 end`,
+            desc(jkaiMemories.createdAt),
+          )
+          .limit(profile.memoryLimit);
+
+        memoryRows = rows.map((row) => ({
+          ...row,
+          createdAt: row.createdAt.toISOString(),
+        }));
+        for (const memory of memoryRows) {
+          facts.push({
+            section: 'New memories',
+            label: memory.category,
+            value: memory.content.slice(0, 600),
+            source: `memory:${memory.id}`,
+          });
+        }
+        record(
+          'memories',
+          'New memories',
+          memoryRows.length ? 'ok' : 'empty',
+          memoryRows.length
+            ? `${memoryRows.length} learned in the last ${profile.memoryLookbackHours} hours`
+            : `nothing new in the last ${profile.memoryLookbackHours} hours`,
+        );
+      } catch (err) {
+        record('memories', 'New memories', 'failed', err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    // ---- Generic workflow sources ---------------------------------------
+    // Any node on the canvas can join the briefing by transforming its output
+    // to `briefingSources: [{ key, label, status, detail, facts[] }]`. This is
+    // deliberately data-shaped rather than node-shaped: calendar, research,
+    // files, web searches and future capabilities all use the same contract.
+    const extensionRows = Array.isArray(input.briefingSources)
+      ? input.briefingSources
+      : Array.isArray(input.additionalSources)
+        ? input.additionalSources
+        : [];
+    for (const raw of extensionRows.slice(0, 30)) {
+      const extension = obj(raw);
+      const key = str(extension?.key);
+      const label = str(extension?.label);
+      if (!extension || !key || !label || !sourceEnabled(key)) continue;
+      const statusRaw = str(extension.status);
+      const status: SourceStatus = statusRaw === 'failed' || statusRaw === 'stale' || statusRaw === 'empty' ? statusRaw : 'ok';
+      const detail = str(extension.detail) ?? (status === 'ok' ? 'reported' : 'no usable value');
+      record(key, label, status, detail, str(extension.error));
+      sectionSourceKeys.set(label, key);
+
+      const extensionFacts = Array.isArray(extension.facts) ? extension.facts : [];
+      for (const rawFact of extensionFacts.slice(0, 30)) {
+        const fact = obj(rawFact);
+        const factLabel = str(fact?.label);
+        const value = str(fact?.value);
+        if (!factLabel || !value) continue;
+        facts.push({
+          section: label,
+          label: factLabel.slice(0, 120),
+          value: value.slice(0, 1500),
+          source: (str(fact?.source) ?? key).slice(0, 160),
+        });
+      }
+    }
+
+    // Disabled sources are omitted from facts, gaps and the ledger. Filtering
+    // happens centrally so it applies equally to existing hard-coded readers
+    // and the generic extension contract above.
+    const keepSection = (section: string): boolean => {
+      const key = sectionSourceKeys.get(section);
+      return !key || sourceEnabled(key);
+    };
+    facts.splice(0, facts.length, ...facts.filter((fact) => keepSection(fact.section)));
+    gaps.splice(0, gaps.length, ...gaps.filter((gap) => keepSection(gap.section)));
+    sources.splice(0, sources.length, ...sources.filter((source) => sourceEnabled(source.key)));
+
     // ---- Source ledger from the run itself ------------------------------
     // A namespaced key only exists when its branch succeeded; a node that
     // failed leaves no trace in the merged payload, so "absent" and "broken"
@@ -404,7 +539,11 @@ export const briefingComposeExecutor: NodeExecutor = {
     // benign gap. Node executions are not in the DB yet — the run is still
     // in flight — which is why this reads the live engine state.
     // Source keys whose producing node was marked `_truthRequired` in the canvas.
-    const requiredSections = new Set<string>();
+    const requiredSections = new Set<string>(
+      Object.entries(profile.sources)
+        .filter(([, preference]) => preference.enabled && preference.required)
+        .map(([key]) => key),
+    );
 
     if (config.auditRun !== false && context._currentNodeId) {
       try {
@@ -448,7 +587,12 @@ export const briefingComposeExecutor: NodeExecutor = {
     // ---- Rendered sheets for the LLM ------------------------------------
     const sections = [...new Set(facts.map((f) => f.section))];
     const factSheet = sections
-      .map((s) => `[${s}]\n` + facts.filter((f) => f.section === s).map((f) => `  ${f.label}: ${f.value}`).join('\n'))
+      .map((s) => {
+        const heading = s === 'New memories'
+          ? 'New memories — REQUIRED: share in a “What I learned” bullet'
+          : s;
+        return `[${heading}]\n` + facts.filter((f) => f.section === s).map((f) => `  ${f.label}: ${f.value}`).join('\n');
+      })
       .join('\n\n');
     const gapSheet = gaps.length
       ? gaps
@@ -482,6 +626,7 @@ export const briefingComposeExecutor: NodeExecutor = {
       location: locationBlock,
       weather: { home: wHome, here: sameSpot ? null : wHere, sameSpot },
       knowledge: intelContext ? { query: str(knowRaw?.intelQuery), context: intelContext } : null,
+      memories: memoryRows,
     };
 
     return {
@@ -506,7 +651,7 @@ export const briefingComposeExecutor: NodeExecutor = {
     return {
       type: 'object',
       description:
-        'Merged signals. Recognised keys: location, weatherHome, weatherHere, sleep, readiness, indoor, email, knowledge.',
+        'Merged signals. Recognised keys: location, weatherHome, weatherHere, sleep, readiness, indoor, email, knowledge, briefingSources.',
     };
   },
 

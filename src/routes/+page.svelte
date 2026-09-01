@@ -175,10 +175,6 @@
             primary={FALLBACK_HERO.primary}
             ghost={FALLBACK_HERO.ghost}
             strap={makeStrap(FALLBACK_HERO.strapTemplate)}
-            {pulse}
-            steps={data.steps}
-            {temp}
-            {condition}
           />
         {:then heroTitle}
           <LandingHero
@@ -186,10 +182,6 @@
             primary={heroTitle.primary}
             ghost={heroTitle.ghost}
             strap={makeStrap(heroTitle.strapTemplate)}
-            {pulse}
-            steps={data.steps}
-            {temp}
-            {condition}
           />
         {/await}
       </div>
@@ -328,7 +320,7 @@
      viewports, divided by a hairline, and stacks under 1024px. */
   .hero-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 1px minmax(300px, 400px);
+    grid-template-columns: minmax(0, 1fr) 1px minmax(280px, 340px);
     width: 100%;
     align-items: stretch;
   }
@@ -336,7 +328,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    padding: clamp(32px, 5vw, 56px) clamp(24px, 5vw, 64px) clamp(24px, 4vw, 40px);
+    padding: clamp(36px, 6vh, 72px) clamp(24px, 4vw, 56px) clamp(28px, 5vh, 56px);
     position: relative;
   }
   /* A warm bloom behind the type — accent from the top left, petrol from the

@@ -3,12 +3,25 @@
   import { invalidateAll } from '$app/navigation';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
+  import type {
+    BriefingProfile,
+    BriefingSourceDefinition,
+    BriefingSourceKey,
+  } from '$lib/constants/briefing';
+
+  type SourceConnection = 'native' | 'connected' | 'available' | 'missing';
+  type SourceOption = BriefingSourceDefinition & {
+    preference: BriefingProfile['sources'][BriefingSourceKey];
+    connection: SourceConnection;
+  };
 
   let { data, embedded = false }: {
     data: {
       briefings: BriefingData[];
       enabled: boolean;
       topics: string[];
+      profile: BriefingProfile;
+      sourceCatalog: SourceOption[];
       workflowId: string | null;
       schedule: { display: string; expr: string | null };
     };
@@ -36,6 +49,47 @@
   });
 
   const okCount = $derived((detail?.sources ?? []).filter((s) => s.status === 'ok').length);
+  const memoryFacts = $derived((detail?.facts ?? []).filter((fact) => fact.section === 'New memories'));
+  const learnedMemories = $derived.by(() => {
+    if (detail?.memories?.length) {
+      return detail.memories.map((memory) => ({
+        id: memory.id,
+        category: memory.category,
+        content: memory.content,
+        confidence: memory.confidence,
+        createdAt: memory.createdAt,
+      }));
+    }
+    // Older stored briefings have memory facts but predate the structured
+    // memory rows. Preserve their useful content without inventing metadata.
+    return memoryFacts.map((memory) => ({
+      id: memory.source,
+      category: memory.label,
+      content: memory.value,
+      confidence: null,
+      createdAt: null,
+    }));
+  });
+  let profile = $state<BriefingProfile>(structuredClone(data.profile));
+  const sourceGroups = $derived(
+    (['Now', 'Personal', 'Knowledge', 'Daydreaming'] as const).map((group) => ({
+      group,
+      sources: data.sourceCatalog.filter((source) => source.group === group),
+    })),
+  );
+  const activeSourceCount = $derived(
+    Object.values(profile.sources).filter((source) => source.enabled).length,
+  );
+  const readySourceCount = $derived(
+    data.sourceCatalog.filter(
+      (source) => profile.sources[source.key].enabled && (source.connection === 'native' || source.connection === 'connected'),
+    ).length,
+  );
+  const addableSourceCount = $derived(
+    data.sourceCatalog.filter(
+      (source) => profile.sources[source.key].enabled && source.connection === 'available',
+    ).length,
+  );
 
   let enabled = $state(data.enabled);
   let topicsText = $state((data.topics ?? []).join(', '));
@@ -69,7 +123,7 @@
     const res = await fetch('/api/admin/briefing/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled, topics }),
+      body: JSON.stringify({ enabled, topics, profile }),
     });
     if (res.ok) { msg = 'Saved.'; await invalidateAll(); } else err = 'Save failed';
   }
@@ -91,6 +145,12 @@
 
   const STATUS_LABEL: Record<BriefingSourceRow['status'], string> = {
     ok: 'ok', failed: 'failed', stale: 'stale', empty: 'nothing',
+  };
+  const CONNECTION_LABEL: Record<SourceConnection, string> = {
+    native: 'built in',
+    connected: 'connected',
+    available: 'add on canvas',
+    missing: 'not connected',
   };
 
   let voted = $state<'up' | 'down' | null>(null);
@@ -136,15 +196,83 @@
 
   {#if showConfig || !latest}
     <section class="br-sec br-config">
-      <label class="br-toggle">
-        <input type="checkbox" bind:checked={enabled} />
-        <span>{enabled ? 'Enabled — runs on schedule' : 'Disabled — no scheduled runs'}</span>
-      </label>
-      <label class="br-field">
-        <span class="sr-label-tight">Topics you care about (comma-separated)</span>
-        <input class="br-in" bind:value={topicsText} placeholder="DfE data policy, brass & rails, home security, LLM costs" />
-      </label>
-      <div class="br-config-foot"><button class="br-save" onclick={saveConfig}>Save config</button></div>
+      <header class="br-config-head">
+        <div>
+          <p class="sr-label-tight">Briefing profile</p>
+          <h2>Choose what earns space</h2>
+          <p>The profile filters the real canvas workflow. Connected capabilities contribute verified facts; new capability nodes can use the same generic source contract.</p>
+        </div>
+        <label class="br-master-toggle">
+          <input type="checkbox" bind:checked={enabled} />
+          <span><b>{enabled ? 'Running' : 'Paused'}</b>{data.schedule.display}</span>
+        </label>
+      </header>
+
+      <div class="br-config-priorities">
+        <label class="br-field br-field-wide">
+          <span class="sr-label-tight">Editorial priorities</span>
+          <span class="br-field-help">Topics are now passed into the scheduled composer, not merely stored here.</span>
+          <input class="br-in" bind:value={topicsText} placeholder="Data policy, home security, current projects, LLM costs" />
+        </label>
+        <div class="br-memory-controls">
+          <label class="br-field">
+            <span class="sr-label-tight">Memory window</span>
+            <span class="br-number-wrap"><input class="br-in br-number" type="number" min="1" max="168" bind:value={profile.memoryLookbackHours} /><span>hours</span></span>
+          </label>
+          <label class="br-field">
+            <span class="sr-label-tight">Memory limit</span>
+            <span class="br-number-wrap"><input class="br-in br-number" type="number" min="1" max="20" bind:value={profile.memoryLimit} /><span>items</span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="br-source-head">
+        <div>
+          <span class="sr-label-tight">Sources</span>
+          <p>{activeSourceCount} selected · {readySourceCount} ready now · {addableSourceCount} available to add. “Required” makes a missing connected source lead the briefing as a warning.</p>
+        </div>
+        {#if data.workflowId}<a class="br-canvas-link" href="/jkai/canvas/morning-briefing">Open source workflow →</a>{/if}
+      </div>
+
+      <div class="br-source-groups">
+        {#each sourceGroups as group (group.group)}
+          <section class="br-source-group">
+            <h3>{group.group}</h3>
+            <div class="br-source-grid">
+              {#each group.sources as source (source.key)}
+                <article class="br-source-card" class:off={!profile.sources[source.key].enabled}>
+                  <div class="br-source-card-top">
+                    <label class="br-source-toggle">
+                      <input type="checkbox" bind:checked={profile.sources[source.key].enabled} />
+                      <span>{source.label}</span>
+                    </label>
+                    <span class="br-connection br-connection-{source.connection}">{CONNECTION_LABEL[source.connection]}</span>
+                  </div>
+                  <p>{source.description}</p>
+                  <label class="br-required" class:disabled={source.connection === 'available' || source.connection === 'missing' || !profile.sources[source.key].enabled}>
+                    <input
+                      type="checkbox"
+                      bind:checked={profile.sources[source.key].required}
+                      disabled={source.connection === 'available' || source.connection === 'missing' || !profile.sources[source.key].enabled}
+                    />
+                    Required for a complete briefing
+                  </label>
+                </article>
+              {/each}
+            </div>
+          </section>
+        {/each}
+      </div>
+
+      <div class="br-extension-note">
+        <strong>Any capability can become a source.</strong>
+        Transform a node’s output to <code>briefingSources</code> with a label, status and fact rows; the composer, evidence ledger and this page handle the rest.
+      </div>
+
+      <div class="br-config-foot">
+        <button class="br-save" onclick={saveConfig}>Save briefing profile</button>
+        <span class="br-field-help">Changes apply to the next manual or scheduled run.</span>
+      </div>
     </section>
   {/if}
 
@@ -185,6 +313,28 @@
         {/if}
       </div>
     </section>
+
+    {#if learnedMemories.length}
+      <section class="br-sec br-memory-share">
+        <div class="br-sec-hd">
+          <span class="sr-label-tight">What JKAI learned</span>
+          <span class="br-when">new shared memories · now part of the briefing</span>
+        </div>
+        <p class="br-memory-intro">These are the durable facts added since the configured cutoff. They also feed the daydreaming context used for future observations.</p>
+        <ul class="br-memory-list">
+          {#each learnedMemories as memory (memory.id)}
+            <li>
+              <span class="br-memory-category">
+                {memory.category}{#if memory.confidence} · {memory.confidence} confidence{/if}
+              </span>
+              <span class="br-memory-content">{memory.content}</span>
+              {#if memory.createdAt}<time class="br-memory-time" datetime={memory.createdAt}>{fmt(memory.createdAt)}</time>{/if}
+            </li>
+          {/each}
+        </ul>
+        <a class="br-link br-memory-link" href="/jkai/daydreams?tab=memory">Open shared memory →</a>
+      </section>
+    {/if}
 
     <!-- ——— Where you are ——— -->
     {#if location}
@@ -348,15 +498,49 @@
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
   .br-when { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
-  .br-config { border: 1px solid var(--line-strong); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-  .br-toggle { display: flex; align-items: center; gap: 8px; font-size: var(--fs-nav); cursor: pointer; }
-  .br-toggle input { width: auto; }
+  .br-config { border: 1px solid var(--line-strong); padding: clamp(16px, 2.5vw, 28px); display: flex; flex-direction: column; gap: 24px; background: color-mix(in srgb, var(--surface-elevated) 55%, transparent); }
+  .br-config-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line-strong); }
+  .br-config-head h2 { margin: 5px 0 8px; font-family: var(--font-display); font-size: clamp(24px, 3vw, 38px); line-height: 1; text-transform: uppercase; }
+  .br-config-head p { max-width: 64ch; margin: 0; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
+  .br-master-toggle { display: flex; align-items: center; gap: 10px; min-width: 170px; padding: 10px 12px; border: 1px solid var(--line-strong); cursor: pointer; }
+  .br-master-toggle input { width: auto; accent-color: var(--accent); }
+  .br-master-toggle span { display: flex; flex-direction: column; gap: 2px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .br-master-toggle b { color: var(--text-primary); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; }
+  .br-config-priorities { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; }
+  .br-field-wide { min-width: 0; }
+  .br-field-help { color: var(--text-ghost); font-size: var(--fs-label); line-height: 1.35; }
+  .br-memory-controls { display: grid; grid-template-columns: repeat(2, minmax(110px, 1fr)); gap: 10px; }
+  .br-number-wrap { display: flex; align-items: center; border: 1px solid var(--line-strong); background: var(--bg); }
+  .br-number-wrap .br-in { border: 0; }
+  .br-number-wrap > span { padding-right: 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .br-number { width: 70px; }
   .br-run, .br-save { font-family: var(--font-mono); font-size: var(--fs-label); padding: 7px 16px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }
   .br-run:disabled { opacity: 0.5; cursor: default; }
   .br-field { display: flex; flex-direction: column; gap: 4px; }
   .br-in { background: var(--bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-size: var(--fs-body); padding: 8px 10px; outline: none; box-sizing: border-box; }
   .br-in:focus { border-color: var(--text-muted); }
   .br-config-foot { display: flex; align-items: center; gap: 12px; }
+  .br-source-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
+  .br-source-head p { margin: 4px 0 0; font-size: var(--fs-label); color: var(--text-muted); }
+  .br-canvas-link { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--accent-ink, var(--accent)); text-decoration: none; white-space: nowrap; }
+  .br-canvas-link:hover { text-decoration: underline; }
+  .br-source-groups { display: flex; flex-direction: column; gap: 22px; }
+  .br-source-group h3 { margin: 0 0 8px; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label-wide); color: var(--text-muted); }
+  .br-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 8px; }
+  .br-source-card { min-width: 0; padding: 12px; border: 1px solid var(--line-strong); background: var(--bg); transition: opacity 0.15s ease, border-color 0.15s ease; }
+  .br-source-card.off { opacity: 0.58; }
+  .br-source-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .br-source-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-nav); font-weight: 600; cursor: pointer; }
+  .br-source-toggle input, .br-required input { width: auto; accent-color: var(--accent); }
+  .br-source-card > p { min-height: 2.7em; margin: 8px 0 12px; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.35; }
+  .br-connection { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
+  .br-connection-native, .br-connection-connected { color: var(--success, #2d7a3a); }
+  .br-connection-available { color: var(--accent-ink, var(--accent)); }
+  .br-required { display: flex; align-items: center; gap: 7px; padding-top: 9px; border-top: 1px solid var(--line-hair); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; }
+  .br-required.disabled { cursor: default; color: var(--text-ghost); }
+  .br-extension-note { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-tint-04); color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
+  .br-extension-note strong { display: block; color: var(--text-primary); }
+  .br-extension-note code { font-family: var(--font-mono); color: var(--accent-ink, var(--accent)); }
   .br-ok { color: var(--success, #2d7a3a); font-size: var(--fs-label); }
   .br-err { color: var(--error, #c44); font-size: var(--fs-label); }
 
@@ -370,6 +554,15 @@
   .br-trust { margin-top: 12px; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--success, #2d7a3a); border-left: 2px solid currentColor; padding-left: 8px; }
   .br-trust-warn { color: var(--warn, #b0892a); }
   .br-warn-line { margin: 8px 0 0; font-size: var(--fs-label); color: var(--warn, #b0892a); }
+
+  .br-memory-share { padding: 18px; border: 1px solid var(--accent); background: var(--accent-tint-04); }
+  .br-memory-intro { max-width: 68ch; margin: 0 0 14px; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
+  .br-memory-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+  .br-memory-list li { padding: 10px 12px; border: 1px solid var(--line-strong); background: var(--bg); display: flex; flex-direction: column; gap: 5px; }
+  .br-memory-category { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-ink, var(--accent)); }
+  .br-memory-content { font-size: var(--fs-nav); line-height: 1.45; }
+  .br-memory-time { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .br-memory-link { display: inline-block; margin-top: 12px; font-family: var(--font-mono); font-size: var(--fs-label); }
 
   .br-loc-main { margin: 0 0 10px; font-size: var(--fs-body); }
   .br-loc-dist { display: block; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); margin-top: 2px; }
@@ -422,6 +615,12 @@
   .br-past-title { font-size: var(--fs-nav); color: var(--text-primary); }
 
   @media (max-width: 620px) {
+    .br-config-head, .br-source-head { align-items: stretch; flex-direction: column; }
+    .br-master-toggle { min-width: 0; }
+    .br-config-priorities { grid-template-columns: 1fr; }
+    .br-memory-controls { grid-template-columns: 1fr 1fr; }
+    .br-source-grid { grid-template-columns: 1fr; }
+    .br-config-foot { align-items: flex-start; flex-direction: column; }
     .br-ledger-row { grid-template-columns: 10px 1fr; row-gap: 2px; }
     .br-ledger-status, .br-ledger-detail { grid-column: 2; }
   }

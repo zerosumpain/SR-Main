@@ -2,20 +2,23 @@
 // personalisation core), recent research, what you've been asking, and live
 // site signals. All best-effort — a missing source contributes nothing.
 import { db } from '$lib/db';
-import { and, desc, eq, gte } from 'drizzle-orm';
-import { researchSessions, orchestratorChats } from '$lib/db/schema';
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { researchSessions, orchestratorChats, jkaiMemories } from '$lib/db/schema';
 import { getRecordByKey, DatastoreError } from '$lib/datastore';
+import { getBriefingProfile } from '$lib/server/briefing-profile';
 
 export interface BriefingSignals {
   insights: { intents: Array<{ intent: string; count: number; missingCapability?: string }>; topUnmet: string[] } | null;
   recentResearch: Array<{ topic: string; status: string; createdAt: string }>;
   recentQuestions: string[];
+  recentMemories: Array<{ id: string; category: string; content: string; confidence: string; createdAt: string }>;
   siteSignals: Record<string, unknown>;
   gathered: string[]; // which sources actually produced data
 }
 
 export async function gatherBriefingSignals(): Promise<BriefingSignals> {
   const gathered: string[] = [];
+  const profile = await getBriefingProfile();
 
   // Learned question intents + unmet needs (written by the self-improve LEARN phase).
   let insights: BriefingSignals['insights'] = null;
@@ -30,6 +33,32 @@ export async function gatherBriefingSignals(): Promise<BriefingSignals> {
   } catch (err) {
     if (!(err instanceof DatastoreError && err.code === 'not_found')) {
       console.error('[briefing] insights gather failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  let recentMemories: BriefingSignals['recentMemories'] = [];
+  if (profile.sources.memories.enabled) {
+    try {
+      const since = new Date(Date.now() - profile.memoryLookbackHours * 3_600_000);
+      const rows = await db
+        .select({
+          id: jkaiMemories.id,
+          category: jkaiMemories.category,
+          content: jkaiMemories.content,
+          confidence: jkaiMemories.confidence,
+          createdAt: jkaiMemories.createdAt,
+        })
+        .from(jkaiMemories)
+        .where(and(isNull(jkaiMemories.supersededBy), gte(jkaiMemories.createdAt, since)))
+        .orderBy(
+          sql`case ${jkaiMemories.confidence} when 'high' then 0 when 'medium' then 1 else 2 end`,
+          desc(jkaiMemories.createdAt),
+        )
+        .limit(profile.memoryLimit);
+      recentMemories = rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
+      if (recentMemories.length) gathered.push('memories');
+    } catch (err) {
+      console.error('[briefing] memory gather failed:', err instanceof Error ? err.message : err);
     }
   }
 
@@ -77,5 +106,5 @@ export async function gatherBriefingSignals(): Promise<BriefingSignals> {
     /* signals are optional */
   }
 
-  return { insights, recentResearch, recentQuestions, siteSignals, gathered };
+  return { insights, recentResearch, recentQuestions, recentMemories, siteSignals, gathered };
 }

@@ -77,4 +77,28 @@ INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VAL
 INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('17b066d4-61c4-57c5-82c9-e17a59489ea1', '0ad09fa0-5e17-40c2-9438-0604d6071a22', '5efde8cc-d689-5711-9be7-5929032b9a53', '037b85f4-3707-5c5a-8592-df2b8873ecdf');
 INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('f665bf38-1364-50d7-87af-029055d715ed', '0ad09fa0-5e17-40c2-9438-0604d6071a22', '037b85f4-3707-5c5a-8592-df2b8873ecdf', '0fffbaf6-7c63-542b-92ae-d9002c117e70');
 INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('be656cbd-9fec-5e08-b0f4-335ca6ce36f2', '0ad09fa0-5e17-40c2-9438-0604d6071a22', '037b85f4-3707-5c5a-8592-df2b8873ecdf', '680d27d2-ea7a-5688-b460-ba36bec9714d');
+
+-- Keep the structured memory rows alongside the fact sheet so the briefing UI
+-- can show what JKAI learned as a first-class section, not only as prose.
+UPDATE workflow_nodes
+SET config = jsonb_set(
+  config,
+  '{expression}',
+  to_jsonb(replace(
+    config->>'expression',
+    '    knowledge: b.knowledge || null,' || E'\n',
+    '    knowledge: b.knowledge || null,' || E'\n' || '    memories: b.memories || [],' || E'\n'
+  ))
+)
+WHERE id = '037b85f4-3707-5c5a-8592-df2b8873ecdf';
+
+-- Memories are not optional colour once supplied: make the writer share at
+-- least one of them explicitly in the outbound note.
+UPDATE workflow_nodes
+SET config = jsonb_set(
+  config,
+  '{systemPrompt}',
+  to_jsonb((config->>'systemPrompt') || E'\n\nMEMORY: When FACTS contains New memories, include at least one “What I learned” bullet using those facts.')
+)
+WHERE id = 'dc7493f0-96f7-5c38-8358-d89e45f0be89';
 COMMIT;

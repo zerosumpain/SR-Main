@@ -63,6 +63,12 @@ function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = 
   if (signals.insights?.topUnmet.length) parts.push(`Unmet needs I have noticed: ${signals.insights.topUnmet.join('; ')}.`);
   if (signals.recentResearch.length) parts.push('Recent research sessions:\n' + signals.recentResearch.map((r) => `- ${r.topic} (${r.status})`).join('\n'));
   if (signals.recentQuestions.length) parts.push('What they asked in the last 24h:\n' + signals.recentQuestions.slice(0, 12).map((q) => `- ${q}`).join('\n'));
+  if (signals.recentMemories.length) {
+    parts.push(
+      'Key new shared memories — include a short “What I learned” section:\n' +
+        signals.recentMemories.map((memory) => `- [${memory.category}] ${memory.content}`).join('\n'),
+    );
+  }
   const walk = (signals.siteSignals.walk as { active?: boolean } | null) ?? null;
   if (walk?.active) parts.push('They are currently out on a walk/ride.');
   if (!parts.length) parts.push('There is little recent signal — keep the briefing short and offer a couple of proactive suggestions.');
