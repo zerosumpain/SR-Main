@@ -5277,6 +5277,31 @@ export const daydreamThoughts = pgTable(
      */
     feedbackSource: text('feedback_source'),
     /**
+     * How relevant the POINT is, 1..5, with 3 meaning "ordinary".
+     *
+     * Deliberately not a fourth value of `feedback`. That column answers "was
+     * this interruption worth having", which can only honestly be asked of
+     * something that actually reached him, and its vocabulary is a verdict —
+     * useful, not that, never. Relevance is a different question about a
+     * different object: how much the SUBJECT matters, whether or not the
+     * suggestion landed. A thing can be a poor suggestion about a subject he
+     * cares about very much, and the ledger had nowhere to record that.
+     *
+     * Writing it changes NO status. That is what keeps it clear of the two
+     * traps this table has already sprung: it cannot collide with
+     * `PROTECTED_STATUSES`, and it cannot be mistaken for the negative verdict
+     * `archived` exists to avoid recording. `persistCandidates` sets neither
+     * this column nor `relevance_at`, so a rating survives the ten-minute
+     * re-detection that rewrites everything else on a `new` or `suppressed`
+     * row.
+     *
+     * It reaches the future through `tallyRelevance` in scoring.ts, in the same
+     * currency as feedback, so a kind he keeps marking relevant earns a higher
+     * multiplier and clears the delivery bar more often on the next pass.
+     */
+    relevance: integer('relevance'),
+    relevanceAt: timestamp('relevance_at', { withTimezone: true }),
+    /**
      * What John said about this one, in his own words.
      *
      * The feedback vocabulary is a closed phrase list — useful, not that, never
@@ -5345,6 +5370,11 @@ export const daydreamThoughts = pgTable(
     index('daydream_thoughts_kind_idx').on(t.kind),
     index('daydream_thoughts_created_idx').on(t.createdAt),
     index('daydream_thoughts_feedback_idx').on(t.feedback),
+    // Mirrors the feedback index, and for the same reason: the learned weights
+    // read every rated row on every detect tick, and a sequential scan of the
+    // whole ledger for the handful that carry a rating is the shape that made
+    // `node_executions` a problem.
+    index('daydream_thoughts_relevance_idx').on(t.relevance),
   ],
 );
 

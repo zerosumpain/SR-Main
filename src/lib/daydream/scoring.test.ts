@@ -249,3 +249,131 @@ describe('feedback source weighting', () => {
     expect(t.n).toBe(2);
   });
 });
+
+// ── Relevance ────────────────────────────────────────────────────────────────
+//
+// The guard on the ask "the model should learn to show more relevant items in
+// the feed". A dial that records a number and changes no weight is a dial that
+// does nothing, and nothing on the page would say so.
+
+describe('relevanceVote', () => {
+  it('is zero at the midpoint — "ordinary" is not a complaint', async () => {
+    const { relevanceVote } = await import('./scoring');
+    expect(relevanceVote(3)).toBe(0);
+  });
+
+  it('runs −1 to +1, linearly', async () => {
+    const { relevanceVote } = await import('./scoring');
+    expect(relevanceVote(1)).toBe(-1);
+    expect(relevanceVote(2)).toBe(-0.5);
+    expect(relevanceVote(4)).toBe(0.5);
+    expect(relevanceVote(5)).toBe(1);
+  });
+
+  it('clamps rather than throwing, and survives rubbish', async () => {
+    const { relevanceVote } = await import('./scoring');
+    expect(relevanceVote(9)).toBe(1);
+    expect(relevanceVote(-4)).toBe(-1);
+    expect(relevanceVote(Number.NaN)).toBe(0);
+  });
+});
+
+describe('tallyRelevance', () => {
+  const rate = (relevance: number, ageDays = 0, kind = 'test_kind') => ({
+    kind,
+    relevance,
+    relevanceAt: daysAgo(ageDays),
+  });
+
+  it('counts a 5 as a full vote at the relevance discount', async () => {
+    const { tallyRelevance, RELEVANCE_SOURCE_WEIGHT } = await import('./scoring');
+    const counts = tallyRelevance([rate(5)], NOW);
+    expect(counts.useful).toBeCloseTo(RELEVANCE_SOURCE_WEIGHT, 6);
+    expect(counts.notUseful).toBe(0);
+    expect(counts.n).toBe(1);
+  });
+
+  it('a 1 pushes the other way, a 4 counts half', async () => {
+    const { tallyRelevance, RELEVANCE_SOURCE_WEIGHT } = await import('./scoring');
+    expect(tallyRelevance([rate(1)], NOW).notUseful).toBeCloseTo(RELEVANCE_SOURCE_WEIGHT, 6);
+    expect(tallyRelevance([rate(4)], NOW).useful).toBeCloseTo(RELEVANCE_SOURCE_WEIGHT / 2, 6);
+  });
+
+  it('neutral ratings contribute nothing AND do not inflate n', async () => {
+    const { tallyRelevance } = await import('./scoring');
+    // A page of 3s is a page he read and had no opinion about. Counting those
+    // as evidence would drag the cold-start threshold down on nothing.
+    expect(tallyRelevance([rate(3), rate(3), rate(3)], NOW)).toEqual({
+      useful: 0,
+      notUseful: 0,
+      n: 0,
+    });
+  });
+
+  it('decays with the same half-life as feedback', async () => {
+    const { tallyRelevance, RELEVANCE_SOURCE_WEIGHT } = await import('./scoring');
+    const old = tallyRelevance([rate(5, FEEDBACK_HALF_LIFE_DAYS)], NOW);
+    expect(old.useful).toBeCloseTo(RELEVANCE_SOURCE_WEIGHT / 2, 6);
+  });
+
+  it('is worth less than an explicit verdict and more than a triage one', async () => {
+    const { RELEVANCE_SOURCE_WEIGHT } = await import('./scoring');
+    expect(RELEVANCE_SOURCE_WEIGHT).toBeLessThan(1);
+    expect(RELEVANCE_SOURCE_WEIGHT).toBeGreaterThan(0.7);
+  });
+});
+
+describe('relevance reaches the weight', () => {
+  it('a run of 5s lifts a kind above neutral', async () => {
+    const { tallyRelevance, mergeCounts } = await import('./scoring');
+    const rows = [5, 5, 5, 5].map((r) => ({
+      kind: 'k',
+      relevance: r,
+      relevanceAt: NOW,
+    }));
+    const merged = mergeCounts(EMPTY_COUNTS, tallyRelevance(rows, NOW));
+    expect(kindWeight(merged)).toBeGreaterThan(1);
+    expect(kindWeight(merged)).toBeLessThanOrEqual(MAX_WEIGHT);
+  });
+
+  it('a run of 1s pushes it below neutral without muting it', async () => {
+    const { tallyRelevance, mergeCounts } = await import('./scoring');
+    const rows = [1, 1, 1, 1, 1, 1].map((r) => ({
+      kind: 'k',
+      relevance: r,
+      relevanceAt: NOW,
+    }));
+    const merged = mergeCounts(EMPTY_COUNTS, tallyRelevance(rows, NOW));
+    expect(kindWeight(merged)).toBeLessThan(1);
+    // Only `never_kind` may reach zero — a statistic must never do it silently.
+    expect(kindWeight(merged)).toBeGreaterThanOrEqual(MIN_WEIGHT);
+  });
+
+  it('adds to feedback rather than replacing it', async () => {
+    const { tallyRelevance, mergeCounts } = await import('./scoring');
+    const fb = tallyFeedback([vote('useful')], NOW);
+    const rel = tallyRelevance([{ kind: 'test_kind', relevance: 5, relevanceAt: NOW }], NOW);
+    const merged = mergeCounts(fb, rel);
+    expect(merged.n).toBe(2);
+    expect(kindWeight(merged)).toBeGreaterThan(kindWeight(fb));
+  });
+});
+
+describe('meanRelevance', () => {
+  it('is null with nothing rated, so the page can say so', async () => {
+    const { meanRelevance } = await import('./scoring');
+    expect(meanRelevance([])).toBeNull();
+  });
+
+  it('is the plain mean — undecayed, so it matches the cards beside it', async () => {
+    const { meanRelevance } = await import('./scoring');
+    const rows = [5, 4, 3].map((r) => ({ kind: 'k', relevance: r, relevanceAt: daysAgo(400) }));
+    expect(meanRelevance(rows)).toEqual({ mean: 4, n: 3 });
+  });
+
+  it('ignores anything outside the dial', async () => {
+    const { meanRelevance } = await import('./scoring');
+    const rows = [{ kind: 'k', relevance: 0, relevanceAt: NOW }];
+    expect(meanRelevance(rows)).toBeNull();
+  });
+});

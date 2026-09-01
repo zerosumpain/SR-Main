@@ -2,10 +2,11 @@
 //
 // How a daydream earns the right to be said out loud.
 //
-// Two separate instruments, deliberately not conflated:
+// Three separate instruments, deliberately not conflated:
 //
 //   kindWeight       what the ledger knows about THIS KIND of thought.
 //   coldStartThreshold  how cautious the system is overall, right now.
+//   tallyRelevance   how much the SUBJECT matters to him, said outright.
 //
 // Keeping them apart is what makes the first fortnight survivable. A brand-new
 // kind has no evidence either way, so its weight is exactly neutral — punishing
@@ -244,4 +245,111 @@ export function finalScore(
       kindWeight: weight,
     },
   };
+}
+
+// ── Relevance ────────────────────────────────────────────────────────────────
+//
+// A third instrument, and deliberately not a fourth verdict.
+//
+// `feedback` answers "was this interruption worth having". It can only honestly
+// be asked of something that actually reached him, its vocabulary is a verdict,
+// and `never_kind` inside it is an absolute mute. Relevance answers a different
+// question about a different object: how much the SUBJECT matters, whether or
+// not this particular suggestion landed. The two come apart constantly — a
+// clumsy suggestion about money is a bad suggestion about a subject that
+// matters a great deal — and until now the ledger had nowhere to put that.
+//
+// It is expressed in the SAME currency as feedback (decayed useful/unhelpful
+// pseudo-votes) rather than as a parallel multiplier, because two independent
+// multipliers over one kind is a number nobody can read off the page. One
+// currency means `kindWeight` stays the single explanation of why a kind ranks
+// where it does.
+
+/** The dial. 1 is "not my concern", 5 is "this is what I care about". */
+export const RELEVANCE_MIN = 1;
+export const RELEVANCE_MAX = 5;
+/** The midpoint contributes nothing: "I looked, and it is ordinary" is a real
+ *  answer and must not be recorded as either approval or a complaint. */
+export const RELEVANCE_NEUTRAL = 3;
+
+/**
+ * How much a relevance rating counts against an explicit verdict.
+ *
+ * Below `explicit` on purpose. A rating can be given on a row that never
+ * reached him — the feed shows suppressed cards, and rating one there is a
+ * judgement about the topic made without ever having been interrupted by it.
+ * Real evidence, and it should not outweigh a verdict on something he actually
+ * saw. Above `triage` (0.7), because this is one card considered on its own
+ * rather than one of thirty in a sorting session.
+ */
+export const RELEVANCE_SOURCE_WEIGHT = 0.8;
+
+export interface RelevanceRow {
+  kind: string;
+  /** 1..5. Anything outside the range, or the neutral midpoint, is ignored. */
+  relevance: number;
+  relevanceAt: Date;
+  placeId?: string | null;
+  hourBand?: string | null;
+}
+
+/**
+ * A rating's signed strength, in votes. −1 … +1, zero at the midpoint.
+ *
+ * Linear rather than stepped, so 5 is exactly twice 4 and the card can print
+ * the number without the page having to explain a curve.
+ */
+export function relevanceVote(relevance: number): number {
+  if (!Number.isFinite(relevance)) return 0;
+  const clamped = Math.min(RELEVANCE_MAX, Math.max(RELEVANCE_MIN, Math.round(relevance)));
+  return (clamped - RELEVANCE_NEUTRAL) / (RELEVANCE_MAX - RELEVANCE_NEUTRAL);
+}
+
+/**
+ * Decay-weighted useful/unhelpful totals for a set of relevance ratings.
+ *
+ * Same two discounts `tallyFeedback` applies — age, then provenance — so the
+ * counts it returns can be added to that function's without converting
+ * anything. `n` counts only ratings that moved the needle: a page full of
+ * neutral 3s is a page he has read and had no opinion about, and letting those
+ * inflate `n` would drag the cold-start threshold down on no evidence at all.
+ */
+export function tallyRelevance(
+  rows: RelevanceRow[],
+  now: Date,
+  halfLifeDays = FEEDBACK_HALF_LIFE_DAYS,
+): WeightCounts {
+  let useful = 0;
+  let notUseful = 0;
+  let n = 0;
+  for (const r of rows) {
+    const vote = relevanceVote(r.relevance);
+    if (vote === 0) continue;
+    const w = decayFactor(r.relevanceAt, now, halfLifeDays) * RELEVANCE_SOURCE_WEIGHT;
+    if (vote > 0) useful += vote * w;
+    else notUseful += -vote * w;
+    n++;
+  }
+  return { useful, notUseful, n };
+}
+
+/** Add two tallies. Trivial, and named so callers do not open the shape. */
+export function mergeCounts(a: WeightCounts, b: WeightCounts): WeightCounts {
+  return { useful: a.useful + b.useful, notUseful: a.notUseful + b.notUseful, n: a.n + b.n };
+}
+
+/**
+ * The mean rating for a kind, for the page.
+ *
+ * Unweighted and undecayed on purpose: this is a description of what he has
+ * said, not an input to anything. Weighting it would make the number on the
+ * card disagree with the ratings visible beside it.
+ */
+export function meanRelevance(rows: RelevanceRow[]): { mean: number; n: number } | null {
+  const valid = rows.filter(
+    (r) => Number.isFinite(r.relevance) && r.relevance >= RELEVANCE_MIN && r.relevance <= RELEVANCE_MAX,
+  );
+  if (valid.length === 0) return null;
+  const sum = valid.reduce((acc, r) => acc + r.relevance, 0);
+  return { mean: Math.round((sum / valid.length) * 100) / 100, n: valid.length };
 }
