@@ -80,6 +80,35 @@ export const blogPostTags = pgTable('blog_post_tags', {
   tag: text('tag').notNull(),
 });
 
+// A lightweight, durable News reading list. This deliberately stores a story
+// snapshot instead of creating an Intel note: favouriting is a reversible
+// reading-list decision, while "keep in knowledge graph" is the explicit act
+// that creates a lasting knowledge footprint.
+export const newsFavourites = pgTable(
+  'news_favourites',
+  {
+    ownerKey: text('owner_key').notNull(),
+    newsKey: text('news_key').notNull(),
+    source: text('source').notNull(),
+    storyId: text('story_id').notNull(),
+    title: text('title').notNull(),
+    url: text('url').notNull(),
+    discussionUrl: text('discussion_url').notNull(),
+    domain: text('domain').notNull(),
+    author: text('author'),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull(),
+    score: integer('score').notNull().default(0),
+    commentCount: integer('comment_count').notNull().default(0),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    summary: text('summary').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerKey, t.newsKey] }),
+    index('news_favourites_owner_created_idx').on(t.ownerKey, t.createdAt),
+  ],
+);
+
 export const blogAssistantMessages = pgTable('blog_assistant_messages', {
   id: serial('id').primaryKey(),
   postId: integer('post_id')
