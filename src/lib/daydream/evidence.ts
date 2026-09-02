@@ -288,7 +288,7 @@ async function resolvePlaces(ids: string[], fill: Fill): Promise<void> {
       // Coordinates are deliberately NOT here. The Places tab has an
       // owner-gated map action for that; a lat/lon must not ride a payload
       // just because a card wanted to be informative.
-      href: `/jkai/daydreams?tab=places`,
+      href: `/jkai/daydreams/places`,
     });
   }
 }
@@ -326,7 +326,7 @@ async function resolveSpend(ids: string[], fill: Fill): Promise<void> {
         r.currency !== 'GBP' ? `Currency: ${r.currency}` : '',
       ].filter(Boolean),
       at: `${r.day}T12:00:00Z`,
-      href: '/jkai/daydreams?tab=money',
+      href: '/jkai/daydreams/money',
     });
   }
 }
@@ -423,7 +423,7 @@ async function resolveMemoryThemes(ids: string[], fill: Fill): Promise<void> {
         row.sourceCount > sourceLines.length ? `${row.sourceCount - sourceLines.length} more source memories are shown on the Memory tab.` : '',
       ].filter(Boolean),
       at: row.updatedAt.toISOString(),
-      href: `/jkai/daydreams?tab=memory#memory-theme-${row.id}`,
+      href: `/jkai/daydreams/memory#memory-theme-${row.id}`,
     });
   }
 }
@@ -454,7 +454,7 @@ async function resolveHypotheses(ids: string[], fill: Fill): Promise<void> {
         `About: ${r.subject}`,
       ].filter(Boolean),
       at: r.proposedAt?.toISOString() ?? null,
-      href: '/jkai/daydreams?tab=discoveries',
+      href: '/jkai/daydreams/discoveries',
     });
   }
 }
@@ -555,7 +555,7 @@ async function resolveFamily(subjects: string[], fill: Fill): Promise<void> {
           : 'No position fixes recorded',
       ],
       at: latest?.ts.toISOString() ?? null,
-      href: '/jkai/daydreams?tab=family',
+      href: '/jkai/daydreams/family',
       symbolic: true,
     });
   }

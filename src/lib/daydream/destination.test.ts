@@ -43,7 +43,7 @@ describe('thoughtDestination', () => {
   it('prefers the place, and uses its NAME as the label when it has one', () => {
     const d = thoughtDestination({ kind: 'unknown_place', placeId: 'p1', placeLabel: 'Costa Coffee' });
     expect(d).toEqual({
-      href: '/jkai/daydreams?tab=places#place-p1',
+      href: '/jkai/daydreams/places#place-p1',
       label: 'Costa Coffee',
       hint: 'Costa Coffee in Places',
       external: false,
@@ -52,7 +52,7 @@ describe('thoughtDestination', () => {
 
   it('still links an unnamed place — the map is the point', () => {
     const d = thoughtDestination({ kind: 'unknown_place', placeId: 'p9', placeLabel: null });
-    expect(d?.href).toBe('/jkai/daydreams?tab=places#place-p9');
+    expect(d?.href).toBe('/jkai/daydreams/places#place-p9');
     expect(d?.label).toBe('In Places');
   });
 
@@ -100,7 +100,7 @@ describe('thoughtDestination', () => {
   });
 
   it('falls through to the tab that answers the kind', () => {
-    expect(thoughtDestination({ kind: 'spend_duplicate' })?.href).toBe('/jkai/daydreams?tab=money');
+    expect(thoughtDestination({ kind: 'spend_duplicate' })?.href).toBe('/jkai/daydreams/money');
   });
 
   it('is null when nothing behind the card is reachable', () => {

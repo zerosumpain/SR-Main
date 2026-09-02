@@ -188,3 +188,28 @@ describe('groupByLikelihood', () => {
     expect(total).toBe(items.length);
   });
 });
+
+describe('familyMark / feed states', () => {
+  it('marks every family with a short word and never a slug', async () => {
+    const { familyMark, FAMILY_MARK, FAMILIES } = await import('./thought-groups');
+    for (const id of Object.keys(FAMILIES)) expect(FAMILY_MARK[id]).toMatch(/^[A-Z]{4,7}$/);
+    expect(familyMark('musing_health')).toBe('MUSE');
+    expect(familyMark('mail_security')).toBe('MAIL');
+    expect(familyMark('intel_missing_link')).toBe('GRAPH');
+    expect(familyMark('unknown_frequent_place')).toBe('PLACE');
+    expect(familyMark('free_window')).toBe('PATTERN');
+    expect(familyMark('rule_driven')).toBe('RULE');
+  });
+
+  it('maps every status to exactly one reader state, unknown to undecided', async () => {
+    const { FEED_STATES, feedStateOf, statusesFor } = await import('./thought-groups');
+    const all = FEED_STATES.flatMap((s) => s.statuses);
+    expect(new Set(all).size).toBe(all.length);
+    expect(feedStateOf('delivered')).toBe('sent');
+    expect(feedStateOf('suppressed')).toBe('held');
+    expect(feedStateOf('actioned')).toBe('filed');
+    expect(feedStateOf('new')).toBe('undecided');
+    expect(feedStateOf('something_else')).toBe('undecided');
+    expect(statusesFor('held')).toEqual(['suppressed']);
+  });
+});

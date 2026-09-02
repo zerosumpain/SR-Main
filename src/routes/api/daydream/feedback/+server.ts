@@ -30,7 +30,7 @@ export const GET: RequestHandler = async ({ url }) => {
   const verdict = url.searchParams.get('verdict') ?? '';
 
   if (!id || !VERDICTS.has(verdict)) {
-    throw redirect(303, '/jkai/daydreams');
+    throw redirect(303, '/jkai/daydreams/feed');
   }
 
   try {
@@ -42,7 +42,7 @@ export const GET: RequestHandler = async ({ url }) => {
   // Always land on the ledger, whether or not the write succeeded — a tap that
   // silently does nothing and shows nothing is worse than one that shows the
   // current state and lets the owner see it did not take.
-  throw redirect(303, '/jkai/daydreams');
+  throw redirect(303, '/jkai/daydreams/feed');
 };
 
 export const POST: RequestHandler = async ({ request }) => {

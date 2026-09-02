@@ -74,6 +74,59 @@ export function familyOf(kind: string): ThoughtFamily {
   return FAMILIES.patterns;
 }
 
+/**
+ * The mono kicker a family wears on every line and cell.
+ *
+ * A MARK, not a colour. Colour on the hub is priority and is decided in one
+ * place (`priority.ts`); a second colour axis for category would make every
+ * card carry two hues and neither would be readable. Six short words in the
+ * label face do the job the raw slug never did.
+ */
+export const FAMILY_MARK: Record<string, string> = {
+  places: 'PLACE',
+  mail: 'MAIL',
+  musings: 'MUSE',
+  graph: 'GRAPH',
+  rules: 'RULE',
+  patterns: 'PATTERN',
+};
+
+export function familyMark(kind: string): string {
+  return FAMILY_MARK[familyOf(kind).id] ?? 'PATTERN';
+}
+
+/** The order families appear down the feed matrix — by what a reader acts on
+ *  first, not by count. Counts change hourly; a matrix whose rows reorder
+ *  hourly cannot be learned. */
+export const FAMILY_ORDER = ['musings', 'mail', 'places', 'graph', 'patterns', 'rules'] as const;
+
+/**
+ * The four states a thought can be in from the reader's side.
+ *
+ * The engine has nine statuses; a reader has four questions — did it reach
+ * me, is it waiting on me, did the engine hold it back, or is it dealt with.
+ * `actioned` files with `archived`: a place question already answered is not
+ * waiting on anyone.
+ */
+export type FeedState = 'sent' | 'undecided' | 'held' | 'filed';
+
+export const FEED_STATES: Array<{ id: FeedState; label: string; statuses: string[] }> = [
+  { id: 'undecided', label: 'Undecided', statuses: ['new'] },
+  { id: 'sent', label: 'Sent', statuses: ['delivered', 'seen'] },
+  { id: 'held', label: 'Held', statuses: ['suppressed'] },
+  { id: 'filed', label: 'Filed', statuses: ['archived', 'dismissed', 'actioned', 'snoozed', 'expired'] },
+];
+
+export function feedStateOf(status: string): FeedState {
+  for (const s of FEED_STATES) if (s.statuses.includes(status)) return s.id;
+  // An unknown status is the one a reader most needs to see, not the one to hide.
+  return 'undecided';
+}
+
+export function statusesFor(state: FeedState): string[] {
+  return FEED_STATES.find((s) => s.id === state)?.statuses ?? [];
+}
+
 /** A reader's name for a kind — the family, plus whatever the suffix said. */
 export function kindLabel(kind: string): string {
   if (kind.startsWith('musing_')) return kind.slice(7).replace(/_/g, ' ');

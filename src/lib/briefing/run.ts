@@ -20,7 +20,7 @@ import {
   type BriefingData,
 } from './types';
 
-const ADMIN_LINK = 'https://strangeramblings.com/jkai/daydreams?tab=briefing';
+const ADMIN_LINK = 'https://strangeramblings.com/jkai/daydreams/briefing';
 
 let running = false;
 export function isBriefingRunning(): boolean {
@@ -138,14 +138,14 @@ async function notify(data: BriefingData): Promise<void> {
   } catch (err) {
     console.error('[briefing] whatsapp notify failed:', errMsg(err));
   }
-  // Web push too — the tap-to-open-the-PWA channel (deep-links /jkai/daydreams?tab=briefing).
+  // Web push too — the tap-to-open-the-PWA channel (deep-links /jkai/daydreams/briefing).
   // Independent of the WhatsApp path; both are best-effort.
   try {
     const { notifyAllSubscribers } = await import('$lib/server/push');
     await notifyAllSubscribers({
       title: `☕ ${data.title}`,
       body: firstLine.slice(0, 160),
-      url: '/jkai/daydreams?tab=briefing',
+      url: '/jkai/daydreams/briefing',
     });
   } catch (err) {
     console.error('[briefing] push notify failed:', errMsg(err));

@@ -99,6 +99,16 @@ export function jobTone(j: {
   return 'watch';
 }
 
+/** The reviewer's verdict on a THOUGHT — the adjudication stage, not the
+ *  hypothesis board. A refutation is the engine nearly saying something wrong,
+ *  so it wears the loud colour; a verified claim is settled and reads calm. */
+export function reviewTone(verdict: string | null | undefined): Tone {
+  if (verdict === 'refuted') return 'urgent';
+  if (verdict === 'verified') return 'good';
+  if (verdict === 'uncertain') return 'watch';
+  return 'quiet';
+}
+
 /** A hypothesis verdict. `null` means it has not been answered yet. */
 export function verdictTone(verdict: string | null | undefined): Tone {
   switch (verdict) {

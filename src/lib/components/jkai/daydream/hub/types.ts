@@ -11,6 +11,9 @@ import type { Tone } from '$lib/daydream/priority';
 export interface ShellTab {
   id: string;
   label: string;
+  /** A real route. Every room of the hub is its own page, so a tab is a link,
+   *  never a `?tab=` state change — that was the same-route navigation trap. */
+  href: string;
   /** Rendered as a pill count. Omit or `0` and nothing renders. */
   count?: number;
   /** Colours the count — `action` is the only one that shouts. */
@@ -38,4 +41,45 @@ export interface Facet {
   /** Rendered muted after the label. `0` still renders — an empty facet is a
    *  fact, and hiding it makes a filter that returns nothing look broken. */
   count?: number | null;
+}
+
+/** One cell in a `RollupGrid` — a category with a figure, not a headline stat. */
+export interface RollupCell {
+  key: string;
+  label: string;
+  value: string;
+  suffix?: string | null;
+  /** One line under the figure; clamps at two. */
+  sub?: string | null;
+  tone?: Tone;
+  /** Small mono text in the top-right corner — a delta, a stage, a unit. */
+  corner?: string | null;
+  /** A short series drawn as a sparkline along the bottom of the cell. */
+  spark?: Array<number | null> | null;
+  /** The cell is a link… */
+  href?: string | null;
+  /** …or a button. Neither: it is a plain figure. */
+  onclick?: (() => void) | null;
+  active?: boolean;
+  /** The mono kicker before the label — a family mark, a stage. */
+  mark?: string | null;
+}
+
+/** An axis of a `CategoryMatrix`. */
+export interface MatrixAxis {
+  id: string;
+  label: string;
+  /** Shown before the row label — the family mark. */
+  mark?: string | null;
+  tone?: Tone;
+}
+
+/** One row of a `FactList`. */
+export interface FactRow {
+  label: string;
+  value: string;
+  href?: string | null;
+  tone?: Tone;
+  /** Mono, for ids and stamps. */
+  mono?: boolean;
 }

@@ -254,7 +254,7 @@ export async function deliver(
         // WhatsApp session.
         const message =
           `💭 *${thought.title.slice(0, 120)}*\n\n${body.slice(0, 500)}\n\n` +
-          `Reply 👍 / 👎 / "never" — or rate it: https://strangeramblings.com/jkai/daydreams?rate=${thought.id}`;
+          `Reply 👍 / 👎 / "never" — or rate it: https://strangeramblings.com/jkai/daydreams/feed?rate=${thought.id}`;
         const res = await executeTool('whatsapp_send', { to, message });
         if (res?.success) sent = true;
         else error = (res as { error?: string } | undefined)?.error ?? 'whatsapp_send failed';
@@ -268,7 +268,7 @@ export async function deliver(
       await notifyAllSubscribers({
         title: thought.title,
         body: body.slice(0, 240),
-        url: '/jkai/daydreams',
+        url: '/jkai/daydreams/feed',
         data: { thoughtId: thought.id, kind: thought.kind },
         // Top level, not inside `data` — the service worker parses the whole
         // body as one object and reads these from it directly.
@@ -345,7 +345,7 @@ export async function deliver(
  * a POST records the answer.
  */
 export function feedbackLine(thoughtId: string): string {
-  return `[Useful? Rate it](/jkai/daydreams?rate=${thoughtId})`;
+  return `[Useful? Rate it](/jkai/daydreams/feed?rate=${thoughtId})`;
 }
 
 /** The conversation a chat note would land in — the most recently touched one.

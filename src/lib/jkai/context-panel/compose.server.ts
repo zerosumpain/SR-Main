@@ -180,7 +180,7 @@ async function daydreamCards(): Promise<ContextCard[]> {
       id: 'daydream-state',
       type: 'metrics',
       title: 'Daydream loop',
-      href: '/jkai/daydreams',
+      href: '/jkai/daydreams/feed',
       metrics: [
         { label: 'New thoughts', value: String(Number(counts?.newThoughts ?? 0)), tone: Number(counts?.newThoughts ?? 0) ? 'warn' : 'default' },
         { label: 'Reviewed', value: String(Number(counts?.reviewed ?? 0)), tone: Number(counts?.reviewed ?? 0) ? 'good' : 'default' },
@@ -191,7 +191,7 @@ async function daydreamCards(): Promise<ContextCard[]> {
       id: 'daydream-thoughts',
       type: 'links',
       title: 'Emerging thoughts',
-      href: '/jkai/daydreams',
+      href: '/jkai/daydreams/feed',
       rows: thoughts.map((t) => ({ id: t.id, label: t.title, meta: `${t.kind} · ${compactStatus(t.status)}`, note: `${Math.round(t.score * 100)} score`, href: `/jkai/daydreams?thought=${t.id}` })),
     },
     {
@@ -199,7 +199,7 @@ async function daydreamCards(): Promise<ContextCard[]> {
       type: 'bars',
       title: 'Repeated places',
       subtitle: 'Separate days, not household visit count',
-      href: '/jkai/daydreams',
+      href: '/jkai/daydreams/feed',
       rows: places.map((p) => ({ id: p.id, label: p.label ?? p.suggestedLabel ?? 'Unnamed place', value: p.distinctDays, display: `${p.distinctDays} days`, href: `/jkai/daydreams?place=${p.id}` })),
     },
   ];

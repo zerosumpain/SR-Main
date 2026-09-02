@@ -114,3 +114,13 @@ describe('the rest of the vocabulary', () => {
     expect(placeTone({ status: 'transit', distinctDays: 9 }, 3)).toBe('quiet');
   });
 });
+
+describe('reviewTone', () => {
+  it('refuted is loud, verified calm, uncertain a watch, nothing quiet', async () => {
+    const { reviewTone } = await import('./priority');
+    expect(reviewTone('refuted')).toBe('urgent');
+    expect(reviewTone('verified')).toBe('good');
+    expect(reviewTone('uncertain')).toBe('watch');
+    expect(reviewTone(null)).toBe('quiet');
+  });
+});

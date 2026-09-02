@@ -20,7 +20,7 @@ export const CRON_TZ = 'Europe/London';
 /**
  * The canvas workflow that actually produces the briefing. It gathers the
  * signals, composes a verified fact sheet, sends the WhatsApp summary and
- * writes the detail into the `briefings` collection for /jkai/daydreams?tab=briefing.
+ * writes the detail into the `briefings` collection for /jkai/daydreams/briefing.
  */
 export const BRIEFING_WORKFLOW_NAME = 'canvas:morning-briefing';
 

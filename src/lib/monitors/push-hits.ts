@@ -1,7 +1,7 @@
 // Monitor-hit web push — when a MONITOR workflow's run completes cleanly and
 // its dedupe step surfaced new items, push a notification with a preview and a
 // deep link into the PWA. Complements the WhatsApp send the generated workflow
-// does itself: push is the tap-to-open-the-app channel (see /jkai/daydreams?tab=watches).
+// does itself: push is the tap-to-open-the-app channel (see /jkai/daydreams/watches).
 //
 // Contract mirrors run-notifications: NEVER throws, and stays silent unless the
 // workflow is actually a registered monitor (marker in the `monitors` datastore
@@ -65,7 +65,7 @@ export async function notifyMonitorHit(args: MonitorHitArgs): Promise<void> {
     await notifyAllSubscribers({
       title: `Monitor: ${hit.newCount} new`,
       body: hit.preview ? `${what} — ${hit.preview}` : what,
-      url: '/jkai/daydreams?tab=watches',
+      url: '/jkai/daydreams/watches',
     });
   } catch (err) {
     // Belt-and-braces: a push hiccup must never affect the run.

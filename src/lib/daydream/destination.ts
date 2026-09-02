@@ -103,7 +103,7 @@ export function thoughtDestination(t: DestinationInput): Destination | null {
   // a visit history, and several detectors are inert until it is named.
   if (t.placeId) {
     return {
-      href: `/jkai/daydreams?tab=places#place-${t.placeId}`,
+      href: `/jkai/daydreams/places#place-${t.placeId}`,
       // The place's own name when it has one — short AND the most informative
       // label available, which is the rare case where those agree.
       label: t.placeLabel ?? 'In Places',
@@ -138,7 +138,7 @@ export function thoughtDestination(t: DestinationInput): Destination | null {
 
   const tab = tabFor(t.kind);
   if (tab) {
-    return { href: `/jkai/daydreams?tab=${tab.tab}`, label: tab.label, hint: tab.hint, external: false };
+    return { href: `/jkai/daydreams/${tab.tab}`, label: tab.label, hint: tab.hint, external: false };
   }
 
   return null;
