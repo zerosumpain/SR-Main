@@ -2182,12 +2182,113 @@ export const jkaiMemories = pgTable('jkai_memories', {
   content: text('content').notNull(),
   sourceConversationId: text('source_conversation_id'),
   confidence: text('confidence').notNull().default('high'), // high, medium
+  /**
+   * When the end-of-day Daydream pass last considered this raw observation.
+   *
+   * Null means it still rides in the ponder pack directly, so something the
+   * owner says at breakfast can shape a daydream before tonight. Once set, the
+   * raw sentence remains as provenance but its durable lesson/value theme is
+   * what future passes read. A reviewed memory with no theme is intentional:
+   * not every episode contains a reusable lesson.
+   */
+  consolidatedAt: timestamp('consolidated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   supersededBy: text('superseded_by'),
 });
 
 export type JkaiMemory = typeof jkaiMemories.$inferSelect;
+
+/**
+ * A durable principle distilled from one or more raw jkai_memories rows.
+ *
+ * The raw store records episodes and statements. Daydreaming needs the more
+ * stable layer above them: what the episodes teach, and how that should change
+ * future reasoning. `kind` is deliberately only lesson/value — a third bucket
+ * would quickly turn this back into a second copy of the category column.
+ */
+export const daydreamMemoryThemes = pgTable(
+  'daydream_memory_themes',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** Stable model-independent identity for incremental consolidation. */
+    slug: text('slug').notNull(),
+    /** 'lesson' | 'value' */
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    /** The generalised principle, stripped of one thought's incidental detail. */
+    statement: text('statement').notNull(),
+    /** How the principle should affect a future daydream when relevant. */
+    guidance: text('guidance').notNull(),
+    /** 'high' | 'medium' — uncertainty survives the roll-up. */
+    confidence: text('confidence').notNull().default('medium'),
+    /** 'active' | 'retired'. Retired themes remain resolvable as old evidence. */
+    status: text('status').notNull().default('active'),
+    /** Recomputed from the source-link table after every consolidation. */
+    sourceCount: integer('source_count').notNull().default(0),
+    firstObservedAt: timestamp('first_observed_at', { withTimezone: true }).notNull().defaultNow(),
+    lastObservedAt: timestamp('last_observed_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_memory_themes_slug_idx').on(t.slug),
+    index('daydream_memory_themes_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamMemoryTheme = typeof daydreamMemoryThemes.$inferSelect;
+
+/** The inspectable many-to-many roll-up from raw observations to themes. */
+export const daydreamMemoryThemeSources = pgTable(
+  'daydream_memory_theme_sources',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    themeId: text('theme_id')
+      .notNull()
+      .references(() => daydreamMemoryThemes.id, { onDelete: 'cascade' }),
+    memoryId: text('memory_id')
+      .notNull()
+      .references(() => jkaiMemories.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_memory_theme_sources_pair_idx').on(t.themeId, t.memoryId),
+    index('daydream_memory_theme_sources_memory_idx').on(t.memoryId),
+  ],
+);
+
+/** One auditable end-of-day attempt, including empty and failed nights. */
+export const daydreamMemoryConsolidations = pgTable(
+  'daydream_memory_consolidations',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** YYYY-MM-DD in Europe/London. The unique key makes the nightly pass idempotent. */
+    localDay: text('local_day').notNull(),
+    /** 'running' | 'completed' | 'failed' */
+    status: text('status').notNull().default('running'),
+    model: text('model'),
+    memoriesReviewed: integer('memories_reviewed').notNull().default(0),
+    themesCreated: integer('themes_created').notNull().default(0),
+    themesUpdated: integer('themes_updated').notNull().default(0),
+    memoriesLinked: integer('memories_linked').notNull().default(0),
+    /** Reviewed source rows that did not safely support a durable principle. */
+    memoriesIgnored: integer('memories_ignored').notNull().default(0),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_memory_consolidations_day_idx').on(t.localDay),
+    index('daydream_memory_consolidations_started_idx').on(t.startedAt),
+  ],
+);
+
+export type DaydreamMemoryConsolidation = typeof daydreamMemoryConsolidations.$inferSelect;
 
 export const quickAnswers = pgTable('quick_answer', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),

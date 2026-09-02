@@ -160,6 +160,7 @@ function snapshotAt(
     interests: [],
     offers: { available: false, items: [] },
     memories: [],
+    memoryThemes: [],
     // Replay is the owner's world only; a family rule read against this
     // snapshot sees `available: false` and its facts stay null (lowerBound).
     emailFacts: { available: false, upcoming: [], recent: [] },

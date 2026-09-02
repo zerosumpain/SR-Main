@@ -23,10 +23,13 @@
   } from '$lib/daydream/thought-groups';
   import { hasMap, thoughtDestination } from '$lib/daydream/destination';
   import {
-    MEMORIES_PER_PACK,
+    MEMORY_THEMES_PER_PACK,
     ORIGIN_LABEL,
     groupByCategory,
+    groupThemesByKind,
     memoryUse,
+    type DaydreamMemoryThemeView,
+    type MemoryConsolidationView,
   } from '$lib/daydream/memories';
   import { SvelteSet } from 'svelte/reactivity';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
@@ -1460,6 +1463,8 @@
     content: string;
     confidence: string;
     createdAt: string;
+    consolidatedAt: string | null;
+    themeIds: string[];
     origin: 'ruling' | 'note' | 'place' | 'elsewhere';
     thoughtId: string | null;
     thoughtTitle: string | null;
@@ -1472,21 +1477,14 @@
   let memoriesLoading = $state(false);
   let memoriesError = $state<string | null>(null);
   let memories = $state<Memory[]>([]);
+  let memoryThemes = $state<DaydreamMemoryThemeView[]>([]);
+  let lastConsolidation = $state<MemoryConsolidationView | null>(null);
+  let consolidating = $state(false);
+  let consolidationNote = $state<string | null>(null);
   let memCategory = $state('all');
   let memOrigin = $state('all');
 
-  /**
-   * Position by age, which is position in the pack.
-   *
-   * `listDaydreamMemories` orders newest-first and `pack.ts` takes the first
-   * sixteen, so the index IS whether this memory is read at all. A Map rather
-   * than `indexOf` inside the loop: this renders once per card and the list
-   * runs to two hundred.
-   */
-  const memRank = $derived(new Map(memories.map((m, i) => [m.id, i])));
-  function memoryReach(m: Memory): boolean {
-    return (memRank.get(m.id) ?? Number.MAX_SAFE_INTEGER) < MEMORIES_PER_PACK;
-  }
+  const awaitingMemories = $derived(memories.filter((m) => m.consolidatedAt == null));
 
   const memoriesVisible = $derived(
     memories.filter(
@@ -1496,6 +1494,7 @@
     ),
   );
   const memoryGroups = $derived(groupByCategory(memoriesVisible));
+  const memoryThemeGroups = $derived(groupThemesByKind(memoryThemes));
 
   const memCategoryFacets = $derived.by((): Facet[] => {
     const scope = memories.filter((m) => memOrigin === 'all' || m.origin === memOrigin);
@@ -1546,14 +1545,49 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'memories', limit: 200 }),
       });
-      const out = (await res.json().catch(() => ({}))) as { memories?: Memory[]; error?: string };
+      const out = (await res.json().catch(() => ({}))) as {
+        memories?: Memory[];
+        themes?: DaydreamMemoryThemeView[];
+        lastConsolidation?: MemoryConsolidationView | null;
+        error?: string;
+      };
       if (out.error) throw new Error(out.error);
       memories = out.memories ?? [];
+      memoryThemes = out.themes ?? [];
+      lastConsolidation = out.lastConsolidation ?? null;
     } catch (err) {
       memoriesError = err instanceof Error ? err.message : String(err);
       memories = [];
+      memoryThemes = [];
     } finally {
       memoriesLoading = false;
+    }
+  }
+
+  async function consolidateMemoriesNow() {
+    consolidating = true;
+    memoriesError = null;
+    consolidationNote = null;
+    try {
+      const res = await fetch('/api/daydream/thoughts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'consolidate_memories' }),
+      });
+      const out = (await res.json().catch(() => ({}))) as {
+        result?: { memoriesReviewed: number; themesCreated: number; themesUpdated: number };
+        error?: string;
+      };
+      if (!res.ok || out.error) throw new Error(out.error ?? 'consolidation failed');
+      const r = out.result;
+      consolidationNote = r?.memoriesReviewed
+        ? `Reviewed ${r.memoriesReviewed}: ${r.themesCreated} themes created and ${r.themesUpdated} updated.`
+        : 'Nothing new was waiting for consolidation.';
+      await loadMemories();
+    } catch (err) {
+      memoriesError = err instanceof Error ? err.message : String(err);
+    } finally {
+      consolidating = false;
     }
   }
 
@@ -2354,6 +2388,9 @@
                     {#if t.intelNoteId}
                       <span class="meta-item good">in the graph</span>
                     {/if}
+                    {#if t.evidence.some((e) => e.kind === 'memory-theme')}
+                      <span class="meta-item good">guided by memory</span>
+                    {/if}
                     {#if t.reviewVerdict}
                       <span class="meta-item {t.reviewVerdict === 'refuted' ? 'warn' : t.reviewVerdict === 'verified' ? 'good' : ''}">
                         {t.reviewVerdict === 'verified'
@@ -2565,154 +2602,123 @@
        and checked, what it concluded, and — the half that matters — whether
        that conclusion was written somewhere the engine reads it back. -->
   {#if tab === 'memory'}
-    <!-- ── WHAT IT KNOWS ────────────────────────────────────────────────
-         "I want the memories page cards to be categorised, and for them to
-         highlight the key attributes that are being remembered (ie how are
-         these being woven into future daydreams?) I'm not sure if it's the
-         specific fact that's remembered, or the concept."
-
-         It is the specific fact, verbatim, and this room says so rather than
-         leaving it to be inferred. `pack.ts` does one thing with a memory:
-
-             add('past', {kind:'memory', id}, `Known (${category}): ${content}`)
-
-         One card per memory, holding the exact sentence. Nothing generalises
-         it, nothing summarises it, no embedding stands between the sentence and
-         the prompt — so a memory is only ever as good as its sentence, which is
-         why every writer here composes a whole quotable claim. -->
-    <section class="band" id="dd-memories">
+    <!-- ── LESSONS AND VALUES ───────────────────────────────────────────
+         The normal reasoning surface. Raw memories remain underneath as the
+         receipts, while these sourced themes are what a future ponder cites. -->
+    <section class="band" id="dd-memory-themes">
       <div class="inner">
         <SectionHead
-          kicker="A / What it knows"
-          title={['Everything it', 'remembers']}
-          strap="The store the engine reads back before it thinks. Four things write into it — a verdict it went and checked, a note you typed on a card, a place you named, and anything a conversation chose to keep — and all four are read the same way."
+          kicker="A / Lessons and values"
+          title={['What the details', 'have taught it']}
+          strap="At 22:30 each night, a model reviews new raw memories and folds them into broader lessons and explicit values. Every theme keeps its source memories, and every future daydream that uses one cites the theme in its evidence trail."
         >
           {#snippet aside()}
             <button type="button" class="btn" disabled={memoriesLoading} onclick={loadMemories}>
               {memoriesLoading ? 'Reading…' : 'Refresh'}
             </button>
+            <button type="button" class="cta" disabled={consolidating || awaitingMemories.length === 0} onclick={consolidateMemoriesNow}>
+              {consolidating ? 'Consolidating…' : `Consolidate now${awaitingMemories.length ? ` (${awaitingMemories.length})` : ''}`}
+            </button>
           {/snippet}
         </SectionHead>
 
-        <!-- The answer to the question, in one card, before any list. -->
         <div class="card t-steady">
           <p class="card-body">
-            <strong>The specific sentence is what is remembered</strong> — not the concept behind
-            it. Each memory below is pasted into the daydream prompt exactly as written, prefixed
-            with its category: <code class="inline-code">Known (situations): …</code>. Nothing
-            generalises it and nothing summarises it, so a vague memory teaches the engine
-            something vague.
+            <strong>The theme is what future daydreams read.</strong> A raw memory is the receipt:
+            it proves why the lesson exists, but after consolidation its thought-specific wording
+            no longer occupies the prompt. Up to {MEMORY_THEMES_PER_PACK} themes reach a ponder
+            pass, ordered by how many memories support them.
           </p>
-          {#if memories.length}
+          {#if lastConsolidation}
             <p class="card-body">
-              {Math.min(MEMORIES_PER_PACK, memories.length)} of {memories.length} reach any one
-              pass — the newest {MEMORIES_PER_PACK}, in the order below.
-              {#if memories.length > MEMORIES_PER_PACK}
-                The other {memories.length - MEMORIES_PER_PACK} are held but not read, so a
-                memory that matters and is old enough is a memory the engine no longer has.
-              {/if}
+              Latest consolidation: <strong>{lastConsolidation.status}</strong> for
+              {lastConsolidation.localDay} · {lastConsolidation.memoriesReviewed} memories reviewed ·
+              {lastConsolidation.themesCreated} themes created · {lastConsolidation.themesUpdated}
+              updated · {lastConsolidation.memoriesIgnored} archive-only{lastConsolidation.model ? ` · ${lastConsolidation.model}` : ''}.
             </p>
+            {#if lastConsolidation.error}<p class="card-body warn">{lastConsolidation.error}</p>{/if}
           {/if}
         </div>
 
+        {#if consolidationNote}<p class="note good">{consolidationNote}</p>{/if}
         {#if memoriesLoading}
           <div class="card t-watch"><p class="card-body">Reading what it knows…</p></div>
         {:else if memoriesError}
           <div class="card t-urgent"><p class="card-body">Could not read the memories: {memoriesError}</p></div>
-        {:else if memories.length === 0}
+        {:else if memoryThemes.length === 0}
           <div class="card t-quiet">
             <p class="card-body">
-              Nothing remembered yet. <strong>Queue to model</strong> on any feed card writes the
-              first one, and so does adding a note to a card or naming a place.
+              No themes yet. {awaitingMemories.length
+                ? `${awaitingMemories.length} raw memories are waiting for tonight’s first consolidation.`
+                : 'A note, named place, ruling, or conversation memory will give the nightly pass its first source.'}
             </p>
           </div>
         {:else}
-          <div class="controls">
-            <FacetBar
-              label="Category"
-              active={memCategory}
-              facets={memCategoryFacets}
-              onpick={(id) => (memCategory = id)}
-            />
-            <FacetBar
-              label="Written by"
-              active={memOrigin}
-              facets={memOriginFacets}
-              onpick={(id) => (memOrigin = id)}
-            />
-          </div>
-
-          {#if memoriesVisible.length === 0}
-            <div class="card t-quiet">
-              <p class="card-body">Nothing in this view. The counts on the chips say where they all went.</p>
-            </div>
-          {/if}
-
-          {#each memoryGroups as g (g.category)}
+          {#each memoryThemeGroups as group (group.kind)}
             <div class="group">
-              <span class="group-label">{g.category}</span>
-              <span class="group-n">{g.items.length}</span>
+              <span class="group-label">{group.kind === 'value' ? 'Values to respect' : 'Lessons to consider'}</span>
+              <span class="group-n">{group.items.length}</span>
               <span class="group-rule"></span>
             </div>
-            <div class="board">
-              {#each g.items as m (m.id)}
-                {@const use = memoryUse(m)}
-                {@const reaches = memoryReach(m)}
-                <article class="card t-{use.binding ? 'urgent' : reaches ? 'good' : 'quiet'}">
+            <div class="stack">
+              {#each group.items as theme (theme.id)}
+                <article class="card t-{theme.influenced.length ? 'good' : 'steady'}" id="memory-theme-{theme.id}">
                   <div class="card-hd">
-                    <span class="card-kicker">{ORIGIN_LABEL[m.origin]}</span>
-                    {#if use.binding}
-                      <span class="pill t-urgent">binding</span>
-                    {:else if reaches}
-                      <span class="pill t-good">in the next pass</span>
+                    <div>
+                      <span class="card-kicker">{theme.kind}</span>
+                      <p class="card-title as-text">{theme.title}</p>
+                    </div>
+                    {#if memoryThemes.indexOf(theme) < MEMORY_THEMES_PER_PACK}
+                      <span class="pill t-good">in the ponder pack</span>
                     {:else}
-                      <span class="pill t-quiet">held, not read</span>
+                      <span class="pill t-quiet">outside the pack cap</span>
                     {/if}
                   </div>
 
-                  <!-- The sentence, verbatim and marked as such. This IS the
-                       card the model gets; showing a tidied version here would
-                       misrepresent the one thing this room exists to show. -->
-                  <p class="mem-sentence">Known ({m.category}): {m.content}</p>
+                  <p class="theme-statement">{theme.statement}</p>
+                  <div class="mem-use">
+                    <p class="field-label">How Daydreaming should apply it</p>
+                    <p class="detail-line">{theme.guidance}</p>
+                  </div>
 
                   <div class="card-meta">
-                    <span class="tag">{m.category}</span>
-                    <span class="meta-item">{m.confidence} confidence</span>
-                    <span class="meta-item stamp">{stamp(m.createdAt)}</span>
-                    {#if m.thoughtKind}<span class="meta-item">from a {kindLabel(m.thoughtKind)}</span>{/if}
-                    {#if m.verdict}
-                      <span class="meta-item {m.verdict === 'refuted' ? 'warn' : 'good'}">
-                        {m.verdict === 'refuted' ? 'did not hold' : m.verdict === 'verified' ? 'held up' : 'could not tell'}
-                        {#if typeof m.likelihood === 'number'} · {Math.round(m.likelihood * 100)}%{/if}
-                      </span>
-                    {/if}
-                    {#if m.placeLabel}<span class="meta-item">{m.placeLabel}</span>{/if}
+                    <span class="tag accent">{theme.sourceCount} source{theme.sourceCount === 1 ? '' : 's'}</span>
+                    <span class="meta-item">{theme.confidence} confidence</span>
+                    <span class="meta-item">updated {stamp(theme.updatedAt)}</span>
+                    <span class="meta-item {theme.influenced.length ? 'good' : ''}">
+                      influenced {theme.influenced.length} thought{theme.influenced.length === 1 ? '' : 's'}
+                    </span>
                   </div>
 
-                  {#if m.thoughtTitle}
-                    <p class="note">About: “{m.thoughtTitle}”</p>
-                  {/if}
-
-                  <!-- How it is woven in. Two mechanisms, and they are not
-                       equal: being carded is MATERIAL the proposer may ignore;
-                       the refutation block is an INSTRUCTION it may not. The
-                       Canva misreading came round eight times under eight names
-                       while only the first was in place, so the page prints the
-                       difference rather than implying both are the same
-                       promise. -->
                   <div class="mem-use">
-                    <p class="field-label">How this reaches a daydream</p>
-                    {#each use.lines as line, li (li)}
-                      <p class="detail-line">{line}</p>
-                    {/each}
-                    {#if !reaches}
-                      <p class="note warn">
-                        Ranked {(memRank.get(m.id) ?? 0) + 1} of {memories.length} by age, and only
-                        the newest {MEMORIES_PER_PACK} are read — so as things stand this one
-                        changes nothing about what gets said next.
-                      </p>
+                    <p class="field-label">Visible impact</p>
+                    {#if theme.influenced.length}
+                      <p class="detail-line">These thoughts cited this theme, so the link is recorded rather than guessed:</p>
+                      <div class="theme-links">
+                        {#each theme.influenced.slice(0, 8) as influence (influence.thoughtId)}
+                          <a class="q link" href="/jkai/daydreams?tab=feed&rate={influence.thoughtId}">
+                            {influence.title} · {stamp(influence.createdAt)}
+                          </a>
+                        {/each}
+                      </div>
+                    {:else}
+                      <p class="detail-line">Not cited by a thought yet. It is available to the ponder pass, but the feed will not claim influence until a generated thought actually names it.</p>
                     {/if}
                   </div>
+
+                  <details class="theme-sources">
+                    <summary>Raw memories rolled into this theme ({theme.sources.length})</summary>
+                    <div class="theme-source-list">
+                      {#each theme.sources as source (source.id)}
+                        <div class="theme-source">
+                          <p class="mem-sentence">{source.content}</p>
+                          <p class="note">
+                            {ORIGIN_LABEL[source.origin]} · {source.category} · {source.confidence} confidence · {stamp(source.createdAt)}
+                          </p>
+                        </div>
+                      {/each}
+                    </div>
+                  </details>
                 </article>
               {/each}
             </div>
@@ -2721,12 +2727,75 @@
       </div>
     </section>
 
-    <section class="band sunken" id="dd-rulings">
+    <!-- The append-only receipts. These explain the roll-up but, once
+         consolidated, no longer compete for slots in the reasoning pack. -->
+    <section class="band sunken" id="dd-memories">
       <div class="inner">
         <SectionHead
-          kicker="B / What it has ruled on"
+          kicker="B / Source archive"
+          title={['The memories', 'underneath the themes']}
+          strap="Exact observations, notes, named places and reviewer rulings. New details wait here until tonight; they can guide future daydreams only through a durable lesson or value, never as thought-specific prompt prose."
+        />
+
+        {#if memories.length}
+          <div class="controls">
+            <FacetBar label="Category" active={memCategory} facets={memCategoryFacets} onpick={(id) => (memCategory = id)} />
+            <FacetBar label="Written by" active={memOrigin} facets={memOriginFacets} onpick={(id) => (memOrigin = id)} />
+          </div>
+        {/if}
+
+        {#if memoriesVisible.length === 0}
+          <div class="card t-quiet"><p class="card-body">No raw memories in this view.</p></div>
+        {/if}
+
+        {#each memoryGroups as g (g.category)}
+          <div class="group">
+            <span class="group-label">{g.category}</span>
+            <span class="group-n">{g.items.length}</span>
+            <span class="group-rule"></span>
+          </div>
+          <div class="board">
+            {#each g.items as m (m.id)}
+              {@const use = memoryUse(m)}
+              <article class="card t-{use.binding ? 'urgent' : m.consolidatedAt == null ? 'watch' : m.themeIds.length ? 'steady' : 'quiet'}">
+                <div class="card-hd">
+                  <span class="card-kicker">{ORIGIN_LABEL[m.origin]}</span>
+                  {#if use.binding}
+                    <span class="pill t-urgent">binding refutation</span>
+                  {:else if m.consolidatedAt == null}
+                    <span class="pill t-watch">awaiting tonight · not in pack</span>
+                  {:else if m.themeIds.length}
+                    <span class="pill t-steady">rolled into {m.themeIds.length} theme{m.themeIds.length === 1 ? '' : 's'}</span>
+                  {:else}
+                    <span class="pill t-quiet">reviewed · archive only</span>
+                  {/if}
+                </div>
+                <p class="mem-sentence">{m.content}</p>
+                <div class="card-meta">
+                  <span class="tag">{m.category}</span>
+                  <span class="meta-item">{m.confidence} confidence</span>
+                  <span class="meta-item stamp">{stamp(m.createdAt)}</span>
+                  {#if m.thoughtKind}<span class="meta-item">from a {kindLabel(m.thoughtKind)}</span>{/if}
+                  {#if m.verdict}<span class="meta-item">{m.verdict}</span>{/if}
+                </div>
+                {#if m.thoughtTitle}<p class="note">About: “{m.thoughtTitle}”</p>{/if}
+                <div class="mem-use">
+                  <p class="field-label">What happens to this detail</p>
+                  {#each use.lines as line, li (li)}<p class="detail-line">{line}</p>{/each}
+                </div>
+              </article>
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </section>
+
+    <section class="band" id="dd-rulings">
+      <div class="inner">
+        <SectionHead
+          kicker="C / What it has ruled on"
           title={['Things it', 'went and checked']}
-          strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict here is also a memory — the ponder cycle reads them refutations-first, and a new claim built on rows already ruled against is never written as new."
+          strap="A model was given the claim, the evidence, and the ability to go and read the sources. Every verdict becomes a raw memory for tonight’s roll-up; an exact refutation also remains a binding rule, so the same disproven claim is not proposed under a new name."
         >
           {#snippet aside()}
             <button type="button" class="btn" disabled={rulingsLoading} onclick={loadRulings}>
@@ -2744,8 +2813,8 @@
           <div class="card t-watch">
             <p class="card-body">
               <strong>{unrememberedCount} of {rulings.length}</strong> rulings have no memory behind
-              them yet. Only a remembered ruling reaches the ponder pack; the review activity writes
-              the missing ones ten at a time as it runs.
+              them yet. Only a remembered ruling can reach tonight’s consolidation, and a refutation
+              cannot become binding until that link exists. The review activity writes the missing ones ten at a time.
             </p>
           </div>
         {/if}
@@ -4482,9 +4551,20 @@
             {/if}
           </div>
 
+          {#if t.evidence.some((e) => e.kind === 'memory-theme')}
+            <div class="detail-block memory-influence">
+              <p class="field-label">How memory influenced this</p>
+              <p class="detail-line">
+                This thought cited {t.evidence.filter((e) => e.kind === 'memory-theme').length}
+                consolidated {t.evidence.filter((e) => e.kind === 'memory-theme').length === 1 ? 'theme' : 'themes'}.
+                The lesson, its guidance, and the raw memories underneath it are shown in the evidence below.
+              </p>
+            </div>
+          {/if}
+
           {#if t.evidence.length}
             <div class="detail-block">
-              <p class="field-label">What it was looking at</p>
+              <p class="field-label">What it was looking at{t.evidence.some((e) => e.kind === 'memory-theme') ? ' — including memory' : ''}</p>
               <EvidenceList thoughtId={t.id} count={t.evidence.length} />
             </div>
           {/if}
@@ -5405,6 +5485,46 @@
   }
   .mem-use .detail-line + .detail-line {
     margin-top: 6px;
+  }
+  .theme-statement {
+    margin: 12px 0 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-heading-sm);
+    line-height: 1.25;
+    color: var(--text-primary);
+    text-wrap: balance;
+  }
+  .theme-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .theme-sources {
+    margin-top: 12px;
+    border-top: 1px solid var(--line-hair);
+    padding-top: 10px;
+  }
+  .theme-sources summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+  .theme-source-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .theme-source + .theme-source {
+    padding-top: 10px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .memory-influence {
+    border-left: 3px solid var(--success, #547a50);
+    padding-left: 12px;
   }
   .inline-code {
     font-family: var(--font-mono);

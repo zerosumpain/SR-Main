@@ -1,25 +1,7 @@
 // src/lib/daydream/memories.ts
 //
-// What the engine actually remembers, and what each memory does.
-//
-// ── The question this answers ──────────────────────────────────────────────
-//
-// The owner's words: "I want the memories page cards to be categorised, and for
-// them to highlight the key attributes that are being remembered (ie how are
-// these being woven into future daydreams?) I'm not sure if it's the specific
-// fact that's remembered, or the concept."
-//
-// The answer is the specific fact, verbatim, and the page should say so rather
-// than leave it to be inferred. `pack.ts` does this and nothing more:
-//
-//     add('past', { kind: 'memory', id: m.id }, `Known (${m.category}): ${m.content}`)
-//
-// One card per memory, holding the exact sentence that was stored. Nothing
-// generalises it, nothing summarises it, and no embedding stands between the
-// sentence and the prompt. So a memory is only ever as useful as the sentence
-// is — which is why every writer in this codebase composes a whole, quotable
-// claim rather than a fragment, and why this module reports the sentence rather
-// than a pretty version of it.
+// What the engine remembers after the nightly roll-up, and how to explain the
+// distinction between an observation and the principle distilled from it.
 //
 // ── PURE. The query lives in `memories.server.ts` ─────────────────────────
 //
@@ -46,25 +28,21 @@
 // would be a second copy of a fact already recorded — free to write and free to
 // disagree with itself later.
 
-/**
- * How many live memories reach one ponder pack.
- *
- * Mirrors `PACK_LIMITS.memories`. Duplicated as a named constant rather than
- * imported because `pack.ts` pulls in the whole snapshot type graph, and this
- * module is read by a page load; the test asserts the two agree, which is the
- * cheap half of an import without the cost.
- */
-export const MEMORIES_PER_PACK = 16;
+/** Mirrors the theme cap in `ponder/pack.ts`; tested to prevent UI drift. */
+export const MEMORY_THEMES_PER_PACK = 20;
 
 export type MemoryOrigin = 'ruling' | 'note' | 'place' | 'elsewhere';
 
 export interface DaydreamMemory {
   id: string;
   category: string;
-  /** The exact sentence. This string, unaltered, is what a pack card holds. */
+  /** The exact source sentence retained for provenance, never prompt prose. */
   content: string;
   confidence: string;
   createdAt: string;
+  consolidatedAt: string | null;
+  /** Themes this raw observation supports. Empty after review means no durable lesson. */
+  themeIds: string[];
   origin: MemoryOrigin;
   /** The thought this was written about, when it was written about one. */
   thoughtId: string | null;
@@ -75,6 +53,43 @@ export interface DaydreamMemory {
   likelihood: number | null;
   /** The place this names, when it names one. */
   placeLabel: string | null;
+}
+
+export interface MemoryThemeInfluence {
+  thoughtId: string;
+  title: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface DaydreamMemoryThemeView {
+  id: string;
+  slug: string;
+  kind: 'lesson' | 'value';
+  title: string;
+  statement: string;
+  guidance: string;
+  confidence: string;
+  sourceCount: number;
+  updatedAt: string;
+  sources: DaydreamMemory[];
+  influenced: MemoryThemeInfluence[];
+}
+
+export interface MemoryConsolidationView {
+  localDay: string;
+  status: string;
+  model: string | null;
+  memoriesReviewed: number;
+  themesCreated: number;
+  themesUpdated: number;
+  memoriesLinked: number;
+  memoriesIgnored: number;
+  promptTokens: number;
+  completionTokens: number;
+  error: string | null;
+  startedAt: string;
+  completedAt: string | null;
 }
 
 /** Where a memory came from, in the owner's terms rather than a column name. */
@@ -92,8 +107,9 @@ export const ORIGIN_LABEL: Record<MemoryOrigin, string> = {
  * it cannot claim a mechanism that is not running. Two mechanisms exist and
  * they are not equal:
  *
- *   1. Every live memory is carded into the ponder pack, verbatim. That makes
- *      it MATERIAL: the proposer may reason over it, cite it, or ignore it.
+ *   1. A raw memory never enters a ponder pack. After the nightly pass, only
+ *      its broader lesson/value may enter; the exact sentence remains as
+ *      inspectable source evidence.
  *   2. A refuted ruling is additionally repeated in `refutedBlock` — a hard
  *      instruction not to propose the claim again in any wording. That is the
  *      only one of the two that BINDS.
@@ -103,14 +119,23 @@ export const ORIGIN_LABEL: Record<MemoryOrigin, string> = {
  * promises. The Canva misreading came round eight times under eight names while
  * only mechanism 1 was in place.
  */
-export function memoryUse(m: Pick<DaydreamMemory, 'category' | 'origin' | 'verdict'>): {
+export function memoryUse(m: Pick<DaydreamMemory, 'category' | 'origin' | 'verdict' | 'consolidatedAt' | 'themeIds'>): {
   lines: string[];
   binding: boolean;
 } {
-  const lines = [
-    `Carded into every ponder pack, verbatim, as “Known (${m.category}): …” — the proposer ` +
-      'reads it as material and may reason over it or ignore it.',
-  ];
+  const lines = m.consolidatedAt == null
+    ? [
+        `Awaiting tonight's consolidation. This exact sentence stays out of ponder packs; ` +
+          `only a broader lesson or value distilled from it can guide future daydreams.`,
+      ]
+    : m.themeIds.length
+      ? [
+          `Kept as source evidence for ${m.themeIds.length === 1 ? 'a durable theme' : `${m.themeIds.length} durable themes`}. ` +
+            'Future ponders read the broader lesson/value, while this sentence remains available to audit where it came from.',
+        ]
+      : [
+          'Reviewed by the nightly consolidator and kept in the raw archive, but judged not to contain a safe durable lesson. It no longer occupies a reasoning-pack slot.',
+        ];
   const binding = m.origin === 'ruling' && m.verdict === 'refuted';
   if (binding) {
     lines.push(
@@ -168,4 +193,19 @@ export function groupByCategory<T extends { category: string }>(
   return [...byCat.entries()]
     .map(([category, items]) => ({ category, items }))
     .sort((a, b) => rank(a.category) - rank(b.category) || a.category.localeCompare(b.category));
+}
+
+export function groupThemesByKind<T extends { kind: string }>(
+  rows: T[],
+): Array<{ kind: string; items: T[] }> {
+  const kinds = ['value', 'lesson'];
+  const rank = (kind: string) => {
+    const i = kinds.indexOf(kind);
+    return i === -1 ? kinds.length : i;
+  };
+  const byKind = new Map<string, T[]>();
+  for (const row of rows) byKind.set(row.kind, [...(byKind.get(row.kind) ?? []), row]);
+  return [...byKind.entries()]
+    .map(([kind, items]) => ({ kind, items }))
+    .sort((a, b) => rank(a.kind) - rank(b.kind) || a.kind.localeCompare(b.kind));
 }

@@ -21,7 +21,7 @@ function snap(places: PlaceSummary[]): DaydreamSnapshot {
     places, coverage: { last24h: 1, last7d: 1 },
     health: { lastNightSleep: null, sleepBaseline: null, readiness: null, daysSinceWorkout: null, trainingLoad: null },
     calendar: { events: [], hiddenCount: 0, partial: false, available: true },
-    interests: [], offers: { available: false, items: [] }, memories: [], family: { available: false, members: [] }, emailFacts: { available: false, upcoming: [], recent: [] }, spend: { available: false, recent: [], totalMinor30d: 0 }, sources: [],
+    interests: [], offers: { available: false, items: [] }, memories: [], memoryThemes: [], family: { available: false, members: [] }, emailFacts: { available: false, upcoming: [], recent: [] }, spend: { available: false, recent: [], totalMinor30d: 0 }, sources: [],
   };
 }
 

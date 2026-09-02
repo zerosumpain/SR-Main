@@ -171,32 +171,6 @@ async function signalAggregates(now: Date): Promise<PackInputs['aggregates']> {
 }
 
 /**
- * What John has said about previous suggestions, verbatim.
- *
- * Carded explicitly rather than left to the snapshot's 200-memory sweep, which
- * has no ordering guarantee: a correction typed yesterday about a suggestion
- * the engine is about to make again is the most valuable card in the pack, and
- * it should not be competing for a slot with a two-year-old note about coffee.
- *
- * Verbatim, and cited like everything else. A note can therefore correct a
- * musing without becoming a second surface on which to invent one.
- */
-async function noteCards(): Promise<PackInputs['aggregates']> {
-  try {
-    const { recentNotes } = await import('../notes');
-    const rows = await recentNotes();
-    return rows
-      .filter((r) => r.note)
-      .map((r) => ({
-        key: `note:${r.id}`,
-        text: `You said about "${r.title}": ${r.note}`,
-      }));
-  } catch {
-    return [];
-  }
-}
-
-/**
  * What the owner has said specific diary entries MEAN.
  *
  * The whole point of a note that does not hide: "PE days are a reminder to
@@ -218,14 +192,14 @@ async function diaryNoteCards(): Promise<PackInputs['aggregates']> {
 }
 
 /**
- * What the REVIEWER settled, so the same misreading is not proposed again.
+ * What the REVIEWER specifically refuted, so the same misreading is not
+ * proposed again.
  *
- * The half that closes the loop. Ruling on a claim already writes a memory
- * (see ../rulings.ts), and the snapshot does sweep 200 memories — but with no
- * ordering guarantee, which is exactly why `noteCards` exists rather than
- * trusting that sweep. A refutation of the claim this cycle is about to make
- * again is the single most valuable card in the pack, and it must not be
- * competing for a slot with a two-year-old note about coffee.
+ * The half that closes the negative loop. Verified and uncertain reviews take
+ * the ordinary raw-memory → nightly-theme path; replaying their full review
+ * prose forever is exactly the over-specific memory behaviour consolidation
+ * replaces. A refutation is different: it is an exact prohibition and remains
+ * binding even after its raw memory has been rolled up.
  *
  * The owner's example is the specification: having ruled that the two Canva
  * rows are one payment, it should stop saying there were two charges.
@@ -242,13 +216,10 @@ async function rulingCardsFor(): Promise<{
     const rows = await rulingCards();
     return {
       cards: rows
-        .filter((r) => r.verdict)
+        .filter((r) => r.verdict === 'refuted')
         .map((r) => ({
           key: `ruling:${r.id}`,
-          text:
-            r.verdict === 'refuted'
-              ? `A reviewer checked "${r.title}" against the sources and it did NOT hold${r.reasoning ? `: ${r.reasoning}` : ''} Do not propose this again.`
-              : `A reviewer checked "${r.title}" against the sources and found it ${r.verdict}${r.reasoning ? `: ${r.reasoning}` : ''}`,
+          text: `A reviewer checked "${r.title}" against the sources and it did NOT hold${r.reasoning ? `: ${r.reasoning}` : ''} Do not propose this again.`,
         })),
       refutedLines: refutedBlock(rows.filter((r) => r.verdict === 'refuted')),
     };
@@ -470,13 +441,12 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, notes, diaryNotes, rulings, notebook] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
       weekAhead(),
       buildProfileLines(now),
-      noteCards(),
       diaryNoteCards(),
       rulingCardsFor(),
       notebookCards(),
@@ -502,7 +472,7 @@ export async function runPonder(
       // reviewer has already SETTLED. Those two go nearest the instruction
       // because they are the two that override: a correction he typed, and a
       // claim that has been checked against the sources and found wanting.
-      aggregates: [...aggregates, ...signals, ...notebook, ...notes, ...diaryNotes, ...rulings.cards],
+      aggregates: [...aggregates, ...signals, ...notebook, ...diaryNotes, ...rulings.cards],
       weekAhead: week,
       feedbackLines: [],
       profileLines,

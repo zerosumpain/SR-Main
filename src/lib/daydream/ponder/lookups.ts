@@ -143,7 +143,7 @@ const whoIsThis: Probe = {
     const known = new Set(
       [
         ...ctx.snapshot.places.map((p) => p.label ?? ''),
-        ...ctx.snapshot.memories.map((m) => m.content),
+        ...ctx.snapshot.memoryThemes.flatMap((t) => [t.title, t.statement]),
       ]
         .join(' ')
         .toLowerCase()
@@ -182,57 +182,9 @@ const whoIsThis: Probe = {
   },
 };
 
-/**
- * The memories that bear on TODAY, rather than the sixteen most recent.
- *
- * `assemblePack` takes `s.memories.slice(0, PACK_LIMITS.memories)` and the
- * snapshot orders them by recency, so a memory written months ago about the
- * merchant on this week's invoice can never reach the pack while sixteen newer
- * and unrelated ones can. This asks for the ones that match what is actually
- * happening.
- */
-const memoriesThatBearOnToday: Probe = {
-  key: 'memory-relevance',
-  tool: 'memory_search',
-  find(ctx) {
-    const terms: string[] = [];
-    for (const t of [
-      ...ctx.weekAhead.map((e) => e.title),
-      ...ctx.snapshot.emailFacts.upcoming.map((f) => f.title),
-    ]) {
-      for (const term of namedTerms(t)) if (!terms.includes(term)) terms.push(term);
-    }
-    // Merchants are already proper nouns and need no extraction.
-    for (const s of ctx.snapshot.spend.recent) {
-      const m = s.merchant?.trim();
-      if (m && !terms.includes(m)) terms.push(m);
-    }
-    return terms.slice(0, MAX_GAPS_PER_PROBE).map((term) => ({
-      id: `memory:${term.toLowerCase()}`,
-      args: { query: term, limit: 3 },
-      reason: `"${term}" is in play this week; the pack's memories are the newest sixteen, not the relevant ones`,
-    }));
-  },
-  render(gap, data) {
-    const memories = (data as { memories?: unknown } | null)?.memories;
-    if (!Array.isArray(memories)) return [];
-    const out: LookupCard[] = [];
-    for (const m of memories.slice(0, MAX_CARDS_PER_GAP)) {
-      const r = m as { id?: unknown; category?: unknown; content?: unknown };
-      if (typeof r.id !== 'string' || typeof r.content !== 'string') continue;
-      const cat = typeof r.category === 'string' && r.category ? r.category : 'note';
-      out.push({
-        ref: { kind: 'memory', id: r.id },
-        text: `Known (${cat}): ${r.content}`,
-      });
-    }
-    return out;
-  },
-};
-
 /** The allow-list. Adding a row is a decision about what may enter the prompt
  *  — read rule 2 at the top of this file before adding one. */
-export const READ_PROBES: readonly Probe[] = [whoIsThis, memoriesThatBearOnToday];
+export const READ_PROBES: readonly Probe[] = [whoIsThis];
 
 export interface LookupRun {
   cards: LookupCard[];

@@ -59,7 +59,7 @@ export interface PackInputs {
  *  haystack; the caps below decide who loses seats, not the model. */
 export const PACK_LIMITS = {
   places: 10,
-  memories: 16,
+  memoryThemes: 20,
   upcomingEmail: 12,
   recentEmail: 6,
   spendRows: 10,
@@ -82,8 +82,8 @@ function pounds(minor: number): string {
 export function assemblePack(inputs: PackInputs): FactPack {
   const { snapshot: s } = inputs;
   const cards: FactCard[] = [];
-  const add = (tense: string, ref: { kind: string; id: string }, text: string) => {
-    const trimmed = text.replace(/\s+/g, ' ').trim().slice(0, 220);
+  const add = (tense: string, ref: { kind: string; id: string }, text: string, maxLength = 220) => {
+    const trimmed = text.replace(/\s+/g, ' ').trim().slice(0, maxLength);
     if (!trimmed) return;
     cards.push({ id: `F${cards.length + 1}`, ref, tense, text: trimmed });
   };
@@ -182,9 +182,16 @@ export function assemblePack(inputs: PackInputs): FactPack {
   for (const a of inputs.aggregates) {
     add('past', { kind: 'features', id: a.key }, a.text);
   }
-  const memories = s.memories.slice(0, PACK_LIMITS.memories);
-  for (const m of memories) {
-    add('past', { kind: 'memory', id: m.id }, `Known (${m.category}): ${m.content}`);
+  for (const theme of s.memoryThemes.slice(0, PACK_LIMITS.memoryThemes)) {
+    add(
+      'past',
+      { kind: 'memory-theme', id: theme.id },
+      `${theme.kind === 'value' ? 'Value' : 'Lesson'} — ${theme.title}: ${theme.statement} ` +
+        `When relevant: ${theme.guidance} (${theme.confidence} confidence; ${theme.sourceCount} source${theme.sourceCount === 1 ? '' : 's'}).`,
+      // Theme guidance is the behavioural part of a consolidated memory. A
+      // longer card prevents a detailed statement from truncating it away.
+      360,
+    );
   }
   for (const t of s.interests.slice(0, PACK_LIMITS.interests)) {
     add('past', { kind: 'interest', id: t.refId }, `Recent interest (${t.source}): ${t.term}`);

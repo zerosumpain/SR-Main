@@ -12,6 +12,7 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
   return {
     places: [],
     memories: [],
+    memoryThemes: [],
     emailFacts: { available: true, upcoming: [], recent: [] },
     spend: { available: true, recent: [], totalMinor30d: 0 },
     ...over,
@@ -71,8 +72,8 @@ describe('runLookups', () => {
   });
 
   it('cites with an existing evidence kind so the drill-through resolves', async () => {
-    // 'intel-entity' and 'memory' already have resolvers in evidence.ts. A new
-    // ref kind would render as an unresolvable id and call it evidence.
+    // The probe uses an evidence kind with a real resolver. A new ref kind
+    // would render as an unresolvable id and call it evidence.
     vi.mocked(executeTool).mockResolvedValue(
       ok({ entities: [{ id: 'e1', name: 'Acme Ltd', type: 'organisation' }] }) as never,
     );
@@ -80,13 +81,10 @@ describe('runLookups', () => {
       snapshot: snap(),
       weekAhead: [{ title: 'Call with Acme Ltd', whenText: 'x', location: null }],
     });
-    expect(run.cards.every((c) => ['intel-entity', 'memory'].includes(c.ref.kind))).toBe(true);
+    expect(run.cards.every((c) => c.ref.kind === 'intel-entity')).toBe(true);
   });
 
   it('does not ask the GRAPH about a name the pack already explains', async () => {
-    // The memory probe deliberately still asks — "what do I know about this
-    // thing that is happening" is the question it exists for, and a place
-    // having a label says nothing about what he has recorded about it.
     const run = await runLookups({
       snapshot: snap({
         places: [{ label: 'Riverside Dental' }] as unknown as DaydreamSnapshot['places'],
@@ -108,25 +106,6 @@ describe('runLookups', () => {
     expect(namedTerms('Vodafone bill')).toEqual(['Vodafone']);
   });
 
-  it('searches memories by what is in play, not by recency', async () => {
-    vi.mocked(executeTool).mockImplementation((async (tool: string) =>
-      tool === 'memory_search'
-        ? ok({ memories: [{ id: 'm1', category: 'billing', content: 'Vodafone contract ends in March' }] })
-        : ok({ entities: [] })) as never);
-    const run = await runLookups({
-      snapshot: snap({
-        spend: {
-          available: true,
-          totalMinor30d: 0,
-          recent: [{ id: 's1', day: '2026-08-29', merchant: 'Vodafone', amountMinor: 3200, currency: 'GBP' }],
-        },
-      }),
-      weekAhead: [],
-    });
-    expect(executeTool).toHaveBeenCalledWith('memory_search', expect.objectContaining({ query: 'Vodafone' }));
-    expect(run.cards.some((c) => c.ref.kind === 'memory' && c.text.includes('Vodafone'))).toBe(true);
-  });
-
   it('never spends more than its budget', async () => {
     vi.mocked(executeTool).mockResolvedValue(ok({ entities: [], memories: [] }) as never);
     const many = Array.from({ length: 12 }, (_, n) => ({
@@ -137,30 +116,6 @@ describe('runLookups', () => {
     const run = await runLookups({ snapshot: snap(), weekAhead: many }, { budget: 2 });
     expect(vi.mocked(executeTool).mock.calls).toHaveLength(2);
     expect(run.asked).toHaveLength(2);
-  });
-
-  it('gives every probe a turn rather than draining the first', async () => {
-    // Two probes with three gaps each and a budget of two must not mean the
-    // second probe never runs.
-    vi.mocked(executeTool).mockResolvedValue(ok({ entities: [], memories: [] }) as never);
-    await runLookups(
-      {
-        snapshot: snap({
-          spend: {
-            available: true,
-            totalMinor30d: 0,
-            recent: [{ id: 's1', day: 'x', merchant: 'Vodafone', amountMinor: 1, currency: 'GBP' }],
-          },
-        }),
-        weekAhead: [
-          { title: 'Call with Acme Ltd', whenText: 'x', location: null },
-          { title: 'Visit Beta Corp', whenText: 'x', location: null },
-        ],
-      },
-      { budget: 2 },
-    );
-    const tools = vi.mocked(executeTool).mock.calls.map((c) => c[0]);
-    expect(new Set(tools).size).toBe(2);
   });
 
   it('a budget of zero makes no calls at all', async () => {
