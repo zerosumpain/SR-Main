@@ -37,6 +37,10 @@ export default defineConfig({
 			// the background, then let the user choose the safe moment to reload.
 			registerType: 'prompt',
 			injectRegister: false,
+			// Cloudflare gives unversioned static files a four-hour browser/edge TTL.
+			// Key the worker URL by the release tree so a new client never registers
+			// stale worker bytes from the previous release's /sw.js cache entry.
+			filename: `jkai-sw-${jkaiBuildId}.js`,
 			// SvelteKit canonicalises /jkai/ to /jkai. A trailing slash here leaves
 			// the installed app's start page outside the worker's control.
 			scope: '/jkai',
