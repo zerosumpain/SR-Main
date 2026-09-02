@@ -120,6 +120,7 @@ export async function recordRulingMemory(
     .values({
       category: 'situations',
       content,
+      daydreamOrigin: 'ruling',
       // A ruling the reviewer could not settle is not a high-confidence fact
       // about the world, and marking it as one would let an "I could not tell"
       // outrank a thing that was actually checked.

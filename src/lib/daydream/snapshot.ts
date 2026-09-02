@@ -25,6 +25,7 @@ import {
   researchSessions,
 } from '$lib/db/schema';
 import { coverageOf } from './cluster';
+import { isDaydreamFindingMemory, isDaydreamFindingTheme } from './memory-scope.server';
 import { DEFAULT_SUBJECT, FAMILY_SUBJECTS, LOCAL_TZ, POLL_INTERVAL_MINS, errMsg } from './types';
 import type {
   CalendarEvent,
@@ -418,9 +419,15 @@ export async function buildSnapshot(
       db
         .select({ id: jkaiMemories.id, category: jkaiMemories.category, content: jkaiMemories.content })
         .from(jkaiMemories)
-        .where(and(isNull(jkaiMemories.supersededBy), isNull(jkaiMemories.consolidatedAt)))
-        // Raw rows are a short-lived bridge: something learned during the day
-        // can matter before tonight, then leaves this list once it has either
+        .where(
+          and(
+            isNull(jkaiMemories.supersededBy),
+            isNull(jkaiMemories.consolidatedAt),
+            isDaydreamFindingMemory(),
+          ),
+        )
+        // Raw findings are a short-lived bridge: a new ruling or note can
+        // matter before tonight, then leaves this list once it has either
         // joined a theme or been explicitly judged non-durable.
         .orderBy(desc(jkaiMemories.createdAt))
         .limit(40),
@@ -435,7 +442,7 @@ export async function buildSnapshot(
           sourceCount: daydreamMemoryThemes.sourceCount,
         })
         .from(daydreamMemoryThemes)
-        .where(eq(daydreamMemoryThemes.status, 'active'))
+        .where(and(eq(daydreamMemoryThemes.status, 'active'), isDaydreamFindingTheme()))
         // Repeatedly-supported themes earn the front of the pack. Recency only
         // breaks a tie; one noisy new episode must not evict a durable value.
         .orderBy(desc(daydreamMemoryThemes.sourceCount), desc(daydreamMemoryThemes.updatedAt))

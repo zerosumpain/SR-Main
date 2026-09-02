@@ -69,7 +69,7 @@ export async function addNote(thoughtId: string, text: string): Promise<NoteResu
 
   const [memory] = await db
     .insert(jkaiMemories)
-    .values({ category: 'situations', content, confidence: 'high' })
+    .values({ category: 'situations', content, confidence: 'high', daydreamOrigin: 'note' })
     .returning({ id: jkaiMemories.id });
 
   if (thought.noteMemoryId) {

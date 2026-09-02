@@ -28,6 +28,7 @@
     groupByCategory,
     groupThemesByKind,
     memoryUse,
+    type DaydreamMemory,
     type DaydreamMemoryThemeView,
     type MemoryConsolidationView,
   } from '$lib/daydream/memories';
@@ -1450,29 +1451,11 @@
     }
   }
 
-  // ── What it knows ─────────────────────────────────────────────────────────
+  // ── What Daydream learned ─────────────────────────────────────────────────
   //
-  // The rulings list below answers "what has it CHECKED", read off the thought
-  // rows. This answers "what does it KNOW", read off the store itself — and
-  // three writers other than the reviewer fill that store: a note John typed on
-  // a card, a place he named, and whatever a conversation chose to keep. Both
-  // rooms are wanted; neither is the other.
-  type Memory = {
-    id: string;
-    category: string;
-    content: string;
-    confidence: string;
-    createdAt: string;
-    consolidatedAt: string | null;
-    themeIds: string[];
-    origin: 'ruling' | 'note' | 'place' | 'elsewhere';
-    thoughtId: string | null;
-    thoughtTitle: string | null;
-    thoughtKind: string | null;
-    verdict: string | null;
-    likelihood: number | null;
-    placeLabel: string | null;
-  };
+  // The shared store has many writers; this room deliberately admits only a
+  // reviewer ruling or a note attached to a Daydream thought.
+  type Memory = DaydreamMemory;
   let memoriesOpen = $state(false);
   let memoriesLoading = $state(false);
   let memoriesError = $state<string | null>(null);
@@ -1516,8 +1499,6 @@
       { id: 'all', label: 'All', count: scope.length },
       { id: 'ruling', label: 'It checked', count: n('ruling') },
       { id: 'note', label: 'You told it', count: n('note') },
-      { id: 'place', label: 'A place', count: n('place') },
-      { id: 'elsewhere', label: 'A conversation', count: n('elsewhere') },
     ];
   });
 
@@ -2666,7 +2647,7 @@
         <SectionHead
           kicker="A / Lessons and values"
           title={['What the details', 'have taught it']}
-          strap="At 22:30 each night, a model reviews new raw memories and folds them into broader lessons and explicit values. Every theme keeps its source memories, and every future daydream that uses one cites the theme in its evidence trail."
+          strap="At 22:30 each night, a model reviews Daydream's own findings—the reviewer's rulings and notes you left on thoughts—and folds them into broader lessons and explicit values. Memories from chat or elsewhere on the site never enter this loop."
         >
           {#snippet aside()}
             <button type="button" class="btn" disabled={memoriesLoading} onclick={loadMemories}>
@@ -2791,7 +2772,7 @@
         <SectionHead
           kicker="B / Source archive"
           title={['The memories', 'underneath the themes']}
-          strap="Exact observations, notes, named places and reviewer rulings. New details wait here until tonight; they can guide future daydreams only through a durable lesson or value, never as thought-specific prompt prose."
+          strap="Only notes left on Daydream thoughts and findings produced by the Daydream reviewer. New details wait here until tonight; memories from chat, named places, and the rest of the site are outside this learning loop."
         />
 
         {#if memories.length}

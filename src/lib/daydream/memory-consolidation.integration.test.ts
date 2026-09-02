@@ -7,7 +7,7 @@
  * It uses a year-2099 local day and prefixed ids, then deletes only those rows.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamMemoryConsolidations,
@@ -19,8 +19,10 @@ import {
 
 const IDS = ['itest-dd-memory-beer', 'itest-dd-memory-review'];
 const PARTIAL_IDS = ['itest-dd-memory-partial-valid', 'itest-dd-memory-partial-deferred'];
+const GLOBAL_ID = 'itest-dd-memory-global-site-wide';
 const THEME_SLUG = 'itest-readiness-context';
 const PARTIAL_THEME_SLUG = 'itest-partial-capability';
+const CONTAMINATED_THEME_SLUG = 'itest-global-contamination';
 const DAY = '2099-09-02';
 const PARTIAL_DAY = '2099-09-03';
 
@@ -47,10 +49,13 @@ vi.mock('$lib/llm/client', () => ({
 }));
 
 import { runMemoryConsolidation } from './memory-consolidation.server';
-import { listDaydreamMemoryThemes } from './memories.server';
+import { listDaydreamMemories, listDaydreamMemoryThemes } from './memories.server';
+import { DAYDREAM_MEMORY_ORIGINS, repairDaydreamMemoryScope } from './memory-scope.server';
 import { resolveEvidence } from './evidence';
 
 let dbReady = false;
+let heldMemoryIds: string[] = [];
+const HELD_AT = new Date('2098-01-01T00:00:00Z');
 
 function completion(content: unknown) {
   return {
@@ -64,7 +69,7 @@ async function cleanup() {
   const themes = await db
     .select({ id: daydreamMemoryThemes.id })
     .from(daydreamMemoryThemes)
-    .where(inArray(daydreamMemoryThemes.slug, [THEME_SLUG, PARTIAL_THEME_SLUG]));
+    .where(inArray(daydreamMemoryThemes.slug, [THEME_SLUG, PARTIAL_THEME_SLUG, CONTAMINATED_THEME_SLUG]));
   if (themes.length) {
     await db.delete(daydreamMemoryThemeSources).where(
       inArray(
@@ -73,11 +78,13 @@ async function cleanup() {
       ),
     );
   }
-  await db.delete(daydreamMemoryThemes).where(inArray(daydreamMemoryThemes.slug, [THEME_SLUG, PARTIAL_THEME_SLUG]));
+  await db
+    .delete(daydreamMemoryThemes)
+    .where(inArray(daydreamMemoryThemes.slug, [THEME_SLUG, PARTIAL_THEME_SLUG, CONTAMINATED_THEME_SLUG]));
   await db
     .delete(daydreamMemoryConsolidations)
     .where(inArray(daydreamMemoryConsolidations.localDay, [DAY, PARTIAL_DAY]));
-  await db.delete(jkaiMemories).where(inArray(jkaiMemories.id, [...IDS, ...PARTIAL_IDS]));
+  await db.delete(jkaiMemories).where(inArray(jkaiMemories.id, [...IDS, ...PARTIAL_IDS, GLOBAL_ID]));
 }
 
 beforeAll(async () => {
@@ -124,24 +131,72 @@ beforeAll(async () => {
     return;
   }
   await cleanup();
+  await repairDaydreamMemoryScope();
+  const preExistingPending = await db
+    .select({ id: jkaiMemories.id })
+    .from(jkaiMemories)
+    .where(
+      and(
+        isNull(jkaiMemories.consolidatedAt),
+        inArray(jkaiMemories.daydreamOrigin, [...DAYDREAM_MEMORY_ORIGINS]),
+      ),
+    );
+  heldMemoryIds = preExistingPending.map((memory) => memory.id);
+  if (heldMemoryIds.length) {
+    await db.update(jkaiMemories).set({ consolidatedAt: HELD_AT }).where(inArray(jkaiMemories.id, heldMemoryIds));
+  }
   await db.insert(jkaiMemories).values([
     {
       id: IDS[0],
       category: 'situations',
       content: 'I had a beer last night, which affected readiness after otherwise strong sleep.',
       confidence: 'high',
+      daydreamOrigin: 'note',
+      consolidatedAt: new Date('2099-09-02T19:58:00Z'),
+      createdAt: new Date('2099-09-02T20:00:00Z'),
     },
     {
       id: IDS[1],
       category: 'situations',
-      content: 'A detailed review could not confirm the exact readiness score from the available weekly summary.',
+      content:
+        'On the daydream claim "A strong sleep night has not translated into high readiness": Checked, and the available weekly summary could not settle the exact score.',
       confidence: 'medium',
+      consolidatedAt: new Date('2099-09-02T19:58:30Z'),
+      createdAt: new Date('2099-09-02T20:01:00Z'),
     },
+    {
+      id: GLOBAL_ID,
+      category: 'preferences',
+      content: 'A site-wide chat memory that must never enter Daydream consolidation.',
+      confidence: 'high',
+      consolidatedAt: new Date('2099-09-02T19:59:30Z'),
+      createdAt: new Date('2099-09-02T19:59:00Z'),
+    },
+  ]);
+  const [contaminated] = await db
+    .insert(daydreamMemoryThemes)
+    .values({
+      slug: CONTAMINATED_THEME_SLUG,
+      kind: 'value',
+      title: 'ITest global contamination',
+      statement: 'A theme incorrectly distilled from a memory elsewhere on the site.',
+      guidance: 'This must be removed before it can influence a future Daydream.',
+      confidence: 'high',
+      sourceCount: 2,
+    })
+    .returning({ id: daydreamMemoryThemes.id });
+  await db.insert(daydreamMemoryThemeSources).values([
+    { themeId: contaminated.id, memoryId: GLOBAL_ID },
+    { themeId: contaminated.id, memoryId: IDS[0] },
   ]);
 });
 
 afterAll(async () => {
-  if (dbReady) await cleanup();
+  if (!dbReady) return;
+  await cleanup();
+  if (heldMemoryIds.length) {
+    await db.update(jkaiMemories).set({ consolidatedAt: null }).where(inArray(jkaiMemories.id, heldMemoryIds));
+  }
 });
 
 describe('nightly memory consolidation', () => {
@@ -165,13 +220,30 @@ describe('nightly memory consolidation', () => {
     const firstPrompt = mocks.create.mock.calls[0][0].messages[1].content as string;
     expect(firstPrompt).toContain('MEMORY M001');
     expect(firstPrompt).not.toContain(IDS[0]);
+    expect(firstPrompt).not.toContain(GLOBAL_ID);
+    expect(firstPrompt).not.toContain('site-wide chat memory');
 
     const [theme] = await db.select().from(daydreamMemoryThemes).where(eq(daydreamMemoryThemes.slug, THEME_SLUG));
     expect(theme.sourceCount).toBe(2);
     expect(theme.guidance).toContain('without assuming');
 
     const raw = await db.select().from(jkaiMemories).where(inArray(jkaiMemories.id, IDS));
-    expect(raw.every((m) => m.consolidatedAt instanceof Date)).toBe(true);
+    expect(
+      raw
+        .map((memory) => [memory.id, memory.consolidatedAt instanceof Date] as const)
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ).toEqual(IDS.map((id) => [id, true] as const).sort(([left], [right]) => left.localeCompare(right)));
+    const [globalMemory] = await db.select().from(jkaiMemories).where(eq(jkaiMemories.id, GLOBAL_ID));
+    expect(globalMemory.consolidatedAt).toBeNull();
+    const badThemes = await db
+      .select({ id: daydreamMemoryThemes.id })
+      .from(daydreamMemoryThemes)
+      .where(eq(daydreamMemoryThemes.slug, CONTAMINATED_THEME_SLUG));
+    expect(badThemes).toHaveLength(0);
+
+    const memoryRoom = await listDaydreamMemories();
+    expect(memoryRoom.map((memory) => memory.id)).toEqual(expect.arrayContaining(IDS));
+    expect(memoryRoom.map((memory) => memory.id)).not.toContain(GLOBAL_ID);
 
     const [audit] = await db
       .select()
@@ -212,6 +284,7 @@ describe('nightly memory consolidation', () => {
         category: 'preferences',
         content: 'Keep useful capabilities in trusted personal systems.',
         confidence: 'high',
+        daydreamOrigin: 'note',
         createdAt: new Date('2099-09-03T20:00:00Z'),
       },
       {
@@ -219,6 +292,7 @@ describe('nightly memory consolidation', () => {
         category: 'situations',
         content: 'A separate detail should remain pending when the model does not account for it.',
         confidence: 'medium',
+        daydreamOrigin: 'ruling',
         createdAt: new Date('2099-09-03T20:01:00Z'),
       },
     ]);

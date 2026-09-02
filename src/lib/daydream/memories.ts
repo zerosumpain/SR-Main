@@ -13,25 +13,19 @@
 // says so. Same shape as `intel/resolve/conflation.ts` and its `.server`
 // sibling.
 //
-// ── Why the memory table, and not the rulings ──────────────────────────────
+// ── Why the shared table still needs an admission boundary ────────────────
 //
-// `rulings.ts` lists what the REVIEWER settled, read off `daydream_thoughts`.
-// That is one writer. `jkai_memories` is the store, and three other things
-// write into it that shape a daydream just as much: a note John typed on a
-// card (`notes.ts`), a place he named (`places.ts`), and anything the chat
-// itself chose to remember. Listing only the rulings answered "what has it
-// checked" when the question was "what does it know".
-//
-// The origin is recovered by joining back rather than by adding a column: the
-// links already exist and point the other way (`review_memory_id`,
-// `note_memory_id`, `daydream_places.memory_id`), so a new `source` column
-// would be a second copy of a fact already recorded — free to write and free to
-// disagree with itself later.
+// `jkai_memories` is shared by chat, places, workflows, and Daydream. The
+// nightly Daydream learning loop is narrower: it may review only findings from
+// its reviewer and notes John attached to its thoughts. Each eligible writer
+// stamps `daydreamOrigin`; every read boundary filters on that stamp. Joining
+// back to the current thought is still useful for display, but cannot establish
+// provenance by itself because superseding a note or ruling moves that link.
 
 /** Mirrors the theme cap in `ponder/pack.ts`; tested to prevent UI drift. */
 export const MEMORY_THEMES_PER_PACK = 20;
 
-export type MemoryOrigin = 'ruling' | 'note' | 'place' | 'elsewhere';
+export type MemoryOrigin = 'ruling' | 'note';
 
 export interface DaydreamMemory {
   id: string;
@@ -51,8 +45,6 @@ export interface DaydreamMemory {
   /** The reviewer's verdict, for a ruling. Null for every other origin. */
   verdict: string | null;
   likelihood: number | null;
-  /** The place this names, when it names one. */
-  placeLabel: string | null;
 }
 
 export interface MemoryThemeInfluence {
@@ -96,8 +88,6 @@ export interface MemoryConsolidationView {
 export const ORIGIN_LABEL: Record<MemoryOrigin, string> = {
   ruling: 'It went and checked',
   note: 'You told it',
-  place: 'You named a place',
-  elsewhere: 'From a conversation',
 };
 
 /**
@@ -142,12 +132,6 @@ export function memoryUse(m: Pick<DaydreamMemory, 'category' | 'origin' | 'verdi
       'Also repeated in the refutation block, which tells the proposer never to raise this ' +
         'claim again in any wording. This is the one that binds — rewording it is still ' +
         'proposing it.',
-    );
-  }
-  if (m.origin === 'place') {
-    lines.push(
-      'A named place also un-mutes the detectors that stay silent until a place has a name, ' +
-        'so this one changes what can be noticed at all.',
     );
   }
   if (m.origin === 'note') {
