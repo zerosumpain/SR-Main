@@ -24,7 +24,6 @@
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { roundPulse } from '$lib/biome/state';
-  import { fillStrap } from '$lib/landing/hero-titles-buckets';
   import type { BiomeStore } from '$lib/biome/store.svelte';
 
   const store = getContext<BiomeStore>('biome');
@@ -55,8 +54,6 @@
   // sensible defaults and the live store takes over once mounted (onMount seeds
   // it from the resolved stream, then its own polling keeps it current).
   let pulse = $derived(mounted ? store.state.pulse : 60);
-  let temp = $derived(mounted ? store.state.weather.temp : 15);
-  let condition = $derived(mounted ? store.state.weather.condition : 'clear');
   let town = $derived(mounted ? store.state.town : undefined);
   let lastSyncedAt = $derived(mounted ? store.state.lastSyncedAt : undefined);
 
@@ -68,10 +65,6 @@
     strapTemplate:
       '{bpm} beats, {steps} steps, {temp} of {sky}. The day has not been agreed to yet.',
   };
-
-  function makeStrap(template: string): string {
-    return fillStrap(template, { bpm: pulse, steps: data.steps, temp, sky: condition });
-  }
 
   let heroTag = $derived(
     `RIGHT NOW · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : ''),
@@ -169,25 +162,16 @@
   <div class="relative z-10 flex-1 flex items-stretch">
     <div class="hero-grid">
       <div class="hero-copy">
-        {#await data.heroTitle}
-          <LandingHero
-            tag={heroTag}
-            primary={FALLBACK_HERO.primary}
-            ghost={FALLBACK_HERO.ghost}
-            strap={makeStrap(FALLBACK_HERO.strapTemplate)}
-          />
-        {:then heroTitle}
-          <LandingHero
-            tag={heroTag}
-            primary={heroTitle.primary}
-            ghost={heroTitle.ghost}
-            strap={makeStrap(heroTitle.strapTemplate)}
-          />
-        {/await}
+        <LandingHero tag={heroTag} />
       </div>
       <div class="hero-divider" aria-hidden="true"></div>
       <aside class="hero-aside">
-        <VitalSigns deploys={deploysToday} />
+        <VitalSigns
+          deploys={deploysToday}
+          heroTitle={data.heroTitle}
+          fallbackHero={FALLBACK_HERO}
+          steps={data.steps}
+        />
       </aside>
     </div>
   </div>

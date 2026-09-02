@@ -1,8 +1,14 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
   import VitalTile from './VitalTile.svelte';
-  import { roundPulse } from '$lib/biome/state';
+  import { fillStrap } from '$lib/landing/hero-titles-buckets';
   import type { BiomeStore } from '$lib/biome/store.svelte';
+
+  interface HeroCopy {
+    primary: string;
+    ghost: string;
+    strapTemplate: string;
+  }
 
   interface VitalsPayload {
     jkai: { activeJobs: number };
@@ -31,10 +37,18 @@
 
   let {
     deploys = null,
+    heroTitle,
+    fallbackHero,
+    steps,
   }: {
     /** Today's shipping, read off the same release showcase the Shipped section
      *  uses. Null when the loader had nothing to say. */
     deploys?: { today: number; peak: number; latestAt: string | null } | null;
+    /** Dynamic copy selected from the current live readings. */
+    heroTitle: Promise<HeroCopy>;
+    /** Deterministic first-paint copy while the live selection streams in. */
+    fallbackHero: HeroCopy;
+    steps: number;
   } = $props();
 
   let mounted = $state(false);
@@ -83,7 +97,13 @@
   // Health is "live" only once the store is seeded AND a real HR source exists —
   // the store's default pulse (60) is a placeholder, never shown as live.
   let hrLive = $derived(mounted && !!store?.state?.sources?.heartRate && store.state.pulse > 0);
-  let bpm = $derived(hrLive ? roundPulse(store.state.pulse) : null);
+  let pulse = $derived(mounted ? store.state.pulse : 60);
+  let temp = $derived(mounted ? store.state.weather.temp : 15);
+  let condition = $derived(mounted ? store.state.weather.condition : 'clear');
+
+  function makeStrap(template: string): string {
+    return fillStrap(template, { bpm: pulse, steps, temp, sky: condition });
+  }
 
   type TileState = 'live' | 'idle' | 'stale' | 'static' | 'loading';
   interface TileVM {
@@ -107,9 +127,8 @@
     }),
   );
 
-  // Four cells, not five: HEALTH is promoted out of the grid into the rail's
-  // hero reading — it is the signal the rest of the page (ECG, biome, pulse
-  // line) is built around, so it should not be one tile among equals.
+  // Four cells, not five: health still drives the open status cell through its
+  // headline and live strap, so it should not also appear as a card.
   let tiles = $derived.by<TileVM[]>(() => {
     const j = v?.jkai;
     const b = v?.builder;
@@ -170,10 +189,20 @@
   });
 </script>
 
+{#snippet status(copy: HeroCopy)}
+  <div class="v-status">
+    <p class="v-status-label">And his current status is&hellip;</p>
+    <p class="v-status-head">
+      <span>{copy.primary}</span>
+      <span class="ghost">{copy.ghost}</span>
+    </p>
+    <p class="v-status-strap">{makeStrap(copy.strapTemplate)}</p>
+  </div>
+{/snippet}
+
 <!-- The rail: an instrument panel on the rail surface, not five floating cards.
-     Head says what it is and what time it is; the pulse is the hero reading
-     because it is the signal the whole page is built around; the rest are cells
-     of one grid; the foot is where you go next. -->
+     Head says what it is and what time it is; the live hero copy occupies the
+     open cell; the rest are cells of one grid; the foot is where you go next. -->
 <aside class="vitals" aria-label="Live signals from across the site">
   <div class="v-head">
     <span class="metric-label">Vitals / live</span>
@@ -181,10 +210,11 @@
   </div>
 
   <div class="v-hero">
-    <div class="v-hero-read">
-      <span class="v-hero-num" class:muted={bpm === null}>{bpm ?? '—'}</span>
-      <span class="metric-label muted">bpm / {hrLive ? 'live' : 'no signal'}</span>
-    </div>
+    {#await heroTitle}
+      {@render status(fallbackHero)}
+    {:then copy}
+      {@render status(copy)}
+    {/await}
     <span class="v-hero-dot" data-state={hrLive ? 'live' : 'idle'} aria-hidden="true"></span>
   </div>
 
@@ -243,7 +273,7 @@
    * It used to be a cream panel on a cream page, which meant the one live
    * surface on the front door read as furniture.
    *
-   * The ink is painted by the BANDS, not by this container: the pulse band is
+   * The ink is painted by the BANDS, not by this container: the status band is
    * a window cut clean through the instrument, and a ground here would sit
    * behind it and fill the hole in again. */
   .vitals {
@@ -282,25 +312,22 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* The pulse band takes the rail's slack. The rail is as tall as the hero, and
+  /* The status band takes the rail's slack. The rail is as tall as the hero, and
      the alternative was a pool of dead space between the readings and the way
-     out — better that the air sits under the signature numeral, which is what
-     the panel is for.
+     out — better that the air sits around the live copy selected from the same
+     readings that drive the rest of the page.
      
      A WINDOW, inside an ink frame. The band is the tallest thing in the rail,
      so on ink it was the single biggest solid mass on the front door and the
      page read as intense. Painting nothing here does better than the cream
-     fill that replaced it: it takes that mass out, it makes the signature
-     reading the one open cell of an otherwise dark instrument, and it lets the
-     hero's ECG run through the rail behind the reading the whole page is built
-     on. The kicker above it and the deck below it stay ink, so the masthead's L
+     fill that replaced it: it takes that mass out, it makes the live copy the
+     one open cell of an otherwise dark instrument, and it lets the hero's ECG
+     run through the rail behind the words selected by the current readings.
+     The kicker above it and the deck below it stay ink, so the masthead's L
      still runs unbroken from the nav down the rail's edge. */
   .v-hero {
     display: flex;
-    /* The band takes the panel's slack and CENTRES the numeral in it. Bottom
-       alignment put every one of those pixels above the figure, which on the
-       cream panel was invisible and on ink was a hole the size of the hero
-       type beside it. Centred, the air belongs to the figure. */
+    /* The band takes the panel's slack and centres the compact status in it. */
     flex: 1 1 auto;
     align-items: center;
     justify-content: space-between;
@@ -312,33 +339,46 @@
     /* Value change is the edge on both sides — no rule above, none below. */
     border-bottom: none;
   }
-  .v-hero-read {
+  .v-status {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
     min-width: 0;
   }
-  .v-hero .metric-label {
+  .v-status-label {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-label-wide);
+    line-height: 1.3;
+    text-transform: uppercase;
     color: var(--text-muted);
   }
-  /* The one display-scale numeral on the rail. Everything else is mono. */
-  .v-hero-num {
+  .v-status-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: var(--fs-num-xl);
-    line-height: 0.8;
-    letter-spacing: -0.05em;
-    font-variant-numeric: tabular-nums;
+    font-size: clamp(24px, 2.25vw, 34px);
+    line-height: 0.94;
+    letter-spacing: -0.036em;
+    text-transform: uppercase;
     color: var(--text-primary);
+    overflow-wrap: anywhere;
   }
-  /* No live reading. Mono and a step down, so the panel says "nothing to
-     report" rather than drawing a display-weight em-dash the size of a bar. */
-  .v-hero-num.muted {
-    font-family: var(--font-mono);
-    font-weight: 400;
-    font-size: var(--fs-num-lg);
-    letter-spacing: 0;
+  .v-status-head .ghost {
     color: var(--text-ghost);
+  }
+  .v-status-strap {
+    margin: 0;
+    max-width: 34ch;
+    font-size: var(--fs-body-sm);
+    line-height: 1.45;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
   }
   .v-hero-dot {
     width: 9px;

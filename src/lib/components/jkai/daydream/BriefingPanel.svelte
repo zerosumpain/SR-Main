@@ -1,8 +1,9 @@
 <script lang="ts">
-  import type { BriefingData, BriefingSourceRow } from '$lib/briefing/types';
   import { invalidateAll } from '$app/navigation';
+  import { untrack } from 'svelte';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
+  import type { BriefingData, BriefingSourceRow } from '$lib/briefing/types';
   import type {
     BriefingProfile,
     BriefingSourceDefinition,
@@ -14,6 +15,7 @@
     preference: BriefingProfile['sources'][BriefingSourceKey];
     connection: SourceConnection;
   };
+  type View = 'briefing' | 'profile';
 
   let { data, embedded = false }: {
     data: {
@@ -32,45 +34,52 @@
   const latest = $derived(briefings[0] ?? null);
   const past = $derived(briefings.slice(1));
   const detail = $derived(latest?.detail ?? null);
-
   const weatherHome = $derived(detail?.weather?.home ?? null);
   const weatherHere = $derived(detail?.weather?.here ?? null);
   const location = $derived(detail?.location ?? null);
 
-  // Facts grouped into their sections, preserving the compose node's ordering.
-  const factSections = $derived.by(() => {
-    const out: Array<{ section: string; rows: Array<{ label: string; value: string; source: string }> }> = [];
-    for (const f of detail?.facts ?? []) {
-      let bucket = out.find((s) => s.section === f.section);
-      if (!bucket) { bucket = { section: f.section, rows: [] }; out.push(bucket); }
-      bucket.rows.push({ label: f.label, value: f.value, source: f.source });
-    }
-    return out;
-  });
-
-  const okCount = $derived((detail?.sources ?? []).filter((s) => s.status === 'ok').length);
   const memoryFacts = $derived((detail?.facts ?? []).filter((fact) => fact.section === 'New memories'));
   const learnedMemories = $derived.by(() => {
-    if (detail?.memories?.length) {
-      return detail.memories.map((memory) => ({
-        id: memory.id,
-        category: memory.category,
-        content: memory.content,
-        confidence: memory.confidence,
-        createdAt: memory.createdAt,
-      }));
-    }
-    // Older stored briefings have memory facts but predate the structured
-    // memory rows. Preserve their useful content without inventing metadata.
+    if (detail?.memories?.length) return detail.memories;
     return memoryFacts.map((memory) => ({
       id: memory.source,
       category: memory.label,
       content: memory.value,
-      confidence: null,
-      createdAt: null,
+      confidence: '',
+      createdAt: '',
     }));
   });
-  let profile = $state<BriefingProfile>(structuredClone(data.profile));
+
+  // Memory has its own first-class section. Excluding it here prevents the
+  // same information appearing again when the evidence drawer is opened.
+  const factSections = $derived.by(() => {
+    const sections: Array<{
+      section: string;
+      rows: Array<{ label: string; value: string; source: string }>;
+    }> = [];
+    for (const fact of detail?.facts ?? []) {
+      if (fact.section === 'New memories') continue;
+      let section = sections.find((item) => item.section === fact.section);
+      if (!section) {
+        section = { section: fact.section, rows: [] };
+        sections.push(section);
+      }
+      section.rows.push({ label: fact.label, value: fact.value, source: fact.source });
+    }
+    return sections;
+  });
+
+  let profile = $state<BriefingProfile>(structuredClone(untrack(() => data.profile)));
+  let enabled = $state(untrack(() => data.enabled));
+  let topicsText = $state(untrack(() => (data.topics ?? []).join(', ')));
+  let view = $state<View>(untrack(() => briefings.length ? 'briefing' : 'profile'));
+  let running = $state(false);
+  let saving = $state(false);
+  let message = $state<string | null>(null);
+  let error = $state<string | null>(null);
+  let voted = $state<'up' | 'down' | null>(null);
+  let voteWhat = $state('');
+
   const sourceGroups = $derived(
     (['Now', 'Personal', 'Knowledge', 'Daydreaming'] as const).map((group) => ({
       group,
@@ -82,7 +91,8 @@
   );
   const readySourceCount = $derived(
     data.sourceCatalog.filter(
-      (source) => profile.sources[source.key].enabled && (source.connection === 'native' || source.connection === 'connected'),
+      (source) => profile.sources[source.key].enabled
+        && (source.connection === 'native' || source.connection === 'connected'),
     ).length,
   );
   const addableSourceCount = $derived(
@@ -90,83 +100,103 @@
       (source) => profile.sources[source.key].enabled && source.connection === 'available',
     ).length,
   );
+  const okCount = $derived((detail?.sources ?? []).filter((source) => source.status === 'ok').length);
+  const issueCount = $derived((detail?.sources ?? []).filter((source) => source.status !== 'ok').length);
 
-  let enabled = $state(data.enabled);
-  let topicsText = $state((data.topics ?? []).join(', '));
-  let running = $state(false);
-  let msg = $state<string | null>(null);
-  let err = $state<string | null>(null);
-  let showConfig = $state(false);
+  const STATUS_LABEL: Record<BriefingSourceRow['status'], string> = {
+    ok: 'reported',
+    failed: 'failed',
+    stale: 'stale',
+    empty: 'no update',
+  };
+  const CONNECTION_LABEL: Record<SourceConnection, string> = {
+    native: 'built in',
+    connected: 'connected',
+    available: 'available',
+    missing: 'not connected',
+  };
 
   async function runNow() {
     if (running || !data.workflowId) return;
-    running = true; msg = null; err = null;
+    running = true;
+    message = null;
+    error = null;
     try {
-      const res = await fetch(`/api/workflows/${data.workflowId}/run`, {
+      const response = await fetch(`/api/workflows/${data.workflowId}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: {} }),
       });
-      const b = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
-      msg = 'Briefing workflow started — refresh in a few seconds.';
-    } catch (e) {
-      err = e instanceof Error ? e.message : 'Run failed';
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      message = 'Briefing started. New results will appear here when the run finishes.';
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'The briefing could not be started.';
     } finally {
       running = false;
     }
   }
 
-  async function saveConfig() {
-    err = null; msg = null;
-    const topics = topicsText.split(',').map((t) => t.trim()).filter(Boolean);
-    const res = await fetch('/api/admin/briefing/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled, topics, profile }),
-    });
-    if (res.ok) { msg = 'Saved.'; await invalidateAll(); } else err = 'Save failed';
+  async function saveProfile() {
+    saving = true;
+    message = null;
+    error = null;
+    const topics = topicsText.split(',').map((topic) => topic.trim()).filter(Boolean);
+    try {
+      const response = await fetch('/api/admin/briefing/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, topics, profile }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      message = 'Briefing profile saved.';
+      await invalidateAll();
+      if (latest) view = 'briefing';
+    } catch {
+      error = 'The briefing profile could not be saved.';
+    } finally {
+      saving = false;
+    }
   }
 
-  function fmt(iso?: string): string {
-    if (!iso) return '';
-    try { return new Date(iso).toLocaleString('en-GB'); } catch { return iso; }
-  }
-
-  function num(v: unknown): number | null {
-    return typeof v === 'number' && Number.isFinite(v) ? v : null;
-  }
-  function text(v: unknown): string | null {
-    return typeof v === 'string' && v.trim() ? v.trim() : null;
-  }
-  function factorsOf(w: Record<string, unknown> | null): string[] {
-    return Array.isArray(w?.factors) ? (w.factors as unknown[]).filter((f): f is string => typeof f === 'string') : [];
-  }
-
-  const STATUS_LABEL: Record<BriefingSourceRow['status'], string> = {
-    ok: 'ok', failed: 'failed', stale: 'stale', empty: 'nothing',
-  };
-  const CONNECTION_LABEL: Record<SourceConnection, string> = {
-    native: 'built in',
-    connected: 'connected',
-    available: 'add on canvas',
-    missing: 'not connected',
-  };
-
-  let voted = $state<'up' | 'down' | null>(null);
-  let voteWhat = $state('');
-  async function vote(v: 'up' | 'down') {
+  async function vote(voteValue: 'up' | 'down') {
     if (!latest) return;
-    voted = v;
+    voted = voteValue;
     try {
       await fetch('/api/admin/briefing/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ briefingId: latest.id, vote: v, what: voteWhat.trim() }),
+        body: JSON.stringify({ briefingId: latest.id, vote: voteValue, what: voteWhat.trim() }),
       });
     } catch {
       voted = null;
     }
+  }
+
+  function fmt(iso?: string): string {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  function num(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+  function text(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+  function factorsOf(weather: Record<string, unknown> | null): string[] {
+    return Array.isArray(weather?.factors)
+      ? (weather.factors as unknown[]).filter((factor): factor is string => typeof factor === 'string')
+      : [];
   }
 </script>
 
@@ -174,102 +204,93 @@
 
 {#if !embedded}<JkaiPageTitle title="BRIEFING" />{/if}
 
-<main class="br" class:embedded>
-  <div class="br-bar">
-    <p class="br-sub">
-      Every claim below is traced to the source that produced it · {data.schedule.display} + WhatsApp
-      {#if !enabled}<span class="br-off">paused</span>{/if}
-    </p>
-    <div class="br-bar-actions">
-      <button class="br-run" onclick={runNow} disabled={running || !data.workflowId}>
+<main class="briefing" class:embedded>
+  <header class="command-bar">
+    <div class="system-state">
+      <span class:paused={!enabled} class="state-dot" aria-hidden="true"></span>
+      <div>
+        <span class="eyebrow">Briefing system</span>
+        <strong>{enabled ? data.schedule.display : 'Paused'}</strong>
+      </div>
+    </div>
+    <div class="command-actions">
+      <button class="button primary" type="button" onclick={runNow} disabled={running || !data.workflowId}>
         {running ? 'Starting…' : 'Run now'}
       </button>
-      <button class="br-cfg-toggle" onclick={() => (showConfig = !showConfig)} aria-expanded={showConfig}>
-        {showConfig ? 'Close profile' : 'Manage profile'}
+      <button
+        class="button secondary"
+        class:active={view === 'profile'}
+        type="button"
+        onclick={() => (view = view === 'profile' && latest ? 'briefing' : 'profile')}
+      >
+        {view === 'profile' && latest ? 'Back to briefing' : 'Edit briefing'}
       </button>
     </div>
-  </div>
+  </header>
 
-  {#if msg || err}
-    <p class="br-flash">{#if msg}<span class="br-ok">{msg}</span>{/if}{#if err}<span class="br-err">⚠ {err}</span>{/if}</p>
+  {#if message || error}
+    <div class:error class="flash" role="status">{error ?? message}</div>
   {/if}
 
-  {#if !showConfig && latest}
-    <section class="br-profile-summary">
-      <div class="br-profile-copy">
-        <p class="sr-label-tight">Briefing profile</p>
-        <h2>{activeSourceCount} sources selected <span>· {readySourceCount} ready now</span></h2>
-        <p>
-          {data.topics.length
-            ? data.topics.join(' · ')
-            : 'Every connected capability may contribute when it has something useful.'}
-        </p>
-      </div>
-      <dl class="br-profile-facts">
-        <div><dt>Memory window</dt><dd>{profile.memoryLookbackHours}h</dd></div>
-        <div><dt>Memory limit</dt><dd>{profile.memoryLimit}</dd></div>
-        <div><dt>Available next</dt><dd>{addableSourceCount}</dd></div>
-      </dl>
-      <button class="br-profile-open" onclick={() => (showConfig = true)}>Review sources →</button>
-    </section>
-  {/if}
-
-  {#if showConfig || !latest}
-    <section class="br-sec br-config">
-      <header class="br-config-head">
+  {#if view === 'profile'}
+    <section class="profile-view" aria-labelledby="profile-title">
+      <header class="profile-head">
         <div>
-          <p class="sr-label-tight">Briefing profile</p>
-          <h2>Choose what earns space</h2>
-          <p>The profile filters the real canvas workflow. Connected capabilities contribute verified facts; new capability nodes can use the same generic source contract.</p>
+          <span class="eyebrow">Briefing profile</span>
+          <h2 id="profile-title">Decide what earns attention</h2>
+          <p>Select the signals JKAI can use, set the editorial priorities, and choose how much recent memory should be carried into each briefing.</p>
         </div>
-        <label class="br-master-toggle">
+        <label class="master-switch">
           <input type="checkbox" bind:checked={enabled} />
           <span><b>{enabled ? 'Running' : 'Paused'}</b>{data.schedule.display}</span>
         </label>
       </header>
 
-      <div class="br-config-priorities">
-        <label class="br-field br-field-wide">
-          <span class="sr-label-tight">Editorial priorities</span>
-          <span class="br-field-help">Topics are now passed into the scheduled composer, not merely stored here.</span>
-          <input class="br-in" bind:value={topicsText} placeholder="Data policy, home security, current projects, LLM costs" />
+      <div class="profile-priorities">
+        <label class="field topics-field">
+          <span class="eyebrow">Editorial priorities</span>
+          <span class="field-help">Comma-separated themes that should influence selection and emphasis.</span>
+          <input class="input" bind:value={topicsText} placeholder="Current projects, home security, LLM costs" />
         </label>
-        <div class="br-memory-controls">
-          <label class="br-field">
-            <span class="sr-label-tight">Memory window</span>
-            <span class="br-number-wrap"><input class="br-in br-number" type="number" min="1" max="168" bind:value={profile.memoryLookbackHours} /><span>hours</span></span>
+        <div class="memory-controls">
+          <label class="field">
+            <span class="eyebrow">Memory window</span>
+            <span class="number-input"><input class="input" type="number" min="1" max="168" bind:value={profile.memoryLookbackHours} /><span>hours</span></span>
           </label>
-          <label class="br-field">
-            <span class="sr-label-tight">Memory limit</span>
-            <span class="br-number-wrap"><input class="br-in br-number" type="number" min="1" max="20" bind:value={profile.memoryLimit} /><span>items</span></span>
+          <label class="field">
+            <span class="eyebrow">Memory limit</span>
+            <span class="number-input"><input class="input" type="number" min="1" max="20" bind:value={profile.memoryLimit} /><span>items</span></span>
           </label>
         </div>
       </div>
 
-      <div class="br-source-head">
+      <div class="source-intro">
         <div>
-          <span class="sr-label-tight">Sources</span>
-          <p>{activeSourceCount} selected · {readySourceCount} ready now · {addableSourceCount} available to add. “Required” makes a missing connected source lead the briefing as a warning.</p>
+          <span class="eyebrow">Sources</span>
+          <p><strong>{activeSourceCount} selected</strong> · {readySourceCount} ready now{#if addableSourceCount} · {addableSourceCount} available to connect{/if}</p>
         </div>
-        {#if data.workflowId}<a class="br-canvas-link" href="/jkai/canvas/morning-briefing">Open source workflow →</a>{/if}
+        {#if data.workflowId}<a href="/jkai/canvas/morning-briefing">Open source workflow →</a>{/if}
       </div>
 
-      <div class="br-source-groups">
+      <div class="source-groups">
         {#each sourceGroups as group (group.group)}
-          <section class="br-source-group">
-            <h3>{group.group}</h3>
-            <div class="br-source-grid">
+          <section class="source-group" aria-labelledby="source-group-{group.group}">
+            <h3 id="source-group-{group.group}">{group.group}</h3>
+            <div class="source-grid">
               {#each group.sources as source (source.key)}
-                <article class="br-source-card" class:off={!profile.sources[source.key].enabled}>
-                  <div class="br-source-card-top">
-                    <label class="br-source-toggle">
+                <article class:disabled={!profile.sources[source.key].enabled} class="source-card">
+                  <div class="source-card-head">
+                    <label class="source-toggle">
                       <input type="checkbox" bind:checked={profile.sources[source.key].enabled} />
                       <span>{source.label}</span>
                     </label>
-                    <span class="br-connection br-connection-{source.connection}">{CONNECTION_LABEL[source.connection]}</span>
+                    <span class="connection connection-{source.connection}">{CONNECTION_LABEL[source.connection]}</span>
                   </div>
                   <p>{source.description}</p>
-                  <label class="br-required" class:disabled={source.connection === 'available' || source.connection === 'missing' || !profile.sources[source.key].enabled}>
+                  <label
+                    class:unavailable={source.connection === 'available' || source.connection === 'missing' || !profile.sources[source.key].enabled}
+                    class="required-toggle"
+                  >
                     <input
                       type="checkbox"
                       bind:checked={profile.sources[source.key].required}
@@ -284,385 +305,356 @@
         {/each}
       </div>
 
-      <div class="br-extension-note">
-        <strong>Any capability can become a source.</strong>
-        Transform a node’s output to <code>briefingSources</code> with a label, status and fact rows; the composer, evidence ledger and this page handle the rest.
-      </div>
+      <aside class="capability-note">
+        <strong>Designed to grow.</strong>
+        Any canvas capability that emits <code>briefingSources</code> can join the same selection, evidence, and composition flow.
+      </aside>
 
-      <div class="br-config-foot">
-        <button class="br-save" onclick={saveConfig}>Save briefing profile</button>
-        <span class="br-field-help">Changes apply to the next manual or scheduled run.</span>
-      </div>
+      <footer class="profile-actions">
+        <button class="button primary save" type="button" onclick={saveProfile} disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</button>
+        {#if latest}<button class="button quiet" type="button" onclick={() => (view = 'briefing')}>Cancel</button>{/if}
+        <span>Changes apply to the next manual or scheduled run.</span>
+      </footer>
     </section>
-  {/if}
+  {:else if latest}
+    <div class="briefing-view">
+      <article class="today" aria-labelledby="briefing-title">
+        <header class="today-head">
+          <div>
+            <span class="eyebrow">{latest.title}</span>
+            <h2 id="briefing-title">{detail?.headline ?? 'Your latest briefing'}</h2>
+          </div>
+          <div class="briefing-meta">
+            <time datetime={latest.startedAt}>{fmt(latest.startedAt)}</time>
+            <span>{latest.status}</span>
+          </div>
+        </header>
 
-  {#if latest}
-    <!-- ——— The summary that went to WhatsApp ——— -->
-    <section class="br-sec">
-      <div class="br-sec-hd">
-        <span class="sr-label-tight">{latest.title}</span>
-        <span class="br-when">{fmt(latest.startedAt)} · {latest.status}</span>
-      </div>
+        {#if latest.markdown}
+          <div class="briefing-copy"><ChatMarkdown content={latest.markdown} /></div>
+        {:else}
+          <p class="empty-copy">This briefing completed without a written summary.</p>
+        {/if}
 
-      {#if detail?.headline}
-        <p class="br-headline">{detail.headline}</p>
-      {/if}
+        <footer class="today-foot">
+          <div class:warning={issueCount > 0} class="source-health">
+            <strong>{okCount} source{okCount === 1 ? '' : 's'} contributed</strong>
+            {#if issueCount > 0}<span>{issueCount} did not report and was excluded</span>{/if}
+          </div>
+          <span class="run-cost">{latest.llmCalls} model call{latest.llmCalls === 1 ? '' : 's'} · ${(latest.costUsd ?? 0).toFixed(3)}</span>
+        </footer>
 
-      {#if latest.markdown}
-        <div class="br-body"><ChatMarkdown content={latest.markdown} /></div>
-      {/if}
+        <div class="feedback">
+          {#if voted}
+            <span class="feedback-done">Noted — {voted === 'up' ? 'more like this' : 'less of this'}.</span>
+          {:else}
+            <label for="briefing-feedback">Tune the next briefing</label>
+            <input id="briefing-feedback" placeholder="Optional topic" bind:value={voteWhat} />
+            <button type="button" onclick={() => vote('up')}>More like this</button>
+            <button type="button" onclick={() => vote('down')}>Less like this</button>
+          {/if}
+        </div>
+      </article>
+
+      <section class:empty={!learnedMemories.length} class="memories" aria-labelledby="memories-title">
+        <header class="section-head">
+          <div>
+            <span class="eyebrow">Shared back from daydreaming</span>
+            <h2 id="memories-title">New memories</h2>
+          </div>
+          <a href="/jkai/daydreams?tab=memory">Open shared memory →</a>
+        </header>
+        {#if learnedMemories.length}
+          <p class="section-intro">Durable facts learned inside the {profile.memoryLookbackHours}-hour window and carried into this briefing.</p>
+          <ul class="memory-list">
+            {#each learnedMemories as memory (memory.id)}
+              <li>
+                <span class="memory-category">{memory.category}{#if memory.confidence} · {memory.confidence} confidence{/if}</span>
+                <span>{memory.content}</span>
+                {#if memory.createdAt}<time datetime={memory.createdAt}>{fmt(memory.createdAt)}</time>{/if}
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="empty-copy">No new durable memories landed inside this briefing’s window. Nothing has been padded or repeated.</p>
+        {/if}
+      </section>
 
       {#if detail}
-        <div class="br-trust" class:br-trust-warn={detail.gaps.length > 0}>
-          {okCount} source{okCount === 1 ? '' : 's'} reported{#if detail.gaps.length} · {detail.gaps.length} unavailable — listed below and excluded from the briefing{/if}
-        </div>
-      {/if}
+        <details class="evidence">
+          <summary>
+            <span><span class="eyebrow">Trace the briefing</span><strong>Sources and evidence</strong></span>
+            <span class="evidence-count">{okCount}/{detail.sources.length} reporting · {detail.facts.length} facts</span>
+          </summary>
 
-      <div class="br-meta">
-        {latest.sources?.join(' · ') || 'no signals'} · {latest.llmCalls} call · ${(latest.costUsd ?? 0).toFixed(3)}
-      </div>
-
-      <div class="br-vote">
-        {#if voted}
-          <span class="br-vote-done">✓ noted — {voted === 'up' ? 'more like this' : 'less of this'}</span>
-        {:else}
-          <span class="sr-label-tight">Rate it</span>
-          <input class="br-vote-what" placeholder="topic (optional — blank = whole briefing)" bind:value={voteWhat} />
-          <button class="br-vote-btn" onclick={() => vote('up')}>More like this</button>
-          <button class="br-vote-btn br-vote-down" onclick={() => vote('down')}>Less of this</button>
-        {/if}
-      </div>
-    </section>
-
-    <section class="br-sec br-memory-share" class:empty={!learnedMemories.length}>
-      <div class="br-sec-hd">
-        <span class="sr-label-tight">What JKAI learned</span>
-        <span class="br-when">new shared memories · now part of the briefing</span>
-      </div>
-      {#if learnedMemories.length}
-        <p class="br-memory-intro">These are the durable facts added since the configured cutoff. They also feed the daydreaming context used for future observations.</p>
-        <ul class="br-memory-list">
-          {#each learnedMemories as memory (memory.id)}
-            <li>
-              <span class="br-memory-category">
-                {memory.category}{#if memory.confidence} · {memory.confidence} confidence{/if}
-              </span>
-              <span class="br-memory-content">{memory.content}</span>
-              {#if memory.createdAt}<time class="br-memory-time" datetime={memory.createdAt}>{fmt(memory.createdAt)}</time>{/if}
-            </li>
-          {/each}
-        </ul>
-        <a class="br-link br-memory-link" href="/jkai/daydreams?tab=memory">Open shared memory →</a>
-      {:else}
-        <p class="br-memory-intro br-memory-empty">
-          This saved briefing predates shared-memory notes, or no new durable memories landed inside its configured window. The next run will show them here when there is something grounded to carry forward.
-        </p>
-        <a class="br-link br-memory-link" href="/jkai/daydreams?tab=memory">Review shared memory →</a>
-      {/if}
-    </section>
-
-    <!-- ——— Where you are ——— -->
-    {#if location}
-      <section class="br-sec">
-        <div class="br-sec-hd"><span class="sr-label-tight">Where you are</span></div>
-        <p class="br-loc-main">
-          {#if location.isHome}At home{:else}{text(location.label) ?? 'Away'}{/if}
-          {#if num(location.distanceKm) !== null && !location.isHome}
-            <span class="br-loc-dist">{num(location.distanceKm)} km {text(location.bearing) ?? ''} of home</span>
-          {/if}
-        </p>
-        <dl class="br-kv">
-          {#if text(location.since)}<div><dt>Since</dt><dd>{fmt(text(location.since) ?? undefined)}</dd></div>{/if}
-          {#if num(location.accuracyM) !== null}<div><dt>Accuracy</dt><dd>±{num(location.accuracyM)} m</dd></div>{/if}
-          {#if num(location.batteryPct) !== null}<div><dt>Phone</dt><dd>{num(location.batteryPct)}%</dd></div>{/if}
-          {#if text(location.source)}<div><dt>Source</dt><dd class="br-mono">{text(location.source)}</dd></div>{/if}
-        </dl>
-        {#if location.stale}
-          <p class="br-warn-line">⚠ This fix is {num(location.ageMins)} minutes old — the tracker has stopped reporting.</p>
-        {/if}
-      </section>
-    {/if}
-
-    <!-- ——— Weather: home and here ——— -->
-    {#if weatherHome || weatherHere}
-      <section class="br-sec">
-        <div class="br-sec-hd">
-          <span class="sr-label-tight">Weather</span>
-          {#if detail?.weather?.sameSpot}<span class="br-when">you are at home — one forecast</span>{/if}
-        </div>
-        <div class="br-wx">
-          {#each [{ w: weatherHome, tag: 'Home' }, { w: weatherHere, tag: 'Where you are' }] as card (card.tag)}
-            {#if card.w}
-              <article class="br-wx-card">
-                <header>
-                  <span class="sr-label-tight">{card.tag}</span>
-                  <h3>{text(card.w.label) ?? '—'}</h3>
-                </header>
-                <p class="br-wx-now">
-                  {num(card.w.nowC)}<span class="br-wx-unit">°C</span>
-                  <span class="br-wx-cond">{text(card.w.condition)}</span>
-                </p>
-                <dl class="br-kv">
-                  <div><dt>Today</dt><dd>{num(card.w.minC)}°C – {num(card.w.maxC)}°C</dd></div>
-                  <div><dt>Rain</dt><dd>{num(card.w.precipProbMaxPct)}%</dd></div>
-                  <div><dt>Wind</dt><dd>{Math.round(num(card.w.windKph) ?? 0)} km/h {text(card.w.windDir) ?? ''}</dd></div>
-                  <div><dt>UV</dt><dd>{num(card.w.uvIndexMax)}</dd></div>
-                  <div><dt>Daylight</dt><dd>{text(card.w.sunrise)} – {text(card.w.sunset)}</dd></div>
-                </dl>
-                {#if factorsOf(card.w).length}
-                  <ul class="br-factors">
-                    {#each factorsOf(card.w) as f (f)}<li>{f}</li>{/each}
-                  </ul>
+          <div class="evidence-content">
+            {#if location || weatherHome || weatherHere}
+              <section class="context-grid" aria-label="Current context">
+                {#if location}
+                  <article class="context-card">
+                    <span class="eyebrow">Location</span>
+                    <h3>{location.isHome ? 'At home' : (text(location.label) ?? 'Away')}</h3>
+                    {#if num(location.distanceKm) !== null && !location.isHome}<p>{num(location.distanceKm)} km {text(location.bearing) ?? ''} of home</p>{/if}
+                    <dl>
+                      {#if text(location.since)}<div><dt>Since</dt><dd>{fmt(text(location.since) ?? undefined)}</dd></div>{/if}
+                      {#if num(location.accuracyM) !== null}<div><dt>Accuracy</dt><dd>±{num(location.accuracyM)} m</dd></div>{/if}
+                      {#if num(location.batteryPct) !== null}<div><dt>Phone</dt><dd>{num(location.batteryPct)}%</dd></div>{/if}
+                    </dl>
+                    {#if location.stale}<p class="warning-text">This location fix is stale.</p>{/if}
+                  </article>
                 {/if}
-              </article>
+
+                {#each [{ weather: weatherHome, label: 'Weather at home' }, { weather: weatherHere, label: 'Weather where you are' }] as card (card.label)}
+                  {#if card.weather}
+                    <article class="context-card weather-card">
+                      <span class="eyebrow">{card.label}</span>
+                      <h3>{num(card.weather.nowC)}<small>°C</small></h3>
+                      <p>{text(card.weather.condition) ?? text(card.weather.label) ?? 'No condition supplied'}</p>
+                      <dl>
+                        <div><dt>Range</dt><dd>{num(card.weather.minC)}–{num(card.weather.maxC)}°C</dd></div>
+                        <div><dt>Rain</dt><dd>{num(card.weather.precipProbMaxPct)}%</dd></div>
+                        <div><dt>Wind</dt><dd>{Math.round(num(card.weather.windKph) ?? 0)} km/h</dd></div>
+                      </dl>
+                      {#if factorsOf(card.weather).length}
+                        <ul class="weather-factors">{#each factorsOf(card.weather) as factor (factor)}<li>{factor}</li>{/each}</ul>
+                      {/if}
+                    </article>
+                  {/if}
+                {/each}
+              </section>
             {/if}
-          {/each}
-        </div>
-      </section>
-    {/if}
 
-    <!-- ——— Everything the briefing was allowed to say ——— -->
-    {#if factSections.length}
-      <section class="br-sec">
-        <div class="br-sec-hd">
-          <span class="sr-label-tight">The facts behind it</span>
-          <span class="br-when">{detail?.facts.length} verified values</span>
-        </div>
-        {#each factSections as sec (sec.section)}
-          <div class="br-facts">
-            <h4 class="br-facts-hd">{sec.section}</h4>
-            <dl class="br-kv br-kv-wide">
-              {#each sec.rows as row (row.label + row.value)}
-                <div><dt>{row.label}</dt><dd>{row.value}<span class="br-src">{row.source}</span></dd></div>
-              {/each}
-            </dl>
+            {#if factSections.length}
+              <section class="fact-ledger">
+                <header class="drawer-heading"><span class="eyebrow">Verified inputs</span><h3>Facts used by the composer</h3></header>
+                {#each factSections as section (section.section)}
+                  <div class="fact-section">
+                    <h4>{section.section}</h4>
+                    <dl>
+                      {#each section.rows as row (row.label + row.value)}
+                        <div><dt>{row.label}</dt><dd>{row.value}<small>{row.source}</small></dd></div>
+                      {/each}
+                    </dl>
+                  </div>
+                {/each}
+              </section>
+            {/if}
+
+            {#if detail.knowledge}
+              <section class="knowledge">
+                <header class="drawer-heading"><span class="eyebrow">Knowledge graph</span><h3>{detail.knowledge.query ? `Context for “${detail.knowledge.query}”` : 'Connected context'}</h3></header>
+                <div class="briefing-copy compact"><ChatMarkdown content={detail.knowledge.context} /></div>
+                <a href="/jkai/intel">Open the intel command centre →</a>
+              </section>
+            {/if}
+
+            {#if detail.sources.length}
+              <section class="source-ledger">
+                <header class="drawer-heading"><span class="eyebrow">Run health</span><h3>What actually reported</h3></header>
+                <ul>
+                  {#each detail.sources as source (source.key)}
+                    <li class="status-{source.status}">
+                      <span class="ledger-dot" aria-hidden="true"></span>
+                      <strong>{source.label}</strong>
+                      <span>{STATUS_LABEL[source.status]}</span>
+                      <small>{source.detail}</small>
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+            {/if}
           </div>
-        {/each}
-      </section>
-    {/if}
+        </details>
+      {/if}
 
-    <!-- ——— Knowledge graph ——— -->
-    {#if detail?.knowledge}
-      <section class="br-sec">
-        <div class="br-sec-hd">
-          <span class="sr-label-tight">From your knowledge graph</span>
-          {#if detail.knowledge.query}<span class="br-when">“{detail.knowledge.query}”</span>{/if}
-        </div>
-        <div class="br-body br-body-sm"><ChatMarkdown content={detail.knowledge.context} /></div>
-        <p class="br-meta"><a class="br-link" href="/jkai/intel">Open the intel command centre →</a></p>
-      </section>
-    {/if}
-
-    <!-- ——— The source ledger ——— -->
-    {#if detail?.sources?.length}
-      <section class="br-sec">
-        <div class="br-sec-hd">
-          <span class="sr-label-tight">Source ledger</span>
-          <span class="br-when">what actually reported, and what didn't</span>
-        </div>
-        <ul class="br-ledger">
-          {#each detail.sources as s (s.key)}
-            <li class="br-ledger-row br-st-{s.status}">
-              <span class="br-ledger-dot" aria-hidden="true"></span>
-              <span class="br-ledger-label">{s.label}</span>
-              <span class="br-ledger-status">{STATUS_LABEL[s.status]}</span>
-              <span class="br-ledger-detail">{s.detail}</span>
-            </li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
+      {#if past.length}
+        <section class="history" aria-labelledby="history-title">
+          <header class="section-head"><div><span class="eyebrow">Archive</span><h2 id="history-title">Earlier briefings</h2></div><span>{past.length} saved</span></header>
+          <div class="history-list">
+            {#each past as briefing (briefing.id)}
+              <details>
+                <summary>
+                  <strong>{briefing.title}</strong>
+                  <span>{fmt(briefing.startedAt)} · {briefing.detail ? `${briefing.detail.sources.filter((source) => source.status === 'ok').length}/${briefing.detail.sources.length} sources` : briefing.status}</span>
+                </summary>
+                {#if briefing.markdown}<div class="briefing-copy compact"><ChatMarkdown content={briefing.markdown} /></div>{:else}<p class="empty-copy">{briefing.error ?? briefing.status}</p>{/if}
+              </details>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    </div>
   {:else}
-    <p class="br-empty">
-      No briefings recorded yet. Hit “Run now” to trigger the workflow, or wait for the {data.schedule.display} run.
-    </p>
-  {/if}
-
-  {#if past.length}
-    <section class="br-sec">
-      <div class="br-sec-hd"><span class="sr-label-tight">Earlier ({past.length})</span></div>
-      <ul class="br-past">
-        {#each past as b (b.id)}
-          <li class="br-past-item">
-            <details>
-              <summary>
-                <span class="br-past-title">{b.title}</span>
-                <span class="br-when">
-                  {fmt(b.startedAt)} · {b.detail ? `${b.detail.sources.filter((s) => s.status === 'ok').length}/${b.detail.sources.length} sources` : b.status}
-                </span>
-              </summary>
-              {#if b.markdown}
-                <div class="br-body br-body-sm"><ChatMarkdown content={b.markdown} /></div>
-              {:else}
-                <p class="br-empty">{b.error ?? b.status}</p>
-              {/if}
-              {#if b.detail?.gaps.length}
-                <p class="br-meta">Unavailable that day: {b.detail.gaps.map((g) => g.section).join(', ')}</p>
-              {/if}
-            </details>
-          </li>
-        {/each}
-      </ul>
+    <section class="first-run">
+      <span class="eyebrow">No briefing yet</span>
+      <h2>Build the first one</h2>
+      <p>Choose the sources that matter, save the profile, then run the workflow once.</p>
+      <button class="button primary" type="button" onclick={() => (view = 'profile')}>Configure briefing</button>
     </section>
   {/if}
 </main>
 
 <style>
-  .br { max-width: 900px; margin: 0 auto; padding: 24px 20px 80px; color: var(--text-primary); }
-  .br.embedded { max-width: none; padding: 0; }
-  .br-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .br-bar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-  .br-sub { margin: 0; color: var(--text-muted); font-size: var(--fs-nav); }
-  .br-off { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--warn, #b0892a); border: 1px solid currentColor; padding: 1px 5px; margin-left: 8px; }
-  .br-cfg-toggle { font-family: var(--font-mono); font-size: var(--fs-label); padding: 7px 12px; background: transparent; border: 1px solid var(--line-strong); color: var(--text-muted); cursor: pointer; }
-  .br-cfg-toggle:hover { color: var(--text-primary); border-color: var(--text-muted); }
-  .br-flash { margin: 0 0 12px; }
+  .briefing { max-width: 1120px; margin: 0 auto; padding: 24px 20px 80px; color: var(--text-primary); }
+  .briefing.embedded { max-width: none; padding: 0; }
+  .eyebrow { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.35; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-muted); }
+  .command-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; margin-bottom: clamp(22px, 3vw, 38px); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+  .system-state { display: flex; align-items: center; gap: 11px; }
+  .system-state strong { display: block; margin-top: 2px; font-size: var(--fs-nav); font-weight: 600; }
+  .state-dot { width: 9px; height: 9px; background: var(--success, #2d7a3a); border-radius: 50%; }
+  .state-dot.paused { background: var(--warn, #b0892a); }
+  .command-actions { display: flex; gap: 8px; }
+  .button { border: 1px solid transparent; padding: 9px 14px; font-family: var(--font-mono); font-size: var(--fs-label); cursor: pointer; }
+  .button:disabled { cursor: default; opacity: 0.5; }
+  .button.primary { background: var(--accent-ink, var(--accent)); color: var(--bg); }
+  .button.secondary { border-color: var(--line-strong); background: transparent; color: var(--text-primary); }
+  .button.secondary:hover, .button.secondary.active { border-color: var(--accent); color: var(--accent-ink, var(--accent)); }
+  .button.quiet { border-color: transparent; background: transparent; color: var(--text-muted); }
+  .flash { margin: -20px 0 24px; padding: 9px 12px; border-left: 3px solid var(--success, #2d7a3a); background: color-mix(in srgb, var(--success, #2d7a3a) 7%, transparent); font-size: var(--fs-label); }
+  .flash.error { border-color: var(--error, #c44); color: var(--error, #c44); }
 
-  .br-sec { margin-bottom: 28px; }
-  .br-sec-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line-strong); padding-bottom: 6px; margin-bottom: 12px; }
-  .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
-  .br-when { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .briefing-view { display: flex; flex-direction: column; gap: clamp(26px, 4vw, 46px); }
+  .today { padding: clamp(22px, 4vw, 48px); border: 1px solid var(--line-strong); border-top: 5px solid var(--text-primary); background: color-mix(in srgb, var(--surface-elevated) 58%, transparent); }
+  .today-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .today h2 { max-width: 22ch; margin: 8px 0 clamp(22px, 3vw, 34px); font-family: var(--font-display); font-size: clamp(30px, 4.5vw, 60px); line-height: 0.98; text-transform: uppercase; text-wrap: balance; }
+  .briefing-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); white-space: nowrap; }
+  .briefing-meta span { text-transform: uppercase; letter-spacing: 0.1em; }
+  .briefing-copy { max-width: 78ch; font-size: var(--fs-body); line-height: 1.65; }
+  .briefing-copy.compact { margin-top: 12px; font-size: var(--fs-body-sm); }
+  .today-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line-hair); }
+  .source-health { display: flex; flex-direction: column; gap: 2px; color: var(--success, #2d7a3a); font-size: var(--fs-label); }
+  .source-health.warning { color: var(--warn, #b0892a); }
+  .source-health span { color: var(--text-muted); }
+  .run-cost { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .feedback { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .feedback label { margin-right: 4px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .feedback input { min-width: 180px; flex: 1; max-width: 320px; padding: 6px 8px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-primary); }
+  .feedback button { padding: 6px 9px; border: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; }
+  .feedback button:hover { border-color: var(--accent); color: var(--accent-ink, var(--accent)); }
+  .feedback-done { color: var(--success, #2d7a3a); font-family: var(--font-mono); font-size: var(--fs-label); }
 
-  .br-config { border: 1px solid var(--line-strong); padding: clamp(16px, 2.5vw, 28px); display: flex; flex-direction: column; gap: 24px; background: color-mix(in srgb, var(--surface-elevated) 55%, transparent); }
-  .br-profile-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: clamp(16px, 3vw, 34px); padding: clamp(16px, 2.3vw, 24px); border: 1px solid var(--line-strong); border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--surface-elevated) 55%, transparent); }
-  .br-profile-copy { min-width: 0; }
-  .br-profile-copy h2 { margin: 5px 0 7px; font-family: var(--font-display); font-size: clamp(22px, 2.8vw, 34px); line-height: 1; text-transform: uppercase; }
-  .br-profile-copy h2 span { color: var(--text-muted); }
-  .br-profile-copy > p:last-child { max-width: 66ch; margin: 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.45; }
-  .br-profile-facts { display: grid; grid-template-columns: repeat(3, auto); gap: 16px; margin: 0; }
-  .br-profile-facts div { min-width: 72px; }
-  .br-profile-facts dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em; }
-  .br-profile-facts dd { margin: 3px 0 0; font-family: var(--font-display); font-size: 22px; color: var(--text-primary); }
-  .br-profile-open { padding: 9px 12px; border: 1px solid var(--line-strong); background: transparent; color: var(--accent-ink, var(--accent)); font-family: var(--font-mono); font-size: var(--fs-label); cursor: pointer; white-space: nowrap; }
-  .br-profile-open:hover { border-color: var(--accent); }
-  .br-config-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line-strong); }
-  .br-config-head h2 { margin: 5px 0 8px; font-family: var(--font-display); font-size: clamp(24px, 3vw, 38px); line-height: 1; text-transform: uppercase; }
-  .br-config-head p { max-width: 64ch; margin: 0; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
-  .br-master-toggle { display: flex; align-items: center; gap: 10px; min-width: 170px; padding: 10px 12px; border: 1px solid var(--line-strong); cursor: pointer; }
-  .br-master-toggle input { width: auto; accent-color: var(--accent); }
-  .br-master-toggle span { display: flex; flex-direction: column; gap: 2px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .br-master-toggle b { color: var(--text-primary); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; }
-  .br-config-priorities { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; }
-  .br-field-wide { min-width: 0; }
-  .br-field-help { color: var(--text-ghost); font-size: var(--fs-label); line-height: 1.35; }
-  .br-memory-controls { display: grid; grid-template-columns: repeat(2, minmax(110px, 1fr)); gap: 10px; }
-  .br-number-wrap { display: flex; align-items: center; border: 1px solid var(--line-strong); background: var(--bg); }
-  .br-number-wrap .br-in { border: 0; }
-  .br-number-wrap > span { padding-right: 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .br-number { width: 70px; }
-  .br-run, .br-save { font-family: var(--font-mono); font-size: var(--fs-label); padding: 7px 16px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }
-  .br-run:disabled { opacity: 0.5; cursor: default; }
-  .br-field { display: flex; flex-direction: column; gap: 4px; }
-  .br-in { background: var(--bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-size: var(--fs-body); padding: 8px 10px; outline: none; box-sizing: border-box; }
-  .br-in:focus { border-color: var(--text-muted); }
-  .br-config-foot { display: flex; align-items: center; gap: 12px; }
-  .br-source-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
-  .br-source-head p { margin: 4px 0 0; font-size: var(--fs-label); color: var(--text-muted); }
-  .br-canvas-link { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--accent-ink, var(--accent)); text-decoration: none; white-space: nowrap; }
-  .br-canvas-link:hover { text-decoration: underline; }
-  .br-source-groups { display: flex; flex-direction: column; gap: 22px; }
-  .br-source-group h3 { margin: 0 0 8px; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label-wide); color: var(--text-muted); }
-  .br-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 8px; }
-  .br-source-card { min-width: 0; padding: 12px; border: 1px solid var(--line-strong); background: var(--bg); transition: opacity 0.15s ease, border-color 0.15s ease; }
-  .br-source-card.off { opacity: 0.58; }
-  .br-source-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  .br-source-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-nav); font-weight: 600; cursor: pointer; }
-  .br-source-toggle input, .br-required input { width: auto; accent-color: var(--accent); }
-  .br-source-card > p { min-height: 2.7em; margin: 8px 0 12px; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.35; }
-  .br-connection { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
-  .br-connection-native, .br-connection-connected { color: var(--success, #2d7a3a); }
-  .br-connection-available { color: var(--accent-ink, var(--accent)); }
-  .br-required { display: flex; align-items: center; gap: 7px; padding-top: 9px; border-top: 1px solid var(--line-hair); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; }
-  .br-required.disabled { cursor: default; color: var(--text-ghost); }
-  .br-extension-note { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-tint-04); color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
-  .br-extension-note strong { display: block; color: var(--text-primary); }
-  .br-extension-note code { font-family: var(--font-mono); color: var(--accent-ink, var(--accent)); }
-  .br-ok { color: var(--success, #2d7a3a); font-size: var(--fs-label); }
-  .br-err { color: var(--error, #c44); font-size: var(--fs-label); }
+  .memories { padding: clamp(20px, 3vw, 30px); border: 1px solid var(--accent); background: var(--accent-tint-04); }
+  .memories.empty { border-color: var(--line-strong); background: transparent; }
+  .section-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+  .section-head h2 { margin: 5px 0 0; font-family: var(--font-display); font-size: clamp(25px, 3vw, 38px); line-height: 1; text-transform: uppercase; }
+  .section-head > a, .knowledge > a, .source-intro > a { color: var(--accent-ink, var(--accent)); font-family: var(--font-mono); font-size: var(--fs-label); text-decoration: none; }
+  .section-head > span { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label); }
+  .section-intro { max-width: 70ch; margin: 14px 0; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
+  .memory-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 9px; margin: 18px 0 0; padding: 0; list-style: none; }
+  .memory-list li { display: flex; flex-direction: column; gap: 6px; padding: 13px; border: 1px solid var(--line-strong); background: var(--bg); font-size: var(--fs-nav); line-height: 1.45; }
+  .memory-category { color: var(--accent-ink, var(--accent)); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+  .memory-list time { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .empty-copy { max-width: 68ch; margin: 14px 0 0; color: var(--text-muted); line-height: 1.55; }
 
-  .br-headline { margin: 0 0 12px; font-family: var(--font-display); font-size: 1.25rem; line-height: 1.25; }
-  .br-body { color: var(--text-primary); }
-  .br-body-sm { margin-top: 8px; font-size: var(--fs-body-sm); }
-  .br-meta { margin-top: 12px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .br-link { color: var(--accent-ink, var(--accent)); text-decoration: none; }
-  .br-link:hover { text-decoration: underline; }
+  .evidence { border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+  .evidence > summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 19px 4px; cursor: pointer; list-style: none; }
+  .evidence > summary::-webkit-details-marker { display: none; }
+  .evidence > summary::after { content: '+'; font-family: var(--font-mono); font-size: 24px; color: var(--accent-ink, var(--accent)); }
+  .evidence[open] > summary::after { content: '−'; }
+  .evidence > summary > span:first-child { flex: 1; }
+  .evidence > summary strong { display: block; margin-top: 3px; font-family: var(--font-display); font-size: clamp(23px, 2.8vw, 34px); line-height: 1; text-transform: uppercase; }
+  .evidence-count { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label); }
+  .evidence-content { display: flex; flex-direction: column; gap: 34px; padding: 8px 4px 28px; }
+  .context-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+  .context-card { padding: 16px; border: 1px solid var(--line-strong); }
+  .context-card h3 { margin: 6px 0; font-size: var(--fs-body-lg); }
+  .context-card > p { margin: 5px 0 12px; color: var(--text-muted); font-size: var(--fs-label); }
+  .weather-card h3 { font-family: var(--font-display); font-size: 38px; line-height: 1; }
+  .weather-card h3 small { font-size: 18px; color: var(--text-muted); }
+  .context-card dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+  .context-card dt, .fact-section dt { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; }
+  .context-card dd { margin: 2px 0 0; font-size: var(--fs-label); }
+  .warning-text { color: var(--warn, #b0892a) !important; }
+  .weather-factors { margin: 12px 0 0; padding: 10px 0 0 18px; border-top: 1px solid var(--line-hair); color: var(--accent-ink, var(--accent)); font-size: var(--fs-label); }
+  .drawer-heading h3 { margin: 4px 0 14px; font-family: var(--font-display); font-size: 26px; text-transform: uppercase; }
+  .fact-section + .fact-section { margin-top: 18px; }
+  .fact-section h4 { margin: 0 0 8px; font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 600; color: var(--text-muted); }
+  .fact-section dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 18px; margin: 0; }
+  .fact-section dl > div { min-width: 0; padding-top: 7px; border-top: 1px solid var(--line-hair); }
+  .fact-section dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: var(--fs-nav); }
+  .fact-section dd small { display: block; margin-top: 2px; color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .source-ledger ul { margin: 0; padding: 0; list-style: none; }
+  .source-ledger li { display: grid; grid-template-columns: 9px minmax(120px, 180px) 86px 1fr; align-items: baseline; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-hair); font-size: var(--fs-label); }
+  .ledger-dot { width: 6px; height: 6px; align-self: center; border-radius: 50%; background: currentColor; }
+  .source-ledger li > span:nth-child(3) { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
+  .source-ledger small { color: var(--text-muted); overflow-wrap: anywhere; }
+  .status-ok { color: var(--success, #2d7a3a); }
+  .status-stale { color: var(--warn, #b0892a); }
+  .status-failed { color: var(--error, #c44); }
+  .status-empty { color: var(--text-ghost); }
+  .source-ledger strong { color: var(--text-primary); }
 
-  .br-trust { margin-top: 12px; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--success, #2d7a3a); border-left: 2px solid currentColor; padding-left: 8px; }
-  .br-trust-warn { color: var(--warn, #b0892a); }
-  .br-warn-line { margin: 8px 0 0; font-size: var(--fs-label); color: var(--warn, #b0892a); }
+  .history { padding-top: 2px; }
+  .history-list { margin-top: 14px; border-top: 1px solid var(--line-strong); }
+  .history-list details { border-bottom: 1px solid var(--line-hair); }
+  .history-list summary { display: flex; justify-content: space-between; gap: 20px; padding: 13px 2px; cursor: pointer; }
+  .history-list summary span { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .history-list .briefing-copy, .history-list .empty-copy { padding: 4px 2px 20px; }
 
-  .br-memory-share { padding: 18px; border: 1px solid var(--accent); background: var(--accent-tint-04); }
-  .br-memory-share.empty { border-color: var(--line-strong); background: color-mix(in srgb, var(--surface-elevated) 40%, transparent); }
-  .br-memory-intro { max-width: 68ch; margin: 0 0 14px; color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
-  .br-memory-empty { margin-bottom: 0; }
-  .br-memory-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
-  .br-memory-list li { padding: 10px 12px; border: 1px solid var(--line-strong); background: var(--bg); display: flex; flex-direction: column; gap: 5px; }
-  .br-memory-category { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-ink, var(--accent)); }
-  .br-memory-content { font-size: var(--fs-nav); line-height: 1.45; }
-  .br-memory-time { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .br-memory-link { display: inline-block; margin-top: 12px; font-family: var(--font-mono); font-size: var(--fs-label); }
+  .profile-view { display: flex; flex-direction: column; gap: clamp(24px, 3.5vw, 40px); padding: clamp(20px, 3.5vw, 38px); border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--surface-elevated) 55%, transparent); }
+  .profile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; padding-bottom: 24px; border-bottom: 1px solid var(--line-strong); }
+  .profile-head h2 { margin: 7px 0 10px; font-family: var(--font-display); font-size: clamp(30px, 4vw, 52px); line-height: 0.98; text-transform: uppercase; }
+  .profile-head p { max-width: 68ch; margin: 0; color: var(--text-muted); line-height: 1.5; }
+  .master-switch { display: flex; align-items: center; gap: 10px; min-width: 180px; padding: 11px 13px; border: 1px solid var(--line-strong); cursor: pointer; }
+  .master-switch input, .source-toggle input, .required-toggle input { width: auto; accent-color: var(--accent); }
+  .master-switch span { display: flex; flex-direction: column; gap: 2px; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .master-switch b { color: var(--text-primary); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.09em; }
+  .profile-priorities { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 20px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-help { color: var(--text-ghost); font-size: var(--fs-label); }
+  .input { box-sizing: border-box; width: 100%; padding: 9px 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-primary); outline: none; }
+  .input:focus { border-color: var(--accent); }
+  .memory-controls { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 10px; }
+  .number-input { display: flex; align-items: center; border: 1px solid var(--line-strong); background: var(--bg); }
+  .number-input .input { width: 72px; border: 0; }
+  .number-input > span { padding-right: 10px; color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .source-intro { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+  .source-intro p { margin: 5px 0 0; color: var(--text-muted); font-size: var(--fs-label); }
+  .source-intro strong { color: var(--text-primary); }
+  .source-groups { display: flex; flex-direction: column; gap: 26px; }
+  .source-group > h3 { margin: 0 0 9px; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; }
+  .source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 9px; }
+  .source-card { display: flex; flex-direction: column; min-width: 0; padding: 14px; border: 1px solid var(--line-strong); background: var(--bg); }
+  .source-card.disabled { opacity: 0.55; }
+  .source-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .source-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; cursor: pointer; }
+  .connection { flex: none; color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+  .connection-native, .connection-connected { color: var(--success, #2d7a3a); }
+  .connection-available { color: var(--accent-ink, var(--accent)); }
+  .source-card > p { min-height: 2.7em; margin: 10px 0 14px; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.4; }
+  .required-toggle { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-hair); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; }
+  .required-toggle.unavailable { color: var(--text-ghost); cursor: default; }
+  .capability-note { padding: 14px 16px; border-left: 3px solid var(--accent); background: var(--accent-tint-04); color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
+  .capability-note strong { display: block; color: var(--text-primary); }
+  .capability-note code { color: var(--accent-ink, var(--accent)); font-family: var(--font-mono); }
+  .profile-actions { display: flex; align-items: center; gap: 10px; padding-top: 22px; border-top: 1px solid var(--line-strong); }
+  .profile-actions > span { color: var(--text-ghost); font-size: var(--fs-label); }
+  .first-run { max-width: 720px; padding: clamp(24px, 4vw, 48px); border: 1px solid var(--line-strong); }
+  .first-run h2 { margin: 8px 0; font-family: var(--font-display); font-size: 42px; text-transform: uppercase; }
+  .first-run p { margin: 0 0 20px; color: var(--text-muted); }
 
-  .br-loc-main { margin: 0 0 10px; font-size: var(--fs-body); }
-  .br-loc-dist { display: block; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); margin-top: 2px; }
-
-  /* Key/value grids — shared by location, weather and facts */
-  .br-kv { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; }
-  .br-kv-wide { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-  .br-kv div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .br-kv dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); }
-  .br-kv dd { margin: 0; font-size: var(--fs-nav); color: var(--text-primary); overflow-wrap: anywhere; }
-  .br-mono { font-family: var(--font-mono); font-size: var(--fs-label); }
-  .br-src { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 1px; }
-
-  .br-wx { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-  .br-wx-card { border: 1px solid var(--line-strong); padding: 14px; }
-  .br-wx-card header { margin-bottom: 8px; }
-  .br-wx-card h3 { margin: 2px 0 0; font-family: var(--font-body, var(--font-sans)); font-size: var(--fs-body-sm); font-weight: 600; overflow-wrap: anywhere; }
-  .br-wx-now { margin: 0 0 12px; font-family: var(--font-display); font-size: 2rem; line-height: 1; }
-  .br-wx-unit { font-size: var(--fs-body-lg); color: var(--text-muted); }
-  .br-wx-cond { display: block; font-family: var(--font-body, var(--font-sans)); font-size: var(--fs-nav); font-weight: 400; color: var(--text-secondary, var(--text-muted)); margin-top: 4px; }
-  .br-factors { list-style: none; margin: 12px 0 0; padding: 10px 0 0; border-top: 1px solid var(--divider, var(--card-border)); display: flex; flex-direction: column; gap: 4px; }
-  .br-factors li { font-size: var(--fs-label); color: var(--accent, #c4570a); }
-
-  .br-facts { margin-bottom: 16px; }
-  .br-facts-hd { margin: 0 0 6px; font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 400; color: var(--text-secondary, var(--text-muted)); }
-
-  .br-ledger { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .br-ledger-row { display: grid; grid-template-columns: 10px 160px 68px 1fr; align-items: baseline; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--divider, var(--card-border)); font-size: var(--fs-nav); }
-  .br-ledger-dot { width: 6px; height: 6px; border-radius: 100px; background: currentColor; align-self: center; }
-  .br-ledger-label { overflow-wrap: anywhere; color: var(--text-primary); }
-  .br-ledger-status { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; }
-  .br-ledger-detail { color: var(--text-muted); font-size: var(--fs-label); overflow-wrap: anywhere; }
-  .br-st-ok { color: var(--success, #2d7a3a); }
-  .br-st-stale { color: var(--warn, #b0892a); }
-  .br-st-failed { color: var(--error, #c44); }
-  .br-st-empty { color: var(--text-ghost); }
-
-  .br-vote { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-hair); flex-wrap: wrap; }
-  .br-vote-what { flex: 1; max-width: 320px; font-family: var(--font-mono); font-size: var(--fs-body); padding: 4px 8px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text-primary); outline: none; }
-  .br-vote-what:focus { border-color: var(--accent); }
-  .br-vote-btn { background: var(--bg); border: 1px solid var(--accent-ink, var(--accent)); color: var(--accent-ink, var(--accent)); padding: 4px 10px; cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; }
-  .br-vote-btn:hover { background: var(--accent-ink, var(--accent)); color: var(--bg); }
-  .br-vote-down { border-color: var(--warn, #b0892a); color: var(--warn, #b0892a); }
-  .br-vote-down:hover { background: var(--warn, #b0892a); color: var(--bg); }
-  .br-vote-done { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--success, #2d7a3a); }
-  .br-empty { color: var(--text-ghost); font-size: var(--fs-nav); }
-
-  .br-past { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .br-past-item summary { cursor: pointer; display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; }
-  .br-past-title { font-size: var(--fs-nav); color: var(--text-primary); }
-
-  @media (max-width: 620px) {
-    .br-profile-summary { grid-template-columns: 1fr; }
-    .br-profile-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-    .br-profile-open { justify-self: start; }
-    .br-config-head, .br-source-head { align-items: stretch; flex-direction: column; }
-    .br-master-toggle { min-width: 0; }
-    .br-config-priorities { grid-template-columns: 1fr; }
-    .br-memory-controls { grid-template-columns: 1fr 1fr; }
-    .br-source-grid { grid-template-columns: 1fr; }
-    .br-config-foot { align-items: flex-start; flex-direction: column; }
-    .br-ledger-row { grid-template-columns: 10px 1fr; row-gap: 2px; }
-    .br-ledger-status, .br-ledger-detail { grid-column: 2; }
+  @media (max-width: 720px) {
+    .command-bar, .today-head, .today-foot, .profile-head, .source-intro { align-items: stretch; flex-direction: column; }
+    .command-actions { width: 100%; }
+    .command-actions .button { flex: 1; }
+    .briefing-meta { align-items: flex-start; }
+    .today h2 { margin-bottom: 22px; }
+    .section-head { align-items: flex-start; flex-direction: column; gap: 10px; }
+    .evidence > summary { align-items: flex-start; flex-wrap: wrap; }
+    .evidence-count { order: 3; width: 100%; }
+    .source-ledger li { grid-template-columns: 9px 1fr 80px; }
+    .source-ledger small { grid-column: 2 / -1; }
+    .profile-priorities { grid-template-columns: 1fr; }
+    .master-switch { min-width: 0; }
+    .profile-actions { align-items: flex-start; flex-wrap: wrap; }
+    .profile-actions > span { width: 100%; }
+  }
+  @media (max-width: 480px) {
+    .briefing { padding-inline: 14px; }
+    .command-actions, .feedback { align-items: stretch; flex-direction: column; }
+    .command-actions .button, .feedback input { width: 100%; max-width: none; }
+    .today, .profile-view { padding: 18px; }
+    .memory-controls, .source-grid { grid-template-columns: 1fr; }
+    .history-list summary { flex-direction: column; gap: 4px; }
   }
 </style>
