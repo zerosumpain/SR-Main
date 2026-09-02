@@ -8,6 +8,7 @@
     { href: '/projects', label: 'Projects' },
     { href: '/decks', label: 'Decks' },
     { href: '/blog', label: 'Writing' },
+    { href: '/news', label: 'News' },
     // One hub. /health is the landing for anonymous visitors and the full
     // consolidated dashboard once signed in; activities, segments, the planner
     // and the recorder are its owner-only children. A cell for one of those

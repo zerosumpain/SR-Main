@@ -91,6 +91,7 @@
   ]);
   const library: MenuRow[] = [
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
+    { label: 'News', href: '/news', meta: 'LIVE WIRE' },
     { label: 'Research', href: '/research', meta: 'DEEP DIVE' },
     { label: 'Daydreams', href: '/jkai/daydreams', meta: 'BRIEF · WATCH · LEARN' },
   ];

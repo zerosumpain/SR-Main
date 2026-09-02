@@ -14,6 +14,7 @@ export interface UrlFetchResult {
 	url: string;
 	finalUrl: string;
 	title: string | null;
+	excerpt: string | null;
 	content: string;
 	truncated: boolean;
 	contentType: string;
@@ -30,6 +31,75 @@ export type UrlFetchError =
 	| { kind: 'network'; message: string };
 
 const URL_REGEX = /\bhttps?:\/\/[^\s<>"')\]}]+/gi;
+
+const BLOCK_SELECTOR = [
+	'address',
+	'article',
+	'aside',
+	'blockquote',
+	'dd',
+	'div',
+	'dl',
+	'dt',
+	'figcaption',
+	'figure',
+	'footer',
+	'h1',
+	'h2',
+	'h3',
+	'h4',
+	'h5',
+	'h6',
+	'header',
+	'hr',
+	'li',
+	'main',
+	'ol',
+	'p',
+	'pre',
+	'section',
+	'table',
+	'tbody',
+	'td',
+	'tfoot',
+	'th',
+	'thead',
+	'tr',
+	'ul',
+].join(',');
+
+/** Normalise extracted prose without flattening its paragraph structure. */
+export function normalizeExtractedText(text: string): string {
+	return text
+		.replace(/\r\n?/g, '\n')
+		.replace(/[\u00a0\u2007\u202f]/g, ' ')
+		.replace(/[\u200b-\u200d\ufeff]/g, '')
+		.replace(/[\t\f\v ]+/g, ' ')
+		.replace(/ *\n */g, '\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
+}
+
+/**
+ * Convert an HTML fragment to readable text while retaining semantic breaks.
+ * `textContent` alone joins adjacent block elements ("2026Model cards"),
+ * which made otherwise successful Readability extractions hard to read.
+ */
+export function readableTextFromHtml(html: string, url = 'https://example.invalid/'): string {
+	if (!html) return '';
+	const dom = new JSDOM(`<body>${html}</body>`, { url });
+	const doc = dom.window.document;
+	doc
+		.querySelectorAll('script, style, template, noscript, svg, canvas, iframe')
+		.forEach((element) => element.remove());
+	doc.querySelectorAll('br').forEach((element) => element.replaceWith('\n'));
+	doc.querySelectorAll('li').forEach((element) => element.prepend('• '));
+	doc.querySelectorAll(BLOCK_SELECTOR).forEach((element) => {
+		element.prepend('\n');
+		element.append('\n');
+	});
+	return normalizeExtractedText(doc.body?.textContent ?? '');
+}
 
 /**
  * Extract up to `max` URLs from a free-form text blob (e.g. a chat message).
@@ -233,6 +303,7 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 			url: rawUrl,
 			finalUrl,
 			title: null,
+			excerpt: null,
 			content: out,
 			truncated: truncated || trimmed.length > MAX_TEXT_CHARS,
 			contentType,
@@ -241,20 +312,27 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 
 	// HTML: try Readability first, fall back to a stripped-text dump.
 	let title: string | null = null;
+	let excerpt: string | null = null;
 	let text = '';
 	try {
 		const dom = new JSDOM(body, { url: finalUrl });
 		const doc = dom.window.document;
 		title = doc.querySelector('title')?.textContent?.trim() ?? null;
+		excerpt =
+			doc.querySelector('meta[property="og:description"]')?.getAttribute('content')?.trim() ||
+			doc.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ||
+			null;
 		const reader = new Readability(doc);
 		const article = reader.parse();
 		if (article?.textContent && article.textContent.trim().length >= 50) {
-			text = article.textContent.trim();
+			text = readableTextFromHtml(article.content ?? '', finalUrl);
+			if (!text) text = normalizeExtractedText(article.textContent);
 			if (article.title) title = article.title;
+			if (article.excerpt?.trim()) excerpt = article.excerpt.trim();
 		} else {
 			// Fallback: strip scripts/styles, take body text
 			doc.querySelectorAll('script, style, nav, footer, header, noscript').forEach((el) => el.remove());
-			text = doc.body?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+			text = readableTextFromHtml(doc.body?.innerHTML ?? '', finalUrl);
 		}
 	} catch (err: any) {
 		throw {
@@ -272,6 +350,7 @@ export async function fetchUrlContent(rawUrl: string): Promise<UrlFetchResult> {
 		url: rawUrl,
 		finalUrl,
 		title,
+		excerpt: excerpt ? normalizeExtractedText(excerpt).slice(0, 800) : null,
 		content: out,
 		truncated: truncated || text.length > MAX_TEXT_CHARS,
 		contentType,

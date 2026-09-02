@@ -43,6 +43,7 @@
         { code: 'CVS', label: 'Canvas', href: '/jkai/canvas', desc: 'Visual workflow builder', keywords: 'workflow nodes flow automation' },
         { code: 'BLD', label: 'Builds', href: '/jkai/builds', desc: 'Autonomous builder', keywords: 'build autonomous app' },
         { code: 'RES', label: 'Research', href: '/research', desc: 'Deep research desk', keywords: 'deep dive gather synthesize' },
+        { code: 'NWS', label: 'News', href: '/news', desc: 'Hacker News and Lobsters reading desk', keywords: 'feed articles hacker news lobsters read' },
       ],
     },
     {
