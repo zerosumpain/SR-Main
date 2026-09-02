@@ -2189,6 +2189,28 @@ export const jkaiMemories = pgTable('jkai_memories', {
 
 export type JkaiMemory = typeof jkaiMemories.$inferSelect;
 
+// Context-aware memory and information proposals. Only distilled text and a
+// provenance pointer are retained; source bodies and precise coordinates stay
+// with their existing integrations.
+export const jkaiContextProposals = pgTable('jkai_context_proposals', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  fingerprint: text('fingerprint').notNull().unique(),
+  kind: text('kind').notNull(), // memory | suggestion
+  content: text('content').notNull(),
+  category: text('category'),
+  confidence: numeric('confidence', { precision: 4, scale: 3 }).notNull(),
+  provisional: boolean('provisional').notNull().default(true),
+  temporalScope: text('temporal_scope').notNull().default('ongoing'),
+  provenance: jsonb('provenance').notNull().default(sql`'[]'::jsonb`),
+  status: text('status').notNull().default('pending'), // pending | accepted | dismissed | deferred | investigated
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type JkaiContextProposal = typeof jkaiContextProposals.$inferSelect;
+
 export const quickAnswers = pgTable('quick_answer', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   topic: text('topic').notNull(),
