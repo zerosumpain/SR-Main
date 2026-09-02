@@ -207,9 +207,12 @@
     outline-offset: -2px;
   }
 
+  /* On a phone the matrix scrolls INSIDE its own box rather than squeezing
+     "UNDECIDED" into a 54px track — `.cm` is `overflow-x: auto`, so the page
+     never scrolls sideways. */
   @media (max-width: 480px) {
     .cm {
-      grid-template-columns: minmax(110px, 1.4fr) repeat(var(--cm-cols), minmax(54px, 1fr));
+      grid-template-columns: minmax(104px, 1.4fr) repeat(var(--cm-cols), minmax(86px, 1fr));
     }
     .cm-head,
     .cm-row,
