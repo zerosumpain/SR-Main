@@ -127,20 +127,64 @@ describe('disclosureLeaks', () => {
     expect(disclosureLeaks(withFeatured).length).toBeGreaterThan(0);
   });
 
-  it('steps over the server clock, and only at the root', () => {
-    // `dashboardUpdatedAt` is when this payload finished being assembled —
-    // within a second of the request, so the reader already knows it. The
-    // pattern that flags it cannot tell it apart from an outing's start time,
-    // so the field is named rather than the pattern loosened.
+  it('steps over a stamp that says when a FIGURE was computed', () => {
+    // Measured in production 2026-09-02: the anonymous payload tripped the
+    // timestamp pattern thirteen times on one request, every one of this shape.
+    // `asOf` is when the analytic ran, `observedAt` the date of the newest row.
     expect(disclosureLeaks({ dashboardUpdatedAt: '2026-09-02T09:14:00.000Z' })).toEqual([]);
-    // Nested, it is not the field this exemption is about.
+    expect(disclosureLeaks({ vo2max: { asOf: '2026-09-02T09:14:00.000Z' } })).toEqual([]);
     expect(
-      disclosureLeaks({ outing: { dashboardUpdatedAt: '2026-08-20T06:41:12Z' } }).length,
-    ).toBeGreaterThan(0);
-    // And the pattern it would have blinded still fires.
+      disclosureLeaks({ readiness: { factors: { hrvTrend: { observedAt: '2026-09-01T00:00:00Z' } } } }),
+    ).toEqual([]);
+    // Nested arbitrarily deep, and in any spelling.
+    expect(disclosureLeaks({ a: { b: { as_of: '2026-09-02T09:14:00Z' } } })).toEqual([]);
+    expect(disclosureLeaks({ instruments: [{ asOf: '2026-09-02T09:14:00Z' }] })).toEqual([]);
+  });
+
+  it('still catches the clock it was written for', () => {
+    // The alternative fix was loosening the pattern to spare a UTC instant.
+    // That would have blinded it to exactly this, which IS an activity start.
     expect(disclosureLeaks({ startedAt: '2026-08-20T06:41:12Z' })).toContain(
       'startedAt: local timestamp',
     );
+    expect(disclosureLeaks({ when: '2026-08-20 06:41:12 +0100' })).toContain(
+      'when: local timestamp',
+    );
+    // A key nobody thought to name is still the backstop's whole job.
+    expect(disclosureLeaks({ note: '2026-08-20 06:41' })).toContain('note: local timestamp');
+  });
+
+  it('is silent on the exact payload that fired thirteen times in production', () => {
+    // Copied from the VPS log, 2026-09-02 14:36:41. Every path the walker named
+    // on a single anonymous request, and not one of them placed him.
+    const stamp = '2026-09-02T09:14:00.000Z';
+    const asOf = { sufficiency: 'ok', sampleSize: 28, asOf: stamp, value: {} };
+    const live = {
+      readiness: { factors: { hrvTrend: { observedAt: stamp } } },
+      vo2max: asOf,
+      sleepRegularity: asOf,
+      acwr: asOf,
+      monotony: asOf,
+      polarised: asOf,
+      circadian: asOf,
+      autonomic: asOf,
+      recoveryDebt: asOf,
+      dashboard: {
+        vo2: { result: asOf },
+        load: { trimpAcwr: asOf, strainAcwr: asOf },
+        zones28: { polarised: asOf },
+      },
+    };
+    expect(disclosureLeaks(live)).toEqual([]);
+  });
+
+  it('does not let a route hide under a stamp key', () => {
+    // The exemption is for the TIMESTAMP test only. Everything else the walker
+    // does still runs on these keys.
+    expect(disclosureLeaks({ asOf: 'ilqvHnb_@k@Uu@]w@a@_A_@}@]{@Wu@Om@Ge@Ai@?g@Bg@Fe@Jc@' }))
+      .toContain('asOf: encoded polyline');
+    expect(disclosureLeaks({ asOf: 'peacock.sand.setts' })).toContain('asOf: segment name');
+    expect(disclosureLeaks({ updatedAt: { polyline: 'a}~fFabc' } }).length).toBeGreaterThan(0);
   });
 
   it('does not mistake a plain 30-day series for geography', () => {
