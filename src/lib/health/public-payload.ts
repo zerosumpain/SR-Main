@@ -84,16 +84,43 @@ export function pickPublic<T extends Record<string, unknown>>(
  * went with the old public document on 2026-09-02, so the last PLACE-BEARING
  * exemption is gone and a polyline under that key is now a leak like any other.
  *
- * What is left is a different kind of thing, and the distinction is the point:
- * `dashboardUpdatedAt` is the ISO instant the SERVER finished assembling the
- * payload — always within a second of the request that asked for it, and
- * therefore something the reader already knows. It is here because
- * `LOCAL_TIMESTAMP` cannot tell it apart from the clock an outing started at,
- * which is a real thing to catch; loosening that pattern to spare a UTC instant
- * would blind it to `2026-08-20T06:41:12Z` on an activity, which is exactly the
- * disclosure it exists for. Naming the one field is the narrower fix.
+ * The set is empty, and the mechanism is kept for the next carve-out that has
+ * to be argued for in the open. `dashboardUpdatedAt` sat here briefly and moved
+ * to `COMPUTATION_STAMP_KEYS` below, which is where it belonged: it is not a
+ * carve-out for a place, it is a whole CLASS of value the timestamp pattern
+ * cannot tell from a place.
  */
-const DISCLOSURE_EXEMPT_ROOTS = new Set(['dashboardUpdatedAt']);
+const DISCLOSURE_EXEMPT_ROOTS = new Set<string>();
+
+/**
+ * Keys whose value stamps when a FIGURE was computed or last read — never when
+ * he was somewhere.
+ *
+ * Measured in production on 2026-09-02, the anonymous payload tripped
+ * `LOCAL_TIMESTAMP` THIRTEEN times on a single request, and every one was a
+ * false positive of this shape: `MetricResult.asOf` (when the analytic ran) on
+ * each of the nine instruments, and `readiness.factors.hrvTrend.observedAt`
+ * (the date of the newest HRV row). Three of them had been firing on every
+ * anonymous request since long before the shared dashboard; the instrument
+ * layer took it to thirteen.
+ *
+ * That matters more than the noise. A guard that cries wolf on every single
+ * request is a guard nobody reads, and the ONE line that matters would arrive
+ * in a log where thirteen identical ones already scroll past. So the pattern is
+ * skipped for these keys and kept for every other one — including the bare `at`
+ * or `when` an outing's clock would land under, which is what it was written
+ * for. Loosening the pattern itself was the alternative and it is the wrong
+ * one: it would have to stop matching `2026-08-20T06:41:12Z`, which is exactly
+ * an activity start.
+ */
+const COMPUTATION_STAMP_KEYS =
+  /^(asof|observedat|computedat|generatedat|assembledat|updatedat|lastupdated|dashboardupdatedat|syncedat|lastsync|refreshedat)$/;
+
+/** Lower-case, alphanumerics only — so `as_of`, `asOf` and `AsOf` all match. */
+function stampKey(path: string): string {
+  const last = path.split('.').pop() ?? '';
+  return last.replace(/\[\d+\]$/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
 
 /**
  * Keys that carry a route. Matched as a SUBSTRING, not an exact name: this repo
@@ -130,7 +157,11 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
     if (node == null || depth > 12) return;
 
     if (typeof node === 'string') {
-      if (LOCAL_TIMESTAMP.test(node)) found.push(`${at}: local timestamp`);
+      // The key decides whether a timestamp is a disclosure. `asOf` is when the
+      // analytic ran; `startedAt` is when he set off. Only the second is a
+      // clock worth catching, and nothing but the key can tell them apart.
+      if (LOCAL_TIMESTAMP.test(node) && !COMPUTATION_STAMP_KEYS.test(stampKey(at)))
+        found.push(`${at}: local timestamp`);
       else if (SEGMENT_NAME.test(node)) found.push(`${at}: segment name`);
       // An encoded polyline under a key nobody thought to name. Google's
       // algorithm emits printable ASCII 63–126 in dense runs; ordinary prose
