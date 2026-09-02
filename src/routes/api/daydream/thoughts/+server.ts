@@ -642,11 +642,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // ── What it knows, and what each memory does ──────────────────────
       //
-      // A sibling of `rulings` rather than a replacement. That one lists what
-      // the REVIEWER settled, read off the thought rows; this lists the store
-      // itself, which three other writers also fill — a note John typed, a
-      // place he named, and whatever the chat chose to keep. "What has it
-      // checked" and "what does it know" are different questions.
+      // A sibling of `rulings` rather than a replacement. It shows the two
+      // raw inputs to Daydream's learning loop: reviewer findings and notes on
+      // Daydream thoughts. The underlying memory table is shared site-wide,
+      // so the query enforces that admission boundary explicitly.
       case 'memories': {
         const limit = Number(body.limit);
         const { loadMemoryOverview } = await import('$lib/daydream/memories.server');

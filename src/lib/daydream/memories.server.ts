@@ -5,16 +5,20 @@
 // component fails the BUILD (not the type-check) on
 // `$env/dynamic/private` in the browser bundle.
 
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamMemoryConsolidations,
   daydreamMemoryThemes,
   daydreamMemoryThemeSources,
-  daydreamPlaces,
   daydreamThoughts,
   jkaiMemories,
 } from '$lib/db/schema';
+import {
+  isDaydreamFindingMemory,
+  isDaydreamFindingTheme,
+  repairDaydreamMemoryScope,
+} from './memory-scope.server';
 import type {
   DaydreamMemory,
   DaydreamMemoryThemeView,
@@ -23,15 +27,15 @@ import type {
 } from './memories';
 
 /**
- * Every live memory, newest first, with where it came from.
+ * Every live Daydream finding, newest first, with where it came from.
  *
  * `supersededBy is null` is the same liveness filter used by consolidation and
  * the snapshot. The page includes consolidated rows for provenance; only the
  * small unconsolidated subset can temporarily enter a reasoning pack.
  *
- * Three left joins rather than three queries: the tables are small, the links
- * are indexed primary keys, and one round trip keeps this off the critical path
- * of a page load that already runs sixteen reads in parallel.
+ * The shared `jkai_memories` table is deliberately filtered by its explicit
+ * Daydream origin. Chat memories, named places, and other site-wide facts do
+ * not belong in this room or in the nightly learning loop.
  */
 export async function listDaydreamMemories(limit = 200): Promise<DaydreamMemory[]> {
   const rows = await db
@@ -42,28 +46,19 @@ export async function listDaydreamMemories(limit = 200): Promise<DaydreamMemory[
       confidence: jkaiMemories.confidence,
       createdAt: jkaiMemories.createdAt,
       consolidatedAt: jkaiMemories.consolidatedAt,
-      sourceConversationId: jkaiMemories.sourceConversationId,
+      daydreamOrigin: jkaiMemories.daydreamOrigin,
       ruledId: daydreamThoughts.id,
       ruledTitle: daydreamThoughts.title,
       ruledKind: daydreamThoughts.kind,
       verdict: daydreamThoughts.reviewVerdict,
       likelihood: daydreamThoughts.reviewLikelihood,
-      reviewMemoryId: daydreamThoughts.reviewMemoryId,
-      noteMemoryId: daydreamThoughts.noteMemoryId,
-      // The JOIN's own key, not the label. A place is detected by the join
-      // having MATCHED; testing `label != null` instead reads an unnamed place
-      // as "from a conversation", which is wrong even though `confirmPlace`
-      // always sets a label — the row is the fact, the label is a field on it.
-      placeId: daydreamPlaces.id,
-      placeLabel: daydreamPlaces.label,
     })
     .from(jkaiMemories)
     .leftJoin(
       daydreamThoughts,
       sql`${daydreamThoughts.reviewMemoryId} = ${jkaiMemories.id} or ${daydreamThoughts.noteMemoryId} = ${jkaiMemories.id}`,
     )
-    .leftJoin(daydreamPlaces, eq(daydreamPlaces.memoryId, jkaiMemories.id))
-    .where(sql`${jkaiMemories.supersededBy} is null`)
+    .where(and(isNull(jkaiMemories.supersededBy), isDaydreamFindingMemory()))
     .orderBy(desc(jkaiMemories.createdAt))
     .limit(Math.max(1, Math.min(500, limit)));
 
@@ -83,18 +78,7 @@ export async function listDaydreamMemories(limit = 200): Promise<DaydreamMemory[
   }
 
   return rows.map((r) => {
-    // Order matters: a row can only be one of these, and the link that
-    // MATCHED is what says which. A thought carries both a review memory and a
-    // note memory, so testing the column rather than the join is the only way
-    // to tell a ruling from a note on the same card.
-    const origin: MemoryOrigin =
-      r.reviewMemoryId === r.id
-        ? 'ruling'
-        : r.noteMemoryId === r.id
-          ? 'note'
-          : r.placeId != null
-            ? 'place'
-            : 'elsewhere';
+    const origin: MemoryOrigin = r.daydreamOrigin === 'ruling' ? 'ruling' : 'note';
     return {
       id: r.id,
       category: r.category,
@@ -104,12 +88,11 @@ export async function listDaydreamMemories(limit = 200): Promise<DaydreamMemory[
       consolidatedAt: r.consolidatedAt?.toISOString() ?? null,
       themeIds: themeIdsByMemory.get(r.id) ?? [],
       origin,
-      thoughtId: origin === 'ruling' || origin === 'note' ? r.ruledId : null,
-      thoughtTitle: origin === 'ruling' || origin === 'note' ? r.ruledTitle : null,
-      thoughtKind: origin === 'ruling' || origin === 'note' ? r.ruledKind : null,
+      thoughtId: r.ruledId,
+      thoughtTitle: r.ruledTitle,
+      thoughtKind: r.ruledKind,
       verdict: origin === 'ruling' ? r.verdict : null,
       likelihood: origin === 'ruling' ? r.likelihood : null,
-      placeLabel: origin === 'place' ? r.placeLabel : null,
     };
   });
 }
@@ -129,7 +112,7 @@ export async function listDaydreamMemoryThemes(limit = 100): Promise<DaydreamMem
       updatedAt: daydreamMemoryThemes.updatedAt,
     })
     .from(daydreamMemoryThemes)
-    .where(eq(daydreamMemoryThemes.status, 'active'))
+    .where(and(eq(daydreamMemoryThemes.status, 'active'), isDaydreamFindingTheme()))
     .orderBy(desc(daydreamMemoryThemes.sourceCount), desc(daydreamMemoryThemes.updatedAt))
     .limit(Math.max(1, Math.min(200, limit)));
   if (themes.length === 0) return [];
@@ -174,6 +157,7 @@ export async function listDaydreamMemoryThemes(limit = 100): Promise<DaydreamMem
         confidence: jkaiMemories.confidence,
         createdAt: jkaiMemories.createdAt,
         consolidatedAt: jkaiMemories.consolidatedAt,
+        daydreamOrigin: jkaiMemories.daydreamOrigin,
       })
       .from(jkaiMemories)
       .where(inArray(jkaiMemories.id, missing));
@@ -186,13 +170,12 @@ export async function listDaydreamMemoryThemes(limit = 100): Promise<DaydreamMem
         createdAt: row.createdAt.toISOString(),
         consolidatedAt: row.consolidatedAt?.toISOString() ?? null,
         themeIds: sourceLinks.filter((l) => l.memoryId === row.id).map((l) => l.themeId),
-        origin: 'elsewhere',
+        origin: row.daydreamOrigin === 'ruling' ? 'ruling' : 'note',
         thoughtId: null,
         thoughtTitle: null,
         thoughtKind: null,
         verdict: null,
         likelihood: null,
-        placeLabel: null,
       });
     }
   }
@@ -257,6 +240,7 @@ export async function latestMemoryConsolidation(): Promise<MemoryConsolidationVi
 }
 
 export async function loadMemoryOverview(limit = 200) {
+  await repairDaydreamMemoryScope();
   const [memories, themes, lastConsolidation] = await Promise.all([
     listDaydreamMemories(limit),
     listDaydreamMemoryThemes(100),

@@ -15,6 +15,11 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from './compose';
 import { LOCAL_TZ, errMsg } from './types';
 import {
+  isDaydreamFindingMemory,
+  isDaydreamFindingTheme,
+  repairDaydreamMemoryScope,
+} from './memory-scope.server';
+import {
   MAX_MEMORIES_PER_CONSOLIDATION,
   parseConsolidationPlan,
   themeSlug,
@@ -146,7 +151,13 @@ async function pendingMemories(): Promise<MemoryForConsolidation[]> {
         createdAt: jkaiMemories.createdAt,
       })
       .from(jkaiMemories)
-      .where(and(isNull(jkaiMemories.supersededBy), isNull(jkaiMemories.consolidatedAt)))
+      .where(
+        and(
+          isNull(jkaiMemories.supersededBy),
+          isNull(jkaiMemories.consolidatedAt),
+          isDaydreamFindingMemory(),
+        ),
+      )
       // Oldest first drains an initial backlog predictably; new memories cannot
       // permanently push an older one outside the bounded nightly prompt.
       .orderBy(jkaiMemories.createdAt)
@@ -166,7 +177,7 @@ async function activeThemes(): Promise<ExistingMemoryTheme[]> {
       sourceCount: daydreamMemoryThemes.sourceCount,
     })
     .from(daydreamMemoryThemes)
-    .where(eq(daydreamMemoryThemes.status, 'active'))
+    .where(and(eq(daydreamMemoryThemes.status, 'active'), isDaydreamFindingTheme()))
     .orderBy(desc(daydreamMemoryThemes.sourceCount), desc(daydreamMemoryThemes.updatedAt))
     .limit(100);
 }
@@ -190,6 +201,11 @@ export async function runMemoryConsolidation(
     error: null,
   };
 
+  // This is also the one-time repair for rows written before the origin
+  // boundary existed. If it requeues a valid source from a contaminated theme,
+  // a scheduled run must not be suppressed by tonight's earlier audit row.
+  const scopeRepair = await repairDaydreamMemoryScope();
+
   const [previous] = await db
     .select({
       id: daydreamMemoryConsolidations.id,
@@ -199,7 +215,12 @@ export async function runMemoryConsolidation(
     .from(daydreamMemoryConsolidations)
     .where(eq(daydreamMemoryConsolidations.localDay, localDay))
     .limit(1);
-  if (previous?.status === 'completed' && !opts.allowRepeat) {
+  if (
+    previous?.status === 'completed' &&
+    !opts.allowRepeat &&
+    scopeRepair.memoriesRequeued === 0 &&
+    scopeRepair.originsBackfilled === 0
+  ) {
     return { ...empty, status: 'already_complete' };
   }
   if (previous?.status === 'running' && now.getTime() - previous.startedAt.getTime() < 30 * 60_000) {

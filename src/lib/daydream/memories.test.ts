@@ -11,7 +11,7 @@ import { PACK_LIMITS } from './ponder/pack';
 describe('memoryUse', () => {
   it('explains that raw detail waits for consolidation', () => {
     const { lines, binding } = memoryUse({
-      category: 'health', origin: 'elsewhere', verdict: null, consolidatedAt: null, themeIds: [],
+      category: 'health', origin: 'note', verdict: null, consolidatedAt: null, themeIds: [],
     });
     expect(lines[0].toLowerCase()).toContain('awaiting tonight');
     expect(lines[0]).toContain('stays out of ponder packs');
@@ -20,7 +20,7 @@ describe('memoryUse', () => {
 
   it('explains that a consolidated row becomes provenance, not prompt prose', () => {
     const { lines } = memoryUse({
-      category: 'health', origin: 'elsewhere', verdict: null,
+      category: 'health', origin: 'note', verdict: null,
       consolidatedAt: '2026-09-02T22:30:00Z', themeIds: ['theme-1'],
     });
     expect(lines[0]).toContain('source evidence');
@@ -36,13 +36,6 @@ describe('memoryUse', () => {
     expect(memoryUse({ ...rest, origin: 'ruling', verdict: 'verified' }).binding).toBe(false);
     expect(memoryUse({ ...rest, origin: 'ruling', verdict: 'uncertain' }).binding).toBe(false);
     expect(memoryUse({ ...rest, origin: 'note', verdict: null }).binding).toBe(false);
-  });
-
-  it('says what a named place additionally unlocks', () => {
-    const { lines } = memoryUse({
-      category: 'places', origin: 'place', verdict: null, consolidatedAt: 'now', themeIds: ['place-theme'],
-    });
-    expect(lines.some((l) => l.includes('un-mute'))).toBe(true);
   });
 });
 

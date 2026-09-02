@@ -2176,26 +2176,37 @@ export type CustomTool = typeof customTools.$inferSelect;
 // JKAI Memories
 // ==========================================
 
-export const jkaiMemories = pgTable('jkai_memories', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  category: text('category').notNull(), // people, preferences, places, health, devices, situations
-  content: text('content').notNull(),
-  sourceConversationId: text('source_conversation_id'),
-  confidence: text('confidence').notNull().default('high'), // high, medium
-  /**
-   * When the end-of-day Daydream pass last considered this raw observation.
-   *
-   * Null means it still rides in the ponder pack directly, so something the
-   * owner says at breakfast can shape a daydream before tonight. Once set, the
-   * raw sentence remains as provenance but its durable lesson/value theme is
-   * what future passes read. A reviewed memory with no theme is intentional:
-   * not every episode contains a reusable lesson.
-   */
-  consolidatedAt: timestamp('consolidated_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  supersededBy: text('superseded_by'),
-});
+export const jkaiMemories = pgTable(
+  'jkai_memories',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    category: text('category').notNull(), // people, preferences, places, health, devices, situations
+    content: text('content').notNull(),
+    sourceConversationId: text('source_conversation_id'),
+    confidence: text('confidence').notNull().default('high'), // high, medium
+    /**
+     * Why this shared-store row is eligible for Daydream's private learning
+     * loop. Null means it belongs to another part of jkai. The intentionally
+     * narrow vocabulary is 'ruling' | 'note': facts remembered by chat and
+     * named places may be useful elsewhere, but they are not Daydream findings.
+     */
+    daydreamOrigin: text('daydream_origin'),
+    /**
+     * When the end-of-day Daydream pass last considered this finding.
+     *
+     * Null means a Daydream ruling or note is still waiting for the nightly
+     * roll-up. Once set, the raw sentence remains as provenance but its durable
+     * lesson/value theme is what future passes read. A reviewed finding with no
+     * theme is intentional: not every episode contains a reusable lesson.
+     * Rows with no `daydreamOrigin` must never be read or marked by this loop.
+     */
+    consolidatedAt: timestamp('consolidated_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    supersededBy: text('superseded_by'),
+  },
+  (t) => [index('jkai_memories_daydream_pending_idx').on(t.daydreamOrigin, t.consolidatedAt, t.createdAt)],
+);
 
 export type JkaiMemory = typeof jkaiMemories.$inferSelect;
 
