@@ -31,6 +31,12 @@ function job(name: string): string {
 }
 
 describe('the prebuild/release split across two machines', () => {
+  it('uses the same structural gate entrypoint locally and in GitHub', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    expect(pkg.scripts.gate).toContain('./scripts/gate-structural.sh');
+    expect(job('level')).toContain('./scripts/gate-structural.sh');
+  });
+
   it('anything importing the built bundle runs in prebuild, which has node_modules', () => {
     expect(job('prebuild')).toContain('ci-prebuild.sh');
     expect(job('release')).not.toContain('ci-prebuild.sh');
@@ -80,6 +86,17 @@ describe('the prebuild/release split across two machines', () => {
 
   it('cancels superseded PR runs but never master releases', () => {
     expect(ci()).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
+  });
+
+  it('proves the exact public commit and automatically restores the previous release', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    expect(release).toContain('/api/version?expected=');
+    expect(release).toContain('wait_for_public_release "$SHA"');
+    expect(release).toContain('rollback_web_release');
+    expect(release).toContain('wait_for_public_release "$PREV_SHA"');
+    expect(release.indexOf('wait_for_public_release "$SHA"')).toBeLessThan(
+      release.indexOf('./scripts/ci-apply-sidecars.sh'),
+    );
   });
 });
 

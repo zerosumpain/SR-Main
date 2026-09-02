@@ -9,13 +9,13 @@
 #
 # Staging is separated from applying because restarting the builder kills the
 # `pi` process of any build in flight, with no resume. `jkai-builder-maintain.sh`
-# (the 60-second watchdog timer) picks the staged bundle up the moment nothing
-# is running. Deploys therefore never wait for a build, and builds are never
-# knocked over by a deploy.
+# (the 60-second watchdog timer) picks the candidate up only after ci-release.sh
+# has proved the matching web SHA publicly and activates its pointer. It then
+# waits until no build is running, so deploys do not knock builds over.
 #
-# Failing here must not fail the release: a stale sidecar is a much smaller
-# problem than a web deploy that did not happen. The caller runs this with `||
-# true` and the log carries the reason.
+# Failing here stops the release before the web symlink moves. The builder is
+# part of the candidate the PR proved; silently retaining a different version
+# would make the deployed set impossible to reproduce from the green artifact.
 set -euo pipefail
 
 VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
@@ -27,10 +27,10 @@ STAGE_DIR="$STAGE_ROOT/$SHA"
 # the release artifact. This script deliberately builds nothing: the release job
 # has no node_modules, because it no longer shares a workspace with the build.
 BUNDLE="packages/jkai-builder/dist/start.js"
-[ -f "$BUNDLE" ] || { echo "$BUNDLE missing — the release artifact did not carry it (did the prebuild step for 'build:builder' fail?)" >&2; exit 1; }
+[ -f "$BUNDLE" ] || { echo "$BUNDLE missing — the release artifact did not carry it (did 'build:release-sidecars' fail?)" >&2; exit 1; }
 
 # Same discipline as ci-prebuild.sh: a staged directory either exists complete
-# or does not exist, so the watchdog can never pick up a half-written bundle.
+# or does not exist, so activation can never point at a half-written bundle.
 echo "==> Staging $SHA..."
 mkdir -p "$STAGE_ROOT"
 rm -rf "$STAGE_DIR.partial"
@@ -39,11 +39,6 @@ cp "$BUNDLE" "$STAGE_DIR.partial/start.js"
 echo "$SHA" > "$STAGE_DIR.partial/sha"
 rm -rf "$STAGE_DIR"
 mv -T "$STAGE_DIR.partial" "$STAGE_DIR"
-
-# The pointer the watchdog reads. Swap it atomically too — it is read by a timer
-# that may fire in the middle of this.
-ln -sfn "$SHA" "$STAGE_ROOT/pending.tmp"
-mv -Tf "$STAGE_ROOT/pending.tmp" "$STAGE_ROOT/pending"
 
 # Keep the last few for a manual rollback; drop the rest. `-type d` matters:
 # `pending` is a symlink to one of these, and a glob would have listed it as a
@@ -67,7 +62,7 @@ UNIT
 sudo systemctl daemon-reload
 
 echo "==> Staged $SHA at $STAGE_DIR"
-echo "    Not live yet — the watchdog applies it within ~60s of the last build finishing."
+echo "    Inert until ci-release.sh proves the matching web SHA publicly and activates it."
 if [ -f "$VPS_DIR/packages/jkai-builder/dist/start.js" ] &&
    cmp -s "$BUNDLE" "$VPS_DIR/packages/jkai-builder/dist/start.js"; then
   echo "    (identical to what is already running — nothing will change)"

@@ -74,8 +74,15 @@ describe('ci-deploy-sidecars manifest', () => {
     expect(end, 'release job not found in ci.yml — renamed?').toBeGreaterThan(start);
 
     const prebuild = ci.slice(start, end);
+    expect(prebuild).toContain('npm run build:release-sidecars');
+    const releaseSidecars = readFileSync(join(ROOT, 'scripts/build-release-sidecars.sh'), 'utf8');
+    for (const script of ['build:builder', 'build:codex-bridge', 'build:wa-worker']) {
+      expect(releaseSidecars, `${script}: missing from the coherent release candidate`).toContain(
+        `npm run ${script}`,
+      );
+    }
     for (const e of entries) {
-      expect(prebuild, `${e.name}: not built in the prebuild job`).toContain(`npm run ${e.script}`);
+      expect(releaseSidecars, `${e.name}: not built by the shared release-sidecar command`).toContain(`npm run ${e.script}`);
     }
 
     // Comment lines are stripped first: the script's header explains the very
@@ -122,6 +129,15 @@ describe('ci-deploy-sidecars manifest', () => {
     expect(stageBuilder, 'stage the builder sidecar before the release').toBeLessThan(release);
   });
 
+  it('does not make the builder candidate eligible until the web SHA is public', () => {
+    const stage = readFileSync(join(ROOT, 'scripts/ci-stage-builder.sh'), 'utf8');
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    expect(stage).not.toContain('pending.tmp');
+    expect(release.indexOf('wait_for_public_release "$SHA"')).toBeLessThan(
+      release.indexOf('builder-releases/pending.tmp'),
+    );
+  });
+
   it('the stage script never restarts a service — that is the apply half\'s job', () => {
     const stage = readFileSync(SCRIPT, 'utf8');
     expect(stage).not.toMatch(/systemctl (restart|start)\b/);
@@ -132,12 +148,20 @@ describe('ci-deploy-sidecars manifest', () => {
     expect(apply).not.toMatch(/npm run/);
   });
 
-  it.each(['scripts/ci-stage-sidecars.sh', 'scripts/ci-apply-sidecars.sh'])(
-    '%s exits 0 even on failure, so a sidecar cannot fail the web release',
-    (rel) => {
-      expect(readFileSync(join(ROOT, rel), 'utf8')).toMatch(/exit 0\s*$/);
-    },
-  );
+  it('staging fails when the candidate is incomplete', () => {
+    const stage = readFileSync(join(ROOT, 'scripts/ci-stage-sidecars.sh'), 'utf8');
+    expect(stage).toContain('refusing to deploy a mixed-version candidate');
+    expect(stage).not.toMatch(/exit 0\s*$/);
+    const workflow = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+    expect(workflow).not.toContain('ci-stage-sidecars.sh ||');
+    expect(workflow).not.toContain('ci-stage-builder.sh ||');
+  });
+
+  it('runtime apply remains recoverable and non-fatal after restoring a failed service', () => {
+    const apply = readFileSync(join(ROOT, 'scripts/ci-apply-sidecars.sh'), 'utf8');
+    expect(apply).toMatch(/exit 0\s*$/);
+    expect(apply).toContain('rolling back');
+  });
 });
 
 describe('the manifest parser itself', () => {

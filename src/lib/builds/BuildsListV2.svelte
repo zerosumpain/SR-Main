@@ -38,7 +38,7 @@
   let openMenuId = $state<string | null>(null);
   let filter = $state<
     | 'all' | 'running' | 'queued' | 'paused' | 'awaiting'
-    | 'delivered' | 'capped' | 'stopped' | 'registered' | 'failed' | 'unknown'
+    | 'delivered' | 'proposed' | 'capped' | 'stopped' | 'registered' | 'failed' | 'unknown'
     | 'published' | 'chat'
   >('all');
   let toast = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -67,7 +67,7 @@
     const c: Record<string, number> = {
       all: builds.length,
       running: 0, queued: 0, paused: 0, awaiting: 0, failed: 0,
-      delivered: 0, capped: 0, stopped: 0, registered: 0, unknown: 0,
+      delivered: 0, proposed: 0, capped: 0, stopped: 0, registered: 0, unknown: 0,
       published: builds.filter((b) => b.publishedSlug).length,
       chat: builds.filter((b) => isChatOrigin(b.origin)).length,
     };
@@ -280,6 +280,10 @@
         <div class="stat-lbl">delivered</div>
       </div>
       <div class="stat">
+        <div class="stat-val">{cnt.proposed}</div>
+        <div class="stat-lbl">PR open</div>
+      </div>
+      <div class="stat">
         <div class="stat-val">{cnt.published}</div>
         <div class="stat-lbl">published</div>
       </div>
@@ -297,6 +301,7 @@
           <span>lane</span>
           <span>ran</span>
           <span>delivered</span>
+          <span>PR open</span>
           <span>median iters</span>
           <span>hit cap</span>
           <span>stopped</span>
@@ -311,6 +316,7 @@
               {l.successRate === null ? '—' : `${l.successRate}%`}<span class="lane-of">
                 {l.delivered}</span>
             </span>
+            <span class="lane-n lane-quiet">{l.proposed || '—'}</span>
             <span class="lane-n lane-key">{l.medianIterations === null ? '—' : l.medianIterations}</span>
             <span class="lane-n lane-quiet">{l.capped || '—'}</span>
             <span class="lane-n lane-quiet">{l.stopped || '—'}</span>
@@ -339,6 +345,7 @@
         { k: 'awaiting', label: 'Awaiting' },
         { k: 'paused', label: 'Paused' },
         { k: 'delivered', label: 'Delivered' },
+        { k: 'proposed', label: 'PR open' },
         { k: 'capped', label: 'Hit cap' },
         { k: 'stopped', label: 'Stopped' },
         { k: 'failed', label: 'Failed' },
@@ -669,7 +676,7 @@
   /* ——— Stats ——— */
   .stats {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 1px;
     background: var(--card-border);
     border: 1px solid var(--card-border);
@@ -714,12 +721,12 @@
   }
   .lane {
     display: grid;
-    grid-template-columns: 6rem repeat(7, minmax(4.5rem, 1fr));
+    grid-template-columns: 6rem repeat(8, minmax(4.5rem, 1fr));
     gap: 0.7rem;
     align-items: baseline;
     background: var(--card-bg);
     padding: 0.6rem 0.85rem;
-    min-width: 44rem;
+    min-width: 50rem;
   }
   .lane-hd span {
     font-family: var(--font-mono);
@@ -1061,6 +1068,7 @@
   .status-pill[data-status="failed"] { border-color: #b43232; color: #b43232; }
   .status-pill[data-status="paused"] { border-color: var(--text-muted); color: var(--text-muted); }
   .status-pill[data-status="delivered"] { border-color: var(--status-success, #2d7d46); color: var(--status-success, #2d7d46); }
+  .status-pill[data-status="proposed"] { border-color: var(--accent); color: var(--accent); }
   /* Not failures, but not deliveries either — muted, and never green. */
   .status-pill[data-status="capped"] { border-color: #b48a32; color: #b48a32; }
   .status-pill[data-status="stopped"] { border-color: var(--text-muted); color: var(--text-muted); }
@@ -1124,6 +1132,7 @@
   .status-dot[data-status="paused"] { background: var(--text-muted); }
   .status-dot[data-status="awaiting"] { background: var(--accent); }
   .status-dot[data-status="delivered"] { background: var(--status-success, #2d7d46); }
+  .status-dot[data-status="proposed"] { background: var(--accent); }
   .status-dot[data-status="capped"] { background: #b48a32; }
   .status-dot[data-status="stopped"] { background: var(--text-muted); opacity: 0.5; }
   .status-dot[data-status="registered"] { background: var(--text-muted); opacity: 0.35; }

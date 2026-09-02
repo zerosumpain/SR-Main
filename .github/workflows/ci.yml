@@ -130,7 +130,7 @@ jobs:
       # preinstalled Node is enough. That is what makes an L1 gate ~25s instead
       # of ~40s, and it is a constraint on anything added to this line: give one
       # of them a dependency and it silently drops out of the L1 gate. They ran
-      # on Node 22 before this split and run on the image default now; all four
+      # on Node 22 before this split and run on the image default now; all five
       # only read files and compare strings, and any incompatibility would be a
       # loud red gate rather than a silent pass.
       #
@@ -139,12 +139,7 @@ jobs:
       # schema.ts and a drizzle push that fails while the release reports success
       # only ever ran on a laptop. Added 2026-08-27.
       - name: Lint gates
-        run: |
-          npm run gate:public-routes &&
-          npm run gate:font-sizes &&
-          npm run gate:measure &&
-          npm run gate:schema-imports &&
-          npm run gate:boundaries
+        run: ./scripts/gate-structural.sh
 
       # A squash merge has a new commit SHA but, when it contains exactly the
       # gated PR content, the same Git TREE. Find a candidate by that immutable
@@ -390,10 +385,7 @@ jobs:
         run: ./scripts/ci-prebuild.sh
 
       - name: Build candidate sidecars
-        run: |
-          npm run build:builder      || echo "::warning::build:builder failed — the previous jkai-builder bundle stays live"
-          npm run build:codex-bridge || echo "::warning::build:codex-bridge failed — the previous bundle stays live"
-          npm run build:wa-worker    || echo "::warning::build:wa-worker failed — the previous bundle stays live"
+        run: npm run build:release-sidecars
 
       - name: Identify source tree
         id: source
@@ -599,16 +591,11 @@ jobs:
       # node_modules. The staging scripts on the VPS consume these instead of
       # building their own.
       #
-      # A sidecar that fails to build must not block the web release: the
-      # staging scripts warn and keep the previous bundle live, which is the
-      # tolerance they have always had. Failing the whole job here would be
-      # stricter than the behaviour this replaces.
+      # A release candidate is one coherent set. Retaining an older sidecar
+      # here would make the artifact a combination that no gate ever tested.
       - name: Build the sidecar bundles
         if: steps.promote.outputs.promoted != 'true'
-        run: |
-          npm run build:builder      || echo "::warning::build:builder failed — the previous jkai-builder bundle stays live"
-          npm run build:codex-bridge || echo "::warning::build:codex-bridge failed — the previous bundle stays live"
-          npm run build:wa-worker    || echo "::warning::build:wa-worker failed — the previous bundle stays live"
+        run: npm run build:release-sidecars
 
       # One artifact carries everything the VPS needs. Deliberately routed
       # through GitHub rather than rsynced porkserv -> VPS: it keeps the number
@@ -703,14 +690,13 @@ jobs:
       # it. Ordering is pinned by tests/scripts/ci-sidecars.test.ts.
       #
       # They build nothing — the bundles arrived in the release artifact, and
-      # this job has no node_modules. A failure still must not fail the ship: a
-      # stale sidecar is a far smaller problem than a web release that did not
-      # happen, and apply skips whatever has no staged directory.
-      - name: Stage the jkai-builder sidecar
-        run: ./scripts/ci-stage-builder.sh || echo "::warning::staging the jkai-builder sidecar failed — it will keep running the previous bundle"
-
+      # this job has no node_modules. Staging is strict: a candidate missing a
+      # promised bundle must stop before the web symlink moves.
       - name: Stage the systemd sidecars
-        run: ./scripts/ci-stage-sidecars.sh || echo "::warning::staging the systemd sidecars failed — they will keep running the previous bundle"
+        run: ./scripts/ci-stage-sidecars.sh
+
+      - name: Stage the jkai-builder sidecar
+        run: ./scripts/ci-stage-builder.sh
 
       - name: Release
         run: ./scripts/ci-release.sh

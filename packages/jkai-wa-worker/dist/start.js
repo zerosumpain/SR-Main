@@ -632,19 +632,19 @@ var init_registry = __esm({
           let score = 0;
           const type = def3.type.toLowerCase();
           const label2 = def3.label.toLowerCase();
-          const desc37 = def3.description.toLowerCase();
+          const desc40 = def3.description.toLowerCase();
           const llmDesc = (def3.llmDescription || "").toLowerCase();
           if (type === q) score += 100;
           if (type.includes(q)) score += 50;
           if (label2.includes(q)) score += 40;
-          if (desc37.includes(q)) score += 20;
+          if (desc40.includes(q)) score += 20;
           if (llmDesc.includes(q)) score += 10;
           const words = q.split(/\s+/);
           for (const word of words) {
             if (word.length < 2) continue;
             if (type.includes(word)) score += 15;
             if (label2.includes(word)) score += 12;
-            if (desc37.includes(word)) score += 8;
+            if (desc40.includes(word)) score += 8;
             if (llmDesc.includes(word)) score += 5;
           }
           return { def: def3, score };
@@ -787,8 +787,12 @@ __export(schema_exports, {
   appleHealthMetrics: () => appleHealthMetrics,
   biomeConfig: () => biomeConfig,
   blogAssistantMessages: () => blogAssistantMessages,
+  blogChecklistItems: () => blogChecklistItems,
+  blogComments: () => blogComments,
+  blogMedia: () => blogMedia,
   blogPostRevisions: () => blogPostRevisions,
   blogPostTags: () => blogPostTags,
+  blogPostViews: () => blogPostViews,
   blogPosts: () => blogPosts,
   buildWorkflowSubscriptions: () => buildWorkflowSubscriptions,
   channels: () => channels,
@@ -806,11 +810,24 @@ __export(schema_exports, {
   datastoreAuditLog: () => datastoreAuditLog,
   datastoreCollections: () => datastoreCollections,
   datastoreRecords: () => datastoreRecords,
+  daydreamCalendarExclusions: () => daydreamCalendarExclusions,
   daydreamDayFeatures: () => daydreamDayFeatures,
+  daydreamDigests: () => daydreamDigests,
   daydreamHypotheses: () => daydreamHypotheses,
+  daydreamLeadSteps: () => daydreamLeadSteps,
+  daydreamLeads: () => daydreamLeads,
+  daydreamMemoryConsolidations: () => daydreamMemoryConsolidations,
+  daydreamMemoryThemeSources: () => daydreamMemoryThemeSources,
+  daydreamMemoryThemes: () => daydreamMemoryThemes,
+  daydreamNotebook: () => daydreamNotebook,
+  daydreamNotebookActions: () => daydreamNotebookActions,
+  daydreamObservations: () => daydreamObservations,
   daydreamOffers: () => daydreamOffers,
   daydreamPlaces: () => daydreamPlaces,
   daydreamRules: () => daydreamRules,
+  daydreamSignals: () => daydreamSignals,
+  daydreamSpend: () => daydreamSpend,
+  daydreamSteers: () => daydreamSteers,
   daydreamThoughts: () => daydreamThoughts,
   daydreamTrail: () => daydreamTrail,
   deckShares: () => deckShares,
@@ -823,6 +840,10 @@ __export(schema_exports, {
   fileEmbeddings: () => fileEmbeddings,
   fileShareTokens: () => fileShareTokens,
   forgeSchedules: () => forgeSchedules,
+  geoCaptureEvents: () => geoCaptureEvents,
+  geoClaims: () => geoClaims,
+  geoDailySnapshot: () => geoDailySnapshot,
+  geoTileState: () => geoTileState,
   globalEntities: () => globalEntities,
   globalEntityLinks: () => globalEntityLinks,
   gmailAccounts: () => gmailAccounts,
@@ -848,10 +869,12 @@ __export(schema_exports, {
   intelExplorations: () => intelExplorations,
   intelInsights: () => intelInsights,
   intelLenses: () => intelLenses,
+  intelMatchDecisions: () => intelMatchDecisions,
   intelNoteEntities: () => intelNoteEntities,
   intelNotes: () => intelNotes,
   intelRelationships: () => intelRelationships,
   intelTimelineEvents: () => intelTimelineEvents,
+  intelTypeSuggestionDismissals: () => intelTypeSuggestionDismissals,
   jkaiAttachments: () => jkaiAttachments,
   jkaiBuildEvents: () => jkaiBuildEvents,
   jkaiBuildNotes: () => jkaiBuildNotes,
@@ -863,6 +886,7 @@ __export(schema_exports, {
   jkaiToolTraces: () => jkaiToolTraces,
   keystoneIntel: () => keystoneIntel,
   keystoneIntelRuns: () => keystoneIntelRuns,
+  mailEmbeddings: () => mailEmbeddings,
   narrativeItems: () => narrativeItems,
   nodeExecutions: () => nodeExecutions,
   oauthTokens: () => oauthTokens,
@@ -932,7 +956,7 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-var vector, blogPosts, blogPostTags, blogAssistantMessages, blogPostRevisions, oauthTokens, stravaActivities, whoopWorkouts, whoopSleep, whoopRecovery, whoopCycles, healthSyncState, healthSyncJobs, appleHealthMetrics, activities, activityTracks, activitySeries, activitySegments, activitySegmentEfforts, plannedRoutes, routeWaypoints, biomeConfig, heroTitles, researchSessions, sources, facts, sourceChunks, researchLeads, entities, entityMentions, relationships, globalEntities, globalEntityLinks, narrativeItems, agentTasks, agentActions, agentActivity, agentSettings, jkaiBuilds, projectVisibility, allowedUser, projectShares, decks, deckSlides, deckShares, jkaiBuildEvents, buildWorkflowSubscriptions, pendingWorkflowDeliveries, jkaiIterations, jkaiLogs, jkaiBuildPendingMessages, jkaiBuildNotes, workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions, workflowAuditLog, workflowSchedules, integrations, conversations, orchestratorChats, jkaiToolTraces, jkaiAttachments, workflowDataStore, whatsappConfig, channels, homeAssistantConfig, promptCache, customTools, jkaiMemories, quickAnswers, synthesisRuns, intelExplorations, appSettings, openrouterModels, intelEntityTypes, intelNotes, intelEntities, intelRelationships, ragCollections, ragMessages, intelNoteEntities, intelTimelineEvents, intelAlerts, scraperCredentials, scraperRunLog, intelInsights, intelLenses, intelDossiers, intelDossierItems, intelCommissions, intelEntityMerges, intelCategories, driveFolderSettings, gmailAccounts, gmailWatches, gmailHistoryCursors, workflowInteractions, scraperTargetKnowledge, workflowFiles, fileShareTokens, fileEmbeddings, webdavCredentials, heartbeatActions, heartbeatPulses, scheduledCallbacks, integrationCredentials, integrationOauthConfigs, apiSecrets, pushSubscriptions, forgeSchedules, policyIndicatorSnapshots, standardRegistryEntries, standardRegistrySourceRuns, keystoneIntel, keystoneIntelRuns, spaceLanderSessions, spaceLanderScores, claudeSessions, claudeSessionStages, releases, releaseItems, datastoreCollections, datastoreRecords, datastoreAuditLog, codegraphNodes, codegraphEdges, codegraphEpisodes, codegraphLessons, codegraphNodeLessons, codegraphNodeEpisodes, codegraphQueries, daydreamTrail, daydreamPlaces, daydreamDayFeatures, daydreamHypotheses, daydreamThoughts, daydreamOffers, daydreamRules;
+var vector, blogPosts, blogPostTags, blogAssistantMessages, blogPostRevisions, blogComments, blogPostViews, blogChecklistItems, blogMedia, oauthTokens, stravaActivities, whoopWorkouts, whoopSleep, whoopRecovery, whoopCycles, healthSyncState, healthSyncJobs, appleHealthMetrics, activities, activityTracks, activitySeries, activitySegments, activitySegmentEfforts, plannedRoutes, routeWaypoints, biomeConfig, heroTitles, researchSessions, sources, facts, sourceChunks, researchLeads, entities, entityMentions, relationships, globalEntities, globalEntityLinks, narrativeItems, agentTasks, agentActions, agentActivity, agentSettings, jkaiBuilds, projectVisibility, allowedUser, projectShares, decks, deckSlides, deckShares, jkaiBuildEvents, buildWorkflowSubscriptions, pendingWorkflowDeliveries, jkaiIterations, jkaiLogs, jkaiBuildPendingMessages, jkaiBuildNotes, workflows, workflowNodes, workflowEdges, workflowRuns, nodeExecutions, workflowAuditLog, workflowSchedules, integrations, conversations, orchestratorChats, jkaiToolTraces, jkaiAttachments, workflowDataStore, whatsappConfig, channels, homeAssistantConfig, promptCache, customTools, jkaiMemories, daydreamMemoryThemes, daydreamMemoryThemeSources, daydreamMemoryConsolidations, quickAnswers, synthesisRuns, intelExplorations, appSettings, openrouterModels, intelEntityTypes, intelNotes, intelEntities, intelRelationships, ragCollections, ragMessages, intelNoteEntities, intelTimelineEvents, intelAlerts, scraperCredentials, scraperRunLog, intelInsights, intelLenses, intelDossiers, intelDossierItems, intelCommissions, intelEntityMerges, intelMatchDecisions, intelTypeSuggestionDismissals, intelCategories, driveFolderSettings, gmailAccounts, gmailWatches, gmailHistoryCursors, workflowInteractions, scraperTargetKnowledge, workflowFiles, fileShareTokens, fileEmbeddings, mailEmbeddings, webdavCredentials, heartbeatActions, heartbeatPulses, scheduledCallbacks, integrationCredentials, integrationOauthConfigs, apiSecrets, pushSubscriptions, forgeSchedules, policyIndicatorSnapshots, standardRegistryEntries, standardRegistrySourceRuns, keystoneIntel, keystoneIntelRuns, spaceLanderSessions, spaceLanderScores, claudeSessions, claudeSessionStages, releases, releaseItems, datastoreCollections, datastoreRecords, datastoreAuditLog, codegraphNodes, codegraphEdges, codegraphEpisodes, codegraphLessons, codegraphNodeLessons, codegraphNodeEpisodes, codegraphQueries, daydreamTrail, daydreamPlaces, daydreamSignals, daydreamObservations, daydreamDayFeatures, daydreamHypotheses, daydreamSteers, daydreamDigests, daydreamSpend, daydreamLeads, daydreamCalendarExclusions, daydreamLeadSteps, daydreamThoughts, daydreamNotebook, daydreamNotebookActions, daydreamOffers, daydreamRules, geoClaims, geoCaptureEvents, geoTileState, geoDailySnapshot;
 var init_schema = __esm({
   "src/lib/db/schema.ts"() {
     "use strict";
@@ -957,6 +981,12 @@ var init_schema = __esm({
       coverImageUrl: text("cover_image_url"),
       coverImageAlt: text("cover_image_alt"),
       contentFormat: text("content_format").default("html").notNull(),
+      // Which reading face the post's body copy is set in. The vocabulary lives in
+      // $lib/blog/fonts (NOT here — this file must have no $lib imports at all) and
+      // resolves to a --font-* custom property, so a value that is not in the
+      // vocabulary renders as the site default rather than as an arbitrary font.
+      // Defaults to 'read', the self-hosted Selawik / Segoe UI stack jkai uses.
+      bodyFont: text("body_font").notNull().default("read"),
       // Who actually wrote the prose. Load-bearing for the voice system: only
       // 'human' posts may seed the Voice Card or supply exemplars. Feeding
       // generated text back into the corpus is model collapse in miniature —
@@ -992,8 +1022,133 @@ var init_schema = __esm({
       previousValue: text("previous_value").notNull(),
       // raw text or JSON-encoded
       reason: text("reason"),
+      // What captured this revision: 'assistant' (a proposal being applied),
+      // 'autosave' (a periodic editor snapshot) or 'manual' (an explicit save).
+      // Defaults to 'assistant' so every row that existed before autosave shipped
+      // keeps its original meaning rather than being silently reclassified.
+      source: text("source").notNull().default("assistant"),
       createdAt: timestamp("created_at").defaultNow().notNull()
     });
+    blogComments = pgTable(
+      "blog_comments",
+      {
+        id: serial("id").primaryKey(),
+        postId: integer("post_id").notNull().references(() => blogPosts.id, { onDelete: "cascade" }),
+        // One level of threading only. A reply to a reply attaches to the same
+        // parent, so the render is always two levels deep and can never need a
+        // recursive query.
+        parentId: integer("parent_id"),
+        authorName: text("author_name").notNull(),
+        body: text("body").notNull(),
+        // 'held' | 'published' | 'spam' | 'deleted'
+        status: text("status").notNull().default("held"),
+        // Salted SHA-256 of the client address. NOT reversible, never returned by
+        // any endpoint, and salted with a server secret so a rainbow table over the
+        // IPv4 space cannot undo it.
+        authorHash: text("author_hash"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        moderatedAt: timestamp("moderated_at", { withTimezone: true })
+      },
+      (t) => [
+        // The public read: published comments for one post, oldest first.
+        index("blog_comments_post_status_idx").on(t.postId, t.status, t.createdAt),
+        // The moderation queue reads across all posts by age.
+        index("blog_comments_status_created_idx").on(t.status, t.createdAt),
+        // Rate limiting asks "how many from this address in the last hour".
+        index("blog_comments_author_created_idx").on(t.authorHash, t.createdAt)
+      ]
+    );
+    blogPostViews = pgTable(
+      "blog_post_views",
+      {
+        id: serial("id").primaryKey(),
+        postId: integer("post_id").notNull().references(() => blogPosts.id, { onDelete: "cascade" }),
+        sessionId: text("session_id").notNull(),
+        // Milliseconds the tab was VISIBLE with this article open. Hidden tabs do
+        // not accumulate — a post left open in a background tab overnight would
+        // otherwise report a fourteen-hour read and poison every average.
+        dwellMs: integer("dwell_ms").notNull().default(0),
+        // Deepest scroll reached, 0-100.
+        maxScrollPct: integer("max_scroll_pct").notNull().default(0),
+        // True once the end of the article body has been on screen.
+        completed: boolean("completed").notNull().default(false),
+        // HOST ONLY, never the full URL. A full referrer carries search terms and
+        // path-embedded identifiers; the host answers "where did they come from"
+        // without collecting any of that.
+        referrerHost: text("referrer_host"),
+        // 'mobile' | 'tablet' | 'desktop', from viewport width at first beacon.
+        deviceClass: text("device_class"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        // The upsert target. One read = one row.
+        uniqueIndex("blog_post_views_post_session_idx").on(t.postId, t.sessionId),
+        // Every admin query is "this post, this window".
+        index("blog_post_views_post_created_idx").on(t.postId, t.createdAt),
+        index("blog_post_views_referrer_idx").on(t.postId, t.referrerHost)
+      ]
+    );
+    blogChecklistItems = pgTable(
+      "blog_checklist_items",
+      {
+        id: serial("id").primaryKey(),
+        postId: integer("post_id").notNull().references(() => blogPosts.id, { onDelete: "cascade" }),
+        // 'claim' | 'link' | 'readability' | 'meta' | 'alt-text' | 'voice' | 'consistency'
+        kind: text("kind").notNull(),
+        // 'blocker' | 'review' | 'nit'. Only 'blocker' stops the publish gate, and
+        // only the deterministic checks may raise one — a model's opinion is never
+        // a blocker.
+        severity: text("severity").notNull().default("review"),
+        title: text("title").notNull(),
+        detail: text("detail").notNull(),
+        // The exact snippet in the post this is about, so the UI can scroll to it.
+        anchorText: text("anchor_text"),
+        anchorHash: text("anchor_hash").notNull(),
+        // [{ url, title, snippet, stance: 'supports' | 'contradicts' | 'unclear' }]
+        evidence: jsonb("evidence"),
+        // 'open' | 'resolved' | 'dismissed'
+        status: text("status").notNull().default("open"),
+        // Which run raised it. Lets a sweep retire items from a superseded run
+        // without touching anything the author has since acted on.
+        runId: text("run_id"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+        resolvedAt: timestamp("resolved_at", { withTimezone: true })
+      },
+      (t) => [
+        // The idempotency key. A re-run updates in place.
+        uniqueIndex("blog_checklist_post_anchor_kind_idx").on(t.postId, t.anchorHash, t.kind),
+        // The panel reads open items for one post by severity.
+        index("blog_checklist_post_status_idx").on(t.postId, t.status, t.severity)
+      ]
+    );
+    blogMedia = pgTable(
+      "blog_media",
+      {
+        id: serial("id").primaryKey(),
+        postId: integer("post_id").notNull().references(() => blogPosts.id, { onDelete: "cascade" }),
+        filename: text("filename").notNull(),
+        // The public path, `/api/blog/images/<postId>/<filename>`. Stored rather
+        // than recomputed so a future change to the serving route cannot silently
+        // orphan every existing reference.
+        url: text("url").notNull(),
+        mimeType: text("mime_type").notNull(),
+        bytes: integer("bytes").notNull(),
+        width: integer("width"),
+        height: integer("height"),
+        // The last alt text the author used for this asset. Offered as the default
+        // the next time the same image is inserted — alt-text coverage is a
+        // publish-gate check, and the cheapest way to raise it is to stop asking
+        // the same question twice.
+        altText: text("alt_text"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("blog_media_post_filename_idx").on(t.postId, t.filename),
+        index("blog_media_post_created_idx").on(t.postId, t.createdAt)
+      ]
+    );
     oauthTokens = pgTable("oauth_tokens", {
       id: serial("id").primaryKey(),
       service: text("service").notNull(),
@@ -1764,13 +1919,13 @@ var init_schema = __esm({
       prompt: text("prompt").notNull(),
       status: text("status").notNull().default("pending"),
       // Why the build stopped, as distinct from `status`. `completed` is claimed
-      // by three endings that are not the same thing: the builder delivered, it
-      // ran out of budget, or someone stopped it — plus chat registrations that
+      // by endings that are not the same thing: the builder delivered, proposed a
+      // PR, ran out of budget, or someone stopped it — plus chat registrations that
       // file `completed` before a file exists. Counting them together reported 61%
       // success where 43% was delivered. A separate nullable column rather than new
       // statuses, because ten consumers read `status === 'completed'` to mean
       // "terminal" and a new status would render a capped build as still running.
-      // 'delivered' | 'budget_cap' | 'stopped_by_user' | 'registered' — see
+      // 'delivered' | 'pr_open' | 'budget_cap' | 'stopped_by_user' | 'registered' — see
       // $lib/builds/build-status.ts. Null on rows written before this existed.
       outcome: text("outcome"),
       budgetConfig: jsonb("budget_config").notNull().default(sql`'{}'::jsonb`),
@@ -2036,7 +2191,12 @@ var init_schema = __esm({
       type: text("type").notNull(),
       content: text("content").notNull(),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-    });
+    }, (t) => [
+      // The build log view reads one build's lines oldest-first and polls while the
+      // build runs. Without this it re-scanned all 21.5k rows (1,034 buffers) per
+      // poll to find the few hundred that belong to the open build.
+      index("jkai_logs_build_idx").on(t.buildId, t.createdAt)
+    ]);
     jkaiBuildPendingMessages = pgTable("jkai_build_pending_messages", {
       id: serial("id").primaryKey(),
       buildId: text("build_id").notNull().references(() => jkaiBuilds.id, { onDelete: "cascade" }),
@@ -2122,7 +2282,16 @@ var init_schema = __esm({
        * paths and only read by the worker. Scheduled runs leave it null ({}).
        */
       inputData: jsonb("input_data")
-    });
+    }, (t) => [
+      // 44k rows and, until now, nothing but the primary key. Twenty-two call sites
+      // filter by workflow_id and twenty-three order by started_at, so every one of
+      // them was a sequential scan of the whole table.
+      index("workflow_runs_workflow_idx").on(t.workflowId, t.startedAt),
+      // The hub layout load runs `count(*) FILTER (WHERE status = ...)` on EVERY
+      // /jkai navigation. Measured before this index: 25ms, 1,095 buffers, growing
+      // with every run the engine has ever made.
+      index("workflow_runs_status_idx").on(t.status, t.startedAt)
+    ]);
     nodeExecutions = pgTable("node_executions", {
       id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
       runId: text("run_id").notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
@@ -2147,7 +2316,16 @@ var init_schema = __esm({
       provider: text("provider"),
       model: text("model"),
       priceSnapshot: jsonb("price_snapshot")
-    });
+    }, (t) => [
+      // The big one. 356k rows / 2.5GB with only a primary key, read by run-worker,
+      // engine-resume, the canvas run views, the doctor and the monitors — every one
+      // of them by run_id. Measured before this index: a parallel sequential scan of
+      // 26,287 buffers (~205MB of I/O) and 89ms to return two rows.
+      index("node_executions_run_idx").on(t.runId),
+      // "How did this node do recently" — the canvas node inspector and the
+      // recent-executions/latest-execution endpoints.
+      index("node_executions_node_idx").on(t.nodeId, t.startedAt)
+    ]);
     workflowAuditLog = pgTable(
       "workflow_audit_log",
       {
@@ -2220,7 +2398,22 @@ var init_schema = __esm({
       // frozen because price_snapshot and the cost ledger are pinned to it, and a
       // thinking level changes neither. Mid-thread is exactly when you want it —
       // the answer that came back thin is the reason to turn it up.
-      thinkingLevel: text("thinking_level")
+      thinkingLevel: text("thinking_level"),
+      // Whether the model above was CHOSEN by the owner in the picker, as opposed to
+      // stamped from the site default when the thread was opened.
+      //
+      // Every thread carries a model — `POST /api/jkai/conversations` writes
+      // `resolveDefaultModel()` when the composer sends none — so "the thread's
+      // model" on its own cannot tell a deliberate pin from a default that happened
+      // to be current that day. That distinction is what decides whether the rest of
+      // the session follows the thread: a pin means "run everything on this", while
+      // a stamped default should keep letting each role resolve the LIVE site
+      // default, so an old thread resumed months later does not drag a stale model
+      // into its builds and its OCR.
+      //
+      // Set true by the PATCH that changes the model, and by a create whose body
+      // named one. Never set by the default path.
+      modelPinnedByUser: boolean("model_pinned_by_user").notNull().default(false)
     });
     orchestratorChats = pgTable("orchestrator_chats", {
       id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
@@ -2351,18 +2544,109 @@ var init_schema = __esm({
       // existing rows backfill correctly.
       createdBy: text("created_by").notNull().default("orchestrator")
     });
-    jkaiMemories = pgTable("jkai_memories", {
-      id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-      category: text("category").notNull(),
-      // people, preferences, places, health, devices, situations
-      content: text("content").notNull(),
-      sourceConversationId: text("source_conversation_id"),
-      confidence: text("confidence").notNull().default("high"),
-      // high, medium
-      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-      supersededBy: text("superseded_by")
-    });
+    jkaiMemories = pgTable(
+      "jkai_memories",
+      {
+        id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+        category: text("category").notNull(),
+        // people, preferences, places, health, devices, situations
+        content: text("content").notNull(),
+        sourceConversationId: text("source_conversation_id"),
+        confidence: text("confidence").notNull().default("high"),
+        // high, medium
+        /**
+         * Why this shared-store row is eligible for Daydream's private learning
+         * loop. Null means it belongs to another part of jkai. The intentionally
+         * narrow vocabulary is 'ruling' | 'note': facts remembered by chat and
+         * named places may be useful elsewhere, but they are not Daydream findings.
+         */
+        daydreamOrigin: text("daydream_origin"),
+        /**
+         * When the end-of-day Daydream pass last considered this finding.
+         *
+         * Null means a Daydream ruling or note is still waiting for the nightly
+         * roll-up. Once set, the raw sentence remains as provenance but its durable
+         * lesson/value theme is what future passes read. A reviewed finding with no
+         * theme is intentional: not every episode contains a reusable lesson.
+         * Rows with no `daydreamOrigin` must never be read or marked by this loop.
+         */
+        consolidatedAt: timestamp("consolidated_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+        supersededBy: text("superseded_by")
+      },
+      (t) => [index("jkai_memories_daydream_pending_idx").on(t.daydreamOrigin, t.consolidatedAt, t.createdAt)]
+    );
+    daydreamMemoryThemes = pgTable(
+      "daydream_memory_themes",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        /** Stable model-independent identity for incremental consolidation. */
+        slug: text("slug").notNull(),
+        /** 'lesson' | 'value' */
+        kind: text("kind").notNull(),
+        title: text("title").notNull(),
+        /** The generalised principle, stripped of one thought's incidental detail. */
+        statement: text("statement").notNull(),
+        /** How the principle should affect a future daydream when relevant. */
+        guidance: text("guidance").notNull(),
+        /** 'high' | 'medium' — uncertainty survives the roll-up. */
+        confidence: text("confidence").notNull().default("medium"),
+        /** 'active' | 'retired'. Retired themes remain resolvable as old evidence. */
+        status: text("status").notNull().default("active"),
+        /** Recomputed from the source-link table after every consolidation. */
+        sourceCount: integer("source_count").notNull().default(0),
+        firstObservedAt: timestamp("first_observed_at", { withTimezone: true }).notNull().defaultNow(),
+        lastObservedAt: timestamp("last_observed_at", { withTimezone: true }).notNull().defaultNow(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("daydream_memory_themes_slug_idx").on(t.slug),
+        index("daydream_memory_themes_status_idx").on(t.status)
+      ]
+    );
+    daydreamMemoryThemeSources = pgTable(
+      "daydream_memory_theme_sources",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        themeId: text("theme_id").notNull().references(() => daydreamMemoryThemes.id, { onDelete: "cascade" }),
+        memoryId: text("memory_id").notNull().references(() => jkaiMemories.id, { onDelete: "cascade" }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("daydream_memory_theme_sources_pair_idx").on(t.themeId, t.memoryId),
+        index("daydream_memory_theme_sources_memory_idx").on(t.memoryId)
+      ]
+    );
+    daydreamMemoryConsolidations = pgTable(
+      "daydream_memory_consolidations",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        /** YYYY-MM-DD in Europe/London. The unique key makes the nightly pass idempotent. */
+        localDay: text("local_day").notNull(),
+        /** 'running' | 'completed' | 'failed' */
+        status: text("status").notNull().default("running"),
+        model: text("model"),
+        memoriesReviewed: integer("memories_reviewed").notNull().default(0),
+        themesCreated: integer("themes_created").notNull().default(0),
+        themesUpdated: integer("themes_updated").notNull().default(0),
+        memoriesLinked: integer("memories_linked").notNull().default(0),
+        /** Reviewed source rows that did not safely support a durable principle. */
+        memoriesIgnored: integer("memories_ignored").notNull().default(0),
+        promptTokens: integer("prompt_tokens").notNull().default(0),
+        completionTokens: integer("completion_tokens").notNull().default(0),
+        error: text("error"),
+        startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+        completedAt: timestamp("completed_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("daydream_memory_consolidations_day_idx").on(t.localDay),
+        index("daydream_memory_consolidations_started_idx").on(t.startedAt)
+      ]
+    );
     quickAnswers = pgTable("quick_answer", {
       id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
       topic: text("topic").notNull(),
@@ -2474,6 +2758,32 @@ var init_schema = __esm({
        * time rather than the sender-written `Date` header.
        */
       observedAt: timestamp("observed_at", { withTimezone: true }),
+      /**
+       * Whether this note's content is allowed into the entity graph.
+       *
+       * A note and the graph rows read out of it used to be the same decision: if
+       * something was ingested, it was extracted. That was tolerable while the
+       * corpus was hand-written notes and Drive uploads, and it stopped being
+       * tolerable when the rolling Gmail sweep started reading the whole mailbox —
+       * 2,781 of 3,116 notes came from email, 67% of live entities were asserted by
+       * an email note alone, and the single most common relationship type in the
+       * graph became `offers` (1,368 edges) because marketing mail is mostly
+       * offers. The graph was answering "what is being sold to me" when it was
+       * asked "who do I work with".
+       *
+       * So the two decisions are now separate. The note is the CORPUS — it is
+       * always stored, and daydream's voucher, receipt and interest readers scan it
+       * exactly as before. This column is the GRAPH GATE.
+       *
+       *   'admitted' — extracted, and its entities and edges are in the graph.
+       *   'pending'  — stored and searchable, never extracted. Costs no LLM call.
+       *   'rejected' — refused by the owner. Never extracted, never re-queued.
+       *
+       * Defaulted to 'admitted' so every non-email source behaves precisely as it
+       * did: only the Gmail sweep writes 'pending', and only because it was asked
+       * to. Nothing here is a general-purpose moderation queue.
+       */
+      graphState: text("graph_state").notNull().default("admitted"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
     }, (t) => ({
@@ -2484,7 +2794,10 @@ var init_schema = __esm({
       byEmbedding: index("intel_notes_embedding_hnsw_idx").using(
         "hnsw",
         sql`${t.embedding} vector_cosine_ops`
-      )
+      ),
+      // The mail queue's every read is "pending email notes, newest first", and the
+      // graph's every read is now "admitted only". Both are this index.
+      byGraphState: index("intel_notes_graph_state_idx").on(t.graphState, t.source)
     }));
     intelEntities = pgTable(
       "intel_entities",
@@ -2646,7 +2959,20 @@ var init_schema = __esm({
       entityId: text("entity_id").notNull().references(() => intelEntities.id, { onDelete: "cascade" }),
       relevance: text("relevance").notNull().default("mentioned"),
       excerpt: text("excerpt")
-    });
+    }, (t) => [
+      // This table had NO index at all — not even a primary key, because it has no
+      // id column. Extraction hit it three times per entity per note (an existence
+      // check, then a corroboration UPDATE carrying a correlated COUNT DISTINCT),
+      // and every one of those was a full scan.
+      //
+      // Deliberately NOT unique. The graph code wants a unique (note_id, entity_id)
+      // and says so, but the table carries duplicate pairs from before that check
+      // existed, so declaring it unique here would make `drizzle-kit push` prompt to
+      // truncate and hang the non-interactive release (see the same trap in
+      // `conversations.shareToken`). Dedupe first, then tighten this.
+      index("intel_note_entities_note_idx").on(t.noteId, t.entityId),
+      index("intel_note_entities_entity_idx").on(t.entityId)
+    ]);
     intelTimelineEvents = pgTable("intel_timeline_events", {
       id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
       entityId: text("entity_id").references(() => intelEntities.id, { onDelete: "set null" }),
@@ -2830,6 +3156,50 @@ var init_schema = __esm({
       },
       (t) => ({ bySurvivor: index("intel_merges_survivor_idx").on(t.survivorId) })
     );
+    intelMatchDecisions = pgTable(
+      "intel_match_decisions",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        /** `a|b` with the two entity ids in id order. */
+        pairKey: text("pair_key").notNull(),
+        aEntityId: text("a_entity_id").notNull(),
+        bEntityId: text("b_entity_id").notNull(),
+        /** 'same' | 'different' | 'unsure'. */
+        verdict: text("verdict").notNull(),
+        /** 'human' | 'llm' | 'auto'. */
+        decidedBy: text("decided_by").notNull().default("human"),
+        /** The matcher's confidence at the time the verdict was recorded. */
+        confidence: doublePrecision("confidence"),
+        /** 0..1 — how sure the DECIDER was, which is a different question. */
+        verdictConfidence: doublePrecision("verdict_confidence"),
+        signals: jsonb("signals").$type().notNull().default(sql`'[]'::jsonb`),
+        rationale: text("rationale"),
+        /** Which model produced an `llm` verdict. Null for a human one. */
+        model: text("model"),
+        /** Names at decision time, so a ruled-out row is readable after a rename. */
+        aName: text("a_name"),
+        bName: text("b_name"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      // The table is created empty, so a unique index is safe to push here — the
+      // documented `drizzle-kit push` hazard is a unique index added to a POPULATED
+      // table (see reference_drizzle_unique_push_gotcha).
+      (t) => ({
+        uniqPair: uniqueIndex("intel_match_decisions_pair_idx").on(t.pairKey),
+        byVerdict: index("intel_match_decisions_verdict_idx").on(t.verdict)
+      })
+    );
+    intelTypeSuggestionDismissals = pgTable(
+      "intel_type_suggestion_dismissals",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        /** `fromTypeId|intoTypeId` in id order. */
+        pairKey: text("pair_key").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => ({ uniqPair: uniqueIndex("intel_type_dismissals_pair_idx").on(t.pairKey) })
+    );
     intelCategories = pgTable(
       "intel_categories",
       {
@@ -3001,6 +3371,46 @@ var init_schema = __esm({
         uniqChunk: uniqueIndex("file_embeddings_file_chunk_idx").on(table.fileId, table.chunkOrd)
       })
     );
+    mailEmbeddings = pgTable(
+      "mail_embeddings",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        noteId: text("note_id").notNull().references(() => intelNotes.id, { onDelete: "cascade" }),
+        /** The note's `metadata.contentHash` when this chunk was embedded. A thread
+         *  that gains a reply changes it, which is what makes re-indexing cheap. */
+        contentHash: text("content_hash").notNull(),
+        chunkOrd: integer("chunk_ord").notNull(),
+        /** Thread subject at embed time — the citation label. */
+        source: text("source").notNull(),
+        /** 'body' | 'attachment'. Kept so a search can say where a passage came
+         *  from; "it was in the covering note" and "it was on page 9 of the PDF"
+         *  are different claims about the same thread. */
+        part: text("part").notNull().default("body"),
+        /** Attachment filename for an `attachment` chunk; null for the body. */
+        filename: text("filename"),
+        text: text("text").notNull(),
+        charStart: integer("char_start").notNull(),
+        charEnd: integer("char_end").notNull(),
+        embeddingModel: text("embedding_model").notNull(),
+        embeddingDim: integer("embedding_dim").notNull(),
+        embedding: vector("embedding").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => ({
+        byNote: index("mail_embeddings_note_idx").on(t.noteId),
+        // Plain, not unique. A unique index on a populated table breaks
+        // non-interactive `drizzle-kit push` (reference_drizzle_unique_push_gotcha),
+        // and re-indexing deletes a note's rows before inserting anyway, so there is
+        // nothing for uniqueness to protect.
+        byNoteChunk: index("mail_embeddings_note_chunk_idx").on(t.noteId, t.chunkOrd),
+        // Same reasoning as the notes/entities HNSW indexes: without it every search
+        // is a Seq Scan over the whole corpus.
+        byEmbedding: index("mail_embeddings_embedding_hnsw_idx").using(
+          "hnsw",
+          sql`${t.embedding} vector_cosine_ops`
+        )
+      })
+    );
     webdavCredentials = pgTable(
       "webdav_credentials",
       {
@@ -3119,7 +3529,7 @@ var init_schema = __esm({
       kind: text("kind").notNull(),
       // 'apikey' | 'basic' | 'oauth2'
       // Encrypted JSON: format `${iv-hex}:${tag-hex}:${ciphertext-hex}` produced
-      // by src/lib/integrations/crypto.ts. Shape of the decrypted JSON depends
+      // by src/lib/secrets/crypto.ts. Shape of the decrypted JSON depends
       // on `kind` — see CredentialPayload<K> in src/lib/integrations/types.ts.
       payloadEnc: text("payload_enc").notNull(),
       // Non-secret config (e.g. CalDAV server URL, OAuth callback override).
@@ -3622,7 +4032,19 @@ var init_schema = __esm({
       "codegraph_nodes",
       {
         id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
-        /** 'file' | 'dir' | 'gate' | 'route' | 'table' | 'tool' | 'skill' */
+        /**
+         * 'file' | 'dir' | 'gate'.
+         *
+         * Trimmed from a seven-value aspiration to the three the writer can
+         * actually mint. `route`, `table`, `tool` and `skill` were declared, never
+         * produced, and never will be by this ingest — a taxonomy nothing can emit
+         * reads as a gap in the data rather than a gap in the model.
+         *
+         * `gate` was in exactly that position until 2026-08-30 and cost more than a
+         * stale comment: `resolveSeed` answers a `gate:` seed with
+         * `eq(kind, 'gate')`, production held zero such rows, and so the whole
+         * `gate:` lane returned an empty seed silently, every time.
+         */
         kind: text("kind").notNull().default("file"),
         /** Repo-relative path, or the gate name for kind='gate'. Identity. */
         canonicalPath: text("canonical_path").notNull(),
@@ -3631,7 +4053,6 @@ var init_schema = __esm({
         displayName: text("display_name"),
         /** Template-generated, never LLM-written. See the fabrication memory. */
         summary: text("summary"),
-        embedding: vector("embedding"),
         /**
          * What KIND of file this is — 'api-endpoint', 'site-tool', 'test', … — a
          * pure function of the path (see codegraph/family.ts), stamped server-side
@@ -3644,14 +4065,36 @@ var init_schema = __esm({
         episodeCount: integer("episode_count").notNull().default(0),
         lessonCount: integer("lesson_count").notNull().default(0),
         /**
+         * Edges touching this node, in either direction. Denormalised for the same
+         * reason the two counts above are, and RECOMPUTED rather than incremented so
+         * a re-run cannot inflate it.
+         *
+         * It exists so `walk()` can decline to expand THROUGH a hub without paying
+         * for a degree count per query. The graph is extremely uneven —
+         * `src/lib/db/schema.ts` has 805 edges and touches 19% of all nodes,
+         * `src/lib/db/index.ts` 593, against a mean of 8.2 — so a single hop from
+         * anywhere near the DB layer floods the 400-row budget with schema
+         * neighbours and returns a retrieval that has told the agent nothing.
+         * `siblingScore` already caps import in-degree for exactly this reason
+         * ("or `schema.ts` wins everything"); this is the same cap for traversal.
+         */
+        degree: integer("degree").notNull().default(0),
+        /**
          * Does this path still exist at git HEAD? A node whose file was deleted
          * cannot teach anything actionable. Refreshed by the sweep, and NEVER
          * trusted when the sentinel self-test fails — see codegraph/liveness.ts.
          */
         existsOnHead: boolean("exists_on_head").notNull().default(true),
         lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
-        /** Tombstone, mirroring intel's merge model. Never a magic string. */
-        mergedIntoId: text("merged_into_id"),
+        /**
+         * Tombstone, mirroring intel's merge model. Never a magic string — and now
+         * enforced rather than asked for. See `supersededById` on lessons for the
+         * incident that made this a rule; the rule was written down and not applied
+         * to any of the three columns that needed it.
+         */
+        mergedIntoId: text("merged_into_id").references(() => codegraphNodes.id, {
+          onDelete: "set null"
+        }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
       },
@@ -3726,7 +4169,6 @@ var init_schema = __esm({
         verdict: text("verdict").notNull().default("unverified"),
         filesTouched: jsonb("files_touched").$type().notNull().default(sql`'[]'::jsonb`),
         prNumber: integer("pr_number"),
-        embedding: vector("embedding"),
         /** How often this episode has been SERVED, and how often it preceded a pass. */
         servedCount: integer("served_count").notNull().default(0),
         helpfulCount: integer("helpful_count").notNull().default(0),
@@ -3765,7 +4207,6 @@ var init_schema = __esm({
         originRef: text("origin_ref"),
         /** Repo-relative paths this lesson names. Drives staleness AND retrieval. */
         citedPaths: jsonb("cited_paths").$type().notNull().default(sql`'[]'::jsonb`),
-        embedding: vector("embedding"),
         servedCount: integer("served_count").notNull().default(0),
         /**
          * Outcome evidence — the input to `relevance.ts`.
@@ -3790,7 +4231,9 @@ var init_schema = __esm({
          */
         retiredAt: timestamp("retired_at", { withTimezone: true }),
         retiredReason: text("retired_reason"),
-        supersededById: text("superseded_by_id"),
+        supersededById: text("superseded_by_id").references(() => codegraphLessons.id, {
+          onDelete: "set null"
+        }),
         staleAt: timestamp("stale_at", { withTimezone: true }),
         observedAt: timestamp("observed_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -3833,8 +4276,26 @@ var init_schema = __esm({
         id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
         /** 'push' | 'pull' | 'chat' — which channel asked. */
         channel: text("channel").notNull(),
-        buildId: text("build_id"),
-        iterationId: text("iteration_id"),
+        /**
+         * SET NULL, never CASCADE.
+         *
+         * This is an AUDIT ledger — the table that exists so "is retrieval working?"
+         * can be answered from SQL rather than from a log line the system wrote
+         * about itself. Cascading would let deleting a build quietly delete the
+         * evidence of what that build was served, which is the one thing this table
+         * must not do. Losing the pointer is honest; losing the row is not.
+         *
+         * Enforced rather than trusted, because the soft reference had already
+         * rotted: production held `build_id = 'ab-verify-build'`, a hand-written
+         * placeholder from an A/B run that was never a build id and that nothing
+         * could have caught. That is the same magic-string failure the
+         * `supersededById` comment records from `forget_memory` (23 dangling rows) —
+         * written down as a rule three times over and applied to no column until now.
+         */
+        buildId: text("build_id").references(() => jkaiBuilds.id, { onDelete: "set null" }),
+        iterationId: text("iteration_id").references(() => jkaiIterations.id, {
+          onDelete: "set null"
+        }),
         /** The CGQL actually executed, verbatim, so a bad serve is reproducible. */
         query: text("query").notNull(),
         /** 'served' | 'empty' | 'failed' — empty and failed are NOT the same. */
@@ -3874,7 +4335,7 @@ var init_schema = __esm({
          */
         ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
         /** Whose fix. 'john' today; the column exists so a second subject never
-         *  means a second table. Family members are presence-only by policy. */
+         *  means a second table. The whole household writes trail rows since 2026-08-27 (owner's D1 decision). */
         subject: text("subject").notNull().default("john"),
         /** 'push' | 'poll' | 'gap' — see the note above. */
         source: text("source").notNull(),
@@ -3948,6 +4409,16 @@ var init_schema = __esm({
         suggestedAddress: text("suggested_address"),
         suggestedAt: timestamp("suggested_at", { withTimezone: true }),
         visitCount: integer("visit_count").notNull().default(0),
+        /**
+         * On how many separate LOCAL DAYS anyone stayed here.
+         *
+         * Distinct from `visitCount`, which counts person-visits and is a household
+         * aggregate: one family outing to a soft-play with five people in the car
+         * is five visits and one day. Asking "what is this place you keep going to?"
+         * about that is wrong, and eleven of the thirteen places in the naming
+         * queue on 2026-08-27 were exactly it. Repetition is a question about days.
+         */
+        distinctDays: integer("distinct_days").notNull().default(0),
         medianDwellMins: integer("median_dwell_mins").notNull().default(0),
         /** Visit counts by weekday (7) and by local hour (24) — a cheap rhythm
          *  summary, so "usually Tuesday afternoon" costs no query. */
@@ -3956,9 +4427,17 @@ var init_schema = __esm({
         firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
         lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
         /**
-         * 'active' | 'ignored' | 'merged'. `ignored` is you saying "stop asking
-         * about this one" — a place-level mute that survives re-clustering, which
-         * a dismissed thought alone would not.
+         * 'active' | 'ignored' | 'merged' | 'transit'.
+         *
+         * `ignored` is you saying "stop asking about this one" — a place-level mute
+         * that survives re-clustering, which a dismissed thought alone would not.
+         *
+         * `transit` is the ENGINE saying it: a cluster the trail passes through
+         * rather than stops at. Kept distinct from `ignored` on purpose — one is
+         * your decision and permanent, the other is a judgement about the evidence
+         * and is revised the moment somebody actually spends ten still minutes
+         * there. Before the stillness rule (2026-08-27) these were indistinguishable
+         * from destinations and made up half the table.
          */
         status: text("status").notNull().default("active"),
         mergedIntoId: text("merged_into_id"),
@@ -3969,6 +4448,66 @@ var init_schema = __esm({
         index("daydream_places_status_idx").on(t.status),
         index("daydream_places_kind_idx").on(t.kind),
         index("daydream_places_label_idx").on(t.label)
+      ]
+    );
+    daydreamSignals = pgTable(
+      "daydream_signals",
+      {
+        /** Namespaced `source:identifier`, stable across restarts and re-discovery. */
+        key: text("key").primaryKey(),
+        /** 'ha' | 'weather' | 'journey' | 'feature' | anything a future source picks. */
+        source: text("source").notNull(),
+        /** Human label, for cards and findings. */
+        label: text("label").notNull(),
+        /** '°C', 'lx', 'min', 'km/h' — null when the source does not say. */
+        unit: text("unit"),
+        /** 'numeric' | 'boolean'. Booleans are stored as 0/1 so one column serves
+         *  both and a daily mean of a boolean is a duty cycle, which is useful. */
+        valueKind: text("value_kind").notNull().default("numeric"),
+        /** HA's own device_class where there is one — 'temperature', 'battery'. */
+        deviceClass: text("device_class"),
+        /**
+         * 'active'   — swept and carded once it has the days for it.
+         * 'ignored'  — John said stop.
+         * 'unusable' — discovered, but the source never produced a usable value.
+         *
+         * Deliberately mirrors daydream_places: a judgement the engine made is
+         * revisable, a mute the owner set is not.
+         */
+        status: text("status").notNull().default("active"),
+        /** Days with at least one observation. The gate for entering a sweep. */
+        observedDays: integer("observed_days").notNull().default(0),
+        firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+        lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        index("daydream_signals_source_idx").on(t.source),
+        index("daydream_signals_status_idx").on(t.status)
+      ]
+    );
+    daydreamObservations = pgTable(
+      "daydream_observations",
+      {
+        id: serial("id").primaryKey(),
+        /** Local day, `YYYY-MM-DD`, same convention as the feature store. */
+        day: date("day").notNull(),
+        /** A person, or 'household' for anything that belongs to the house rather
+         *  than to someone — indoor temperature is nobody's in particular. */
+        subject: text("subject").notNull().default("household"),
+        signalKey: text("signal_key").notNull(),
+        valueMean: doublePrecision("value_mean"),
+        valueMin: doublePrecision("value_min"),
+        valueMax: doublePrecision("value_max"),
+        valueLast: doublePrecision("value_last"),
+        samples: integer("samples").notNull().default(0),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("daydream_observations_key_idx").on(t.day, t.subject, t.signalKey),
+        index("daydream_observations_signal_idx").on(t.signalKey),
+        index("daydream_observations_day_idx").on(t.day)
       ]
     );
     daydreamDayFeatures = pgTable(
@@ -4007,6 +4546,12 @@ var init_schema = __esm({
         // ── Diary. ──
         calendarEvents: integer("calendar_events"),
         calendarBusyMinutes: integer("calendar_busy_minutes"),
+        /** Spend EVIDENCED that day — verified email receipts plus the bank rails
+         *  when armed. Minor units. A zero is a true statement about evidence, not
+         *  about spending; an unreadable spend table leaves the day null. Added
+         *  2026-08-27 by manual ALTER (drizzle push is unsafe while two unrelated
+         *  table drops are pending). */
+        verifiedSpendMinor: integer("verified_spend_minor"),
         /**
          * Per-domain observation state: 'ok' | 'partial' | 'absent'.
          *
@@ -4070,6 +4615,189 @@ var init_schema = __esm({
         index("daydream_hypotheses_proposed_idx").on(t.proposedAt)
       ]
     );
+    daydreamSteers = pgTable(
+      "daydream_steers",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        subject: text("subject").notNull().default("john"),
+        /** What he typed, verbatim. Rendered back to him; never executed. */
+        text: text("text").notNull(),
+        /** 'active' | 'done' | 'dropped'. */
+        status: text("status").notNull().default("active"),
+        /** How many proposal batches have been run under this steer, so one that
+         *  has shaped a fortnight of questions and produced nothing is visible. */
+        batchesInfluenced: integer("batches_influenced").notNull().default(0),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [index("daydream_steers_status_idx").on(t.status)]
+    );
+    daydreamDigests = pgTable(
+      "daydream_digests",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        subject: text("subject").notNull().default("john"),
+        /** Local day the digest covers. */
+        day: date("day").notNull(),
+        /** Deterministic summary, assembled from counts. Always present. */
+        summary: text("summary").notNull(),
+        /** Optional model phrasing over the same counts. Never the only record. */
+        narrative: text("narrative"),
+        /** Did anything check the narrative? Same three states as a thought. */
+        verified: boolean("verified"),
+        /** Every number the summary quotes, so none of them is unexplained. */
+        stats: jsonb("stats").$type().notNull().default(sql`'{}'::jsonb`),
+        readAt: timestamp("read_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("daydream_digests_subject_day_idx").on(t.subject, t.day),
+        index("daydream_digests_day_idx").on(t.day)
+      ]
+    );
+    daydreamSpend = pgTable(
+      "daydream_spend",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        subject: text("subject").notNull().default("john"),
+        /** The intel_notes row this came from. The provenance, and the dedupe key. */
+        sourceNoteId: text("source_note_id").notNull(),
+        merchant: text("merchant").notNull(),
+        /** Minor units (pence), integer — never a float. Money in floating point is
+         *  a rounding error waiting to be summed. */
+        amountMinor: integer("amount_minor").notNull(),
+        currency: text("currency").notNull().default("GBP"),
+        /** LOCAL day of the purchase, for joining against day features later. */
+        day: date("day").notNull(),
+        /** The exact substring the amount was read from. Stored so a wrong figure
+         *  can be traced to the text that produced it rather than argued about. */
+        evidence: text("evidence").notNull(),
+        /** Did the amount actually appear in the source? Written by code, never by
+         *  a model. A false here means the row is quarantined, not quoted. */
+        verified: boolean("verified").notNull().default(false),
+        extractedAt: timestamp("extracted_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("daydream_spend_note_idx").on(t.sourceNoteId),
+        index("daydream_spend_day_idx").on(t.day),
+        index("daydream_spend_merchant_idx").on(t.merchant)
+      ]
+    );
+    daydreamLeads = pgTable(
+      "daydream_leads",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        subject: text("subject").notNull().default("john"),
+        /** Stable identity so the same line of enquiry is not opened twice. */
+        leadKey: text("lead_key").notNull(),
+        /** What it is trying to find out, in John's terms. */
+        title: text("title").notNull(),
+        /** The model's reasoning for opening it. Never rendered as fact. */
+        rationale: text("rationale").notNull(),
+        /** Metric names this lead is allowed to range over — its own allow-list,
+         *  narrower than the global one, so a lead cannot quietly become a sweep. */
+        metrics: jsonb("metrics").$type().notNull().default(sql`'[]'::jsonb`),
+        /** 'open' | 'paid_off' | 'abandoned' | 'parked'. */
+        status: text("status").notNull().default("open"),
+        /** Recomputed each round from this lead's own results. */
+        score: doublePrecision("score").notNull().default(0.5),
+        /** Every input to `score`, named. Never show an unexplained number. */
+        scoreComponents: jsonb("score_components").$type().notNull().default(sql`'{}'::jsonb`),
+        roundsRun: integer("rounds_run").notNull().default(0),
+        /** Consecutive rounds that produced no supported hypothesis. */
+        barrenRounds: integer("barren_rounds").notNull().default(0),
+        hypothesesSpawned: integer("hypotheses_spawned").notNull().default(0),
+        hypothesesHeld: integer("hypotheses_held").notNull().default(0),
+        /** Per-row so it can be tuned from evidence later without a migration. */
+        abandonAfterBarrenRounds: integer("abandon_after_barren_rounds").notNull().default(4),
+        /** Owner steer that opened this, when one did. */
+        steerId: text("steer_id"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+        lastRoundAt: timestamp("last_round_at", { withTimezone: true })
+      },
+      (t) => [
+        uniqueIndex("daydream_leads_subject_key_idx").on(t.subject, t.leadKey),
+        index("daydream_leads_status_score_idx").on(t.status, t.score)
+      ]
+    );
+    daydreamCalendarExclusions = pgTable(
+      "daydream_calendar_exclusions",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        /** 'series' | 'occurrence' | 'title' */
+        scope: text("scope").notNull(),
+        /** The iCalendar UID. Present for series and occurrence scopes; a
+         *  recurring event shares one UID across every occurrence, which is what
+         *  makes 'series' a single row rather than one per date. */
+        uid: text("uid"),
+        /** Which instance, for scope='occurrence'. Stored as the event's own start
+         *  instant, matched to the minute — iCloud re-serialises these and an
+         *  equality test on the raw string does not survive it. */
+        occurrenceStart: timestamp("occurrence_start", { withTimezone: true }),
+        /** Case- and space-normalised title, for scope='title'. */
+        titleKey: text("title_key"),
+        /** What it was called and where it lived when it was excluded. Display
+         *  only — kept so the list of hidden things is readable a year later,
+         *  when the UID means nothing to anybody. */
+        title: text("title"),
+        calendarName: text("calendar_name"),
+        /** The owner's own words. A verdict says something is unwanted; only a
+         *  reason says why, and the reason is the half that changes what the
+         *  engine does next. */
+        reason: text("reason"),
+        /**
+         * Whether this row HIDES the event, or merely explains it.
+         *
+         * Not every correction is "stop looking at this". John's example: "PE days
+         * are a reminder to take PE kit into school, not an actual time
+         * commitment." That is a fact about what an entry MEANS, and the engine is
+         * better off knowing it than blind to it — hiding the event would also
+         * hide the kit reminder.
+         *
+         * `true`  — filtered out everywhere (busy minutes, prompts, suggestions).
+         * `false` — stays visible, and the reason is carded into the ponder pack
+         *           so the model reads it alongside the diary.
+         *
+         * Defaults true so every row written before this column existed keeps
+         * meaning exactly what it meant.
+         */
+        hidden: boolean("hidden").notNull().default(true),
+        /** The one value the matcher actually compares, derived from scope + the
+         *  fields above. Stored rather than computed so "already excluded?" is one
+         *  indexed lookup, and so the unique index below can exist at all. */
+        matchKey: text("match_key").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      // A NEW table, so a unique index is safe here — the drizzle-kit push hazard
+      // only bites when one is added to a table that already holds rows.
+      (t) => [
+        uniqueIndex("daydream_calendar_exclusions_key_idx").on(t.matchKey),
+        index("daydream_calendar_exclusions_uid_idx").on(t.uid)
+      ]
+    );
+    daydreamLeadSteps = pgTable(
+      "daydream_lead_steps",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        leadId: text("lead_id").notNull(),
+        round: integer("round").notNull(),
+        /** 'plan' | 'spawn' | 'read' | 'judge' | 'prune'. */
+        kind: text("kind").notNull(),
+        /** What happened, in one deterministic line. */
+        note: text("note").notNull(),
+        /** Structured detail — hypothesis ids, verdicts, the numbers behind a
+         *  pruning decision. */
+        detail: jsonb("detail").$type().notNull().default(sql`'{}'::jsonb`),
+        tokens: integer("tokens").notNull().default(0),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        index("daydream_lead_steps_lead_idx").on(t.leadId, t.round),
+        index("daydream_lead_steps_created_idx").on(t.createdAt)
+      ]
+    );
     daydreamThoughts = pgTable(
       "daydream_thoughts",
       {
@@ -4100,6 +4828,37 @@ var init_schema = __esm({
          *  a composer that has started refusing everything is visible rather than
          *  looking like a quiet week. */
         narrativeDroppedReason: text("narrative_dropped_reason"),
+        // ── The review ────────────────────────────────────────────────────────
+        //
+        // `verified` above records only that the PHRASING was checked against the
+        // cards it cited. It says nothing about whether the thing is TRUE: a
+        // musing can cite its cards perfectly and still be a misreading of them,
+        // which is exactly the "you were charged twice for Canva" case where the
+        // invoice and the bank line are one payment seen twice.
+        //
+        // These columns hold a second, harder question, answered by a model that
+        // is given the thought and sent to the sources to check it. Nullable
+        // because a thought is unreviewed until it is reviewed, and "not yet
+        // looked at" must stay distinguishable from "looked at and found wanting".
+        /** 'verified' | 'refuted' | 'uncertain'. Null = not yet reviewed. */
+        reviewVerdict: text("review_verdict"),
+        /** The reviewer's own 0..1 estimate that the claim is true. Kept apart
+         *  from `score`, which is how much the ENGINE wanted to say it — being
+         *  confident and being worth saying are different questions. */
+        reviewLikelihood: doublePrecision("review_likelihood"),
+        /** Why, in its own words. Shown on the feed beside the claim, so a
+         *  refutation can be argued with rather than merely obeyed. */
+        reviewReasoning: text("review_reasoning"),
+        /** The claim restated once the sources have been read. Null when the
+         *  original stood. */
+        reviewNarrative: text("review_narrative"),
+        /** What it actually looked at, so a verdict resting on nothing is
+         *  visible as such. */
+        reviewSources: jsonb("review_sources").$type().notNull().default(sql`'[]'::jsonb`),
+        reviewModel: text("review_model"),
+        reviewAt: timestamp("review_at", { withTimezone: true }),
+        reviewPromptTokens: integer("review_prompt_tokens").notNull().default(0),
+        reviewCompletionTokens: integer("review_completion_tokens").notNull().default(0),
         /**
          * What the phrasing actually cost, in tokens.
          *
@@ -4151,7 +4910,79 @@ var init_schema = __esm({
          * discount, and says on the page that it was inferred rather than said.
          */
         feedbackSource: text("feedback_source"),
+        /**
+         * How relevant the POINT is, 1..5, with 3 meaning "ordinary".
+         *
+         * Deliberately not a fourth value of `feedback`. That column answers "was
+         * this interruption worth having", which can only honestly be asked of
+         * something that actually reached him, and its vocabulary is a verdict —
+         * useful, not that, never. Relevance is a different question about a
+         * different object: how much the SUBJECT matters, whether or not the
+         * suggestion landed. A thing can be a poor suggestion about a subject he
+         * cares about very much, and the ledger had nowhere to record that.
+         *
+         * Writing it changes NO status. That is what keeps it clear of the two
+         * traps this table has already sprung: it cannot collide with
+         * `PROTECTED_STATUSES`, and it cannot be mistaken for the negative verdict
+         * `archived` exists to avoid recording. `persistCandidates` sets neither
+         * this column nor `relevance_at`, so a rating survives the ten-minute
+         * re-detection that rewrites everything else on a `new` or `suppressed`
+         * row.
+         *
+         * It reaches the future through `tallyRelevance` in scoring.ts, in the same
+         * currency as feedback, so a kind he keeps marking relevant earns a higher
+         * multiplier and clears the delivery bar more often on the next pass.
+         */
+        relevance: integer("relevance"),
+        relevanceAt: timestamp("relevance_at", { withTimezone: true }),
+        /**
+         * What John said about this one, in his own words.
+         *
+         * The feedback vocabulary is a closed phrase list — useful, not that, never
+         * — which is right for a verdict and useless for a reason. The reason is
+         * the valuable part: "good call, but some of those calendar events are
+         * rolling reminders" is a correction no thumbs-down could carry, and
+         * without somewhere to put it the only options were to accept a flawed
+         * suggestion or mute the whole kind.
+         *
+         * Also written to `jkai_memories` so the rest of jkai can read it, on the
+         * same argument `confirmPlace` makes: the useful place for something the
+         * owner typed is the store everything already reads, not one feature's
+         * private column. This column is the display copy and the link.
+         */
+        note: text("note"),
+        noteMemoryId: text("note_memory_id"),
+        noteAt: timestamp("note_at", { withTimezone: true }),
         feedbackNote: text("feedback_note"),
+        /**
+         * The `jkai_memories` row written when the REVIEWER ruled on this thought.
+         *
+         * Same argument `note` above makes, applied to the other author. A verdict
+         * that lives only in `review_verdict` is a fact one feature knows; the
+         * owner's ask was that ruling on something in the feed should TEACH it —
+         * "I don't expect it to say there's been 2 charges for Canva any more, now
+         * it knows they're the same thing". Teaching means the store the rest of
+         * jkai reads, and means the ponder pack carding it, which is what actually
+         * stops the claim being re-proposed.
+         *
+         * Written by the caller of `reviewThought`, never by the reviewer itself —
+         * `adjudicate.ts` rule 2 is that the reviewer decides and never acts, and
+         * a memory-writing tool in its hands would be an act.
+         */
+        reviewMemoryId: text("review_memory_id"),
+        /**
+         * The derived `intel_notes` row this thought was extracted into, once the
+         * owner said it was useful.
+         *
+         * `intel-bridge.ts` already carries insights from the graph INTO daydream
+         * as candidates. This is the return leg, and it deliberately runs on a
+         * different trust rule: a bridged insight is a proposal that still has to
+         * clear every delivery gate, whereas a woven thought is something the owner
+         * has explicitly endorsed — which is the admission test `graph_state`
+         * exists to apply.
+         */
+        intelNoteId: text("intel_note_id"),
+        intelWovenAt: timestamp("intel_woven_at", { withTimezone: true }),
         /**
          * How many detect ticks have re-proposed this exact thing.
          *
@@ -4172,7 +5003,93 @@ var init_schema = __esm({
         index("daydream_thoughts_status_idx").on(t.status),
         index("daydream_thoughts_kind_idx").on(t.kind),
         index("daydream_thoughts_created_idx").on(t.createdAt),
-        index("daydream_thoughts_feedback_idx").on(t.feedback)
+        index("daydream_thoughts_feedback_idx").on(t.feedback),
+        // Mirrors the feedback index, and for the same reason: the learned weights
+        // read every rated row on every detect tick, and a sequential scan of the
+        // whole ledger for the handful that carry a rating is the shape that made
+        // `node_executions` a problem.
+        index("daydream_thoughts_relevance_idx").on(t.relevance)
+      ]
+    );
+    daydreamNotebook = pgTable(
+      "daydream_notebook",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        title: text("title").notNull().default(""),
+        /** Markdown, verbatim. NOTHING writes to this column except the owner —
+         *  see `supporting` below for where the model's contribution goes. */
+        body: text("body").notNull().default(""),
+        /** Free-text grouping. Empty string means unfiled, which is a real state
+         *  and must not be conflated with null. */
+        folder: text("folder").notNull().default(""),
+        tags: jsonb("tags").$type().notNull().default(sql`'[]'::jsonb`),
+        /** 'active' | 'archived'. Archiving hides it from the notebook and stops it
+         *  being reviewed; it is never deleted by the engine. */
+        status: text("status").notNull().default("active"),
+        pinned: boolean("pinned").notNull().default(false),
+        /**
+         * What the model added, kept APART from the body.
+         *
+         * The rule this column exists to enforce: the model never edits what John
+         * wrote. Supporting information is appended here, rendered as the model's
+         * and separately clearable, so if the whole review path failed permanently
+         * every note would still read exactly as typed. Merging it into `body`
+         * would make "what did I actually write" unanswerable.
+         */
+        supporting: text("supporting"),
+        supportingAt: timestamp("supporting_at", { withTimezone: true }),
+        /** When the review last looked at it, and at what version of the text —
+         *  an unchanged note does not need re-reviewing, and re-reading it every
+         *  idle cycle would spend the cap on nothing. */
+        reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+        reviewedHash: text("reviewed_hash"),
+        reviewCount: integer("review_count").notNull().default(0),
+        /** The derived intel note this was extracted into, so a note reaches the
+         *  knowledge graph the same way a file or a chat thread does. */
+        intelNoteId: text("intel_note_id"),
+        intelWovenAt: timestamp("intel_woven_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        index("daydream_notebook_status_idx").on(t.status),
+        index("daydream_notebook_folder_idx").on(t.folder),
+        index("daydream_notebook_updated_idx").on(t.updatedAt),
+        // The review's own query: active notes that have not been looked at since
+        // they last changed, oldest first.
+        index("daydream_notebook_reviewed_idx").on(t.status, t.reviewedAt)
+      ]
+    );
+    daydreamNotebookActions = pgTable(
+      "daydream_notebook_actions",
+      {
+        id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+        noteId: text("note_id").notNull().references(() => daydreamNotebook.id, { onDelete: "cascade" }),
+        /** The closed vocabulary in $lib/daydream/notebook/actions. */
+        kind: text("kind").notNull(),
+        /** One line, as the model phrased it — what it thinks this will get. */
+        title: text("title").notNull(),
+        /** The validated parameters, as data. */
+        params: jsonb("params").$type().notNull().default(sql`'{}'::jsonb`),
+        /** 'planned' | 'done' | 'failed' | 'refused' */
+        status: text("status").notNull().default("planned"),
+        /** Why the validator refused it, or why execution failed. */
+        error: text("error"),
+        /** What it produced, in words, for the note's action list. */
+        result: text("result"),
+        /** Where the result LIVES, when it lives somewhere — a research session, an
+         *  intel entity. `refKind` names the table so the page can build a link
+         *  without guessing from the id's shape. */
+        refKind: text("ref_kind"),
+        refId: text("ref_id"),
+        plannedAt: timestamp("planned_at", { withTimezone: true }).notNull().defaultNow(),
+        executedAt: timestamp("executed_at", { withTimezone: true }),
+        promptTokens: integer("prompt_tokens").notNull().default(0),
+        completionTokens: integer("completion_tokens").notNull().default(0)
+      },
+      (t) => [
+        index("daydream_notebook_actions_note_idx").on(t.noteId),
+        index("daydream_notebook_actions_status_idx").on(t.status)
       ]
     );
     daydreamOffers = pgTable(
@@ -4254,6 +5171,219 @@ var init_schema = __esm({
         index("daydream_rules_status_idx").on(t.status)
       ]
     );
+    geoClaims = pgTable(
+      "geo_claims",
+      {
+        id: serial("id").primaryKey(),
+        subject: text("subject").notNull(),
+        /** When the journey this ring came from ENDED. The decay clock. */
+        capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+        /** UTC calendar day of `capturedAt`, stored rather than derived at read
+         *  time in whichever zone happened to ask. Matches the ledger's `day`. */
+        day: text("day").notNull(),
+        /** 'trail' | 'workout' */
+        sourceKind: text("source_kind").notNull(),
+        /** Stable id of the thing this came from: `apple:<activityId>` for a
+         *  workout, `<subject>@<journey start ISO>` for a trail journey. Not null,
+         *  because Postgres treats NULLs as distinct and the unique index below
+         *  would stop deduplicating anything. */
+        sourceRef: text("source_ref").notNull(),
+        /** Which ring of that journey — a figure-of-eight yields two. */
+        ringIndex: integer("ring_index").notNull().default(0),
+        /**
+         * The DECLARED activity, where the source knew one: walk | run | trail_run
+         * | hike | ride | mtb. NULL for every trail journey, because Life360
+         * genuinely carries no activity type — the UI must say "untyped" rather
+         * than guess, and `mode` cannot stand in for it (it derives from GPS speed,
+         * which puts a runner and a cyclist in the same band).
+         *
+         * Amendment 1: cycling captures ground and is filtered at the VIEWING
+         * layer. This column is what makes that possible — without it a ride is
+         * indistinguishable from a walk once it is in the ledger and the only
+         * filter available would be at ingest, which is the thing that was
+         * rejected.
+         */
+        activityType: text("activity_type"),
+        /** The real ring, [[lon, lat], ...] — same order as
+         *  activity_tracks.coordinates. Kept so a polygon renderer could be layered
+         *  on later without losing history. */
+        ring: jsonb("ring").notNull(),
+        /** Encoded, for cheap list rendering. Same codec as activity_tracks. */
+        polyline: text("polyline"),
+        /** { method, gapM, pathM, thresholds } — see ClosureRecord in $lib/geo/loops. */
+        closure: jsonb("closure").notNull(),
+        /** The ring's own shoelace area — what a hand-check of a claim measures. */
+        areaM2: doublePrecision("area_m2").notNull(),
+        /** The ground actually AWARDED: cell count x the per-latitude constant.
+         *  A different model from `areaM2` and deliberately not reconciled with it. */
+        capturedAreaM2: doublePrecision("captured_area_m2").notNull(),
+        /** 2 x area / perimeter — the thinness gate's measure, stored so a retune
+         *  can be argued from what shipped. */
+        widthM: doublePrecision("width_m").notNull(),
+        tileCount: integer("tile_count").notNull(),
+        /** { subject: count } — who held these cells immediately before this claim.
+         *  'unclaimed' counts virgin ground. */
+        tilesTaken: jsonb("tiles_taken").notNull(),
+        /** Lat/lon bounding box. The no-PostGIS index substitute: a viewport query
+         *  is four B-tree comparisons. */
+        minLat: doublePrecision("min_lat").notNull(),
+        maxLat: doublePrecision("max_lat").notNull(),
+        minLon: doublePrecision("min_lon").notNull(),
+        maxLon: doublePrecision("max_lon").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("geo_claims_source_idx").on(t.subject, t.sourceKind, t.sourceRef, t.ringIndex),
+        index("geo_claims_subject_at_idx").on(t.subject, t.capturedAt),
+        index("geo_claims_captured_idx").on(t.capturedAt),
+        index("geo_claims_bbox_idx").on(t.minLat, t.maxLat, t.minLon, t.maxLon)
+      ]
+    );
+    geoCaptureEvents = pgTable(
+      "geo_capture_events",
+      {
+        id: serial("id").primaryKey(),
+        subject: text("subject").notNull(),
+        tileX: integer("tile_x").notNull(),
+        tileY: integer("tile_y").notNull(),
+        /** UTC calendar day, `YYYY-MM-DD`. Part of the uniqueness key. */
+        day: text("day").notNull(),
+        /**
+         * 'loop' | 'trample' | 'fill'.
+         *
+         * 'fill' is the interior of ground a journey encircled without treading —
+         * see $lib/geo/fill. It is a THIRD value of the unique index below, not a
+         * flag on 'loop', so it is auditable, filterable and reversible with one
+         * DELETE, and so a rebuild can add it to history that was ingested before
+         * it existed without disturbing a single row already written.
+         */
+        kind: text("kind").notNull(),
+        /** 3 for a loop, 3 for a fill, 1 for a trample. Stored rather than derived
+         *  so a future weighting change cannot silently rewrite history. */
+        weight: doublePrecision("weight").notNull(),
+        capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+        /** The loop this event came from, where there was one. Advisory. */
+        claimId: integer("claim_id"),
+        /** 'trail' | 'workout' */
+        sourceKind: text("source_kind").notNull(),
+        sourceRef: text("source_ref").notNull(),
+        /**
+         * The DECLARED activity behind this capture, or NULL for a trail journey.
+         * The filter dimension the map and the boards read.
+         *
+         * DELIBERATELY NOT PART OF THE UNIQUE INDEX BELOW. A cell walked and then
+         * ridden on the same day is still one loop capture and one trample capture
+         * — adding this column to the key would make it two, which is exactly the
+         * farming hole Decision 10 exists to close (ten laps of the garden score
+         * once; ten laps on a bike between them must not score ten more).
+         *
+         * The consequence is stated rather than hidden: on such a day the ledger
+         * records whichever kind got there first, so filtering rides out can
+         * remove a cell that was also walked. That is the honest cost of one event
+         * per person per cell per day, and it is a rounding error against the
+         * alternative.
+         *
+         * NEVER WRITE THE FILTER AS A BARE `activity_type not in (...)`. This
+         * column is NULL for every trail journey — four of the five family
+         * subjects — and in Postgres `null not in ('ride')` is NULL, not true, so
+         * a bare NOT IN silently drops the entire Life360 corpus and the foot-only
+         * map shows John alone while everyone else reads as a broken phone. Use
+         * `is distinct from` for one value, or `(activity_type is null or
+         * activity_type not in (...))` for several — or better, do not spell it at
+         * all: `activityTypeNotIn()` in $lib/geo/service is the one place it is
+         * written. Same class of trap as filtering daydream_trail by a `source`
+         * allow-list, which drops the whole `backfill` corpus.
+         */
+        activityType: text("activity_type"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        uniqueIndex("geo_capture_events_unique_idx").on(
+          t.subject,
+          t.tileX,
+          t.tileY,
+          t.day,
+          t.kind
+        ),
+        // The recompute reads every event on a set of touched cells, so this is the
+        // hot one. node_executions taught the lesson: a hot table with no index.
+        index("geo_capture_events_tile_idx").on(t.tileX, t.tileY),
+        index("geo_capture_events_subject_at_idx").on(t.subject, t.capturedAt),
+        index("geo_capture_events_captured_idx").on(t.capturedAt),
+        // WRITE time, not capture time, and they are different questions. A daily
+        // snapshot is only valid until a row arrives that it should have seen — a
+        // gap/backfill fix, or the Phase 5 family backfill — and rollDailySnapshots
+        // finds those by comparing this column against the snapshot's own
+        // created_at. Created here rather than later because this table is the hot
+        // one and node_executions taught what adding an index to 2.5GB costs.
+        index("geo_capture_events_created_idx").on(t.createdAt)
+      ]
+    );
+    geoTileState = pgTable(
+      "geo_tile_state",
+      {
+        tileX: integer("tile_x").notNull(),
+        tileY: integer("tile_y").notNull(),
+        ownerSubject: text("owner_subject").notNull(),
+        ownerScore: doublePrecision("owner_score").notNull(),
+        ownerSince: timestamp("owner_since", { withTimezone: true }).notNull(),
+        /** Most recent event on this cell, by anyone. */
+        lastEventAt: timestamp("last_event_at", { withTimezone: true }).notNull(),
+        /**
+         * Who held it in the instant before the current owner took it, or null if
+         * nobody did.
+         *
+         * Derived from the LEDGER, not from the row this recompute overwrote. The
+         * obvious "whatever the row said before I changed it" loses every handover
+         * on a full rebuild into an empty table, and cannot see a handover that
+         * happens inside one run — which is every backfill. Deriving it keeps this
+         * column a pure function of geo_capture_events, which is what makes a
+         * re-run byte-identical.
+         */
+        previousOwner: text("previous_owner"),
+        /** Second place as at the last recompute — the "how close was it" column. */
+        runnerUp: text("runner_up"),
+        runnerUpScore: doublePrecision("runner_up_score").notNull().default(0),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        primaryKey({ columns: [t.tileX, t.tileY] }),
+        index("geo_tile_state_owner_idx").on(t.ownerSubject),
+        index("geo_tile_state_since_idx").on(t.ownerSince)
+      ]
+    );
+    geoDailySnapshot = pgTable(
+      "geo_daily_snapshot",
+      {
+        /** UTC calendar day, `YYYY-MM-DD`. */
+        day: text("day").notNull(),
+        subject: text("subject").notNull(),
+        tileCount: integer("tile_count").notNull(),
+        /** Cell count x the per-latitude Mercator constant. No geodesic library. */
+        areaM2: doublePrecision("area_m2").notNull(),
+        /** Four-connected components of the owned cells — "how many geos". */
+        regionCount: integer("region_count").notNull(),
+        // ABSENCE MEANS ZERO. A subject who owned ground yesterday and owns none
+        // today has no row for today rather than a row of zeroes, so the weekly
+        // gained/lost board must read a missing row as nothing held, never as
+        // nothing known. writeDailySnapshot enforces that in both directions: it
+        // upserts the subjects who hold ground and DELETES the rows of any subject
+        // on that day who no longer does, so a repair cannot leave a ghost behind.
+        //
+        // WHEN this row was computed, and it is load-bearing rather than
+        // bookkeeping: a snapshot is stale the moment a capture event it should
+        // have seen is inserted after it (a gap or backfill fix landing on a day
+        // already rolled). rollDailySnapshots detects exactly that by comparing
+        // this against geo_capture_events.created_at, so the upsert deliberately
+        // REFRESHES it — a recompute that kept the original stamp would report
+        // itself as still stale forever and never make progress.
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+      },
+      (t) => [
+        primaryKey({ columns: [t.day, t.subject] }),
+        index("geo_daily_snapshot_subject_idx").on(t.subject, t.day)
+      ]
+    );
   }
 });
 
@@ -4278,7 +5408,7 @@ var init_db = __esm({
   }
 });
 
-// src/lib/workflows/execution-context.ts
+// src/lib/context/execution.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 function recordLLMCall(call) {
   const ctx = executionContext.getStore();
@@ -4317,14 +5447,14 @@ function rollupUsage(calls) {
   };
 }
 var executionContext;
-var init_execution_context = __esm({
-  "src/lib/workflows/execution-context.ts"() {
+var init_execution = __esm({
+  "src/lib/context/execution.ts"() {
     "use strict";
     executionContext = new AsyncLocalStorage();
   }
 });
 
-// src/lib/jkai/llm-pricing.ts
+// src/lib/llm/pricing.ts
 function warmCataloguePrices() {
   if (cataloguePrices || warmInFlight) return;
   warmInFlight = true;
@@ -4358,8 +5488,8 @@ function computeCost(pricing, tokensInput, tokensOutput) {
   return tokensInput * pricing.inputPerMillion / PER_MILLION + tokensOutput * pricing.outputPerMillion / PER_MILLION;
 }
 var PER_MILLION, OPENROUTER_PRICES, cataloguePrices, warmInFlight;
-var init_llm_pricing = __esm({
-  "src/lib/jkai/llm-pricing.ts"() {
+var init_pricing = __esm({
+  "src/lib/llm/pricing.ts"() {
     "use strict";
     PER_MILLION = 1e6;
     OPENROUTER_PRICES = {
@@ -4383,7 +5513,7 @@ var init_llm_pricing = __esm({
   }
 });
 
-// src/lib/jkai/llm-usage-log.ts
+// src/lib/llm/usage-log.ts
 function buildInput(call) {
   const input = {};
   if (call.source) input.source = call.source;
@@ -4417,15 +5547,15 @@ function recordDurableLLMCall(call) {
     );
   });
 }
-var init_llm_usage_log = __esm({
-  "src/lib/jkai/llm-usage-log.ts"() {
+var init_usage_log = __esm({
+  "src/lib/llm/usage-log.ts"() {
     "use strict";
     init_db();
     init_schema();
   }
 });
 
-// src/lib/jkai/activity-context.ts
+// src/lib/context/activity.ts
 import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
 function withActivity(id, fn) {
   return activity.run({ id }, fn);
@@ -4434,14 +5564,24 @@ function currentActivityId() {
   return activity.getStore()?.id ?? null;
 }
 var activity;
-var init_activity_context = __esm({
-  "src/lib/jkai/activity-context.ts"() {
+var init_activity = __esm({
+  "src/lib/context/activity.ts"() {
     "use strict";
     activity = new AsyncLocalStorage2();
   }
 });
 
-// src/lib/jkai/chat-context.ts
+// src/lib/context/chat.ts
+var chat_exports = {};
+__export(chat_exports, {
+  currentChatContext: () => currentChatContext,
+  currentChatSessionId: () => currentChatSessionId,
+  currentSessionModel: () => currentSessionModel,
+  currentSessionThinkingLevel: () => currentSessionThinkingLevel,
+  emptyChatUsage: () => emptyChatUsage,
+  noteChatRound: () => noteChatRound,
+  withChatContext: () => withChatContext
+});
 import { AsyncLocalStorage as AsyncLocalStorage3 } from "node:async_hooks";
 function emptyChatUsage() {
   return {
@@ -4475,15 +5615,25 @@ function noteChatRound(round) {
     totals.reportedCostUsd = (totals.reportedCostUsd ?? 0) + round.reportedCostUsd;
   }
 }
+function currentChatSessionId() {
+  const store2 = chatCtx.getStore();
+  return store2?.jobId ?? store2?.conversationId ?? null;
+}
+function currentSessionModel() {
+  return chatCtx.getStore()?.sessionModel ?? null;
+}
+function currentSessionThinkingLevel() {
+  return chatCtx.getStore()?.sessionThinkingLevel ?? null;
+}
 var chatCtx;
-var init_chat_context = __esm({
-  "src/lib/jkai/chat-context.ts"() {
+var init_chat = __esm({
+  "src/lib/context/chat.ts"() {
     "use strict";
     chatCtx = new AsyncLocalStorage3();
   }
 });
 
-// src/lib/deepdive/meter.ts
+// src/lib/context/research-meter.ts
 import { AsyncLocalStorage as AsyncLocalStorage4 } from "node:async_hooks";
 import { eq, sql as sql2 } from "drizzle-orm";
 function runWithResearchMeter(sessionId, fn) {
@@ -4517,8 +5667,8 @@ function countTavilyExtract(urlCount, depth = "basic") {
   bump({ extracts: 1, credits: extractCredits(urlCount, depth) });
 }
 var researchRun, SEARCH_CREDITS, EXTRACT_URLS_PER_CREDIT;
-var init_meter = __esm({
-  "src/lib/deepdive/meter.ts"() {
+var init_research_meter = __esm({
+  "src/lib/context/research-meter.ts"() {
     "use strict";
     init_db();
     init_schema();
@@ -4541,11 +5691,13 @@ __export(default_models_exports, {
   DEFAULT_IMAGE_MODEL_ID: () => DEFAULT_IMAGE_MODEL_ID,
   DEFAULT_IMAGE_TOOL_MODEL_ID: () => DEFAULT_IMAGE_TOOL_MODEL_ID,
   DEFAULT_NODE_MAX_TOKENS: () => DEFAULT_NODE_MAX_TOKENS,
+  DEFAULT_RESEARCH_FAST_MODEL_ID: () => DEFAULT_RESEARCH_FAST_MODEL_ID,
   DEFAULT_SELFIMPROVE_MODEL_ID: () => DEFAULT_SELFIMPROVE_MODEL_ID,
   DEFAULT_VISION_MODEL_ID: () => DEFAULT_VISION_MODEL_ID,
   LEGACY_GLM_TO_OPENROUTER: () => LEGACY_GLM_TO_OPENROUTER,
   REASONING_TOKEN_FLOOR: () => REASONING_TOKEN_FLOOR,
   coerceModelContext: () => coerceModelContext,
+  isEmbeddingModelId: () => isEmbeddingModelId,
   isGlmModel: () => isGlmModel,
   isReasoningModel: () => isReasoningModel,
   mapLegacyModelId: () => mapLegacyModelId
@@ -4563,6 +5715,9 @@ function coerceModelContext(ctx) {
 function isGlmModel(modelId) {
   return modelId.startsWith("z-ai/glm") || modelId.startsWith("glm-");
 }
+function isEmbeddingModelId(modelId) {
+  return /(^|\/)text-embedding|embedding/i.test(modelId);
+}
 function isReasoningModel(modelId) {
   const id = modelId.toLowerCase().replace(/^~/, "");
   return isGlmModel(id) || id.startsWith("deepseek/deepseek-v4") || id.startsWith("deepseek/deepseek-r") || id.startsWith("minimax/minimax-m") || id.startsWith("moonshotai/") || id.startsWith("tencent/hy3") || id.startsWith("qwen/qwq") || id.startsWith("openai/o1") || id.startsWith("openai/o3") || // Codex models reach here as the bare slug — `toCodexSlug` strips the
@@ -4575,7 +5730,7 @@ function isReasoningModel(modelId) {
   // reads like a cheap non-reasoning model and is not one.
   id.startsWith("google/gemini-3");
 }
-var DEFAULT_CHAT_MODEL_ID, DEFAULT_AGENTIC_MODEL_ID, DEFAULT_EXTRACTION_MODEL_ID, DEFAULT_SELFIMPROVE_MODEL_ID, DEFAULT_DOCTOR_MODEL_ID, DEFAULT_VISION_MODEL_ID, DEFAULT_IMAGE_MODEL_ID, DEFAULT_IMAGE_TOOL_MODEL_ID, DEFAULT_EMBEDDING_MODEL_ID, DEFAULT_AUDIO_MODEL_ID, DEFAULT_ART_DIRECTOR_MODEL_ID, LEGACY_GLM_TO_OPENROUTER, REASONING_TOKEN_FLOOR, DEFAULT_NODE_MAX_TOKENS;
+var DEFAULT_CHAT_MODEL_ID, DEFAULT_AGENTIC_MODEL_ID, DEFAULT_EXTRACTION_MODEL_ID, DEFAULT_SELFIMPROVE_MODEL_ID, DEFAULT_DOCTOR_MODEL_ID, DEFAULT_VISION_MODEL_ID, DEFAULT_IMAGE_MODEL_ID, DEFAULT_IMAGE_TOOL_MODEL_ID, DEFAULT_EMBEDDING_MODEL_ID, DEFAULT_AUDIO_MODEL_ID, DEFAULT_ART_DIRECTOR_MODEL_ID, DEFAULT_RESEARCH_FAST_MODEL_ID, LEGACY_GLM_TO_OPENROUTER, REASONING_TOKEN_FLOOR, DEFAULT_NODE_MAX_TOKENS;
 var init_default_models = __esm({
   "src/lib/constants/default-models.ts"() {
     "use strict";
@@ -4586,10 +5741,11 @@ var init_default_models = __esm({
     DEFAULT_DOCTOR_MODEL_ID = "deepseek/deepseek-v4-flash";
     DEFAULT_VISION_MODEL_ID = "google/gemini-2.5-flash";
     DEFAULT_IMAGE_MODEL_ID = "google/gemini-3.1-flash-image";
-    DEFAULT_IMAGE_TOOL_MODEL_ID = "black-forest-labs/flux-1.1-pro";
+    DEFAULT_IMAGE_TOOL_MODEL_ID = "google/gemini-2.5-flash-image";
     DEFAULT_EMBEDDING_MODEL_ID = "openai/text-embedding-3-large";
     DEFAULT_AUDIO_MODEL_ID = "google/gemini-2.0-flash-001";
     DEFAULT_ART_DIRECTOR_MODEL_ID = "z-ai/glm-5.2";
+    DEFAULT_RESEARCH_FAST_MODEL_ID = "google/gemini-3.5-flash";
     LEGACY_GLM_TO_OPENROUTER = {
       "glm-5.2": "z-ai/glm-5.2",
       "glm-5.1": "z-ai/glm-5.1",
@@ -4609,7 +5765,7 @@ var init_default_models = __esm({
   }
 });
 
-// src/lib/jkai/usage-capture.ts
+// src/lib/llm/usage-capture.ts
 import { sql as sql3 } from "drizzle-orm";
 function captureUsage(provider, model, usage, timing) {
   const promptTokens = usage?.prompt_tokens ?? null;
@@ -4655,7 +5811,7 @@ function captureUsage(provider, model, usage, timing) {
       source: store2 ? "workflow" : researchId ? "research" : chat ? "jkai-chat" : "gateway",
       // The workload this call is serving, when it is serving one. Without it
       // every non-workflow, non-research call is indistinguishable in the
-      // ledger — see $lib/jkai/activity-context.
+      // ledger — see $lib/context/activity.
       activity: currentActivityId(),
       sessionId: store2?.runId ?? researchId ?? chat?.jobId ?? chat?.conversationId ?? null,
       conversationId: chat?.conversationId ?? null,
@@ -4829,29 +5985,30 @@ function installUsageCapture(client, provider) {
 }
 var CAP_TTL_MS, capCache;
 var init_usage_capture = __esm({
-  "src/lib/jkai/usage-capture.ts"() {
+  "src/lib/llm/usage-capture.ts"() {
     "use strict";
     init_db();
     init_schema();
-    init_execution_context();
-    init_llm_pricing();
-    init_llm_usage_log();
-    init_activity_context();
-    init_chat_context();
-    init_meter();
+    init_execution();
+    init_pricing();
+    init_usage_log();
+    init_activity();
+    init_chat();
+    init_research_meter();
     init_default_models();
     CAP_TTL_MS = 5 * 6e4;
     capCache = null;
   }
 });
 
-// src/lib/deepdive/keys.ts
+// src/lib/llm/keys.ts
 var keys_exports = {};
 __export(keys_exports, {
   getEmbeddingModel: () => getEmbeddingModel,
   getFallbackModel: () => getFallbackModel,
   getKeysStatus: () => getKeysStatus,
   getOpenRouterClient: () => getOpenRouterClient,
+  getOpenRouterKey: () => getOpenRouterKey,
   getTavilyKey: () => getTavilyKey,
   hasOpenRouter: () => hasOpenRouter,
   loadKeys: () => loadKeys,
@@ -4886,12 +6043,21 @@ function getTavilyKey() {
   if (!keys.tavilyApiKey) throw new Error("Tavily API key not configured");
   return keys.tavilyApiKey;
 }
-function getOpenRouterClient() {
-  const keys = loadKeys();
-  if (!keys.openrouterApiKey) throw new Error("OpenRouter API key not configured");
+async function getOpenRouterKey() {
+  try {
+    const { getOpenRouterApiKey: getOpenRouterApiKey2 } = await Promise.resolve().then(() => (init_settings(), settings_exports));
+    const key = await getOpenRouterApiKey2();
+    if (key) return key;
+  } catch {
+  }
+  return loadKeys().openrouterApiKey;
+}
+async function getOpenRouterClient() {
+  const apiKey = await getOpenRouterKey();
+  if (!apiKey) throw new Error("OpenRouter API key not configured");
   return installUsageCapture(
     new OpenAI({
-      apiKey: keys.openrouterApiKey,
+      apiKey,
       baseURL: "https://openrouter.ai/api/v1"
     }),
     "openrouter"
@@ -4904,14 +6070,16 @@ function getEmbeddingModel() {
 function getFallbackModel() {
   return loadKeys().openrouterFallbackModel || "google/gemini-3.1-flash-lite-preview";
 }
-function hasOpenRouter() {
-  return !!loadKeys().openrouterApiKey;
+async function hasOpenRouter() {
+  return !!await getOpenRouterKey();
 }
-function getKeysStatus() {
+async function getKeysStatus() {
   const keys = loadKeys();
   return {
     tavilyConfigured: !!keys.tavilyApiKey,
-    openrouterConfigured: !!keys.openrouterApiKey,
+    // Not `keys.openrouterApiKey` — the key normally lives in the DB, and a
+    // status that reads only the file reported "Not set" for a working key.
+    openrouterConfigured: !!await getOpenRouterKey(),
     elevenlabsConfigured: !!keys.elevenlabsApiKey,
     fallbackModel: getFallbackModel(),
     embeddingModel: keys.embeddingModel || "openai/text-embedding-3-large"
@@ -4919,7 +6087,7 @@ function getKeysStatus() {
 }
 var KEYS_PATH;
 var init_keys = __esm({
-  "src/lib/deepdive/keys.ts"() {
+  "src/lib/llm/keys.ts"() {
     "use strict";
     init_usage_capture();
     init_env_shim();
@@ -5059,12 +6227,12 @@ var init_settings = __esm({
   }
 });
 
-// src/lib/jkai/usage-meter.ts
+// src/lib/llm/usage-meter.ts
 function isSubscriptionModelId(modelId) {
   return typeof modelId === "string" && modelId.startsWith("codex/");
 }
 var init_usage_meter = __esm({
-  "src/lib/jkai/usage-meter.ts"() {
+  "src/lib/llm/usage-meter.ts"() {
     "use strict";
   }
 });
@@ -5076,24 +6244,41 @@ function isCodexModelId(modelId) {
 function toCodexSlug(modelId) {
   return modelId.startsWith("codex/") ? modelId.slice("codex/".length) : modelId;
 }
+var DEFAULT_CODEX_MODEL_SLUG;
 var init_codex_catalogue = __esm({
   "src/lib/server/models/codex-catalogue.ts"() {
     "use strict";
     init_usage_meter();
+    DEFAULT_CODEX_MODEL_SLUG = "gpt-5.6-terra";
   }
 });
 
-// src/lib/jkai/llm-client.ts
-var llm_client_exports = {};
-__export(llm_client_exports, {
+// src/lib/llm/client.ts
+var client_exports = {};
+__export(client_exports, {
   clearLLMClientCache: () => clearLLMClientCache,
+  codexCanStandIn: () => codexCanStandIn,
   getGroundedCodexClient: () => getGroundedCodexClient,
-  getLLMClient: () => getLLMClient
+  getLLMClient: () => getLLMClient,
+  isCreditOrAuthFailure: () => isCreditOrAuthFailure,
+  markOpenrouterDown: () => markOpenrouterDown,
+  openrouterIsDown: () => openrouterIsDown
 });
 import OpenAI2 from "openai";
 function clearLLMClientCache() {
   openrouterClient = void 0;
   codexClient = void 0;
+  openrouterOutageUntil = 0;
+}
+function openrouterIsDown(now = Date.now()) {
+  return now < openrouterOutageUntil;
+}
+function markOpenrouterDown(now = Date.now()) {
+  openrouterOutageUntil = now + OUTAGE_TTL_MS;
+}
+function isCreditOrAuthFailure(err) {
+  const status = err?.status;
+  return status === 402 || status === 401 || status === 403;
 }
 function getGroundedCodexClient() {
   if (!groundedCodexClient) {
@@ -5110,43 +6295,1945 @@ function getGroundedCodexClient() {
 async function getLLMClient(ctx) {
   const resolved = coerceModelContext(ctx);
   if (resolved.provider === "codex") {
-    if (!codexClient) {
-      codexClient = installUsageCapture(
-        new OpenAI2({
-          // The bridge is loopback-only and unauthenticated at the HTTP layer —
-          // the real credential is the Codex OAuth token in ~/.codex/auth.json,
-          // held by the bridge process. The SDK requires a non-empty apiKey, so
-          // this placeholder satisfies it without meaning anything.
-          apiKey: "codex-bridge-local",
-          baseURL: `${getCodexBridgeUrl()}/v1`
-        }),
-        "codex"
-      );
-    }
-    return { client: codexClient, model: toCodexSlug(resolved.modelId) };
+    return { client: getCodexClient(), model: toCodexSlug(resolved.modelId) };
   }
+  const openrouterModel = mapLegacyModelId(resolved.modelId);
+  if (openrouterClient && !openrouterIsDown()) {
+    return { client: openrouterClient, model: openrouterModel };
+  }
+  const apiKey = await getOpenRouterApiKey();
+  if ((!apiKey || openrouterIsDown()) && await codexCanStandIn(openrouterModel)) {
+    console.warn(
+      `[llm] OpenRouter unavailable (${apiKey ? "out of credit" : "no key"}) \u2014 "${openrouterModel}" routed to Codex ${DEFAULT_CODEX_MODEL_SLUG}`
+    );
+    return { client: getCodexClient(), model: DEFAULT_CODEX_MODEL_SLUG };
+  }
+  if (!apiKey) throw new Error("OpenRouter API key not configured");
   if (!openrouterClient) {
-    const apiKey = await getOpenRouterApiKey();
-    if (!apiKey) throw new Error("OpenRouter API key not configured");
-    openrouterClient = installUsageCapture(
-      new OpenAI2({
-        apiKey,
-        baseURL: OPENROUTER_BASE_URL
-      }),
-      "openrouter"
+    openrouterClient = installCodexFallback(
+      installUsageCapture(
+        new OpenAI2({
+          apiKey,
+          baseURL: OPENROUTER_BASE_URL
+        }),
+        "openrouter"
+      )
     );
   }
-  return { client: openrouterClient, model: mapLegacyModelId(resolved.modelId) };
+  return { client: openrouterClient, model: openrouterModel };
 }
-var OPENROUTER_BASE_URL, openrouterClient, codexClient, groundedCodexClient;
-var init_llm_client = __esm({
-  "src/lib/jkai/llm-client.ts"() {
+function getCodexClient() {
+  if (!codexClient) {
+    codexClient = installUsageCapture(
+      new OpenAI2({
+        // The bridge is loopback-only and unauthenticated at the HTTP layer —
+        // the real credential is the Codex OAuth token in ~/.codex/auth.json,
+        // held by the bridge process. The SDK requires a non-empty apiKey, so
+        // this placeholder satisfies it without meaning anything.
+        apiKey: "codex-bridge-local",
+        baseURL: `${getCodexBridgeUrl()}/v1`
+      }),
+      "codex"
+    );
+  }
+  return codexClient;
+}
+async function codexCanStandIn(modelId) {
+  if (isEmbeddingModelId(modelId)) return false;
+  return await isCodexEnabled();
+}
+function installCodexFallback(client) {
+  const completions = client.chat.completions;
+  const original = completions.create.bind(completions);
+  completions.create = async function(...args) {
+    try {
+      return await original(...args);
+    } catch (err) {
+      if (!isCreditOrAuthFailure(err)) throw err;
+      markOpenrouterDown();
+      const params = args[0] ?? {};
+      const model = params.model ?? "";
+      if (!await codexCanStandIn(model)) throw err;
+      const status = err.status;
+      console.warn(`[llm] OpenRouter refused ${status} for "${model}" \u2014 retrying on Codex ${DEFAULT_CODEX_MODEL_SLUG}`);
+      const codex = getCodexClient().chat.completions;
+      return await codex.create({ ...params, model: DEFAULT_CODEX_MODEL_SLUG }, ...args.slice(1));
+    }
+  };
+  return client;
+}
+var OPENROUTER_BASE_URL, openrouterClient, codexClient, groundedCodexClient, OUTAGE_TTL_MS, openrouterOutageUntil;
+var init_client = __esm({
+  "src/lib/llm/client.ts"() {
     "use strict";
     init_settings();
     init_usage_capture();
     init_default_models();
     init_codex_catalogue();
     OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+    OUTAGE_TTL_MS = 5 * 6e4;
+    openrouterOutageUntil = 0;
+  }
+});
+
+// src/lib/server/models/capabilities.ts
+import { eq as eq3 } from "drizzle-orm";
+function capsFromModalities(inputs) {
+  return {
+    image: inputs.includes("image"),
+    audio: inputs.includes("audio"),
+    video: inputs.includes("video"),
+    pdf: inputs.includes("file"),
+    // Every chat model takes text; nothing in the catalogue contradicts it.
+    documentText: true
+  };
+}
+function warmCatalogueCaps() {
+  if (catalogueCaps || capsWarmInFlight) return;
+  capsWarmInFlight = true;
+  (async () => {
+    const { db: db2 } = await Promise.resolve().then(() => (init_db(), db_exports));
+    const { openrouterModels: openrouterModels2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const rows = await db2.select({ id: openrouterModels2.id, raw: openrouterModels2.raw }).from(openrouterModels2);
+    const map = /* @__PURE__ */ new Map();
+    for (const r of rows) {
+      const raw = r.raw ?? {};
+      const inputs = raw.architecture?.input_modalities;
+      if (!Array.isArray(inputs) || inputs.length === 0) continue;
+      map.set(r.id, capsFromModalities(inputs.map((m) => String(m))));
+    }
+    if (map.size > 0) catalogueCaps = map;
+  })().catch(() => {
+    capsWarmInFlight = false;
+  });
+}
+function getModelCapabilities(ctx) {
+  if (ctx.provider === "codex" || isCodexModelId(ctx.modelId)) return TEXT_ONLY;
+  warmCatalogueCaps();
+  const id = mapLegacyModelId(ctx.modelId);
+  return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;
+}
+function getProviderFeatures(provider) {
+  return provider === "codex" ? CODEX_FEATURES : OPENROUTER_FEATURES;
+}
+var ALL, IMAGE_ONLY, IMAGE_PDF, TEXT_ONLY, OPENROUTER_CAPS, catalogueCaps, capsWarmInFlight, OPENROUTER_FEATURES, CODEX_FEATURES;
+var init_capabilities = __esm({
+  "src/lib/server/models/capabilities.ts"() {
+    "use strict";
+    init_default_models();
+    init_thinking();
+    init_codex_catalogue();
+    ALL = { image: true, audio: true, video: true, pdf: true, documentText: true };
+    IMAGE_ONLY = { image: true, audio: false, video: false, pdf: false, documentText: true };
+    IMAGE_PDF = { image: true, audio: false, video: false, pdf: true, documentText: true };
+    TEXT_ONLY = { image: false, audio: false, video: false, pdf: false, documentText: true };
+    OPENROUTER_CAPS = {
+      // GLM family via OpenRouter z-ai/* slugs (multimodal parity with the old
+      // direct-z.ai capability map).
+      "z-ai/glm-5": ALL,
+      "z-ai/glm-5.2": ALL,
+      "z-ai/glm-5.1": ALL,
+      "z-ai/glm-5v-turbo": IMAGE_ONLY,
+      "z-ai/glm-4.6v": IMAGE_ONLY,
+      "z-ai/glm-4.5v": IMAGE_ONLY,
+      "z-ai/glm-4.7": TEXT_ONLY,
+      "z-ai/glm-4.6": TEXT_ONLY,
+      "z-ai/glm-4.5": TEXT_ONLY,
+      "anthropic/claude-3.5-sonnet": IMAGE_PDF,
+      "anthropic/claude-3.7-sonnet": IMAGE_PDF,
+      "anthropic/claude-opus-4.1": IMAGE_PDF,
+      "anthropic/claude-sonnet-4.5": IMAGE_PDF,
+      "openai/gpt-4o": IMAGE_ONLY,
+      "openai/gpt-4.1": IMAGE_ONLY,
+      "google/gemini-2.5-pro": ALL,
+      "google/gemini-2.5-flash": ALL,
+      "google/gemini-3.5-flash": ALL,
+      "google/gemini-3.1-flash-lite-preview": ALL,
+      "google/gemini-3.1-flash-lite": ALL,
+      "x-ai/grok-2-vision": IMAGE_ONLY,
+      // Open-weight cost leaders (the 2026-07-25 routing shift). Listed explicitly
+      // even though TEXT_ONLY is the fallback: these are the models the router now
+      // picks, so their limits should be stated rather than inferred. deepseek-v4-*
+      // and the minimax/tencent picks are all text→text — to send an image or PDF,
+      // switch the conversation to a multimodal model in the picker (the alt chip).
+      "deepseek/deepseek-v4-flash": TEXT_ONLY,
+      "deepseek/deepseek-v4-pro": TEXT_ONLY,
+      "minimax/minimax-m3": TEXT_ONLY,
+      "tencent/hy3-preview": TEXT_ONLY,
+      "openai/gpt-oss-120b": TEXT_ONLY
+    };
+    catalogueCaps = null;
+    capsWarmInFlight = false;
+    OPENROUTER_FEATURES = {
+      tools: true,
+      structuredOutput: true,
+      streaming: true,
+      embeddings: true
+    };
+    CODEX_FEATURES = {
+      // TRUE since the bridge learned to publish caller tools as an MCP server —
+      // the only route by which Codex accepts external tools. It captures the
+      // dispatch and returns `tool_calls`, so the caller still runs the tool, as
+      // the chat-completions contract requires. Before that this said false, and
+      // the UI wrongly reported the MODEL as incapable.
+      tools: true,
+      structuredOutput: true,
+      streaming: true,
+      embeddings: false
+    };
+  }
+});
+
+// src/lib/models/workloads.ts
+function emitsImages(modality) {
+  if (!modality) return false;
+  const arrow = modality.indexOf("->");
+  if (arrow === -1) return false;
+  return modality.slice(arrow + 2).includes("image");
+}
+var SITE_WORKLOADS, WORKLOADS;
+var init_workloads = __esm({
+  "src/lib/models/workloads.ts"() {
+    "use strict";
+    init_default_models();
+    SITE_WORKLOADS = [
+      {
+        id: "extraction",
+        scope: "site",
+        label: "Entity extraction",
+        blurb: "Intel entity extraction + resolution after a reply lands.",
+        key: "jkai.intel.extract_model",
+        fallbackModelId: DEFAULT_EXTRACTION_MODEL_ID,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "Latency-visible: it runs after the reply is delivered and the entity rail stays empty until it finishes. Mechanical JSON against a fixed schema, so it takes the fastest cheap model rather than the smartest one."
+      },
+      {
+        id: "resolution",
+        scope: "site",
+        label: "Entity adjudication",
+        blurb: "Reads the evidence behind two candidate duplicates and rules on whether they are one thing.",
+        key: "jkai.intel.resolution_model",
+        // Follows the site default deliberately. Extraction is pinned cheap because
+        // it is mechanical JSON on a latency-visible path; this is the opposite —
+        // nothing waits on it, it runs a few hundred times a night at most, and the
+        // whole point of it is judgement the string rules could not make.
+        fallbackModelId: null,
+        requires: "tools",
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "selfimprove",
+        scope: "site",
+        label: "Self-improve",
+        blurb: "The nightly 03:30 self-improvement engine that authors code.",
+        key: "jkai.selfimprove.model",
+        fallbackModelId: DEFAULT_SELFIMPROVE_MODEL_ID,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "Writes code that ships unattended, so it was pinned in 2026-07-29 to stop a chat-default change silently altering what authors it. Still a deliberate choice \u2014 just one you can now see and make."
+      },
+      {
+        id: "daydream",
+        scope: "site",
+        label: "Daydreaming",
+        blurb: "Phrases what the daydream detectors found, and verifies it against the evidence.",
+        key: "jkai.daydream.model",
+        fallbackModelId: null,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "Follows the site default rather than pinning, because the work is short-form phrasing under a hard evidence constraint rather than code authoring. Worth knowing before changing it: on a Codex model this role is capped at 10% of the weekly allowance per day and 50% of the current 5-hour window, enforced in $lib/daydream/budget.ts. Move it to an OpenRouter model and those caps stop applying \u2014 the spend becomes cash instead, and nothing here limits it."
+      },
+      {
+        id: "doctor",
+        scope: "site",
+        label: "Workflow doctor",
+        blurb: "Diagnosing failing canvas nodes \u2014 the 05:00 doctor and the runtime self-heal.",
+        key: "jkai.workflowdoctor.model",
+        fallbackModelId: DEFAULT_DOCTOR_MODEL_ID,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "Pinned for the same reason as self-improve: diagnosis quality should not move overnight because the chat default moved."
+      },
+      {
+        id: "thinking",
+        scope: "site",
+        label: "Thinking tier",
+        blurb: "Orchestrator plan / clarify turns and any prompt past the large-context threshold.",
+        key: "jkai.builder.thinking_model",
+        fallbackModelId: null,
+        requires: "tools",
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "vision",
+        scope: "site",
+        label: "Vision / OCR",
+        blurb: "Image captions and OCR for the file index and Drive search.",
+        key: "jkai.vision.model",
+        fallbackModelId: DEFAULT_VISION_MODEL_ID,
+        requires: "image-input",
+        catalogue: "tools",
+        reason: "Must accept images. The site default is currently text-only, and a text-only model answers the prompt while ignoring the picture \u2014 a confident caption of nothing."
+      },
+      {
+        id: "image",
+        scope: "site",
+        label: "Image generation",
+        blurb: "Studio explainer images (chat-completions with `modalities: [image, text]`).",
+        key: "jkai.image.model",
+        fallbackModelId: DEFAULT_IMAGE_MODEL_ID,
+        requires: "image-output",
+        catalogue: "image-out",
+        reason: "Must emit an image; a text model cannot serve this role at all. Note this does NOT cover the canvas `generate_image` tool, which calls OpenRouter's separate /images/generations endpoint \u2014 a different API that these models do not serve. That one is the `image-tool` role below."
+      },
+      {
+        id: "audio",
+        scope: "site",
+        label: "Audio transcription",
+        blurb: "Speech-to-text for audio files in the @files index.",
+        key: "jkai.audio.model",
+        fallbackModelId: DEFAULT_AUDIO_MODEL_ID,
+        requires: "audio-input",
+        catalogue: "tools",
+        reason: "Must accept an `input_audio` content part. OpenAI's whisper endpoint is not reachable through this repo's OpenRouter-only gateway, so transcription rides a multimodal chat model rather than a dedicated speech API."
+      },
+      {
+        id: "art-director",
+        scope: "site",
+        label: "Deck art director",
+        blurb: "Composing slide layouts and block choices in the decks builder.",
+        key: "jkai.decks.art_director_model",
+        fallbackModelId: DEFAULT_ART_DIRECTOR_MODEL_ID,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it."
+      },
+      {
+        id: "image-tool",
+        scope: "site",
+        label: "Image tool",
+        blurb: "The canvas/chat `generate_image` tool \u2014 OpenRouter's /images/generations endpoint.",
+        key: "jkai.image.tool_model",
+        envKey: "JKAI_IMAGE_MODEL",
+        fallbackModelId: DEFAULT_IMAGE_TOOL_MODEL_ID,
+        requires: null,
+        // OpenRouter's /models feed does not carry the dedicated image-generation
+        // namespace, so there is no list to pick from — the slug is typed in, the
+        // same situation as embeddings.
+        catalogue: "none",
+        reason: "A DIFFERENT API from the `image` role above: /images/generations, which the chat-completions image models do not serve. Typing a chat model here fails at call time. Verified serving this endpoint on 2026-08-30, cheapest first: google/gemini-2.5-flash-image ($0.039/image), openai/gpt-5-image-mini ($0.050), google/gemini-3-pro-image ($0.135). FLUX is gone \u2014 OpenRouter removed black-forest-labs/flux-1.1-pro and the endpoint 404s for it, which is why every image generation on the site silently failed until 2026-08-30."
+      },
+      {
+        id: "embeddings",
+        scope: "site",
+        label: "Embeddings",
+        blurb: "RAG, Drive file embeddings and the knowledge index.",
+        key: "jkai.embeddings.model",
+        fallbackModelId: DEFAULT_EMBEDDING_MODEL_ID,
+        requires: "embeddings",
+        catalogue: "none",
+        reason: "Needs the /v1/embeddings endpoint, which Codex has no equivalent of. OpenRouter's model feed omits embedding models, so there is nothing here to pick from a list \u2014 set the slug by hand."
+      },
+      // ── The rest of the site's LLM tasks ─────────────────────────────────────
+      //
+      // Added 2026-09-01 (John, reading /admin/ops/costs: "deep research is locked
+      // to using a specific model as are a few others… I want to be able to define
+      // a model for EVERY type of task").
+      //
+      // Only the first of these was pinned to a constant. The others all followed
+      // the site default already — but "follows the default" and "cannot be changed"
+      // are indistinguishable when there is no key, and on the spend page they read
+      // as one undifferentiated `source:gateway` bucket. Registering them costs
+      // nothing at runtime (`fallbackModelId: null` resolves exactly as before) and
+      // buys two things: a switch per task, and a spend row per task so the switch
+      // has evidence behind it.
+      {
+        id: "research-fast",
+        scope: "site",
+        label: "Research \u2014 fast tiers",
+        blurb: "The budgeted research tiers: Instant, Scan and Brief.",
+        key: "jkai.research.fast_model",
+        envKey: "RESEARCH_FAST_MODEL",
+        fallbackModelId: DEFAULT_RESEARCH_FAST_MODEL_ID,
+        requires: "openrouter",
+        catalogue: "tools",
+        reason: "These tiers promise an answer inside a wall clock (30s / 90s / 110s), so they must NOT inherit the site default: a reasoning model spends the budget thinking before it emits a token, and a codex/ id costs ~10s on the first call and cannot stream at all. Pick something fast and non-reasoning here, or the tier stops meaning what its label says."
+      },
+      {
+        id: "research-deep",
+        scope: "site",
+        label: "Research \u2014 Investigation",
+        blurb: "The unbudgeted full research desk: breadth search, extraction, red-team, clustering.",
+        key: "jkai.research.deep_model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: "The one tier with no clock to protect, so it follows the site default and takes whatever quality that buys. It is also the most expensive thing on the site per run \u2014 worth pinning UP rather than down if the default ever moves cheap."
+      },
+      {
+        id: "builder",
+        scope: "site",
+        label: "Autonomous builder",
+        blurb: "The pi coding agent and the orchestrator planner behind /jkai/builds.",
+        key: "jkai.builder.model",
+        fallbackModelId: null,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "Follows the site default. Note a build PINS its model at creation from whatever this resolves to, so changing it affects new builds only \u2014 the same rule chat conversations follow."
+      },
+      {
+        id: "heartbeat",
+        scope: "site",
+        label: "Heartbeat turns",
+        blurb: "Scheduled heartbeat turns that continue a conversation unattended.",
+        key: "jkai.heartbeat.model",
+        fallbackModelId: null,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "Follows the site default. Worth knowing before changing it: these run unattended on a timer, so a slow or expensive pick here is spent without anyone watching."
+      },
+      {
+        id: "briefing",
+        scope: "site",
+        label: "Daily briefing",
+        blurb: "The scheduled briefing that assembles the day from verified sources.",
+        key: "jkai.briefing.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "blog",
+        scope: "site",
+        label: "Blog assistant",
+        blurb: "The editor assistant, auto-review and claim-checking on /admin/blog.",
+        key: "jkai.blog.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "chat-maintenance",
+        scope: "site",
+        label: "Chat housekeeping",
+        blurb: "History compression and memory review \u2014 the background work on a long thread.",
+        key: "jkai.chat.maintenance_model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: "Nobody reads this output directly; it only has to be faithful. A cheap fast model is the obvious pin, and it is separated from the chat turn itself precisely so pinning one does not move the other."
+      },
+      {
+        id: "intel-analysis",
+        scope: "site",
+        label: "Intel analysis",
+        blurb: "Note preprocessing, entity briefs, recall and conflation repair in the intel graph.",
+        key: "jkai.intel.analysis_model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: "Distinct from Entity extraction, which is the latency-critical post-reply pass. This is the read side \u2014 briefs and recall a person waits on deliberately \u2014 so it can afford a better model than extraction can."
+      },
+      {
+        id: "notebook",
+        scope: "site",
+        label: "Notebook research",
+        blurb: "The scan / brief passes behind /jkai/notes.",
+        key: "jkai.notebook.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "project-chat",
+        scope: "site",
+        label: "Project page chats",
+        blurb: "The study chats and authoring aids on /projects (policy engine, data spine, DfE, ARCHETYPE).",
+        key: "jkai.projects.chat_model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "trails",
+        scope: "site",
+        label: "Trails interpretation",
+        blurb: "Turning a recorded route into prose on /trails.",
+        key: "jkai.trails.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "landing",
+        scope: "site",
+        label: "Landing hero titles",
+        blurb: "The rotating hero titles generated for the landing page.",
+        key: "jkai.landing.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "delegation",
+        scope: "site",
+        label: "Agent delegation",
+        blurb: "Sub-agents from the agent team, when one is dispatched without its own model.",
+        key: "jkai.delegation.model",
+        fallbackModelId: null,
+        requires: "tools",
+        catalogue: "tools",
+        reason: "An agent row may name its own model, which still wins. This is what a team member with no model of its own runs on."
+      },
+      {
+        id: "rag",
+        scope: "site",
+        label: "RAG answering",
+        blurb: "Answers synthesised over a document collection, with citations.",
+        key: "jkai.rag.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: "The ANSWER model, not the embedding model \u2014 those are separate roles because they are separately consequential: changing this one is free, and changing Embeddings invalidates every stored vector."
+      },
+      {
+        id: "mapping",
+        scope: "site",
+        label: "Canvas edge mapping",
+        blurb: "Proposing the field mapping when two canvas nodes are wired together.",
+        key: "jkai.mapping.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: "Falls back to a deterministic heuristic on any failure, so this is the one role where a bad pick degrades rather than breaks \u2014 which also means a broken pick here is easy to miss."
+      },
+      {
+        id: "health",
+        scope: "site",
+        label: "Health narratives",
+        blurb: "The narrative and hero copy over the health metrics on /health.",
+        key: "jkai.health.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      },
+      {
+        id: "releases",
+        scope: "site",
+        label: "Release summaries",
+        blurb: "Turning a deploy diff into the release log entry.",
+        key: "jkai.releases.model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: "Runs against a whole diff, so it is context-hungry: the largest releases already blow the gateway's 90s non-streaming ceiling on a reasoning model and fall back to a compact second pass. Pin something fast with a large window rather than something clever."
+      },
+      {
+        id: "tool-suggestions",
+        scope: "site",
+        label: "Tool-usage suggestions",
+        blurb: "The admin tool-usage audit that proposes toolchain changes.",
+        key: "jkai.tooling.suggestions_model",
+        fallbackModelId: null,
+        requires: null,
+        catalogue: "tools",
+        reason: null
+      }
+    ];
+    WORKLOADS = [...SITE_WORKLOADS];
+  }
+});
+
+// src/lib/datastore/types.ts
+var DatastoreError;
+var init_types = __esm({
+  "src/lib/datastore/types.ts"() {
+    "use strict";
+    DatastoreError = class extends Error {
+      constructor(code, message) {
+        super(message);
+        this.code = code;
+        this.name = "DatastoreError";
+      }
+    };
+  }
+});
+
+// src/lib/datastore/permissions.ts
+import { sql as sql4 } from "drizzle-orm";
+function dedupe(list) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const item of list) {
+    if (!seen.has(item)) {
+      seen.add(item);
+      out.push(item);
+    }
+  }
+  return out;
+}
+function builtinDefault(creator) {
+  return dedupe([creator, "owner", "jkai"]);
+}
+function resolvePermissions(record, collection) {
+  const creator = record.createdBy ?? collection.createdBy ?? "owner";
+  const fallback = builtinDefault(creator);
+  const source = record.permissions ?? collection.defaultPermissions ?? null;
+  const pick = (action) => {
+    const fromSource = source?.[action];
+    return Array.isArray(fromSource) ? fromSource : fallback;
+  };
+  return {
+    read: pick("read"),
+    write: pick("write"),
+    delete: pick("delete")
+  };
+}
+function listGrants(list, actor) {
+  if (!list) return false;
+  for (const entry of list) {
+    if (entry === "*") return true;
+    if (entry === actor) return true;
+    if (entry === "workflow:*" && actor.startsWith("workflow:")) return true;
+  }
+  return false;
+}
+function canDo(action, perms, actor) {
+  if (actor === "owner") return true;
+  return listGrants(perms[action], actor);
+}
+function assertCan(action, perms, actor) {
+  if (!canDo(action, perms, actor)) {
+    throw new DatastoreError(
+      "forbidden",
+      `actor "${actor}" is not permitted to ${action} this resource`
+    );
+  }
+}
+function readableSqlPredicate(collection, actor) {
+  if (actor === "owner") return sql4`TRUE`;
+  const colRead = collection.defaultPermissions?.read;
+  const colReadJson = Array.isArray(colRead) ? sql4`${JSON.stringify(colRead)}::jsonb` : sql4`NULL`;
+  const creator = collection.createdBy ?? "owner";
+  const builtin = sql4`jsonb_build_array(coalesce(created_by, ${creator}), 'owner', 'jkai')`;
+  const eff = sql4`CASE
+    WHEN permissions IS NOT NULL THEN coalesce(permissions -> 'read', ${builtin})
+    ELSE coalesce(${colReadJson}, ${builtin})
+  END`;
+  const wildcardWorkflow = actor.startsWith("workflow:") ? sql4` OR ${eff} @> '"workflow:*"'::jsonb` : sql4``;
+  return sql4`(${eff} @> to_jsonb(${actor}::text) OR ${eff} @> '"*"'::jsonb${wildcardWorkflow})`;
+}
+var init_permissions = __esm({
+  "src/lib/datastore/permissions.ts"() {
+    "use strict";
+    init_types();
+  }
+});
+
+// src/lib/datastore/audit.ts
+import { sql as sql5 } from "drizzle-orm";
+function auditDatastore(entry) {
+  try {
+    const before = entry.before === void 0 ? null : JSON.stringify(entry.before);
+    const after = entry.after === void 0 ? null : JSON.stringify(entry.after);
+    void db.execute(sql5`
+        INSERT INTO datastore_audit_log (collection_id, record_id, actor, action, before, after)
+        VALUES (
+          ${entry.collectionId},
+          ${entry.recordId ?? null},
+          ${entry.actor},
+          ${entry.action},
+          ${before}::jsonb,
+          ${after}::jsonb
+        )
+      `).catch((err) => {
+      console.error(
+        "[datastore-audit] failed to write audit row:",
+        err instanceof Error ? err.message : err
+      );
+    });
+  } catch (err) {
+    console.error(
+      "[datastore-audit] audit write threw synchronously:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+var init_audit = __esm({
+  "src/lib/datastore/audit.ts"() {
+    "use strict";
+    init_db();
+  }
+});
+
+// src/lib/datastore/collections.ts
+var collections_exports = {};
+__export(collections_exports, {
+  deleteCollection: () => deleteCollection,
+  ensureCollection: () => ensureCollection,
+  getCollectionBySlug: () => getCollectionBySlug,
+  listCollections: () => listCollections,
+  mapCollectionRow: () => mapCollectionRow,
+  updateCollection: () => updateCollection
+});
+import { sql as sql6 } from "drizzle-orm";
+function asDate(v) {
+  return v instanceof Date ? v : new Date(String(v));
+}
+function mapCollectionRow(r) {
+  return {
+    id: String(r.id),
+    slug: String(r.slug),
+    name: r.name ?? null,
+    description: r.description ?? null,
+    schema: r.schema ?? null,
+    defaultPermissions: r.default_permissions ?? null,
+    settings: r.settings ?? null,
+    isSystem: r.is_system === true,
+    createdBy: r.created_by ?? null,
+    createdAt: asDate(r.created_at),
+    updatedAt: asDate(r.updated_at)
+  };
+}
+function rowsOf(res) {
+  return res.rows ?? [];
+}
+function collectionPerms(collection) {
+  return resolvePermissions({ permissions: null, createdBy: collection.createdBy }, collection);
+}
+function validateSlug(slug) {
+  if (!SLUG_RE.test(slug)) {
+    throw new DatastoreError(
+      "validation",
+      `invalid collection slug "${slug}" (lowercase alphanumeric, hyphen or underscore; must start alphanumeric)`
+    );
+  }
+}
+function jsonbParam(value) {
+  return value === void 0 || value === null ? sql6`NULL` : sql6`${JSON.stringify(value)}::jsonb`;
+}
+async function getCollectionBySlug(slug) {
+  const res = await db.execute(
+    sql6`SELECT * FROM datastore_collections WHERE slug = ${slug} LIMIT 1`
+  );
+  const [row] = rowsOf(res);
+  return row ? mapCollectionRow(row) : null;
+}
+async function ensureCollection(slug, opts, actor) {
+  validateSlug(slug);
+  const existing = await getCollectionBySlug(slug);
+  if (existing) return existing;
+  const res = await db.execute(sql6`
+    INSERT INTO datastore_collections
+      (slug, name, description, schema, default_permissions, settings, is_system, created_by)
+    VALUES (
+      ${slug},
+      ${opts.name ?? null},
+      ${opts.description ?? null},
+      ${jsonbParam(opts.schema ?? null)},
+      ${jsonbParam(opts.defaultPermissions ?? null)},
+      ${jsonbParam(opts.settings ?? null)},
+      ${opts.isSystem === true},
+      ${actor}
+    )
+    ON CONFLICT (slug) DO NOTHING
+    RETURNING *
+  `);
+  const [row] = rowsOf(res);
+  const created = row ? mapCollectionRow(row) : await getCollectionBySlug(slug);
+  if (!created) throw new DatastoreError("conflict", `failed to create collection "${slug}"`);
+  if (row) {
+    auditDatastore({
+      collectionId: created.id,
+      actor,
+      action: "collection_create",
+      after: created
+    });
+  }
+  return created;
+}
+async function listCollections(actor) {
+  const res = await db.execute(sql6`SELECT * FROM datastore_collections ORDER BY updated_at DESC`);
+  return rowsOf(res).map(mapCollectionRow).filter((c4) => canDo("read", collectionPerms(c4), actor));
+}
+async function updateCollection(slug, patch, actor) {
+  const before = await getCollectionBySlug(slug);
+  if (!before) throw new DatastoreError("not_found", `collection "${slug}" not found`);
+  assertCan("write", collectionPerms(before), actor);
+  const sets = [];
+  if (patch.name !== void 0) sets.push(sql6`name = ${patch.name}`);
+  if (patch.description !== void 0) sets.push(sql6`description = ${patch.description}`);
+  if (patch.schema !== void 0) sets.push(sql6`schema = ${jsonbParam(patch.schema)}`);
+  if (patch.defaultPermissions !== void 0)
+    sets.push(sql6`default_permissions = ${jsonbParam(patch.defaultPermissions)}`);
+  if (patch.settings !== void 0) sets.push(sql6`settings = ${jsonbParam(patch.settings)}`);
+  if (patch.isSystem !== void 0) sets.push(sql6`is_system = ${patch.isSystem === true}`);
+  sets.push(sql6`updated_at = now()`);
+  const res = await db.execute(sql6`
+    UPDATE datastore_collections SET ${sql6.join(sets, sql6`, `)} WHERE slug = ${slug} RETURNING *
+  `);
+  const [row] = rowsOf(res);
+  const after = row ? mapCollectionRow(row) : before;
+  auditDatastore({ collectionId: after.id, actor, action: "collection_update", before, after });
+  return after;
+}
+async function deleteCollection(slug, actor) {
+  const before = await getCollectionBySlug(slug);
+  if (!before) throw new DatastoreError("not_found", `collection "${slug}" not found`);
+  if (before.isSystem) {
+    throw new DatastoreError("forbidden", `collection "${slug}" is a system collection and cannot be deleted`);
+  }
+  assertCan("delete", collectionPerms(before), actor);
+  await db.execute(sql6`DELETE FROM datastore_collections WHERE id = ${before.id}`);
+  auditDatastore({ collectionId: before.id, actor, action: "collection_delete", before });
+  return { deleted: true };
+}
+var SLUG_RE;
+var init_collections = __esm({
+  "src/lib/datastore/collections.ts"() {
+    "use strict";
+    init_db();
+    init_types();
+    init_permissions();
+    init_audit();
+    SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
+  }
+});
+
+// src/lib/datastore/validate.ts
+function jsonType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  const t = typeof value;
+  if (t === "number") return "number";
+  if (t === "boolean") return "boolean";
+  if (t === "string") return "string";
+  if (t === "object") return "object";
+  return t;
+}
+function typeMatches(value, expected) {
+  if (expected === "integer") return typeof value === "number" && Number.isInteger(value);
+  return jsonType(value) === expected;
+}
+function isPlainSchema(schema) {
+  return typeof schema === "object" && schema !== null && !Array.isArray(schema);
+}
+function walk(value, schema, path4, errors) {
+  const at = path4 || "(root)";
+  if (schema.type !== void 0) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    if (!types.some((t) => typeMatches(value, String(t)))) {
+      errors.push(`${at}: expected type ${types.join("|")}, got ${jsonType(value)}`);
+      return;
+    }
+  }
+  if (Array.isArray(schema.enum)) {
+    const ok2 = schema.enum.some((e) => JSON.stringify(e) === JSON.stringify(value));
+    if (!ok2) errors.push(`${at}: value not in enum`);
+  }
+  if (typeof value === "number") {
+    if (typeof schema.minimum === "number" && value < schema.minimum) {
+      errors.push(`${at}: ${value} < minimum ${schema.minimum}`);
+    }
+    if (typeof schema.maximum === "number" && value > schema.maximum) {
+      errors.push(`${at}: ${value} > maximum ${schema.maximum}`);
+    }
+  }
+  if (typeof value === "string" && typeof schema.pattern === "string") {
+    let re = null;
+    try {
+      re = new RegExp(schema.pattern);
+    } catch {
+      re = null;
+    }
+    if (re && !re.test(value)) errors.push(`${at}: does not match pattern ${schema.pattern}`);
+  }
+  if (jsonType(value) === "object") {
+    const obj2 = value;
+    if (Array.isArray(schema.required)) {
+      for (const req of schema.required) {
+        if (!(String(req) in obj2)) errors.push(`${at}: missing required field "${req}"`);
+      }
+    }
+    if (isPlainSchema(schema.properties)) {
+      for (const [prop, sub2] of Object.entries(schema.properties)) {
+        if (prop in obj2 && isPlainSchema(sub2)) {
+          walk(obj2[prop], sub2, path4 ? `${path4}.${prop}` : prop, errors);
+        }
+      }
+    }
+  }
+  if (Array.isArray(value) && isPlainSchema(schema.items)) {
+    value.forEach((el, i) => walk(el, schema.items, `${at}[${i}]`, errors));
+  }
+}
+function validateAgainstSchema(data, schema) {
+  if (!schema || !isPlainSchema(schema) || Object.keys(schema).length === 0) {
+    return { ok: true };
+  }
+  const errors = [];
+  walk(data, schema, "", errors);
+  return errors.length === 0 ? { ok: true } : { ok: false, errors };
+}
+var init_validate = __esm({
+  "src/lib/datastore/validate.ts"() {
+    "use strict";
+  }
+});
+
+// src/lib/db/sql-array.ts
+function pgTextArray(values) {
+  const quoted = values.map(
+    (v) => `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+  );
+  return `{${quoted.join(",")}}`;
+}
+var init_sql_array = __esm({
+  "src/lib/db/sql-array.ts"() {
+    "use strict";
+  }
+});
+
+// src/lib/datastore/query.ts
+import { sql as sql7 } from "drizzle-orm";
+function parsePath(path4) {
+  if (typeof path4 !== "string" || !PATH_RE.test(path4)) {
+    throw new DatastoreError("validation", `invalid path: ${JSON.stringify(path4)}`);
+  }
+  const segments2 = path4.split(".");
+  if (segments2.some((s) => s.length === 0)) {
+    throw new DatastoreError("validation", `invalid path (empty segment): ${JSON.stringify(path4)}`);
+  }
+  return segments2;
+}
+function pathParam(segments2) {
+  return pgTextArray(segments2);
+}
+function pathLiteral(path4) {
+  return pgTextArray(parsePath(path4));
+}
+function coerceNumericOperand(op, value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if ((op === "gt" || op === "gte" || op === "lt" || op === "lte") && typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+function compileOne(filter) {
+  const segments2 = parsePath(filter.path);
+  const pl = pathParam(segments2);
+  if (filter.op === "exists") {
+    return sql7`data #> ${pl}::text[] IS NOT NULL`;
+  }
+  if (filter.op === "contains") {
+    return sql7`data #> ${pl}::text[] @> ${JSON.stringify(filter.value ?? null)}::jsonb`;
+  }
+  if (filter.op === "in") {
+    if (!Array.isArray(filter.value)) {
+      throw new DatastoreError("validation", 'the "in" operator requires an array value');
+    }
+    const literal = pgTextArray(filter.value.map((v) => String(v)));
+    return sql7`(data #>> ${pl}::text[]) = ANY(${literal}::text[])`;
+  }
+  const symbol = COMPARATORS[filter.op];
+  if (!symbol) {
+    throw new DatastoreError("validation", `unknown filter operator: ${JSON.stringify(filter.op)}`);
+  }
+  const num6 = coerceNumericOperand(filter.op, filter.value);
+  if (num6 !== null) {
+    return sql7`(CASE WHEN jsonb_typeof(data #> ${pl}::text[]) = 'number' THEN (data #>> ${pl}::text[])::numeric END) ${sql7.raw(symbol)} ${num6}`;
+  }
+  return sql7`data #>> ${pl}::text[] ${sql7.raw(symbol)} ${String(filter.value ?? "")}`;
+}
+function compileFilters(filters) {
+  if (!filters || filters.length === 0) return void 0;
+  const parts = filters.map(compileOne);
+  return sql7.join(parts, sql7` AND `);
+}
+function compileSort(sort) {
+  const dir = sort?.dir === "asc" ? sql7.raw("ASC") : sql7.raw("DESC");
+  if (sort?.field) {
+    const col = SORT_FIELDS[sort.field];
+    if (!col) throw new DatastoreError("validation", `invalid sort field: ${sort.field}`);
+    return sql7`${sql7.raw(col)} ${dir}`;
+  }
+  if (sort?.path) {
+    const pl = pathParam(parsePath(sort.path));
+    return sql7`data #> ${pl}::text[] ${dir} NULLS LAST`;
+  }
+  return sql7`updated_at ${dir}`;
+}
+function clampLimit(limit2) {
+  if (typeof limit2 !== "number" || !Number.isFinite(limit2) || limit2 <= 0) return DEFAULT_LIMIT;
+  return Math.min(Math.floor(limit2), MAX_LIMIT);
+}
+function clampOffset(offset) {
+  if (typeof offset !== "number" || !Number.isFinite(offset) || offset <= 0) return 0;
+  return Math.floor(offset);
+}
+var PATH_RE, DEFAULT_LIMIT, MAX_LIMIT, COMPARATORS, SORT_FIELDS;
+var init_query = __esm({
+  "src/lib/datastore/query.ts"() {
+    "use strict";
+    init_sql_array();
+    init_types();
+    PATH_RE = /^[a-zA-Z0-9_.]+$/;
+    DEFAULT_LIMIT = 100;
+    MAX_LIMIT = 500;
+    COMPARATORS = {
+      eq: "=",
+      ne: "<>",
+      gt: ">",
+      gte: ">=",
+      lt: "<",
+      lte: "<="
+    };
+    SORT_FIELDS = {
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+      key: "key"
+    };
+  }
+});
+
+// src/lib/datastore/records.ts
+var records_exports = {};
+__export(records_exports, {
+  aggregateRecords: () => aggregateRecords,
+  bulkInsertRecords: () => bulkInsertRecords,
+  countRecords: () => countRecords,
+  deleteRecord: () => deleteRecord,
+  getRecord: () => getRecord,
+  getRecordByKey: () => getRecordByKey,
+  insertRecord: () => insertRecord,
+  queryRecords: () => queryRecords,
+  recordCountsByCollection: () => recordCountsByCollection,
+  updateRecord: () => updateRecord,
+  upsertRecord: () => upsertRecord
+});
+import { sql as sql8 } from "drizzle-orm";
+function asDate2(v) {
+  return v instanceof Date ? v : new Date(String(v));
+}
+function rowsOf2(res) {
+  return res.rows ?? [];
+}
+function mapRecordRow(r) {
+  return {
+    id: String(r.id),
+    collectionId: String(r.collection_id),
+    key: r.key ?? null,
+    data: r.data ?? {},
+    permissions: r.permissions ?? null,
+    version: Number(r.version ?? 1),
+    createdBy: r.created_by ?? null,
+    updatedBy: r.updated_by ?? null,
+    createdAt: asDate2(r.created_at),
+    updatedAt: asDate2(r.updated_at),
+    expiresAt: r.expires_at ? asDate2(r.expires_at) : null
+  };
+}
+async function getCollectionOrThrow(slug) {
+  const collection = await getCollectionBySlug(slug);
+  if (!collection) throw new DatastoreError("not_found", `collection "${slug}" not found`);
+  return collection;
+}
+function settingsOf(collection) {
+  return collection.settings ?? {};
+}
+function assertPayloadWithinLimit(collection, data) {
+  const max = settingsOf(collection).maxPayloadBytes ?? DEFAULT_MAX_PAYLOAD_BYTES;
+  const bytes = Buffer.byteLength(JSON.stringify(data ?? {}), "utf8");
+  if (bytes > max) {
+    throw new DatastoreError("limit", `record payload ${bytes} bytes exceeds limit of ${max} bytes`);
+  }
+}
+function assertSchemaValid(collection, data) {
+  if (!collection.schema) return;
+  const result = validateAgainstSchema(data, collection.schema);
+  if (!result.ok) {
+    throw new DatastoreError("validation", `schema validation failed: ${result.errors.join("; ")}`);
+  }
+}
+function jsonbParam2(value) {
+  return value === void 0 || value === null ? sql8`NULL` : sql8`${JSON.stringify(value)}::jsonb`;
+}
+function scopedWhere(collectionId, filters) {
+  const filterSql = compileFilters(filters);
+  return filterSql ? sql8`collection_id = ${collectionId} AND (${filterSql})` : sql8`collection_id = ${collectionId}`;
+}
+async function countInCollection(collectionId, filters) {
+  const res = await db.execute(
+    sql8`SELECT count(*)::int AS count FROM datastore_records WHERE ${scopedWhere(collectionId, filters)}`
+  );
+  const [row] = rowsOf2(res);
+  return Number(row?.count ?? 0);
+}
+function readableWhere(collection, actor, filters) {
+  return sql8`${scopedWhere(collection.id, filters)} AND ${readableSqlPredicate(collection, actor)}`;
+}
+async function countReadable(collection, actor, filters) {
+  const res = await db.execute(
+    sql8`SELECT count(*)::int AS count FROM datastore_records WHERE ${readableWhere(collection, actor, filters)}`
+  );
+  const [row] = rowsOf2(res);
+  return Number(row?.count ?? 0);
+}
+async function recordCountsByCollection() {
+  const res = await db.execute(
+    sql8`SELECT collection_id, count(*)::int AS count FROM datastore_records GROUP BY collection_id`
+  );
+  const out = {};
+  for (const r of rowsOf2(res)) out[String(r.collection_id)] = Number(r.count ?? 0);
+  return out;
+}
+async function fetchRow(collection, ref) {
+  let res;
+  if (ref.id) {
+    res = await db.execute(
+      sql8`SELECT * FROM datastore_records WHERE id = ${ref.id} AND collection_id = ${collection.id} LIMIT 1`
+    );
+  } else if (ref.key !== void 0 && ref.key !== null) {
+    res = await db.execute(
+      sql8`SELECT * FROM datastore_records WHERE collection_id = ${collection.id} AND key = ${ref.key} LIMIT 1`
+    );
+  } else {
+    throw new DatastoreError("validation", "a record reference requires an id or key");
+  }
+  const [row] = rowsOf2(res);
+  return row ? mapRecordRow(row) : null;
+}
+function isUniqueViolation(err) {
+  return typeof err === "object" && err !== null && err.code === "23505";
+}
+async function insertRecord(slug, input, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  assertCan("write", resolvePermissions({ permissions: null, createdBy: null }, collection), actor);
+  assertSchemaValid(collection, input.data);
+  assertPayloadWithinLimit(collection, input.data);
+  const max = settingsOf(collection).maxRecords ?? DEFAULT_MAX_RECORDS;
+  if (await countInCollection(collection.id) >= max) {
+    throw new DatastoreError("limit", `collection "${slug}" is at its maxRecords limit (${max})`);
+  }
+  let res;
+  try {
+    res = await db.execute(sql8`
+      INSERT INTO datastore_records
+        (collection_id, key, data, permissions, created_by, updated_by, expires_at)
+      VALUES (
+        ${collection.id},
+        ${input.key ?? null},
+        ${jsonbParam2(input.data ?? {})},
+        ${jsonbParam2(input.permissions ?? null)},
+        ${actor},
+        ${actor},
+        ${input.expiresAt ?? null}
+      )
+      RETURNING *
+    `);
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new DatastoreError("conflict", `a record with key "${input.key}" already exists in "${slug}"`);
+    }
+    throw err;
+  }
+  const record = mapRecordRow(rowsOf2(res)[0]);
+  auditDatastore({ collectionId: collection.id, recordId: record.id, actor, action: "insert", after: record });
+  return record;
+}
+async function bulkInsertRecords(slug, inputs, actor) {
+  if (inputs.length > BULK_CAP) {
+    throw new DatastoreError("limit", `bulk insert is capped at ${BULK_CAP} records per batch`);
+  }
+  const out = [];
+  for (const input of inputs) {
+    out.push(await insertRecord(slug, input, actor));
+  }
+  return out;
+}
+async function upsertRecord(slug, input, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  if (input.key === void 0 || input.key === null || input.key === "") {
+    throw new DatastoreError("validation", "upsertRecord requires a non-empty key");
+  }
+  assertSchemaValid(collection, input.data);
+  assertPayloadWithinLimit(collection, input.data);
+  const existing = await fetchRow(collection, { key: input.key });
+  const gatePerms = existing ? resolvePermissions(existing, collection) : resolvePermissions({ permissions: null, createdBy: null }, collection);
+  assertCan("write", gatePerms, actor);
+  if (!existing) {
+    const max = settingsOf(collection).maxRecords ?? DEFAULT_MAX_RECORDS;
+    if (await countInCollection(collection.id) >= max) {
+      throw new DatastoreError("limit", `collection "${slug}" is at its maxRecords limit (${max})`);
+    }
+  }
+  const permsOnConflict = input.permissions !== void 0 && input.permissions !== null ? sql8`excluded.permissions` : sql8`datastore_records.permissions`;
+  const res = await db.execute(sql8`
+    INSERT INTO datastore_records
+      (collection_id, key, data, permissions, created_by, updated_by, expires_at)
+    VALUES (
+      ${collection.id},
+      ${input.key},
+      ${jsonbParam2(input.data ?? {})},
+      ${jsonbParam2(input.permissions ?? null)},
+      ${actor},
+      ${actor},
+      ${input.expiresAt ?? null}
+    )
+    ON CONFLICT (collection_id, key) WHERE key IS NOT NULL DO UPDATE SET
+      data = excluded.data,
+      permissions = ${permsOnConflict},
+      version = datastore_records.version + 1,
+      updated_at = now(),
+      updated_by = ${actor},
+      expires_at = excluded.expires_at
+    RETURNING *
+  `);
+  const record = mapRecordRow(rowsOf2(res)[0]);
+  auditDatastore({
+    collectionId: collection.id,
+    recordId: record.id,
+    actor,
+    action: existing ? "update" : "insert",
+    before: existing ?? void 0,
+    after: record
+  });
+  return record;
+}
+async function updateRecord(slug, ref, changes, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  const existing = await fetchRow(collection, ref);
+  if (!existing) throw new DatastoreError("not_found", `record not found in "${slug}"`);
+  const effectivePerms = resolvePermissions(existing, collection);
+  assertCan("write", effectivePerms, actor);
+  if (changes.permissions !== void 0) {
+    assertCan("delete", effectivePerms, actor);
+  }
+  if (changes.expectedVersion !== void 0 && changes.expectedVersion !== existing.version) {
+    throw new DatastoreError(
+      "conflict",
+      `version mismatch: expected ${changes.expectedVersion}, stored ${existing.version}`
+    );
+  }
+  const dataChanged = changes.data !== void 0 || changes.patch !== void 0;
+  const newData = changes.data ? changes.data : changes.patch ? { ...existing.data, ...changes.patch } : existing.data;
+  if (dataChanged) {
+    assertSchemaValid(collection, newData);
+    assertPayloadWithinLimit(collection, newData);
+  }
+  const sets = [];
+  if (dataChanged) sets.push(sql8`data = ${jsonbParam2(newData)}`);
+  if (changes.permissions !== void 0) sets.push(sql8`permissions = ${jsonbParam2(changes.permissions)}`);
+  if (changes.expiresAt !== void 0) sets.push(sql8`expires_at = ${changes.expiresAt ?? null}`);
+  sets.push(sql8`version = datastore_records.version + 1`);
+  sets.push(sql8`updated_at = now()`);
+  sets.push(sql8`updated_by = ${actor}`);
+  const res = await db.execute(sql8`
+    UPDATE datastore_records SET ${sql8.join(sets, sql8`, `)}
+    WHERE id = ${existing.id} AND version = ${existing.version}
+    RETURNING *
+  `);
+  const [row] = rowsOf2(res);
+  if (!row) {
+    throw new DatastoreError("conflict", "record was modified concurrently; retry with a fresh version");
+  }
+  const after = mapRecordRow(row);
+  const action = dataChanged ? "update" : changes.permissions !== void 0 ? "permissions" : "update";
+  auditDatastore({ collectionId: collection.id, recordId: after.id, actor, action, before: existing, after });
+  return after;
+}
+async function deleteRecord(slug, ref, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  const existing = await fetchRow(collection, ref);
+  if (!existing) throw new DatastoreError("not_found", `record not found in "${slug}"`);
+  assertCan("delete", resolvePermissions(existing, collection), actor);
+  await db.execute(sql8`DELETE FROM datastore_records WHERE id = ${existing.id}`);
+  auditDatastore({ collectionId: collection.id, recordId: existing.id, actor, action: "delete", before: existing });
+  return { deleted: true, id: existing.id };
+}
+async function getRecord(slug, id, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  const record = await fetchRow(collection, { id });
+  if (!record) throw new DatastoreError("not_found", `record "${id}" not found in "${slug}"`);
+  assertCan("read", resolvePermissions(record, collection), actor);
+  return record;
+}
+async function getRecordByKey(slug, key, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  const record = await fetchRow(collection, { key });
+  if (!record) throw new DatastoreError("not_found", `record with key "${key}" not found in "${slug}"`);
+  assertCan("read", resolvePermissions(record, collection), actor);
+  return record;
+}
+function assertCollectionReadable(collection, actor) {
+  const perms = resolvePermissions({ permissions: null, createdBy: collection.createdBy }, collection);
+  assertCan("read", perms, actor);
+}
+async function queryRecords(slug, opts, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  assertCollectionReadable(collection, actor);
+  const where = readableWhere(collection, actor, opts.filters);
+  const order = compileSort(opts.sort);
+  const limit2 = clampLimit(opts.limit);
+  const offset = clampOffset(opts.offset);
+  const res = await db.execute(sql8`
+    SELECT * FROM datastore_records WHERE ${where} ORDER BY ${order} LIMIT ${limit2} OFFSET ${offset}
+  `);
+  const records = rowsOf2(res).map(mapRecordRow);
+  if (opts.includeTotal) {
+    const total = await countReadable(collection, actor, opts.filters);
+    return { records, total };
+  }
+  return { records };
+}
+async function countRecords(slug, filters, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  assertCollectionReadable(collection, actor);
+  return countReadable(collection, actor, filters);
+}
+async function aggregateRecords(slug, opts, actor) {
+  const collection = await getCollectionOrThrow(slug);
+  assertCollectionReadable(collection, actor);
+  const where = readableWhere(collection, actor, opts.filters);
+  let valueExpr;
+  if (opts.op === "count") {
+    valueExpr = sql8`count(*)::int`;
+  } else {
+    if (!opts.path) {
+      throw new DatastoreError("validation", `aggregate "${opts.op}" requires a numeric path`);
+    }
+    const pl = pathLiteral(opts.path);
+    const inner = sql8`(CASE WHEN jsonb_typeof(data #> ${pl}::text[]) = 'number' THEN (data #>> ${pl}::text[])::numeric END)`;
+    valueExpr = opts.op === "sum" ? sql8`sum(${inner})` : opts.op === "avg" ? sql8`avg(${inner})` : opts.op === "min" ? sql8`min(${inner})` : sql8`max(${inner})`;
+  }
+  if (opts.groupBy) {
+    const gl = pathLiteral(opts.groupBy);
+    const res2 = await db.execute(sql8`
+      SELECT data #>> ${gl}::text[] AS grp, ${valueExpr} AS value
+      FROM datastore_records WHERE ${where}
+      GROUP BY grp ORDER BY value DESC
+    `);
+    const groups = rowsOf2(res2).map((r) => ({
+      group: r.grp ?? null,
+      value: Number(r.value ?? 0)
+    }));
+    return { groups };
+  }
+  const res = await db.execute(
+    sql8`SELECT ${valueExpr} AS value FROM datastore_records WHERE ${where}`
+  );
+  const [row] = rowsOf2(res);
+  return { value: Number(row?.value ?? 0) };
+}
+var DEFAULT_MAX_PAYLOAD_BYTES, DEFAULT_MAX_RECORDS, BULK_CAP;
+var init_records = __esm({
+  "src/lib/datastore/records.ts"() {
+    "use strict";
+    init_db();
+    init_types();
+    init_collections();
+    init_permissions();
+    init_validate();
+    init_query();
+    init_audit();
+    DEFAULT_MAX_PAYLOAD_BYTES = 262144;
+    DEFAULT_MAX_RECORDS = 5e4;
+    BULK_CAP = 100;
+  }
+});
+
+// src/lib/datastore/ttl-reaper.ts
+import { sql as sql9 } from "drizzle-orm";
+function rowsOf3(res) {
+  return res.rows ?? [];
+}
+async function sweepExpired() {
+  let deleted = 0;
+  const expiredRes = await db.execute(sql9`
+    DELETE FROM datastore_records
+    WHERE expires_at IS NOT NULL AND expires_at < now()
+    RETURNING id, collection_id
+  `);
+  for (const row of rowsOf3(expiredRes)) {
+    deleted++;
+    auditDatastore({
+      collectionId: String(row.collection_id),
+      recordId: String(row.id),
+      actor: "system",
+      action: "expire"
+    });
+  }
+  const collectionsRes = await db.execute(sql9`
+    SELECT id, (settings->>'ttlSeconds') AS ttl
+    FROM datastore_collections
+    WHERE (settings->>'ttlSeconds') IS NOT NULL
+  `);
+  for (const col of rowsOf3(collectionsRes)) {
+    const ttl = Number(col.ttl);
+    if (!Number.isFinite(ttl) || ttl <= 0) continue;
+    const res = await db.execute(sql9`
+      DELETE FROM datastore_records
+      WHERE collection_id = ${String(col.id)}
+        AND updated_at < now() - make_interval(secs => ${ttl})
+      RETURNING id, collection_id
+    `);
+    for (const row of rowsOf3(res)) {
+      deleted++;
+      auditDatastore({
+        collectionId: String(row.collection_id),
+        recordId: String(row.id),
+        actor: "system",
+        action: "expire"
+      });
+    }
+  }
+  return deleted;
+}
+function safeSweep() {
+  void sweepExpired().catch((err) => {
+    console.error("[datastore-reaper] sweep failed:", err instanceof Error ? err.message : err);
+  });
+}
+function startDatastoreReaper() {
+  if (started) return;
+  started = true;
+  safeSweep();
+  timer = setInterval(safeSweep, HOUR_MS);
+  if (timer && typeof timer.unref === "function") timer.unref();
+}
+function stopDatastoreReaper() {
+  if (timer) clearInterval(timer);
+  timer = null;
+  started = false;
+}
+var HOUR_MS, timer, started;
+var init_ttl_reaper = __esm({
+  "src/lib/datastore/ttl-reaper.ts"() {
+    "use strict";
+    init_db();
+    init_audit();
+    HOUR_MS = 60 * 60 * 1e3;
+    timer = null;
+    started = false;
+  }
+});
+
+// src/lib/datastore/index.ts
+var datastore_exports = {};
+__export(datastore_exports, {
+  DatastoreError: () => DatastoreError,
+  aggregateRecords: () => aggregateRecords,
+  assertCan: () => assertCan,
+  bulkInsertRecords: () => bulkInsertRecords,
+  canDo: () => canDo,
+  clampLimit: () => clampLimit,
+  clampOffset: () => clampOffset,
+  compileFilters: () => compileFilters,
+  compileSort: () => compileSort,
+  countRecords: () => countRecords,
+  deleteCollection: () => deleteCollection,
+  deleteRecord: () => deleteRecord,
+  ensureCollection: () => ensureCollection,
+  getCollectionBySlug: () => getCollectionBySlug,
+  getRecord: () => getRecord,
+  getRecordByKey: () => getRecordByKey,
+  insertRecord: () => insertRecord,
+  listCollections: () => listCollections,
+  mapCollectionRow: () => mapCollectionRow,
+  queryRecords: () => queryRecords,
+  recordCountsByCollection: () => recordCountsByCollection,
+  resolvePermissions: () => resolvePermissions,
+  startDatastoreReaper: () => startDatastoreReaper,
+  stopDatastoreReaper: () => stopDatastoreReaper,
+  sweepExpired: () => sweepExpired,
+  updateCollection: () => updateCollection,
+  updateRecord: () => updateRecord,
+  upsertRecord: () => upsertRecord,
+  validateAgainstSchema: () => validateAgainstSchema
+});
+var init_datastore = __esm({
+  "src/lib/datastore/index.ts"() {
+    "use strict";
+    init_types();
+    init_collections();
+    init_records();
+    init_permissions();
+    init_validate();
+    init_query();
+    init_ttl_reaper();
+  }
+});
+
+// src/lib/config/owner.ts
+function ownerPhone() {
+  const raw = env.WORKFLOW_NOTIFY_PHONE?.trim();
+  if (raw) return raw;
+  if (!warned) {
+    warned = true;
+    console.error(
+      "[config] WORKFLOW_NOTIFY_PHONE is not set \u2014 owner WhatsApp notifications (briefing, alerts, connector monitor, intel) have nowhere to go."
+    );
+  }
+  return null;
+}
+var warned;
+var init_owner = __esm({
+  "src/lib/config/owner.ts"() {
+    "use strict";
+    init_env_shim();
+    warned = false;
+  }
+});
+
+// src/lib/routing/types.ts
+function errMsg(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+function asData(value) {
+  return value;
+}
+function toCtx(modelId) {
+  return { provider: "openrouter", modelId };
+}
+var PROFILES, SETTINGS_ENABLED_KEY, SETTINGS_ASSIGNMENTS_KEY, SETTINGS_CONFIG_KEY, SETTINGS_OVERRIDES_KEY, RUNS_COLLECTION, EVENTS_COLLECTION, SYSTEM_ACTOR, ROUTING_PERMS, DEFAULT_CONFIG;
+var init_types2 = __esm({
+  "src/lib/routing/types.ts"() {
+    "use strict";
+    init_owner();
+    PROFILES = ["general", "tool", "rag", "agentic", "vision"];
+    SETTINGS_ENABLED_KEY = "jkai.routing.enabled";
+    SETTINGS_ASSIGNMENTS_KEY = "jkai.routing.assignments";
+    SETTINGS_CONFIG_KEY = "jkai.routing.config";
+    SETTINGS_OVERRIDES_KEY = "jkai.routing.overrides";
+    RUNS_COLLECTION = "model-routing-runs";
+    EVENTS_COLLECTION = "model-routing-events";
+    SYSTEM_ACTOR = "system";
+    ROUTING_PERMS = {
+      read: ["owner", "jkai", "system"],
+      write: ["system", "owner"],
+      delete: ["owner", "system"]
+    };
+    DEFAULT_CONFIG = {
+      weights: {
+        general: { quality: 0.3, price: 0.45, speed: 0.25 },
+        tool: { quality: 0.35, price: 0.45, speed: 0.2 },
+        rag: { quality: 0.25, price: 0.4, speed: 0.35 },
+        agentic: { quality: 0.4, price: 0.45, speed: 0.15 },
+        // Quality carries more than `rag` because a misread transcript is not a
+        // worse answer, it is a WRONG one that gets embedded and fed to the intel
+        // graph as the contents of the document. Price still leads, since this runs
+        // over every image and scan in the Drive.
+        vision: { quality: 0.35, price: 0.45, speed: 0.2 }
+      },
+      // Fractions of the catalogue's best agentic index (≈54 today → general ≈32,
+      // tool ≈35, rag ≈27, agentic ≈41). Agentic is highest because multi-step
+      // delegation with a weak model burns more tokens retrying than it saves.
+      qualityFloorFrac: { general: 0.6, tool: 0.65, rag: 0.5, agentic: 0.75, vision: 0.55 },
+      priceCeilingPerM: 15,
+      minContext: 32e3,
+      successBiasK: 0.2,
+      openWeightBonus: 0.15,
+      openWeightsOnly: false
+    };
+  }
+});
+
+// src/lib/routing/events.ts
+var events_exports2 = {};
+__export(events_exports2, {
+  describeProfiles: () => describeProfiles,
+  ensureRoutingCollections: () => ensureRoutingCollections,
+  errMsg: () => errMsg,
+  getRoutingConfig: () => getRoutingConfig,
+  isRoutingEnabled: () => isRoutingEnabled,
+  listEvents: () => listEvents,
+  listRuns: () => listRuns,
+  loadAssignments: () => loadAssignments,
+  loadOverrides: () => loadOverrides,
+  persistRun: () => persistRun,
+  recordOutcome: () => recordOutcome,
+  recordRoutingDecision: () => recordRoutingDecision,
+  resolveModelForProfile: () => resolveModelForProfile,
+  saveAssignments: () => saveAssignments,
+  setOverride: () => setOverride,
+  setRoutingConfig: () => setRoutingConfig,
+  setRoutingEnabled: () => setRoutingEnabled
+});
+async function ensureRoutingCollections() {
+  await ensureCollection(
+    RUNS_COLLECTION,
+    { name: "Model routing runs", description: "Overnight model-selection runs", isSystem: true, defaultPermissions: ROUTING_PERMS },
+    SYSTEM_ACTOR
+  );
+  await ensureCollection(
+    EVENTS_COLLECTION,
+    { name: "Model routing events", description: "Per-conversation routing decisions + outcomes", isSystem: true, defaultPermissions: ROUTING_PERMS },
+    SYSTEM_ACTOR
+  );
+}
+async function isRoutingEnabled() {
+  return await getSetting(SETTINGS_ENABLED_KEY) !== false;
+}
+async function getRoutingConfig() {
+  const stored = await getSetting(SETTINGS_CONFIG_KEY);
+  if (!stored) return DEFAULT_CONFIG;
+  return {
+    weights: { ...DEFAULT_CONFIG.weights, ...stored.weights ?? {} },
+    qualityFloorFrac: { ...DEFAULT_CONFIG.qualityFloorFrac, ...stored.qualityFloorFrac ?? {} },
+    priceCeilingPerM: stored.priceCeilingPerM ?? DEFAULT_CONFIG.priceCeilingPerM,
+    minContext: stored.minContext ?? DEFAULT_CONFIG.minContext,
+    successBiasK: stored.successBiasK ?? DEFAULT_CONFIG.successBiasK,
+    openWeightBonus: stored.openWeightBonus ?? DEFAULT_CONFIG.openWeightBonus,
+    openWeightsOnly: stored.openWeightsOnly ?? DEFAULT_CONFIG.openWeightsOnly
+  };
+}
+async function setRoutingConfig(cfg) {
+  await setSetting(SETTINGS_CONFIG_KEY, cfg);
+}
+async function setRoutingEnabled(enabled) {
+  await setSetting(SETTINGS_ENABLED_KEY, enabled);
+}
+async function loadAssignments() {
+  return await getSetting(SETTINGS_ASSIGNMENTS_KEY) ?? {};
+}
+async function saveAssignments(a) {
+  await setSetting(SETTINGS_ASSIGNMENTS_KEY, a);
+}
+async function loadOverrides() {
+  return await getSetting(SETTINGS_OVERRIDES_KEY) ?? {};
+}
+async function setOverride(profile, modelId) {
+  const current = await loadOverrides();
+  const next = { ...current };
+  if (modelId) {
+    next[profile] = { modelId, pinnedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  } else {
+    delete next[profile];
+  }
+  await setSetting(SETTINGS_OVERRIDES_KEY, next);
+  return next;
+}
+async function resolveModelForProfile(profile) {
+  const [overrides, assignments] = await Promise.all([loadOverrides(), loadAssignments()]);
+  const pinned = overrides[profile];
+  if (pinned?.modelId) return { ...toCtx(pinned.modelId), source: "override" };
+  const assigned = assignments[profile];
+  if (assigned?.modelId) return { ...toCtx(assigned.modelId), source: "auto" };
+  return { ...await resolveDefaultModel(), source: "default" };
+}
+async function describeProfiles() {
+  const [overrides, assignments, siteDefault] = await Promise.all([
+    loadOverrides(),
+    loadAssignments(),
+    resolveDefaultModel()
+  ]);
+  return PROFILES.map((profile) => {
+    const auto = assignments[profile] ?? null;
+    const pinned = overrides[profile] ?? null;
+    const effectiveModelId = pinned?.modelId ?? auto?.modelId ?? siteDefault.modelId;
+    const source = pinned ? "override" : auto ? "auto" : "default";
+    return {
+      profile,
+      autoModelId: auto?.modelId ?? null,
+      autoReason: auto?.reason ?? null,
+      overrideModelId: pinned?.modelId ?? null,
+      pinnedAt: pinned?.pinnedAt ?? null,
+      effectiveModelId,
+      source
+    };
+  });
+}
+async function recordRoutingDecision(ev) {
+  const data = {
+    conversationId: ev.conversationId,
+    profile: ev.profile,
+    modelId: ev.modelId,
+    decidedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    correctFirstTime: null
+  };
+  await upsertRecord(EVENTS_COLLECTION, { key: ev.conversationId, data: asData(data) }, SYSTEM_ACTOR);
+}
+async function recordOutcome(conversationId, correct, signal) {
+  let existing = null;
+  try {
+    const rec = await getRecordByKey(EVENTS_COLLECTION, conversationId, SYSTEM_ACTOR);
+    existing = rec.data;
+  } catch (err) {
+    if (err instanceof DatastoreError && err.code === "not_found") return;
+    throw err;
+  }
+  const updated = { ...existing, correctFirstTime: correct, signal };
+  await upsertRecord(EVENTS_COLLECTION, { key: conversationId, data: asData(updated) }, SYSTEM_ACTOR);
+}
+async function listEvents(limit2 = 2e3) {
+  const { records } = await queryRecords(
+    EVENTS_COLLECTION,
+    { sort: { field: "updatedAt", dir: "desc" }, limit: limit2 },
+    SYSTEM_ACTOR
+  );
+  return records.map((r) => r.data);
+}
+async function persistRun(run) {
+  await upsertRecord(RUNS_COLLECTION, { key: run.id, data: asData(run) }, SYSTEM_ACTOR);
+}
+async function listRuns(limit2 = 20) {
+  const { records } = await queryRecords(
+    RUNS_COLLECTION,
+    { sort: { field: "updatedAt", dir: "desc" }, limit: limit2 },
+    SYSTEM_ACTOR
+  );
+  return records.map((r) => r.data);
+}
+var init_events2 = __esm({
+  "src/lib/routing/events.ts"() {
+    "use strict";
+    init_datastore();
+    init_types();
+    init_settings();
+    init_types2();
+  }
+});
+
+// src/lib/server/models/workload-settings.ts
+var workload_settings_exports = {};
+__export(workload_settings_exports, {
+  describeSiteWorkloads: () => describeSiteWorkloads,
+  resolveArtDirectorModel: () => resolveArtDirectorModel,
+  resolveAudioModel: () => resolveAudioModel,
+  resolveBlogModel: () => resolveBlogModel,
+  resolveBriefingModel: () => resolveBriefingModel,
+  resolveBuilderModel: () => resolveBuilderModel,
+  resolveChatMaintenanceModel: () => resolveChatMaintenanceModel,
+  resolveDelegationModel: () => resolveDelegationModel,
+  resolveDoctorModel: () => resolveDoctorModel,
+  resolveEmbeddingModel: () => resolveEmbeddingModel,
+  resolveExtractionModel: () => resolveExtractionModel,
+  resolveHealthModel: () => resolveHealthModel,
+  resolveHeartbeatModel: () => resolveHeartbeatModel,
+  resolveImageModel: () => resolveImageModel,
+  resolveImageToolModel: () => resolveImageToolModel,
+  resolveIntelAnalysisModel: () => resolveIntelAnalysisModel,
+  resolveLandingModel: () => resolveLandingModel,
+  resolveMappingModel: () => resolveMappingModel,
+  resolveNotebookModel: () => resolveNotebookModel,
+  resolveProjectChatModel: () => resolveProjectChatModel,
+  resolveRagModel: () => resolveRagModel,
+  resolveReleasesModel: () => resolveReleasesModel,
+  resolveResearchDeepModel: () => resolveResearchDeepModel,
+  resolveResearchFastModel: () => resolveResearchFastModel,
+  resolveResolutionModel: () => resolveResolutionModel,
+  resolveSelfimproveModel: () => resolveSelfimproveModel,
+  resolveToolSuggestionsModel: () => resolveToolSuggestionsModel,
+  resolveTrailsModel: () => resolveTrailsModel,
+  resolveVisionModel: () => resolveVisionModel,
+  resolveWorkloadModel: () => resolveWorkloadModel,
+  setWorkloadModel: () => setWorkloadModel,
+  workloadBlockReason: () => workloadBlockReason
+});
+import { eq as eq4 } from "drizzle-orm";
+async function resolveWorkloadModel(def3) {
+  const session2 = await sessionModelForWorkload(def3);
+  if (session2) return session2;
+  const v = await getSetting(def3.key);
+  if (v?.modelId) return coerceModelContext({ modelId: v.modelId });
+  if (def3.fallbackModelId) return coerceModelContext({ modelId: def3.fallbackModelId });
+  return resolveDefaultModel();
+}
+async function sessionModelForWorkload(def3) {
+  const { currentSessionModel: currentSessionModel2 } = await Promise.resolve().then(() => (init_chat(), chat_exports));
+  const pinned = currentSessionModel2();
+  if (!pinned) return null;
+  switch (def3.requires) {
+    // Chat models, which is what the picker offers — the pin is one by
+    // construction. `null` is a role with no requirement at all.
+    case "tools":
+    case null:
+      return pinned;
+    case "image-input":
+      return getModelCapabilities(pinned).image ? pinned : null;
+    case "audio-input":
+      return getModelCapabilities(pinned).audio ? pinned : null;
+    case "image-output":
+      return await modelEmitsImages(pinned) ? pinned : null;
+    // See the note above: not a gate that happens to fail, a role the session
+    // model is the wrong KIND of thing for.
+    case "embeddings":
+      return null;
+    default:
+      return null;
+  }
+}
+async function modelEmitsImages(ctx) {
+  try {
+    const [row] = await db.select({ modality: openrouterModels.modality }).from(openrouterModels).where(eq4(openrouterModels.id, ctx.modelId)).limit(1);
+    return emitsImages(row?.modality);
+  } catch (err) {
+    console.warn(
+      `[models] modality lookup failed for ${ctx.modelId}:`,
+      err instanceof Error ? err.message : err
+    );
+    return false;
+  }
+}
+async function resolveById(id) {
+  const def3 = SITE_WORKLOADS.find((w) => w.id === id);
+  if (!def3) throw new Error(`unknown workload: ${id}`);
+  return resolveWorkloadModel(def3);
+}
+async function resolveVisionModel() {
+  const def3 = SITE_WORKLOADS.find((w) => w.id === "vision");
+  const session2 = await sessionModelForWorkload(def3);
+  if (session2) return session2;
+  const pinned = await getSetting(def3.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  try {
+    const { isRoutingEnabled: isRoutingEnabled2, loadAssignments: loadAssignments2, loadOverrides: loadOverrides2 } = await Promise.resolve().then(() => (init_events2(), events_exports2));
+    if (await isRoutingEnabled2()) {
+      const pin = (await loadOverrides2()).vision;
+      if (pin?.modelId) return coerceModelContext({ modelId: pin.modelId });
+      const assigned = (await loadAssignments2()).vision;
+      if (assigned?.modelId) return coerceModelContext({ modelId: assigned.modelId });
+    }
+  } catch (err) {
+    console.warn(`[models] vision routing lookup failed (${err.message}); using the fallback`);
+  }
+  return coerceModelContext({ modelId: def3.fallbackModelId });
+}
+async function resolveImageToolModel() {
+  const def3 = SITE_WORKLOADS.find((w) => w.id === "image-tool");
+  const session2 = await sessionModelForWorkload(def3);
+  if (session2) return session2;
+  const pinned = await getSetting(def3.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  const fromEnv = envModelFor(def3);
+  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
+  return coerceModelContext({ modelId: def3.fallbackModelId });
+}
+function envModelFor(def3) {
+  if (!def3.envKey) return null;
+  const v = process.env[def3.envKey];
+  return v && v.trim() ? v.trim() : null;
+}
+async function resolveResearchFastModel() {
+  const def3 = SITE_WORKLOADS.find((w) => w.id === "research-fast");
+  const pinned = await getSetting(def3.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+  const fromEnv = envModelFor(def3);
+  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
+  return coerceModelContext({ modelId: def3.fallbackModelId });
+}
+function sourceFor(def3, set) {
+  if (set) return "pinned";
+  if (envModelFor(def3)) return "env";
+  return def3.fallbackModelId ? "code" : "default";
+}
+async function describeSiteWorkloads() {
+  const siteDefault = await resolveDefaultModel();
+  const stored = await Promise.all(
+    SITE_WORKLOADS.map(
+      (w) => getSetting(w.key).then((v) => v?.modelId ?? null)
+    )
+  );
+  return SITE_WORKLOADS.map((def3, i) => {
+    const setModelId = stored[i];
+    const effectiveModelId = setModelId ?? envModelFor(def3) ?? def3.fallbackModelId ?? siteDefault.modelId;
+    return {
+      id: def3.id,
+      scope: def3.scope,
+      label: def3.label,
+      blurb: def3.blurb,
+      key: def3.key,
+      reason: def3.reason,
+      requires: def3.requires,
+      catalogue: def3.catalogue,
+      setModelId,
+      effectiveModelId,
+      source: sourceFor(def3, setModelId),
+      divergesFromDefault: effectiveModelId !== siteDefault.modelId
+    };
+  });
+}
+async function workloadBlockReason(def3, modelId) {
+  const ctx = coerceModelContext({ modelId });
+  switch (def3.requires) {
+    case "tools":
+      return getProviderFeatures(ctx.provider).tools ? null : `${ctx.provider} cannot pass tool schemas, which ${def3.label} needs.`;
+    case "embeddings":
+      return getProviderFeatures(ctx.provider).embeddings ? null : `${ctx.provider} has no embeddings endpoint. Use an OpenRouter model for ${def3.label}.`;
+    case "image-input":
+      return getModelCapabilities(ctx).image ? null : `${modelId} cannot accept images, so it cannot serve ${def3.label}. It would answer the prompt and ignore the picture.`;
+    case "openrouter":
+      return ctx.provider === "openrouter" ? null : `${def3.label} streams through OpenRouter directly, so a ${ctx.provider} model cannot serve it \u2014 the id would be sent to the wrong endpoint.`;
+    case "audio-input":
+      return getModelCapabilities(ctx).audio ? null : `${modelId} cannot accept audio, so it cannot serve ${def3.label}.`;
+    case "image-output": {
+      if (ctx.provider === "codex") {
+        return `Codex cannot return an image, so it cannot serve ${def3.label}.`;
+      }
+      const [row] = await db.select({ modality: openrouterModels.modality }).from(openrouterModels).where(eq4(openrouterModels.id, modelId)).limit(1);
+      if (!row) return null;
+      return emitsImages(row.modality) ? null : `${modelId} does not emit images (modality ${row.modality ?? "unknown"}), so it cannot serve ${def3.label}.`;
+    }
+    case null:
+      return null;
+  }
+}
+async function setWorkloadModel(def3, modelId) {
+  if (modelId === null) {
+    await deleteSetting(def3.key);
+  } else {
+    await setSetting(def3.key, coerceModelContext({ modelId }));
+  }
+  clearSettingsCache();
+}
+var resolveExtractionModel, resolveResolutionModel, resolveSelfimproveModel, resolveDoctorModel, resolveImageModel, resolveEmbeddingModel, resolveAudioModel, resolveArtDirectorModel, resolveResearchDeepModel, resolveBuilderModel, resolveHeartbeatModel, resolveBriefingModel, resolveBlogModel, resolveChatMaintenanceModel, resolveIntelAnalysisModel, resolveNotebookModel, resolveProjectChatModel, resolveTrailsModel, resolveLandingModel, resolveDelegationModel, resolveRagModel, resolveMappingModel, resolveHealthModel, resolveReleasesModel, resolveToolSuggestionsModel;
+var init_workload_settings = __esm({
+  "src/lib/server/models/workload-settings.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    init_settings();
+    init_default_models();
+    init_capabilities();
+    init_workloads();
+    resolveExtractionModel = () => resolveById("extraction");
+    resolveResolutionModel = () => resolveById("resolution");
+    resolveSelfimproveModel = () => resolveById("selfimprove");
+    resolveDoctorModel = () => resolveById("doctor");
+    resolveImageModel = () => resolveById("image");
+    resolveEmbeddingModel = () => resolveById("embeddings");
+    resolveAudioModel = () => resolveById("audio");
+    resolveArtDirectorModel = () => resolveById("art-director");
+    resolveResearchDeepModel = () => resolveById("research-deep");
+    resolveBuilderModel = () => resolveById("builder");
+    resolveHeartbeatModel = () => resolveById("heartbeat");
+    resolveBriefingModel = () => resolveById("briefing");
+    resolveBlogModel = () => resolveById("blog");
+    resolveChatMaintenanceModel = () => resolveById("chat-maintenance");
+    resolveIntelAnalysisModel = () => resolveById("intel-analysis");
+    resolveNotebookModel = () => resolveById("notebook");
+    resolveProjectChatModel = () => resolveById("project-chat");
+    resolveTrailsModel = () => resolveById("trails");
+    resolveLandingModel = () => resolveById("landing");
+    resolveDelegationModel = () => resolveById("delegation");
+    resolveRagModel = () => resolveById("rag");
+    resolveMappingModel = () => resolveById("mapping");
+    resolveHealthModel = () => resolveById("health");
+    resolveReleasesModel = () => resolveById("releases");
+    resolveToolSuggestionsModel = () => resolveById("tool-suggestions");
   }
 });
 
@@ -5218,22 +8305,25 @@ function parseHealingResponse(raw) {
   }
 }
 async function diagnoseAndFix(context, onProgress) {
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
+  const { client, model } = await getLLMClient(await resolveDoctorModel());
   const userPrompt = buildHealingPrompt(context);
   onProgress?.(`Diagnosing: ${context.error.slice(0, 100)}`);
   let response;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: HEALING_SYSTEM_PROMPT },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 2048,
-        response_format: { type: "json_object" }
-      });
+      response = await withActivity(
+        "doctor",
+        () => client.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: HEALING_SYSTEM_PROMPT },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 2048,
+          response_format: { type: "json_object" }
+        })
+      );
       break;
     } catch (err) {
       if (err?.status === 429 && attempt < 2) {
@@ -5257,8 +8347,9 @@ var HEALING_SYSTEM_PROMPT;
 var init_healing = __esm({
   "src/lib/workflows/orchestrator/healing.ts"() {
     "use strict";
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_activity();
     HEALING_SYSTEM_PROMPT = `You are a workflow debugging expert. A node in a workflow has failed during execution. Your job is to diagnose the root cause and propose a fix.
 
 ## Diagnosis Categories
@@ -5313,7 +8404,7 @@ var init_observability_bus = __esm({
 });
 
 // src/lib/workflows/engine-runtime.ts
-import { and, eq as eq3, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, eq as eq5, inArray, isNull, lt, or } from "drizzle-orm";
 import { monitorEventLoopDelay } from "perf_hooks";
 function nodeTimeoutMs(nodeType, configOverrideMs) {
   if (typeof configOverrideMs === "number" && configOverrideMs > 0) return configOverrideMs;
@@ -5350,7 +8441,7 @@ function startHeartbeat(runId) {
   const tick = async () => {
     if (stopped) return;
     try {
-      await db.update(workflowRuns).set({ heartbeatAt: /* @__PURE__ */ new Date() }).where(eq3(workflowRuns.id, runId));
+      await db.update(workflowRuns).set({ heartbeatAt: /* @__PURE__ */ new Date() }).where(eq5(workflowRuns.id, runId));
     } catch (e) {
       console.warn(`[engine-runtime] heartbeat write failed for ${runId}:`, e instanceof Error ? e.message : e);
     }
@@ -5738,16 +8829,16 @@ __export(data_store_exports, {
   loadStoreSnapshot: () => loadStoreSnapshot,
   setStoreValue: () => setStoreValue
 });
-import { and as and2, eq as eq4, sql as sql5 } from "drizzle-orm";
+import { and as and2, eq as eq6, sql as sql11 } from "drizzle-orm";
 async function getStoreValue(workflowId, key) {
-  const [row] = await db.select().from(workflowDataStore).where(and2(eq4(workflowDataStore.workflowId, workflowId), eq4(workflowDataStore.key, key)));
+  const [row] = await db.select().from(workflowDataStore).where(and2(eq6(workflowDataStore.workflowId, workflowId), eq6(workflowDataStore.key, key)));
   return {
     value: row?.value ?? null,
     found: row !== void 0
   };
 }
 async function loadStoreSnapshot(workflowId) {
-  const rows = await db.select().from(workflowDataStore).where(eq4(workflowDataStore.workflowId, workflowId));
+  const rows = await db.select().from(workflowDataStore).where(eq6(workflowDataStore.workflowId, workflowId));
   const snapshot = /* @__PURE__ */ new Map();
   for (const row of rows) {
     snapshot.set(row.key, row.value);
@@ -5761,7 +8852,7 @@ async function setStoreValue(workflowId, key, value) {
   });
 }
 function dedupeExpr(base2) {
-  return sql5`(SELECT COALESCE(jsonb_agg(elem ORDER BY ord), '[]'::jsonb)
+  return sql11`(SELECT COALESCE(jsonb_agg(elem ORDER BY ord), '[]'::jsonb)
     FROM (
       SELECT DISTINCT ON (elem) elem, ord
       FROM jsonb_array_elements(${base2}) WITH ORDINALITY AS t(elem, ord)
@@ -5769,7 +8860,7 @@ function dedupeExpr(base2) {
     ) d)`;
 }
 function trimExpr(base2, maxItems) {
-  return sql5`(SELECT CASE
+  return sql11`(SELECT CASE
       WHEN jsonb_array_length(${base2}) <= ${maxItems} THEN ${base2}
       ELSE (
         SELECT COALESCE(jsonb_agg(elem ORDER BY ord), '[]'::jsonb)
@@ -5792,12 +8883,12 @@ function wrapArray(base2, opts) {
 }
 async function arrayUpsert(workflowId, key, values, opts) {
   const newJson = JSON.stringify(values ?? []);
-  const insertBase = sql5`${newJson}::jsonb`;
-  const updateBase = sql5`(CASE WHEN jsonb_typeof(workflow_data_store.value) = 'array'
+  const insertBase = sql11`${newJson}::jsonb`;
+  const updateBase = sql11`(CASE WHEN jsonb_typeof(workflow_data_store.value) = 'array'
       THEN workflow_data_store.value ELSE '[]'::jsonb END) || ${newJson}::jsonb`;
   const insertExpr = wrapArray(insertBase, opts);
   const updateExpr = wrapArray(updateBase, opts);
-  const res = await db.execute(sql5`
+  const res = await db.execute(sql11`
     INSERT INTO workflow_data_store (workflow_id, key, value, updated_at)
     VALUES (${workflowId}, ${key}, ${insertExpr}, now())
     ON CONFLICT (workflow_id, key)
@@ -5824,12 +8915,12 @@ async function addToSetReturningNew(workflowId, key, candidateIds, maxItems) {
     }
   }
   return db.transaction(async (tx) => {
-    await tx.execute(sql5`
+    await tx.execute(sql11`
       INSERT INTO workflow_data_store (workflow_id, key, value, updated_at)
       VALUES (${workflowId}, ${key}, '[]'::jsonb, now())
       ON CONFLICT (workflow_id, key) DO NOTHING
     `);
-    const res = await tx.execute(sql5`
+    const res = await tx.execute(sql11`
       SELECT value FROM workflow_data_store
       WHERE workflow_id = ${workflowId} AND key = ${key}
       FOR UPDATE
@@ -5844,7 +8935,7 @@ async function addToSetReturningNew(workflowId, key, candidateIds, maxItems) {
     if (maxItems != null && Number.isFinite(maxItems) && maxItems > 0 && merged.length > maxItems) {
       merged = merged.slice(merged.length - maxItems);
     }
-    await tx.execute(sql5`
+    await tx.execute(sql11`
       UPDATE workflow_data_store
       SET value = ${JSON.stringify(merged)}::jsonb, updated_at = now()
       WHERE workflow_id = ${workflowId} AND key = ${key}
@@ -5853,7 +8944,7 @@ async function addToSetReturningNew(workflowId, key, candidateIds, maxItems) {
   });
 }
 async function incrementAtomic(workflowId, key, by) {
-  const res = await db.execute(sql5`
+  const res = await db.execute(sql11`
     INSERT INTO workflow_data_store (workflow_id, key, value, updated_at)
     VALUES (${workflowId}, ${key}, to_jsonb(${by}::numeric), now())
     ON CONFLICT (workflow_id, key)
@@ -5867,7 +8958,7 @@ async function incrementAtomic(workflowId, key, by) {
   return Number(row?.value ?? by);
 }
 async function deleteStoreKey(workflowId, key) {
-  const res = await db.execute(sql5`
+  const res = await db.execute(sql11`
     DELETE FROM workflow_data_store
     WHERE workflow_id = ${workflowId} AND key = ${key}
     RETURNING id
@@ -6259,27 +9350,6 @@ var init_dedupe = __esm({
   }
 });
 
-// src/lib/config/owner.ts
-function ownerPhone() {
-  const raw = env.WORKFLOW_NOTIFY_PHONE?.trim();
-  if (raw) return raw;
-  if (!warned) {
-    warned = true;
-    console.error(
-      "[config] WORKFLOW_NOTIFY_PHONE is not set \u2014 owner WhatsApp notifications (briefing, alerts, connector monitor, intel) have nowhere to go."
-    );
-  }
-  return null;
-}
-var warned;
-var init_owner = __esm({
-  "src/lib/config/owner.ts"() {
-    "use strict";
-    init_env_shim();
-    warned = false;
-  }
-});
-
 // src/lib/workflows/whatsapp/format.ts
 function markdownToWhatsApp(md) {
   if (!md) return "";
@@ -6360,7 +9430,7 @@ var init_format = __esm({
 });
 
 // src/lib/workflows/run-notifications.ts
-import { eq as eq5 } from "drizzle-orm";
+import { eq as eq7 } from "drizzle-orm";
 function resolvePath4(obj2, path4) {
   if (!path4) return void 0;
   let current = obj2;
@@ -6415,7 +9485,7 @@ async function notifyRunOutcome(args) {
       name: workflows.name,
       description: workflows.description,
       notifications: workflows.notifications
-    }).from(workflows).where(eq5(workflows.id, workflowId)).limit(1);
+    }).from(workflows).where(eq7(workflows.id, workflowId)).limit(1);
     const cfg = row?.notifications;
     if (!cfg || cfg.onFailure !== true && cfg.onCompletion !== true) return;
     if (cfg.channel && cfg.channel !== "whatsapp") return;
@@ -6601,929 +9671,6 @@ var init_state_templates = __esm({
   }
 });
 
-// src/lib/datastore/types.ts
-var DatastoreError;
-var init_types = __esm({
-  "src/lib/datastore/types.ts"() {
-    "use strict";
-    DatastoreError = class extends Error {
-      constructor(code, message) {
-        super(message);
-        this.code = code;
-        this.name = "DatastoreError";
-      }
-    };
-  }
-});
-
-// src/lib/datastore/permissions.ts
-import { sql as sql6 } from "drizzle-orm";
-function dedupe(list) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const item of list) {
-    if (!seen.has(item)) {
-      seen.add(item);
-      out.push(item);
-    }
-  }
-  return out;
-}
-function builtinDefault(creator) {
-  return dedupe([creator, "owner", "jkai"]);
-}
-function resolvePermissions(record, collection) {
-  const creator = record.createdBy ?? collection.createdBy ?? "owner";
-  const fallback = builtinDefault(creator);
-  const source = record.permissions ?? collection.defaultPermissions ?? null;
-  const pick = (action) => {
-    const fromSource = source?.[action];
-    return Array.isArray(fromSource) ? fromSource : fallback;
-  };
-  return {
-    read: pick("read"),
-    write: pick("write"),
-    delete: pick("delete")
-  };
-}
-function listGrants(list, actor) {
-  if (!list) return false;
-  for (const entry of list) {
-    if (entry === "*") return true;
-    if (entry === actor) return true;
-    if (entry === "workflow:*" && actor.startsWith("workflow:")) return true;
-  }
-  return false;
-}
-function canDo(action, perms, actor) {
-  if (actor === "owner") return true;
-  return listGrants(perms[action], actor);
-}
-function assertCan(action, perms, actor) {
-  if (!canDo(action, perms, actor)) {
-    throw new DatastoreError(
-      "forbidden",
-      `actor "${actor}" is not permitted to ${action} this resource`
-    );
-  }
-}
-function readableSqlPredicate(collection, actor) {
-  if (actor === "owner") return sql6`TRUE`;
-  const colRead = collection.defaultPermissions?.read;
-  const colReadJson = Array.isArray(colRead) ? sql6`${JSON.stringify(colRead)}::jsonb` : sql6`NULL`;
-  const creator = collection.createdBy ?? "owner";
-  const builtin = sql6`jsonb_build_array(coalesce(created_by, ${creator}), 'owner', 'jkai')`;
-  const eff = sql6`CASE
-    WHEN permissions IS NOT NULL THEN coalesce(permissions -> 'read', ${builtin})
-    ELSE coalesce(${colReadJson}, ${builtin})
-  END`;
-  const wildcardWorkflow = actor.startsWith("workflow:") ? sql6` OR ${eff} @> '"workflow:*"'::jsonb` : sql6``;
-  return sql6`(${eff} @> to_jsonb(${actor}::text) OR ${eff} @> '"*"'::jsonb${wildcardWorkflow})`;
-}
-var init_permissions = __esm({
-  "src/lib/datastore/permissions.ts"() {
-    "use strict";
-    init_types();
-  }
-});
-
-// src/lib/datastore/audit.ts
-import { sql as sql7 } from "drizzle-orm";
-function auditDatastore(entry) {
-  try {
-    const before = entry.before === void 0 ? null : JSON.stringify(entry.before);
-    const after = entry.after === void 0 ? null : JSON.stringify(entry.after);
-    void db.execute(sql7`
-        INSERT INTO datastore_audit_log (collection_id, record_id, actor, action, before, after)
-        VALUES (
-          ${entry.collectionId},
-          ${entry.recordId ?? null},
-          ${entry.actor},
-          ${entry.action},
-          ${before}::jsonb,
-          ${after}::jsonb
-        )
-      `).catch((err) => {
-      console.error(
-        "[datastore-audit] failed to write audit row:",
-        err instanceof Error ? err.message : err
-      );
-    });
-  } catch (err) {
-    console.error(
-      "[datastore-audit] audit write threw synchronously:",
-      err instanceof Error ? err.message : err
-    );
-  }
-}
-var init_audit = __esm({
-  "src/lib/datastore/audit.ts"() {
-    "use strict";
-    init_db();
-  }
-});
-
-// src/lib/datastore/collections.ts
-var collections_exports = {};
-__export(collections_exports, {
-  deleteCollection: () => deleteCollection,
-  ensureCollection: () => ensureCollection,
-  getCollectionBySlug: () => getCollectionBySlug,
-  listCollections: () => listCollections,
-  mapCollectionRow: () => mapCollectionRow,
-  updateCollection: () => updateCollection
-});
-import { sql as sql8 } from "drizzle-orm";
-function asDate(v) {
-  return v instanceof Date ? v : new Date(String(v));
-}
-function mapCollectionRow(r) {
-  return {
-    id: String(r.id),
-    slug: String(r.slug),
-    name: r.name ?? null,
-    description: r.description ?? null,
-    schema: r.schema ?? null,
-    defaultPermissions: r.default_permissions ?? null,
-    settings: r.settings ?? null,
-    isSystem: r.is_system === true,
-    createdBy: r.created_by ?? null,
-    createdAt: asDate(r.created_at),
-    updatedAt: asDate(r.updated_at)
-  };
-}
-function rowsOf(res) {
-  return res.rows ?? [];
-}
-function collectionPerms(collection) {
-  return resolvePermissions({ permissions: null, createdBy: collection.createdBy }, collection);
-}
-function validateSlug(slug) {
-  if (!SLUG_RE.test(slug)) {
-    throw new DatastoreError(
-      "validation",
-      `invalid collection slug "${slug}" (lowercase alphanumeric, hyphen or underscore; must start alphanumeric)`
-    );
-  }
-}
-function jsonbParam(value) {
-  return value === void 0 || value === null ? sql8`NULL` : sql8`${JSON.stringify(value)}::jsonb`;
-}
-async function getCollectionBySlug(slug) {
-  const res = await db.execute(
-    sql8`SELECT * FROM datastore_collections WHERE slug = ${slug} LIMIT 1`
-  );
-  const [row] = rowsOf(res);
-  return row ? mapCollectionRow(row) : null;
-}
-async function ensureCollection(slug, opts, actor) {
-  validateSlug(slug);
-  const existing = await getCollectionBySlug(slug);
-  if (existing) return existing;
-  const res = await db.execute(sql8`
-    INSERT INTO datastore_collections
-      (slug, name, description, schema, default_permissions, settings, is_system, created_by)
-    VALUES (
-      ${slug},
-      ${opts.name ?? null},
-      ${opts.description ?? null},
-      ${jsonbParam(opts.schema ?? null)},
-      ${jsonbParam(opts.defaultPermissions ?? null)},
-      ${jsonbParam(opts.settings ?? null)},
-      ${opts.isSystem === true},
-      ${actor}
-    )
-    ON CONFLICT (slug) DO NOTHING
-    RETURNING *
-  `);
-  const [row] = rowsOf(res);
-  const created = row ? mapCollectionRow(row) : await getCollectionBySlug(slug);
-  if (!created) throw new DatastoreError("conflict", `failed to create collection "${slug}"`);
-  if (row) {
-    auditDatastore({
-      collectionId: created.id,
-      actor,
-      action: "collection_create",
-      after: created
-    });
-  }
-  return created;
-}
-async function listCollections(actor) {
-  const res = await db.execute(sql8`SELECT * FROM datastore_collections ORDER BY updated_at DESC`);
-  return rowsOf(res).map(mapCollectionRow).filter((c4) => canDo("read", collectionPerms(c4), actor));
-}
-async function updateCollection(slug, patch, actor) {
-  const before = await getCollectionBySlug(slug);
-  if (!before) throw new DatastoreError("not_found", `collection "${slug}" not found`);
-  assertCan("write", collectionPerms(before), actor);
-  const sets = [];
-  if (patch.name !== void 0) sets.push(sql8`name = ${patch.name}`);
-  if (patch.description !== void 0) sets.push(sql8`description = ${patch.description}`);
-  if (patch.schema !== void 0) sets.push(sql8`schema = ${jsonbParam(patch.schema)}`);
-  if (patch.defaultPermissions !== void 0)
-    sets.push(sql8`default_permissions = ${jsonbParam(patch.defaultPermissions)}`);
-  if (patch.settings !== void 0) sets.push(sql8`settings = ${jsonbParam(patch.settings)}`);
-  if (patch.isSystem !== void 0) sets.push(sql8`is_system = ${patch.isSystem === true}`);
-  sets.push(sql8`updated_at = now()`);
-  const res = await db.execute(sql8`
-    UPDATE datastore_collections SET ${sql8.join(sets, sql8`, `)} WHERE slug = ${slug} RETURNING *
-  `);
-  const [row] = rowsOf(res);
-  const after = row ? mapCollectionRow(row) : before;
-  auditDatastore({ collectionId: after.id, actor, action: "collection_update", before, after });
-  return after;
-}
-async function deleteCollection(slug, actor) {
-  const before = await getCollectionBySlug(slug);
-  if (!before) throw new DatastoreError("not_found", `collection "${slug}" not found`);
-  if (before.isSystem) {
-    throw new DatastoreError("forbidden", `collection "${slug}" is a system collection and cannot be deleted`);
-  }
-  assertCan("delete", collectionPerms(before), actor);
-  await db.execute(sql8`DELETE FROM datastore_collections WHERE id = ${before.id}`);
-  auditDatastore({ collectionId: before.id, actor, action: "collection_delete", before });
-  return { deleted: true };
-}
-var SLUG_RE;
-var init_collections = __esm({
-  "src/lib/datastore/collections.ts"() {
-    "use strict";
-    init_db();
-    init_types();
-    init_permissions();
-    init_audit();
-    SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
-  }
-});
-
-// src/lib/datastore/validate.ts
-function jsonType(value) {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  const t = typeof value;
-  if (t === "number") return "number";
-  if (t === "boolean") return "boolean";
-  if (t === "string") return "string";
-  if (t === "object") return "object";
-  return t;
-}
-function typeMatches(value, expected) {
-  if (expected === "integer") return typeof value === "number" && Number.isInteger(value);
-  return jsonType(value) === expected;
-}
-function isPlainSchema(schema) {
-  return typeof schema === "object" && schema !== null && !Array.isArray(schema);
-}
-function walk(value, schema, path4, errors) {
-  const at = path4 || "(root)";
-  if (schema.type !== void 0) {
-    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
-    if (!types.some((t) => typeMatches(value, String(t)))) {
-      errors.push(`${at}: expected type ${types.join("|")}, got ${jsonType(value)}`);
-      return;
-    }
-  }
-  if (Array.isArray(schema.enum)) {
-    const ok2 = schema.enum.some((e) => JSON.stringify(e) === JSON.stringify(value));
-    if (!ok2) errors.push(`${at}: value not in enum`);
-  }
-  if (typeof value === "number") {
-    if (typeof schema.minimum === "number" && value < schema.minimum) {
-      errors.push(`${at}: ${value} < minimum ${schema.minimum}`);
-    }
-    if (typeof schema.maximum === "number" && value > schema.maximum) {
-      errors.push(`${at}: ${value} > maximum ${schema.maximum}`);
-    }
-  }
-  if (typeof value === "string" && typeof schema.pattern === "string") {
-    let re = null;
-    try {
-      re = new RegExp(schema.pattern);
-    } catch {
-      re = null;
-    }
-    if (re && !re.test(value)) errors.push(`${at}: does not match pattern ${schema.pattern}`);
-  }
-  if (jsonType(value) === "object") {
-    const obj2 = value;
-    if (Array.isArray(schema.required)) {
-      for (const req of schema.required) {
-        if (!(String(req) in obj2)) errors.push(`${at}: missing required field "${req}"`);
-      }
-    }
-    if (isPlainSchema(schema.properties)) {
-      for (const [prop, sub2] of Object.entries(schema.properties)) {
-        if (prop in obj2 && isPlainSchema(sub2)) {
-          walk(obj2[prop], sub2, path4 ? `${path4}.${prop}` : prop, errors);
-        }
-      }
-    }
-  }
-  if (Array.isArray(value) && isPlainSchema(schema.items)) {
-    value.forEach((el, i) => walk(el, schema.items, `${at}[${i}]`, errors));
-  }
-}
-function validateAgainstSchema(data, schema) {
-  if (!schema || !isPlainSchema(schema) || Object.keys(schema).length === 0) {
-    return { ok: true };
-  }
-  const errors = [];
-  walk(data, schema, "", errors);
-  return errors.length === 0 ? { ok: true } : { ok: false, errors };
-}
-var init_validate = __esm({
-  "src/lib/datastore/validate.ts"() {
-    "use strict";
-  }
-});
-
-// src/lib/db/sql-array.ts
-function pgTextArray(values) {
-  const quoted = values.map(
-    (v) => `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
-  );
-  return `{${quoted.join(",")}}`;
-}
-var init_sql_array = __esm({
-  "src/lib/db/sql-array.ts"() {
-    "use strict";
-  }
-});
-
-// src/lib/datastore/query.ts
-import { sql as sql9 } from "drizzle-orm";
-function parsePath(path4) {
-  if (typeof path4 !== "string" || !PATH_RE.test(path4)) {
-    throw new DatastoreError("validation", `invalid path: ${JSON.stringify(path4)}`);
-  }
-  const segments2 = path4.split(".");
-  if (segments2.some((s) => s.length === 0)) {
-    throw new DatastoreError("validation", `invalid path (empty segment): ${JSON.stringify(path4)}`);
-  }
-  return segments2;
-}
-function pathParam(segments2) {
-  return pgTextArray(segments2);
-}
-function pathLiteral(path4) {
-  return pgTextArray(parsePath(path4));
-}
-function coerceNumericOperand(op, value) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if ((op === "gt" || op === "gte" || op === "lt" || op === "lte") && typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    const n = Number(trimmed);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-function compileOne(filter) {
-  const segments2 = parsePath(filter.path);
-  const pl = pathParam(segments2);
-  if (filter.op === "exists") {
-    return sql9`data #> ${pl}::text[] IS NOT NULL`;
-  }
-  if (filter.op === "contains") {
-    return sql9`data #> ${pl}::text[] @> ${JSON.stringify(filter.value ?? null)}::jsonb`;
-  }
-  if (filter.op === "in") {
-    if (!Array.isArray(filter.value)) {
-      throw new DatastoreError("validation", 'the "in" operator requires an array value');
-    }
-    const literal = pgTextArray(filter.value.map((v) => String(v)));
-    return sql9`(data #>> ${pl}::text[]) = ANY(${literal}::text[])`;
-  }
-  const symbol = COMPARATORS[filter.op];
-  if (!symbol) {
-    throw new DatastoreError("validation", `unknown filter operator: ${JSON.stringify(filter.op)}`);
-  }
-  const num6 = coerceNumericOperand(filter.op, filter.value);
-  if (num6 !== null) {
-    return sql9`(CASE WHEN jsonb_typeof(data #> ${pl}::text[]) = 'number' THEN (data #>> ${pl}::text[])::numeric END) ${sql9.raw(symbol)} ${num6}`;
-  }
-  return sql9`data #>> ${pl}::text[] ${sql9.raw(symbol)} ${String(filter.value ?? "")}`;
-}
-function compileFilters(filters) {
-  if (!filters || filters.length === 0) return void 0;
-  const parts = filters.map(compileOne);
-  return sql9.join(parts, sql9` AND `);
-}
-function compileSort(sort) {
-  const dir = sort?.dir === "asc" ? sql9.raw("ASC") : sql9.raw("DESC");
-  if (sort?.field) {
-    const col = SORT_FIELDS[sort.field];
-    if (!col) throw new DatastoreError("validation", `invalid sort field: ${sort.field}`);
-    return sql9`${sql9.raw(col)} ${dir}`;
-  }
-  if (sort?.path) {
-    const pl = pathParam(parsePath(sort.path));
-    return sql9`data #> ${pl}::text[] ${dir} NULLS LAST`;
-  }
-  return sql9`updated_at ${dir}`;
-}
-function clampLimit(limit2) {
-  if (typeof limit2 !== "number" || !Number.isFinite(limit2) || limit2 <= 0) return DEFAULT_LIMIT;
-  return Math.min(Math.floor(limit2), MAX_LIMIT);
-}
-function clampOffset(offset) {
-  if (typeof offset !== "number" || !Number.isFinite(offset) || offset <= 0) return 0;
-  return Math.floor(offset);
-}
-var PATH_RE, DEFAULT_LIMIT, MAX_LIMIT, COMPARATORS, SORT_FIELDS;
-var init_query = __esm({
-  "src/lib/datastore/query.ts"() {
-    "use strict";
-    init_sql_array();
-    init_types();
-    PATH_RE = /^[a-zA-Z0-9_.]+$/;
-    DEFAULT_LIMIT = 100;
-    MAX_LIMIT = 500;
-    COMPARATORS = {
-      eq: "=",
-      ne: "<>",
-      gt: ">",
-      gte: ">=",
-      lt: "<",
-      lte: "<="
-    };
-    SORT_FIELDS = {
-      createdAt: "created_at",
-      updatedAt: "updated_at",
-      key: "key"
-    };
-  }
-});
-
-// src/lib/datastore/records.ts
-var records_exports = {};
-__export(records_exports, {
-  aggregateRecords: () => aggregateRecords,
-  bulkInsertRecords: () => bulkInsertRecords,
-  countRecords: () => countRecords,
-  deleteRecord: () => deleteRecord,
-  getRecord: () => getRecord,
-  getRecordByKey: () => getRecordByKey,
-  insertRecord: () => insertRecord,
-  queryRecords: () => queryRecords,
-  recordCountsByCollection: () => recordCountsByCollection,
-  updateRecord: () => updateRecord,
-  upsertRecord: () => upsertRecord
-});
-import { sql as sql10 } from "drizzle-orm";
-function asDate2(v) {
-  return v instanceof Date ? v : new Date(String(v));
-}
-function rowsOf2(res) {
-  return res.rows ?? [];
-}
-function mapRecordRow(r) {
-  return {
-    id: String(r.id),
-    collectionId: String(r.collection_id),
-    key: r.key ?? null,
-    data: r.data ?? {},
-    permissions: r.permissions ?? null,
-    version: Number(r.version ?? 1),
-    createdBy: r.created_by ?? null,
-    updatedBy: r.updated_by ?? null,
-    createdAt: asDate2(r.created_at),
-    updatedAt: asDate2(r.updated_at),
-    expiresAt: r.expires_at ? asDate2(r.expires_at) : null
-  };
-}
-async function getCollectionOrThrow(slug) {
-  const collection = await getCollectionBySlug(slug);
-  if (!collection) throw new DatastoreError("not_found", `collection "${slug}" not found`);
-  return collection;
-}
-function settingsOf(collection) {
-  return collection.settings ?? {};
-}
-function assertPayloadWithinLimit(collection, data) {
-  const max = settingsOf(collection).maxPayloadBytes ?? DEFAULT_MAX_PAYLOAD_BYTES;
-  const bytes = Buffer.byteLength(JSON.stringify(data ?? {}), "utf8");
-  if (bytes > max) {
-    throw new DatastoreError("limit", `record payload ${bytes} bytes exceeds limit of ${max} bytes`);
-  }
-}
-function assertSchemaValid(collection, data) {
-  if (!collection.schema) return;
-  const result = validateAgainstSchema(data, collection.schema);
-  if (!result.ok) {
-    throw new DatastoreError("validation", `schema validation failed: ${result.errors.join("; ")}`);
-  }
-}
-function jsonbParam2(value) {
-  return value === void 0 || value === null ? sql10`NULL` : sql10`${JSON.stringify(value)}::jsonb`;
-}
-function scopedWhere(collectionId, filters) {
-  const filterSql = compileFilters(filters);
-  return filterSql ? sql10`collection_id = ${collectionId} AND (${filterSql})` : sql10`collection_id = ${collectionId}`;
-}
-async function countInCollection(collectionId, filters) {
-  const res = await db.execute(
-    sql10`SELECT count(*)::int AS count FROM datastore_records WHERE ${scopedWhere(collectionId, filters)}`
-  );
-  const [row] = rowsOf2(res);
-  return Number(row?.count ?? 0);
-}
-function readableWhere(collection, actor, filters) {
-  return sql10`${scopedWhere(collection.id, filters)} AND ${readableSqlPredicate(collection, actor)}`;
-}
-async function countReadable(collection, actor, filters) {
-  const res = await db.execute(
-    sql10`SELECT count(*)::int AS count FROM datastore_records WHERE ${readableWhere(collection, actor, filters)}`
-  );
-  const [row] = rowsOf2(res);
-  return Number(row?.count ?? 0);
-}
-async function recordCountsByCollection() {
-  const res = await db.execute(
-    sql10`SELECT collection_id, count(*)::int AS count FROM datastore_records GROUP BY collection_id`
-  );
-  const out = {};
-  for (const r of rowsOf2(res)) out[String(r.collection_id)] = Number(r.count ?? 0);
-  return out;
-}
-async function fetchRow(collection, ref) {
-  let res;
-  if (ref.id) {
-    res = await db.execute(
-      sql10`SELECT * FROM datastore_records WHERE id = ${ref.id} AND collection_id = ${collection.id} LIMIT 1`
-    );
-  } else if (ref.key !== void 0 && ref.key !== null) {
-    res = await db.execute(
-      sql10`SELECT * FROM datastore_records WHERE collection_id = ${collection.id} AND key = ${ref.key} LIMIT 1`
-    );
-  } else {
-    throw new DatastoreError("validation", "a record reference requires an id or key");
-  }
-  const [row] = rowsOf2(res);
-  return row ? mapRecordRow(row) : null;
-}
-function isUniqueViolation(err) {
-  return typeof err === "object" && err !== null && err.code === "23505";
-}
-async function insertRecord(slug, input, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  assertCan("write", resolvePermissions({ permissions: null, createdBy: null }, collection), actor);
-  assertSchemaValid(collection, input.data);
-  assertPayloadWithinLimit(collection, input.data);
-  const max = settingsOf(collection).maxRecords ?? DEFAULT_MAX_RECORDS;
-  if (await countInCollection(collection.id) >= max) {
-    throw new DatastoreError("limit", `collection "${slug}" is at its maxRecords limit (${max})`);
-  }
-  let res;
-  try {
-    res = await db.execute(sql10`
-      INSERT INTO datastore_records
-        (collection_id, key, data, permissions, created_by, updated_by, expires_at)
-      VALUES (
-        ${collection.id},
-        ${input.key ?? null},
-        ${jsonbParam2(input.data ?? {})},
-        ${jsonbParam2(input.permissions ?? null)},
-        ${actor},
-        ${actor},
-        ${input.expiresAt ?? null}
-      )
-      RETURNING *
-    `);
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      throw new DatastoreError("conflict", `a record with key "${input.key}" already exists in "${slug}"`);
-    }
-    throw err;
-  }
-  const record = mapRecordRow(rowsOf2(res)[0]);
-  auditDatastore({ collectionId: collection.id, recordId: record.id, actor, action: "insert", after: record });
-  return record;
-}
-async function bulkInsertRecords(slug, inputs, actor) {
-  if (inputs.length > BULK_CAP) {
-    throw new DatastoreError("limit", `bulk insert is capped at ${BULK_CAP} records per batch`);
-  }
-  const out = [];
-  for (const input of inputs) {
-    out.push(await insertRecord(slug, input, actor));
-  }
-  return out;
-}
-async function upsertRecord(slug, input, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  if (input.key === void 0 || input.key === null || input.key === "") {
-    throw new DatastoreError("validation", "upsertRecord requires a non-empty key");
-  }
-  assertSchemaValid(collection, input.data);
-  assertPayloadWithinLimit(collection, input.data);
-  const existing = await fetchRow(collection, { key: input.key });
-  const gatePerms = existing ? resolvePermissions(existing, collection) : resolvePermissions({ permissions: null, createdBy: null }, collection);
-  assertCan("write", gatePerms, actor);
-  if (!existing) {
-    const max = settingsOf(collection).maxRecords ?? DEFAULT_MAX_RECORDS;
-    if (await countInCollection(collection.id) >= max) {
-      throw new DatastoreError("limit", `collection "${slug}" is at its maxRecords limit (${max})`);
-    }
-  }
-  const permsOnConflict = input.permissions !== void 0 && input.permissions !== null ? sql10`excluded.permissions` : sql10`datastore_records.permissions`;
-  const res = await db.execute(sql10`
-    INSERT INTO datastore_records
-      (collection_id, key, data, permissions, created_by, updated_by, expires_at)
-    VALUES (
-      ${collection.id},
-      ${input.key},
-      ${jsonbParam2(input.data ?? {})},
-      ${jsonbParam2(input.permissions ?? null)},
-      ${actor},
-      ${actor},
-      ${input.expiresAt ?? null}
-    )
-    ON CONFLICT (collection_id, key) WHERE key IS NOT NULL DO UPDATE SET
-      data = excluded.data,
-      permissions = ${permsOnConflict},
-      version = datastore_records.version + 1,
-      updated_at = now(),
-      updated_by = ${actor},
-      expires_at = excluded.expires_at
-    RETURNING *
-  `);
-  const record = mapRecordRow(rowsOf2(res)[0]);
-  auditDatastore({
-    collectionId: collection.id,
-    recordId: record.id,
-    actor,
-    action: existing ? "update" : "insert",
-    before: existing ?? void 0,
-    after: record
-  });
-  return record;
-}
-async function updateRecord(slug, ref, changes, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  const existing = await fetchRow(collection, ref);
-  if (!existing) throw new DatastoreError("not_found", `record not found in "${slug}"`);
-  const effectivePerms = resolvePermissions(existing, collection);
-  assertCan("write", effectivePerms, actor);
-  if (changes.permissions !== void 0) {
-    assertCan("delete", effectivePerms, actor);
-  }
-  if (changes.expectedVersion !== void 0 && changes.expectedVersion !== existing.version) {
-    throw new DatastoreError(
-      "conflict",
-      `version mismatch: expected ${changes.expectedVersion}, stored ${existing.version}`
-    );
-  }
-  const dataChanged = changes.data !== void 0 || changes.patch !== void 0;
-  const newData = changes.data ? changes.data : changes.patch ? { ...existing.data, ...changes.patch } : existing.data;
-  if (dataChanged) {
-    assertSchemaValid(collection, newData);
-    assertPayloadWithinLimit(collection, newData);
-  }
-  const sets = [];
-  if (dataChanged) sets.push(sql10`data = ${jsonbParam2(newData)}`);
-  if (changes.permissions !== void 0) sets.push(sql10`permissions = ${jsonbParam2(changes.permissions)}`);
-  if (changes.expiresAt !== void 0) sets.push(sql10`expires_at = ${changes.expiresAt ?? null}`);
-  sets.push(sql10`version = datastore_records.version + 1`);
-  sets.push(sql10`updated_at = now()`);
-  sets.push(sql10`updated_by = ${actor}`);
-  const res = await db.execute(sql10`
-    UPDATE datastore_records SET ${sql10.join(sets, sql10`, `)}
-    WHERE id = ${existing.id} AND version = ${existing.version}
-    RETURNING *
-  `);
-  const [row] = rowsOf2(res);
-  if (!row) {
-    throw new DatastoreError("conflict", "record was modified concurrently; retry with a fresh version");
-  }
-  const after = mapRecordRow(row);
-  const action = dataChanged ? "update" : changes.permissions !== void 0 ? "permissions" : "update";
-  auditDatastore({ collectionId: collection.id, recordId: after.id, actor, action, before: existing, after });
-  return after;
-}
-async function deleteRecord(slug, ref, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  const existing = await fetchRow(collection, ref);
-  if (!existing) throw new DatastoreError("not_found", `record not found in "${slug}"`);
-  assertCan("delete", resolvePermissions(existing, collection), actor);
-  await db.execute(sql10`DELETE FROM datastore_records WHERE id = ${existing.id}`);
-  auditDatastore({ collectionId: collection.id, recordId: existing.id, actor, action: "delete", before: existing });
-  return { deleted: true, id: existing.id };
-}
-async function getRecord(slug, id, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  const record = await fetchRow(collection, { id });
-  if (!record) throw new DatastoreError("not_found", `record "${id}" not found in "${slug}"`);
-  assertCan("read", resolvePermissions(record, collection), actor);
-  return record;
-}
-async function getRecordByKey(slug, key, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  const record = await fetchRow(collection, { key });
-  if (!record) throw new DatastoreError("not_found", `record with key "${key}" not found in "${slug}"`);
-  assertCan("read", resolvePermissions(record, collection), actor);
-  return record;
-}
-function assertCollectionReadable(collection, actor) {
-  const perms = resolvePermissions({ permissions: null, createdBy: collection.createdBy }, collection);
-  assertCan("read", perms, actor);
-}
-async function queryRecords(slug, opts, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  assertCollectionReadable(collection, actor);
-  const where = readableWhere(collection, actor, opts.filters);
-  const order = compileSort(opts.sort);
-  const limit2 = clampLimit(opts.limit);
-  const offset = clampOffset(opts.offset);
-  const res = await db.execute(sql10`
-    SELECT * FROM datastore_records WHERE ${where} ORDER BY ${order} LIMIT ${limit2} OFFSET ${offset}
-  `);
-  const records = rowsOf2(res).map(mapRecordRow);
-  if (opts.includeTotal) {
-    const total = await countReadable(collection, actor, opts.filters);
-    return { records, total };
-  }
-  return { records };
-}
-async function countRecords(slug, filters, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  assertCollectionReadable(collection, actor);
-  return countReadable(collection, actor, filters);
-}
-async function aggregateRecords(slug, opts, actor) {
-  const collection = await getCollectionOrThrow(slug);
-  assertCollectionReadable(collection, actor);
-  const where = readableWhere(collection, actor, opts.filters);
-  let valueExpr;
-  if (opts.op === "count") {
-    valueExpr = sql10`count(*)::int`;
-  } else {
-    if (!opts.path) {
-      throw new DatastoreError("validation", `aggregate "${opts.op}" requires a numeric path`);
-    }
-    const pl = pathLiteral(opts.path);
-    const inner = sql10`(CASE WHEN jsonb_typeof(data #> ${pl}::text[]) = 'number' THEN (data #>> ${pl}::text[])::numeric END)`;
-    valueExpr = opts.op === "sum" ? sql10`sum(${inner})` : opts.op === "avg" ? sql10`avg(${inner})` : opts.op === "min" ? sql10`min(${inner})` : sql10`max(${inner})`;
-  }
-  if (opts.groupBy) {
-    const gl = pathLiteral(opts.groupBy);
-    const res2 = await db.execute(sql10`
-      SELECT data #>> ${gl}::text[] AS grp, ${valueExpr} AS value
-      FROM datastore_records WHERE ${where}
-      GROUP BY grp ORDER BY value DESC
-    `);
-    const groups = rowsOf2(res2).map((r) => ({
-      group: r.grp ?? null,
-      value: Number(r.value ?? 0)
-    }));
-    return { groups };
-  }
-  const res = await db.execute(
-    sql10`SELECT ${valueExpr} AS value FROM datastore_records WHERE ${where}`
-  );
-  const [row] = rowsOf2(res);
-  return { value: Number(row?.value ?? 0) };
-}
-var DEFAULT_MAX_PAYLOAD_BYTES, DEFAULT_MAX_RECORDS, BULK_CAP;
-var init_records = __esm({
-  "src/lib/datastore/records.ts"() {
-    "use strict";
-    init_db();
-    init_types();
-    init_collections();
-    init_permissions();
-    init_validate();
-    init_query();
-    init_audit();
-    DEFAULT_MAX_PAYLOAD_BYTES = 262144;
-    DEFAULT_MAX_RECORDS = 5e4;
-    BULK_CAP = 100;
-  }
-});
-
-// src/lib/datastore/ttl-reaper.ts
-import { sql as sql11 } from "drizzle-orm";
-function rowsOf3(res) {
-  return res.rows ?? [];
-}
-async function sweepExpired() {
-  let deleted = 0;
-  const expiredRes = await db.execute(sql11`
-    DELETE FROM datastore_records
-    WHERE expires_at IS NOT NULL AND expires_at < now()
-    RETURNING id, collection_id
-  `);
-  for (const row of rowsOf3(expiredRes)) {
-    deleted++;
-    auditDatastore({
-      collectionId: String(row.collection_id),
-      recordId: String(row.id),
-      actor: "system",
-      action: "expire"
-    });
-  }
-  const collectionsRes = await db.execute(sql11`
-    SELECT id, (settings->>'ttlSeconds') AS ttl
-    FROM datastore_collections
-    WHERE (settings->>'ttlSeconds') IS NOT NULL
-  `);
-  for (const col of rowsOf3(collectionsRes)) {
-    const ttl = Number(col.ttl);
-    if (!Number.isFinite(ttl) || ttl <= 0) continue;
-    const res = await db.execute(sql11`
-      DELETE FROM datastore_records
-      WHERE collection_id = ${String(col.id)}
-        AND updated_at < now() - make_interval(secs => ${ttl})
-      RETURNING id, collection_id
-    `);
-    for (const row of rowsOf3(res)) {
-      deleted++;
-      auditDatastore({
-        collectionId: String(row.collection_id),
-        recordId: String(row.id),
-        actor: "system",
-        action: "expire"
-      });
-    }
-  }
-  return deleted;
-}
-function safeSweep() {
-  void sweepExpired().catch((err) => {
-    console.error("[datastore-reaper] sweep failed:", err instanceof Error ? err.message : err);
-  });
-}
-function startDatastoreReaper() {
-  if (started) return;
-  started = true;
-  safeSweep();
-  timer = setInterval(safeSweep, HOUR_MS);
-  if (timer && typeof timer.unref === "function") timer.unref();
-}
-function stopDatastoreReaper() {
-  if (timer) clearInterval(timer);
-  timer = null;
-  started = false;
-}
-var HOUR_MS, timer, started;
-var init_ttl_reaper = __esm({
-  "src/lib/datastore/ttl-reaper.ts"() {
-    "use strict";
-    init_db();
-    init_audit();
-    HOUR_MS = 60 * 60 * 1e3;
-    timer = null;
-    started = false;
-  }
-});
-
-// src/lib/datastore/index.ts
-var datastore_exports = {};
-__export(datastore_exports, {
-  DatastoreError: () => DatastoreError,
-  aggregateRecords: () => aggregateRecords,
-  assertCan: () => assertCan,
-  bulkInsertRecords: () => bulkInsertRecords,
-  canDo: () => canDo,
-  clampLimit: () => clampLimit,
-  clampOffset: () => clampOffset,
-  compileFilters: () => compileFilters,
-  compileSort: () => compileSort,
-  countRecords: () => countRecords,
-  deleteCollection: () => deleteCollection,
-  deleteRecord: () => deleteRecord,
-  ensureCollection: () => ensureCollection,
-  getCollectionBySlug: () => getCollectionBySlug,
-  getRecord: () => getRecord,
-  getRecordByKey: () => getRecordByKey,
-  insertRecord: () => insertRecord,
-  listCollections: () => listCollections,
-  mapCollectionRow: () => mapCollectionRow,
-  queryRecords: () => queryRecords,
-  recordCountsByCollection: () => recordCountsByCollection,
-  resolvePermissions: () => resolvePermissions,
-  startDatastoreReaper: () => startDatastoreReaper,
-  stopDatastoreReaper: () => stopDatastoreReaper,
-  sweepExpired: () => sweepExpired,
-  updateCollection: () => updateCollection,
-  updateRecord: () => updateRecord,
-  upsertRecord: () => upsertRecord,
-  validateAgainstSchema: () => validateAgainstSchema
-});
-var init_datastore = __esm({
-  "src/lib/datastore/index.ts"() {
-    "use strict";
-    init_types();
-    init_collections();
-    init_records();
-    init_permissions();
-    init_validate();
-    init_query();
-    init_ttl_reaper();
-  }
-});
-
 // src/lib/workflows/nodes/llm-helpers.ts
 var llm_helpers_exports = {};
 __export(llm_helpers_exports, {
@@ -7558,7 +9705,7 @@ var init_llm_helpers = __esm({
   "src/lib/workflows/nodes/llm-helpers.ts"() {
     "use strict";
     init_settings();
-    init_llm_client();
+    init_client();
     init_default_models();
   }
 });
@@ -7758,7 +9905,7 @@ var init_workflow_gateway = __esm({
   "src/lib/llm/workflow-gateway.ts"() {
     "use strict";
     init_llm_helpers();
-    init_llm_client();
+    init_client();
     init_keys();
     init_resilience();
     NONSTREAM_TIMEOUT_MS = 9e4;
@@ -7770,7 +9917,7 @@ var init_workflow_gateway = __esm({
 // src/lib/workflows/prompts/loader.ts
 import { readdirSync as readdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, existsSync as existsSync2, statSync } from "fs";
 import { join as join4 } from "path";
-import { eq as eq6 } from "drizzle-orm";
+import { eq as eq8 } from "drizzle-orm";
 function compilePromptFiles(dir = DEFAULT_PROMPTS_DIR) {
   if (!existsSync2(dir)) {
     mkdirSync2(dir, { recursive: true });
@@ -7818,7 +9965,7 @@ async function syncPrompts(dir = DEFAULT_PROMPTS_DIR) {
 }
 async function getCompiledPrompt(dir = DEFAULT_PROMPTS_DIR) {
   try {
-    const [cached2] = await db.select().from(promptCache).where(eq6(promptCache.id, "default")).limit(1);
+    const [cached2] = await db.select().from(promptCache).where(eq8(promptCache.id, "default")).limit(1);
     if (cached2?.compiledPrompt) {
       return cached2.compiledPrompt;
     }
@@ -8381,7 +10528,7 @@ var init_efficiency = __esm({
 });
 
 // src/lib/trails/activities-service.ts
-import { and as and3, desc, eq as eq7, gte, inArray as inArray2, sql as sql12 } from "drizzle-orm";
+import { and as and3, desc, eq as eq9, gte, inArray as inArray2, sql as sql12 } from "drizzle-orm";
 var EFFECTIVE_TYPE;
 var init_activities_service = __esm({
   "src/lib/trails/activities-service.ts"() {
@@ -8588,9 +10735,9 @@ function calculateACWR(history) {
   if (history.length === 0) {
     return { acute: 0, chronic: 0, ratio: 0 };
   }
-  const totalLoad = history.reduce((sum, d) => sum + d.load, 0);
   const acute = history.slice(-7).reduce((sum, d) => sum + d.load, 0);
-  const chronic = history.length > 0 ? totalLoad / history.length * 7 : 0;
+  const chronicWindow = history.slice(0, Math.max(0, history.length - 7)).slice(-21);
+  const chronic = chronicWindow.length ? chronicWindow.reduce((sum, d) => sum + d.load, 0) / chronicWindow.length * 7 : 0;
   const ratio = chronic > 0 ? acute / chronic : 0;
   return { acute, chronic, ratio };
 }
@@ -8612,6 +10759,7 @@ async function getTrainingLoad() {
   const startDate = new Date(today.getTime() - lookbackMs);
   const startUnix = Math.floor(startDate.getTime() / 1e3);
   const endUnix = Math.floor(now.getTime() / 1e3);
+  const acuteSinceUnix = endUnix - 7 * 24 * 60 * 60;
   const [cycles, activities2] = await Promise.all([
     db.select().from(whoopCycles).where(and5(gte3(whoopCycles.startDate, startUnix), lte(whoopCycles.startDate, endUnix))).orderBy(desc2(whoopCycles.startDate)),
     db.select().from(stravaActivities).where(
@@ -8622,26 +10770,30 @@ async function getTrainingLoad() {
     ).orderBy(desc2(stravaActivities.startDate))
   ]);
   const loadMap = /* @__PURE__ */ new Map();
-  for (const cycle of cycles) {
+  const useWhoop = cycles.some((cycle) => cycle.startDate >= acuteSinceUnix);
+  if (useWhoop) for (const cycle of cycles) {
     const dateKey = cycle.startDateLocal.slice(0, 10);
     const strain = realStrain(cycle.strain);
-    loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + strain);
+    loadMap.set(dateKey, Math.max(loadMap.get(dateKey) ?? 0, strain));
   }
-  for (const activity2 of activities2) {
+  if (!useWhoop) for (const activity2 of activities2) {
     const dateKey = activity2.startDateLocal.slice(0, 10);
-    if (!loadMap.has(dateKey)) {
-      const load = estimateStravaLoad(
-        activity2.movingTime,
-        activity2.averageHeartrate ?? 0,
-        activity2.maxHeartrate ?? 0
-      );
-      loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + load);
-    }
+    const load = estimateStravaLoad(
+      activity2.movingTime,
+      activity2.averageHeartrate ?? 0,
+      activity2.maxHeartrate ?? 0
+    );
+    loadMap.set(dateKey, (loadMap.get(dateKey) ?? 0) + load);
   }
   const history = [];
   for (let i = 27; i >= 0; i--) {
-    const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1e3);
-    const dateKey = d.toISOString().slice(0, 10);
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateKey = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(d);
     history.push({
       date: dateKey,
       load: loadMap.get(dateKey) ?? 0
@@ -8654,6 +10806,7 @@ async function getTrainingLoad() {
     chronic,
     ratio,
     zone,
+    source: useWhoop ? "whoop" : activities2.length ? "strava" : "none",
     history
   };
 }
@@ -8673,9 +10826,35 @@ __export(readiness_service_exports, {
   classifyLoadBalance: () => classifyLoadBalance,
   getReadiness: () => getReadiness,
   getReadinessLabel: () => getReadinessLabel,
-  normalizeHrvTrend: () => normalizeHrvTrend
+  normalizeHrvTrend: () => normalizeHrvTrend,
+  summariseAppleMetric: () => summariseAppleMetric
 });
-import { desc as desc3, eq as eq8, gte as gte4 } from "drizzle-orm";
+import { and as and6, desc as desc3, eq as eq10, gte as gte4, inArray as inArray3 } from "drizzle-orm";
+function summariseAppleMetric(rows) {
+  if (rows.length === 0) return null;
+  const byDay = /* @__PURE__ */ new Map();
+  const validRows = [];
+  for (const row of rows) {
+    if (row.value == null) continue;
+    validRows.push({ ...row, value: row.value });
+    const value = row.value / APPLE_SCALE;
+    if (!Number.isFinite(value)) continue;
+    const day = /^\d{4}-\d{2}-\d{2}/.exec(row.dateLocal)?.[0] ?? new Date(row.date * 1e3).toISOString().slice(0, 10);
+    const values = byDay.get(day) ?? [];
+    values.push(value);
+    byDay.set(day, values);
+  }
+  if (byDay.size === 0) return null;
+  const days = [...byDay.entries()].map(([day, values]) => ({ day, value: values.reduce((a, b) => a + b, 0) / values.length })).sort((a, b) => a.day.localeCompare(b.day));
+  const latestDay = days[days.length - 1];
+  const previous = days.slice(Math.max(0, days.length - 8), -1);
+  const newestRow = validRows.reduce((a, b) => a.date > b.date ? a : b);
+  return {
+    latest: latestDay.value,
+    averagePreviousDays: previous.length ? previous.reduce((sum, d) => sum + d.value, 0) / previous.length : null,
+    observedAt: new Date(newestRow.date * 1e3).toISOString()
+  };
+}
 function normalizeHrvTrend(todayHrv, avg7d) {
   if (!avg7d) return { value: 50, direction: "stable" };
   const pctChange = (todayHrv - avg7d) / avg7d * 100;
@@ -8724,22 +10903,40 @@ async function getReadiness() {
   const now = /* @__PURE__ */ new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sevenDaysAgo = Math.floor(todayStart.getTime() / 1e3) - 7 * 24 * 60 * 60;
-  const [latestRecoveryArr, recentRecoveries, latestSleepArr, trainingLoad] = await Promise.all([
+  const freshSince = Math.floor(now.getTime() / 1e3) - 48 * 60 * 60;
+  const [latestRecoveryArr, recentRecoveries, latestSleepArr, appleRows, trainingLoad] = await Promise.all([
     // Latest recovery
-    db.select().from(whoopRecovery).orderBy(desc3(whoopRecovery.createdDate)).limit(1),
+    db.select().from(whoopRecovery).where(gte4(whoopRecovery.createdDate, freshSince)).orderBy(desc3(whoopRecovery.createdDate)).limit(1),
     // Last 7 recoveries for HRV average
     db.select().from(whoopRecovery).where(gte4(whoopRecovery.createdDate, sevenDaysAgo)).orderBy(desc3(whoopRecovery.createdDate)).limit(7),
     // Latest non-nap sleep
-    db.select().from(whoopSleep).where(eq8(whoopSleep.nap, false)).orderBy(desc3(whoopSleep.startDate)).limit(1),
+    db.select().from(whoopSleep).where(and6(eq10(whoopSleep.nap, false), gte4(whoopSleep.endDate, freshSince))).orderBy(desc3(whoopSleep.startDate)).limit(1),
+    // HR/HRV comes from the Apple webhook for this owner. Whoop remains a
+    // fallback so historical/self-hosted installations keep working.
+    db.select({
+      metricName: appleHealthMetrics.metricName,
+      date: appleHealthMetrics.date,
+      dateLocal: appleHealthMetrics.dateLocal,
+      value: appleHealthMetrics.value
+    }).from(appleHealthMetrics).where(and6(
+      gte4(appleHealthMetrics.date, sevenDaysAgo - 24 * 60 * 60),
+      inArray3(appleHealthMetrics.metricName, ["heart_rate_variability", "resting_heart_rate"])
+    )).orderBy(desc3(appleHealthMetrics.date)),
     // Training load (ACWR)
     getTrainingLoad()
   ]);
   const latestRecovery = latestRecoveryArr[0] ?? null;
   const latestSleep = latestSleepArr[0] ?? null;
   const hrvValues = recentRecoveries.map((r) => r.hrvRmssd).filter((v) => v != null);
-  const hrv7DayAvg = hrvValues.length > 0 ? hrvValues.reduce((sum, v) => sum + v, 0) / hrvValues.length : null;
+  const whoopHrv7DayAvg = hrvValues.length > 0 ? hrvValues.reduce((sum, v) => sum + v, 0) / hrvValues.length : null;
+  const appleHrv = summariseAppleMetric(
+    appleRows.filter((r) => r.metricName === "heart_rate_variability")
+  );
   const recoveryValue = latestRecovery?.recoveryScore ?? 50;
-  const hrvTodayVal = latestRecovery?.hrvRmssd ?? null;
+  const hrvTodayVal = appleHrv?.latest ?? latestRecovery?.hrvRmssd ?? null;
+  const hrv7DayAvg = appleHrv?.averagePreviousDays ?? whoopHrv7DayAvg;
+  const hrvSource = appleHrv ? "apple" : latestRecovery ? "whoop" : void 0;
+  const hrvObservedAt = appleHrv?.observedAt ?? (latestRecovery ? new Date(latestRecovery.createdDate * 1e3).toISOString() : void 0);
   const { value: hrvNormalized, direction: hrvDirection } = hrvTodayVal != null && hrv7DayAvg != null ? normalizeHrvTrend(hrvTodayVal, hrv7DayAvg) : { value: 50, direction: "stable" };
   const sleepValue = latestSleep?.sleepPerformance ?? 50;
   const { value: loadValue, zone: loadZone } = classifyLoadBalance(trainingLoad.ratio);
@@ -8756,18 +10953,28 @@ async function getReadiness() {
     recommendation,
     factors: {
       recovery: { value: recoveryValue, weight: 0.4 },
-      hrvTrend: { value: hrvNormalized, weight: 0.2, direction: hrvDirection, raw: hrvTodayVal ?? void 0, avg7d: hrv7DayAvg ?? void 0 },
+      hrvTrend: {
+        value: hrvNormalized,
+        weight: 0.2,
+        direction: hrvDirection,
+        raw: hrvTodayVal ?? void 0,
+        avg7d: hrv7DayAvg ?? void 0,
+        source: hrvSource,
+        observedAt: hrvObservedAt
+      },
       sleepQuality: { value: sleepValue, weight: 0.2 },
       loadBalance: { value: loadValue, weight: 0.2, zone: loadZone }
     }
   };
 }
+var APPLE_SCALE;
 var init_readiness_service = __esm({
   "src/lib/health/readiness-service.ts"() {
     "use strict";
     init_db();
     init_schema();
     init_training_load_service();
+    APPLE_SCALE = 100;
   }
 });
 
@@ -8776,12 +10983,12 @@ var sleep_analysis_service_exports = {};
 __export(sleep_analysis_service_exports, {
   getSleepAnalysis: () => getSleepAnalysis
 });
-import { desc as desc4, eq as eq9 } from "drizzle-orm";
+import { desc as desc4, eq as eq11 } from "drizzle-orm";
 async function getSleepAnalysis() {
-  const sleeps = await db.select().from(whoopSleep).where(eq9(whoopSleep.nap, false)).orderBy(desc4(whoopSleep.startDate)).limit(14);
+  const sleeps = await db.select().from(whoopSleep).where(eq11(whoopSleep.nap, false)).orderBy(desc4(whoopSleep.startDate)).limit(14);
   if (!sleeps.length) {
     return {
-      latest: { totalDuration: 0, lightPercent: 0, deepPercent: 0, remPercent: 0, awakePercent: 0, performance: 0, consistency: 0, efficiency: 0 },
+      latest: null,
       trend: []
     };
   }
@@ -8790,6 +10997,10 @@ async function getSleepAnalysis() {
   const totalInBed = latest.totalInBed || 1;
   return {
     latest: {
+      // A night belongs to the morning on which it ended. Exposing both the day
+      // and instant prevents callers from calling an old row "last night".
+      date: new Date(latest.endDate * 1e3).toISOString().slice(0, 10),
+      endedAt: new Date(latest.endDate * 1e3).toISOString(),
       totalDuration: totalInBed,
       lightPercent: Math.round((latest.totalLight || 0) / totalSleep * 100),
       deepPercent: Math.round((latest.totalSlowWave || 0) / totalSleep * 100),
@@ -8968,7 +11179,7 @@ var init_health = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/blog.ts
-import { desc as desc6, eq as eq10 } from "drizzle-orm";
+import { desc as desc6, eq as eq12 } from "drizzle-orm";
 var init_blog = __esm({
   "src/lib/workflows/site-tools/tools/blog.ts"() {
     "use strict";
@@ -9004,7 +11215,7 @@ var init_blog = __esm({
       handler: async (args) => {
         const id = Number(args.id);
         if (isNaN(id)) return { success: false, error: "Invalid ID \u2014 must be a number" };
-        const [post] = await db.select().from(blogPosts).where(eq10(blogPosts.id, id)).limit(1);
+        const [post] = await db.select().from(blogPosts).where(eq12(blogPosts.id, id)).limit(1);
         return post ? { success: true, data: post } : { success: false, error: "Post not found" };
       }
     });
@@ -9063,7 +11274,7 @@ var init_blog = __esm({
         if (args.status) updates.status = args.status;
         const id = Number(args.id);
         if (isNaN(id)) return { success: false, error: "Invalid ID \u2014 must be a number" };
-        const [post] = await db.update(blogPosts).set(updates).where(eq10(blogPosts.id, id)).returning();
+        const [post] = await db.update(blogPosts).set(updates).where(eq12(blogPosts.id, id)).returning();
         return post ? { success: true, data: post } : { success: false, error: "Post not found" };
       }
     });
@@ -9078,7 +11289,7 @@ var init_blog = __esm({
       category: "Blog",
       toolset: "blog",
       handler: async (args) => {
-        const [post] = await db.update(blogPosts).set({ status: "draft" }).where(eq10(blogPosts.id, Number(args.id))).returning();
+        const [post] = await db.update(blogPosts).set({ status: "draft" }).where(eq12(blogPosts.id, Number(args.id))).returning();
         return post ? { success: true, data: post } : { success: false, error: "Post not found" };
       }
     });
@@ -9096,7 +11307,7 @@ var init_conversation_id = __esm({
 });
 
 // src/lib/jkai/budget.ts
-import { eq as eq11, and as and6, gte as gte5 } from "drizzle-orm";
+import { eq as eq13, and as and7, gte as gte5 } from "drizzle-orm";
 function cooldown(oldestInWindow, reason) {
   const resumeAt = oldestInWindow ? oldestInWindow + 60 * 60 * 1e3 : Date.now() + 60 * 1e3;
   const waitMs = resumeAt - Date.now();
@@ -9133,8 +11344,8 @@ async function checkBudget(build) {
   }
   const windowStart = new Date(Date.now() - 60 * 60 * 1e3);
   const recentIterations = await db.select().from(jkaiIterations).where(
-    and6(
-      eq11(jkaiIterations.buildId, build.id),
+    and7(
+      eq13(jkaiIterations.buildId, build.id),
       gte5(jkaiIterations.createdAt, windowStart)
     )
   );
@@ -9761,9 +11972,9 @@ ${setupRes.stderr}`).slice(0, 2e3)
     `cd ${dev} && printf '%s\\n' 'serve.json' '/index.html' 'design-system/' >> .git/info/exclude`,
     3e4
   );
-  const installRes = await execInSandbox(`cd ${dev} && npm install --include=dev 2>&1 | tail -5`, 3e5);
+  const installRes = await execInSandbox(`cd ${dev} && npm ci --include=dev 2>&1 | tail -5`, 3e5);
   if (installRes.exitCode !== 0) {
-    throw new Error(`npm install failed in git workspace: ${installRes.stdout}
+    throw new Error(`npm ci failed in git workspace: ${installRes.stdout}
 ${installRes.stderr}`.slice(0, 2e3));
   }
   await writeGateEnv(buildId, dev);
@@ -10525,7 +12736,7 @@ var init_stage_events = __esm({
 });
 
 // src/lib/jkai/serve-manager.ts
-import { eq as eq12 } from "drizzle-orm";
+import { eq as eq14, isNotNull as isNotNull2 } from "drizzle-orm";
 async function manageServeConfig(buildId) {
   let config = null;
   let source = "none";
@@ -10566,13 +12777,13 @@ async function manageServeConfig(buildId) {
     await emitStage(buildId, { stage: "iterating", previewUrl: `/api/jkai/proxy/${buildId}/` });
     return;
   }
-  const [build] = await db.select().from(jkaiBuilds).where(eq12(jkaiBuilds.id, buildId));
+  const [build] = await db.select().from(jkaiBuilds).where(eq14(jkaiBuilds.id, buildId));
   const currentConfig = build?.serveConfig;
   const keepExisting = currentConfig?.port === config.port;
   if (!keepExisting) {
-    const allBuilds = await db.select().from(jkaiBuilds);
+    const allBuilds = await db.select({ id: jkaiBuilds.id, serveConfig: jkaiBuilds.serveConfig }).from(jkaiBuilds).where(isNotNull2(jkaiBuilds.serveConfig));
     const takenPorts = new Set(
-      allBuilds.filter((b) => b.id !== buildId && b.serveConfig).map((b) => b.serveConfig?.port).filter(Boolean)
+      allBuilds.filter((b) => b.id !== buildId).map((b) => b.serveConfig?.port).filter(Boolean)
     );
     if (takenPorts.has(config.port)) {
       const assigned = await allocatePort(buildId);
@@ -10612,7 +12823,7 @@ async function manageServeConfig(buildId) {
     config.healthCheck
   );
   if (healthy) {
-    await db.update(jkaiBuilds).set({ serveConfig: config, updatedAt: /* @__PURE__ */ new Date() }).where(eq12(jkaiBuilds.id, buildId));
+    await db.update(jkaiBuilds).set({ serveConfig: config, updatedAt: /* @__PURE__ */ new Date() }).where(eq14(jkaiBuilds.id, buildId));
     await emitLog(
       buildId,
       "system",
@@ -10731,12 +12942,12 @@ var init_transient_failure = __esm({
 });
 
 // src/lib/jkai/orchestrator-helpers.ts
-import { eq as eq13, and as and7 } from "drizzle-orm";
+import { eq as eq15, and as and8 } from "drizzle-orm";
 async function failOrphanedIterations(buildId) {
   await db.update(jkaiIterations).set({ status: "failed" }).where(
-    and7(
-      eq13(jkaiIterations.buildId, buildId),
-      eq13(jkaiIterations.status, "running")
+    and8(
+      eq15(jkaiIterations.buildId, buildId),
+      eq15(jkaiIterations.status, "running")
     )
   );
 }
@@ -11421,7 +13632,7 @@ var init_strip_nulls = __esm({
 // src/lib/jkai/pi-runner.ts
 import { spawn } from "child_process";
 import { join as join6 } from "path";
-import { eq as eq14 } from "drizzle-orm";
+import { eq as eq16 } from "drizzle-orm";
 function buildToolAllowlist(bridgedToolNames) {
   const seen = new Set(BASE_PI_TOOLS);
   for (const name of bridgedToolNames ?? []) {
@@ -11463,7 +13674,7 @@ function resolvePiVersion() {
 function assertPiVersion(found) {
   if (found === null || found === PI_VERSION) return null;
   const where = HOST_MODE ? `the build host` : `the ${CONTAINER_NAME2} container`;
-  const fix = HOST_MODE ? `sudo npm install -g @mariozechner/pi-coding-agent@${PI_VERSION}` : `rebuild the sandbox image (docker/jkai-sandbox/Dockerfile pins it via ARG PI_VERSION)`;
+  const fix = HOST_MODE ? `sudo npm install -g ${PI_PACKAGE}@${PI_VERSION}` : `rebuild the sandbox image (docker/jkai-sandbox/Dockerfile pins it via ARG PI_VERSION)`;
   return {
     kind: "tooling_unavailable",
     message: `pi ${found} is installed on ${where}, but this build expects ${PI_VERSION} (jkai.piVersion in package.json). Refusing to run: pi's tool-allowlist and Codex-transport behaviour are internals we depend on, and a mismatch degrades builds silently rather than crashing them. Either install the pin \u2014 ${fix} \u2014 or, if the new version is wanted, move the pin in a PR and let a canary build prove it.`,
@@ -11887,7 +14098,7 @@ ${resultText}`.slice(0, 32e3)
       const text4 = (m.content ?? []).map((c4) => c4.text ?? "").join("\n");
       if (text4) messages.push({ role: "user", content: text4.slice(0, 32e3) });
     }
-    await db.update(jkaiIterations).set({ messages, tokensUsed, outputTokens: outputTokensUsed }).where(eq14(jkaiIterations.id, iteration.id)).catch((err) => {
+    await db.update(jkaiIterations).set({ messages, tokensUsed, outputTokens: outputTokensUsed }).where(eq16(jkaiIterations.id, iteration.id)).catch((err) => {
       if (incrementalWriteFailed) return;
       incrementalWriteFailed = true;
       void emitLog(
@@ -12027,7 +14238,7 @@ function base(kind, message, i) {
     attempts: 1
   };
 }
-var BASE_PI_TOOLS, CONTAINER_NAME2, HOST_MODE, PI_VERSION, piVersionProbe, EXTENSION_LOG_LINE, BRIDGE_FAILURE, PI_MISSING_LOGIN;
+var BASE_PI_TOOLS, CONTAINER_NAME2, HOST_MODE, PI_VERSION, PI_PACKAGE, piVersionProbe, EXTENSION_LOG_LINE, BRIDGE_FAILURE, PI_MISSING_LOGIN;
 var init_pi_runner = __esm({
   "src/lib/jkai/pi-runner.ts"() {
     "use strict";
@@ -12044,7 +14255,8 @@ var init_pi_runner = __esm({
     BASE_PI_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"];
     CONTAINER_NAME2 = "jkai-sandbox";
     HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === "1";
-    PI_VERSION = "0.73.1";
+    PI_VERSION = "0.84.4";
+    PI_PACKAGE = "@earendil-works/pi-coding-agent";
     piVersionProbe = null;
     EXTENSION_LOG_LINE = /^\s*\[[\w-]+\]\s/;
     BRIDGE_FAILURE = /\[jkai-tools\][^\n]*manifest fetch (failed|error)/i;
@@ -12059,7 +14271,7 @@ __export(event_bus_exports, {
   on: () => on
 });
 import { EventEmitter as EventEmitter4 } from "events";
-import { eq as eq15, and as and8 } from "drizzle-orm";
+import { eq as eq17, and as and9 } from "drizzle-orm";
 function emit(type, payload) {
   emitter3.emit(type, { type, payload });
 }
@@ -12068,7 +14280,7 @@ function on(type, handler) {
   return () => emitter3.off(type, handler);
 }
 async function handlePlatformEvent(event) {
-  const schedules = await db.select().from(workflowSchedules).where(and8(eq15(workflowSchedules.type, "event"), eq15(workflowSchedules.enabled, true)));
+  const schedules = await db.select().from(workflowSchedules).where(and9(eq17(workflowSchedules.type, "event"), eq17(workflowSchedules.enabled, true)));
   const matching = schedules.filter((s) => {
     const config = s.config;
     if (config.eventType !== event.type) return false;
@@ -12080,7 +14292,7 @@ async function handlePlatformEvent(event) {
     return true;
   });
   for (const schedule of matching) {
-    const [wf] = await db.select().from(workflows).where(eq15(workflows.id, schedule.workflowId)).limit(1);
+    const [wf] = await db.select().from(workflows).where(eq17(workflows.id, schedule.workflowId)).limit(1);
     if (!wf) continue;
     const runId = crypto.randomUUID();
     const now = /* @__PURE__ */ new Date();
@@ -12091,8 +14303,8 @@ async function handlePlatformEvent(event) {
       trigger: "event",
       startedAt: now
     });
-    const nodes = await db.select().from(workflowNodes).where(eq15(workflowNodes.workflowId, schedule.workflowId));
-    const edges = await db.select().from(workflowEdges).where(eq15(workflowEdges.workflowId, schedule.workflowId));
+    const nodes = await db.select().from(workflowNodes).where(eq17(workflowNodes.workflowId, schedule.workflowId));
+    const edges = await db.select().from(workflowEdges).where(eq17(workflowEdges.workflowId, schedule.workflowId));
     const def3 = {
       id: schedule.workflowId,
       name: wf.name,
@@ -12112,7 +14324,7 @@ async function handlePlatformEvent(event) {
       }))
     };
     engine.execute(def3, runId, { event: event.payload ?? {} }, void 0, schedule.workflowId).then(async (result) => {
-      await db.update(workflowRuns).set({ status: result.status, completedAt: /* @__PURE__ */ new Date(), error: result.error ?? null }).where(eq15(workflowRuns.id, runId));
+      await db.update(workflowRuns).set({ status: result.status, completedAt: /* @__PURE__ */ new Date(), error: result.error ?? null }).where(eq17(workflowRuns.id, runId));
     }).catch(console.error);
   }
 }
@@ -12130,11 +14342,11 @@ var init_event_bus = __esm({
 });
 
 // src/lib/jkai/workflow-deliveries.ts
-import { and as and9, asc, desc as desc7, eq as eq16, inArray as inArray3, isNull as isNull2 } from "drizzle-orm";
+import { and as and10, asc, desc as desc7, eq as eq18, inArray as inArray4, isNull as isNull2 } from "drizzle-orm";
 async function consumePendingDeliveries(buildId, limit2 = 10) {
-  const rows = await db.select().from(pendingWorkflowDeliveries).where(and9(eq16(pendingWorkflowDeliveries.buildId, buildId), isNull2(pendingWorkflowDeliveries.consumedAt))).orderBy(desc7(pendingWorkflowDeliveries.createdAt)).limit(limit2);
+  const rows = await db.select().from(pendingWorkflowDeliveries).where(and10(eq18(pendingWorkflowDeliveries.buildId, buildId), isNull2(pendingWorkflowDeliveries.consumedAt))).orderBy(desc7(pendingWorkflowDeliveries.createdAt)).limit(limit2);
   if (rows.length === 0) return [];
-  await db.update(pendingWorkflowDeliveries).set({ consumedAt: /* @__PURE__ */ new Date() }).where(inArray3(pendingWorkflowDeliveries.id, rows.map((r) => r.id)));
+  await db.update(pendingWorkflowDeliveries).set({ consumedAt: /* @__PURE__ */ new Date() }).where(inArray4(pendingWorkflowDeliveries.id, rows.map((r) => r.id)));
   return rows.map((r) => ({
     workflowId: r.workflowId,
     runId: r.runId,
@@ -12152,12 +14364,12 @@ var init_workflow_deliveries = __esm({
 });
 
 // src/lib/jkai/workflow-grounding.ts
-import { inArray as inArray4 } from "drizzle-orm";
+import { inArray as inArray5 } from "drizzle-orm";
 async function buildAttachedWorkflowGrounding(workflowIds) {
   if (workflowIds.length === 0) return "";
-  const wfRows = await db.select().from(workflows).where(inArray4(workflows.id, workflowIds));
+  const wfRows = await db.select().from(workflows).where(inArray5(workflows.id, workflowIds));
   if (wfRows.length === 0) return "";
-  const allNodes = await db.select().from(workflowNodes).where(inArray4(workflowNodes.workflowId, workflowIds));
+  const allNodes = await db.select().from(workflowNodes).where(inArray5(workflowNodes.workflowId, workflowIds));
   const lines2 = [
     "--- Primary workflows (attached to this build) ---",
     "You can call workflow_run with `id` set to one of these workflow IDs.",
@@ -12269,7 +14481,7 @@ var init_grounding = __esm({
 
 // src/lib/deepdive/ai.ts
 async function getPrimary() {
-  return getLLMClient(await resolveDefaultModel());
+  return getLLMClient(currentSessionModel() ?? await resolveResearchDeepModel());
 }
 function repairJson(text4) {
   let s = text4.replace(/,\s*"[^"]*$/, "").replace(/,\s*$/, "");
@@ -12301,7 +14513,7 @@ function repairJson(text4) {
   return s;
 }
 async function openRouterChat(messages, opts) {
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = getFallbackModel();
   const fallbackSignal = AbortSignal.timeout(6e4);
   const combinedSignal = opts.signal ? AbortSignal.any([opts.signal, fallbackSignal]) : fallbackSignal;
@@ -12361,7 +14573,7 @@ function parseJsonText(text4) {
   }
 }
 async function jsonCompletion(systemPrompt2, userPrompt, options) {
-  const { client, model } = options?.model ? { client: getOpenRouterClient(), model: options.model } : await getPrimary();
+  const { client, model } = options?.model ? await getLLMClient(coerceModelContext({ modelId: options.model })) : await getPrimary();
   const jsonSystemPrompt = systemPrompt2 + "\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.";
   const messages = [
     { role: "system", content: jsonSystemPrompt },
@@ -12466,7 +14678,7 @@ async function runStream2(client, model, messages, opts) {
 }
 async function streamCompletion(systemPrompt2, userPrompt, options) {
   const explicitModel = !!options?.model;
-  const { client, model } = explicitModel ? { client: getOpenRouterClient(), model: options.model } : await getPrimary();
+  const { client, model } = explicitModel ? await getLLMClient(coerceModelContext({ modelId: options.model })) : await getPrimary();
   const messages = [
     { role: "system", content: systemPrompt2 },
     { role: "user", content: userPrompt }
@@ -12514,7 +14726,7 @@ async function streamCompletion(systemPrompt2, userPrompt, options) {
         if (externalSignal.aborted) fallbackAc.abort(externalSignal.reason);
         else externalSignal.addEventListener("abort", () => fallbackAc.abort(externalSignal.reason), { once: true });
       }
-      return runStream2(getOpenRouterClient(), fallbackModel, messages, {
+      return runStream2(await getOpenRouterClient(), fallbackModel, messages, {
         temperature,
         maxTokens,
         signal: fallbackAc.signal,
@@ -12542,7 +14754,7 @@ async function groundedCompletion(systemPrompt2, userPrompt, options) {
     if (text5) options.onToken?.(text5);
     return { text: text5, citations: readCitations(message) };
   }
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = options.model ?? getFallbackModel();
   let text4 = "";
   const citationsByUrl = /* @__PURE__ */ new Map();
@@ -12573,7 +14785,7 @@ async function groundedCompletion(systemPrompt2, userPrompt, options) {
   return { text: text4, citations: [...citationsByUrl.values()] };
 }
 async function generateEmbedding(text4) {
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = getEmbeddingModel();
   const response = await withRetry(
     () => client.embeddings.create({
@@ -12591,7 +14803,7 @@ async function generateEmbedding(text4) {
 }
 async function generateEmbeddings(texts) {
   if (!texts.length) return [];
-  const client = getOpenRouterClient();
+  const client = await getOpenRouterClient();
   const model = getEmbeddingModel();
   const out = [];
   for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
@@ -12619,9 +14831,11 @@ var init_ai = __esm({
   "src/lib/deepdive/ai.ts"() {
     "use strict";
     init_keys();
-    init_llm_client();
+    init_client();
     init_grounding();
-    init_settings();
+    init_workload_settings();
+    init_default_models();
+    init_chat();
     init_resilience();
     CREDIT_FALLBACK_MAX_TOKENS = 1e3;
     WEB_PLUGIN_MAX_RESULTS = 5;
@@ -12851,7 +15065,7 @@ var init_tavily = __esm({
   "src/lib/deepdive/tavily.ts"() {
     "use strict";
     init_keys();
-    init_meter();
+    init_research_meter();
     TAVILY_BASE = "https://api.tavily.com";
     TAVILY_TIMEOUT_MS = 15e3;
   }
@@ -12916,7 +15130,7 @@ var init_frontier_scoring = __esm({
 });
 
 // src/lib/deepdive/frontier.ts
-import { and as and10, asc as asc2, desc as desc8, eq as eq18, inArray as inArray5, sql as sql16 } from "drizzle-orm";
+import { and as and11, asc as asc2, desc as desc8, eq as eq20, inArray as inArray6, sql as sql16 } from "drizzle-orm";
 function emitLead(sessionId, lead) {
   emit2(sessionId, {
     type: "lead",
@@ -12937,7 +15151,7 @@ function emitLead(sessionId, lead) {
 async function addLeads(sessionId, specs) {
   if (!specs.length) return [];
   const existing = new Set(
-    (await db.select({ query: researchLeads.query }).from(researchLeads).where(eq18(researchLeads.sessionId, sessionId))).map((r) => r.query.trim().toLowerCase())
+    (await db.select({ query: researchLeads.query }).from(researchLeads).where(eq20(researchLeads.sessionId, sessionId))).map((r) => r.query.trim().toLowerCase())
   );
   const fresh = [];
   for (const spec of specs) {
@@ -12964,16 +15178,16 @@ async function addLeads(sessionId, specs) {
   return rows;
 }
 async function takeLeads(sessionId, limit2) {
-  const queued = await db.select().from(researchLeads).where(and10(eq18(researchLeads.sessionId, sessionId), eq18(researchLeads.status, "queued"))).orderBy(asc2(researchLeads.depth), desc8(researchLeads.score), asc2(researchLeads.createdAt)).limit(limit2);
+  const queued = await db.select().from(researchLeads).where(and11(eq20(researchLeads.sessionId, sessionId), eq20(researchLeads.status, "queued"))).orderBy(asc2(researchLeads.depth), desc8(researchLeads.score), asc2(researchLeads.createdAt)).limit(limit2);
   if (!queued.length) return [];
   const claimed = await db.update(researchLeads).set({ status: "running", startedAt: /* @__PURE__ */ new Date() }).where(
-    and10(
-      inArray5(
+    and11(
+      inArray6(
         researchLeads.id,
         queued.map((l) => l.id)
       ),
       // Only claim what is still queued — a concurrent worker may have taken it.
-      eq18(researchLeads.status, "queued")
+      eq20(researchLeads.status, "queued")
     )
   ).returning();
   for (const row of claimed) emitLead(sessionId, row);
@@ -12992,7 +15206,7 @@ async function recordLeadSources(sessionId, leadId, sourcesFound, searchFailed) 
     });
     return;
   }
-  const [row] = await db.update(researchLeads).set({ metrics: { sourcesFound, searchFailed } }).where(eq18(researchLeads.id, leadId)).returning();
+  const [row] = await db.update(researchLeads).set({ metrics: { sourcesFound, searchFailed } }).where(eq20(researchLeads.id, leadId)).returning();
   if (row) emitLead(sessionId, row);
 }
 async function completeLead(sessionId, leadId, outcome) {
@@ -13003,7 +15217,7 @@ async function completeLead(sessionId, leadId, outcome) {
     score: verdict.score,
     metrics: outcome,
     completedAt: /* @__PURE__ */ new Date()
-  }).where(eq18(researchLeads.id, leadId)).returning();
+  }).where(eq20(researchLeads.id, leadId)).returning();
   if (row) emitLead(sessionId, row);
   if (verdict.status === "drifted") {
     await pruneSubtree(sessionId, leadId, "parent line of enquiry was abandoned");
@@ -13014,11 +15228,11 @@ async function pruneSubtree(sessionId, rootId, reason) {
   let frontier = [rootId];
   let pruned = 0;
   for (let hop = 0; hop <= MAX_LEAD_DEPTH && frontier.length; hop++) {
-    const children = await db.select().from(researchLeads).where(and10(eq18(researchLeads.sessionId, sessionId), inArray5(researchLeads.parentId, frontier)));
+    const children = await db.select().from(researchLeads).where(and11(eq20(researchLeads.sessionId, sessionId), inArray6(researchLeads.parentId, frontier)));
     if (!children.length) break;
     const cancellable = children.filter((c4) => c4.status === "queued").map((c4) => c4.id);
     if (cancellable.length) {
-      const rows = await db.update(researchLeads).set({ status: "pruned", reason, completedAt: /* @__PURE__ */ new Date() }).where(inArray5(researchLeads.id, cancellable)).returning();
+      const rows = await db.update(researchLeads).set({ status: "pruned", reason, completedAt: /* @__PURE__ */ new Date() }).where(inArray6(researchLeads.id, cancellable)).returning();
       pruned += rows.length;
       for (const row of rows) emitLead(sessionId, row);
     }
@@ -13123,7 +15337,7 @@ var init_desk_events = __esm({
 });
 
 // src/lib/deepdive/credibility.ts
-import { eq as eq19, and as and11, sql as sql17 } from "drizzle-orm";
+import { eq as eq21, and as and12, sql as sql17 } from "drizzle-orm";
 function classifyDomain(domain) {
   const lower = domain.toLowerCase();
   if (DOMAIN_SCORES[lower]) return DOMAIN_SCORES[lower];
@@ -13141,9 +15355,9 @@ function classifyDomain(domain) {
   return { score: 0.5, type: "other" };
 }
 async function computeSourceAgreement(sessionId) {
-  const embeddingsAvailable3 = !!loadKeys().openrouterApiKey;
+  const embeddingsAvailable3 = await hasOpenRouter();
   if (embeddingsAvailable3) {
-    const allFacts = await db.select({ id: facts.id, sourceId: facts.sourceId, embedding: facts.embedding }).from(facts).where(and11(eq19(facts.sessionId, sessionId), eq19(facts.isCounterfactual, false)));
+    const allFacts = await db.select({ id: facts.id, sourceId: facts.sourceId, embedding: facts.embedding }).from(facts).where(and12(eq21(facts.sessionId, sessionId), eq21(facts.isCounterfactual, false)));
     const factsWithEmbeddings = allFacts.filter((f) => f.embedding);
     for (const fact of factsWithEmbeddings) {
       if (!fact.embedding) continue;
@@ -13160,11 +15374,11 @@ async function computeSourceAgreement(sessionId) {
       );
       const agreement = similar.rows.length;
       if (agreement > 0) {
-        await db.update(facts).set({ sourceAgreement: agreement }).where(eq19(facts.id, fact.id));
+        await db.update(facts).set({ sourceAgreement: agreement }).where(eq21(facts.id, fact.id));
       }
     }
   } else {
-    const allFacts = await db.select({ id: facts.id, sourceId: facts.sourceId, content: facts.content }).from(facts).where(and11(eq19(facts.sessionId, sessionId), eq19(facts.isCounterfactual, false)));
+    const allFacts = await db.select({ id: facts.id, sourceId: facts.sourceId, content: facts.content }).from(facts).where(and12(eq21(facts.sessionId, sessionId), eq21(facts.isCounterfactual, false)));
     for (const fact of allFacts) {
       const words = new Set(fact.content.toLowerCase().split(/\s+/).filter((w) => w.length > 4));
       let agreement = 0;
@@ -13184,7 +15398,7 @@ async function computeSourceAgreement(sessionId) {
         }
       }
       if (agreement > 0) {
-        await db.update(facts).set({ sourceAgreement: agreement }).where(eq19(facts.id, fact.id));
+        await db.update(facts).set({ sourceAgreement: agreement }).where(eq21(facts.id, fact.id));
       }
     }
   }
@@ -13252,7 +15466,7 @@ var init_credibility = __esm({
 
 // src/lib/deepdive/types.ts
 var DIVERSITY_THRESHOLDS;
-var init_types2 = __esm({
+var init_types3 = __esm({
   "src/lib/deepdive/types.ts"() {
     "use strict";
     DIVERSITY_THRESHOLDS = {
@@ -13264,7 +15478,7 @@ var init_types2 = __esm({
 });
 
 // src/lib/deepdive/phase1.ts
-import { eq as eq20, count } from "drizzle-orm";
+import { eq as eq22, count } from "drizzle-orm";
 function getDomain(url) {
   try {
     return new URL(url).hostname;
@@ -13306,7 +15520,7 @@ Knowledge gap being investigated: ${seedContext.gapDescription}`;
 Hypothesis being tested: ${seedContext.hypothesisText}`;
     }
   }
-  const [leadCount] = await db.select({ n: count() }).from(researchLeads).where(eq20(researchLeads.sessionId, sessionId));
+  const [leadCount] = await db.select({ n: count() }).from(researchLeads).where(eq22(researchLeads.sessionId, sessionId));
   if (Number(leadCount?.n ?? 0) === 0) {
     emitLog2(sessionId, "\u{1F50D}", "Generating initial search queries...");
     let queryPrompt = `Generate 8-12 diverse search queries covering different angles of this topic. Include biographical, technical, historical, critical, contextual, geographical, legal, and economic angles as relevant. Vary the phrasing to minimize result overlap.`;
@@ -13335,7 +15549,7 @@ Respond with JSON: { "queries": ["query1", "query2", ...] }`;
   const seenUrls = /* @__PURE__ */ new Set();
   const allCategories = /* @__PURE__ */ new Set();
   let consecutiveLowDiversity = 0;
-  const [stored] = await db.select({ n: count() }).from(sources).where(eq20(sources.sessionId, sessionId));
+  const [stored] = await db.select({ n: count() }).from(sources).where(eq22(sources.sessionId, sessionId));
   let totalSourcesStored = Number(stored?.n ?? 0);
   const stats = {
     sourcesFound: 0,
@@ -13403,7 +15617,7 @@ Snippet: ${result.content?.slice(0, 800)}
 Respond with JSON: { "category": "...", "preview_facts": [...], "follow_up_queries": [...] }`
             );
             if (analysis.category) {
-              await db.update(sources).set({ category: analysis.category }).where(eq20(sources.id, stored2.id));
+              await db.update(sources).set({ category: analysis.category }).where(eq22(sources.id, stored2.id));
               if (!allCategories.has(analysis.category)) {
                 batchNewCategories.add(analysis.category);
                 allCategories.add(analysis.category);
@@ -13464,7 +15678,7 @@ var init_phase1 = __esm({
     init_frontier();
     init_desk_events();
     init_credibility();
-    init_types2();
+    init_types3();
   }
 });
 
@@ -13552,7 +15766,7 @@ var init_extract_content = __esm({
 
 // src/lib/rag/types.ts
 var CHUNK_CHARS, OVERLAP_CHARS;
-var init_types3 = __esm({
+var init_types4 = __esm({
   "src/lib/rag/types.ts"() {
     "use strict";
     CHUNK_CHARS = 1e3;
@@ -13613,14 +15827,14 @@ function chunkText(input, options = {}) {
 var init_chunk = __esm({
   "src/lib/rag/chunk.ts"() {
     "use strict";
-    init_types3();
+    init_types4();
   }
 });
 
 // src/lib/deepdive/source-index.ts
-import { eq as eq21, sql as sql18 } from "drizzle-orm";
+import { eq as eq23, sql as sql18 } from "drizzle-orm";
 async function indexSourceContent(sessionId, source, content) {
-  if (!embeddingsAvailable()) return { status: "skipped", reason: "no-embeddings" };
+  if (!await embeddingsAvailable()) return { status: "skipped", reason: "no-embeddings" };
   const text4 = (content || "").slice(0, MAX_CONTENT_CHARS).trim();
   if (!text4) return { status: "skipped", reason: "no-content" };
   const pieces = chunkText(text4);
@@ -13638,7 +15852,7 @@ async function indexSourceContent(sessionId, source, content) {
     embeddingModel: model
   }));
   await db.transaction(async (tx) => {
-    await tx.delete(sourceChunks).where(eq21(sourceChunks.sourceId, source.id));
+    await tx.delete(sourceChunks).where(eq23(sourceChunks.sourceId, source.id));
     await tx.insert(sourceChunks).values(rows);
   });
   return { status: "indexed", chunkCount: rows.length };
@@ -13654,7 +15868,7 @@ var init_source_index = __esm({
     init_extract_content();
     init_keys();
     MAX_CONTENT_CHARS = 2e4;
-    embeddingsAvailable = () => !!loadKeys().openrouterApiKey;
+    embeddingsAvailable = hasOpenRouter;
   }
 });
 
@@ -13673,7 +15887,7 @@ var init_concurrency = __esm({
 });
 
 // src/lib/deepdive/phase2.ts
-import { eq as eq22, and as and13, sql as sql19 } from "drizzle-orm";
+import { eq as eq24, and as and14, sql as sql19 } from "drizzle-orm";
 function normalise(text4) {
   return text4.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
@@ -13691,7 +15905,7 @@ function bigramSimilarity(a, b) {
   return union === 0 ? 0 : intersection / union;
 }
 async function isDuplicate(sessionId, content) {
-  if (embeddingsAvailable2()) {
+  if (await embeddingsAvailable2()) {
     try {
       const embedding = await generateEmbedding(content);
       const vectorStr = toVectorLiteral(embedding);
@@ -13707,7 +15921,7 @@ async function isDuplicate(sessionId, content) {
       console.error("[deepdive] Embedding dedup failed, falling back to bigram:", err);
     }
   }
-  const existing = await db.select({ content: facts.content }).from(facts).where(eq22(facts.sessionId, sessionId));
+  const existing = await db.select({ content: facts.content }).from(facts).where(eq24(facts.sessionId, sessionId));
   for (const row of existing) {
     if (bigramSimilarity(content, row.content) > 0.85) return { duplicate: true, embedding: null };
   }
@@ -13720,7 +15934,7 @@ async function runPhase2(sessionId, session2, isTimeUp) {
   const concurrencyLimit = pLimit(getLlmConcurrencyLimit());
   const systemPrompt2 = `You are a research analyst. Topic: "${session2.topic}"
 Goals: ${goals.join("; ")}`;
-  const allSources = await db.select().from(sources).where(and13(eq22(sources.sessionId, sessionId), eq22(sources.phase, 1)));
+  const allSources = await db.select().from(sources).where(and14(eq24(sources.sessionId, sessionId), eq24(sources.phase, 1)));
   const stats = {
     sourcesFound: allSources.length,
     factsExtracted: 0,
@@ -13766,14 +15980,14 @@ Goals: ${goals.join("; ")}`;
       recentNewFacts = 0;
     }
   }
-  const claimed = await db.select({ id: researchLeads.id, metrics: researchLeads.metrics }).from(researchLeads).where(and13(eq22(researchLeads.sessionId, sessionId), eq22(researchLeads.status, "running")));
+  const claimed = await db.select({ id: researchLeads.id, metrics: researchLeads.metrics }).from(researchLeads).where(and14(eq24(researchLeads.sessionId, sessionId), eq24(researchLeads.status, "running")));
   for (const lead of claimed) {
     if (tallies.has(lead.id)) continue;
     await db.update(researchLeads).set({
       status: "stalled",
       reason: "gathered sources, but the run ended before they were analysed",
       completedAt: /* @__PURE__ */ new Date()
-    }).where(eq22(researchLeads.id, lead.id));
+    }).where(eq24(researchLeads.id, lead.id));
   }
   for (const [leadId, t] of tallies) {
     try {
@@ -13936,8 +16150,8 @@ Respond with JSON: { "entities": [...] }`
         if (!e.name) continue;
         const normalised = e.name.toLowerCase().trim();
         const existing = await db.select().from(entities).where(
-          and13(
-            eq22(entities.sessionId, sessionId),
+          and14(
+            eq24(entities.sessionId, sessionId),
             sql19`lower(trim(${entities.name})) = ${normalised}`
           )
         ).limit(1);
@@ -13961,7 +16175,7 @@ Respond with JSON: { "entities": [...] }`
             description: created.description
           });
         }
-        const sourceFacts = await db.select().from(facts).where(and13(eq22(facts.sessionId, sessionId), eq22(facts.sourceId, src.id)));
+        const sourceFacts = await db.select().from(facts).where(and14(eq24(facts.sessionId, sessionId), eq24(facts.sourceId, src.id)));
         for (const fact of sourceFacts) {
           if (fact.content.toLowerCase().includes(normalised)) {
             await db.insert(entityMentions).values({
@@ -13995,24 +16209,24 @@ Respond with JSON: { "relationships": [...] }`
           const fromNorm = rel.from_entity.toLowerCase().trim();
           const toNorm = rel.to_entity.toLowerCase().trim();
           const [fromEntity] = await db.select().from(entities).where(
-            and13(
-              eq22(entities.sessionId, sessionId),
+            and14(
+              eq24(entities.sessionId, sessionId),
               sql19`lower(trim(${entities.name})) = ${fromNorm}`
             )
           ).limit(1);
           const [toEntity] = await db.select().from(entities).where(
-            and13(
-              eq22(entities.sessionId, sessionId),
+            and14(
+              eq24(entities.sessionId, sessionId),
               sql19`lower(trim(${entities.name})) = ${toNorm}`
             )
           ).limit(1);
           if (!fromEntity || !toEntity) continue;
           const existingRel = await db.select().from(relationships).where(
-            and13(
-              eq22(relationships.sessionId, sessionId),
-              eq22(relationships.fromEntityId, fromEntity.id),
-              eq22(relationships.toEntityId, toEntity.id),
-              eq22(relationships.relationshipType, rel.relationship_type)
+            and14(
+              eq24(relationships.sessionId, sessionId),
+              eq24(relationships.fromEntityId, fromEntity.id),
+              eq24(relationships.toEntityId, toEntity.id),
+              eq24(relationships.relationshipType, rel.relationship_type)
             )
           ).limit(1);
           if (existingRel.length > 0) continue;
@@ -14042,9 +16256,9 @@ Respond with JSON: { "relationships": [...] }`
     if (depth === "deep" && !shouldStop2(sessionId)) {
       try {
         const sourcePersonEntities = await db.select().from(entities).where(
-          and13(
-            eq22(entities.sessionId, sessionId),
-            eq22(entities.type, "person")
+          and14(
+            eq24(entities.sessionId, sessionId),
+            eq24(entities.type, "person")
           )
         );
         const linkedinSearched = /* @__PURE__ */ new Set();
@@ -14079,8 +16293,8 @@ Respond with JSON: { "connections": [...] }. Return empty array if no clear conn
                   if (!conn.name) continue;
                   const connNorm = conn.name.toLowerCase().trim();
                   const [existing] = await db.select().from(entities).where(
-                    and13(
-                      eq22(entities.sessionId, sessionId),
+                    and14(
+                      eq24(entities.sessionId, sessionId),
                       sql19`lower(trim(${entities.name})) = ${connNorm}`
                     )
                   ).limit(1);
@@ -14139,19 +16353,19 @@ var init_phase2 = __esm({
     init_concurrency();
     init_frontier();
     init_ai();
-    embeddingsAvailable2 = () => !!loadKeys().openrouterApiKey;
+    embeddingsAvailable2 = hasOpenRouter;
   }
 });
 
 // src/lib/deepdive/phase3.ts
-import { eq as eq23, and as and14, sql as sql20 } from "drizzle-orm";
+import { eq as eq25, and as and15, sql as sql20 } from "drizzle-orm";
 async function runPhase3(sessionId, session2, isTimeUp) {
   const config = session2.config ?? {};
   const aggression = config.redTeamAggression ?? "standard";
   const goals = session2.goals ?? [];
   const systemPrompt2 = `You are a critical research analyst performing adversarial fact-checking. Topic: "${session2.topic}"
 Goals: ${goals.join("; ")}`;
-  const allFacts = await db.select().from(facts).where(and14(eq23(facts.sessionId, sessionId), eq23(facts.isCounterfactual, false)));
+  const allFacts = await db.select().from(facts).where(and15(eq25(facts.sessionId, sessionId), eq25(facts.isCounterfactual, false)));
   if (allFacts.length === 0) {
     emitLog2(sessionId, "\u2139\uFE0F", "No facts to challenge. Skipping Phase 3.");
     return;
@@ -14221,7 +16435,7 @@ Respond with JSON: { "queries": [...] }`
       let contradictions = 0;
       let supports = 0;
       const existingUrls = new Set(
-        (await db.select({ url: sources.url }).from(sources).where(eq23(sources.sessionId, sessionId))).map((s) => s.url)
+        (await db.select({ url: sources.url }).from(sources).where(eq25(sources.sessionId, sessionId))).map((s) => s.url)
       );
       for (const query of (queryResult.queries ?? []).slice(0, 2)) {
         if (isTimeUp()) break;
@@ -14310,7 +16524,7 @@ Respond with JSON: { "verdict": "supports|contradicts|qualifies|irrelevant", "co
         newConfidence = Math.min(0.97, newConfidence + 0.03 * supports);
       }
       if (newConfidence !== fact.confidence) {
-        await db.update(facts).set({ confidence: newConfidence }).where(eq23(facts.id, fact.id));
+        await db.update(facts).set({ confidence: newConfidence }).where(eq25(facts.id, fact.id));
       }
       if (contradictions === 0 && supports === 0) {
         report.facts_unchanged++;
@@ -14325,7 +16539,7 @@ Respond with JSON: { "verdict": "supports|contradicts|qualifies|irrelevant", "co
   }
   const currentConfig = session2.config ?? {};
   currentConfig.red_team_report = report;
-  await db.update(researchSessions).set({ config: currentConfig }).where(eq23(researchSessions.id, sessionId));
+  await db.update(researchSessions).set({ config: currentConfig }).where(eq25(researchSessions.id, sessionId));
   emitLog2(
     sessionId,
     "\u2139\uFE0F",
@@ -14345,7 +16559,7 @@ var init_phase3 = __esm({
 });
 
 // src/lib/deepdive/postprocess.ts
-import { eq as eq24, and as and15, sql as sql21 } from "drizzle-orm";
+import { eq as eq26, and as and16, sql as sql21 } from "drizzle-orm";
 async function runPostProcessing(sessionId, session2, isTimeUp = () => false) {
   const goals = session2.goals ?? [];
   const systemPrompt2 = `You are a research summariser. Topic: "${session2.topic}"
@@ -14358,11 +16572,11 @@ Goals: ${goals.join("; ")}`;
     entity_centrality: {}
   };
   const finalise = async () => {
-    await db.update(researchSessions).set({ report }).where(eq24(researchSessions.id, sessionId));
+    await db.update(researchSessions).set({ report }).where(eq26(researchSessions.id, sessionId));
     emitLog2(sessionId, "\u2139\uFE0F", "Post-processing stopped early \u2014 report saved with what was finished.");
   };
   emitLog2(sessionId, "\u2139\uFE0F", "Ranking facts...");
-  const allFacts = await db.select().from(facts).where(and15(eq24(facts.sessionId, sessionId), eq24(facts.isCounterfactual, false)));
+  const allFacts = await db.select().from(facts).where(and16(eq26(facts.sessionId, sessionId), eq26(facts.isCounterfactual, false)));
   const factScores = allFacts.map((f) => ({
     id: f.id,
     score: f.confidence,
@@ -14377,11 +16591,11 @@ Goals: ${goals.join("; ")}`;
     console.error("[deepdive] Source agreement computation failed:", err);
   }
   emitLog2(sessionId, "\u2139\uFE0F", "Computing entity centrality...");
-  const allEntities = await db.select().from(entities).where(eq24(entities.sessionId, sessionId));
+  const allEntities = await db.select().from(entities).where(eq26(entities.sessionId, sessionId));
   let maxCentrality = 0;
   const centralityScores = {};
   for (const entity of allEntities) {
-    const mentionCount = await db.select({ count: sql21`count(*)` }).from(entityMentions).where(eq24(entityMentions.entityId, entity.id));
+    const mentionCount = await db.select({ count: sql21`count(*)` }).from(entityMentions).where(eq26(entityMentions.entityId, entity.id));
     const relCount = await db.select({ count: sql21`count(*)` }).from(relationships).where(
       sql21`${relationships.sessionId} = ${sessionId} AND (${relationships.fromEntityId} = ${entity.id} OR ${relationships.toEntityId} = ${entity.id})`
     );
@@ -14412,7 +16626,7 @@ Goals: ${goals.join("; ")}`;
   emitLog2(sessionId, "\u2139\uFE0F", "Writing executive summary...");
   const topFacts = factScores.slice(0, 20).map((f) => f.content);
   const topEntities = allEntities.sort((a, b) => (centralityScores[b.id] ?? 0) - (centralityScores[a.id] ?? 0)).slice(0, 10).map((e) => `${e.name} (${e.type})`);
-  const counterfactuals = await db.select().from(facts).where(and15(eq24(facts.sessionId, sessionId), eq24(facts.isCounterfactual, true)));
+  const counterfactuals = await db.select().from(facts).where(and16(eq26(facts.sessionId, sessionId), eq26(facts.isCounterfactual, true)));
   try {
     report.executive_summary = await chatCompletion(
       systemPrompt2 + "\n\nCRITICAL: You must ONLY reference information that appears in the facts provided below. Do NOT add any claims, context, background knowledge, or speculation that is not directly stated in these facts. Every sentence in your summary must be traceable to one or more of the listed facts.",
@@ -14443,7 +16657,7 @@ Research goals: ${goals.join("; ")}`,
     try {
       const personFacts = [];
       for (const pe of personEntities.slice(0, 20)) {
-        const mentionRows = await db.select({ factId: entityMentions.factId }).from(entityMentions).where(eq24(entityMentions.entityId, pe.id));
+        const mentionRows = await db.select({ factId: entityMentions.factId }).from(entityMentions).where(eq26(entityMentions.entityId, pe.id));
         const factContents = mentionRows.map((m) => allFacts.find((f) => f.id === m.factId)?.content).filter(Boolean);
         if (factContents.length > 0) {
           personFacts.push({ name: pe.name, entityId: pe.id, facts: factContents });
@@ -14494,7 +16708,7 @@ Respond with JSON: { "clusters": [...] }. Return empty array if no disambiguatio
       id: f.id,
       content: f.content
     }));
-    const allSources = await db.select({ id: sources.id, category: sources.category }).from(sources).where(eq24(sources.sessionId, sessionId));
+    const allSources = await db.select({ id: sources.id, category: sources.category }).from(sources).where(eq26(sources.sessionId, sessionId));
     const sourceCategories = [...new Set(allSources.map((s) => s.category).filter(Boolean))];
     const categoryHint = sourceCategories.length > 0 ? `
 
@@ -14651,7 +16865,7 @@ Respond with JSON: { "followups": [...] }`,
   }
   emitLog2(sessionId, "\u2139\uFE0F", "Computing source diversity...");
   try {
-    const allSourcesForDiversity = await db.select({ domain: sources.domain, credibilityType: sources.credibilityType }).from(sources).where(eq24(sources.sessionId, sessionId));
+    const allSourcesForDiversity = await db.select({ domain: sources.domain, credibilityType: sources.credibilityType }).from(sources).where(eq26(sources.sessionId, sessionId));
     const domains = new Set(allSourcesForDiversity.map((s) => s.domain).filter(Boolean));
     const byType2 = {};
     for (const s of allSourcesForDiversity) {
@@ -14690,13 +16904,13 @@ Respond with JSON: { "followups": [...] }`,
         );
         const avgDist = Number(distResult.rows[0]?.avg_dist ?? 0);
         const novelty = avgDist * 0.6 + (1 - fact.confidence) * 0.4;
-        await db.update(facts).set({ noveltyScore: Math.round(novelty * 1e3) / 1e3 }).where(eq24(facts.id, fact.id));
+        await db.update(facts).set({ noveltyScore: Math.round(novelty * 1e3) / 1e3 }).where(eq26(facts.id, fact.id));
       }
     }
   } catch (err) {
     console.error("[deepdive] Novelty scoring failed:", err);
   }
-  await db.update(researchSessions).set({ report }).where(eq24(researchSessions.id, sessionId));
+  await db.update(researchSessions).set({ report }).where(eq26(researchSessions.id, sessionId));
   emitLog2(sessionId, "\u2139\uFE0F", "Post-processing complete.");
 }
 var init_postprocess = __esm({
@@ -14712,7 +16926,7 @@ var init_postprocess = __esm({
 });
 
 // src/lib/deepdive/cross-session.ts
-import { eq as eq25, and as and16, sql as sql22, ne as ne2 } from "drizzle-orm";
+import { eq as eq27, and as and17, sql as sql22, ne as ne2 } from "drizzle-orm";
 function normalise2(text4) {
   return text4.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
@@ -14730,15 +16944,15 @@ function bigramSimilarity2(a, b) {
   return union === 0 ? 0 : intersection / union;
 }
 async function linkSessionEntitiesToGlobal(sessionId) {
-  const embeddingsAvailable3 = !!loadKeys().openrouterApiKey;
-  const sessionEntities = await db.select().from(entities).where(eq25(entities.sessionId, sessionId));
+  const embeddingsAvailable3 = await hasOpenRouter();
+  const sessionEntities = await db.select().from(entities).where(eq27(entities.sessionId, sessionId));
   if (sessionEntities.length === 0) return;
   emitLog2(sessionId, "\u2139\uFE0F", `Linking ${sessionEntities.length} entities to global knowledge base...`);
   for (const entity of sessionEntities) {
     const existingLink = await db.select().from(globalEntityLinks).where(
-      and16(
-        eq25(globalEntityLinks.sessionEntityId, entity.id),
-        eq25(globalEntityLinks.sessionId, sessionId)
+      and17(
+        eq27(globalEntityLinks.sessionEntityId, entity.id),
+        eq27(globalEntityLinks.sessionId, sessionId)
       )
     ).limit(1);
     if (existingLink.length > 0) continue;
@@ -14776,7 +16990,7 @@ async function linkSessionEntitiesToGlobal(sessionId) {
       }
     }
     if (!matchedGlobalId) {
-      const allGlobal = await db.select({ id: globalEntities.id, canonicalName: globalEntities.canonicalName }).from(globalEntities).where(eq25(globalEntities.type, entity.type));
+      const allGlobal = await db.select({ id: globalEntities.id, canonicalName: globalEntities.canonicalName }).from(globalEntities).where(eq27(globalEntities.type, entity.type));
       for (const ge of allGlobal) {
         const sim = bigramSimilarity2(entity.name, ge.canonicalName);
         if (sim > 0.8 && sim > matchConfidence) {
@@ -14815,607 +17029,6 @@ var init_cross_session = __esm({
   }
 });
 
-// src/lib/server/models/capabilities.ts
-import { eq as eq26 } from "drizzle-orm";
-function capsFromModalities(inputs) {
-  return {
-    image: inputs.includes("image"),
-    audio: inputs.includes("audio"),
-    video: inputs.includes("video"),
-    pdf: inputs.includes("file"),
-    // Every chat model takes text; nothing in the catalogue contradicts it.
-    documentText: true
-  };
-}
-function warmCatalogueCaps() {
-  if (catalogueCaps || capsWarmInFlight) return;
-  capsWarmInFlight = true;
-  (async () => {
-    const { db: db2 } = await Promise.resolve().then(() => (init_db(), db_exports));
-    const { openrouterModels: openrouterModels2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const rows = await db2.select({ id: openrouterModels2.id, raw: openrouterModels2.raw }).from(openrouterModels2);
-    const map = /* @__PURE__ */ new Map();
-    for (const r of rows) {
-      const raw = r.raw ?? {};
-      const inputs = raw.architecture?.input_modalities;
-      if (!Array.isArray(inputs) || inputs.length === 0) continue;
-      map.set(r.id, capsFromModalities(inputs.map((m) => String(m))));
-    }
-    if (map.size > 0) catalogueCaps = map;
-  })().catch(() => {
-    capsWarmInFlight = false;
-  });
-}
-function getModelCapabilities(ctx) {
-  if (ctx.provider === "codex" || isCodexModelId(ctx.modelId)) return TEXT_ONLY;
-  warmCatalogueCaps();
-  const id = mapLegacyModelId(ctx.modelId);
-  return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;
-}
-function getProviderFeatures(provider) {
-  return provider === "codex" ? CODEX_FEATURES : OPENROUTER_FEATURES;
-}
-var ALL, IMAGE_ONLY, IMAGE_PDF, TEXT_ONLY, OPENROUTER_CAPS, catalogueCaps, capsWarmInFlight, OPENROUTER_FEATURES, CODEX_FEATURES;
-var init_capabilities = __esm({
-  "src/lib/server/models/capabilities.ts"() {
-    "use strict";
-    init_default_models();
-    init_thinking();
-    init_codex_catalogue();
-    ALL = { image: true, audio: true, video: true, pdf: true, documentText: true };
-    IMAGE_ONLY = { image: true, audio: false, video: false, pdf: false, documentText: true };
-    IMAGE_PDF = { image: true, audio: false, video: false, pdf: true, documentText: true };
-    TEXT_ONLY = { image: false, audio: false, video: false, pdf: false, documentText: true };
-    OPENROUTER_CAPS = {
-      // GLM family via OpenRouter z-ai/* slugs (multimodal parity with the old
-      // direct-z.ai capability map).
-      "z-ai/glm-5": ALL,
-      "z-ai/glm-5.2": ALL,
-      "z-ai/glm-5.1": ALL,
-      "z-ai/glm-5v-turbo": IMAGE_ONLY,
-      "z-ai/glm-4.6v": IMAGE_ONLY,
-      "z-ai/glm-4.5v": IMAGE_ONLY,
-      "z-ai/glm-4.7": TEXT_ONLY,
-      "z-ai/glm-4.6": TEXT_ONLY,
-      "z-ai/glm-4.5": TEXT_ONLY,
-      "anthropic/claude-3.5-sonnet": IMAGE_PDF,
-      "anthropic/claude-3.7-sonnet": IMAGE_PDF,
-      "anthropic/claude-opus-4.1": IMAGE_PDF,
-      "anthropic/claude-sonnet-4.5": IMAGE_PDF,
-      "openai/gpt-4o": IMAGE_ONLY,
-      "openai/gpt-4.1": IMAGE_ONLY,
-      "google/gemini-2.5-pro": ALL,
-      "google/gemini-2.5-flash": ALL,
-      "google/gemini-3.5-flash": ALL,
-      "google/gemini-3.1-flash-lite-preview": ALL,
-      "google/gemini-3.1-flash-lite": ALL,
-      "x-ai/grok-2-vision": IMAGE_ONLY,
-      // Open-weight cost leaders (the 2026-07-25 routing shift). Listed explicitly
-      // even though TEXT_ONLY is the fallback: these are the models the router now
-      // picks, so their limits should be stated rather than inferred. deepseek-v4-*
-      // and the minimax/tencent picks are all text→text — to send an image or PDF,
-      // switch the conversation to a multimodal model in the picker (the alt chip).
-      "deepseek/deepseek-v4-flash": TEXT_ONLY,
-      "deepseek/deepseek-v4-pro": TEXT_ONLY,
-      "minimax/minimax-m3": TEXT_ONLY,
-      "tencent/hy3-preview": TEXT_ONLY,
-      "openai/gpt-oss-120b": TEXT_ONLY
-    };
-    catalogueCaps = null;
-    capsWarmInFlight = false;
-    OPENROUTER_FEATURES = {
-      tools: true,
-      structuredOutput: true,
-      streaming: true,
-      embeddings: true
-    };
-    CODEX_FEATURES = {
-      // TRUE since the bridge learned to publish caller tools as an MCP server —
-      // the only route by which Codex accepts external tools. It captures the
-      // dispatch and returns `tool_calls`, so the caller still runs the tool, as
-      // the chat-completions contract requires. Before that this said false, and
-      // the UI wrongly reported the MODEL as incapable.
-      tools: true,
-      structuredOutput: true,
-      streaming: true,
-      embeddings: false
-    };
-  }
-});
-
-// src/lib/models/workloads.ts
-function emitsImages(modality) {
-  if (!modality) return false;
-  const arrow = modality.indexOf("->");
-  if (arrow === -1) return false;
-  return modality.slice(arrow + 2).includes("image");
-}
-var SITE_WORKLOADS, WORKLOADS;
-var init_workloads = __esm({
-  "src/lib/models/workloads.ts"() {
-    "use strict";
-    init_default_models();
-    SITE_WORKLOADS = [
-      {
-        id: "extraction",
-        scope: "site",
-        label: "Entity extraction",
-        blurb: "Intel entity extraction + resolution after a reply lands.",
-        key: "jkai.intel.extract_model",
-        fallbackModelId: DEFAULT_EXTRACTION_MODEL_ID,
-        requires: "tools",
-        catalogue: "tools",
-        reason: "Latency-visible: it runs after the reply is delivered and the entity rail stays empty until it finishes. Mechanical JSON against a fixed schema, so it takes the fastest cheap model rather than the smartest one."
-      },
-      {
-        id: "selfimprove",
-        scope: "site",
-        label: "Self-improve",
-        blurb: "The nightly 03:30 self-improvement engine that authors code.",
-        key: "jkai.selfimprove.model",
-        fallbackModelId: DEFAULT_SELFIMPROVE_MODEL_ID,
-        requires: "tools",
-        catalogue: "tools",
-        reason: "Writes code that ships unattended, so it was pinned in 2026-07-29 to stop a chat-default change silently altering what authors it. Still a deliberate choice \u2014 just one you can now see and make."
-      },
-      {
-        id: "daydream",
-        scope: "site",
-        label: "Daydreaming",
-        blurb: "Phrases what the daydream detectors found, and verifies it against the evidence.",
-        key: "jkai.daydream.model",
-        fallbackModelId: null,
-        requires: "tools",
-        catalogue: "tools",
-        reason: "Follows the site default rather than pinning, because the work is short-form phrasing under a hard evidence constraint rather than code authoring. Worth knowing before changing it: on a Codex model this role is capped at 10% of the weekly allowance per day and 50% of the current 5-hour window, enforced in $lib/daydream/budget.ts. Move it to an OpenRouter model and those caps stop applying \u2014 the spend becomes cash instead, and nothing here limits it."
-      },
-      {
-        id: "doctor",
-        scope: "site",
-        label: "Workflow doctor",
-        blurb: "The 05:00 workflow doctor that diagnoses failing canvas nodes.",
-        key: "jkai.workflowdoctor.model",
-        fallbackModelId: DEFAULT_DOCTOR_MODEL_ID,
-        requires: "tools",
-        catalogue: "tools",
-        reason: "Pinned for the same reason as self-improve: diagnosis quality should not move overnight because the chat default moved."
-      },
-      {
-        id: "thinking",
-        scope: "site",
-        label: "Thinking tier",
-        blurb: "Orchestrator plan / clarify turns and any prompt past the large-context threshold.",
-        key: "jkai.builder.thinking_model",
-        fallbackModelId: null,
-        requires: "tools",
-        catalogue: "tools",
-        reason: null
-      },
-      {
-        id: "vision",
-        scope: "site",
-        label: "Vision / OCR",
-        blurb: "Image captions and OCR for the file index and Drive search.",
-        key: "jkai.vision.model",
-        fallbackModelId: DEFAULT_VISION_MODEL_ID,
-        requires: "image-input",
-        catalogue: "tools",
-        reason: "Must accept images. The site default is currently text-only, and a text-only model answers the prompt while ignoring the picture \u2014 a confident caption of nothing."
-      },
-      {
-        id: "image",
-        scope: "site",
-        label: "Image generation",
-        blurb: "Studio explainer images (chat-completions with `modalities: [image, text]`).",
-        key: "jkai.image.model",
-        fallbackModelId: DEFAULT_IMAGE_MODEL_ID,
-        requires: "image-output",
-        catalogue: "image-out",
-        reason: "Must emit an image; a text model cannot serve this role at all. Note this does NOT cover the canvas `generate_image` tool, which calls OpenRouter's separate /images/generations endpoint with FLUX \u2014 a different API that these models do not serve. That one is set with the JKAI_IMAGE_MODEL env var."
-      },
-      {
-        id: "audio",
-        scope: "site",
-        label: "Audio transcription",
-        blurb: "Speech-to-text for audio files in the @files index.",
-        key: "jkai.audio.model",
-        fallbackModelId: DEFAULT_AUDIO_MODEL_ID,
-        requires: "audio-input",
-        catalogue: "tools",
-        reason: "Must accept an `input_audio` content part. OpenAI's whisper endpoint is not reachable through this repo's OpenRouter-only gateway, so transcription rides a multimodal chat model rather than a dedicated speech API."
-      },
-      {
-        id: "art-director",
-        scope: "site",
-        label: "Deck art director",
-        blurb: "Composing slide layouts and block choices in the decks builder.",
-        key: "jkai.decks.art_director_model",
-        fallbackModelId: DEFAULT_ART_DIRECTOR_MODEL_ID,
-        requires: "tools",
-        catalogue: "tools",
-        reason: "A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it."
-      },
-      {
-        id: "image-tool",
-        scope: "site",
-        label: "Image tool (FLUX)",
-        blurb: "The canvas/chat `generate_image` tool \u2014 OpenRouter's /images/generations endpoint.",
-        key: "jkai.image.tool_model",
-        envKey: "JKAI_IMAGE_MODEL",
-        fallbackModelId: DEFAULT_IMAGE_TOOL_MODEL_ID,
-        requires: null,
-        // OpenRouter's /models feed does not carry the dedicated image-generation
-        // namespace, so there is no list to pick from — the slug is typed in, the
-        // same situation as embeddings.
-        catalogue: "none",
-        reason: "A DIFFERENT API from the `image` role above: /images/generations, which the chat-completions image models do not serve. It was the last LLM spender on the site set only by an environment variable (JKAI_IMAGE_MODEL), i.e. unreadable and unchangeable from any screen."
-      },
-      {
-        id: "embeddings",
-        scope: "site",
-        label: "Embeddings",
-        blurb: "RAG, Drive file embeddings and the knowledge index.",
-        key: "jkai.embeddings.model",
-        fallbackModelId: DEFAULT_EMBEDDING_MODEL_ID,
-        requires: "embeddings",
-        catalogue: "none",
-        reason: "Needs the /v1/embeddings endpoint, which Codex has no equivalent of. OpenRouter's model feed omits embedding models, so there is nothing here to pick from a list \u2014 set the slug by hand."
-      }
-    ];
-    WORKLOADS = [...SITE_WORKLOADS];
-  }
-});
-
-// src/lib/routing/types.ts
-function errMsg(err) {
-  return err instanceof Error ? err.message : String(err);
-}
-function asData(value) {
-  return value;
-}
-function toCtx(modelId) {
-  return { provider: "openrouter", modelId };
-}
-var PROFILES, SETTINGS_ENABLED_KEY, SETTINGS_ASSIGNMENTS_KEY, SETTINGS_CONFIG_KEY, SETTINGS_OVERRIDES_KEY, RUNS_COLLECTION, EVENTS_COLLECTION, SYSTEM_ACTOR, ROUTING_PERMS, DEFAULT_CONFIG;
-var init_types4 = __esm({
-  "src/lib/routing/types.ts"() {
-    "use strict";
-    init_owner();
-    PROFILES = ["general", "tool", "rag", "agentic", "vision"];
-    SETTINGS_ENABLED_KEY = "jkai.routing.enabled";
-    SETTINGS_ASSIGNMENTS_KEY = "jkai.routing.assignments";
-    SETTINGS_CONFIG_KEY = "jkai.routing.config";
-    SETTINGS_OVERRIDES_KEY = "jkai.routing.overrides";
-    RUNS_COLLECTION = "model-routing-runs";
-    EVENTS_COLLECTION = "model-routing-events";
-    SYSTEM_ACTOR = "system";
-    ROUTING_PERMS = {
-      read: ["owner", "jkai", "system"],
-      write: ["system", "owner"],
-      delete: ["owner", "system"]
-    };
-    DEFAULT_CONFIG = {
-      weights: {
-        general: { quality: 0.3, price: 0.45, speed: 0.25 },
-        tool: { quality: 0.35, price: 0.45, speed: 0.2 },
-        rag: { quality: 0.25, price: 0.4, speed: 0.35 },
-        agentic: { quality: 0.4, price: 0.45, speed: 0.15 },
-        // Quality carries more than `rag` because a misread transcript is not a
-        // worse answer, it is a WRONG one that gets embedded and fed to the intel
-        // graph as the contents of the document. Price still leads, since this runs
-        // over every image and scan in the Drive.
-        vision: { quality: 0.35, price: 0.45, speed: 0.2 }
-      },
-      // Fractions of the catalogue's best agentic index (≈54 today → general ≈32,
-      // tool ≈35, rag ≈27, agentic ≈41). Agentic is highest because multi-step
-      // delegation with a weak model burns more tokens retrying than it saves.
-      qualityFloorFrac: { general: 0.6, tool: 0.65, rag: 0.5, agentic: 0.75, vision: 0.55 },
-      priceCeilingPerM: 15,
-      minContext: 32e3,
-      successBiasK: 0.2,
-      openWeightBonus: 0.15,
-      openWeightsOnly: false
-    };
-  }
-});
-
-// src/lib/routing/events.ts
-var events_exports2 = {};
-__export(events_exports2, {
-  describeProfiles: () => describeProfiles,
-  ensureRoutingCollections: () => ensureRoutingCollections,
-  errMsg: () => errMsg,
-  getRoutingConfig: () => getRoutingConfig,
-  isRoutingEnabled: () => isRoutingEnabled,
-  listEvents: () => listEvents,
-  listRuns: () => listRuns,
-  loadAssignments: () => loadAssignments,
-  loadOverrides: () => loadOverrides,
-  persistRun: () => persistRun,
-  recordOutcome: () => recordOutcome,
-  recordRoutingDecision: () => recordRoutingDecision,
-  resolveModelForProfile: () => resolveModelForProfile,
-  saveAssignments: () => saveAssignments,
-  setOverride: () => setOverride,
-  setRoutingConfig: () => setRoutingConfig,
-  setRoutingEnabled: () => setRoutingEnabled
-});
-async function ensureRoutingCollections() {
-  await ensureCollection(
-    RUNS_COLLECTION,
-    { name: "Model routing runs", description: "Overnight model-selection runs", isSystem: true, defaultPermissions: ROUTING_PERMS },
-    SYSTEM_ACTOR
-  );
-  await ensureCollection(
-    EVENTS_COLLECTION,
-    { name: "Model routing events", description: "Per-conversation routing decisions + outcomes", isSystem: true, defaultPermissions: ROUTING_PERMS },
-    SYSTEM_ACTOR
-  );
-}
-async function isRoutingEnabled() {
-  return await getSetting(SETTINGS_ENABLED_KEY) !== false;
-}
-async function getRoutingConfig() {
-  const stored = await getSetting(SETTINGS_CONFIG_KEY);
-  if (!stored) return DEFAULT_CONFIG;
-  return {
-    weights: { ...DEFAULT_CONFIG.weights, ...stored.weights ?? {} },
-    qualityFloorFrac: { ...DEFAULT_CONFIG.qualityFloorFrac, ...stored.qualityFloorFrac ?? {} },
-    priceCeilingPerM: stored.priceCeilingPerM ?? DEFAULT_CONFIG.priceCeilingPerM,
-    minContext: stored.minContext ?? DEFAULT_CONFIG.minContext,
-    successBiasK: stored.successBiasK ?? DEFAULT_CONFIG.successBiasK,
-    openWeightBonus: stored.openWeightBonus ?? DEFAULT_CONFIG.openWeightBonus,
-    openWeightsOnly: stored.openWeightsOnly ?? DEFAULT_CONFIG.openWeightsOnly
-  };
-}
-async function setRoutingConfig(cfg) {
-  await setSetting(SETTINGS_CONFIG_KEY, cfg);
-}
-async function setRoutingEnabled(enabled) {
-  await setSetting(SETTINGS_ENABLED_KEY, enabled);
-}
-async function loadAssignments() {
-  return await getSetting(SETTINGS_ASSIGNMENTS_KEY) ?? {};
-}
-async function saveAssignments(a) {
-  await setSetting(SETTINGS_ASSIGNMENTS_KEY, a);
-}
-async function loadOverrides() {
-  return await getSetting(SETTINGS_OVERRIDES_KEY) ?? {};
-}
-async function setOverride(profile, modelId) {
-  const current = await loadOverrides();
-  const next = { ...current };
-  if (modelId) {
-    next[profile] = { modelId, pinnedAt: (/* @__PURE__ */ new Date()).toISOString() };
-  } else {
-    delete next[profile];
-  }
-  await setSetting(SETTINGS_OVERRIDES_KEY, next);
-  return next;
-}
-async function resolveModelForProfile(profile) {
-  const [overrides, assignments] = await Promise.all([loadOverrides(), loadAssignments()]);
-  const pinned = overrides[profile];
-  if (pinned?.modelId) return { ...toCtx(pinned.modelId), source: "override" };
-  const assigned = assignments[profile];
-  if (assigned?.modelId) return { ...toCtx(assigned.modelId), source: "auto" };
-  return { ...await resolveDefaultModel(), source: "default" };
-}
-async function describeProfiles() {
-  const [overrides, assignments, siteDefault] = await Promise.all([
-    loadOverrides(),
-    loadAssignments(),
-    resolveDefaultModel()
-  ]);
-  return PROFILES.map((profile) => {
-    const auto = assignments[profile] ?? null;
-    const pinned = overrides[profile] ?? null;
-    const effectiveModelId = pinned?.modelId ?? auto?.modelId ?? siteDefault.modelId;
-    const source = pinned ? "override" : auto ? "auto" : "default";
-    return {
-      profile,
-      autoModelId: auto?.modelId ?? null,
-      autoReason: auto?.reason ?? null,
-      overrideModelId: pinned?.modelId ?? null,
-      pinnedAt: pinned?.pinnedAt ?? null,
-      effectiveModelId,
-      source
-    };
-  });
-}
-async function recordRoutingDecision(ev) {
-  const data = {
-    conversationId: ev.conversationId,
-    profile: ev.profile,
-    modelId: ev.modelId,
-    decidedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    correctFirstTime: null
-  };
-  await upsertRecord(EVENTS_COLLECTION, { key: ev.conversationId, data: asData(data) }, SYSTEM_ACTOR);
-}
-async function recordOutcome(conversationId, correct, signal) {
-  let existing = null;
-  try {
-    const rec = await getRecordByKey(EVENTS_COLLECTION, conversationId, SYSTEM_ACTOR);
-    existing = rec.data;
-  } catch (err) {
-    if (err instanceof DatastoreError && err.code === "not_found") return;
-    throw err;
-  }
-  const updated = { ...existing, correctFirstTime: correct, signal };
-  await upsertRecord(EVENTS_COLLECTION, { key: conversationId, data: asData(updated) }, SYSTEM_ACTOR);
-}
-async function listEvents(limit2 = 2e3) {
-  const { records } = await queryRecords(
-    EVENTS_COLLECTION,
-    { sort: { field: "updatedAt", dir: "desc" }, limit: limit2 },
-    SYSTEM_ACTOR
-  );
-  return records.map((r) => r.data);
-}
-async function persistRun(run) {
-  await upsertRecord(RUNS_COLLECTION, { key: run.id, data: asData(run) }, SYSTEM_ACTOR);
-}
-async function listRuns(limit2 = 20) {
-  const { records } = await queryRecords(
-    RUNS_COLLECTION,
-    { sort: { field: "updatedAt", dir: "desc" }, limit: limit2 },
-    SYSTEM_ACTOR
-  );
-  return records.map((r) => r.data);
-}
-var init_events2 = __esm({
-  "src/lib/routing/events.ts"() {
-    "use strict";
-    init_datastore();
-    init_types();
-    init_settings();
-    init_types4();
-  }
-});
-
-// src/lib/server/models/workload-settings.ts
-var workload_settings_exports = {};
-__export(workload_settings_exports, {
-  describeSiteWorkloads: () => describeSiteWorkloads,
-  resolveArtDirectorModel: () => resolveArtDirectorModel,
-  resolveAudioModel: () => resolveAudioModel,
-  resolveDoctorModel: () => resolveDoctorModel,
-  resolveEmbeddingModel: () => resolveEmbeddingModel,
-  resolveExtractionModel: () => resolveExtractionModel,
-  resolveImageModel: () => resolveImageModel,
-  resolveImageToolModel: () => resolveImageToolModel,
-  resolveSelfimproveModel: () => resolveSelfimproveModel,
-  resolveVisionModel: () => resolveVisionModel,
-  resolveWorkloadModel: () => resolveWorkloadModel,
-  setWorkloadModel: () => setWorkloadModel,
-  workloadBlockReason: () => workloadBlockReason
-});
-import { eq as eq27 } from "drizzle-orm";
-async function resolveWorkloadModel(def3) {
-  const v = await getSetting(def3.key);
-  if (v?.modelId) return coerceModelContext({ modelId: v.modelId });
-  if (def3.fallbackModelId) return coerceModelContext({ modelId: def3.fallbackModelId });
-  return resolveDefaultModel();
-}
-async function resolveById(id) {
-  const def3 = SITE_WORKLOADS.find((w) => w.id === id);
-  if (!def3) throw new Error(`unknown workload: ${id}`);
-  return resolveWorkloadModel(def3);
-}
-async function resolveVisionModel() {
-  const def3 = SITE_WORKLOADS.find((w) => w.id === "vision");
-  const pinned = await getSetting(def3.key);
-  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
-  try {
-    const { isRoutingEnabled: isRoutingEnabled2, loadAssignments: loadAssignments2, loadOverrides: loadOverrides2 } = await Promise.resolve().then(() => (init_events2(), events_exports2));
-    if (await isRoutingEnabled2()) {
-      const pin = (await loadOverrides2()).vision;
-      if (pin?.modelId) return coerceModelContext({ modelId: pin.modelId });
-      const assigned = (await loadAssignments2()).vision;
-      if (assigned?.modelId) return coerceModelContext({ modelId: assigned.modelId });
-    }
-  } catch (err) {
-    console.warn(`[models] vision routing lookup failed (${err.message}); using the fallback`);
-  }
-  return coerceModelContext({ modelId: def3.fallbackModelId });
-}
-async function resolveImageToolModel() {
-  const def3 = SITE_WORKLOADS.find((w) => w.id === "image-tool");
-  const pinned = await getSetting(def3.key);
-  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
-  const fromEnv = envModelFor(def3);
-  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
-  return coerceModelContext({ modelId: def3.fallbackModelId });
-}
-function envModelFor(def3) {
-  if (!def3.envKey) return null;
-  const v = process.env[def3.envKey];
-  return v && v.trim() ? v.trim() : null;
-}
-function sourceFor(def3, set) {
-  if (set) return "pinned";
-  if (envModelFor(def3)) return "env";
-  return def3.fallbackModelId ? "code" : "default";
-}
-async function describeSiteWorkloads() {
-  const siteDefault = await resolveDefaultModel();
-  const stored = await Promise.all(
-    SITE_WORKLOADS.map(
-      (w) => getSetting(w.key).then((v) => v?.modelId ?? null)
-    )
-  );
-  return SITE_WORKLOADS.map((def3, i) => {
-    const setModelId = stored[i];
-    const effectiveModelId = setModelId ?? envModelFor(def3) ?? def3.fallbackModelId ?? siteDefault.modelId;
-    return {
-      id: def3.id,
-      scope: def3.scope,
-      label: def3.label,
-      blurb: def3.blurb,
-      key: def3.key,
-      reason: def3.reason,
-      requires: def3.requires,
-      catalogue: def3.catalogue,
-      setModelId,
-      effectiveModelId,
-      source: sourceFor(def3, setModelId),
-      divergesFromDefault: effectiveModelId !== siteDefault.modelId
-    };
-  });
-}
-async function workloadBlockReason(def3, modelId) {
-  const ctx = coerceModelContext({ modelId });
-  switch (def3.requires) {
-    case "tools":
-      return getProviderFeatures(ctx.provider).tools ? null : `${ctx.provider} cannot pass tool schemas, which ${def3.label} needs.`;
-    case "embeddings":
-      return getProviderFeatures(ctx.provider).embeddings ? null : `${ctx.provider} has no embeddings endpoint. Use an OpenRouter model for ${def3.label}.`;
-    case "image-input":
-      return getModelCapabilities(ctx).image ? null : `${modelId} cannot accept images, so it cannot serve ${def3.label}. It would answer the prompt and ignore the picture.`;
-    case "audio-input":
-      return getModelCapabilities(ctx).audio ? null : `${modelId} cannot accept audio, so it cannot serve ${def3.label}.`;
-    case "image-output": {
-      if (ctx.provider === "codex") {
-        return `Codex cannot return an image, so it cannot serve ${def3.label}.`;
-      }
-      const [row] = await db.select({ modality: openrouterModels.modality }).from(openrouterModels).where(eq27(openrouterModels.id, modelId)).limit(1);
-      if (!row) return null;
-      return emitsImages(row.modality) ? null : `${modelId} does not emit images (modality ${row.modality ?? "unknown"}), so it cannot serve ${def3.label}.`;
-    }
-    case null:
-      return null;
-  }
-}
-async function setWorkloadModel(def3, modelId) {
-  if (modelId === null) {
-    await deleteSetting(def3.key);
-  } else {
-    await setSetting(def3.key, coerceModelContext({ modelId }));
-  }
-  clearSettingsCache();
-}
-var resolveExtractionModel, resolveSelfimproveModel, resolveDoctorModel, resolveImageModel, resolveEmbeddingModel, resolveAudioModel, resolveArtDirectorModel;
-var init_workload_settings = __esm({
-  "src/lib/server/models/workload-settings.ts"() {
-    "use strict";
-    init_db();
-    init_schema();
-    init_settings();
-    init_default_models();
-    init_capabilities();
-    init_workloads();
-    resolveExtractionModel = () => resolveById("extraction");
-    resolveSelfimproveModel = () => resolveById("selfimprove");
-    resolveDoctorModel = () => resolveById("doctor");
-    resolveImageModel = () => resolveById("image");
-    resolveEmbeddingModel = () => resolveById("embeddings");
-    resolveAudioModel = () => resolveById("audio");
-    resolveArtDirectorModel = () => resolveById("art-director");
-  }
-});
-
 // src/lib/jkai/intel/embed.ts
 var embed_exports = {};
 __export(embed_exports, {
@@ -15426,28 +17039,46 @@ __export(embed_exports, {
   generateEmbedding: () => generateEmbedding2,
   generateEmbeddings: () => generateEmbeddings2
 });
-import { and as and17, eq as eq28, isNull as isNull3, sql as sql23 } from "drizzle-orm";
+import { and as and18, eq as eq28, isNull as isNull3, sql as sql23 } from "drizzle-orm";
+function isContextOverflow(err) {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /maximum context length|context_length_exceeded|too many tokens|reduce the length/i.test(msg);
+}
+async function shrinkToFit(inputs, call) {
+  let cut = MAX_INPUT_CHARS;
+  let lastError;
+  for (let attempt = 0; attempt <= SHRINK_ATTEMPTS; attempt += 1) {
+    try {
+      return await call(inputs.map((t) => t.slice(0, cut)));
+    } catch (err) {
+      if (!isContextOverflow(err)) throw err;
+      lastError = err;
+      cut = Math.floor(cut / 2);
+      console.warn(`[intel:embed] input too long \u2014 retrying at ${cut} chars`);
+    }
+  }
+  throw lastError;
+}
 async function generateEmbedding2(text4) {
   const { client } = await getLLMClient({ provider: "openrouter", modelId: EMBEDDING_MODEL });
-  const truncated = text4.slice(0, 32e3);
-  const response = await withActivity(
-    "embeddings",
-    () => client.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: truncated
-    })
+  const response = await shrinkToFit(
+    [text4],
+    (inputs) => withActivity(
+      "embeddings",
+      () => client.embeddings.create({ model: EMBEDDING_MODEL, input: inputs[0] })
+    )
   );
   return response.data[0].embedding;
 }
 async function generateEmbeddings2(texts) {
   if (!texts.length) return [];
   const { client } = await getLLMClient({ provider: "openrouter", modelId: EMBEDDING_MODEL });
-  const response = await withActivity(
-    "embeddings",
-    () => client.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: texts.map((t) => t.slice(0, 32e3))
-    })
+  const response = await shrinkToFit(
+    texts,
+    (inputs) => withActivity(
+      "embeddings",
+      () => client.embeddings.create({ model: EMBEDDING_MODEL, input: inputs })
+    )
   );
   const out = new Array(texts.length);
   for (const item of response.data) out[item.index] = item.embedding;
@@ -15483,7 +17114,7 @@ async function backfillEntityEmbeddings(limit2 = 500, batchSize = 96) {
     name: intelEntities.name,
     summary: intelEntities.summary,
     properties: intelEntities.properties
-  }).from(intelEntities).where(and17(isNull3(intelEntities.embedding), isNull3(intelEntities.mergedIntoId))).limit(capped);
+  }).from(intelEntities).where(and18(isNull3(intelEntities.embedding), isNull3(intelEntities.mergedIntoId))).limit(capped);
   let embedded = 0;
   let failed = 0;
   for (let i = 0; i < rows.length; i += batchSize) {
@@ -15505,19 +17136,21 @@ async function backfillEntityEmbeddings(limit2 = 500, batchSize = 96) {
       );
     }
   }
-  const [{ count: remaining } = { count: 0 }] = await db.select({ count: sql23`count(*)::int` }).from(intelEntities).where(and17(isNull3(intelEntities.embedding), isNull3(intelEntities.mergedIntoId)));
+  const [{ count: remaining } = { count: 0 }] = await db.select({ count: sql23`count(*)::int` }).from(intelEntities).where(and18(isNull3(intelEntities.embedding), isNull3(intelEntities.mergedIntoId)));
   console.log(`[intel:embed] backfill \u2014 embedded ${embedded}, failed ${failed}, ${remaining} left`);
   return { embedded, remaining, failed };
 }
-var EMBEDDING_MODEL;
+var EMBEDDING_MODEL, MAX_INPUT_CHARS, SHRINK_ATTEMPTS;
 var init_embed = __esm({
   "src/lib/jkai/intel/embed.ts"() {
     "use strict";
-    init_llm_client();
-    init_activity_context();
+    init_client();
+    init_activity();
     init_db();
     init_schema();
     EMBEDDING_MODEL = "openai/text-embedding-3-small";
+    MAX_INPUT_CHARS = 16e3;
+    SHRINK_ATTEMPTS = 3;
   }
 });
 
@@ -15647,9 +17280,9 @@ var FULL_LIST_CEILING, CANDIDATE_K, EXTRACTION_SYSTEM_PROMPT;
 var init_extract = __esm({
   "src/lib/jkai/intel/extract.ts"() {
     "use strict";
-    init_llm_client();
+    init_client();
     init_workload_settings();
-    init_activity_context();
+    init_activity();
     init_db();
     init_schema();
     init_embed();
@@ -16069,7 +17702,7 @@ __export(trust_refresh_exports, {
   refreshConfidence: () => refreshConfidence,
   scoreFor: () => scoreFor
 });
-import { and as and18, eq as eq30, isNull as isNull5, sql as sql25 } from "drizzle-orm";
+import { and as and19, eq as eq30, isNull as isNull5, sql as sql25 } from "drizzle-orm";
 function scoreFor(row) {
   const ageDays = row.lastCorroboratedAt ? Math.max(0, (Date.now() - row.lastCorroboratedAt.getTime()) / DAY_MS) : 0;
   return computeConfidence({
@@ -16131,7 +17764,7 @@ async function backfillConfidence(opts = {}) {
     scored++;
     if (scored % PROGRESS_EVERY === 0) opts.onProgress?.(scored, targets.length);
   }
-  const [{ count: remaining } = { count: 0 }] = await db.select({ count: sql25`count(*)::int` }).from(intelEntities).where(and18(isNull5(intelEntities.confidenceScore), isNull5(intelEntities.mergedIntoId)));
+  const [{ count: remaining } = { count: 0 }] = await db.select({ count: sql25`count(*)::int` }).from(intelEntities).where(and19(isNull5(intelEntities.confidenceScore), isNull5(intelEntities.mergedIntoId)));
   console.log(`[intel:trust] scored ${scored} entities, ${remaining} still unscored`);
   return { scored, remaining };
 }
@@ -16147,7 +17780,7 @@ var init_trust_refresh = __esm({
 });
 
 // src/lib/jkai/intel/graph.ts
-import { eq as eq31, desc as desc9, sql as sql26, and as and19, inArray as inArray7, isNull as isNull6 } from "drizzle-orm";
+import { eq as eq31, desc as desc9, sql as sql26, and as and20, inArray as inArray8, isNull as isNull6 } from "drizzle-orm";
 function normaliseTypeName(name) {
   return name.toLowerCase().trim().replace(/[\s_-]+/g, "").replace(/(ies)$/, "y").replace(/(?<=[a-z]{3})s$/, "");
 }
@@ -16161,7 +17794,7 @@ async function loadTypeIndex(opts = {}) {
   return index2;
 }
 async function resolveTypeId(typeName) {
-  const [row] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).where(and19(eq31(intelEntityTypes.name, typeName.toLowerCase()), eq31(intelEntityTypes.status, "active"))).limit(1);
+  const [row] = await db.select({ id: intelEntityTypes.id }).from(intelEntityTypes).where(and20(eq31(intelEntityTypes.name, typeName.toLowerCase()), eq31(intelEntityTypes.status, "active"))).limit(1);
   if (row) return row.id;
   const index2 = await loadTypeIndex({ activeOnly: true });
   return index2.get(normaliseTypeName(typeName)) ?? null;
@@ -16224,7 +17857,7 @@ async function createProposedTypes(proposed) {
 }
 async function upsertEntity(entity, noteId) {
   if (entity.possibleMatchId) {
-    const [existing] = await db.select().from(intelEntities).where(and19(eq31(intelEntities.id, entity.possibleMatchId), isNull6(intelEntities.mergedIntoId))).limit(1);
+    const [existing] = await db.select().from(intelEntities).where(and20(eq31(intelEntities.id, entity.possibleMatchId), isNull6(intelEntities.mergedIntoId))).limit(1);
     if (existing) {
       const mergedProps = { ...existing.properties ?? {}, ...entity.properties };
       await db.update(intelEntities).set({
@@ -16245,7 +17878,7 @@ async function upsertEntity(entity, noteId) {
     console.warn(`[intel] unknown type "${entity.type}" for "${entity.name}" \u2192 concept`);
   }
   const [sameName] = await db.select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId }).from(intelEntities).where(
-    and19(
+    and20(
       sql26`lower(${intelEntities.name}) = ${entity.name.trim().toLowerCase()}`,
       isNull6(intelEntities.mergedIntoId)
     )
@@ -16256,7 +17889,7 @@ async function upsertEntity(entity, noteId) {
   ).limit(1);
   const canonical = canonicalName(entity.name);
   const [sameCanonical] = sameName || !canonical ? [] : await db.select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId }).from(intelEntities).where(
-    and19(
+    and20(
       eq31(intelEntities.canonicalName, canonical),
       isNull6(intelEntities.mergedIntoId)
     )
@@ -16304,14 +17937,14 @@ async function updateEntitySummaries(entityIds) {
     name: intelEntities.name,
     typeName: intelEntityTypes.name,
     properties: intelEntities.properties
-  }).from(intelEntities).innerJoin(intelEntityTypes, eq31(intelEntities.typeId, intelEntityTypes.id)).where(and19(inArray7(intelEntities.id, entityIds), isNull6(intelEntities.summary)));
+  }).from(intelEntities).innerJoin(intelEntityTypes, eq31(intelEntities.typeId, intelEntityTypes.id)).where(and20(inArray8(intelEntities.id, entityIds), isNull6(intelEntities.summary)));
   if (pending.length === 0) return;
   const batch = pending.slice(0, SUMMARY_BATCH);
   const excerpts = await db.select({
     entityId: intelNoteEntities.entityId,
     content: sql26`substring(${intelNotes.processedContent} from 1 for 400)`,
     date: intelNotes.createdAt
-  }).from(intelNoteEntities).innerJoin(intelNotes, eq31(intelNoteEntities.noteId, intelNotes.id)).where(inArray7(intelNoteEntities.entityId, batch.map((e) => e.id))).orderBy(desc9(intelNotes.createdAt)).limit(batch.length * 3);
+  }).from(intelNoteEntities).innerJoin(intelNotes, eq31(intelNoteEntities.noteId, intelNotes.id)).where(inArray8(intelNoteEntities.entityId, batch.map((e) => e.id))).orderBy(desc9(intelNotes.createdAt)).limit(batch.length * 3);
   const byEntity = /* @__PURE__ */ new Map();
   for (const row of excerpts) {
     const list = byEntity.get(row.entityId) ?? [];
@@ -16391,7 +18024,7 @@ async function persistExtraction(noteId, result, opts = {}) {
   for (const entity of result.entities) {
     const entityId = entityIdMap.get(entity.name);
     if (!entityId) continue;
-    const [existingLink] = await db.select({ noteId: intelNoteEntities.noteId }).from(intelNoteEntities).where(and19(eq31(intelNoteEntities.noteId, noteId), eq31(intelNoteEntities.entityId, entityId))).limit(1);
+    const [existingLink] = await db.select({ noteId: intelNoteEntities.noteId }).from(intelNoteEntities).where(and20(eq31(intelNoteEntities.noteId, noteId), eq31(intelNoteEntities.entityId, entityId))).limit(1);
     if (existingLink) continue;
     await db.insert(intelNoteEntities).values({
       noteId,
@@ -16404,12 +18037,19 @@ async function persistExtraction(noteId, result, opts = {}) {
       excerpt: findExcerpt(noteText, entity.name)
     });
   }
-  for (const entityId of entityIdMap.values()) {
+  const entityIds = [...entityIdMap.values()];
+  if (entityIds.length) {
     await db.execute(sql26`
-      UPDATE intel_entities SET
-        corroboration = (SELECT count(DISTINCT note_id)::int FROM intel_note_entities WHERE entity_id = ${entityId}),
+      UPDATE intel_entities e SET
+        corroboration = c.n,
         last_corroborated_at = now()
-      WHERE id = ${entityId}
+      FROM (
+        SELECT entity_id, count(DISTINCT note_id)::int AS n
+        FROM intel_note_entities
+        WHERE entity_id = ANY(${sql26.param(entityIds)})
+        GROUP BY entity_id
+      ) c
+      WHERE e.id = c.entity_id
     `);
   }
   try {
@@ -16431,7 +18071,7 @@ async function persistExtraction(noteId, result, opts = {}) {
       manual: intelRelationships.manual,
       suppressed: intelRelationships.suppressed
     }).from(intelRelationships).where(
-      and19(
+      and20(
         eq31(intelRelationships.sourceEntityId, sourceId),
         eq31(intelRelationships.targetEntityId, targetId),
         eq31(intelRelationships.type, rel.type)
@@ -16469,7 +18109,7 @@ async function persistExtraction(noteId, result, opts = {}) {
   for (const event of result.timelineEvents) {
     const entityId = event.linkedEntity ? entityIdMap.get(event.linkedEntity) ?? null : null;
     const [duplicate] = await db.select({ id: intelTimelineEvents.id }).from(intelTimelineEvents).where(
-      and19(
+      and20(
         eq31(intelTimelineEvents.noteId, noteId),
         eq31(intelTimelineEvents.date, event.date),
         eq31(intelTimelineEvents.title, event.title)
@@ -16487,7 +18127,6 @@ async function persistExtraction(noteId, result, opts = {}) {
     });
     timelineEventCount++;
   }
-  const entityIds = [...entityIdMap.values()];
   updateEntitySummaries(entityIds).catch((err) => {
     console.error("[intel] Summary update failed:", err);
   });
@@ -16499,10 +18138,10 @@ var init_graph2 = __esm({
     "use strict";
     init_db();
     init_schema();
-    init_llm_client();
+    init_client();
     init_summary_salvage();
     init_workload_settings();
-    init_activity_context();
+    init_activity();
     init_staleness();
     init_match();
     MAX_NEW_TYPES_PER_EXTRACTION = 2;
@@ -16919,11 +18558,11 @@ var MAX_IMAGE_BYTES, MAX_AUDIO_BYTES, MAX_PDF_OCR_BYTES, IMAGE_PROMPT, PDF_OCR_P
 var init_describe = __esm({
   "src/lib/file-index/describe.ts"() {
     "use strict";
-    init_llm_client();
+    init_client();
     init_settings();
     init_capabilities();
     init_workload_settings();
-    init_activity_context();
+    init_activity();
     MAX_IMAGE_BYTES = 20 * 1024 * 1024;
     MAX_AUDIO_BYTES = 20 * 1024 * 1024;
     MAX_PDF_OCR_BYTES = 15 * 1024 * 1024;
@@ -16938,27 +18577,30 @@ async function ocrHandwriting(attachment) {
   const buffer = await readBuffer(attachment.diskPath);
   const base64 = buffer.toString("base64");
   const mimeType = attachment.mimeType || "image/jpeg";
-  const modelCtx = await resolveDefaultModel();
+  const modelCtx = await resolveVisionModel();
   const { client, model } = await getLLMClient(modelCtx);
-  const response = await client.chat.completions.create({
-    model,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "This is a photo of handwritten notes. Transcribe all the text you can see, preserving the structure as much as possible. If there are diagrams, describe them briefly. Return only the transcribed text."
-          },
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64}` }
-          }
-        ]
-      }
-    ]
-  });
+  const response = await withActivity(
+    "vision",
+    () => client.chat.completions.create({
+      model,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "This is a photo of handwritten notes. Transcribe all the text you can see, preserving the structure as much as possible. If there are diagrams, describe them briefly. Return only the transcribed text."
+            },
+            {
+              type: "image_url",
+              image_url: { url: `data:${mimeType};base64,${base64}` }
+            }
+          ]
+        }
+      ]
+    })
+  );
   return response.choices[0]?.message?.content ?? "";
 }
 async function transcribeAudio(attachment) {
@@ -17000,8 +18642,9 @@ function parseEmail(rawText) {
 var init_preprocess = __esm({
   "src/lib/jkai/intel/preprocess.ts"() {
     "use strict";
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_activity();
     init_storage();
   }
 });
@@ -17015,6 +18658,9 @@ async function findSimilarNotes(noteId, limit2 = 10) {
            n.embedding <=> (SELECT embedding FROM intel_notes WHERE id = ${noteId}) as distance
     FROM intel_notes n
     WHERE n.id != ${noteId}
+      -- Same reason as searchIntel: a note held at the mail gate is embedded so
+      -- the queue can cluster it, not so it can be recalled as evidence.
+      AND n.graph_state = 'admitted'
       AND n.embedding IS NOT NULL
       AND (SELECT embedding FROM intel_notes WHERE id = ${noteId}) IS NOT NULL
     ORDER BY distance ASC
@@ -17049,18 +18695,20 @@ async function findSimilarEntities(noteId, limit2 = 10) {
 }
 async function evaluateConnections(noteContent, similarNotes, similarEntities) {
   if (similarNotes.length === 0 && similarEntities.length === 0) return [];
-  const modelCtx = await resolveDefaultModel();
+  const modelCtx = currentSessionModel() ?? await resolveIntelAnalysisModel();
   const { client, model } = await getLLMClient(modelCtx);
   const notesContext = similarNotes.map((n) => `- "${n.title ?? "Untitled"}" (similarity: ${(1 - n.distance).toFixed(2)}): ${n.snippet}`).join("\n");
   const entitiesContext = similarEntities.map((e) => `- ${e.name} (${e.typeName}, similarity: ${(1 - e.distance).toFixed(2)}): ${e.summary ?? "no summary"}`).join("\n");
-  const response = await client.chat.completions.create({
-    model,
-    temperature: 0.3,
-    max_tokens: 1500,
-    messages: [
-      {
-        role: "system",
-        content: `You evaluate whether a new note has genuine, significant connections to existing knowledge.
+  const response = await withActivity(
+    "intel-analysis",
+    () => client.chat.completions.create({
+      model,
+      temperature: 0.3,
+      max_tokens: 1500,
+      messages: [
+        {
+          role: "system",
+          content: `You evaluate whether a new note has genuine, significant connections to existing knowledge.
 
 Return ONLY valid JSON: an array of connections found. Each connection:
 {
@@ -17078,10 +18726,10 @@ Rules:
 - "low" significance: minor reinforcements of known information
 - Return empty array [] if no genuine connections found
 - Be conservative \u2014 false positives waste the user's attention`
-      },
-      {
-        role: "user",
-        content: `NEW NOTE:
+        },
+        {
+          role: "user",
+          content: `NEW NOTE:
 ${noteContent.slice(0, 2e3)}
 
 SIMILAR EXISTING NOTES:
@@ -17091,9 +18739,10 @@ RELATED ENTITIES:
 ${entitiesContext || "(none)"}
 
 What genuine connections exist between the new note and existing knowledge?`
-      }
-    ]
-  });
+        }
+      ]
+    })
+  );
   const raw = response.choices[0]?.message?.content ?? "[]";
   const cleaned = raw.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "").trim();
   try {
@@ -17148,16 +18797,18 @@ var init_recall = __esm({
     "use strict";
     init_db();
     init_schema();
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_chat();
+    init_activity();
   }
 });
 
 // src/lib/jkai/intel/notify.ts
-import { eq as eq33, and as and20 } from "drizzle-orm";
+import { eq as eq33, and as and21 } from "drizzle-orm";
 async function pushHighAlerts(noteId) {
   const alerts = await db.select().from(intelAlerts).where(
-    and20(
+    and21(
       eq33(intelAlerts.noteId, noteId),
       eq33(intelAlerts.significance, "high"),
       eq33(intelAlerts.delivered, false)
@@ -17214,7 +18865,7 @@ __export(ingest_exports, {
   deleteNoteCascade: () => deleteNoteCascade,
   processNote: () => processNote
 });
-import { eq as eq34, ne as ne3, and as and21, inArray as inArray8 } from "drizzle-orm";
+import { eq as eq34, ne as ne3, and as and22, inArray as inArray9 } from "drizzle-orm";
 async function createNote(input) {
   const [note] = await db.insert(intelNotes).values({
     title: input.title ?? null,
@@ -17277,8 +18928,8 @@ async function deleteNoteCascade(noteId) {
     let orphanIds = candidateIds;
     if (candidateIds.length > 0) {
       const linkedElsewhere = await tx.select({ entityId: intelNoteEntities.entityId }).from(intelNoteEntities).where(
-        and21(
-          inArray8(intelNoteEntities.entityId, candidateIds),
+        and22(
+          inArray9(intelNoteEntities.entityId, candidateIds),
           ne3(intelNoteEntities.noteId, noteId)
         )
       );
@@ -17291,7 +18942,7 @@ async function deleteNoteCascade(noteId) {
     for (let depth = 0; depth < 8; depth += 1) {
       const frontier = [...doomed];
       if (frontier.length === 0) break;
-      const aliases = await tx.select({ id: intelEntities.id }).from(intelEntities).where(inArray8(intelEntities.mergedIntoId, frontier));
+      const aliases = await tx.select({ id: intelEntities.id }).from(intelEntities).where(inArray9(intelEntities.mergedIntoId, frontier));
       const added = aliases.map((a) => a.id).filter((id) => !doomed.has(id));
       if (added.length === 0) break;
       for (const id of added) doomed.add(id);
@@ -17301,12 +18952,12 @@ async function deleteNoteCascade(noteId) {
     let removedDossierItems = 0;
     let removedInsights = 0;
     if (doomedIds.length > 0) {
-      const timelineResult = await tx.delete(intelTimelineEvents).where(inArray8(intelTimelineEvents.entityId, doomedIds));
+      const timelineResult = await tx.delete(intelTimelineEvents).where(inArray9(intelTimelineEvents.entityId, doomedIds));
       removedTimelineEvents = rowsAffected(timelineResult);
       const dossierResult = await tx.delete(intelDossierItems).where(
-        and21(
+        and22(
           eq34(intelDossierItems.kind, "entity"),
-          inArray8(intelDossierItems.refId, doomedIds)
+          inArray9(intelDossierItems.refId, doomedIds)
         )
       );
       removedDossierItems = rowsAffected(dossierResult);
@@ -17314,12 +18965,12 @@ async function deleteNoteCascade(noteId) {
       const candidateInsights = await tx.select({ id: intelInsights.id, entityIds: intelInsights.entityIds }).from(intelInsights);
       const staleInsightIds = candidateInsights.filter((row) => (row.entityIds ?? []).some((id) => doomedSet.has(id))).map((row) => row.id);
       if (staleInsightIds.length > 0) {
-        await tx.delete(intelInsights).where(inArray8(intelInsights.id, staleInsightIds));
+        await tx.delete(intelInsights).where(inArray9(intelInsights.id, staleInsightIds));
       }
       removedInsights = staleInsightIds.length;
     }
     if (doomedIds.length > 0) {
-      await tx.delete(intelEntities).where(inArray8(intelEntities.id, doomedIds));
+      await tx.delete(intelEntities).where(inArray9(intelEntities.id, doomedIds));
     }
     return {
       deleted: true,
@@ -17352,10 +19003,14 @@ var init_ingest = __esm({
 // src/lib/jkai/intel/analytics/model.ts
 var model_exports = {};
 __export(model_exports, {
+  PLACE_TYPE: () => PLACE_TYPE,
+  SPATIAL_RELATIONS: () => SPATIAL_RELATIONS,
   buildIndex: () => buildIndex,
   components: () => components,
   hopNeighbourhood: () => hopNeighbourhood,
-  pairKey: () => pairKey
+  isCoLocationEdge: () => isCoLocationEdge,
+  pairKey: () => pairKey,
+  resolveEntitySources: () => resolveEntitySources
 });
 function pairKey(a, b) {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -17418,9 +19073,37 @@ function components(index2) {
   }
   return out.sort((a, b) => b.length - a.length);
 }
+function resolveEntitySources(noteSources, firstSeenSource) {
+  if (noteSources.length > 0) return [...noteSources];
+  return firstSeenSource ? [firstSeenSource] : [];
+}
+function isCoLocationEdge(edge, byId) {
+  if (!SPATIAL_RELATIONS.has(edge.type)) return false;
+  return byId.get(edge.source)?.typeName === PLACE_TYPE || byId.get(edge.target)?.typeName === PLACE_TYPE;
+}
+var PLACE_TYPE, SPATIAL_RELATIONS;
 var init_model = __esm({
   "src/lib/jkai/intel/analytics/model.ts"() {
     "use strict";
+    PLACE_TYPE = "location";
+    SPATIAL_RELATIONS = /* @__PURE__ */ new Set([
+      "located_in",
+      "located_at",
+      "based_in",
+      "resides_in",
+      "lives_in",
+      "registered_in",
+      "is_in",
+      "has_address",
+      "has_postcode",
+      "near",
+      "located_near",
+      "nearby",
+      "distance",
+      "visited",
+      "present_in",
+      "present_at"
+    ]);
   }
 });
 
@@ -17583,6 +19266,11 @@ var init_centrality = __esm({
 });
 
 // src/lib/jkai/intel/analytics/community.ts
+function pairIsSubstantive(index2, a, b) {
+  const edges = index2.edgesBetween.get(pairKey(a, b));
+  if (!edges || edges.length === 0) return true;
+  return edges.some((e) => !isCoLocationEdge(e, index2.byId));
+}
 function toWeighted(index2) {
   const order = [...index2.ids];
   const idx = new Map(order.map((id, i) => [id, i]));
@@ -17598,6 +19286,7 @@ function toWeighted(index2) {
     for (const nb of index2.neighbours.get(id) ?? []) {
       const j = idx.get(nb);
       if (j === void 0 || j === i) continue;
+      if (!pairIsSubstantive(index2, id, nb)) continue;
       adj.get(i).set(j, 1);
       if (i < j) totalWeight += 1;
     }
@@ -17755,6 +19444,7 @@ var DOMINANCE_CAP, RESOLUTION_SWEEP, MIN_MEANINGFUL_SIZE;
 var init_community = __esm({
   "src/lib/jkai/intel/analytics/community.ts"() {
     "use strict";
+    init_model();
     DOMINANCE_CAP = 0.08;
     RESOLUTION_SWEEP = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
     MIN_MEANINGFUL_SIZE = 5;
@@ -17940,9 +19630,10 @@ async function loadSnapshot(includeArtefacts) {
     const id = String(r.id);
     const created = r.created_at ? new Date(String(r.created_at)).getTime() : 0;
     const updated = r.updated_at ? new Date(String(r.updated_at)).getTime() : created;
-    const firstSeenSource = r.first_seen_source == null ? null : String(r.first_seen_source);
-    const sources3 = toStringArray(r.sources);
-    if (firstSeenSource && !sources3.includes(firstSeenSource)) sources3.push(firstSeenSource);
+    const sources3 = resolveEntitySources(
+      toStringArray(r.sources),
+      r.first_seen_source == null ? null : String(r.first_seen_source)
+    );
     const firstSeenAt = r.first_seen_at ? new Date(String(r.first_seen_at)).getTime() : 0;
     return {
       id,
@@ -18107,14 +19798,14 @@ var init_load = __esm({
 });
 
 // src/lib/jkai/intel/auto-extract.ts
-import { and as and22, eq as eq35, isNotNull as isNotNull2, sql as sql29 } from "drizzle-orm";
+import { and as and23, eq as eq35, isNotNull as isNotNull3, sql as sql29 } from "drizzle-orm";
 function isAutoExtractEnabled() {
   if (process.env.JKAI_BUILDER_PROCESS === "1") return false;
   return process.env.INTEL_AUTO_EXTRACT !== "0";
 }
 async function findDerivedNote(kind, refId) {
-  const [row] = await db.select({ id: intelNotes.id, metadata: intelNotes.metadata }).from(intelNotes).where(
-    and22(
+  const [row] = await db.select({ id: intelNotes.id, metadata: intelNotes.metadata, graphState: intelNotes.graphState }).from(intelNotes).where(
+    and23(
       sql29`${intelNotes.metadata}->>'autoKind' = ${kind}`,
       sql29`${intelNotes.metadata}->>'refId' = ${refId}`
     )
@@ -18154,6 +19845,9 @@ async function extractIntoIntel(input) {
       const prevHash = existing.metadata?.contentHash;
       if (prevHash === input.contentHash) return { status: "unchanged", noteId: existing.id };
     }
+    const priorState = existing?.graphState ?? null;
+    if (priorState === "rejected") return { status: "skipped", noteId: existing?.id };
+    const held = !!input.hold && priorState !== "admitted";
     const clipped = text4.length > MAX_EXTRACT_CHARS ? text4.slice(0, MAX_EXTRACT_CHARS) : text4;
     const metadata = {
       ...input.metadata ?? {},
@@ -18171,7 +19865,8 @@ async function extractIntoIntel(input) {
         title: input.title,
         rawContent: clipped,
         processedContent: clipped,
-        status: "processing",
+        status: held ? "held" : "processing",
+        ...held ? { graphState: "pending" } : {},
         metadata,
         categories,
         // Also set on update, so notes written before a source override
@@ -18187,12 +19882,23 @@ async function extractIntoIntel(input) {
         processedContent: clipped,
         source: input.source ?? input.kind,
         format: "summary",
-        status: "processing",
+        status: held ? "held" : "processing",
+        graphState: held ? "pending" : "admitted",
         metadata,
         categories,
         observedAt: input.observedAt
       }).returning({ id: intelNotes.id });
       noteId = created.id;
+    }
+    if (held) {
+      await embedNote(noteId).catch(
+        (err) => (
+          // A note that could not be embedded is still a note. It clusters by
+          // sender and subject like any other; it just will not match on topic.
+          console.warn(`[intel:auto] could not embed held note ${noteId}:`, err instanceof Error ? err.message : err)
+        )
+      );
+      return { status: "held", noteId };
     }
     let extraction;
     try {
@@ -18209,9 +19915,20 @@ async function extractIntoIntel(input) {
     await db.update(intelNotes).set({
       title: input.title || extraction.summary.slice(0, 100) || input.kind,
       status: "processed",
+      // Extraction happened, so by definition this note is in the graph. Set
+      // here rather than by the admission path alone, because the state has to
+      // describe what is TRUE of the row, not what somebody intended — a note
+      // left at 'pending' with entities hanging off it would make the purge
+      // and the queue disagree about the same thread.
+      graphState: "admitted",
       updatedAt: /* @__PURE__ */ new Date()
     }).where(eq35(intelNotes.id, noteId));
-    await embedNote(noteId);
+    await embedNote(noteId).catch(
+      (err) => console.warn(
+        `[intel:auto] ${input.kind} ${input.refId} extracted but not embedded:`,
+        err instanceof Error ? err.message : err
+      )
+    );
     console.log(
       `[intel:auto] ${input.kind} ${input.refId} \u2192 ${stats.entityCount} entities, ${stats.relationshipCount} relationships`
     );
@@ -18233,7 +19950,7 @@ async function deleteDerivedIntel(kind, refId) {
   if (!refId) return result;
   try {
     const notes = await db.select({ id: intelNotes.id }).from(intelNotes).where(
-      and22(
+      and23(
         sql29`${intelNotes.metadata}->>'autoKind' = ${kind}`,
         sql29`${intelNotes.metadata}->>'refId' = ${refId}`
       )
@@ -18279,7 +19996,7 @@ var init_auto_extract = __esm({
 
 // src/lib/deepdive/intel-bridge.ts
 import { createHash } from "crypto";
-import { eq as eq36, inArray as inArray9 } from "drizzle-orm";
+import { eq as eq36, inArray as inArray10 } from "drizzle-orm";
 function isOpaqueId(value) {
   return UUID_RE.test(value.trim());
 }
@@ -18342,7 +20059,7 @@ function collectFactIds(report) {
 async function loadFactText(report) {
   const ids = collectFactIds(report).filter(isOpaqueId);
   if (!ids.length) return /* @__PURE__ */ new Map();
-  const rows = await db.select({ id: facts.id, content: facts.content }).from(facts).where(inArray9(facts.id, ids));
+  const rows = await db.select({ id: facts.id, content: facts.content }).from(facts).where(inArray10(facts.id, ids));
   return new Map(rows.map((r) => [r.id, r.content]));
 }
 async function loadStructure(sessionId) {
@@ -18415,9 +20132,6 @@ function coerceDepth(value) {
   if (isDepth(key)) return key;
   return LEGACY_DEPTHS[key] ?? "brief";
 }
-function fastModel() {
-  return env.RESEARCH_FAST_MODEL || DEFAULT_FAST_MODEL;
-}
 function depthPreset(depth) {
   const d = coerceDepth(depth);
   switch (d) {
@@ -18432,7 +20146,7 @@ function depthPreset(depth) {
         phases: [],
         budgetMs: 3e4,
         reserves: { synthesis: 25e3 },
-        pinnedModel: fastModel(),
+        modelRole: "research-fast",
         maxSources: 0,
         config: {
           maxSources: 0,
@@ -18453,7 +20167,7 @@ function depthPreset(depth) {
         phases: [],
         budgetMs: 9e4,
         reserves: { synthesis: 25e3 },
-        pinnedModel: fastModel(),
+        modelRole: "research-fast",
         maxSources: 12,
         config: {
           maxSources: 12,
@@ -18474,7 +20188,7 @@ function depthPreset(depth) {
         phases: [],
         budgetMs: BRIEF_BUDGET_MS,
         reserves: { synthesis: 25e3 },
-        pinnedModel: fastModel(),
+        modelRole: "research-fast",
         maxSources: 15,
         config: {
           maxSources: 15,
@@ -18496,7 +20210,7 @@ function depthPreset(depth) {
         phases: ["phase1", "phase2", "phase3", "post"],
         budgetMs: null,
         reserves: {},
-        pinnedModel: null,
+        modelRole: "research-deep",
         maxSources: 40,
         config: {
           maxSources: 40,
@@ -18513,11 +20227,11 @@ function depthPreset(depth) {
       };
   }
 }
-var RESEARCH_DEPTHS, BRIEF_BUDGET_MS, SYNTHESIS_MAX_TOKENS, LEGACY_DEPTHS, DEFAULT_FAST_MODEL;
+var RESEARCH_DEPTHS, BRIEF_BUDGET_MS, SYNTHESIS_MAX_TOKENS, LEGACY_DEPTHS;
 var init_depth = __esm({
   "src/lib/deepdive/depth.ts"() {
     "use strict";
-    init_env_shim();
+    init_default_models();
     RESEARCH_DEPTHS = ["instant", "scan", "brief", "investigation"];
     BRIEF_BUDGET_MS = 11e4;
     SYNTHESIS_MAX_TOKENS = 4e3;
@@ -18530,7 +20244,6 @@ var init_depth = __esm({
       deep: "investigation",
       full: "investigation"
     };
-    DEFAULT_FAST_MODEL = "google/gemini-3.5-flash";
   }
 });
 
@@ -18580,7 +20293,7 @@ var init_budget2 = __esm({
 });
 
 // src/lib/deepdive/grounding.server.ts
-import { and as and23, eq as eq37, inArray as inArray10 } from "drizzle-orm";
+import { and as and24, eq as eq37, inArray as inArray11 } from "drizzle-orm";
 async function resolveCitationUrl(url) {
   if (!isRedirectCitation(url)) return url;
   try {
@@ -18629,7 +20342,7 @@ async function recordCitations(sessionId, citations) {
   for (const c4 of resolved) if (!byUrl.has(c4.url)) byUrl.set(c4.url, c4);
   const urls = [...byUrl.keys()];
   const existing = new Set(
-    (await db.select({ url: sources.url }).from(sources).where(and23(eq37(sources.sessionId, sessionId), inArray10(sources.url, urls)))).map((r) => r.url)
+    (await db.select({ url: sources.url }).from(sources).where(and24(eq37(sources.sessionId, sessionId), inArray11(sources.url, urls)))).map((r) => r.url)
   );
   const rows = urls.filter((u) => !existing.has(u)).map((url) => {
     const domain = hostOf(url);
@@ -18828,6 +20541,7 @@ function streamHandlers(sessionId) {
 }
 async function runInstant(sessionId, session2, budget) {
   const preset = depthPreset("instant");
+  const model = (await resolveResearchFastModel()).modelId;
   const goals = session2.goals ?? [];
   const grounding = coerceGrounding(session2.grounding);
   const question = `**Question:** ${session2.topic}` + (goals.length ? `
@@ -18835,7 +20549,7 @@ async function runInstant(sessionId, session2, budget) {
   if (!isGrounded(grounding)) {
     emitLog2(sessionId, "\u{1F4AC}", "Answering from model knowledge \u2014 no sources consulted.");
     const { text: text5 } = await streamCompletion(UNGROUNDED_RULES, question, {
-      model: preset.pinnedModel ?? void 0,
+      model,
       maxTokens: SYNTHESIS_MAX_TOKENS,
       signal: budget.signalFor("synthesis"),
       ...streamHandlers(sessionId)
@@ -18857,7 +20571,7 @@ async function runInstant(sessionId, session2, budget) {
   );
   const { text: text4, citations } = await groundedCompletion(GROUNDED_RULES, question, {
     mode: grounding,
-    model: preset.pinnedModel ?? void 0,
+    model,
     maxTokens: SYNTHESIS_MAX_TOKENS,
     signal: budget.signalFor("synthesis"),
     onToken: streamHandlers(sessionId).onToken
@@ -18883,7 +20597,7 @@ async function runInstant(sessionId, session2, budget) {
 }
 async function runScan(sessionId, session2, budget) {
   const preset = depthPreset("scan");
-  const model = preset.pinnedModel ?? void 0;
+  const model = (await resolveResearchFastModel()).modelId;
   const scope = coerceScope(session2.scope);
   const goals = session2.goals ?? [];
   const topic = session2.topic;
@@ -19044,6 +20758,7 @@ var init_fast = __esm({
     init_desk_events();
     init_scope();
     init_depth();
+    init_workload_settings();
     SEARCH_CEILING_MS = 15e3;
     QUERY_GEN_CEILING_MS = 1e4;
     UNGROUNDED_RULES = `You are answering from your own knowledge. No search has been run and you have no sources.
@@ -19066,7 +20781,7 @@ Rules:
 });
 
 // src/lib/deepdive/brief.ts
-import { eq as eq39, and as and24, sql as sql30 } from "drizzle-orm";
+import { eq as eq39, and as and25, sql as sql30 } from "drizzle-orm";
 function getDomain3(url) {
   try {
     return new URL(url).hostname;
@@ -19076,7 +20791,7 @@ function getDomain3(url) {
 }
 async function runBrief(sessionId, session2, budget) {
   const preset = depthPreset("brief");
-  const model = preset.pinnedModel ?? void 0;
+  const model = (await resolveResearchFastModel()).modelId;
   const scope = coerceScope(session2.scope);
   const goals = session2.goals ?? [];
   const topic = session2.topic;
@@ -19312,7 +21027,7 @@ Write the brief with inline [N] citations.`,
     for (const f of extracted) {
       if (!f?.content || f.content.length < 10) continue;
       const dupe = await db.select({ id: facts.id }).from(facts).where(
-        and24(eq39(facts.sessionId, sessionId), sql30`lower(trim(${facts.content})) = ${f.content.trim().toLowerCase()}`)
+        and25(eq39(facts.sessionId, sessionId), sql30`lower(trim(${facts.content})) = ${f.content.trim().toLowerCase()}`)
       ).limit(1);
       if (dupe.length) continue;
       const extractedConf = Math.max(0, Math.min(1, f.confidence ?? 0.5));
@@ -19350,7 +21065,7 @@ Write the brief with inline [N] citations.`,
       if (!e?.name) continue;
       const normalised = e.name.toLowerCase().trim();
       const existing = await db.select({ id: entities.id }).from(entities).where(
-        and24(eq39(entities.sessionId, sessionId), sql30`lower(trim(${entities.name})) = ${normalised}`)
+        and25(eq39(entities.sessionId, sessionId), sql30`lower(trim(${entities.name})) = ${normalised}`)
       ).limit(1);
       if (existing.length) continue;
       const [row] = await db.insert(entities).values({
@@ -19384,6 +21099,7 @@ var init_brief = __esm({
     init_concurrency();
     init_scope();
     init_depth();
+    init_workload_settings();
     MAX_QUERIES = 8;
     MAX_ANALYSED = 8;
     EXTRACT_CONCURRENCY = 8;
@@ -19439,7 +21155,7 @@ __export(worker_exports, {
   throwIfStopped: () => throwIfStopped
 });
 import { EventEmitter as EventEmitter5 } from "events";
-import { and as and25, eq as eq40 } from "drizzle-orm";
+import { and as and26, eq as eq40 } from "drizzle-orm";
 function getEmitter(sessionId) {
   let emitter4 = activeEmitters.get(sessionId);
   if (!emitter4) {
@@ -19530,7 +21246,7 @@ async function finish(sessionId, startTime, priorMs = 0) {
   emitLog2(sessionId, "\u2139\uFE0F", `Research complete in ${Math.round(durationMs / 1e3)}s.`);
 }
 async function pauseRun(sessionId, phase, spentMs = 0) {
-  await db.update(researchLeads).set({ status: "queued", startedAt: null }).where(and25(eq40(researchLeads.sessionId, sessionId), eq40(researchLeads.status, "running")));
+  await db.update(researchLeads).set({ status: "queued", startedAt: null }).where(and26(eq40(researchLeads.sessionId, sessionId), eq40(researchLeads.status, "running")));
   await db.update(researchSessions).set({
     status: "paused",
     resumeFrom: phase,
@@ -19600,7 +21316,7 @@ async function runResearchPhases(sessionId) {
       const run = preset.runner === "instant" ? runInstant : preset.runner === "scan" ? runScan : runBrief;
       await updateSessionStatus(sessionId, "phase1");
       emitStatus(sessionId, "phase1");
-      await run(sessionId, session2, budget);
+      await withActivity(preset.modelRole, () => run(sessionId, session2, budget));
       flushArtefacts(sessionId);
       await finish(sessionId, startTime, priorMs);
       return;
@@ -19624,7 +21340,7 @@ async function runResearchPhases(sessionId) {
       emitStatus(sessionId, "phase1");
       emitLog2(sessionId, "\u{1F50D}", "Starting Phase 1: Lead Generation");
       try {
-        await runPhase1(sessionId, session2, isTimeUp2);
+        await withActivity("research-deep", () => runPhase1(sessionId, session2, isTimeUp2));
       } catch (err) {
         if (err?.name === "AbortError" || shouldStop2(sessionId) || shouldPause(sessionId)) {
           emitLog2(sessionId, "\u2139\uFE0F", "Phase 1 stopped.");
@@ -19646,7 +21362,7 @@ async function runResearchPhases(sessionId) {
       emitStatus(sessionId, "phase2");
       emitLog2(sessionId, "\u{1F50D}", "Starting Phase 2: Deep Research");
       try {
-        await runPhase2(sessionId, session2, isTimeUp2);
+        await withActivity("research-deep", () => runPhase2(sessionId, session2, isTimeUp2));
       } catch (err) {
         if (err?.name === "AbortError" || shouldStop2(sessionId) || shouldPause(sessionId)) {
           emitLog2(sessionId, "\u2139\uFE0F", "Phase 2 stopped.");
@@ -19668,7 +21384,7 @@ async function runResearchPhases(sessionId) {
       emitStatus(sessionId, "phase3");
       emitLog2(sessionId, "\u{1F50D}", "Starting Phase 3: Red Teaming");
       try {
-        await runPhase3(sessionId, session2, isTimeUp2);
+        await withActivity("research-deep", () => runPhase3(sessionId, session2, isTimeUp2));
       } catch (err) {
         if (err?.name === "AbortError" || shouldStop2(sessionId) || shouldPause(sessionId)) {
           emitLog2(sessionId, "\u2139\uFE0F", "Phase 3 stopped.");
@@ -19685,7 +21401,7 @@ async function runResearchPhases(sessionId) {
     emitStatus(sessionId, "post_processing");
     emitLog2(sessionId, "\u2139\uFE0F", "Starting post-processing");
     try {
-      await runPostProcessing(sessionId, session2, isTimeUp2);
+      await withActivity("research-deep", () => runPostProcessing(sessionId, session2, isTimeUp2));
     } catch (err) {
       console.error("[deepdive] Post-processing error:", err);
       emitLog2(sessionId, "\u26A0\uFE0F", `Post-processing error: ${err.message ?? "unknown"}`);
@@ -19727,11 +21443,12 @@ var init_worker = __esm({
     init_intel_bridge();
     init_desk_events();
     init_depth();
+    init_activity();
     init_budget2();
     init_fast();
     init_brief();
     init_phase_order();
-    init_meter();
+    init_research_meter();
     activeEmitters = /* @__PURE__ */ new Map();
     stopSignals = /* @__PURE__ */ new Map();
     skipSignals = /* @__PURE__ */ new Map();
@@ -19756,7 +21473,7 @@ __export(research_brief_exports, {
   isBriefUsable: () => isBriefUsable,
   mapHitsToFacts: () => mapHitsToFacts
 });
-import { eq as eq41, and as and26, ne as ne4, inArray as inArray11 } from "drizzle-orm";
+import { eq as eq41, and as and27, ne as ne4, inArray as inArray12 } from "drizzle-orm";
 function isBriefUsable(brief) {
   if (brief.facts.length < MIN_FACTS) {
     return {
@@ -19915,7 +21632,7 @@ async function contestedPairs(selected, cap = 8) {
       refutes: facts.refutesFactId,
       counterClaim: facts.content,
       counterUrl: sources.url
-    }).from(facts).leftJoin(sources, eq41(sources.id, facts.sourceId)).where(inArray11(facts.refutesFactId, ids)).limit(cap);
+    }).from(facts).leftJoin(sources, eq41(sources.id, facts.sourceId)).where(inArray12(facts.refutesFactId, ids)).limit(cap);
     const out = [];
     for (const r of rows) {
       const original = r.refutes ? byId.get(r.refutes) : void 0;
@@ -20057,7 +21774,7 @@ async function buildResearchBrief(buildId, challenge, mode = "extend") {
     url: sources.url,
     title: sources.title
   }).from(facts).innerJoin(sources, eq41(facts.sourceId, sources.id)).where(
-    and26(
+    and27(
       eq41(facts.sessionId, session2.id),
       // A refuted or discarded claim must never reach a published explainer
       // as sourced truth — the worst failure mode this feature has.
@@ -20087,21 +21804,24 @@ async function synthesiseBrief(buildId, challenge, orderedFacts, sessionId) {
   }));
   const factsForPrompt = orderedFacts.map((f, i) => `${i + 1}. ${f.content}
    source: ${f.url}`).join("\n");
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveNotebookModel();
   const { client, model } = await getLLMClient(ctx);
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: CONVERT_PROMPT },
-      { role: "user", content: `Topic: ${challenge}
+  const completion = await withActivity(
+    "notebook",
+    () => client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: CONVERT_PROMPT },
+        { role: "user", content: `Topic: ${challenge}
 
 FACTS:
 ${factsForPrompt}`.slice(0, 12e4) }
-    ],
-    temperature: 0.3,
-    max_tokens: 8192,
-    response_format: { type: "json_object" }
-  });
+      ],
+      temperature: 0.3,
+      max_tokens: 8192,
+      response_format: { type: "json_object" }
+    })
+  );
   if (completion.usage) {
     const [buildRow] = await db.select({ priceSnapshot: jkaiBuilds.priceSnapshot }).from(jkaiBuilds).where(eq41(jkaiBuilds.id, buildId));
     const priceSnapshot = buildRow?.priceSnapshot ?? null;
@@ -20150,8 +21870,9 @@ var init_research_brief = __esm({
     "use strict";
     init_db();
     init_schema();
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_activity();
     init_log_emitter();
     init_usage();
     RESEARCH_DEADLINE_MS = 90 * 60 * 1e3;
@@ -20408,6 +22129,16 @@ function gateStageIn(text4) {
   if (!m) return null;
   return `${m[1].replace(/^gate:/, "gate:")}-failed`;
 }
+function assertionMatcherIn(rawText) {
+  const t = stripAnsi(rawText);
+  const i = t.search(/\bexpected\b/i);
+  if (i === -1) return null;
+  const window = t.slice(i, i + 400);
+  for (const [name, re] of MATCHERS) {
+    if (re.test(window)) return name;
+  }
+  return null;
+}
 function fingerprintOf(rawText, command = "") {
   const t = stripAnsi(rawText);
   if (!t.trim()) return null;
@@ -20417,7 +22148,13 @@ function fingerprintOf(rawText, command = "") {
   const svelte = t.match(/\b(a11y[_-][a-z_]+|svelte\/[a-z-]+)\b/);
   if (svelte) return `svelte-check:${svelte[1].replace(/-/g, "_")}`;
   const named = t.match(/\b(\w*(?:Error|Exception))\b(?!\s*:\s*$)/);
-  if (named && named[1] !== "Error") return `${gate}:${named[1]}`;
+  if (named && named[1] !== "Error") {
+    if (named[1] === "AssertionError") {
+      const m = assertionMatcherIn(t);
+      return m ? `${gate}:AssertionError:${m}` : `${gate}:AssertionError`;
+    }
+    return `${gate}:${named[1]}`;
+  }
   const mod = t.match(/Cannot find (?:module|package) ['"]([^'"]+)['"]/);
   if (mod) return `${gate}:missing-module:${mod[1].split("/").slice(0, 2).join("/")}`;
   const failFile = t.match(/FAIL\s+(\S+\.(?:test|spec)\.[jt]sx?)/);
@@ -20442,7 +22179,14 @@ function fingerprintsIn(rawText, command = "") {
     out.add(`${gateOf(command)}:missing-module:${m[1].split("/").slice(0, 2).join("/")}`);
   }
   for (const m of t.matchAll(/\b(\w+(?:Error|Exception))\b/g)) {
-    if (m[1] !== "Error") out.add(`${gateOf(command)}:${m[1]}`);
+    if (m[1] === "Error") continue;
+    if (m[1] === "AssertionError") {
+      const a = assertionMatcherIn(t);
+      if (a) out.add(`${gateOf(command)}:AssertionError:${a}`);
+      out.add(`${gateOf(command)}:AssertionError`);
+      continue;
+    }
+    out.add(`${gateOf(command)}:${m[1]}`);
   }
   if (!out.size) {
     const single = fingerprintOf(rawText, command);
@@ -20452,12 +22196,38 @@ function fingerprintsIn(rawText, command = "") {
   if (stage) out.add(stage);
   return [...out].slice(0, 8);
 }
-var ANSI, ORPHAN_SGR;
+var ANSI, ORPHAN_SGR, MATCHERS;
 var init_fingerprint = __esm({
   "src/lib/codegraph/fingerprint.ts"() {
     "use strict";
     ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
     ORPHAN_SGR = /\[[0-9;]{1,11}m/g;
+    MATCHERS = [
+      // Specific before generic. Do not reorder without re-reading the note above.
+      ["toHaveBeenCalledTimes", /to be called \d+ times?/i],
+      ["toHaveBeenCalledWith", /to be called with/i],
+      ["toHaveBeenCalled", /to be called\b/i],
+      ["toBeGreaterThan", /to be greater than(?: or equal)?/i],
+      ["toBeLessThan", /to be less than(?: or equal)?/i],
+      ["toBeCloseTo", /to be close to/i],
+      ["toBeTruthy", /to be truthy/i],
+      ["toBeFalsy", /to be falsy/i],
+      ["toBeDefined", /to be defined/i],
+      ["toBeUndefined", /to be undefined\b/i],
+      ["toBeNull", /to be null\b/i],
+      ["toBeInstanceOf", /to be an instance of/i],
+      ["toEqual", /to (?:deeply |strictly )?equal/i],
+      ["toContain", /to contain/i],
+      ["toHaveLength", /to have (?:a )?length/i],
+      ["toHaveProperty", /to have property/i],
+      ["toMatchObject", /to match object/i],
+      ["toMatch", /to match/i],
+      ["toThrow", /to throw/i],
+      ["rejects", /resolved instead of rejected|promise (?:resolved|rejected)/i],
+      // Generic last: `// Object.is equality` is vitest's own marker for toBe, and
+      // a bare "to be" is what remains once every sharper phrasing has declined.
+      ["toBe", /Object\.is equality|to be\b/i]
+    ];
   }
 });
 
@@ -20479,6 +22249,10 @@ function recencyWeight(observedAt, now = Date.now()) {
   const decayed = Math.pow(0.5, days / HALF_LIFE_DAYS2);
   return RECENCY_FLOOR2 + (1 - RECENCY_FLOOR2) * decayed;
 }
+function verdictWeight(verdict) {
+  if (!verdict) return 1;
+  return VERDICT_WEIGHT[verdict] ?? 1;
+}
 function relevanceOf(e, now = Date.now()) {
   const recency = recencyWeight(e.observedAt, now);
   const outcome = wilsonLowerBound(e.helpful, e.unhelpful);
@@ -20488,7 +22262,7 @@ function relevanceOf(e, now = Date.now()) {
   const belief = (1 - confidence) * NEUTRAL_PRIOR + confidence * outcome;
   const recencyInfluence = 1 - confidence;
   const effectiveRecency = 1 - recencyInfluence * (1 - recency);
-  const score = belief * effectiveRecency * liveness;
+  const score = belief * effectiveRecency * liveness * verdictWeight(e.verdict);
   let because;
   if (observations === 0) {
     because = e.served > 0 ? `served ${e.served}\xD7 but no outcome resolved yet \u2014 ranked on recency` : "never served \u2014 ranked on recency alone";
@@ -20523,15 +22297,17 @@ function serveIsAttributable(serve) {
   return serve.outcome === "served" && serve.servedFor.length > 0;
 }
 function resolveServe(input) {
-  const { servedFor, nextFingerprints, nextGatePassed } = input;
-  if (nextGatePassed === true) return "helpful";
+  const { outcome, servedFor, nextFingerprints, nextGatePassed } = input;
+  if (!serveIsAttributable({ outcome, servedFor })) {
+    return outcome === "served" ? "unattributable" : "unresolved";
+  }
   if (nextFingerprints === null || nextGatePassed === null) return "unresolved";
-  if (!servedFor.length) return "unresolved";
+  if (nextGatePassed === true) return "helpful";
   const recurred = servedFor.some((f) => nextFingerprints.includes(f));
   if (recurred) return "unhelpful";
   return "helpful";
 }
-var NEUTRAL_PRIOR, OUTCOME_FLOOR, RECENCY_FLOOR2, HALF_LIFE_DAYS2, STALE_WEIGHT, EVIDENCE_HALF_WEIGHT;
+var NEUTRAL_PRIOR, OUTCOME_FLOOR, RECENCY_FLOOR2, HALF_LIFE_DAYS2, STALE_WEIGHT, EVIDENCE_HALF_WEIGHT, VERDICT_WEIGHT;
 var init_relevance = __esm({
   "src/lib/codegraph/relevance.ts"() {
     "use strict";
@@ -20541,6 +22317,13 @@ var init_relevance = __esm({
     HALF_LIFE_DAYS2 = 120;
     STALE_WEIGHT = 0.35;
     EVIDENCE_HALF_WEIGHT = 10;
+    VERDICT_WEIGHT = {
+      verified: 1,
+      landed: 0.75,
+      unverified: 0.5,
+      repaired: 0.4,
+      abandoned: 0.2
+    };
   }
 });
 
@@ -20551,11 +22334,11 @@ __export(feedback_exports, {
   resolveBuildServes: () => resolveBuildServes,
   resolveCompletedBuildServes: () => resolveCompletedBuildServes
 });
-import { and as and27, eq as eq42, inArray as inArray12, isNull as isNull7, sql as sql31 } from "drizzle-orm";
+import { and as and28, eq as eq42, inArray as inArray13, isNull as isNull7, sql as sql31 } from "drizzle-orm";
 async function resolveBuildServes(input) {
   const { buildId, nextEvaluation, nextGatePassed } = input;
   const pending = await db.select().from(codegraphQueries).where(
-    and27(
+    and28(
       eq42(codegraphQueries.buildId, buildId),
       eq42(codegraphQueries.channel, "push"),
       isNull7(codegraphQueries.resolution)
@@ -20566,38 +22349,45 @@ async function resolveBuildServes(input) {
   let resolved = 0;
   let lessons = 0;
   let episodes = 0;
+  let unattributable = 0;
   let lastOutcome = "unresolved";
   for (const q of pending) {
     const outcome = resolveServe({
+      outcome: q.outcome,
       servedFor: q.servedFor ?? [],
       nextFingerprints,
       nextGatePassed
     });
     lastOutcome = outcome;
     if (outcome === "unresolved") continue;
+    if (outcome === "unattributable") {
+      await db.update(codegraphQueries).set({ resolution: "unattributable", resolvedAt: /* @__PURE__ */ new Date() }).where(eq42(codegraphQueries.id, q.id));
+      unattributable++;
+      continue;
+    }
     const lessonIds = q.lessonIds ?? [];
     const episodeIds = q.episodeIds ?? [];
     const helpful = outcome === "helpful";
     if (lessonIds.length) {
       await db.update(codegraphLessons).set(
         helpful ? { helpfulCount: sql31`${codegraphLessons.helpfulCount} + 1` } : { unhelpfulCount: sql31`${codegraphLessons.unhelpfulCount} + 1` }
-      ).where(inArray12(codegraphLessons.id, lessonIds));
+      ).where(inArray13(codegraphLessons.id, lessonIds));
       lessons += lessonIds.length;
     }
     if (episodeIds.length) {
       await db.update(codegraphEpisodes).set(
         helpful ? { helpfulCount: sql31`${codegraphEpisodes.helpfulCount} + 1` } : { unhelpfulCount: sql31`${codegraphEpisodes.unhelpfulCount} + 1` }
-      ).where(inArray12(codegraphEpisodes.id, episodeIds));
+      ).where(inArray13(codegraphEpisodes.id, episodeIds));
       episodes += episodeIds.length;
     }
     await db.update(codegraphQueries).set({ resolution: outcome, resolvedAt: /* @__PURE__ */ new Date() }).where(eq42(codegraphQueries.id, q.id));
     resolved++;
   }
-  return { resolved, outcome: lastOutcome, lessons, episodes };
+  return { resolved, outcome: lastOutcome, lessons, episodes, unattributable };
 }
 async function resolveCompletedBuildServes(buildId) {
   const pending = await db.select().from(codegraphQueries).where(
-    and27(
+    and28(
       eq42(codegraphQueries.buildId, buildId),
       eq42(codegraphQueries.channel, "push"),
       isNull7(codegraphQueries.resolution)
@@ -20618,11 +22408,11 @@ async function resolveCompletedBuildServes(buildId) {
     const lessonIds = q.lessonIds ?? [];
     const episodeIds = q.episodeIds ?? [];
     if (lessonIds.length) {
-      await db.update(codegraphLessons).set({ helpfulCount: sql31`${codegraphLessons.helpfulCount} + 1` }).where(inArray12(codegraphLessons.id, lessonIds));
+      await db.update(codegraphLessons).set({ helpfulCount: sql31`${codegraphLessons.helpfulCount} + 1` }).where(inArray13(codegraphLessons.id, lessonIds));
       lessons += lessonIds.length;
     }
     if (episodeIds.length) {
-      await db.update(codegraphEpisodes).set({ helpfulCount: sql31`${codegraphEpisodes.helpfulCount} + 1` }).where(inArray12(codegraphEpisodes.id, episodeIds));
+      await db.update(codegraphEpisodes).set({ helpfulCount: sql31`${codegraphEpisodes.helpfulCount} + 1` }).where(inArray13(codegraphEpisodes.id, episodeIds));
       episodes += episodeIds.length;
     }
     await db.update(codegraphQueries).set({ resolution: "helpful", resolvedAt: /* @__PURE__ */ new Date() }).where(eq42(codegraphQueries.id, q.id));
@@ -20633,10 +22423,10 @@ async function resolveCompletedBuildServes(buildId) {
 async function recordServed(input) {
   const now = /* @__PURE__ */ new Date();
   if (input.lessonIds.length) {
-    await db.update(codegraphLessons).set({ servedCount: sql31`${codegraphLessons.servedCount} + 1`, lastServedAt: now }).where(inArray12(codegraphLessons.id, input.lessonIds));
+    await db.update(codegraphLessons).set({ servedCount: sql31`${codegraphLessons.servedCount} + 1`, lastServedAt: now }).where(inArray13(codegraphLessons.id, input.lessonIds));
   }
   if (input.episodeIds.length) {
-    await db.update(codegraphEpisodes).set({ servedCount: sql31`${codegraphEpisodes.servedCount} + 1`, lastServedAt: now }).where(inArray12(codegraphEpisodes.id, input.episodeIds));
+    await db.update(codegraphEpisodes).set({ servedCount: sql31`${codegraphEpisodes.servedCount} + 1`, lastServedAt: now }).where(inArray13(codegraphEpisodes.id, input.episodeIds));
   }
 }
 var init_feedback = __esm({
@@ -20733,10 +22523,10 @@ function parsePick(words, pos) {
   const kind = words[0];
   const pick = { kind, limit: 3 };
   for (const kv of words.slice(1)) {
-    const eq123 = kv.indexOf("=");
-    if (eq123 === -1) throw new CgqlError(`"${kv}" should be key=value`, pos);
-    const key = kv.slice(0, eq123).trim();
-    const value = kv.slice(eq123 + 1).trim();
+    const eq127 = kv.indexOf("=");
+    if (eq127 === -1) throw new CgqlError(`"${kv}" should be key=value`, pos);
+    const key = kv.slice(0, eq127).trim();
+    const value = kv.slice(eq127 + 1).trim();
     if (!value) throw new CgqlError(`"${key}=" has no value`, pos);
     switch (key) {
       case "verdict": {
@@ -21017,7 +22807,7 @@ function editedPathsFromActions(actions, max = 12) {
   }
   return [...out];
 }
-function planBuildQuery(input, namedFiles = []) {
+function planBuildQuery(input, namedFiles = [], knownPaths = null) {
   const fps = fingerprintsIn(input.previousEvaluation ?? "", "npm run gate");
   if (fps.length) {
     const q = cgqlForFingerprints(fps, 3);
@@ -21028,7 +22818,7 @@ function planBuildQuery(input, namedFiles = []) {
     ...pathsInText(input.prompt),
     ...namedFiles
   ].filter(Boolean);
-  const unique = [...new Set(files)];
+  const unique = [...new Set(files)].filter((p) => !knownPaths || knownPaths.has(p));
   if (unique.length) {
     const q = cgqlForFiles(unique, { hops: 1 });
     if (q) return { query: q, reason: `file set (${unique.length} path(s))`, fingerprints: [] };
@@ -21054,14 +22844,15 @@ var init_build_context = __esm({
 // src/lib/codegraph/name-lookup.ts
 var name_lookup_exports = {};
 __export(name_lookup_exports, {
+  filterKnownPaths: () => filterKnownPaths,
   lookupNamedFiles: () => lookupNamedFiles
 });
-import { and as and28, eq as eq43, or as or2, like } from "drizzle-orm";
+import { and as and29, eq as eq43, inArray as inArray14, or as or2, like } from "drizzle-orm";
 async function lookupNamedFiles(names, dirHints) {
   if (!names.length) return { resolved: [], ambiguous: [] };
   try {
     const rows = await db.select({ path: codegraphNodes.canonicalPath }).from(codegraphNodes).where(
-      and28(
+      and29(
         eq43(codegraphNodes.kind, "file"),
         or2(...names.map((n) => like(codegraphNodes.canonicalPath, `%/${n}`)))
       )
@@ -21071,12 +22862,69 @@ async function lookupNamedFiles(names, dirHints) {
     return { resolved: [], ambiguous: [] };
   }
 }
+async function filterKnownPaths(paths, repo = "SR-Main") {
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!unique.length) return [];
+  try {
+    const rows = await db.select({ path: codegraphNodes.canonicalPath }).from(codegraphNodes).where(
+      and29(
+        eq43(codegraphNodes.repo, repo),
+        eq43(codegraphNodes.existsOnHead, true),
+        inArray14(codegraphNodes.canonicalPath, unique.slice(0, 200))
+      )
+    );
+    const known = new Set(rows.map((r) => r.path));
+    return unique.filter((p) => known.has(p));
+  } catch {
+    return unique;
+  }
+}
 var init_name_lookup = __esm({
   "src/lib/codegraph/name-lookup.ts"() {
     "use strict";
     init_db();
     init_schema();
     init_build_context();
+  }
+});
+
+// src/lib/codegraph/gates.ts
+function normaliseGate(raw) {
+  const s = String(raw ?? "").trim().toLowerCase().replace(/^gate:/, "").replace(/[\s_]+/g, "-");
+  if (!s) return "cmd";
+  for (const a of ALIASES) if (a.test.test(s)) return a.name;
+  return GATE_NAMES.includes(s) ? s : "cmd";
+}
+function gateNodePath(raw) {
+  return `gate:${normaliseGate(raw)}`;
+}
+function gateSeedToPath(seed) {
+  return gateNodePath(seed);
+}
+var GATE_NAMES, ALIASES;
+var init_gates = __esm({
+  "src/lib/codegraph/gates.ts"() {
+    "use strict";
+    GATE_NAMES = [
+      "vitest",
+      "typecheck",
+      "svelte-check",
+      "build",
+      "lint",
+      "gate",
+      "cmd"
+    ];
+    ALIASES = [
+      { name: "svelte-check", test: /^(svelte-?check|sveltecheck)$/ },
+      { name: "vitest", test: /^(vitest|jest|test|tests|npm-test|unit)$/ },
+      { name: "typecheck", test: /^(typecheck|tsc|types|type-check|tsc-check)$/ },
+      { name: "build", test: /^(build|vite-build|npm-build|compile)$/ },
+      { name: "lint", test: /^(lint|eslint|prettier|ruff|format)$/ },
+      // `gate` is the whole-chain runner. It stays distinct from `cmd`: "the gate
+      // chain failed" and "some ad-hoc command failed" are different facts, and the
+      // fingerprint vocabulary already separates them.
+      { name: "gate", test: /^(gate|gate-all|npm-run-gate)$/ }
+    ];
   }
 });
 
@@ -21131,6 +22979,27 @@ var init_family = __esm({
       { family: "workflow-node-def", test: /^src\/lib\/workflows\/nodes\/.*\.def\.ts$/ },
       { family: "workflow-node", test: /^src\/lib\/workflows\/nodes\/[^/]+\.ts$/ },
       { family: "site-tool", test: /^src\/lib\/workflows\/site-tools\/tools\/[^/]+\.ts$/ },
+      /*
+       * Ambient type declarations are a shape of their own, and must be named
+       * BEFORE `lib-module`: `route-manifest.d.ts` ends in `.ts`, so it matched
+       * `^src/lib/.*\.ts$` and was filed as an ordinary module.
+       */
+      { family: "types", test: /\.d\.ts$/ },
+      /*
+       * A project page's own helper modules.
+       *
+       * The single largest gap in family coverage, measured: of 254 family-less
+       * files under `src/`, about 166 are `src/routes/projects/<slug>/lib/*.ts` —
+       * policy-engine 40, engine-room 29, dfe-data-strategy 26, broads-pilot 18,
+       * and so on. They fell through because `lib-module` is scoped to `src/lib/`.
+       *
+       * They are a genuine family rather than a convenience bucket: someone writing
+       * a new field study's `lib/` module wants to see how other field studies
+       * wrote theirs, and emphatically does not want `src/lib/jkai/orchestrator.ts`
+       * held up as the precedent. Without a family they had no siblings at all, so
+       * the precedent channel could not answer for them.
+       */
+      { family: "project-lib", test: /^src\/routes\/projects\/[^/]+\/lib\/.*\.[tj]s$/ },
       { family: "component", test: /^src\/lib\/components\/.*\.svelte$/ },
       { family: "svelte", test: /\.svelte$/ },
       { family: "db-schema", test: /^src\/lib\/db\/.*\.ts$/ },
@@ -21147,23 +23016,29 @@ __export(retrieve_exports, {
   runCgql: () => runCgql,
   runPlan: () => runPlan
 });
-import { and as and29, desc as desc10, eq as eq44, inArray as inArray13, isNull as isNull8, or as or3, sql as sql32 } from "drizzle-orm";
+import { and as and30, desc as desc10, eq as eq44, inArray as inArray15, isNull as isNull8, lte as lte2, or as or3, sql as sql32 } from "drizzle-orm";
 async function seedNodes(plan, repo) {
   const { seed } = plan;
   if (seed.type === "file") {
     const clauses = seed.paths.map(
       (p) => p.includes("*") ? sql32`${codegraphNodes.canonicalPath} LIKE ${p.replace(/\*/g, "%")}` : sql32`${codegraphNodes.canonicalPath} = ${p}`
     );
-    const rows = await db.select({ id: codegraphNodes.id }).from(codegraphNodes).where(and29(eq44(codegraphNodes.repo, repo), nodeVisible(), or3(...clauses))).limit(200);
+    const rows = await db.select({ id: codegraphNodes.id }).from(codegraphNodes).where(and30(eq44(codegraphNodes.repo, repo), nodeVisible(), or3(...clauses))).limit(200);
     return rows.map((r) => r.id);
   }
   if (seed.type === "gate") {
     const rows = await db.select({ id: codegraphNodes.id }).from(codegraphNodes).where(
-      and29(
+      and30(
         eq44(codegraphNodes.repo, repo),
         eq44(codegraphNodes.kind, "gate"),
         nodeVisible(),
-        inArray13(codegraphNodes.canonicalPath, seed.gates)
+        // Through the SAME normaliser as ingest. A seed is written by a
+        // human or an agent — `gate:tsc`, `gate:svelte_check` — and matching
+        // raw text would resolve the spellings we happened to store and
+        // silently miss the rest, which is a quieter version of the bug this
+        // replaces (the lane matched nothing at all, because no gate node
+        // existed to match).
+        inArray15(codegraphNodes.canonicalPath, seed.gates.map(gateSeedToPath))
       )
     ).limit(50);
     return rows.map((r) => r.id);
@@ -21177,10 +23052,10 @@ async function walk3(seedIds, plan) {
   for (let h = 0; h < plan.hops; h++) {
     if (!frontier.length) break;
     const rows = await db.select({ a: codegraphEdges.sourceId, b: codegraphEdges.targetId, w: codegraphEdges.weight }).from(codegraphEdges).where(
-      and29(
+      and30(
         eq44(codegraphEdges.suppressed, false),
-        inArray13(codegraphEdges.kind, plan.edgeKinds),
-        or3(inArray13(codegraphEdges.sourceId, frontier), inArray13(codegraphEdges.targetId, frontier))
+        inArray15(codegraphEdges.kind, plan.edgeKinds),
+        or3(inArray15(codegraphEdges.sourceId, frontier), inArray15(codegraphEdges.targetId, frontier))
       )
     ).orderBy(desc10(codegraphEdges.weight)).limit(400);
     const next = [];
@@ -21192,9 +23067,14 @@ async function walk3(seedIds, plan) {
         }
       }
     }
-    frontier = next;
+    frontier = next.length ? await withoutHubs(next) : next;
   }
   return [...seen].slice(0, 300);
+}
+async function withoutHubs(ids) {
+  const rows = await db.select({ id: codegraphNodes.id }).from(codegraphNodes).where(and30(inArray15(codegraphNodes.id, ids), lte2(codegraphNodes.degree, HUB_DEGREE)));
+  const keep = new Set(rows.map((r) => r.id));
+  return ids.filter((id) => keep.has(id));
 }
 async function topicLessons(text4, base2, limit2) {
   const tokens = topicTokens(text4);
@@ -21209,22 +23089,22 @@ async function topicLessons(text4, base2, limit2) {
     sql32` + `
   );
   const needed = Math.max(1, Math.ceil(tokens.length / 2));
-  return db.select().from(codegraphLessons).where(and29(base2, sql32`(${hits}) >= ${needed}`)).orderBy(sql32`(${score}) DESC`, LESSON_RECENCY).limit(limit2);
+  return db.select().from(codegraphLessons).where(and30(base2, sql32`(${hits}) >= ${needed}`)).orderBy(sql32`(${score}) DESC`, LESSON_RECENCY).limit(limit2);
 }
 function seedFirst(column, seedIds) {
   if (!seedIds.length) return null;
-  return sql32`(CASE WHEN ${inArray13(column, seedIds)} THEN 0 ELSE 1 END)`;
+  return sql32`(CASE WHEN ${inArray15(column, seedIds)} THEN 0 ELSE 1 END)`;
 }
 async function pickLessons(nodeIds, plan, pick, repo, seedIds = []) {
-  const base2 = and29(eq44(codegraphLessons.repo, repo), lessonVisible());
+  const base2 = and30(eq44(codegraphLessons.repo, repo), lessonVisible());
   if (plan.seed.type === "topic" || !nodeIds.length) {
     if (plan.seed.type !== "topic") {
-      return db.select().from(codegraphLessons).where(base2).orderBy(LESSON_RECENCY).limit(pick.limit);
+      return [];
     }
     return topicLessons(plan.seed.text, base2, pick.limit);
   }
   const nearestLesson = seedFirst(codegraphNodeLessons.nodeId, seedIds);
-  const rows = await db.select({ l: codegraphLessons }).from(codegraphNodeLessons).innerJoin(codegraphLessons, eq44(codegraphLessons.id, codegraphNodeLessons.lessonId)).where(and29(inArray13(codegraphNodeLessons.nodeId, nodeIds), base2)).orderBy(...nearestLesson ? [nearestLesson, LESSON_RECENCY] : [LESSON_RECENCY]).limit(pick.limit * 3);
+  const rows = await db.select({ l: codegraphLessons }).from(codegraphNodeLessons).innerJoin(codegraphLessons, eq44(codegraphLessons.id, codegraphNodeLessons.lessonId)).where(and30(inArray15(codegraphNodeLessons.nodeId, nodeIds), base2)).orderBy(...nearestLesson ? [nearestLesson, LESSON_RECENCY] : [LESSON_RECENCY]).limit(pick.limit * 3);
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const r of rows) {
@@ -21237,11 +23117,11 @@ async function pickLessons(nodeIds, plan, pick, repo, seedIds = []) {
 }
 async function pickEpisodes(nodeIds, plan, pick, repo, seedIds = []) {
   const conds = [eq44(codegraphEpisodes.repo, repo), episodeVisible()];
-  if (pick.verdicts?.length) conds.push(inArray13(codegraphEpisodes.verdict, pick.verdicts));
+  if (pick.verdicts?.length) conds.push(inArray15(codegraphEpisodes.verdict, pick.verdicts));
   if (pick.gate) conds.push(eq44(codegraphEpisodes.gate, pick.gate));
   if (plan.seed.type === "fingerprint") {
-    conds.push(inArray13(codegraphEpisodes.fingerprint, plan.seed.fingerprints));
-    return db.select().from(codegraphEpisodes).where(and29(...conds)).orderBy(EPISODE_RECENCY).limit(pick.limit);
+    conds.push(inArray15(codegraphEpisodes.fingerprint, plan.seed.fingerprints));
+    return db.select().from(codegraphEpisodes).where(and30(...conds)).orderBy(EPISODE_RECENCY).limit(pick.limit);
   }
   if (plan.seed.type === "topic") {
     const tokens = topicTokens(plan.seed.text);
@@ -21252,13 +23132,13 @@ async function pickEpisodes(nodeIds, plan, pick, repo, seedIds = []) {
         sql32` + `
       );
       conds.push(sql32`(${hits}) >= ${Math.max(1, Math.ceil(tokens.length / 2))}`);
-      return db.select().from(codegraphEpisodes).where(and29(...conds)).orderBy(sql32`(${hits}) DESC`, EPISODE_RECENCY).limit(pick.limit);
+      return db.select().from(codegraphEpisodes).where(and30(...conds)).orderBy(sql32`(${hits}) DESC`, EPISODE_RECENCY).limit(pick.limit);
     }
-    return db.select().from(codegraphEpisodes).where(and29(...conds)).orderBy(EPISODE_RECENCY).limit(pick.limit);
+    return db.select().from(codegraphEpisodes).where(and30(...conds)).orderBy(EPISODE_RECENCY).limit(pick.limit);
   }
   if (!nodeIds.length) return [];
   const nearestEpisode = seedFirst(codegraphNodeEpisodes.nodeId, seedIds);
-  const rows = await db.select({ e: codegraphEpisodes }).from(codegraphNodeEpisodes).innerJoin(codegraphEpisodes, eq44(codegraphEpisodes.id, codegraphNodeEpisodes.episodeId)).where(and29(inArray13(codegraphNodeEpisodes.nodeId, nodeIds), ...conds)).orderBy(...nearestEpisode ? [nearestEpisode, EPISODE_RECENCY] : [EPISODE_RECENCY]).limit(pick.limit * 4);
+  const rows = await db.select({ e: codegraphEpisodes }).from(codegraphNodeEpisodes).innerJoin(codegraphEpisodes, eq44(codegraphEpisodes.id, codegraphNodeEpisodes.episodeId)).where(and30(inArray15(codegraphNodeEpisodes.nodeId, nodeIds), ...conds)).orderBy(...nearestEpisode ? [nearestEpisode, EPISODE_RECENCY] : [EPISODE_RECENCY]).limit(pick.limit * 4);
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const r of rows) {
@@ -21285,7 +23165,7 @@ async function siblingNodes(path4, repo, limit2) {
     episodeCount: codegraphNodes.episodeCount,
     lessonCount: codegraphNodes.lessonCount
   }).from(codegraphNodes).where(
-    and29(
+    and30(
       eq44(codegraphNodes.repo, repo),
       eq44(codegraphNodes.family, family),
       nodeVisible(),
@@ -21299,10 +23179,10 @@ async function siblingNodes(path4, repo, limit2) {
   if (!others.length) return [];
   const inDegree = /* @__PURE__ */ new Map();
   const rows = await db.select({ target: codegraphEdges.targetId }).from(codegraphEdges).where(
-    and29(
+    and30(
       eq44(codegraphEdges.kind, "imports"),
       eq44(codegraphEdges.suppressed, false),
-      inArray13(codegraphEdges.targetId, others.map((o) => o.id))
+      inArray15(codegraphEdges.targetId, others.map((o) => o.id))
     )
   );
   for (const r of rows) inDegree.set(r.target, (inDegree.get(r.target) ?? 0) + 1);
@@ -21317,10 +23197,10 @@ async function siblingNodes(path4, repo, limit2) {
   })).sort((a, b) => b.score - a.score || a.node.canonicalPath.localeCompare(b.node.canonicalPath)).slice(0, limit2).map((x) => x.node);
 }
 async function testNodes(path4, repo, limit2) {
-  const [target] = await db.select({ id: codegraphNodes.id }).from(codegraphNodes).where(and29(eq44(codegraphNodes.repo, repo), eq44(codegraphNodes.canonicalPath, path4), nodeVisible())).limit(1);
+  const [target] = await db.select({ id: codegraphNodes.id }).from(codegraphNodes).where(and30(eq44(codegraphNodes.repo, repo), eq44(codegraphNodes.canonicalPath, path4), nodeVisible())).limit(1);
   if (!target) return [];
   const edges = await db.select({ source: codegraphEdges.sourceId, target: codegraphEdges.targetId }).from(codegraphEdges).where(
-    and29(
+    and30(
       eq44(codegraphEdges.kind, "tests"),
       eq44(codegraphEdges.suppressed, false),
       or3(eq44(codegraphEdges.sourceId, target.id), eq44(codegraphEdges.targetId, target.id))
@@ -21334,7 +23214,7 @@ async function testNodes(path4, repo, limit2) {
     kind: codegraphNodes.kind,
     episodeCount: codegraphNodes.episodeCount,
     lessonCount: codegraphNodes.lessonCount
-  }).from(codegraphNodes).where(and29(inArray13(codegraphNodes.id, otherIds), nodeVisible(), eq44(codegraphNodes.existsOnHead, true))).limit(limit2);
+  }).from(codegraphNodes).where(and30(inArray15(codegraphNodes.id, otherIds), nodeVisible(), eq44(codegraphNodes.existsOnHead, true))).limit(limit2);
 }
 async function runPlan(plan, opts = {}) {
   const started2 = Date.now();
@@ -21395,7 +23275,10 @@ async function runPlan(plan, opts = {}) {
             served: e.servedCount ?? 0,
             helpful: e.helpfulCount ?? 0,
             unhelpful: e.unhelpfulCount ?? 0,
-            observedAt: e.occurredAt ?? null
+            observedAt: e.occurredAt ?? null,
+            // Without this the multiplier exists and never fires. An unverified
+            // episode would rank level with one we watched go green.
+            verdict: e.verdict
           })
         });
       }
@@ -21406,7 +23289,7 @@ async function runPlan(plan, opts = {}) {
         kind: codegraphNodes.kind,
         episodeCount: codegraphNodes.episodeCount,
         lessonCount: codegraphNodes.lessonCount
-      }).from(codegraphNodes).where(and29(inArray13(codegraphNodes.id, nodeIds), nodeVisible())).orderBy(desc10(codegraphNodes.episodeCount)).limit(pick.limit);
+      }).from(codegraphNodes).where(and30(inArray15(codegraphNodes.id, nodeIds), nodeVisible())).orderBy(desc10(codegraphNodes.episodeCount)).limit(pick.limit);
       nodes.push(...rows);
     }
   }
@@ -21520,21 +23403,23 @@ ${trim(l.body, 700)}`,
   );
   return lines2.join("\n");
 }
-var LESSON_RECENCY, EPISODE_RECENCY, VERDICT_RANK, lessonVisible, episodeVisible, nodeVisible;
+var LESSON_RECENCY, EPISODE_RECENCY, VERDICT_RANK, lessonVisible, episodeVisible, nodeVisible, HUB_DEGREE;
 var init_retrieve = __esm({
   "src/lib/codegraph/retrieve.ts"() {
     "use strict";
     init_db();
     init_schema();
     init_query2();
+    init_gates();
     init_relevance();
     init_family();
     LESSON_RECENCY = sql32`${codegraphLessons.observedAt} DESC NULLS LAST`;
     EPISODE_RECENCY = sql32`${codegraphEpisodes.occurredAt} DESC NULLS LAST`;
     VERDICT_RANK = Object.fromEntries(VERDICTS.map((v, i) => [v, i]));
-    lessonVisible = () => and29(isNull8(codegraphLessons.retiredAt), isNull8(codegraphLessons.supersededById));
+    lessonVisible = () => and30(isNull8(codegraphLessons.retiredAt), isNull8(codegraphLessons.supersededById));
     episodeVisible = () => isNull8(codegraphEpisodes.retiredAt);
     nodeVisible = () => isNull8(codegraphNodes.mergedIntoId);
+    HUB_DEGREE = 100;
   }
 });
 
@@ -21629,7 +23514,7 @@ __export(build_notes_exports, {
   listNotes: () => listNotes,
   removeNote: () => removeNote
 });
-import { and as and30, asc as asc3, eq as eq45, isNull as isNull9 } from "drizzle-orm";
+import { and as and31, asc as asc3, eq as eq45, isNull as isNull9 } from "drizzle-orm";
 async function addNote(buildId, content) {
   const trimmed = content.trim();
   if (!trimmed) throw new Error("note content required");
@@ -21637,10 +23522,10 @@ async function addNote(buildId, content) {
   return row;
 }
 async function listNotes(buildId) {
-  return db.select().from(jkaiBuildNotes).where(and30(eq45(jkaiBuildNotes.buildId, buildId), isNull9(jkaiBuildNotes.removedAt))).orderBy(asc3(jkaiBuildNotes.createdAt));
+  return db.select().from(jkaiBuildNotes).where(and31(eq45(jkaiBuildNotes.buildId, buildId), isNull9(jkaiBuildNotes.removedAt))).orderBy(asc3(jkaiBuildNotes.createdAt));
 }
 async function removeNote(buildId, id) {
-  const result = await db.update(jkaiBuildNotes).set({ removedAt: /* @__PURE__ */ new Date() }).where(and30(eq45(jkaiBuildNotes.buildId, buildId), eq45(jkaiBuildNotes.id, id))).returning();
+  const result = await db.update(jkaiBuildNotes).set({ removedAt: /* @__PURE__ */ new Date() }).where(and31(eq45(jkaiBuildNotes.buildId, buildId), eq45(jkaiBuildNotes.id, id))).returning();
   return result.length > 0;
 }
 function formatNotesForPrompt(notes) {
@@ -21672,21 +23557,21 @@ __export(pending_messages_exports, {
   listPendingMessages: () => listPendingMessages,
   removePendingMessage: () => removePendingMessage
 });
-import { and as and31, asc as asc4, eq as eq46, isNull as isNull10 } from "drizzle-orm";
+import { and as and32, asc as asc4, eq as eq46, isNull as isNull10 } from "drizzle-orm";
 async function enqueuePendingMessage(buildId, content, role = "user") {
   const [row] = await db.insert(jkaiBuildPendingMessages).values({ buildId, content: content.trim(), role }).returning();
   return row;
 }
 async function listPendingMessages(buildId) {
-  return db.select().from(jkaiBuildPendingMessages).where(and31(eq46(jkaiBuildPendingMessages.buildId, buildId), isNull10(jkaiBuildPendingMessages.consumedAt))).orderBy(asc4(jkaiBuildPendingMessages.createdAt));
+  return db.select().from(jkaiBuildPendingMessages).where(and32(eq46(jkaiBuildPendingMessages.buildId, buildId), isNull10(jkaiBuildPendingMessages.consumedAt))).orderBy(asc4(jkaiBuildPendingMessages.createdAt));
 }
 async function drainPendingMessages(buildId) {
   const now = /* @__PURE__ */ new Date();
-  const drained = await db.update(jkaiBuildPendingMessages).set({ consumedAt: now }).where(and31(eq46(jkaiBuildPendingMessages.buildId, buildId), isNull10(jkaiBuildPendingMessages.consumedAt))).returning();
+  const drained = await db.update(jkaiBuildPendingMessages).set({ consumedAt: now }).where(and32(eq46(jkaiBuildPendingMessages.buildId, buildId), isNull10(jkaiBuildPendingMessages.consumedAt))).returning();
   return drained.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 async function removePendingMessage(buildId, id) {
-  const result = await db.update(jkaiBuildPendingMessages).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and31(eq46(jkaiBuildPendingMessages.buildId, buildId), eq46(jkaiBuildPendingMessages.id, id))).returning();
+  const result = await db.update(jkaiBuildPendingMessages).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and32(eq46(jkaiBuildPendingMessages.buildId, buildId), eq46(jkaiBuildPendingMessages.id, id))).returning();
   return result.length > 0;
 }
 function formatPendingForPrompt(messages) {
@@ -21846,11 +23731,24 @@ ${systemPromptSuffix}`;
           iteration.id
         );
       }
-      const { planBuildQuery: planBuildQuery2, bareNamesInText: bareNamesInText2, dirHintsInText: dirHintsInText2 } = await Promise.resolve().then(() => (init_build_context(), build_context_exports));
-      const { lookupNamedFiles: lookupNamedFiles2 } = await Promise.resolve().then(() => (init_name_lookup(), name_lookup_exports));
+      const {
+        planBuildQuery: planBuildQuery2,
+        bareNamesInText: bareNamesInText2,
+        dirHintsInText: dirHintsInText2,
+        editedPathsFromActions: editedPathsFromActions2,
+        pathsInText: pathsInText2
+      } = await Promise.resolve().then(() => (init_build_context(), build_context_exports));
+      const { lookupNamedFiles: lookupNamedFiles2, filterKnownPaths: filterKnownPaths2 } = await Promise.resolve().then(() => (init_name_lookup(), name_lookup_exports));
       const named = await lookupNamedFiles2(
         bareNamesInText2(build.prompt),
         dirHintsInText2(build.prompt)
+      );
+      const knownPaths = new Set(
+        await filterKnownPaths2([
+          ...editedPathsFromActions2(prevIteration?.actions ?? null),
+          ...pathsInText2(build.prompt),
+          ...named.resolved
+        ])
       );
       if (named.ambiguous.length) {
         await emitLog(
@@ -21866,7 +23764,8 @@ ${systemPromptSuffix}`;
           previousEvaluation: prevIteration?.evaluation ?? null,
           previousActions: prevIteration?.actions ?? null
         },
-        named.resolved
+        named.resolved,
+        knownPaths
       );
       if (!planned) {
         await emitLog(build.id, "system", "Codegraph: nothing to query (no gate error, no file set)", iteration.id);
@@ -22268,7 +24167,7 @@ var init_test_runner = __esm({
 });
 
 // src/lib/jkai/planner.ts
-import { eq as eq47, and as and32 } from "drizzle-orm";
+import { eq as eq47, and as and33 } from "drizzle-orm";
 function buildRevisionInstruction(isStudio) {
   if (isStudio) {
     return `The critic above has reviewed your plan across nine dimensions. Address all critical issues raised.
@@ -22461,7 +24360,7 @@ async function planBuild(buildId, prompt, timeLimitMs = 4 * 60 * 1e3) {
     provider: "openrouter",
     // The build's own pin, else the single site default (the builder no longer
     // has a separate model setting).
-    modelId: build?.modelId ?? (await resolveDefaultModel()).modelId
+    modelId: build?.modelId ?? (await resolveBuilderModel()).modelId
   });
   const priceSnapshot = build?.priceSnapshot ?? null;
   const deadline = Date.now() + timeLimitMs;
@@ -22626,11 +24525,11 @@ async function replanBuild(buildId) {
   if (!build) return false;
   const { client, model } = await getLLMClient({
     provider: "openrouter",
-    modelId: build.modelId ?? (await resolveDefaultModel()).modelId
+    modelId: build.modelId ?? (await resolveBuilderModel()).modelId
   });
   const priceSnapshot = build.priceSnapshot ?? null;
   const completedIterations = await db.select().from(jkaiIterations).where(
-    and32(
+    and33(
       eq47(jkaiIterations.buildId, buildId),
       eq47(jkaiIterations.status, "completed")
     )
@@ -22639,7 +24538,7 @@ async function replanBuild(buildId) {
 ${it.evaluation || "No evaluation"}`).join("\n\n");
   const fileList = await listWorkspaceFiles(buildId);
   const [planIteration] = await db.select().from(jkaiIterations).where(
-    and32(
+    and33(
       eq47(jkaiIterations.buildId, buildId),
       eq47(jkaiIterations.number, 0)
     )
@@ -22726,8 +24625,8 @@ var init_planner = __esm({
     "use strict";
     init_db();
     init_schema();
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
     init_sandbox();
     init_log_emitter();
     init_usage();
@@ -23213,7 +25112,15 @@ __export(orchestrator_exports, {
   onBuildLog: () => onBuildLog,
   orchestrator: () => orchestrator
 });
-import { eq as eq49, and as and33, desc as desc11, asc as asc5, sql as sql33, inArray as inArray14 } from "drizzle-orm";
+import { eq as eq49, and as and34, desc as desc11, asc as asc5, lt as lt2, sql as sql33, inArray as inArray16 } from "drizzle-orm";
+async function emitRepoVerification(buildId, event, iterationId = null) {
+  await emitLog(
+    buildId,
+    "verification",
+    JSON.stringify({ version: 1, ...event }),
+    iterationId
+  );
+}
 var LIVENESS_PING_MS, STALE_BUILD_MS, RECLAIM_AFTER_MS, STUDIO_KIT_CHECK_FILES, Orchestrator, orchestrator;
 var init_orchestrator = __esm({
   "src/lib/jkai/orchestrator.ts"() {
@@ -23398,13 +25305,13 @@ ${improvementPrompt}`;
       async initContinuation(buildId, combinedPrompt) {
         await ensureSandboxRunning();
         await db.delete(jkaiIterations).where(
-          and33(
+          and34(
             eq49(jkaiIterations.buildId, buildId),
             eq49(jkaiIterations.number, 0)
           )
         );
         const completedIterations = await db.select().from(jkaiIterations).where(
-          and33(
+          and34(
             eq49(jkaiIterations.buildId, buildId),
             eq49(jkaiIterations.status, "completed")
           )
@@ -23584,12 +25491,16 @@ Plan the next set of iterations to deliver the improvements. Build on what exist
        */
       async reclaimFinishedWorkspaces() {
         const cutoff = new Date(Date.now() - RECLAIM_AFTER_MS);
-        const finished = await db.select({ id: jkaiBuilds.id, updatedAt: jkaiBuilds.updatedAt }).from(jkaiBuilds).where(inArray14(jkaiBuilds.status, ["completed", "failed"]));
+        const finished = await db.select({ id: jkaiBuilds.id }).from(jkaiBuilds).where(
+          and34(
+            inArray16(jkaiBuilds.status, ["completed", "failed"]),
+            lt2(jkaiBuilds.updatedAt, cutoff)
+          )
+        );
         let freed = 0;
         let count2 = 0;
         for (const b of finished) {
           if (this.activeBuildId === b.id) continue;
-          if (!b.updatedAt || b.updatedAt > cutoff) continue;
           const bytes = await reclaimWorkspaceDeps(b.id).catch(() => 0);
           if (bytes > 0) {
             freed += bytes;
@@ -23673,7 +25584,7 @@ Plan the next set of iterations to deliver the improvements. Build on what exist
           await this.enqueue(buildId, { kind: "approvePlan" });
           return;
         }
-        const [iter0] = await db.select().from(jkaiIterations).where(and33(eq49(jkaiIterations.buildId, buildId), eq49(jkaiIterations.number, 0))).limit(1);
+        const [iter0] = await db.select().from(jkaiIterations).where(and34(eq49(jkaiIterations.buildId, buildId), eq49(jkaiIterations.number, 0))).limit(1);
         const { parsePlanMilestones: parsePlanMilestones2 } = await Promise.resolve().then(() => (init_plan_parse(), plan_parse_exports));
         const milestones = parsePlanMilestones2(iter0?.plan ?? null);
         await failOrphanedIterations(buildId);
@@ -23742,7 +25653,7 @@ Plan the next set of iterations to deliver the improvements. Build on what exist
         await this.initAndPlan(buildId);
       }
       async editPlan(buildId, plan) {
-        await db.update(jkaiIterations).set({ plan }).where(and33(eq49(jkaiIterations.buildId, buildId), eq49(jkaiIterations.number, 0)));
+        await db.update(jkaiIterations).set({ plan }).where(and34(eq49(jkaiIterations.buildId, buildId), eq49(jkaiIterations.number, 0)));
       }
       // --- Iteration-approval API (Phase 2) ---
       async approveIteration(buildId) {
@@ -23856,7 +25767,7 @@ ${trimmed}` : build.prompt;
           }
           const [lastIteration] = await db.select().from(jkaiIterations).where(eq49(jkaiIterations.buildId, buildId)).orderBy(desc11(jkaiIterations.number)).limit(1);
           const [prevIteration] = await db.select().from(jkaiIterations).where(
-            and33(
+            and34(
               eq49(jkaiIterations.buildId, buildId),
               eq49(jkaiIterations.status, "completed")
             )
@@ -23876,7 +25787,7 @@ ${trimmed}` : build.prompt;
             totalEstimate: build.milestones?.length
           }, iteration.id);
           const [planIteration] = await db.select().from(jkaiIterations).where(
-            and33(
+            and34(
               eq49(jkaiIterations.buildId, buildId),
               eq49(jkaiIterations.number, 0),
               eq49(jkaiIterations.status, "completed")
@@ -24116,19 +26027,60 @@ ${summary2}`,
           if (build.gitTargetConfig) {
             await emitStage(buildId, { stage: "running_tests", iteration: iterationNumber }, iteration.id);
             const dev = `/home/jkai/workspace/${buildId}/dev`;
-            const runGate = async (cmd) => {
+            const runGate = async (cmd, phase, label2) => {
+              const started2 = Date.now();
+              await emitRepoVerification(buildId, {
+                phase,
+                label: label2,
+                status: "running",
+                command: cmd
+              }, iteration.id);
               await emitLog(buildId, "system", `Running gate: ${cmd} ...`, iteration.id);
               const g = await execInSandbox(
                 `cd ${dev} && NO_COLOR=1 FORCE_COLOR=0 ${cmd} 2>&1`,
                 12e5
               );
-              return { out: (g.stdout + "\n" + g.stderr).trim(), passed: g.exitCode === 0 };
+              const passed = g.exitCode === 0;
+              await emitRepoVerification(buildId, {
+                phase,
+                label: label2,
+                status: passed ? "passed" : "failed",
+                command: cmd,
+                durationMs: Date.now() - started2,
+                detail: passed ? "Command exited 0." : `Command exited ${g.exitCode}.`
+              }, iteration.id);
+              return { out: (g.stdout + "\n" + g.stderr).trim(), passed };
             };
             const fingerprint2 = await this.workspaceFingerprint(dev);
             const cached2 = this.lastGate;
             let gate;
             if (fingerprint2 && cached2 && cached2.buildId === buildId && cached2.fingerprint === fingerprint2) {
               gate = { out: cached2.out, passed: cached2.passed, command: cached2.command };
+              const finalCommand = build.gitTargetConfig.finalGateCommand;
+              if (finalCommand && cached2.command === finalCommand) {
+                await emitRepoVerification(buildId, {
+                  phase: "feedback_gate",
+                  label: "Structural checks, typecheck and tests",
+                  status: "reused_passed",
+                  command: build.gitTargetConfig.gateCommand,
+                  detail: "Workspace fingerprint is unchanged; reusing the previous passing result."
+                }, iteration.id);
+                await emitRepoVerification(buildId, {
+                  phase: "release_candidate",
+                  label: "Production web and sidecar bundles",
+                  status: cached2.passed ? "reused_passed" : "reused_failed",
+                  command: finalCommand,
+                  detail: `Workspace fingerprint is unchanged; reusing the previous ${cached2.passed ? "passing" : "failing"} result.`
+                }, iteration.id);
+              } else {
+                await emitRepoVerification(buildId, {
+                  phase: "feedback_gate",
+                  label: "Structural checks, typecheck and tests",
+                  status: cached2.passed ? "reused_passed" : "reused_failed",
+                  command: build.gitTargetConfig.gateCommand,
+                  detail: `Workspace fingerprint is unchanged; reusing the previous ${cached2.passed ? "passing" : "failing"} result.`
+                }, iteration.id);
+              }
               await emitLog(
                 buildId,
                 "system",
@@ -24271,7 +26223,14 @@ ${summary2}`;
           if (build.gitTargetConfig) {
             if (testResult.passed) {
               await emitLog(buildId, "system", "Gate passed \u2014 publishing via GitHub PR (no auto-merge; human review required).", iteration.id);
-              let prUrl = null;
+              await emitRepoVerification(buildId, {
+                phase: "publish",
+                label: "Publish candidate",
+                status: "running",
+                detail: "Committing the verified tree, pushing its branch and opening a PR."
+              }, iteration.id);
+              let publishedRef = null;
+              let openedPr = false;
               try {
                 const summary2 = (build.title || result.goals || build.prompt || "autonomous changes").slice(0, 120);
                 const prBody = [
@@ -24291,8 +26250,15 @@ ${result.evaluation.slice(0, 1500)}` : ""
                   summary: summary2,
                   body: prBody
                 });
-                prUrl = published?.prUrl ?? published?.branchRef ?? null;
+                openedPr = Boolean(published?.prUrl);
+                publishedRef = published?.prUrl ?? published?.branchRef ?? null;
               } catch (err) {
+                await emitRepoVerification(buildId, {
+                  phase: "publish",
+                  label: "Publish candidate",
+                  status: "failed",
+                  detail: err.message
+                }, iteration.id);
                 await this.abortBuild(buildId, {
                   kind: "nonzero_exit",
                   message: `Gate passed but git publish failed: ${err.message}`,
@@ -24300,31 +26266,60 @@ ${result.evaluation.slice(0, 1500)}` : ""
                 });
                 return;
               }
+              await emitRepoVerification(buildId, {
+                phase: "publish",
+                label: "Publish candidate",
+                status: "passed",
+                detail: openedPr ? `Pull request opened: ${publishedRef}` : publishedRef ? `Verified branch pushed: ${publishedRef}` : "The verified tree contained no changes to publish."
+              }, iteration.id);
+              if (openedPr) {
+                await emitRepoVerification(buildId, {
+                  phase: "ci",
+                  label: "GitHub CI and review",
+                  status: "pending",
+                  detail: "The builder has opened the PR but has not received an authoritative CI or merge callback."
+                }, iteration.id);
+                await emitRepoVerification(buildId, {
+                  phase: "deploy",
+                  label: "Production deployment",
+                  status: "pending",
+                  detail: "Not verified: opening a PR does not prove that its commit is serving in production."
+                }, iteration.id);
+              }
               await db.update(jkaiBuilds).set({
                 status: "completed",
-                outcome: "delivered",
-                publishedSlug: prUrl,
+                outcome: openedPr ? "pr_open" : "delivered",
+                publishedSlug: publishedRef,
                 updatedAt: /* @__PURE__ */ new Date()
               }).where(eq49(jkaiBuilds.id, buildId));
               try {
-                const { resolveCompletedBuildServes: resolveCompletedBuildServes2 } = await Promise.resolve().then(() => (init_feedback(), feedback_exports));
-                const r = await resolveCompletedBuildServes2(buildId);
-                if (r.resolved > 0) {
+                if (openedPr) {
                   await emitLog(
                     buildId,
                     "system",
-                    `Codegraph feedback: ${r.resolved} serve(s) resolved as helpful on first-pass completion \u2014 ${r.lessons} lesson(s), ${r.episodes} episode(s)`,
+                    "Codegraph feedback deferred \u2014 a green local candidate and open PR are not yet evidence that the change deployed successfully.",
                     iteration.id
                   );
+                } else {
+                  const { resolveCompletedBuildServes: resolveCompletedBuildServes2 } = await Promise.resolve().then(() => (init_feedback(), feedback_exports));
+                  const r = await resolveCompletedBuildServes2(buildId);
+                  if (r.resolved > 0) {
+                    await emitLog(
+                      buildId,
+                      "system",
+                      `Codegraph feedback: ${r.resolved} serve(s) resolved as helpful on first-pass completion \u2014 ${r.lessons} lesson(s), ${r.episodes} episode(s)`,
+                      iteration.id
+                    );
+                  }
                 }
               } catch {
               }
-              await emitLog(buildId, "system", prUrl ? `Build complete \u2014 PR: ${prUrl}` : "Build complete \u2014 no changes to publish.", iteration.id);
-              await emitStage(buildId, { stage: "completed", message: prUrl ?? void 0 });
+              await emitLog(buildId, "system", openedPr ? `Candidate complete \u2014 PR opened: ${publishedRef}. CI, merge and production verification remain pending.` : publishedRef ? `Candidate complete \u2014 branch pushed: ${publishedRef}.` : "Build complete \u2014 no changes to publish.", iteration.id);
+              await emitStage(buildId, { stage: "completed", message: publishedRef ?? void 0 });
               try {
                 await notifyAllSubscribers({
                   title: "Forge PR ready",
-                  body: prUrl ? prUrl : build.title ?? "Forge build finished",
+                  body: publishedRef ? publishedRef : build.title ?? "Forge build finished",
                   url: `/jkai/builds/${buildId}`
                 });
               } catch (e) {
@@ -24481,9 +26476,17 @@ ${result.evaluation.slice(0, 1500)}` : ""
        * build. See `finalGateCommand` in git-targets.ts for the split.
        */
       async runGateChain(runGate, cfg) {
-        const gate = await runGate(cfg.gateCommand);
+        const gate = await runGate(
+          cfg.gateCommand,
+          "feedback_gate",
+          "Structural checks, typecheck and tests"
+        );
         if (gate.passed && cfg.finalGateCommand) {
-          const finalGate = await runGate(cfg.finalGateCommand);
+          const finalGate = await runGate(
+            cfg.finalGateCommand,
+            "release_candidate",
+            "Production web and sidecar bundles"
+          );
           return { ...finalGate, command: cfg.finalGateCommand };
         }
         return { ...gate, command: cfg.gateCommand };
@@ -24587,7 +26590,7 @@ var init_static_smoke = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/builds.ts
-import { desc as desc12, eq as eq50, and as and34, asc as asc6 } from "drizzle-orm";
+import { desc as desc12, eq as eq50, and as and35, asc as asc6 } from "drizzle-orm";
 function parseMaybe(v) {
   if (typeof v !== "string") return v;
   const t = v.trim();
@@ -24693,8 +26696,8 @@ var init_builds = __esm({
       producesLongRunningTask: { kind: "build", idPath: "id", cadenceSeconds: 30 },
       handler: async (args, toolCtx) => {
         const { orchestrator: orchestrator2 } = await Promise.resolve().then(() => (init_orchestrator(), orchestrator_exports));
-        const { resolveDefaultModel: resolveDefaultModel2 } = await Promise.resolve().then(() => (init_settings(), settings_exports));
-        const ctx = await resolveDefaultModel2();
+        const { resolveBuilderModel: resolveBuilderModel2 } = await Promise.resolve().then(() => (init_workload_settings(), workload_settings_exports));
+        const ctx = toolCtx?.modelContext ?? await resolveBuilderModel2();
         const attachedRaw = args.attachedWorkflowIds;
         const attachedWorkflowIds = Array.isArray(attachedRaw) && attachedRaw.every((s) => typeof s === "string") ? attachedRaw : [];
         const insertValues = {
@@ -24713,7 +26716,7 @@ var init_builds = __esm({
     });
     register({
       name: "build_list",
-      description: "List recent JKAI builds with status (pending/running/completed/failed) and `outcome` \u2014 `completed` alone does NOT mean it worked: read `outcome` for delivered | budget_cap | stopped_by_user | registered. Compact by default \u2014 returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. Pass verbose:true to return the full rows including heavy columns (prompt, config, serve_config, model fields).",
+      description: "List recent JKAI builds with status (pending/running/completed/failed) and `outcome` \u2014 `completed` alone does NOT mean it deployed: read `outcome` for delivered | pr_open | budget_cap | stopped_by_user | registered. `pr_open` means the builder proved a candidate and proposed it, not that CI merged or production serves it. Compact by default \u2014 returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. Pass verbose:true to return the full rows including heavy columns (prompt, config, serve_config, model fields).",
       parameters: {
         type: "object",
         properties: {
@@ -24836,7 +26839,7 @@ var init_builds = __esm({
           createdAt: jkaiIterations.createdAt
         }).from(jkaiIterations).where(eq50(jkaiIterations.buildId, build.id)).orderBy(asc6(jkaiIterations.number));
         const now = /* @__PURE__ */ new Date();
-        const [latestStage] = await db.select({ content: jkaiLogs.content, createdAt: jkaiLogs.createdAt }).from(jkaiLogs).where(and34(eq50(jkaiLogs.buildId, build.id), eq50(jkaiLogs.type, "stage"))).orderBy(desc12(jkaiLogs.createdAt)).limit(1);
+        const [latestStage] = await db.select({ content: jkaiLogs.content, createdAt: jkaiLogs.createdAt }).from(jkaiLogs).where(and35(eq50(jkaiLogs.buildId, build.id), eq50(jkaiLogs.type, "stage"))).orderBy(desc12(jkaiLogs.createdAt)).limit(1);
         const secondsSince = (d) => d ? Math.round((now.getTime() - d.getTime()) / 1e3) : null;
         let currentStage = null;
         if (latestStage?.content) {
@@ -24890,7 +26893,7 @@ var init_builds = __esm({
       toolset: "builds",
       handler: async (args) => {
         const [iteration] = await db.select().from(jkaiIterations).where(
-          and34(
+          and35(
             eq50(jkaiIterations.buildId, args.buildId),
             eq50(jkaiIterations.number, args.number)
           )
@@ -24911,7 +26914,7 @@ var init_builds = __esm({
       toolset: "builds",
       handler: async (args) => {
         const [iteration] = await db.select().from(jkaiIterations).where(
-          and34(
+          and35(
             eq50(jkaiIterations.buildId, args.buildId),
             eq50(jkaiIterations.number, 0)
           )
@@ -24949,7 +26952,7 @@ var init_builds = __esm({
         const maxLogs = args.limit || 50;
         const type = args.type;
         const rows = await db.select().from(jkaiLogs).where(
-          type ? and34(eq50(jkaiLogs.buildId, buildId), eq50(jkaiLogs.type, type)) : eq50(jkaiLogs.buildId, buildId)
+          type ? and35(eq50(jkaiLogs.buildId, buildId), eq50(jkaiLogs.type, type)) : eq50(jkaiLogs.buildId, buildId)
         ).orderBy(desc12(jkaiLogs.createdAt)).limit(maxLogs);
         return { success: true, data: rows };
       }
@@ -25101,7 +27104,7 @@ var init_builds = __esm({
       toolset: "builds",
       handler: async (args, toolCtx) => {
         const { ensureWorkspace: ensureWorkspace2, writeFileInSandbox: writeFileInSandbox2, execInSandbox: execInSandbox2 } = await Promise.resolve().then(() => (init_sandbox(), sandbox_exports));
-        const { resolveDefaultModel: resolveDefaultModel2 } = await Promise.resolve().then(() => (init_settings(), settings_exports));
+        const { resolveBuilderModel: resolveBuilderModel2 } = await Promise.resolve().then(() => (init_workload_settings(), workload_settings_exports));
         const coerced = coerceFilesArg(args.files);
         if (!coerced.ok) return { success: false, error: coerced.error };
         const files = coerced.files;
@@ -25125,7 +27128,7 @@ var init_builds = __esm({
         const prompt = String(args.prompt);
         const titleArg = typeof args.title === "string" && args.title.trim().length > 0 ? args.title.trim() : null;
         const title = titleArg ?? prompt.split("\n")[0].slice(0, 60);
-        const ctx = await resolveDefaultModel2();
+        const ctx = toolCtx?.modelContext ?? await resolveBuilderModel2();
         const updateId = typeof args.updateBuildId === "string" ? args.updateBuildId.trim() : "";
         let build;
         if (updateId) {
@@ -25359,7 +27362,8 @@ import { eq as eq52 } from "drizzle-orm";
 async function createStudioBuild({
   challenge,
   title,
-  researchMode = "extend"
+  researchMode = "extend",
+  modelContext
 }) {
   if (!RESEARCH_MODES.includes(researchMode)) {
     throw new Error(
@@ -25379,7 +27383,7 @@ async function createStudioBuild({
       `createStudioBuild: title too long (${trimmedTitle.length} chars, max ${MAX_TITLE_LEN})`
     );
   }
-  const ctx = await resolveDefaultModel();
+  const ctx = modelContext ?? await resolveBuilderModel();
   const priceSnapshot = await snapshotPrice(ctx);
   const [build] = await db.insert(jkaiBuilds).values({
     title: trimmedTitle || `Studio: ${trimmed.slice(0, 60)}`,
@@ -25412,7 +27416,7 @@ var init_studio = __esm({
     init_db();
     init_schema();
     init_builder_client();
-    init_settings();
+    init_workload_settings();
     init_price_snapshot();
     init_research_brief();
     STUDIO_BUDGET = Object.freeze({
@@ -25456,11 +27460,14 @@ var init_studio2 = __esm({
       category: "JKAI Builder",
       toolset: "builds",
       producesLongRunningTask: { kind: "build", idPath: "buildId", cadenceSeconds: 30 },
-      handler: async (args) => {
+      handler: async (args, toolCtx) => {
         const { createStudioBuild: createStudioBuild2 } = await Promise.resolve().then(() => (init_studio(), studio_exports));
         const { buildId } = await createStudioBuild2({
           challenge: args.challenge,
           title: typeof args.title === "string" ? args.title : void 0,
+          // The build outlives this turn, so the pin is persisted on its row rather
+          // than read from the turn's ambient context later.
+          modelContext: toolCtx?.modelContext,
           // createStudioBuild validates this and throws on anything unknown — the
           // column has no CHECK constraint, so that is the only real guard.
           ...typeof args.researchMode === "string" ? { researchMode: args.researchMode } : {}
@@ -25674,9 +27681,12 @@ var init_research = __esm({
         if (!session2) return { success: false, error: "Session not found" };
         if (!session2.report) return { success: false, error: "Session has no report yet \u2014 it may still be running" };
         const reportText = typeof session2.report === "string" ? session2.report : JSON.stringify(session2.report);
-        const { getLLMClient: getLLMClient2 } = await Promise.resolve().then(() => (init_llm_client(), llm_client_exports));
-        const { resolveDefaultModel: resolveDefaultModel2 } = await Promise.resolve().then(() => (init_settings(), settings_exports));
-        const { client, model } = await getLLMClient2(await resolveDefaultModel2());
+        const { getLLMClient: getLLMClient2 } = await Promise.resolve().then(() => (init_client(), client_exports));
+        const { resolveResearchDeepModel: resolveResearchDeepModel2 } = await Promise.resolve().then(() => (init_workload_settings(), workload_settings_exports));
+        const { currentSessionModel: currentSessionModel2 } = await Promise.resolve().then(() => (init_chat(), chat_exports));
+        const { client, model } = await getLLMClient2(
+          currentSessionModel2() ?? await resolveResearchDeepModel2()
+        );
         const systemPrompt2 = `You are answering a question using ONLY the research findings provided below. Do not use any external knowledge.
 
 Research Topic: ${session2.topic}
@@ -25788,9 +27798,12 @@ Instructions:
         };
         const instruction = formatInstructions[format];
         if (!instruction) return { success: false, error: `Unknown format: ${format}. Use: blog_draft, build_prompt, workflow_description, or summary` };
-        const { getLLMClient: getLLMClient2 } = await Promise.resolve().then(() => (init_llm_client(), llm_client_exports));
-        const { resolveDefaultModel: resolveDefaultModel2 } = await Promise.resolve().then(() => (init_settings(), settings_exports));
-        const { client, model } = await getLLMClient2(await resolveDefaultModel2());
+        const { getLLMClient: getLLMClient2 } = await Promise.resolve().then(() => (init_client(), client_exports));
+        const { resolveResearchDeepModel: resolveResearchDeepModel2 } = await Promise.resolve().then(() => (init_workload_settings(), workload_settings_exports));
+        const { currentSessionModel: currentSessionModel2 } = await Promise.resolve().then(() => (init_chat(), chat_exports));
+        const { client, model } = await getLLMClient2(
+          currentSessionModel2() ?? await resolveResearchDeepModel2()
+        );
         const systemPrompt2 = `Research Topic: ${session2.topic}
 
 Research Findings:
@@ -26166,14 +28179,16 @@ var init_run_queue = __esm({
 var scheduler_exports = {};
 __export(scheduler_exports, {
   getActiveJobs: () => getActiveJobs,
+  reconcileSchedules: () => reconcileSchedules,
   registerCronJob: () => registerCronJob,
   reloadSchedule: () => reloadSchedule,
+  startScheduleReconciler: () => startScheduleReconciler,
   startScheduler: () => startScheduler,
   stopScheduler: () => stopScheduler,
   unregisterCronJob: () => unregisterCronJob
 });
 import { Cron } from "croner";
-import { eq as eq54, and as and35 } from "drizzle-orm";
+import { eq as eq54, and as and36 } from "drizzle-orm";
 function getActiveJobs() {
   return activeJobs;
 }
@@ -26187,8 +28202,9 @@ async function startScheduler() {
     }
     console.log("[scheduler] Acquired cron leader lock");
   }
+  cronOwner = true;
   console.log("[scheduler] Starting cron scheduler...");
-  const schedules = await db.select().from(workflowSchedules).where(and35(eq54(workflowSchedules.type, "cron"), eq54(workflowSchedules.enabled, true)));
+  const schedules = await db.select().from(workflowSchedules).where(and36(eq54(workflowSchedules.type, "cron"), eq54(workflowSchedules.enabled, true)));
   let registered = 0;
   for (const schedule of schedules) {
     try {
@@ -26202,17 +28218,69 @@ async function startScheduler() {
     }
   }
   console.log(`[scheduler] Registered ${registered}/${schedules.length} cron jobs`);
+  startScheduleReconciler();
+}
+function startScheduleReconciler() {
+  if (reconcilerStarted) return;
+  reconcilerStarted = true;
+  setInterval(() => {
+    void reconcileSchedules().catch(
+      (e) => console.warn("[scheduler] reconcile failed:", e instanceof Error ? e.message : e)
+    );
+  }, RECONCILE_INTERVAL_MS).unref();
+}
+async function reconcileSchedules() {
+  if (!cronOwner) return { added: 0, removed: 0 };
+  const rows = await db.select().from(workflowSchedules).where(and36(eq54(workflowSchedules.type, "cron"), eq54(workflowSchedules.enabled, true)));
+  const wanted = new Map(rows.map((r) => [r.id, r]));
+  let added = 0;
+  let removed = 0;
+  for (const scheduleId of [...activeJobs.keys()]) {
+    if (!wanted.has(scheduleId)) {
+      unregisterCronJob(scheduleId);
+      removed++;
+    }
+  }
+  for (const schedule of rows) {
+    if (activeJobs.has(schedule.id) && registeredSignature.get(schedule.id) === scheduleSignature(schedule.config)) {
+      continue;
+    }
+    try {
+      registerCronJob(schedule);
+      added++;
+    } catch (err) {
+      console.error(
+        `[scheduler] Reconcile could not register ${schedule.id} (workflow ${schedule.workflowId}):`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+  if (added || removed) console.log(`[scheduler] Reconciled: +${added} -${removed}`);
+  return { added, removed };
 }
 function stopScheduler() {
   for (const [, job] of activeJobs) {
     job.stop();
   }
   activeJobs.clear();
+  registeredSignature.clear();
   console.log("[scheduler] All cron jobs stopped");
 }
+function scheduleSignature(config) {
+  const cfg = config ?? {};
+  const expression = typeof cfg.expression === "string" && cfg.expression || typeof cfg.cron === "string" && cfg.cron || "";
+  return `${expression}|${cronTimezone(cfg)}`;
+}
 function registerCronJob(schedule) {
+  if (!cronOwner) {
+    console.log(
+      `[scheduler] Schedule ${schedule.id} saved but not registered here (this process does not own cron) \u2014 the scheduler will pick it up within a minute.`
+    );
+    return;
+  }
   activeJobs.get(schedule.id)?.stop();
   activeJobs.delete(schedule.id);
+  registeredSignature.delete(schedule.id);
   const cfg = schedule.config ?? {};
   const expression = typeof cfg.expression === "string" && cfg.expression || typeof cfg.cron === "string" && cfg.cron || void 0;
   if (!expression) {
@@ -26224,11 +28292,13 @@ function registerCronJob(schedule) {
     await runScheduledWorkflow(schedule.workflowId, schedule.id);
   });
   activeJobs.set(schedule.id, job);
+  registeredSignature.set(schedule.id, `${expression}|${timezone}`);
   console.log(`[scheduler] Registered schedule ${schedule.id} (${expression} ${timezone})`);
 }
 function unregisterCronJob(scheduleId) {
   activeJobs.get(scheduleId)?.stop();
   activeJobs.delete(scheduleId);
+  registeredSignature.delete(scheduleId);
 }
 async function runScheduledWorkflow(workflowId, scheduleId) {
   const [workflow] = await db.select().from(workflows).where(eq54(workflows.id, workflowId)).limit(1);
@@ -26325,7 +28395,7 @@ async function runScheduledWorkflow(workflowId, scheduleId) {
         outputData: output,
         completedAt: /* @__PURE__ */ new Date(),
         ...usage ?? {}
-      }).where(and35(eq54(nodeExecutions.runId, runId), eq54(nodeExecutions.nodeId, nodeId)));
+      }).where(and36(eq54(nodeExecutions.runId, runId), eq54(nodeExecutions.nodeId, nodeId)));
     }
     for (const [nodeId, error] of result.nodeErrors) {
       const usage = result.nodeUsage.get(nodeId);
@@ -26335,7 +28405,7 @@ async function runScheduledWorkflow(workflowId, scheduleId) {
         error,
         completedAt: /* @__PURE__ */ new Date(),
         ...usage ?? {}
-      }).where(and35(eq54(nodeExecutions.runId, runId), eq54(nodeExecutions.nodeId, nodeId)));
+      }).where(and36(eq54(nodeExecutions.runId, runId), eq54(nodeExecutions.nodeId, nodeId)));
     }
     const job = activeJobs.get(scheduleId);
     await db.update(workflowSchedules).set({
@@ -26363,7 +28433,7 @@ async function reloadSchedule(scheduleId) {
   }
   registerCronJob(schedule);
 }
-var activeJobs;
+var activeJobs, registeredSignature, cronOwner, RECONCILE_INTERVAL_MS, reconcilerStarted;
 var init_scheduler = __esm({
   "src/lib/workflows/scheduler.ts"() {
     "use strict";
@@ -26373,7 +28443,12 @@ var init_scheduler = __esm({
     init_types5();
     init_observability_bus();
     init_cron_timezone();
+    init_service_role();
     activeJobs = /* @__PURE__ */ new Map();
+    registeredSignature = /* @__PURE__ */ new Map();
+    cronOwner = process.env.JKAI_RUN_WORKER !== "1" && runsService("scheduler");
+    RECONCILE_INTERVAL_MS = 6e4;
+    reconcilerStarted = false;
   }
 });
 
@@ -26676,7 +28751,7 @@ var init_audit_diff = __esm({
 });
 
 // src/lib/canvas/mutate.server.ts
-import { and as and36, eq as eq55, inArray as inArray15, or as or4 } from "drizzle-orm";
+import { and as and37, eq as eq55, inArray as inArray17, or as or4 } from "drizzle-orm";
 function stringify(value) {
   try {
     return JSON.stringify(value) ?? "";
@@ -26696,7 +28771,7 @@ function credentialFields(config) {
 async function mutateNodeConfig(input) {
   const { workflowId, nodeId, patch, removeKeys, expectedVersion, actor, reason } = input;
   const conn = input.tx ?? db;
-  const [node] = await conn.select().from(workflowNodes).where(and36(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId)));
+  const [node] = await conn.select().from(workflowNodes).where(and37(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId)));
   if (!node) throw new NodeNotFoundError(nodeId);
   const currentVersion = node.version ?? 0;
   if (typeof expectedVersion === "number" && currentVersion !== expectedVersion) {
@@ -26724,15 +28799,15 @@ async function mutateNodeConfig(input) {
   if (typeof input.label === "string") updates.label = input.label;
   if (typeof input.type === "string") updates.type = input.type;
   if (input.position) updates.position = input.position;
-  const where = typeof expectedVersion === "number" ? and36(
+  const where = typeof expectedVersion === "number" ? and37(
     eq55(workflowNodes.id, nodeId),
     eq55(workflowNodes.workflowId, workflowId),
     eq55(workflowNodes.version, expectedVersion)
-  ) : and36(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId));
+  ) : and37(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId));
   const [updated] = await conn.update(workflowNodes).set(updates).where(where).returning();
   if (!updated) {
     if (typeof expectedVersion === "number") {
-      const [now] = await conn.select().from(workflowNodes).where(and36(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId)));
+      const [now] = await conn.select().from(workflowNodes).where(and37(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId)));
       if (now) throw new VersionConflictError(now.version ?? 0, expectedVersion);
     }
     throw new NodeNotFoundError(nodeId);
@@ -26817,17 +28892,17 @@ async function createNode(input) {
 async function deleteNode(input) {
   const { workflowId, nodeId, actor, reason } = input;
   const conn = input.tx ?? db;
-  const [node] = await conn.select().from(workflowNodes).where(and36(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId)));
+  const [node] = await conn.select().from(workflowNodes).where(and37(eq55(workflowNodes.id, nodeId), eq55(workflowNodes.workflowId, workflowId)));
   if (!node) throw new NodeNotFoundError(nodeId);
   const edges = await conn.select().from(workflowEdges).where(
-    and36(
+    and37(
       eq55(workflowEdges.workflowId, workflowId),
       or4(eq55(workflowEdges.sourceNodeId, nodeId), eq55(workflowEdges.targetNodeId, nodeId))
     )
   );
   if (edges.length > 0) {
     await conn.delete(workflowEdges).where(
-      inArray15(
+      inArray17(
         workflowEdges.id,
         edges.map((e) => e.id)
       )
@@ -26862,9 +28937,9 @@ async function createEdge(input) {
     throw new EdgeEndpointError([sourceNodeId]);
   }
   const endpoints = await conn.select().from(workflowNodes).where(
-    and36(
+    and37(
       eq55(workflowNodes.workflowId, workflowId),
-      inArray15(workflowNodes.id, [sourceNodeId, targetNodeId])
+      inArray17(workflowNodes.id, [sourceNodeId, targetNodeId])
     )
   );
   const found = new Set(endpoints.map((n) => n.id));
@@ -26875,7 +28950,7 @@ async function createEdge(input) {
   const sourceHandle = input.sourceHandle || null;
   const targetHandle = input.targetHandle || null;
   const between = await conn.select().from(workflowEdges).where(
-    and36(
+    and37(
       eq55(workflowEdges.workflowId, workflowId),
       eq55(workflowEdges.sourceNodeId, sourceNodeId),
       eq55(workflowEdges.targetNodeId, targetNodeId)
@@ -26915,7 +28990,7 @@ async function createEdge(input) {
 async function deleteEdge(input) {
   const { workflowId, edgeId, actor, reason } = input;
   const conn = input.tx ?? db;
-  const [edge] = await conn.select().from(workflowEdges).where(and36(eq55(workflowEdges.id, edgeId), eq55(workflowEdges.workflowId, workflowId)));
+  const [edge] = await conn.select().from(workflowEdges).where(and37(eq55(workflowEdges.id, edgeId), eq55(workflowEdges.workflowId, workflowId)));
   if (!edge) throw new EdgeNotFoundError(edgeId);
   await conn.delete(workflowEdges).where(eq55(workflowEdges.id, edgeId));
   await recordAudit(
@@ -26933,7 +29008,7 @@ async function deleteEdge(input) {
 async function updateEdge(input) {
   const { workflowId, edgeId, actor, reason } = input;
   const conn = input.tx ?? db;
-  const [edge] = await conn.select().from(workflowEdges).where(and36(eq55(workflowEdges.id, edgeId), eq55(workflowEdges.workflowId, workflowId)));
+  const [edge] = await conn.select().from(workflowEdges).where(and37(eq55(workflowEdges.id, edgeId), eq55(workflowEdges.workflowId, workflowId)));
   if (!edge) throw new EdgeNotFoundError(edgeId);
   const nextSource = input.sourceNodeId ?? edge.sourceNodeId;
   const nextTarget = input.targetNodeId ?? edge.targetNodeId;
@@ -26943,7 +29018,7 @@ async function updateEdge(input) {
     ...input.targetNodeId ? [input.targetNodeId] : []
   ];
   if (moved.length > 0) {
-    const endpoints = await conn.select({ id: workflowNodes.id, type: workflowNodes.type }).from(workflowNodes).where(and36(eq55(workflowNodes.workflowId, workflowId), inArray15(workflowNodes.id, moved)));
+    const endpoints = await conn.select({ id: workflowNodes.id, type: workflowNodes.type }).from(workflowNodes).where(and37(eq55(workflowNodes.workflowId, workflowId), inArray17(workflowNodes.id, moved)));
     const found = new Set(endpoints.map((n) => n.id));
     const missing = moved.filter((id) => !found.has(id));
     if (missing.length > 0) throw new EdgeEndpointError(missing);
@@ -27058,7 +29133,7 @@ var init_mutate_server = __esm({
 });
 
 // src/lib/canvas/amend.server.ts
-import { and as and37, eq as eq56 } from "drizzle-orm";
+import { and as and38, eq as eq56 } from "drizzle-orm";
 function resolveRef(id, refs) {
   if (!id.startsWith("#")) return id;
   const resolved = refs.get(id.slice(1));
@@ -27221,16 +29296,16 @@ async function applyAmendOps(input) {
             const targetNodeId = resolveRef(op.targetNodeId, refs);
             const [source, target] = await Promise.all([
               tx.select().from(workflowNodes).where(
-                and37(eq56(workflowNodes.id, sourceNodeId), eq56(workflowNodes.workflowId, workflowId))
+                and38(eq56(workflowNodes.id, sourceNodeId), eq56(workflowNodes.workflowId, workflowId))
               ).then((r) => r[0]),
               tx.select().from(workflowNodes).where(
-                and37(eq56(workflowNodes.id, targetNodeId), eq56(workflowNodes.workflowId, workflowId))
+                and38(eq56(workflowNodes.id, targetNodeId), eq56(workflowNodes.workflowId, workflowId))
               ).then((r) => r[0])
             ]);
             if (!source) throw new NodeNotFoundError(sourceNodeId);
             if (!target) throw new NodeNotFoundError(targetNodeId);
             const existing = await tx.select().from(workflowEdges).where(
-              and37(
+              and38(
                 eq56(workflowEdges.workflowId, workflowId),
                 eq56(workflowEdges.sourceNodeId, sourceNodeId),
                 eq56(workflowEdges.targetNodeId, targetNodeId)
@@ -30501,6 +32576,12 @@ var init_briefing_compose_def = __esm({
 - \`indoor\` \u2014 a \`home-assistant\` query_state output
 - \`email\` \u2014 a \`gmail-search\` output
 - \`knowledge\` \u2014 an \`intel-query\` output
+- \`briefingSources\` \u2014 a generic array from any capability: \`[{ key, label, status, detail, facts: [{ label, value, source }] }]\`. Use this for calendar, research, files, web results, finance, monitors, or future node types without changing this composer.
+
+The owner-facing briefing profile controls which sources are included and which
+ones are required. The composer also reads recent shared JKAI memories and
+daydream activity directly, so learning completed outside the canvas is visible
+in the next briefing.
 
 **Returns** \`{ briefing, facts[], gaps[], sources[], factSheet, gapSheet, headline, availableCount, gapCount }\`.
 
@@ -35908,7 +37989,7 @@ var run_helpers_exports = {};
 __export(run_helpers_exports, {
   runWorkflowAndPersist: () => runWorkflowAndPersist
 });
-import { eq as eq57, and as and38 } from "drizzle-orm";
+import { eq as eq57, and as and39 } from "drizzle-orm";
 function runWorkflowAndPersist(definition, runId, initialInput, opts) {
   const { workflowId, breakpoints, selfHealing = true, label: label2 = "run" } = opts;
   let settled = false;
@@ -35995,7 +38076,7 @@ function runWorkflowAndPersist(definition, runId, initialInput, opts) {
           outputData: output,
           completedAt: /* @__PURE__ */ new Date(),
           ...usage ?? {}
-        }).where(and38(eq57(nodeExecutions.runId, runId), eq57(nodeExecutions.nodeId, nodeId)));
+        }).where(and39(eq57(nodeExecutions.runId, runId), eq57(nodeExecutions.nodeId, nodeId)));
       }
       for (const [nodeId, error] of result.nodeErrors) {
         const usage = result.nodeUsage.get(nodeId);
@@ -36005,7 +38086,7 @@ function runWorkflowAndPersist(definition, runId, initialInput, opts) {
           error,
           completedAt: /* @__PURE__ */ new Date(),
           ...usage ?? {}
-        }).where(and38(eq57(nodeExecutions.runId, runId), eq57(nodeExecutions.nodeId, nodeId)));
+        }).where(and39(eq57(nodeExecutions.runId, runId), eq57(nodeExecutions.nodeId, nodeId)));
       }
       for (const entry of healingHistory) {
         await db.update(workflowNodes).set({ config: entry.newConfig }).where(eq57(workflowNodes.id, entry.nodeId));
@@ -36087,7 +38168,7 @@ __export(adapter_server_exports, {
   loadModelCatalogue: () => loadModelCatalogue,
   reapExpiredInteractions: () => reapExpiredInteractions
 });
-import { eq as eq58, desc as desc14, asc as asc7, and as and39, or as or5, inArray as inArray16 } from "drizzle-orm";
+import { eq as eq58, desc as desc14, asc as asc7, and as and40, or as or5, inArray as inArray18 } from "drizzle-orm";
 async function loadModelCatalogue() {
   const [glmSetting, orAltSetting, orModels] = await Promise.all([
     getSetting("jkai.chat.default_model"),
@@ -36120,7 +38201,7 @@ function workflowNameFor(slug) {
   return `canvas:${slug}`;
 }
 async function reapExpiredInteractions(workflowId) {
-  const { lt: lt3, isNull: isNull18 } = await import("drizzle-orm");
+  const { lt: lt5, isNull: isNull20 } = await import("drizzle-orm");
   const { workflowInteractions: workflowInteractions2, workflowRuns: workflowRuns2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   const { emitWorkflowEvent: emitWorkflowEvent2 } = await Promise.resolve().then(() => (init_events(), events_exports));
   const expired = await db.select({
@@ -36128,12 +38209,12 @@ async function reapExpiredInteractions(workflowId) {
     runId: workflowInteractions2.runId,
     nodeId: workflowInteractions2.nodeId
   }).from(workflowInteractions2).innerJoin(workflowRuns2, eq58(workflowRuns2.id, workflowInteractions2.runId)).where(
-    and39(
+    and40(
       eq58(workflowRuns2.workflowId, workflowId),
       eq58(workflowRuns2.status, "awaiting_human"),
       eq58(workflowInteractions2.cancelled, false),
-      isNull18(workflowInteractions2.resolvedAt),
-      lt3(workflowInteractions2.expiresAt, /* @__PURE__ */ new Date())
+      isNull20(workflowInteractions2.resolvedAt),
+      lt5(workflowInteractions2.expiresAt, /* @__PURE__ */ new Date())
     )
   );
   if (expired.length === 0) return 0;
@@ -36172,7 +38253,7 @@ async function allocateCanvasName(seed) {
   return { name: workflowNameFor(slug), slug };
 }
 async function listCanvasStats() {
-  const { like: like6, gte: gte11, inArray: inArray22, sql: sqlTag } = await import("drizzle-orm");
+  const { like: like6, gte: gte13, inArray: inArray27, sql: sqlTag } = await import("drizzle-orm");
   const canvasRows = await db.select({ id: workflows.id }).from(workflows).where(like6(workflows.name, `${SLUG_PREFIX}%`));
   const ids = canvasRows.map((r) => r.id);
   if (ids.length === 0) {
@@ -36188,10 +38269,10 @@ async function listCanvasStats() {
     };
   }
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1e3);
-  const [nodeAgg] = await db.select({ n: sqlTag`count(*)::int` }).from(workflowNodes).where(inArray22(workflowNodes.workflowId, ids));
-  const [edgeAgg] = await db.select({ n: sqlTag`count(*)::int` }).from(workflowEdges).where(inArray22(workflowEdges.workflowId, ids));
+  const [nodeAgg] = await db.select({ n: sqlTag`count(*)::int` }).from(workflowNodes).where(inArray27(workflowNodes.workflowId, ids));
+  const [edgeAgg] = await db.select({ n: sqlTag`count(*)::int` }).from(workflowEdges).where(inArray27(workflowEdges.workflowId, ids));
   const recentRuns = await db.select({ status: workflowRuns.status, startedAt: workflowRuns.startedAt }).from(workflowRuns).where(
-    and39(inArray22(workflowRuns.workflowId, ids), gte11(workflowRuns.startedAt, sevenDaysAgo))
+    and40(inArray27(workflowRuns.workflowId, ids), gte13(workflowRuns.startedAt, sevenDaysAgo))
   );
   const runs7d = recentRuns.length;
   const terminal = recentRuns.filter((r) => r.status === "completed" || r.status === "failed");
@@ -36215,7 +38296,7 @@ async function listCanvasStats() {
     b.total += 1;
     if (r.status === "failed" || r.status === "completed_with_errors") b.failed += 1;
   }
-  const nodeTypeRows = await db.select({ type: workflowNodes.type }).from(workflowNodes).where(inArray22(workflowNodes.workflowId, ids));
+  const nodeTypeRows = await db.select({ type: workflowNodes.type }).from(workflowNodes).where(inArray27(workflowNodes.workflowId, ids));
   const mix = /* @__PURE__ */ new Map();
   for (const n of nodeTypeRows) {
     const kind = mapTypeToKind(n.type);
@@ -36227,10 +38308,10 @@ async function listCanvasStats() {
     nextRunAt: workflowSchedules.nextRunAt,
     name: workflows.name
   }).from(workflowSchedules).innerJoin(workflows, eq58(workflows.id, workflowSchedules.workflowId)).where(
-    and39(
-      inArray22(workflowSchedules.workflowId, ids),
+    and40(
+      inArray27(workflowSchedules.workflowId, ids),
       eq58(workflowSchedules.enabled, true),
-      gte11(workflowSchedules.nextRunAt, /* @__PURE__ */ new Date())
+      gte13(workflowSchedules.nextRunAt, /* @__PURE__ */ new Date())
     )
   ).orderBy(asc7(workflowSchedules.nextRunAt)).limit(4);
   const nextScheduled = scheduleRows.filter((r) => r.nextRunAt).map((r) => {
@@ -36497,7 +38578,7 @@ async function loadCanvas(slug) {
   const msgRows = await db.select().from(orchestratorChats).where(
     pinnedConversationIds.length > 0 ? or5(
       eq58(orchestratorChats.workflowId, workflowId),
-      inArray16(orchestratorChats.conversationId, pinnedConversationIds)
+      inArray18(orchestratorChats.conversationId, pinnedConversationIds)
     ) : eq58(orchestratorChats.workflowId, workflowId)
   ).orderBy(desc14(orchestratorChats.createdAt)).limit(400);
   const legacyBucket = chatNodeIds[0] ?? null;
@@ -36603,12 +38684,19 @@ var init_adapter_server = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/workflows.ts
-import { desc as desc15, eq as eq59, asc as asc8, and as and40, or as or6, inArray as inArray17, gte as gte6 } from "drizzle-orm";
+import { desc as desc15, eq as eq59, asc as asc8, and as and41, inArray as inArray19, gte as gte6 } from "drizzle-orm";
 function refuseCredentialConfig(fields) {
   return {
     success: false,
     error: `Refusing to write this node: config field(s) ${fields.join(", ")} look like a live credential. A secret in a node config spreads to the workflow row, run records, audit log and canvas history \u2014 deleting the node afterwards does not recall it. Never put a key in node config and never ask the user to paste one into the chat. Instead call request_credential (new secret) or update_credential (rotation), then reference the stored secret by its registry handle. Re-send this node with the credential field removed.`
   };
+}
+async function canvasScope(ctx) {
+  if (typeof ctx?.workflowId === "string" && ctx.workflowId.trim()) return ctx.workflowId.trim();
+  const chatId = ctx?.conversationId;
+  if (!chatId || !UUID_RE3.test(chatId)) return null;
+  const [row] = await db.select({ id: workflows.id }).from(workflows).where(eq59(workflows.id, chatId)).limit(1);
+  return row?.id ?? null;
 }
 async function fanInWarnings(workflowId) {
   const [nodes, edges] = await Promise.all([
@@ -36839,7 +38927,7 @@ function normalizeScheduleConfig(config) {
   }
   return cfg;
 }
-var REPAIR_DONT_REBUILD, AMEND_OPS_DESCRIPTION, KNOWN_AMEND_OPS;
+var REPAIR_DONT_REBUILD, UUID_RE3, AMEND_OPS_DESCRIPTION, KNOWN_AMEND_OPS;
 var init_workflows = __esm({
   "src/lib/workflows/site-tools/tools/workflows.ts"() {
     "use strict";
@@ -36856,6 +38944,7 @@ var init_workflows = __esm({
     init_mutate_server();
     init_amend_server();
     REPAIR_DONT_REBUILD = `The canvas EXISTS and every node is saved \u2014 this is a repair job, not a rebuild. Fix each issue above with workflow_update_node (it takes a config patch; pass null to drop a key), then workflow_lint to confirm they are gone. Do NOT call workflow_delete and build again: deleting loses the node ids, the run history and the canvas URL the user may already have open, and the rebuild reproduces the same guesses. If a single node's shape is the problem, call workflow_describe_node for its exact config schema first.`;
+    UUID_RE3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     register({
       name: "workflow_build_from_spec",
       description: 'Build a NEW canvas (workflow) from an EXPLICIT JSON spec \u2014 name, trigger, nodes, edges. PREFER workflow_generate UNLESS the user dictated exact node types and config: this tool takes your spec verbatim, so every config shape is a guess you are making, whereas workflow_generate grounds itself in the live node registry, plans, runs a critic round, then verifies and self-heals before saving. Reach for this one when you need precise control over an exact DAG the user specified. Use this when the user has confirmed the design you proposed in chat. DESIGN-FIRST WORKFLOW: Before calling this tool, you MUST have written out the design in chat (numbered nodes with type+label+config, edge wiring) and the user must have said yes/build it/ship it. Never call this tool with a guess at the design \u2014 every config field must be intentional. Each node is inserted into the canvas one at a time with a small delay, and the canvas page auto-refreshes between inserts so the user can watch the build live if they have the URL open. The tool emits the canvas URL on its very first progress event so the user can open it before the build finishes. CRITICAL: paste `data.summaryMarkdown` VERBATIM as your reply when the tool returns. It contains the canvas link, the description, every node with its actual saved config, the flow diagram, and any "Needs attention" issues that need fixing on the canvas. Do NOT rewrite it, summarise it, or construct your own URL.',
@@ -36917,10 +39006,11 @@ var init_workflows = __esm({
       handler: async (args, ctx) => {
         const emit4 = ctx?.emit ?? (() => {
         });
-        if (ctx?.conversationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ctx.conversationId)) {
+        const openCanvas = await canvasScope(ctx);
+        if (openCanvas) {
           return {
             success: false,
-            error: `workflow_build_from_spec creates a NEW canvas \u2014 but this chat is already on workflow ${ctx.conversationId}. To add nodes to the current canvas, use workflow_add_node + workflow_add_edge (per the design-first flow). Only call workflow_build_from_spec from the general /jkai chat hub (which has no workflow scope).`
+            error: `workflow_build_from_spec creates a NEW canvas \u2014 but this chat is already on workflow ${openCanvas}. To add nodes to the current canvas, use workflow_add_node + workflow_add_edge (per the design-first flow). Only call workflow_build_from_spec from the general /jkai chat hub (which has no workflow scope).`
           };
         }
         const v = validateSpec(args);
@@ -37271,7 +39361,7 @@ ${REPAIR_DONT_REBUILD}`,
         const nodeIds = executions.map((e) => e.nodeId);
         const nodeMap = /* @__PURE__ */ new Map();
         if (nodeIds.length > 0) {
-          const nodeRows = await db.select({ id: workflowNodes.id, label: workflowNodes.label }).from(workflowNodes).where(or6(...nodeIds.map((nid) => eq59(workflowNodes.id, nid))));
+          const nodeRows = await db.select({ id: workflowNodes.id, label: workflowNodes.label }).from(workflowNodes).where(inArray19(workflowNodes.id, [...new Set(nodeIds)]));
           for (const n of nodeRows) nodeMap.set(n.id, n.label);
         }
         return {
@@ -37430,7 +39520,7 @@ ${REPAIR_DONT_REBUILD}`,
         const typeErr = await validateNodeType(type);
         if (typeErr) return { success: false, error: typeErr };
         if (type === "trigger") {
-          const [existing] = await db.select().from(workflowNodes).where(and40(eq59(workflowNodes.workflowId, workflowId), eq59(workflowNodes.type, "trigger")));
+          const [existing] = await db.select().from(workflowNodes).where(and41(eq59(workflowNodes.workflowId, workflowId), eq59(workflowNodes.type, "trigger")));
           if (existing) {
             return {
               success: false,
@@ -38126,7 +40216,7 @@ ${REPAIR_DONT_REBUILD}`,
         const workflowId = readWorkflowId(args, { allowBareId: false });
         if (!workflowId) return { success: false, error: missingIdError("workflow", "workflowId") };
         const { buildWorkflowSubscriptions: buildWorkflowSubscriptions2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-        await db.delete(buildWorkflowSubscriptions2).where(and40(eq59(buildWorkflowSubscriptions2.buildId, buildId), eq59(buildWorkflowSubscriptions2.workflowId, workflowId)));
+        await db.delete(buildWorkflowSubscriptions2).where(and41(eq59(buildWorkflowSubscriptions2.buildId, buildId), eq59(buildWorkflowSubscriptions2.workflowId, workflowId)));
         return { success: true, data: { buildId, workflowId, message: "Unsubscribed." } };
       }
     });
@@ -38173,9 +40263,9 @@ ${REPAIR_DONT_REBUILD}`,
         if (!workflow) return { success: false, error: "Workflow not found" };
         if (keys && keys.length > 0) {
           const deleted2 = await db.delete(workflowDataStore).where(
-            and40(
+            and41(
               eq59(workflowDataStore.workflowId, workflowId),
-              inArray17(workflowDataStore.key, keys)
+              inArray19(workflowDataStore.key, keys)
             )
           ).returning({ key: workflowDataStore.key });
           return {
@@ -38198,7 +40288,7 @@ ${REPAIR_DONT_REBUILD}`,
         }
         const cutoff = runsWithStart[runsWithStart.length - 1].startedAt;
         const deleted = await db.delete(workflowDataStore).where(
-          and40(
+          and41(
             eq59(workflowDataStore.workflowId, workflowId),
             gte6(workflowDataStore.updatedAt, cutoff)
           )
@@ -38299,8 +40389,7 @@ ${REPAIR_DONT_REBUILD}`,
         });
         const prompt = typeof args.prompt === "string" ? args.prompt.trim() : "";
         if (!prompt) return { success: false, error: "`prompt` (string) is required." };
-        const isUuid = (v) => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-        let workflowId = typeof args.workflowId === "string" && args.workflowId.trim() ? args.workflowId.trim() : isUuid(ctx?.conversationId) ? ctx.conversationId : null;
+        let workflowId = typeof args.workflowId === "string" && args.workflowId.trim() ? args.workflowId.trim() : await canvasScope(ctx);
         const { generateWorkflow: generateWorkflow2, saveWorkflowFromGenerated: saveWorkflowFromGenerated2, runWorkflowVerification: runWorkflowVerification2 } = await Promise.resolve().then(() => (init_orchestrator2(), orchestrator_exports2));
         const { formatIssues: formatIssues2 } = await Promise.resolve().then(() => (init_verify(), verify_exports));
         let result;
@@ -38363,6 +40452,20 @@ ${REPAIR_DONT_REBUILD}`,
               }
               return createdRow.id;
             });
+            const genTrigger = deriveTriggerShape(
+              workflow.trigger
+            );
+            if (genTrigger.scheduleRow) {
+              const [sch] = await db.insert(workflowSchedules).values({
+                workflowId,
+                type: genTrigger.scheduleRow.type,
+                config: genTrigger.scheduleRow.config,
+                enabled: true
+              }).returning();
+              if (genTrigger.scheduleRow.type === "cron") {
+                registerCronJob({ id: sch.id, workflowId, config: sch.config });
+              }
+            }
           }
         } catch (dbErr) {
           const msg = dbErr instanceof Error ? dbErr.message : "Unknown DB error";
@@ -38412,7 +40515,7 @@ ${REPAIR_DONT_REBUILD}`,
 });
 
 // src/lib/workflows/site-tools/tools/diagnostics.ts
-import { desc as desc16, eq as eq60, and as and41 } from "drizzle-orm";
+import { desc as desc16, eq as eq60, and as and42 } from "drizzle-orm";
 var init_diagnostics = __esm({
   "src/lib/workflows/site-tools/tools/diagnostics.ts"() {
     "use strict";
@@ -38480,7 +40583,7 @@ var init_diagnostics = __esm({
         const limit2 = args.limit || 20;
         const workflowId = args.workflowId;
         const rows = await db.select().from(workflowRuns).where(
-          workflowId ? and41(eq60(workflowRuns.trigger, "scheduled"), eq60(workflowRuns.workflowId, workflowId)) : eq60(workflowRuns.trigger, "scheduled")
+          workflowId ? and42(eq60(workflowRuns.trigger, "scheduled"), eq60(workflowRuns.workflowId, workflowId)) : eq60(workflowRuns.trigger, "scheduled")
         ).orderBy(desc16(workflowRuns.startedAt)).limit(limit2);
         const runs = rows.map((r) => {
           const durationMs = r.startedAt && r.completedAt ? new Date(r.completedAt).getTime() - new Date(r.startedAt).getTime() : null;
@@ -38566,7 +40669,7 @@ var init_capabilities2 = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/memory.ts
-import { eq as eq61, and as and42, isNull as isNull11, ilike, desc as desc17 } from "drizzle-orm";
+import { eq as eq61, and as and43, isNull as isNull11, ilike, desc as desc17 } from "drizzle-orm";
 var CATEGORIES;
 var init_memory = __esm({
   "src/lib/workflows/site-tools/tools/memory.ts"() {
@@ -38598,7 +40701,7 @@ var init_memory = __esm({
       handler: async (args) => {
         const category = args.category;
         const content = args.content;
-        const existing = await db.select().from(jkaiMemories).where(and42(
+        const existing = await db.select().from(jkaiMemories).where(and43(
           eq61(jkaiMemories.category, category),
           isNull11(jkaiMemories.supersededBy)
         ));
@@ -38654,7 +40757,7 @@ var init_memory = __esm({
         const conditions = [isNull11(jkaiMemories.supersededBy)];
         if (category) conditions.push(eq61(jkaiMemories.category, category));
         if (query) conditions.push(ilike(jkaiMemories.content, `%${query}%`));
-        const rows = await db.select().from(jkaiMemories).where(and42(...conditions)).orderBy(desc17(jkaiMemories.updatedAt)).limit(50);
+        const rows = await db.select().from(jkaiMemories).where(and43(...conditions)).orderBy(desc17(jkaiMemories.updatedAt)).limit(50);
         return { success: true, data: { memories: rows, count: rows.length } };
       }
     });
@@ -38806,7 +40909,17 @@ function handleJkaiHelp(args) {
     }
     return { success: true, data: entry };
   }
-  return { success: true, data: manifest };
+  return {
+    success: true,
+    data: {
+      toolsets: manifest.map((m) => ({
+        toolset: m.toolset,
+        description: m.description,
+        tools: m.tools.map((t) => t.name)
+      })),
+      note: 'Index only \u2014 per-tool descriptions omitted so the whole catalogue fits. Call jkai_help({ toolset: "<name>" }) for full descriptions of one toolset, then activate_toolset("<name>") to load it. Every toolset is listed here: if you cannot see a capability above, it does not exist \u2014 do not substitute another.'
+    }
+  };
 }
 async function handleCreateTool(args) {
   const name = args.name;
@@ -38929,7 +41042,7 @@ var init_meta_tools = __esm({
         type: "function",
         function: {
           name: "jkai_help",
-          description: "See what capabilities and tools are available. Returns all toolsets with their tool names and descriptions, including custom tools. Use this when unsure which toolset to activate.",
+          description: "See what capabilities and tools are available. Called with no arguments it returns an INDEX of every toolset \u2014 name, one-line description, and the tool names it holds \u2014 which is the complete list of what exists. Pass `toolset` to get the full descriptions for one of them. Use this when unsure which toolset to activate.",
           parameters: {
             type: "object",
             properties: {
@@ -39832,6 +41945,12 @@ function reconcileClusters(input) {
     keyForIndex.set(pair.index, pair.key);
     indexForKey.set(pair.key, pair.index);
   }
+  for (const [index2, keys] of [...losers]) {
+    const absorbed = keys.filter((key) => !indexForKey.has(key));
+    if (absorbed.length === keys.length) continue;
+    if (absorbed.length) losers.set(index2, absorbed);
+    else losers.delete(index2);
+  }
   const changes = {
     created: [],
     matched: [],
@@ -39971,6 +42090,9 @@ var init_cluster_identity = __esm({
 });
 
 // src/lib/jkai/intel/analytics/cluster-label.ts
+function ubiquityThreshold(trackedClusters) {
+  return Math.max(UBIQUITY_REACH_FLOOR, Math.ceil(trackedClusters * UBIQUITY_CLUSTER_SHARE));
+}
 function pluralise(typeName, count2) {
   const readable = typeName.replace(/_/g, " ");
   if (count2 === 1) return readable;
@@ -39982,6 +42104,7 @@ function ranked(counts) {
 function findUbiquitousEntities(index2, membership, tracked) {
   const out = /* @__PURE__ */ new Set();
   if (tracked.size < 2) return out;
+  const threshold = ubiquityThreshold(tracked.size);
   for (const id of index2.ids) {
     const reach = /* @__PURE__ */ new Set();
     const own = membership.get(id);
@@ -39989,9 +42112,9 @@ function findUbiquitousEntities(index2, membership, tracked) {
     for (const neighbour of index2.neighbours.get(id) ?? []) {
       const community = membership.get(neighbour);
       if (community !== void 0 && tracked.has(community)) reach.add(community);
-      if (reach.size >= UBIQUITY_REACH) break;
+      if (reach.size >= threshold) break;
     }
-    if (reach.size >= UBIQUITY_REACH) out.add(id);
+    if (reach.size >= threshold) out.add(id);
   }
   return out;
 }
@@ -40063,11 +42186,12 @@ function composeClusterLabel(members, ctx) {
   const [dominantType, count2] = composition.types[0] ?? ["entity", members.length];
   return `${members.length} ${pluralise(dominantType, count2)}`;
 }
-var UBIQUITY_REACH, LEADERS, MAX_LABEL_PART, IRREGULAR_PLURALS, KNOWN_SOURCES;
+var UBIQUITY_CLUSTER_SHARE, UBIQUITY_REACH_FLOOR, LEADERS, MAX_LABEL_PART, IRREGULAR_PLURALS, KNOWN_SOURCES;
 var init_cluster_label = __esm({
   "src/lib/jkai/intel/analytics/cluster-label.ts"() {
     "use strict";
-    UBIQUITY_REACH = 20;
+    UBIQUITY_CLUSTER_SHARE = 0.2;
+    UBIQUITY_REACH_FLOOR = 4;
     LEADERS = 2;
     MAX_LABEL_PART = 32;
     IRREGULAR_PLURALS = {
@@ -40172,10 +42296,10 @@ async function reconcileFromAnalysis(analysis, opts = {}) {
     lastReconciledAt = 0;
     lastResult = null;
     console.warn("[intel/clusters] roster write failed", err);
-    return { ...result, resolution, recomputed: true };
+    return { ...result, resolution, recomputed: true, ubiquitous };
   }
   lastReconciledAt = analysis.computedAt;
-  lastResult = { ...result, resolution, recomputed: true };
+  lastResult = { ...result, resolution, recomputed: true, ubiquitous };
   return lastResult;
 }
 function invalidateClusterReconcile() {
@@ -40242,7 +42366,7 @@ var init_cluster_store = __esm({
 });
 
 // src/lib/jkai/intel/context.ts
-import { desc as desc18, eq as eq65, inArray as inArray18, or as or7, sql as sql37 } from "drizzle-orm";
+import { desc as desc18, eq as eq65, inArray as inArray20, or as or6, sql as sql37 } from "drizzle-orm";
 async function buildKnowledgeContext(userMessage) {
   try {
     const context = await findRelevantContext(userMessage);
@@ -40277,6 +42401,12 @@ async function vectorLookups(vectorStr) {
       FROM intel_notes n
       WHERE n.embedding IS NOT NULL
         AND n.status = 'processed'
+        -- Stated explicitly, even though a held note's status is 'held' and the
+        -- line above already excludes it. That exclusion is incidental — it
+        -- depends on two columns happening to agree — and this is the door the
+        -- whole mail gate exists to keep shut: chat must never answer from an
+        -- email nobody approved.
+        AND n.graph_state = 'admitted'
       ORDER BY distance ASC
       LIMIT 5
     `);
@@ -40302,9 +42432,9 @@ async function findRelevantContext(query) {
     sourceId: intelRelationships.sourceEntityId,
     targetId: intelRelationships.targetEntityId
   }).from(intelRelationships).where(
-    or7(
-      inArray18(intelRelationships.sourceEntityId, entityIds),
-      inArray18(intelRelationships.targetEntityId, entityIds)
+    or6(
+      inArray20(intelRelationships.sourceEntityId, entityIds),
+      inArray20(intelRelationships.targetEntityId, entityIds)
     )
   ).limit(entityIds.length * REL_PER_ENTITY * 3 + 50) : [];
   const relsByEntity = /* @__PURE__ */ new Map();
@@ -40319,7 +42449,7 @@ async function findRelevantContext(query) {
   const otherIds = [
     ...new Set(allRels.flatMap((r) => [r.sourceId, r.targetId]).filter((id) => !!id))
   ];
-  const nameRows = otherIds.length > 0 ? await db.select({ id: intelEntities.id, name: intelEntities.name }).from(intelEntities).where(inArray18(intelEntities.id, otherIds)) : [];
+  const nameRows = otherIds.length > 0 ? await db.select({ id: intelEntities.id, name: intelEntities.name }).from(intelEntities).where(inArray20(intelEntities.id, otherIds)) : [];
   const nameById = new Map(nameRows.map((r) => [r.id, r.name]));
   const entities2 = [];
   for (const row of relevantEntities) {
@@ -40717,8 +42847,8 @@ function summarizeToolResult(step) {
   const tool = disp.tool;
   const args = disp.args;
   if (status === "error") {
-    const errMsg3 = result?.error ?? unwrap(result).error;
-    return errMsg3 ? `${tool} failed: ${trim2(errMsg3, 80)}` : `${tool} failed`;
+    const errMsg4 = result?.error ?? unwrap(result).error;
+    return errMsg4 ? `${tool} failed: ${trim2(errMsg4, 80)}` : `${tool} failed`;
   }
   const d = unwrap(result);
   const count2 = countOf(d);
@@ -41259,7 +43389,7 @@ function searchSkills(query, limit2 = 10) {
   const scored = loadSkillIndex().map((s) => {
     const id = s.id.toLowerCase();
     const name = s.name.toLowerCase();
-    const desc37 = s.description.toLowerCase();
+    const desc40 = s.description.toLowerCase();
     const tags = s.tags.map((t) => t.toLowerCase());
     let score = 0;
     for (const t of terms) {
@@ -41269,7 +43399,7 @@ function searchSkills(query, limit2 = 10) {
       else if (name.includes(t)) score += 3;
       if (tags.some((tag) => tag === t)) score += 3;
       else if (tags.some((tag) => tag.includes(t))) score += 1;
-      if (desc37.includes(t)) score += 2;
+      if (desc40.includes(t)) score += 2;
     }
     return { s, score };
   });
@@ -41334,7 +43464,7 @@ function renderForSummary(messages) {
 }
 async function summarise(text4, previous) {
   try {
-    const ctx = await resolveDefaultModel();
+    const ctx = currentSessionModel() ?? await resolveChatMaintenanceModel();
     const { client, model } = await getLLMClient(ctx);
     const user = previous ? `Digest so far (fold the new messages into it, keeping what still matters):
 
@@ -41345,14 +43475,17 @@ ${previous}
 New messages that just fell out of the window:
 
 ${text4}` : text4;
-    const res = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: PROMPT },
-        { role: "user", content: user }
-      ],
-      max_tokens: 1500
-    });
+    const res = await withActivity(
+      "chat-maintenance",
+      () => client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: PROMPT },
+          { role: "user", content: user }
+        ],
+        max_tokens: 1500
+      })
+    );
     const out = res.choices?.[0]?.message?.content?.trim() ?? "";
     return out.length > 40 ? out : null;
   } catch (err) {
@@ -41447,8 +43580,10 @@ var init_compress = __esm({
   "src/lib/workflows/chat/compress.ts"() {
     "use strict";
     init_datastore();
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_chat();
+    init_activity();
     COMPRESSION_COLLECTION = "chat-compression";
     SYSTEM_ACTOR5 = "system";
     KEEP_RECENT = 30;
@@ -41561,7 +43696,7 @@ __export(sub_agent_exports, {
   DEFAULT_SUBAGENT_TOOLS: () => DEFAULT_SUBAGENT_TOOLS,
   runSubAgent: () => runSubAgent
 });
-async function runSubAgent(parentJobId, args, modelContext) {
+async function runSubAgent(parentJobId, args, modelContext, session2) {
   const agentId = crypto.randomUUID();
   const task = (args.task ?? "").trim();
   if (!task) {
@@ -41591,6 +43726,8 @@ async function runSubAgent(parentJobId, args, modelContext) {
         // give the child its own scope for events
         onStreamEvent: (e) => publishJobEvent(childJobId, e),
         modelContext,
+        sessionModel: session2?.sessionModel ?? null,
+        thinkingLevel: session2?.thinkingLevel ?? null,
         priceSnapshot: null,
         useIntelContext: false,
         subagentDepth: 1,
@@ -42047,7 +44184,7 @@ function maybeIngestAsNote(userMessage) {
   });
 }
 async function runSingleToolCall(toolCall, ctx) {
-  const { activeTools, activatedToolsets, haEntityCount, loadHaEntities, onToolProgress, onProgress, onStreamEvent, conversationId } = ctx;
+  const { activeTools, activatedToolsets, haEntityCount, loadHaEntities, onToolProgress, onProgress, onStreamEvent, conversationId, workflowId } = ctx;
   const fnName = toolCall.function.name;
   let fnArgs;
   try {
@@ -42139,7 +44276,10 @@ async function runSingleToolCall(toolCall, ctx) {
       try {
         const { runSubAgent: runSubAgent2 } = await Promise.resolve().then(() => (init_sub_agent(), sub_agent_exports));
         const agentArgs = fnArgs;
-        const out = await runSubAgent2(ctx.parentJobId, agentArgs, ctx.modelContext);
+        const out = await runSubAgent2(ctx.parentJobId, agentArgs, ctx.modelContext, {
+          sessionModel: ctx.sessionModel ?? null,
+          thinkingLevel: ctx.thinkingLevel ?? null
+        });
         toolResult = { success: true, data: out };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -42149,17 +44289,28 @@ async function runSingleToolCall(toolCall, ctx) {
   } else if (isRegisteredTool(fnName)) {
     const { isDestructive: isDestructive2, describeDestructiveAction: describeDestructiveAction2, requireConfirmation: requireConfirmation2 } = await Promise.resolve().then(() => (init_confirmation_gate(), confirmation_gate_exports));
     const jobId = ctx.parentJobId;
+    const sessionModel = ctx.sessionModel ?? void 0;
+    const sessionThinking = ctx.sessionModel ? ctx.thinkingLevel ?? null : null;
     const toolCtx = jobId ? {
       jobId,
       conversationId: conversationId ?? void 0,
+      workflowId: workflowId ?? null,
+      modelContext: sessionModel,
+      thinkingLevel: sessionThinking,
       emit: (text4) => {
         const trimmed = text4.trim().slice(0, 200);
         if (!trimmed) return;
         setJobPhase(jobId, "tool_running", `${fnName}: ${trimmed}`);
         onStreamEvent?.({ type: "status", text: trimmed });
       }
-    } : conversationId ? { conversationId, emit: () => {
-    } } : void 0;
+    } : conversationId || workflowId ? {
+      conversationId: conversationId ?? void 0,
+      workflowId: workflowId ?? null,
+      modelContext: sessionModel,
+      thinkingLevel: sessionThinking,
+      emit: () => {
+      }
+    } : void 0;
     if (jobId) setJobPhase(jobId, "tool_running", runningSummary || fnName);
     if (isDestructive2(fnName)) {
       if (!jobId) {
@@ -42343,7 +44494,12 @@ async function generalChat(input, conversationHistory, options) {
       {
         jobId: options.jobId ?? void 0,
         conversationId: options.conversationId ?? void 0,
-        usage
+        usage,
+        // Everything the turn spawns, several frames down and through code that
+        // has no idea a chat exists, reads the pin from here. Only set when the
+        // owner actually chose — see ChatOptions.sessionModel.
+        sessionModel: options.sessionModel ?? void 0,
+        sessionThinkingLevel: options.sessionModel ? options.thinkingLevel ?? null : null
       },
       () => runGeneralChat(input, conversationHistory, options, () => ack?.cancel())
     );
@@ -42825,8 +44981,11 @@ ${answerLines}` });
         onProgress,
         onStreamEvent: options.onStreamEvent,
         conversationId: options.conversationId,
+        workflowId: options.workflowId ?? null,
         parentJobId: options.jobId ?? null,
         modelContext: options.modelContext,
+        sessionModel: options.sessionModel ?? null,
+        thinkingLevel: options.thinkingLevel ?? null,
         subagentDepth: options.subagentDepth ?? 0,
         toolWhitelist: options.toolWhitelist
       }))
@@ -42847,10 +45006,10 @@ var MAX_HISTORY, DEFAULT_TOOL_ROUNDS, EXTENDED_TOOL_ROUNDS, ABSOLUTE_TOOL_ROUNDS
 var init_general_chat = __esm({
   "src/lib/workflows/chat/general-chat.ts"() {
     "use strict";
-    init_chat_context();
+    init_chat();
     init_db();
     init_schema();
-    init_llm_client();
+    init_client();
     init_usage();
     init_settings();
     init_thinking();
@@ -43031,6 +45190,8 @@ ${resultContext}
 
 ${item.completionPrompt}`;
     let modelContext = await resolveDefaultModel();
+    let sessionModel = null;
+    let thinkingLevel = null;
     let priceSnapshot = null;
     const [conv] = await db.select().from(conversations).where(eq69(conversations.id, item.conversationId)).limit(1);
     if (conv) {
@@ -43038,11 +45199,15 @@ ${item.completionPrompt}`;
         provider: conv.modelProvider,
         modelId: conv.modelId
       });
+      if (conv.modelPinnedByUser) sessionModel = modelContext;
+      thinkingLevel = isThinkingLevel(conv.thinkingLevel) ? conv.thinkingLevel : null;
       priceSnapshot = conv.priceSnapshot;
     }
     const { response } = await generalChat({ text: followUpMessage }, recentHistory, {
       conversationId: item.conversationId,
       modelContext,
+      sessionModel,
+      thinkingLevel,
       priceSnapshot
     });
     await db.insert(orchestratorChats).values({ conversationId: item.conversationId, role: "assistant", content: response });
@@ -43082,6 +45247,7 @@ var init_followup_queue = __esm({
     init_general_chat();
     init_settings();
     init_default_models();
+    init_thinking();
     sseSubscribers = /* @__PURE__ */ new Map();
     queue = [];
     workerTimer = null;
@@ -43248,7 +45414,7 @@ var init_tool_args = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/heartbeat.ts
-import { eq as eq71, or as or8, desc as desc21, inArray as inArray19 } from "drizzle-orm";
+import { eq as eq71, or as or7, desc as desc21, inArray as inArray21 } from "drizzle-orm";
 var RECENT_PULSES_PER_ACTION;
 var init_heartbeat = __esm({
   "src/lib/workflows/site-tools/tools/heartbeat.ts"() {
@@ -43381,7 +45547,7 @@ var init_heartbeat = __esm({
         if (!name && !id) return { success: false, error: "name or id is required" };
         const reason = optionalString(args, "reason") ?? null;
         const now = /* @__PURE__ */ new Date();
-        const match = name && id ? or8(eq71(heartbeatActions.name, name), eq71(heartbeatActions.id, id)) : name ? eq71(heartbeatActions.name, name) : eq71(heartbeatActions.id, id);
+        const match = name && id ? or7(eq71(heartbeatActions.name, name), eq71(heartbeatActions.id, id)) : name ? eq71(heartbeatActions.name, name) : eq71(heartbeatActions.id, id);
         const [row] = await db.update(heartbeatActions).set({
           status: "done",
           completedAt: now,
@@ -43424,7 +45590,7 @@ var init_heartbeat = __esm({
             ts: heartbeatPulses.ts,
             outcome: heartbeatPulses.outcome,
             summary: heartbeatPulses.summary
-          }).from(heartbeatPulses).where(inArray19(heartbeatPulses.actionId, filtered.map((r) => r.id))).orderBy(desc21(heartbeatPulses.ts)).limit(filtered.length * RECENT_PULSES_PER_ACTION * 4);
+          }).from(heartbeatPulses).where(inArray21(heartbeatPulses.actionId, filtered.map((r) => r.id))).orderBy(desc21(heartbeatPulses.ts)).limit(filtered.length * RECENT_PULSES_PER_ACTION * 4);
           for (const p of recent) {
             const list = pulsesByAction.get(p.actionId) ?? [];
             if (list.length < RECENT_PULSES_PER_ACTION) {
@@ -43466,6 +45632,26 @@ var init_heartbeat = __esm({
 
 // src/lib/workflows/site-tools/tools/scheduled.ts
 import { eq as eq72 } from "drizzle-orm";
+async function resolveConversation(args, ctx, opts) {
+  const explicit = optionalString(args, "conversation_id");
+  const raw = explicit || ctx?.conversationId || "";
+  if (!raw) {
+    if (!opts.required) return { ok: true, id: null, whatsappPhoneNumber: null };
+    return {
+      ok: false,
+      error: "No conversation to deliver into: none was passed and this caller has no chat context. Do not invent a conversation_id \u2014 a callback pointing at a conversation that does not exist is accepted here and then fails silently when it fires."
+    };
+  }
+  const id = normaliseConversationId(raw);
+  const [row] = await db.select({ id: conversations.id, phone: conversations.whatsappPhoneNumber }).from(conversations).where(eq72(conversations.id, id)).limit(1);
+  if (!row) {
+    return {
+      ok: false,
+      error: `No conversation ${id} exists, so a callback delivered there would fail at fire time with nobody watching. Omit conversation_id and it defaults to the current chat.`
+    };
+  }
+  return { ok: true, id: row.id, whatsappPhoneNumber: row.phone };
+}
 function parseFireAt(args) {
   if (typeof args.fire_at_iso === "string") {
     const d = new Date(args.fire_at_iso);
@@ -43479,6 +45665,15 @@ function parseFireAt(args) {
 async function upsertCallback(opts) {
   const existing = await db.select().from(scheduledCallbacks).where(eq72(scheduledCallbacks.name, opts.name)).limit(1);
   if (existing.length > 0) {
+    const prior = existing[0];
+    const live = prior.status === "pending";
+    if (live && !opts.replaceExisting) {
+      const when = prior.fireAt instanceof Date ? prior.fireAt.toISOString() : String(prior.fireAt ?? "unknown");
+      return {
+        success: false,
+        error: `A callback named "${opts.name}" is already scheduled for ${when}. Pick a DISTINCT name if this is a separate reminder \u2014 reusing one replaces the other, and the first would never fire. If you really mean to move or rewrite that same reminder, call again with replace_existing: true.`
+      };
+    }
     const [row2] = await db.update(scheduledCallbacks).set({
       description: opts.description,
       kind: opts.kind,
@@ -43519,37 +45714,39 @@ var init_scheduled = __esm({
       parameters: {
         type: "object",
         properties: {
-          conversation_id: { type: "string", description: "The conversation that should receive the reply." },
-          name: { type: "string", description: 'Stable, unique identifier for this callback (e.g. "leave-reminder-1730"). Reusing a name updates the existing callback.' },
+          conversation_id: { type: "string", description: "Conversation to deliver into. OMIT IT \u2014 it defaults to the current chat. Never guess a value." },
+          name: { type: "string", description: 'DISTINCT identifier for this callback, specific to what it is about (e.g. "claude-renewal-sep-9", not "reminder"). A name already in use by a pending callback is REFUSED \u2014 two reminders sharing one name would collapse into one.' },
           text: { type: "string", description: "The exact text to post. \u22644000 chars." },
           fire_at_iso: { type: "string", description: 'ISO-8601 wall-clock time to fire (e.g. "2026-05-06T17:30:00Z"). Use this OR in_seconds.' },
           in_seconds: { type: "number", description: "Fire this many seconds from now. Use this OR fire_at_iso." },
-          notify_whatsapp: { type: "boolean", description: "Also push via WhatsApp when the conversation has a phone number." }
+          replace_existing: { type: "boolean", description: "Only when you mean to MOVE or rewrite the existing callback of this name. Never set it to work around a name clash between two different reminders \u2014 pick a distinct name instead." },
+          notify_whatsapp: { type: "boolean", description: "Push via WhatsApp as well as posting into the chat. Defaults to TRUE for a WhatsApp conversation \u2014 a reminder asked for on WhatsApp has to arrive there." }
         },
-        required: ["conversation_id", "name", "text"]
+        required: ["name", "text"]
       },
       category: "System",
       toolset: "schedule",
-      handler: async (args) => {
+      handler: async (args, ctx) => {
         const fireAt = parseFireAt(args);
         if (!fireAt) return { success: false, error: "must provide fire_at_iso or in_seconds" };
         const textArg = requiredString(args, "text");
         if (!textArg.ok) return { success: false, error: textArg.error };
         const nameArg = requiredString(args, "name");
         if (!nameArg.ok) return { success: false, error: nameArg.error };
-        const convArg = requiredString(args, "conversation_id");
-        if (!convArg.ok) return { success: false, error: convArg.error };
+        const conv = await resolveConversation(args, ctx, { required: true });
+        if (!conv.ok) return { success: false, error: conv.error };
         const text4 = textArg.value.slice(0, 4e3);
         const name = nameArg.value;
-        const conversationId = normaliseConversationId(convArg.value);
-        const notifyWhatsApp = !!args.notify_whatsapp;
+        const conversationId = conv.id;
+        const notifyWhatsApp = typeof args.notify_whatsapp === "boolean" ? args.notify_whatsapp : !!conv.whatsappPhoneNumber;
         return upsertCallback({
           name,
           description: `Scheduled reply (${text4.slice(0, 60)}\u2026)`,
           kind: "reply",
           conversationId,
           payload: { text: text4, notifyWhatsApp },
-          fireAt
+          fireAt,
+          replaceExisting: args.replace_existing === true
         });
       }
     });
@@ -43559,18 +45756,19 @@ var init_scheduled = __esm({
       parameters: {
         type: "object",
         properties: {
-          conversation_id: { type: "string", description: "Conversation to notify when the tool fires (optional)." },
-          name: { type: "string", description: "Stable, unique identifier for this callback." },
+          conversation_id: { type: "string", description: "Conversation to notify when the tool fires. OMIT IT \u2014 it defaults to the current chat. Never guess a value." },
+          name: { type: "string", description: "DISTINCT identifier, specific to what this call is about. A name already in use by a pending callback is REFUSED." },
           tool_name: { type: "string", description: 'Name of a registered site-tool (e.g. "ha_call_service", "blog_create_post").' },
           args: { type: "object", description: "Args object passed to the tool exactly as if it were called now." },
           fire_at_iso: { type: "string", description: "ISO-8601 wall-clock time. Use this OR in_seconds." },
-          in_seconds: { type: "number", description: "Fire this many seconds from now." }
+          in_seconds: { type: "number", description: "Fire this many seconds from now." },
+          replace_existing: { type: "boolean", description: "Only when you mean to MOVE or rewrite the existing callback of this name. Never set it to work around a name clash between two different reminders \u2014 pick a distinct name instead." }
         },
         required: ["name", "tool_name", "args"]
       },
       category: "System",
       toolset: "schedule",
-      handler: async (args) => {
+      handler: async (args, ctx) => {
         const fireAt = parseFireAt(args);
         if (!fireAt) return { success: false, error: "must provide fire_at_iso or in_seconds" };
         const toolNameArg = requiredString(args, "tool_name");
@@ -43584,8 +45782,9 @@ var init_scheduled = __esm({
           };
         }
         const toolArgs = args.args ?? {};
-        const rawConv = optionalString(args, "conversation_id");
-        const conversationId = rawConv ? normaliseConversationId(rawConv) : null;
+        const conv = await resolveConversation(args, ctx, { required: false });
+        if (!conv.ok) return { success: false, error: conv.error };
+        const conversationId = conv.id;
         const nameArg = requiredString(args, "name");
         if (!nameArg.ok) return { success: false, error: nameArg.error };
         const name = nameArg.value;
@@ -43595,7 +45794,8 @@ var init_scheduled = __esm({
           kind: "tool",
           conversationId,
           payload: { toolName, args: toolArgs },
-          fireAt
+          fireAt,
+          replaceExisting: args.replace_existing === true
         });
       }
     });
@@ -43605,35 +45805,37 @@ var init_scheduled = __esm({
       parameters: {
         type: "object",
         properties: {
-          conversation_id: { type: "string", description: "Conversation to re-engage." },
-          name: { type: "string", description: "Stable, unique identifier." },
+          conversation_id: { type: "string", description: "Conversation to re-engage. OMIT IT \u2014 it defaults to the current chat. Never guess a value." },
+          name: { type: "string", description: "DISTINCT identifier, specific to what this turn is about. A name already in use by a pending callback is REFUSED." },
           message: { type: "string", description: "The synthetic user message that triggers the LLM turn." },
           fire_at_iso: { type: "string", description: "ISO-8601 wall-clock time. Use this OR in_seconds." },
-          in_seconds: { type: "number", description: "Fire this many seconds from now." }
+          in_seconds: { type: "number", description: "Fire this many seconds from now." },
+          replace_existing: { type: "boolean", description: "Only when you mean to MOVE or rewrite the existing callback of this name. Never set it to work around a name clash between two different reminders \u2014 pick a distinct name instead." }
         },
-        required: ["conversation_id", "name", "message"]
+        required: ["name", "message"]
       },
       category: "System",
       toolset: "schedule",
-      handler: async (args) => {
+      handler: async (args, ctx) => {
         const fireAt = parseFireAt(args);
         if (!fireAt) return { success: false, error: "must provide fire_at_iso or in_seconds" };
         const messageArg = requiredString(args, "message");
         if (!messageArg.ok) return { success: false, error: messageArg.error };
         const nameArg = requiredString(args, "name");
         if (!nameArg.ok) return { success: false, error: nameArg.error };
-        const convArg = requiredString(args, "conversation_id");
-        if (!convArg.ok) return { success: false, error: convArg.error };
+        const conv = await resolveConversation(args, ctx, { required: true });
+        if (!conv.ok) return { success: false, error: conv.error };
         const message = messageArg.value;
         const name = nameArg.value;
-        const conversationId = normaliseConversationId(convArg.value);
+        const conversationId = conv.id;
         return upsertCallback({
           name,
           description: `Scheduled orchestrator turn (${message.slice(0, 60)}\u2026)`,
           kind: "orchestrator-turn",
           conversationId,
           payload: { message },
-          fireAt
+          fireAt,
+          replaceExisting: args.replace_existing === true
         });
       }
     });
@@ -45324,10 +47526,19 @@ var init_git_targets = __esm({
       // worker dying under reclaim, reported as a defect in a file the change never
       // touched. CI never sees it (2 cores, one worker), which is exactly why it
       // has to be pinned here rather than in the shared script's defaults.
-      gateCommand: "npm run gate:public-routes && npm run gate:font-sizes && GATE_TEST_MAX_WORKERS=3 ./scripts/gate-concurrent.sh",
+      gateCommand: "./scripts/gate-structural.sh && GATE_TEST_MAX_WORKERS=3 ./scripts/gate-concurrent.sh",
       // What the per-iteration gate no longer proves, proved once before the PR.
-      // The union of the two is exactly the old `npm run gate`.
-      finalGateCommand: "npm run gate:build",
+      //
+      // `build:release-sidecars` is here because this target can reach the agent's
+      // own harness and both integration workers. There is no path allowlist on a
+      // repo build — the clone is the whole repo — so a build may edit any of those
+      // packages. `gate:build` only proves the site bundle; without this command a
+      // broken sidecar could open a green PR and fail only while staging a release.
+      //
+      // It runs in the FINAL gate rather than per iteration for the same reason
+      // `gate:build` does: it is expensive and re-proving it on an iteration that
+      // only touched a test buys nothing.
+      finalGateCommand: "npm run gate:build && npm run build:release-sidecars",
       openPr: true,
       prTitlePrefix: "Agent: "
     };
@@ -45403,7 +47614,8 @@ async function createChangeRequest({
   title,
   request,
   labels,
-  conversationId
+  conversationId,
+  modelContext
 }) {
   if (!githubConfigured()) {
     throw new Error(
@@ -45427,12 +47639,14 @@ async function createChangeRequest({
     ].join("\n"),
     labels: labels ?? ["change-request"]
   });
-  const ctx = await resolveDefaultModel();
+  const ctx = modelContext ?? await resolveBuilderModel();
   const priceSnapshot = await snapshotPrice(ctx);
   if (/^[~@]/.test(ctx.modelId)) {
+    const origin = modelContext ? "the model pinned on the chat that asked for it" : "the current site default";
+    const remedy = modelContext ? "pick a plain model id in the chat composer before raising the request" : "set a plain id at /admin/ai/models";
     await commentOnIssue(
       issue.number,
-      `\u26A0\uFE0F Starting this build on \`${ctx.modelId}\`, the current site default. That id carries a provider-alias prefix the agent runtime does not resolve to a known model, so it has no context-window metadata for it and cannot manage context. If this build burns tokens or stalls, check the model before the code \u2014 set a plain id at /admin/ai/models.`
+      `\u26A0\uFE0F Starting this build on \`${ctx.modelId}\`, ${origin}. That id carries a provider-alias prefix the agent runtime does not resolve to a known model, so it has no context-window metadata for it and cannot manage context. If this build burns tokens or stalls, check the model before the code \u2014 ${remedy}.`
     ).catch(() => {
     });
   }
@@ -45490,7 +47704,7 @@ var init_change_request = __esm({
     init_db();
     init_schema();
     init_builder_client();
-    init_settings();
+    init_workload_settings();
     init_price_snapshot();
     init_git_targets();
     init_issues();
@@ -45592,7 +47806,9 @@ var init_request_change = __esm({
             labels: Array.isArray(args.labels) ? args.labels.filter((l) => typeof l === "string") : void 0,
             // Link the build back to the chat that asked for it, so the
             // build-progress watcher can see it at all.
-            conversationId: toolCtx?.conversationId
+            conversationId: toolCtx?.conversationId,
+            // And build on that chat's model when it pinned one.
+            modelContext: toolCtx?.modelContext
           });
           return {
             success: true,
@@ -45613,11 +47829,11 @@ var init_request_change = __esm({
 });
 
 // src/lib/jkai/media/rate-limits.ts
-import { and as and43, eq as eq76, gte as gte7, sql as sql39 } from "drizzle-orm";
+import { and as and44, eq as eq76, gte as gte7, sql as sql39 } from "drizzle-orm";
 async function checkImageQuota(conversationId, requested) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1e3);
   const rows = await db.select({ count: sql39`count(*)` }).from(jkaiAttachments).where(
-    and43(
+    and44(
       eq76(jkaiAttachments.conversationId, conversationId),
       eq76(jkaiAttachments.kind, "image"),
       eq76(jkaiAttachments.source, "generated"),
@@ -45638,7 +47854,7 @@ async function checkImageQuota(conversationId, requested) {
 async function checkTtsQuota(conversationId, charsRequested) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1e3);
   const rows = await db.select({ total: sql39`coalesce(sum((metadata->>'characters')::int), 0)` }).from(jkaiAttachments).where(
-    and43(
+    and44(
       eq76(jkaiAttachments.conversationId, conversationId),
       eq76(jkaiAttachments.kind, "audio"),
       eq76(jkaiAttachments.source, "generated"),
@@ -45712,10 +47928,20 @@ async function handleGenerateImage(args, ctx) {
       },
       body: JSON.stringify({
         model,
-        prompt: `${args.prompt}
-
-aspect_ratio: ${aspect}`,
-        n: 1
+        prompt: args.prompt,
+        n: 1,
+        // A TOP-LEVEL parameter, not a line appended to the prompt.
+        //
+        // This used to be `${prompt}\n\naspect_ratio: ${aspect}` and the model
+        // ignored it completely — measured 2026-08-30: every request came back
+        // 1024x1024 whatever was asked for, so the tool's `aspect_ratio`
+        // argument had never done anything. As a parameter it is exact:
+        // 16:9 -> 1344x768, 9:16 -> 768x1344, 4:3 -> 1184x864.
+        //
+        // A model that does not understand the parameter ignores it the same
+        // way it ignored the prompt line, so this is strictly better and never
+        // worse.
+        aspect_ratio: aspect
       })
     });
     if (!resp.ok) {
@@ -45739,6 +47965,9 @@ aspect_ratio: ${aspect}`,
     let mime = "image/png";
     if (item.b64_json) {
       buf = Buffer.from(item.b64_json, "base64");
+      if (typeof item.media_type === "string" && item.media_type.startsWith("image/")) {
+        mime = item.media_type;
+      }
     } else if (item.url) {
       const imgRes = await fetch(item.url);
       if (!imgRes.ok) return { success: false, error: `image download ${imgRes.status}` };
@@ -45773,7 +48002,7 @@ var init_media_generate_image = __esm({
     init_schema();
     init_storage();
     init_rate_limits();
-    init_llm_usage_log();
+    init_usage_log();
     register({
       name: "generate_image",
       description: "Generate one to four images from a text prompt. Saves each image as a conversation attachment the user can view and download inline.",
@@ -46308,7 +48537,7 @@ __export(target_knowledge_exports, {
   normalizeDomain: () => normalizeDomain,
   upsertKnowledge: () => upsertKnowledge
 });
-import { eq as eq78, inArray as inArray20 } from "drizzle-orm";
+import { eq as eq78, inArray as inArray22 } from "drizzle-orm";
 function normalizeDomain(raw) {
   try {
     const u = raw.includes("://") ? new URL(raw) : new URL(`https://${raw}`);
@@ -46320,7 +48549,7 @@ function normalizeDomain(raw) {
 async function lookupByDomains(domains) {
   const normalized = Array.from(new Set(domains.map(normalizeDomain).filter(Boolean)));
   if (!normalized.length) return [];
-  return db.select().from(scraperTargetKnowledge).where(inArray20(scraperTargetKnowledge.domain, normalized));
+  return db.select().from(scraperTargetKnowledge).where(inArray22(scraperTargetKnowledge.domain, normalized));
 }
 async function upsertKnowledge(input) {
   const domain = normalizeDomain(input.domain);
@@ -46445,9 +48674,9 @@ async function runScrape(opts) {
     try {
       const { normalizeDomain: normalizeDomain2, upsertKnowledge: upsertKnowledge2 } = await Promise.resolve().then(() => (init_target_knowledge(), target_knowledge_exports));
       const { scraperTargetKnowledge: scraperTargetKnowledge2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { inArray: inArray22 } = await import("drizzle-orm");
+      const { inArray: inArray27 } = await import("drizzle-orm");
       const domain = normalizeDomain2(opts.url);
-      const existing = await db.select({ id: scraperTargetKnowledge2.id, source: scraperTargetKnowledge2.source }).from(scraperTargetKnowledge2).where(inArray22(scraperTargetKnowledge2.domain, [domain]));
+      const existing = await db.select({ id: scraperTargetKnowledge2.id, source: scraperTargetKnowledge2.source }).from(scraperTargetKnowledge2).where(inArray27(scraperTargetKnowledge2.domain, [domain]));
       const hasManualRow = existing.some((r) => r.source === "manual");
       if (!hasManualRow) {
         await upsertKnowledge2({
@@ -47053,7 +49282,7 @@ var init_scraper = __esm({
 
 // src/lib/file-shares.ts
 import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
-import { and as and44, desc as desc22, eq as eq82, isNull as isNull13, sql as sql40 } from "drizzle-orm";
+import { and as and45, desc as desc22, eq as eq82, isNull as isNull13, sql as sql40 } from "drizzle-orm";
 function isAgentCreated(uploadedBy) {
   return uploadedBy != null && AGENT_UPLOADERS.has(uploadedBy);
 }
@@ -47724,15 +49953,18 @@ async function extractAudio(buffer, mimeType, filename, options) {
       );
     }
   }
-  const modelCtx = await resolveDefaultModel();
+  const modelCtx = await resolveAudioModel();
   const { client } = await getLLMClient(modelCtx);
   try {
     const file = new File([new Uint8Array(buffer)], filename || "audio.bin", { type: mimeType || "audio/mpeg" });
-    const response = await client.audio.transcriptions.create({
-      model: "whisper-1",
-      file,
-      ...options?.language ? { language: options.language } : {}
-    });
+    const response = await withActivity(
+      "audio",
+      () => client.audio.transcriptions.create({
+        model: "whisper-1",
+        file,
+        ...options?.language ? { language: options.language } : {}
+      })
+    );
     const text4 = response.text ?? "";
     return {
       text: text4,
@@ -47748,8 +49980,9 @@ async function extractAudio(buffer, mimeType, filename, options) {
 var init_audio = __esm({
   "src/lib/jkai/extract/audio.ts"() {
     "use strict";
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_activity();
     init_types7();
     init_stt_local();
   }
@@ -48125,14 +50358,14 @@ function normalize3(v) {
 var init_retrieve2 = __esm({
   "src/lib/rag/retrieve.ts"() {
     "use strict";
-    init_types3();
+    init_types4();
   }
 });
 
 // src/lib/file-index/embed.ts
 async function embedOnce(inputs) {
   const { client } = await getLLMClient({ provider: "openrouter", modelId: FILE_INDEX_EMBEDDING_MODEL });
-  const truncated = inputs.map((t) => t.slice(0, MAX_INPUT_CHARS));
+  const truncated = inputs.map((t) => t.slice(0, MAX_INPUT_CHARS2));
   const response = await client.embeddings.create({ model: FILE_INDEX_EMBEDDING_MODEL, input: truncated });
   const out = [...response.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map((d) => d.embedding);
   if (out.length !== inputs.length) {
@@ -48141,17 +50374,17 @@ async function embedOnce(inputs) {
   return out;
 }
 async function embedQuery(text4) {
-  const [v] = await embedOnce([text4.slice(0, MAX_INPUT_CHARS)]);
+  const [v] = await embedOnce([text4.slice(0, MAX_INPUT_CHARS2)]);
   return normalize3(v);
 }
-var FILE_INDEX_EMBEDDING_MODEL, MAX_INPUT_CHARS;
+var FILE_INDEX_EMBEDDING_MODEL, MAX_INPUT_CHARS2;
 var init_embed2 = __esm({
   "src/lib/file-index/embed.ts"() {
     "use strict";
-    init_llm_client();
+    init_client();
     init_retrieve2();
     FILE_INDEX_EMBEDDING_MODEL = "openai/text-embedding-3-small";
-    MAX_INPUT_CHARS = 24e3;
+    MAX_INPUT_CHARS2 = 24e3;
   }
 });
 
@@ -48562,7 +50795,7 @@ var init_route_export = __esm({
   }
 });
 
-// src/lib/integrations/crypto.ts
+// src/lib/secrets/crypto.ts
 import { createCipheriv as createCipheriv2, createDecipheriv as createDecipheriv2, randomBytes as randomBytes3 } from "crypto";
 function getKey2() {
   const hex = process.env.INTEGRATION_CREDENTIALS_KEY;
@@ -48589,7 +50822,7 @@ function decryptPayload(enc) {
   return pt.toString("utf8");
 }
 var init_crypto2 = __esm({
-  "src/lib/integrations/crypto.ts"() {
+  "src/lib/secrets/crypto.ts"() {
     "use strict";
   }
 });
@@ -50165,7 +52398,14 @@ async function searchIntel(query, facets) {
            ${vectorStr != null ? sql44`(n.embedding <=> ${vectorStr}::vector)` : sql44`0.5::float8`} AS distance
     FROM intel_notes n
     WHERE
-      ${q ? sql44`(n.title ILIKE ${`%${q}%`} OR COALESCE(n.processed_content, n.raw_content) ILIKE ${`%${q}%`})` : sql44`TRUE`}
+      -- Only what the graph is actually allowed to know. A note held at the mail
+      -- gate is stored and embedded so the admission queue can cluster and search
+      -- it, and this is the door it must not come through: intel recall answers
+      -- questions ABOUT the graph, and a marketing email nobody approved is not
+      -- part of it. Admitted mail is searchable here and, at passage level, via
+      -- $lib/mail-index.
+      n.graph_state = 'admitted'
+      AND ${q ? sql44`(n.title ILIKE ${`%${q}%`} OR COALESCE(n.processed_content, n.raw_content) ILIKE ${`%${q}%`})` : sql44`TRUE`}
       ${fromTs ? sql44`AND n.created_at >= ${fromTs}::timestamptz` : sql44``}
       ${toTs ? sql44`AND n.created_at < ${toTs}::timestamptz` : sql44``}
       ${tagFilter ? sql44`AND n.metadata->>'sourceTag' = ANY(${pgTextArray(tagFilter)}::text[])` : sql44``}
@@ -50233,7 +52473,7 @@ var init_search2 = __esm({
 });
 
 // src/lib/knowledge/search.ts
-import { and as and45, desc as desc25, ilike as ilike2, isNull as isNull14 } from "drizzle-orm";
+import { and as and46, desc as desc25, ilike as ilike2, isNull as isNull14 } from "drizzle-orm";
 function clip2(s) {
   const t = (s ?? "").toString();
   return t.length > MAX_PASSAGE ? t.slice(0, MAX_PASSAGE) + "\u2026" : t;
@@ -50306,7 +52546,7 @@ async function branchResearch(query, limit2) {
 async function branchMemory(query, limit2) {
   const q = query.trim();
   if (!q) return [];
-  const rows = await db.select().from(jkaiMemories).where(and45(ilike2(jkaiMemories.content, `%${q}%`), isNull14(jkaiMemories.supersededBy))).orderBy(desc25(jkaiMemories.updatedAt)).limit(limit2);
+  const rows = await db.select().from(jkaiMemories).where(and46(ilike2(jkaiMemories.content, `%${q}%`), isNull14(jkaiMemories.supersededBy))).orderBy(desc25(jkaiMemories.updatedAt)).limit(limit2);
   return rows.map((r) => ({
     source: "memory",
     title: r.category || "memory",
@@ -50967,9 +53207,9 @@ function detectTypeOutliers(a) {
       action: "review",
       actionLabel: "Tidy entity types",
       // /jkai/intel/types has never existed — this button 404'd. Type
-      // governance (proposed types, merging one type into another) lives on the
-      // quality page.
-      actionPayload: "/jkai/intel/quality#types"
+      // governance moved off the quality page into a surface of its own, which
+      // leads with the merge suggestions this insight is asking for.
+      actionPayload: "/jkai/intel/categories#suggestions"
     }
   ];
 }
@@ -51303,6 +53543,186 @@ var init_intel_graph = __esm({
   }
 });
 
+// src/lib/mail-index/embed.ts
+async function embedOnce2(inputs) {
+  const { client } = await getLLMClient({
+    provider: "openrouter",
+    modelId: MAIL_INDEX_EMBEDDING_MODEL
+  });
+  const truncated = inputs.map((t) => t.slice(0, MAX_INPUT_CHARS3));
+  const response = await client.embeddings.create({
+    model: MAIL_INDEX_EMBEDDING_MODEL,
+    input: truncated
+  });
+  const out = [...response.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map((d) => d.embedding);
+  if (out.length !== inputs.length) {
+    throw new Error(`mail embedding count mismatch: got ${out.length} for ${inputs.length} inputs`);
+  }
+  return out;
+}
+async function embedChunks(texts) {
+  if (!texts.length) return [];
+  const vectors = [];
+  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+    const out = await embedOnce2(texts.slice(i, i + BATCH_SIZE));
+    for (const v of out) vectors.push(normalize3(v));
+  }
+  return vectors;
+}
+async function embedQuery2(query) {
+  const [vector2] = await embedChunks([query]);
+  return vector2 ?? [];
+}
+var MAIL_INDEX_EMBEDDING_MODEL, MAX_INPUT_CHARS3, BATCH_SIZE;
+var init_embed3 = __esm({
+  "src/lib/mail-index/embed.ts"() {
+    "use strict";
+    init_client();
+    init_retrieve2();
+    MAIL_INDEX_EMBEDDING_MODEL = "openai/text-embedding-3-small";
+    MAX_INPUT_CHARS3 = 24e3;
+    BATCH_SIZE = 48;
+  }
+});
+
+// src/lib/mail-index/search.ts
+import { and as and47, eq as eq88, inArray as inArray23, sql as sql45 } from "drizzle-orm";
+async function searchMail(query, options = {}) {
+  const q = (query || "").trim();
+  if (!q) return [];
+  const topK = Number.isFinite(options.topK) ? Math.min(Math.max(options.topK, 1), 30) : DEFAULT_TOP_K3;
+  const minSim = Number.isFinite(options.minSim) ? options.minSim : DEFAULT_MIN_SIM3;
+  const vector2 = await embedQuery2(q);
+  if (!vector2.length) return [];
+  const literal = `[${vector2.join(",")}]`;
+  const maxDistance = 1 - minSim;
+  const distance = sql45`${mailEmbeddings.embedding} <=> ${literal}::vector`;
+  const rows = await db.select({
+    noteId: mailEmbeddings.noteId,
+    subject: mailEmbeddings.source,
+    part: mailEmbeddings.part,
+    filename: mailEmbeddings.filename,
+    chunkOrd: mailEmbeddings.chunkOrd,
+    text: mailEmbeddings.text,
+    metadata: intelNotes.metadata,
+    observedAt: intelNotes.observedAt,
+    distance
+  }).from(mailEmbeddings).innerJoin(intelNotes, eq88(mailEmbeddings.noteId, intelNotes.id)).where(
+    and47(
+      eq88(intelNotes.graphState, "admitted"),
+      sql45`${mailEmbeddings.embedding} <=> ${literal}::vector <= ${maxDistance}`
+    )
+  ).orderBy(distance).limit(topK);
+  return rows.map((r) => {
+    const meta = r.metadata ?? {};
+    const threadId = typeof meta.gmailThreadId === "string" ? meta.gmailThreadId : null;
+    return {
+      noteId: r.noteId,
+      subject: r.subject,
+      part: r.part,
+      filename: r.filename,
+      chunkOrd: r.chunkOrd,
+      passage: r.text.length > MAX_PASSAGE_CHARS4 ? `${r.text.slice(0, MAX_PASSAGE_CHARS4)}\u2026` : r.text,
+      score: Math.round((1 - Number(r.distance)) * 1e3) / 1e3,
+      participants: Array.isArray(meta.participants) ? meta.participants.map(String) : [],
+      observedAt: r.observedAt,
+      gmailUrl: threadId ? `https://mail.google.com/mail/u/0/#all/${threadId}` : null
+    };
+  });
+}
+async function readMail(noteId) {
+  const rows = await db.select({
+    subject: mailEmbeddings.source,
+    part: mailEmbeddings.part,
+    filename: mailEmbeddings.filename,
+    text: mailEmbeddings.text,
+    chunkOrd: mailEmbeddings.chunkOrd
+  }).from(mailEmbeddings).innerJoin(intelNotes, eq88(mailEmbeddings.noteId, intelNotes.id)).where(and47(eq88(mailEmbeddings.noteId, noteId), eq88(intelNotes.graphState, "admitted"))).orderBy(mailEmbeddings.chunkOrd);
+  if (!rows.length) return null;
+  return {
+    subject: rows[0].subject,
+    passages: rows.map((r) => ({ part: r.part, filename: r.filename, text: r.text }))
+  };
+}
+var DEFAULT_TOP_K3, DEFAULT_MIN_SIM3, MAX_PASSAGE_CHARS4;
+var init_search4 = __esm({
+  "src/lib/mail-index/search.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    init_embed3();
+    DEFAULT_TOP_K3 = 8;
+    DEFAULT_MIN_SIM3 = 0.2;
+    MAX_PASSAGE_CHARS4 = 1200;
+  }
+});
+
+// src/lib/workflows/site-tools/tools/mail.ts
+var init_mail = __esm({
+  "src/lib/workflows/site-tools/tools/mail.ts"() {
+    "use strict";
+    init_registry_internal();
+    init_search4();
+    register({
+      name: "mail_search",
+      description: 'Semantic search over email threads that have been admitted to the knowledge graph, including the text of their attachments. Returns ranked passages with the thread subject, who was on it, when it was received, and a link into Gmail. Use this for "what did X say about Y", "what did we agree", or anything whose answer is a sentence inside an email. Only threads the owner approved are searchable \u2014 held or rejected mail is invisible here. For documents in /drive use file_search instead.',
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "What you are looking for, in natural language" },
+          limit: { type: "number", description: "Max passages to return (default 8, max 30)" },
+          minScore: { type: "number", description: "Minimum cosine similarity 0\u20131 (default 0.2)" }
+        },
+        required: ["query"]
+      },
+      category: "Intel",
+      toolset: "intel",
+      handler: async (args) => {
+        const query = typeof args.query === "string" ? args.query.trim() : "";
+        if (!query) return { success: false, error: "mail_search needs a query." };
+        const hits = await searchMail(query, {
+          topK: Number(args.limit) || void 0,
+          minSim: Number.isFinite(Number(args.minScore)) ? Number(args.minScore) : void 0
+        });
+        return {
+          success: true,
+          data: {
+            query,
+            count: hits.length,
+            // Said explicitly rather than left as an empty array. "No admitted mail
+            // matched" and "no mail has been admitted" are different answers, and a
+            // model that cannot tell them apart will report the wrong one.
+            note: hits.length ? void 0 : "No admitted email matched. Threads must be approved at /jkai/intel/mail before they are searchable.",
+            hits
+          }
+        };
+      }
+    });
+    register({
+      name: "mail_read",
+      description: "Read every indexed passage of one admitted email thread, in order. Use after mail_search when a single passage is not enough. Takes the noteId from a mail_search hit.",
+      parameters: {
+        type: "object",
+        properties: {
+          noteId: { type: "string", description: "The noteId from a mail_search hit" }
+        },
+        required: ["noteId"]
+      },
+      category: "Intel",
+      toolset: "intel",
+      handler: async (args) => {
+        const noteId = typeof args.noteId === "string" ? args.noteId.trim() : "";
+        if (!noteId) return { success: false, error: "mail_read needs a noteId." };
+        const thread = await readMail(noteId);
+        if (!thread) {
+          return { success: false, error: "No admitted thread with that id \u2014 it may be held or rejected." };
+        }
+        return { success: true, data: thread };
+      }
+    });
+  }
+});
+
 // src/lib/workflows/site-tools/tools/codegraph.ts
 var loadQuery, loadRetrieve;
 var init_codegraph = __esm({
@@ -51514,7 +53934,8 @@ async function delegateToAgent(agentName, task, onEvent) {
   if (!trimmed) throw new Error("task is required");
   const agent = await getAgent(agentName);
   if (!agent) throw new Error(`No agent named "${agentName}". Use agent_list to see the team.`);
-  const modelContext = agent.model ? coerceModelContext({ provider: "openrouter", modelId: agent.model }) : await resolveDefaultModel();
+  const sessionModel = currentSessionModel();
+  const modelContext = agent.model ? coerceModelContext({ provider: "openrouter", modelId: agent.model }) : sessionModel ?? await resolveDelegationModel();
   const whitelist = agent.allowedTools?.length ? [.../* @__PURE__ */ new Set([...agent.allowedTools, ...META_TOOLS])] : void 0;
   const persona = `${agent.persona}
 
@@ -51524,6 +53945,11 @@ Shared team memory lives in the datastore collection "${TEAM_MEMORY_COLLECTION}"
     [],
     {
       modelContext,
+      // Only forwarded as a session pin when the agent did not bring its own
+      // model — otherwise the agent's tools would resolve to the session's model
+      // while the agent itself ran on its own, which is worse than either.
+      sessionModel: agent.model ? null : sessionModel,
+      thinkingLevel: agent.model ? null : currentSessionThinkingLevel(),
       priceSnapshot: null,
       subagentDepth: 1,
       toolWhitelist: whitelist,
@@ -51539,8 +53965,9 @@ var init_delegate = __esm({
   "src/lib/agents/delegate.ts"() {
     "use strict";
     init_general_chat();
-    init_settings();
+    init_workload_settings();
     init_default_models();
+    init_chat();
     init_store();
     init_types8();
     META_TOOLS = ["jkai_extended", "activate_toolset"];
@@ -51733,14 +54160,14 @@ var init_discovery = __esm({
           if (terms.length === 0) return { success: false, error: "query is required" };
           const scored = tools.map((t) => {
             const name = t.name.toLowerCase();
-            const desc37 = (t.description ?? "").toLowerCase();
+            const desc40 = (t.description ?? "").toLowerCase();
             const set = (t.toolset ?? "").toLowerCase();
             let score = 0;
             for (const term of terms) {
               if (name === term) score += 10;
               if (name.includes(term)) score += 4;
               if (set.includes(term)) score += 2;
-              if (desc37.includes(term)) score += 2;
+              if (desc40.includes(term)) score += 2;
             }
             return { t, score };
           });
@@ -51803,7 +54230,7 @@ var init_discovery = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/recall.ts
-import { and as and46, desc as desc26, eq as eq88, ilike as ilike3, isNull as isNull15, sql as sql45 } from "drizzle-orm";
+import { and as and48, desc as desc26, eq as eq89, ilike as ilike3, isNull as isNull15, sql as sql46 } from "drizzle-orm";
 function excerpt(text4, q, radius = 160) {
   const i = text4.toLowerCase().indexOf(q.toLowerCase());
   if (i === -1) return text4.slice(0, radius * 2);
@@ -51839,7 +54266,7 @@ var init_recall2 = __esm({
         try {
           const where = [ilike3(orchestratorChats.content, `%${q}%`)];
           if (args.role === "user" || args.role === "assistant") {
-            where.push(eq88(orchestratorChats.role, args.role));
+            where.push(eq89(orchestratorChats.role, args.role));
           }
           const rows = await db.select({
             content: orchestratorChats.content,
@@ -51847,7 +54274,7 @@ var init_recall2 = __esm({
             createdAt: orchestratorChats.createdAt,
             conversationId: orchestratorChats.conversationId,
             title: conversations.title
-          }).from(orchestratorChats).leftJoin(conversations, eq88(conversations.id, orchestratorChats.conversationId)).where(and46(...where)).orderBy(desc26(orchestratorChats.createdAt)).limit(limit2);
+          }).from(orchestratorChats).leftJoin(conversations, eq89(conversations.id, orchestratorChats.conversationId)).where(and48(...where)).orderBy(desc26(orchestratorChats.createdAt)).limit(limit2);
           return {
             success: true,
             data: {
@@ -51886,13 +54313,17 @@ var init_recall2 = __esm({
           const where = [isNull15(jkaiMemories.supersededBy)];
           const q = (args.query ?? "").trim();
           if (q) where.push(ilike3(jkaiMemories.content, `%${q}%`));
-          if (args.category) where.push(eq88(jkaiMemories.category, args.category));
-          const rows = await db.select().from(jkaiMemories).where(and46(...where)).orderBy(desc26(jkaiMemories.updatedAt)).limit(limit2);
+          if (args.category) where.push(eq89(jkaiMemories.category, args.category));
+          const rows = await db.select().from(jkaiMemories).where(and48(...where)).orderBy(desc26(jkaiMemories.updatedAt)).limit(limit2);
           return {
             success: true,
             data: {
               count: rows.length,
               memories: rows.map((m) => ({
+                // The id was omitted, which made a returned memory impossible to
+                // cite: anything quoting one could name the text but not the row
+                // it came from. Additive, so no existing caller changes.
+                id: m.id,
                 category: m.category,
                 content: m.content,
                 confidence: m.confidence,
@@ -51928,7 +54359,7 @@ var init_recall2 = __esm({
         if (!content) return { success: false, error: "content is required" };
         if (!category) return { success: false, error: "category is required" };
         try {
-          const existing = await db.select({ id: jkaiMemories.id }).from(jkaiMemories).where(and46(isNull15(jkaiMemories.supersededBy), sql45`lower(${jkaiMemories.content}) = lower(${content})`)).limit(1);
+          const existing = await db.select({ id: jkaiMemories.id }).from(jkaiMemories).where(and48(isNull15(jkaiMemories.supersededBy), sql46`lower(${jkaiMemories.content}) = lower(${content})`)).limit(1);
           if (existing.length > 0) {
             return { success: true, data: { stored: false, reason: "already remembered", content } };
           }
@@ -52226,7 +54657,7 @@ var init_monitors = __esm({
         try {
           const marker = await createMonitor(description, cron, ctx?.emit);
           const url = `${(process.env.PUBLIC_SITE_URL || "https://strangeramblings.com").replace(/\/+$/, "")}/jkai/canvas/${marker.slug}`;
-          return { success: true, data: { ...marker, url, manageUrl: "/jkai/monitors" } };
+          return { success: true, data: { ...marker, url, manageUrl: "/jkai/daydreams?tab=watches" } };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : "monitor_create failed" };
         }
@@ -52283,7 +54714,7 @@ var init_crypto3 = __esm({
 
 // src/lib/workflows/gmail/service.ts
 import { google } from "googleapis";
-import { eq as eq89 } from "drizzle-orm";
+import { eq as eq90 } from "drizzle-orm";
 function b64urlDecode(s) {
   if (!s) return "";
   return Buffer.from(s, "base64url").toString("utf8");
@@ -52391,7 +54822,7 @@ var init_service3 = __esm({
             status: "active",
             lastError: null,
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq89(gmailAccounts.id, account.id));
+          }).where(eq90(gmailAccounts.id, account.id));
           client.setCredentials(credentials);
           return client;
         } catch (err) {
@@ -52400,7 +54831,7 @@ var init_service3 = __esm({
             status: code === "invalid_grant" ? "auth_expired" : "active",
             lastError: String(code).slice(0, 500),
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq89(gmailAccounts.id, account.id));
+          }).where(eq90(gmailAccounts.id, account.id));
           throw new Error(`Gmail token refresh failed: ${code}`);
         }
       }
@@ -52557,23 +54988,23 @@ var init_service3 = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/gmail.ts
-import { desc as desc27, eq as eq90 } from "drizzle-orm";
+import { desc as desc27, eq as eq91 } from "drizzle-orm";
 async function resolveAccount(args) {
   const rawId = args.accountId;
   const rawEmail = args.email;
   const id = typeof rawId === "number" || typeof rawId === "string" ? Number(rawId) : NaN;
   const hasId = Number.isFinite(id) && id > 0;
   if (hasId) {
-    const [acct2] = await db.select().from(gmailAccounts).where(eq90(gmailAccounts.id, id)).limit(1);
+    const [acct2] = await db.select().from(gmailAccounts).where(eq91(gmailAccounts.id, id)).limit(1);
     if (!acct2) return { error: `Gmail account ${id} not found` };
     return acct2;
   }
   if (typeof rawEmail === "string" && rawEmail.length > 0) {
-    const [acct2] = await db.select().from(gmailAccounts).where(eq90(gmailAccounts.email, rawEmail)).limit(1);
+    const [acct2] = await db.select().from(gmailAccounts).where(eq91(gmailAccounts.email, rawEmail)).limit(1);
     if (!acct2) return { error: `Gmail account "${rawEmail}" not found` };
     return acct2;
   }
-  const [acct] = await db.select().from(gmailAccounts).where(eq90(gmailAccounts.status, "active")).orderBy(desc27(gmailAccounts.updatedAt)).limit(1);
+  const [acct] = await db.select().from(gmailAccounts).where(eq91(gmailAccounts.status, "active")).orderBy(desc27(gmailAccounts.updatedAt)).limit(1);
   if (!acct) {
     return {
       error: "No active Gmail accounts connected. Connect one at /admin/connections/gmail or pass accountId/email."
@@ -53030,9 +55461,9 @@ var init_registry4 = __esm({
 });
 
 // src/lib/integrations/credentials.ts
-import { eq as eq91 } from "drizzle-orm";
+import { eq as eq92 } from "drizzle-orm";
 async function getCredential(id) {
-  const rows = await db.select().from(integrationCredentials).where(eq91(integrationCredentials.id, id)).limit(1);
+  const rows = await db.select().from(integrationCredentials).where(eq92(integrationCredentials.id, id)).limit(1);
   if (rows.length === 0) return null;
   const row = rows[0];
   const payload = JSON.parse(decryptPayload(row.payloadEnc));
@@ -53064,7 +55495,7 @@ async function listCredentials(integrationType) {
     updatedAt: integrationCredentials.updatedAt
   }).from(integrationCredentials);
   if (integrationType) {
-    return q.where(eq91(integrationCredentials.integrationType, integrationType));
+    return q.where(eq92(integrationCredentials.integrationType, integrationType));
   }
   return q;
 }
@@ -53890,7 +56321,7 @@ var init_node_call = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/custom-tool-admin.ts
-import { eq as eq92 } from "drizzle-orm";
+import { eq as eq93 } from "drizzle-orm";
 var init_custom_tool_admin = __esm({
   "src/lib/workflows/site-tools/tools/custom-tool-admin.ts"() {
     "use strict";
@@ -53953,7 +56384,7 @@ var init_custom_tool_admin = __esm({
       handler: async (args) => {
         const name = typeof args.name === "string" ? args.name.trim() : "";
         if (!name) return { success: false, error: "name is required" };
-        const [row] = await db.select().from(customTools).where(eq92(customTools.name, name)).limit(1);
+        const [row] = await db.select().from(customTools).where(eq93(customTools.name, name)).limit(1);
         if (!row) {
           return {
             success: false,
@@ -53966,7 +56397,7 @@ var init_custom_tool_admin = __esm({
           return { success: false, error: "Nothing to change \u2014 pass handlerCode, description, or both." };
         }
         if (!newCode) {
-          await db.update(customTools).set({ description: newDescription }).where(eq92(customTools.name, name));
+          await db.update(customTools).set({ description: newDescription }).where(eq93(customTools.name, name));
           register({
             name,
             description: newDescription,
@@ -54010,7 +56441,7 @@ var init_custom_tool_admin = __esm({
           // hide whether the repair actually worked.
           runCount: 0,
           errorCount: 0
-        }).where(eq92(customTools.name, name));
+        }).where(eq93(customTools.name, name));
         register({
           name,
           description: newDescription ?? row.description,
@@ -54044,14 +56475,14 @@ var init_custom_tool_admin = __esm({
       handler: async (args) => {
         const name = typeof args.name === "string" ? args.name.trim() : "";
         if (!name) return { success: false, error: "name is required" };
-        const [row] = await db.select().from(customTools).where(eq92(customTools.name, name)).limit(1);
+        const [row] = await db.select().from(customTools).where(eq93(customTools.name, name)).limit(1);
         if (!row) {
           return {
             success: false,
             error: `No custom tool named "${name}" exists. Built-in tools cannot be deleted \u2014 only tools created through promote_ephemeral_tool or the nightly improvement run.`
           };
         }
-        await db.delete(customTools).where(eq92(customTools.name, name));
+        await db.delete(customTools).where(eq93(customTools.name, name));
         const wasLive = unregister(name);
         return { success: true, data: { name, toolset: row.toolset, removedFromRegistry: wasLive } };
       }
@@ -55142,10 +57573,10 @@ verify ${verifyUrl} \u2192 ${curl.stdout}`;
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/registry.ts
+// src/lib/policy-engine/tracking/registry.ts
 var AY_24_25, AY_25_26, CY_2024, KS4_GUID, KS4_SLUG, KS4_A8, KS4_G5, KS4_TOTAL, KS4_DIS, KS4_EHCP, KS2_GUID, KS2_SLUG, KS2_RWM, KS2_BASE, KS2_TOTAL, KS2_DIS, EYFSP_GUID, EYFSP_SLUG, GLD, EYFSP_TOTAL, EYFSP_FSM, SEN_GUID, SEN_SLUG, SEN_PCT, SEN_COUNT, SEN_BASE, SEN_SUPPORT, SEN_EHCP, ABS_PA_GUID, ABS_OVERALL_GUID, ABS_SLUG, ABS_PA_PCT, ABS_OVERALL_PCT, NEET1617_GUID, NEET1617_SLUG, NEET1617_PCT, INDICATORS, INDICATORS_BY_KEY;
 var init_registry5 = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/registry.ts"() {
+  "src/lib/policy-engine/tracking/registry.ts"() {
     "use strict";
     AY_24_25 = { code: "AY", period: "2024/2025" };
     AY_25_26 = { code: "AY", period: "2025/2026" };
@@ -55526,7 +57957,7 @@ var init_registry5 = __esm({
   }
 });
 
-// src/routes/projects/policy-engine/lib/format.ts
+// src/lib/policy-engine/format.ts
 function fmtNum(v, dp = 0) {
   if (!isFinite(v)) return "\u2014";
   return v.toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -55535,12 +57966,12 @@ function fmtGBP(v, dp = 0) {
   return `\xA3${fmtNum(v, dp)}`;
 }
 var init_format3 = __esm({
-  "src/routes/projects/policy-engine/lib/format.ts"() {
+  "src/lib/policy-engine/format.ts"() {
     "use strict";
   }
 });
 
-// src/routes/projects/policy-engine/lib/levers.ts
+// src/lib/policy-engine/levers.ts
 function ageBandCostBn(band2, intensityPct, prevalence) {
   return band2.pop * prevalence * (intensityPct / 100) * band2.unit / 1e3;
 }
@@ -55572,7 +58003,7 @@ function policyLevers() {
 }
 var LEVERS, LEVERS_BY_ID, AGE_BANDS;
 var init_levers = __esm({
-  "src/routes/projects/policy-engine/lib/levers.ts"() {
+  "src/lib/policy-engine/levers.ts"() {
     "use strict";
     init_format3();
     LEVERS = [
@@ -56285,10 +58716,10 @@ var init_levers = __esm({
   }
 });
 
-// src/routes/projects/policy-engine/lib/params.ts
+// src/lib/policy-engine/params.ts
 var BASE_YEAR, END_YEAR, band, POP, BASELINE, GAP_TO_LEVEL, N, CH, EY_KS4_LAG, EY_FADEOUT, SEND, SYS, POST16, NEETSEG, NEETPIPE, IND, AGEID, WORK, COST;
 var init_params = __esm({
-  "src/routes/projects/policy-engine/lib/params.ts"() {
+  "src/lib/policy-engine/params.ts"() {
     "use strict";
     BASE_YEAR = 2025;
     END_YEAR = 2040;
@@ -56784,7 +59215,7 @@ var init_params = __esm({
   }
 });
 
-// src/routes/projects/policy-engine/lib/engine.ts
+// src/lib/policy-engine/engine.ts
 function concave(x) {
   const K = 1.8;
   if (x <= 0) return Math.max(-1.5, x);
@@ -57235,7 +59666,7 @@ function runSim(levers, opts = {}) {
 }
 var ABSENCE_TO_GAP_K4, ABSENCE_TO_GAP_K2, POVERTY_TO_AGE3, POVERTY_TO_RECEP, POVERTY_TO_ABSENCE, PA_DIS_BASE, EXTRA_MENTOR_DIS_CUT, clamp;
 var init_engine = __esm({
-  "src/routes/projects/policy-engine/lib/engine.ts"() {
+  "src/lib/policy-engine/engine.ts"() {
     "use strict";
     init_levers();
     init_params();
@@ -57250,7 +59681,7 @@ var init_engine = __esm({
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/projection.ts
+// src/lib/policy-engine/tracking/projection.ts
 function buildProjectionSims() {
   return {
     baseSim: runSim(baselineLevers()),
@@ -57271,14 +59702,14 @@ function dualProjections(spec, year, sims) {
   };
 }
 var init_projection = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/projection.ts"() {
+  "src/lib/policy-engine/tracking/projection.ts"() {
     "use strict";
     init_engine();
     init_levers();
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/status.ts
+// src/lib/policy-engine/tracking/status.ts
 function classifyStatus(observed, projected, opts) {
   if (observed == null || projected == null || !Number.isFinite(observed) || !Number.isFinite(projected)) {
     return "no-data";
@@ -57294,12 +59725,12 @@ function classifyStatus(observed, projected, opts) {
   return worseBy <= tol ? "on-track" : "off-track";
 }
 var init_status = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/status.ts"() {
+  "src/lib/policy-engine/tracking/status.ts"() {
     "use strict";
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/assemble.ts
+// src/lib/policy-engine/tracking/assemble.ts
 function assembleSnapshot(args) {
   const { spec, observedValue, refYear } = args;
   const { baseline, policy } = dualProjections(spec, refYear, args.sims);
@@ -57323,23 +59754,23 @@ function assembleSnapshot(args) {
   };
 }
 var init_assemble = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/assemble.ts"() {
+  "src/lib/policy-engine/tracking/assemble.ts"() {
     "use strict";
     init_projection();
     init_status();
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/ees.server.ts
+// src/lib/policy-engine/tracking/ees.server.ts
 function buildEesQuery(f) {
-  const and57 = Object.values(f.filters).map((optId) => ({
+  const and62 = Object.values(f.filters).map((optId) => ({
     filters: { eq: optId }
   }));
-  and57.push({ timePeriods: { eq: { code: f.timePeriod.code, period: f.timePeriod.period } } });
-  and57.push({ geographicLevels: { eq: "NAT" } });
+  and62.push({ timePeriods: { eq: { code: f.timePeriod.code, period: f.timePeriod.period } } });
+  and62.push({ geographicLevels: { eq: "NAT" } });
   return {
     url: `${EES_BASE}/data-sets/${f.datasetGuid}/query`,
-    body: { criteria: { and: and57 }, indicators: [f.indicatorId], page: 1, pageSize: 1 }
+    body: { criteria: { and: and62 }, indicators: [f.indicatorId], page: 1, pageSize: 1 }
   };
 }
 function extractEesValue(resp, indicatorId) {
@@ -57390,14 +59821,14 @@ async function fetchEesPublications(fetchImpl = fetch) {
 }
 var EES_BASE, FETCH_TIMEOUT_MS3;
 var init_ees_server = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/ees.server.ts"() {
+  "src/lib/policy-engine/tracking/ees.server.ts"() {
     "use strict";
     EES_BASE = "https://api.education.gov.uk/statistics/v1";
     FETCH_TIMEOUT_MS3 = 8e3;
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/sources.server.ts
+// src/lib/policy-engine/tracking/sources.server.ts
 import ExcelJS3 from "exceljs";
 async function fetchOnsNeet(field, fetchImpl = fetch) {
   try {
@@ -57458,7 +59889,7 @@ async function fetchWorldBank(indicator, country, fetchImpl = fetch) {
 }
 var TIMEOUT_MS, timeout, ONS_NEET_BASE, NEET_COL, QUARTER_RE;
 var init_sources_server = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/sources.server.ts"() {
+  "src/lib/policy-engine/tracking/sources.server.ts"() {
     "use strict";
     TIMEOUT_MS = 15e3;
     timeout = () => AbortSignal.timeout(TIMEOUT_MS);
@@ -57474,7 +59905,7 @@ var init_sources_server = __esm({
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/freshness.ts
+// src/lib/policy-engine/tracking/freshness.ts
 function freshnessState(input) {
   const ref = input.releaseDate ?? input.fetchedAt;
   if (!ref) return "no-data";
@@ -57489,13 +59920,13 @@ function freshnessState(input) {
 }
 var MS_PER_MONTH;
 var init_freshness = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/freshness.ts"() {
+  "src/lib/policy-engine/tracking/freshness.ts"() {
     "use strict";
     MS_PER_MONTH = 365.25 / 12 * 24 * 60 * 60 * 1e3;
   }
 });
 
-// src/routes/projects/policy-engine/lib/tracking/ingest.server.ts
+// src/lib/policy-engine/tracking/ingest.server.ts
 var ingest_server_exports = {};
 __export(ingest_server_exports, {
   loadTrackedIndicators: () => loadTrackedIndicators,
@@ -57696,7 +60127,7 @@ async function loadTrackedIndicators(now = /* @__PURE__ */ new Date()) {
 }
 var num2, hashOf;
 var init_ingest_server = __esm({
-  "src/routes/projects/policy-engine/lib/tracking/ingest.server.ts"() {
+  "src/lib/policy-engine/tracking/ingest.server.ts"() {
     "use strict";
     init_db();
     init_schema();
@@ -57810,7 +60241,7 @@ var init_site_signals = __esm({
 
 // src/lib/decks/shares.ts
 import { createHash as createHash4, randomBytes as randomBytes5 } from "node:crypto";
-import { and as and47, desc as desc28, eq as eq93, sql as sql46 } from "drizzle-orm";
+import { and as and49, desc as desc28, eq as eq94, sql as sql47 } from "drizzle-orm";
 function generateShareToken() {
   return randomBytes5(32).toString("base64url");
 }
@@ -59900,7 +62331,7 @@ var init_image_sources_server = __esm({
 });
 
 // src/lib/workflows/site-tools/tools/presentations.ts
-import { asc as asc9, desc as desc29, eq as eq94, sql as sql47 } from "drizzle-orm";
+import { asc as asc9, desc as desc29, eq as eq95, sql as sql48 } from "drizzle-orm";
 function validGeometry(geo) {
   if (geo === void 0 || geo === null) return true;
   if (typeof geo !== "object" || Array.isArray(geo)) return false;
@@ -59929,7 +62360,7 @@ async function pickUniqueSlug2(seed) {
   let slug = baseSlug;
   let attempt = 1;
   while (attempt < 50) {
-    const [existing] = await db.select({ id: decks.id }).from(decks).where(eq94(decks.slug, slug));
+    const [existing] = await db.select({ id: decks.id }).from(decks).where(eq95(decks.slug, slug));
     if (!existing) break;
     attempt += 1;
     slug = `${baseSlug}-${attempt}`;
@@ -60118,11 +62549,11 @@ var init_presentations = __esm({
         try {
           slideCount = await insertSlides(deck.id, slides, null);
         } catch (err) {
-          await db.delete(decks).where(eq94(decks.id, deck.id)).catch(() => {
+          await db.delete(decks).where(eq95(decks.id, deck.id)).catch(() => {
           });
           return { success: false, error: `slide insert failed: ${err instanceof Error ? err.message : String(err)}` };
         }
-        const persisted = await db.select().from(deckSlides).where(eq94(deckSlides.deckId, deck.id));
+        const persisted = await db.select().from(deckSlides).where(eq95(deckSlides.deckId, deck.id));
         const persistIssues = persisted.flatMap((row) => {
           const res = validateBlocks(row.blocks);
           return res.issues.map((i) => `slide "${row.title ?? row.id}": ${i}`);
@@ -60225,7 +62656,7 @@ var init_presentations = __esm({
           description: decks.description,
           isPublic: decks.isPublic,
           updatedAt: decks.updatedAt,
-          slideCount: sql47`(select count(*) from ${deckSlides} where ${deckSlides.deckId} = ${decks.id})`
+          slideCount: sql48`(select count(*) from ${deckSlides} where ${deckSlides.deckId} = ${decks.id})`
         }).from(decks).orderBy(desc29(decks.updatedAt));
         return { success: true, data: { decks: rows } };
       }
@@ -60242,9 +62673,9 @@ var init_presentations = __esm({
       toolset: "decks",
       handler: async (args) => {
         const slug = typeof args.slug === "string" ? args.slug.trim() : "";
-        const [deck] = await db.select().from(decks).where(eq94(decks.slug, slug));
+        const [deck] = await db.select().from(decks).where(eq95(decks.slug, slug));
         if (!deck) return { success: false, error: `no deck with slug "${slug}" \u2014 call presentation_list` };
-        const rows = await db.select().from(deckSlides).where(eq94(deckSlides.deckId, deck.id)).orderBy(asc9(deckSlides.position));
+        const rows = await db.select().from(deckSlides).where(eq95(deckSlides.deckId, deck.id)).orderBy(asc9(deckSlides.position));
         return {
           success: true,
           data: {
@@ -60282,7 +62713,7 @@ var init_presentations = __esm({
       handler: async (args, ctx) => {
         const slug = typeof args.slug === "string" ? args.slug.trim() : "";
         const slides = args.slides;
-        const [deck] = await db.select().from(decks).where(eq94(decks.slug, slug));
+        const [deck] = await db.select().from(decks).where(eq95(decks.slug, slug));
         if (!deck) return { success: false, error: `no deck with slug "${slug}" \u2014 call presentation_list` };
         if (!Array.isArray(slides) || slides.length === 0) return { success: false, error: "slides must be a non-empty array" };
         if (slides.length > 40) return { success: false, error: "too many top-level slides (max 40) \u2014 tighten the story" };
@@ -60297,8 +62728,8 @@ var init_presentations = __esm({
         const baseUrl2 = (process.env.PUBLIC_SITE_URL || "https://strangeramblings.com").replace(/\/+$/, "");
         const url = `${baseUrl2}/decks/${slug}`;
         ctx?.emit(`Rewriting deck at ${url} \u2026`);
-        const oldRows = await db.select().from(deckSlides).where(eq94(deckSlides.deckId, deck.id));
-        await db.delete(deckSlides).where(eq94(deckSlides.deckId, deck.id));
+        const oldRows = await db.select().from(deckSlides).where(eq95(deckSlides.deckId, deck.id));
+        await db.delete(deckSlides).where(eq95(deckSlides.deckId, deck.id));
         let slideCount = 0;
         try {
           slideCount = await insertSlides(deck.id, slides, null);
@@ -60313,8 +62744,8 @@ var init_presentations = __esm({
           updatedAt: /* @__PURE__ */ new Date(),
           ...typeof args.title === "string" && args.title.trim() ? { title: args.title.trim() } : {},
           ...typeof args.description === "string" ? { description: args.description } : {}
-        }).where(eq94(decks.id, deck.id));
-        const persisted = await db.select().from(deckSlides).where(eq94(deckSlides.deckId, deck.id));
+        }).where(eq95(decks.id, deck.id));
+        const persisted = await db.select().from(deckSlides).where(eq95(deckSlides.deckId, deck.id));
         const persistIssues = persisted.flatMap((row) => {
           const res = validateBlocks(row.blocks);
           return res.issues.map((i) => `slide "${row.title ?? row.id}": ${i}`);
@@ -62986,7 +65417,7 @@ function getToolsetManifest() {
     browser: "A real headless browser on the residential-IP host \u2014 navigate, read the page, click, type, scroll, list images, and read the console. Use for pages that need JavaScript or a login, and for diagnosing why a page misbehaves",
     recall: "Continuity across conversations \u2014 search what was actually said before (session_search), search stored facts about the user (memory_search), and pin a new one (memory_remember)",
     agents: "Persistent agent team \u2014 list/define named specialist agents and delegate a focused sub-task to one (each has its own persona, allowed tools, and shared team memory)",
-    monitors: 'Natural-language monitors \u2014 create a "watch X, tell me when Y" scheduled workflow and list active monitors (manage/pause on /jkai/monitors)',
+    monitors: 'Natural-language monitors \u2014 create a "watch X, tell me when Y" scheduled workflow and list active monitors (manage/pause on /jkai/daydreams?tab=watches)',
     "codegraph": 'Build-history GRAPH for this repo \u2014 what changing a file has taught us before. Seed a query with file:PATH, fingerprint:<error class>, gate:NAME or topic:"text", then pipe | hops 1 | lessons | episodes. Returns the rules that apply to those files and what happened the last time they changed, each with a verdict (verified/landed/repaired). Use for "how do I change X here", "why is it done this way", "has this broken before" \u2014 where intel-graph answers about the WORLD, this answers about the CODE.',
     "intel-graph": "Intel knowledge GRAPH structure \u2014 find entities, walk their N-hop neighbourhood, trace how two things are connected, and read what the graph noticed on its own (brokers, unexpected links, likely-missing links). Use when the question is about how things RELATE, where knowledge_search answers what is known ABOUT a thing."
   };
@@ -63074,6 +65505,7 @@ var init_registry7 = __esm({
     init_route_plan();
     init_knowledge();
     init_intel_graph();
+    init_mail();
     init_codegraph();
     init_agents();
     init_discovery();
@@ -63168,8 +65600,8 @@ function buildConfigFieldsSection(def3) {
     const enumList = Array.isArray(s.enum) && s.enum.length > 0 ? ` enum: ${s.enum.map((v) => JSON.stringify(v)).join(" | ")}` : "";
     const dflt = key in defaults ? ` default: ${JSON.stringify(defaults[key])}` : "";
     const cond = visibilityByKey.has(key) ? ` (${visibilityByKey.get(key)})` : "";
-    const desc37 = s.description ? ` \u2014 ${s.description}` : "";
-    return `  - \`${key}\` (${type}${tag}${enumList}${dflt})${cond}${desc37}`;
+    const desc40 = s.description ? ` \u2014 ${s.description}` : "";
+    return `  - \`${key}\` (${type}${tag}${enumList}${dflt})${cond}${desc40}`;
   });
   return `**Config fields:**
 ${lines2.join("\n")}`;
@@ -63183,8 +65615,8 @@ ${lines2.join("\n")}`;
 function buildSingleNodeGrounding(def3, recentExecutions = []) {
   return buildNodeGrounding([{ ...def3, hidden: false }], recentExecutions);
 }
-function firstSentence2(desc37) {
-  const clean = desc37.replace(/\s+/g, " ").trim();
+function firstSentence2(desc40) {
+  const clean = desc40.replace(/\s+/g, " ").trim();
   const m = clean.match(/^(.*?[.!?])(\s|$)/);
   const s = m ? m[1] : clean;
   return s.length > 120 ? `${s.slice(0, 117)}\u2026` : s;
@@ -63284,14 +65716,14 @@ var init_grounding2 = __esm({
 });
 
 // src/lib/workflows/orchestrator/workspace-grounding.ts
-import { eq as eq95, desc as desc30, ne as ne5, asc as asc10 } from "drizzle-orm";
+import { eq as eq96, desc as desc30, ne as ne5, asc as asc10 } from "drizzle-orm";
 async function buildGmailAccountsSection() {
   try {
     const rows = await db.select({
       id: gmailAccounts.id,
       email: gmailAccounts.email,
       status: gmailAccounts.status
-    }).from(gmailAccounts).where(eq95(gmailAccounts.status, "active")).orderBy(asc10(gmailAccounts.id));
+    }).from(gmailAccounts).where(eq96(gmailAccounts.status, "active")).orderBy(asc10(gmailAccounts.id));
     if (rows.length === 0) return null;
     const lines2 = rows.map(
       (r) => `  - id: ${r.id}, email: \`${r.email}\`, status: \`${r.status}\``
@@ -63339,7 +65771,7 @@ async function buildDataStoreSection(workflowId) {
       key: workflowDataStore.key,
       value: workflowDataStore.value,
       updatedAt: workflowDataStore.updatedAt
-    }).from(workflowDataStore).where(eq95(workflowDataStore.workflowId, workflowId)).orderBy(asc10(workflowDataStore.key)).limit(MAX_DATA_STORE_KEYS);
+    }).from(workflowDataStore).where(eq96(workflowDataStore.workflowId, workflowId)).orderBy(asc10(workflowDataStore.key)).limit(MAX_DATA_STORE_KEYS);
     return renderWorkflowMemorySection(rows);
   } catch {
     return `${WORKFLOW_MEMORY_HEADING}
@@ -63348,7 +65780,7 @@ async function buildDataStoreSection(workflowId) {
 }
 async function buildHaEntitiesSection() {
   try {
-    const [config] = await db.select({ entityRegistry: homeAssistantConfig.entityRegistry }).from(homeAssistantConfig).where(eq95(homeAssistantConfig.id, "default")).limit(1);
+    const [config] = await db.select({ entityRegistry: homeAssistantConfig.entityRegistry }).from(homeAssistantConfig).where(eq96(homeAssistantConfig.id, "default")).limit(1);
     const all = Array.isArray(config?.entityRegistry) ? config.entityRegistry : [];
     if (all.length === 0) return null;
     const prioritised = all.filter((e) => e.domain && HA_PRIORITY_DOMAINS.has(e.domain)).sort((a, b) => (a.entity_id ?? "").localeCompare(b.entity_id ?? ""));
@@ -63731,14 +66163,14 @@ function processToolCall(draft, toolName, args, deps) {
       if (results.length === 0) {
         return { success: true, response: `No nodes found matching "${query}". Consider using create_node to build a new integration, or try a different search query.` };
       }
-      const desc37 = results.map((d) => {
+      const desc40 = results.map((d) => {
         const ports = `Inputs: ${d.inputs.map((p) => p.name).join(", ") || "none"} | Outputs: ${d.outputs.map((p) => p.name).join(", ") || "none"}`;
         const configKeys = d.configSchema?.properties ? `Config keys: ${Object.keys(d.configSchema.properties).join(", ")}` : "";
         return `- **${d.label}** (\`${d.type}\`): ${d.description}
   ${ports}${configKeys ? "\n  " + configKeys : ""}`;
       }).join("\n");
       return { success: true, response: `Found ${results.length} matching node(s):
-${desc37}` };
+${desc40}` };
     }
     case "use_node": {
       const parsed = toolSchemas.use_node.safeParse(args);
@@ -64129,7 +66561,7 @@ __export(orchestrator_exports2, {
   runWorkflowVerification: () => runWorkflowVerification,
   saveWorkflowFromGenerated: () => saveWorkflowFromGenerated
 });
-import { eq as eq96, asc as asc11, desc as desc31, and as and48, isNotNull as isNotNull4 } from "drizzle-orm";
+import { eq as eq97, asc as asc11, desc as desc31, and as and50, isNotNull as isNotNull5 } from "drizzle-orm";
 import { randomUUID as randomUUID4 } from "crypto";
 function humaniseGeneratorStep(fnName, fnArgs, draft) {
   const s = (k) => {
@@ -64197,10 +66629,10 @@ async function getRecentExecutionExamples() {
       nodeType: workflowNodes.type,
       inputData: nodeExecutions.inputData,
       outputData: nodeExecutions.outputData
-    }).from(nodeExecutions).innerJoin(workflowNodes, eq96(nodeExecutions.nodeId, workflowNodes.id)).where(
-      and48(
-        eq96(nodeExecutions.status, "completed"),
-        isNotNull4(nodeExecutions.outputData)
+    }).from(nodeExecutions).innerJoin(workflowNodes, eq97(nodeExecutions.nodeId, workflowNodes.id)).where(
+      and50(
+        eq97(nodeExecutions.status, "completed"),
+        isNotNull5(nodeExecutions.outputData)
       )
     ).orderBy(desc31(nodeExecutions.completedAt)).limit(50);
     const byType2 = /* @__PURE__ */ new Map();
@@ -64593,7 +67025,7 @@ ${basePrompt}` : basePrompt;
   onChunk?.("Planning workflow \u2014 picking the nodes and how they wire together.\n");
   let existingDraft;
   if (workflowId && conversationHistory.length > 0) {
-    const recentChats = await db.select().from(orchestratorChats).where(eq96(orchestratorChats.workflowId, workflowId)).orderBy(desc31(orchestratorChats.createdAt)).limit(10);
+    const recentChats = await db.select().from(orchestratorChats).where(eq97(orchestratorChats.workflowId, workflowId)).orderBy(desc31(orchestratorChats.createdAt)).limit(10);
     for (const row of recentChats) {
       const meta = row.metadata;
       if (meta?.draftState) {
@@ -64843,7 +67275,7 @@ ${baseModifyPrompt}` : baseModifyPrompt;
   return { workflow, thinking };
 }
 async function getChatHistory(workflowId) {
-  const rows = await db.select().from(orchestratorChats).where(eq96(orchestratorChats.workflowId, workflowId)).orderBy(asc11(orchestratorChats.createdAt));
+  const rows = await db.select().from(orchestratorChats).where(eq97(orchestratorChats.workflowId, workflowId)).orderBy(asc11(orchestratorChats.createdAt));
   return rows.map((r) => ({
     id: r.id,
     role: r.role,
@@ -64854,14 +67286,14 @@ async function getChatHistory(workflowId) {
 }
 async function saveWorkflowFromGenerated(workflowId, generated) {
   await db.transaction(async (tx) => {
-    await tx.delete(workflowNodes).where(eq96(workflowNodes.workflowId, workflowId));
-    await tx.delete(workflowEdges).where(eq96(workflowEdges.workflowId, workflowId));
+    await tx.delete(workflowNodes).where(eq97(workflowNodes.workflowId, workflowId));
+    await tx.delete(workflowEdges).where(eq97(workflowEdges.workflowId, workflowId));
     await tx.update(workflows).set({
       name: generated.name,
       description: generated.description || null,
       trigger: generated.trigger ?? { type: "manual" },
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq96(workflows.id, workflowId));
+    }).where(eq97(workflows.id, workflowId));
     if (generated.nodes.length > 0) {
       await tx.insert(workflowNodes).values(
         generated.nodes.map((n) => ({
@@ -64914,12 +67346,12 @@ var init_orchestrator2 = __esm({
 });
 
 // src/lib/monitors/monitors.server.ts
-import { eq as eq97, desc as desc32, inArray as inArray21 } from "drizzle-orm";
+import { eq as eq98, desc as desc32, inArray as inArray24 } from "drizzle-orm";
 async function getMonitorHits(workflowId, limit2 = 4) {
-  const runs = await db.select({ id: workflowRuns.id, startedAt: workflowRuns.startedAt }).from(workflowRuns).where(eq97(workflowRuns.workflowId, workflowId)).orderBy(desc32(workflowRuns.startedAt)).limit(30);
+  const runs = await db.select({ id: workflowRuns.id, startedAt: workflowRuns.startedAt }).from(workflowRuns).where(eq98(workflowRuns.workflowId, workflowId)).orderBy(desc32(workflowRuns.startedAt)).limit(30);
   if (!runs.length) return [];
   const runAt = new Map(runs.map((r) => [r.id, r.startedAt?.toISOString() ?? ""]));
-  const execs = await db.select({ runId: nodeExecutions.runId, outputData: nodeExecutions.outputData }).from(nodeExecutions).where(inArray21(nodeExecutions.runId, runs.map((r) => r.id)));
+  const execs = await db.select({ runId: nodeExecutions.runId, outputData: nodeExecutions.outputData }).from(nodeExecutions).where(inArray24(nodeExecutions.runId, runs.map((r) => r.id)));
   const hits = [];
   for (const ex of execs) {
     const out = ex.outputData;
@@ -64943,12 +67375,12 @@ function baseUrl() {
   return (process.env.PUBLIC_SITE_URL || "https://strangeramblings.com").replace(/\/+$/, "");
 }
 async function createMonitor(description, cron, onProgress) {
-  const desc37 = (description ?? "").trim();
-  if (!desc37) throw new Error("description is required");
+  const desc40 = (description ?? "").trim();
+  if (!desc40) throw new Error("description is required");
   const { generateWorkflow: generateWorkflow2 } = await Promise.resolve().then(() => (init_orchestrator2(), orchestrator_exports2));
   const emit4 = onProgress ?? (() => {
   });
-  const prompt = `Build a recurring MONITOR workflow that runs on a schedule and notifies me when something of interest is found. It should: fetch/check the relevant source, keep only genuinely new items (use a dedupe step), and send me a WhatsApp message only when there is something new. Monitor request: ${desc37}`;
+  const prompt = `Build a recurring MONITOR workflow that runs on a schedule and notifies me when something of interest is found. It should: fetch/check the relevant source, keep only genuinely new items (use a dedupe step), and send me a WhatsApp message only when there is something new. Monitor request: ${desc40}`;
   const result = await generateWorkflow2(prompt, null, (t) => emit4(t.trimEnd()));
   if (result.followUp) throw new Error(`The monitor needs clarification: ${result.followUp}`);
   const workflow = result.workflow;
@@ -64956,7 +67388,7 @@ async function createMonitor(description, cron, onProgress) {
     throw new Error("Could not generate a monitor workflow from that description \u2014 try being more specific about what to watch and when.");
   }
   const { allocateCanvasName: allocateCanvasName2 } = await Promise.resolve().then(() => (init_adapter_server(), adapter_server_exports));
-  const { name: canvasName, slug } = await allocateCanvasName2(workflow.name || `monitor: ${desc37.slice(0, 40)}`);
+  const { name: canvasName, slug } = await allocateCanvasName2(workflow.name || `monitor: ${desc40.slice(0, 40)}`);
   const genCron = workflow.trigger?.type === "cron" ? workflow.trigger.config?.expression ?? workflow.trigger.config?.cron : void 0;
   let effectiveCron = (cron ?? genCron ?? DEFAULT_CRON).trim();
   try {
@@ -64970,7 +67402,7 @@ async function createMonitor(description, cron, onProgress) {
   const workflowId = await db.transaction(async (tx) => {
     const [row] = await tx.insert(workflows).values({
       name: canvasName,
-      description: workflow.description || desc37,
+      description: workflow.description || desc40,
       trigger: { type: "cron", config: { expression: effectiveCron } }
     }).returning();
     await tx.insert(workflowNodes).values(
@@ -64990,7 +67422,7 @@ async function createMonitor(description, cron, onProgress) {
   } catch (err) {
     console.error("[monitors] reloadSchedule failed:", err instanceof Error ? err.message : err);
   }
-  const marker = { workflowId, slug, description: desc37, cron: effectiveCron, createdAt: (/* @__PURE__ */ new Date()).toISOString() };
+  const marker = { workflowId, slug, description: desc40, cron: effectiveCron, createdAt: (/* @__PURE__ */ new Date()).toISOString() };
   await ensureMonitorsCollection();
   await upsertRecord(MONITORS_COLLECTION, { key: workflowId, data: marker }, ACTOR5);
   return marker;
@@ -65011,13 +67443,13 @@ async function listMonitors() {
     }
   }
   const ids = markers.map((m) => m.workflowId);
-  const scheds = ids.length ? await db.select().from(workflowSchedules).where(inArray21(workflowSchedules.workflowId, ids)) : [];
+  const scheds = ids.length ? await db.select().from(workflowSchedules).where(inArray24(workflowSchedules.workflowId, ids)) : [];
   const schedByWf = new Map(scheds.map((s) => [s.workflowId, s]));
   return Promise.all(
     markers.map(async (m) => {
       const sched = schedByWf.get(m.workflowId);
       const [[lastRun], hits] = await Promise.all([
-        db.select({ status: workflowRuns.status }).from(workflowRuns).where(eq97(workflowRuns.workflowId, m.workflowId)).orderBy(desc32(workflowRuns.startedAt)).limit(1),
+        db.select({ status: workflowRuns.status }).from(workflowRuns).where(eq98(workflowRuns.workflowId, m.workflowId)).orderBy(desc32(workflowRuns.startedAt)).limit(1),
         getMonitorHits(m.workflowId)
       ]);
       return {
@@ -65034,9 +67466,9 @@ async function listMonitors() {
   );
 }
 async function setMonitorEnabled(workflowId, enabled) {
-  const [sched] = await db.select().from(workflowSchedules).where(eq97(workflowSchedules.workflowId, workflowId)).limit(1);
+  const [sched] = await db.select().from(workflowSchedules).where(eq98(workflowSchedules.workflowId, workflowId)).limit(1);
   if (!sched) return { ok: false };
-  await db.update(workflowSchedules).set({ enabled }).where(eq97(workflowSchedules.id, sched.id));
+  await db.update(workflowSchedules).set({ enabled }).where(eq98(workflowSchedules.id, sched.id));
   try {
     const { reloadSchedule: reloadSchedule2 } = await Promise.resolve().then(() => (init_scheduler(), scheduler_exports));
     await reloadSchedule2(sched.id);
@@ -65099,7 +67531,7 @@ async function notifyMonitorHit(args) {
     await notifyAllSubscribers2({
       title: `Monitor: ${hit.newCount} new`,
       body: hit.preview ? `${what} \u2014 ${hit.preview}` : what,
-      url: "/jkai/monitors"
+      url: "/jkai/daydreams?tab=watches"
     });
   } catch (err) {
     console.error("[monitors] push notify failed:", err instanceof Error ? err.message : err);
@@ -65115,7 +67547,7 @@ var init_push_hits = __esm({
 });
 
 // src/lib/workflows/engine.ts
-import { and as and49, eq as eq98 } from "drizzle-orm";
+import { and as and51, eq as eq99 } from "drizzle-orm";
 async function persistNodeCompletion(runId, nodeId, fields) {
   try {
     await db.update(nodeExecutions).set({
@@ -65126,7 +67558,7 @@ async function persistNodeCompletion(runId, nodeId, fields) {
       ...fields.error !== void 0 ? { error: fields.error } : {},
       completedAt: /* @__PURE__ */ new Date(),
       ...fields.usage ?? {}
-    }).where(and49(eq98(nodeExecutions.runId, runId), eq98(nodeExecutions.nodeId, nodeId)));
+    }).where(and51(eq99(nodeExecutions.runId, runId), eq99(nodeExecutions.nodeId, nodeId)));
   } catch (e) {
     console.warn(
       `[engine] incremental persist failed run=${runId} node=${nodeId}:`,
@@ -65141,7 +67573,7 @@ var init_engine2 = __esm({
     init_graph();
     init_events();
     init_healing();
-    init_execution_context();
+    init_execution();
     init_observability_bus();
     init_engine_runtime();
     init_db();
@@ -66552,12 +68984,12 @@ __export(sub_workflow_exports, {
   subWorkflowDef: () => subWorkflowDef,
   subWorkflowExecutor: () => subWorkflowExecutor
 });
-import { eq as eq99 } from "drizzle-orm";
+import { eq as eq100 } from "drizzle-orm";
 async function loadSubWorkflowDefinition(workflowId) {
-  const [workflow] = await db.select().from(workflows).where(eq99(workflows.id, workflowId)).limit(1);
+  const [workflow] = await db.select().from(workflows).where(eq100(workflows.id, workflowId)).limit(1);
   if (!workflow) return null;
-  const nodes = await db.select().from(workflowNodes).where(eq99(workflowNodes.workflowId, workflowId));
-  const edges = await db.select().from(workflowEdges).where(eq99(workflowEdges.workflowId, workflowId));
+  const nodes = await db.select().from(workflowNodes).where(eq100(workflowNodes.workflowId, workflowId));
+  const edges = await db.select().from(workflowEdges).where(eq100(workflowEdges.workflowId, workflowId));
   return {
     id: workflowId,
     name: workflow.name,
@@ -67056,9 +69488,9 @@ var init_strava = __esm({
 });
 
 // src/lib/health/tokens.ts
-import { eq as eq100 } from "drizzle-orm";
+import { eq as eq101 } from "drizzle-orm";
 async function getValidToken(service) {
-  const [token2] = await db.select().from(oauthTokens).where(eq100(oauthTokens.service, service)).limit(1);
+  const [token2] = await db.select().from(oauthTokens).where(eq101(oauthTokens.service, service)).limit(1);
   if (!token2) return null;
   const now = Math.floor(Date.now() / 1e3);
   const isExpired = token2.expiresAt ? token2.expiresAt < now + 60 : false;
@@ -67073,7 +69505,7 @@ async function getValidToken(service) {
         refreshToken: newTokens.refresh_token,
         expiresAt: newTokens.expires_at,
         updatedAt: Math.floor(Date.now() / 1e3)
-      }).where(eq100(oauthTokens.service, "strava"));
+      }).where(eq101(oauthTokens.service, "strava"));
       return newTokens.access_token;
     } else {
       newTokens = await refreshWhoopToken(token2.refreshToken);
@@ -67083,7 +69515,7 @@ async function getValidToken(service) {
         refreshToken: newTokens.refresh_token || token2.refreshToken,
         expiresAt,
         updatedAt: Math.floor(Date.now() / 1e3)
-      }).where(eq100(oauthTokens.service, "whoop"));
+      }).where(eq101(oauthTokens.service, "whoop"));
       return newTokens.access_token;
     }
   } catch (e) {
@@ -67102,7 +69534,7 @@ var init_tokens = __esm({
 });
 
 // src/lib/workflows/nodes/whoop.ts
-import { and as and50, gte as gte9, lte as lte2, desc as desc33 } from "drizzle-orm";
+import { and as and52, gte as gte9, lte as lte3, desc as desc33 } from "drizzle-orm";
 function resolveRange({ daysOpt, startOpt, endOpt }) {
   const nowSec = Math.floor(Date.now() / 1e3);
   const endSec = endOpt ? Math.floor(new Date(endOpt).getTime() / 1e3) : nowSec;
@@ -67144,16 +69576,16 @@ var init_whoop2 = __esm({
           const { startSec, endSec } = resolveRange({ daysOpt: days, startOpt: start, endOpt: end });
           const [recoveryRows, sleepRows, workoutRows, cycleRows] = await Promise.all([
             db.select().from(whoopRecovery).where(
-              and50(gte9(whoopRecovery.createdDate, startSec), lte2(whoopRecovery.createdDate, endSec))
+              and52(gte9(whoopRecovery.createdDate, startSec), lte3(whoopRecovery.createdDate, endSec))
             ),
             db.select().from(whoopSleep).where(
-              and50(gte9(whoopSleep.startDate, startSec), lte2(whoopSleep.startDate, endSec))
+              and52(gte9(whoopSleep.startDate, startSec), lte3(whoopSleep.startDate, endSec))
             ),
             db.select().from(whoopWorkouts).where(
-              and50(gte9(whoopWorkouts.startDate, startSec), lte2(whoopWorkouts.startDate, endSec))
+              and52(gte9(whoopWorkouts.startDate, startSec), lte3(whoopWorkouts.startDate, endSec))
             ),
             db.select().from(whoopCycles).where(
-              and50(gte9(whoopCycles.startDate, startSec), lte2(whoopCycles.startDate, endSec))
+              and52(gte9(whoopCycles.startDate, startSec), lte3(whoopCycles.startDate, endSec))
             )
           ]);
           const totalSleepMs = sleepRows.reduce(
@@ -67199,7 +69631,7 @@ var init_whoop2 = __esm({
         if (operation === "get_recent") {
           const { startSec, endSec } = resolveRange({ daysOpt: days, startOpt: start, endOpt: end });
           const rows = await db.select().from(whoopRecovery).where(
-            and50(gte9(whoopRecovery.createdDate, startSec), lte2(whoopRecovery.createdDate, endSec))
+            and52(gte9(whoopRecovery.createdDate, startSec), lte3(whoopRecovery.createdDate, endSec))
           ).orderBy(desc33(whoopRecovery.createdDate));
           const series = rows.map((r) => ({
             date: new Date(r.createdDate * 1e3).toISOString().slice(0, 10),
@@ -67215,7 +69647,7 @@ var init_whoop2 = __esm({
           const metric = config.metric ?? "recovery";
           const { startSec, endSec } = resolveRange({ daysOpt: days, startOpt: start, endOpt: end });
           if (metric === "sleep_performance") {
-            const rows2 = await db.select({ d: whoopSleep.startDate, v: whoopSleep.sleepPerformance }).from(whoopSleep).where(and50(gte9(whoopSleep.startDate, startSec), lte2(whoopSleep.startDate, endSec))).orderBy(whoopSleep.startDate);
+            const rows2 = await db.select({ d: whoopSleep.startDate, v: whoopSleep.sleepPerformance }).from(whoopSleep).where(and52(gte9(whoopSleep.startDate, startSec), lte3(whoopSleep.startDate, endSec))).orderBy(whoopSleep.startDate);
             return {
               output: {
                 metric,
@@ -67225,7 +69657,7 @@ var init_whoop2 = __esm({
             };
           }
           if (metric === "strain") {
-            const rows2 = await db.select({ d: whoopCycles.startDate, v: whoopCycles.strain }).from(whoopCycles).where(and50(gte9(whoopCycles.startDate, startSec), lte2(whoopCycles.startDate, endSec))).orderBy(whoopCycles.startDate);
+            const rows2 = await db.select({ d: whoopCycles.startDate, v: whoopCycles.strain }).from(whoopCycles).where(and52(gte9(whoopCycles.startDate, startSec), lte3(whoopCycles.startDate, endSec))).orderBy(whoopCycles.startDate);
             return {
               output: {
                 metric,
@@ -67236,7 +69668,7 @@ var init_whoop2 = __esm({
           }
           const col = RECOVERY_METRIC_COL[metric];
           if (!col) throw new Error(`Unknown Whoop metric: ${metric}`);
-          const rows = await db.select({ d: whoopRecovery.createdDate, v: col }).from(whoopRecovery).where(and50(gte9(whoopRecovery.createdDate, startSec), lte2(whoopRecovery.createdDate, endSec))).orderBy(whoopRecovery.createdDate);
+          const rows = await db.select({ d: whoopRecovery.createdDate, v: col }).from(whoopRecovery).where(and52(gte9(whoopRecovery.createdDate, startSec), lte3(whoopRecovery.createdDate, endSec))).orderBy(whoopRecovery.createdDate);
           return {
             output: {
               metric,
@@ -67309,7 +69741,7 @@ var init_whoop2 = __esm({
 });
 
 // src/lib/workflows/nodes/strava.ts
-import { and as and51, eq as eq101, gte as gte10, lte as lte3, desc as desc34 } from "drizzle-orm";
+import { and as and53, eq as eq102, gte as gte10, lte as lte4, desc as desc34 } from "drizzle-orm";
 function resolveRange2({
   daysOpt,
   startOpt,
@@ -67347,13 +69779,13 @@ var init_strava2 = __esm({
           const { startSec, endSec } = resolveRange2({ daysOpt: days, startOpt: start, endOpt: end });
           const conditions = [
             gte10(stravaActivities.startDate, startSec),
-            lte3(stravaActivities.startDate, endSec)
+            lte4(stravaActivities.startDate, endSec)
           ];
-          if (sportType) conditions.push(eq101(stravaActivities.sportType, sportType));
+          if (sportType) conditions.push(eq102(stravaActivities.sportType, sportType));
           if (operation === "query_activities" && minDistance > 0) {
             conditions.push(gte10(stravaActivities.distance, minDistance));
           }
-          const rows = await db.select().from(stravaActivities).where(and51(...conditions)).orderBy(desc34(stravaActivities.startDate));
+          const rows = await db.select().from(stravaActivities).where(and53(...conditions)).orderBy(desc34(stravaActivities.startDate));
           if (operation === "get_summary") {
             const totalDistanceMeters = rows.reduce((a, r) => a + (r.distance ?? 0), 0);
             const totalMovingTimeSec = rows.reduce((a, r) => a + (r.movingTime ?? 0), 0);
@@ -67541,10 +69973,10 @@ var init_openrouter = __esm({
             };
           }
           case "list_models": {
-            const keys = loadKeys();
-            if (!keys.openrouterApiKey) throw new Error("OpenRouter API key not configured");
+            const apiKey = await getOpenRouterKey();
+            if (!apiKey) throw new Error("OpenRouter API key not configured");
             const res = await fetch(`${OPENROUTER_BASE}/models`, {
-              headers: { Authorization: `Bearer ${keys.openrouterApiKey}` }
+              headers: { Authorization: `Bearer ${apiKey}` }
             });
             if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
             const data = await res.json();
@@ -67552,10 +69984,10 @@ var init_openrouter = __esm({
             return { output: { models, count: models.length }, rowCount: 1 };
           }
           case "get_usage": {
-            const keys = loadKeys();
-            if (!keys.openrouterApiKey) throw new Error("OpenRouter API key not configured");
+            const apiKey = await getOpenRouterKey();
+            if (!apiKey) throw new Error("OpenRouter API key not configured");
             const res = await fetch(`${OPENROUTER_BASE}/auth/key`, {
-              headers: { Authorization: `Bearer ${keys.openrouterApiKey}` }
+              headers: { Authorization: `Bearer ${apiKey}` }
             });
             if (!res.ok) throw new Error(`OpenRouter API error: ${res.status}`);
             const data = await res.json();
@@ -68080,7 +70512,7 @@ var init_llm_agent = __esm({
     init_llm_helpers();
     init_site_tool_denylist();
     init_engine_runtime();
-    init_execution_context();
+    init_execution();
     init_llm_agent_def();
     llmAgentExecutor = {
       type: "llm-agent",
@@ -68619,6 +71051,74 @@ var init_health_query = __esm({
   }
 });
 
+// src/lib/constants/briefing.ts
+function normaliseBriefingProfile(value) {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const rawSources = raw.sources && typeof raw.sources === "object" && !Array.isArray(raw.sources) ? raw.sources : {};
+  const sources3 = structuredClone(DEFAULT_BRIEFING_PROFILE.sources);
+  for (const [key, preference] of Object.entries(rawSources)) {
+    if (!SOURCE_KEYS.has(key) || !preference || typeof preference !== "object") continue;
+    const p = preference;
+    sources3[key] = {
+      enabled: typeof p.enabled === "boolean" ? p.enabled : true,
+      required: typeof p.required === "boolean" ? p.required : false
+    };
+  }
+  return {
+    sources: sources3,
+    memoryLookbackHours: boundedInt(raw.memoryLookbackHours, DEFAULT_BRIEFING_PROFILE.memoryLookbackHours, 1, 168),
+    memoryLimit: boundedInt(raw.memoryLimit, DEFAULT_BRIEFING_PROFILE.memoryLimit, 1, 20)
+  };
+}
+var SETTINGS_PROFILE_KEY, SETTINGS_TOPICS_KEY, BRIEFING_SOURCE_CATALOG, SOURCE_KEYS, DEFAULT_BRIEFING_PROFILE, boundedInt;
+var init_briefing = __esm({
+  "src/lib/constants/briefing.ts"() {
+    "use strict";
+    SETTINGS_PROFILE_KEY = "briefing.profile";
+    SETTINGS_TOPICS_KEY = "briefing.topics";
+    BRIEFING_SOURCE_CATALOG = [
+      { key: "location", label: "Location", description: "Where you are and how fresh the position is.", group: "Now", mode: "workflow", nodeTypes: ["location-context"] },
+      { key: "weather-home", label: "Weather at home", description: "Conditions, rain, wind and daylight at home.", group: "Now", mode: "workflow", nodeTypes: ["weather-brief"] },
+      { key: "weather-here", label: "Weather where you are", description: "A second forecast when you are away.", group: "Now", mode: "workflow", nodeTypes: ["weather-brief"] },
+      { key: "indoor", label: "Home sensors", description: "Selected Home Assistant readings and unavailable sensors.", group: "Now", mode: "workflow", nodeTypes: ["home-assistant"] },
+      { key: "sleep", label: "Sleep", description: "The latest sleep duration, performance and stages.", group: "Personal", mode: "workflow", nodeTypes: ["health-query"] },
+      { key: "readiness", label: "Readiness", description: "Recovery score and the current recommendation.", group: "Personal", mode: "workflow", nodeTypes: ["health-query"] },
+      { key: "email", label: "Email", description: "New mail selected by the briefing workflow.", group: "Personal", mode: "workflow", nodeTypes: ["gmail-search", "gmail-fetch"] },
+      { key: "knowledge", label: "Knowledge graph", description: "Relevant context already connected across JKAI.", group: "Knowledge", mode: "workflow", nodeTypes: ["intel-query"] },
+      { key: "calendar", label: "Calendar", description: "Upcoming events supplied by a calendar node.", group: "Personal", mode: "extension", nodeTypes: ["apple-calendar"] },
+      { key: "research", label: "Research", description: "Fresh findings or completed research relevant today.", group: "Knowledge", mode: "extension", nodeTypes: ["research-search", "deep-dive-list", "deep-dive-report"] },
+      { key: "files", label: "Files", description: "Selected documents, notes or recently changed files.", group: "Knowledge", mode: "extension", nodeTypes: ["file-search", "file-read", "file-extract"] },
+      { key: "web", label: "Web sources", description: "News, searches or pages gathered by workflow nodes.", group: "Knowledge", mode: "extension", nodeTypes: ["tavily-search", "web-scrape", "stealth-scrape"] },
+      { key: "daydreams", label: "Daydream activity", description: "What the system raised, held back and is investigating.", group: "Daydreaming", mode: "native", nodeTypes: [] },
+      { key: "memories", label: "New memories", description: "Important facts JKAI learned recently, shared back explicitly.", group: "Daydreaming", mode: "native", nodeTypes: [] }
+    ];
+    SOURCE_KEYS = new Set(BRIEFING_SOURCE_CATALOG.map((s) => s.key));
+    DEFAULT_BRIEFING_PROFILE = {
+      sources: Object.fromEntries(
+        BRIEFING_SOURCE_CATALOG.map((source) => [source.key, { enabled: true, required: false }])
+      ),
+      memoryLookbackHours: 30,
+      memoryLimit: 6
+    };
+    boundedInt = (value, fallback, min, max) => {
+      const n = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+    };
+  }
+});
+
+// src/lib/server/briefing-profile.ts
+async function getBriefingProfile() {
+  return normaliseBriefingProfile(await getSetting(SETTINGS_PROFILE_KEY));
+}
+var init_briefing_profile = __esm({
+  "src/lib/server/briefing-profile.ts"() {
+    "use strict";
+    init_settings();
+    init_briefing();
+  }
+});
+
 // src/lib/workflows/nodes/briefing-compose.ts
 function sectionsForNode(type, config = {}) {
   switch (type) {
@@ -68704,6 +71204,9 @@ var TRUTH_REQUIRED_KEY, obj, num3, str2, briefingComposeExecutor;
 var init_briefing_compose = __esm({
   "src/lib/workflows/nodes/briefing-compose.ts"() {
     "use strict";
+    init_briefing();
+    init_briefing_profile();
+    init_settings();
     init_briefing_compose_def();
     TRUTH_REQUIRED_KEY = "_truthRequired";
     obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
@@ -68715,9 +71218,23 @@ var init_briefing_compose = __esm({
         const timezone = str2(config.timezone) ?? "Europe/London";
         const titlePrefix = str2(config.titlePrefix) ?? "Briefing";
         const now = /* @__PURE__ */ new Date();
+        const profile = await getBriefingProfile();
+        const sourceEnabled = (key) => profile.sources[key]?.enabled !== false;
         const facts2 = [];
         const gaps = [];
         const sources3 = [];
+        const sectionSourceKeys = /* @__PURE__ */ new Map([
+          ["Location", "location"],
+          ["Weather \xB7 home", "weather-home"],
+          ["Weather \xB7 where you are", "weather-here"],
+          ["Sleep", "sleep"],
+          ["Readiness", "readiness"],
+          ["Home", "indoor"],
+          ["Email", "email"],
+          ["Knowledge graph", "knowledge"],
+          ["Daydreams", "daydreams"],
+          ["New memories", "memories"]
+        ]);
         const record = (key, label2, status, detail, error) => {
           sources3.push({ key, label: label2, status, detail, error: error ?? null });
           if (status === "failed" || status === "empty") gaps.push({ section: label2, reason: detail });
@@ -68725,6 +71242,16 @@ var init_briefing_compose = __esm({
         const recordLedgerOnly = (key, label2, detail, error) => {
           sources3.push({ key, label: label2, status: "failed", detail, error: error ?? null });
         };
+        const topics = await getSetting(SETTINGS_TOPICS_KEY) ?? [];
+        const cleanTopics = topics.filter((topic) => typeof topic === "string" && !!topic.trim()).slice(0, 20);
+        if (cleanTopics.length) {
+          facts2.push({
+            section: "Briefing focus",
+            label: "Keep in view",
+            value: cleanTopics.join(" \xB7 ").slice(0, 1e3),
+            source: "briefing settings"
+          });
+        }
         const loc = obj(input.location);
         const home = obj(loc?.home);
         const current = obj(loc?.current);
@@ -68866,7 +71393,110 @@ var init_briefing_compose = __esm({
         } else {
           record("knowledge", "Knowledge graph", "empty", "no matching entities in the graph");
         }
-        const requiredSections = /* @__PURE__ */ new Set();
+        try {
+          const { db: db2 } = await Promise.resolve().then(() => (init_db(), db_exports));
+          const { daydreamThoughts: daydreamThoughts2, daydreamLeads: daydreamLeads2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+          const { and: and62, desc: desc40, eq: eq127, gte: gte13, sql: dsql } = await import("drizzle-orm");
+          const since = new Date(Date.now() - 24 * 36e5);
+          const said = await db2.select({ title: daydreamThoughts2.title, kind: daydreamThoughts2.kind }).from(daydreamThoughts2).where(and62(eq127(daydreamThoughts2.status, "delivered"), gte13(daydreamThoughts2.deliveredAt, since))).orderBy(desc40(daydreamThoughts2.score)).limit(2);
+          const [held] = await db2.select({ n: dsql`count(*)::int` }).from(daydreamThoughts2).where(and62(eq127(daydreamThoughts2.status, "suppressed"), gte13(daydreamThoughts2.updatedAt, since)));
+          const [open] = await db2.select({ n: dsql`count(*)::int` }).from(daydreamLeads2).where(eq127(daydreamLeads2.status, "open"));
+          if (said.length) {
+            facts2.push({
+              section: "Daydreams",
+              label: "It said",
+              value: said.map((t) => `\u201C${t.title}\u201D`).join(" \xB7 ").slice(0, 300),
+              source: "daydream"
+            });
+          }
+          if ((held?.n ?? 0) > 0) {
+            facts2.push({ section: "Daydreams", label: "Held back", value: `${held.n} below the bar`, source: "daydream" });
+          }
+          if ((open?.n ?? 0) > 0) {
+            facts2.push({ section: "Daydreams", label: "Investigating", value: `${open.n} open line${open.n === 1 ? "" : "s"} of enquiry`, source: "daydream" });
+          }
+          if (said.length || (held?.n ?? 0) > 0 || (open?.n ?? 0) > 0) {
+            record("daydreams", "Daydreams", "ok", `${said.length} said, ${held?.n ?? 0} held`);
+          } else {
+            record("daydreams", "Daydreams", "empty", "a quiet day \u2014 nothing raised, nothing held");
+          }
+        } catch (err) {
+          record("daydreams", "Daydreams", "failed", err instanceof Error ? err.message : String(err));
+        }
+        let memoryRows = [];
+        if (sourceEnabled("memories")) {
+          try {
+            const { db: db2 } = await Promise.resolve().then(() => (init_db(), db_exports));
+            const { jkaiMemories: jkaiMemories2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+            const { and: and62, desc: desc40, gte: gte13, isNull: isNull20, sql: sql52 } = await import("drizzle-orm");
+            const since = new Date(now.getTime() - profile.memoryLookbackHours * 36e5);
+            const rows = await db2.select({
+              id: jkaiMemories2.id,
+              category: jkaiMemories2.category,
+              content: jkaiMemories2.content,
+              confidence: jkaiMemories2.confidence,
+              createdAt: jkaiMemories2.createdAt
+            }).from(jkaiMemories2).where(and62(isNull20(jkaiMemories2.supersededBy), gte13(jkaiMemories2.createdAt, since))).orderBy(
+              sql52`case ${jkaiMemories2.confidence} when 'high' then 0 when 'medium' then 1 else 2 end`,
+              desc40(jkaiMemories2.createdAt)
+            ).limit(profile.memoryLimit);
+            memoryRows = rows.map((row) => ({
+              ...row,
+              createdAt: row.createdAt.toISOString()
+            }));
+            for (const memory of memoryRows) {
+              facts2.push({
+                section: "New memories",
+                label: memory.category,
+                value: memory.content.slice(0, 600),
+                source: `memory:${memory.id}`
+              });
+            }
+            record(
+              "memories",
+              "New memories",
+              memoryRows.length ? "ok" : "empty",
+              memoryRows.length ? `${memoryRows.length} learned in the last ${profile.memoryLookbackHours} hours` : `nothing new in the last ${profile.memoryLookbackHours} hours`
+            );
+          } catch (err) {
+            record("memories", "New memories", "failed", err instanceof Error ? err.message : String(err));
+          }
+        }
+        const extensionRows = Array.isArray(input.briefingSources) ? input.briefingSources : Array.isArray(input.additionalSources) ? input.additionalSources : [];
+        for (const raw of extensionRows.slice(0, 30)) {
+          const extension = obj(raw);
+          const key = str2(extension?.key);
+          const label2 = str2(extension?.label);
+          if (!extension || !key || !label2 || !sourceEnabled(key)) continue;
+          const statusRaw = str2(extension.status);
+          const status = statusRaw === "failed" || statusRaw === "stale" || statusRaw === "empty" ? statusRaw : "ok";
+          const detail = str2(extension.detail) ?? (status === "ok" ? "reported" : "no usable value");
+          record(key, label2, status, detail, str2(extension.error));
+          sectionSourceKeys.set(label2, key);
+          const extensionFacts = Array.isArray(extension.facts) ? extension.facts : [];
+          for (const rawFact of extensionFacts.slice(0, 30)) {
+            const fact = obj(rawFact);
+            const factLabel = str2(fact?.label);
+            const value = str2(fact?.value);
+            if (!factLabel || !value) continue;
+            facts2.push({
+              section: label2,
+              label: factLabel.slice(0, 120),
+              value: value.slice(0, 1500),
+              source: (str2(fact?.source) ?? key).slice(0, 160)
+            });
+          }
+        }
+        const keepSection = (section) => {
+          const key = sectionSourceKeys.get(section);
+          return !key || sourceEnabled(key);
+        };
+        facts2.splice(0, facts2.length, ...facts2.filter((fact) => keepSection(fact.section)));
+        gaps.splice(0, gaps.length, ...gaps.filter((gap) => keepSection(gap.section)));
+        sources3.splice(0, sources3.length, ...sources3.filter((source) => sourceEnabled(source.key)));
+        const requiredSections = new Set(
+          Object.entries(profile.sources).filter(([, preference]) => preference.enabled && preference.required).map(([key]) => key)
+        );
         if (config.auditRun !== false && context._currentNodeId) {
           try {
             const seen = /* @__PURE__ */ new Set();
@@ -68899,8 +71529,11 @@ var init_briefing_compose = __esm({
         const requiredGaps = gaps.filter((g) => g.required);
         const truthCompromised = requiredGaps.length > 0;
         const sections = [...new Set(facts2.map((f) => f.section))];
-        const factSheet = sections.map((s) => `[${s}]
-` + facts2.filter((f) => f.section === s).map((f) => `  ${f.label}: ${f.value}`).join("\n")).join("\n\n");
+        const factSheet = sections.map((s) => {
+          const heading = s === "New memories" ? "New memories \u2014 REQUIRED: share in a \u201CWhat I learned\u201D bullet" : s;
+          return `[${heading}]
+` + facts2.filter((f) => f.section === s).map((f) => `  ${f.label}: ${f.value}`).join("\n");
+        }).join("\n\n");
         const gapSheet = gaps.length ? gaps.map((g) => `  ${g.section}: UNAVAILABLE${g.required ? " (REQUIRED)" : ""} \u2014 ${g.reason}`).join("\n") : "  (none \u2014 every source reported)";
         const headlineBits = [];
         const hereW = sameSpot ? wHome : wHere;
@@ -68924,7 +71557,8 @@ var init_briefing_compose = __esm({
           requiredGaps,
           location: locationBlock,
           weather: { home: wHome, here: sameSpot ? null : wHere, sameSpot },
-          knowledge: intelContext ? { query: str2(knowRaw?.intelQuery), context: intelContext } : null
+          knowledge: intelContext ? { query: str2(knowRaw?.intelQuery), context: intelContext } : null,
+          memories: memoryRows
         };
         return {
           output: {
@@ -68946,7 +71580,7 @@ var init_briefing_compose = __esm({
       getInputSchema() {
         return {
           type: "object",
-          description: "Merged signals. Recognised keys: location, weatherHome, weatherHere, sleep, readiness, indoor, email, knowledge."
+          description: "Merged signals. Recognised keys: location, weatherHome, weatherHere, sleep, readiness, indoor, email, knowledge, briefingSources."
         };
       },
       getOutputSchema() {
@@ -70064,7 +72698,7 @@ var init_delegate_agent = __esm({
 });
 
 // src/lib/workflows/nodes/builder-canvas.ts
-import { eq as eq102 } from "drizzle-orm";
+import { eq as eq103 } from "drizzle-orm";
 function tplString(raw, input) {
   if (typeof raw !== "string") return "";
   return interpolateTemplate(raw, input);
@@ -70083,7 +72717,7 @@ var init_builder_canvas = __esm({
     init_db();
     init_schema();
     init_builder_client();
-    init_settings();
+    init_workload_settings();
     init_price_snapshot();
     init_published_link();
     TERMINAL_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "paused"]);
@@ -70119,7 +72753,7 @@ var init_builder_canvas = __esm({
       async execute(input, config, _context) {
         const attachedBuildId = String(config.buildId ?? "").trim();
         if (attachedBuildId) {
-          const [existing] = await db.select().from(jkaiBuilds).where(eq102(jkaiBuilds.id, attachedBuildId));
+          const [existing] = await db.select().from(jkaiBuilds).where(eq103(jkaiBuilds.id, attachedBuildId));
           if (existing) {
             return {
               output: {
@@ -70143,7 +72777,7 @@ var init_builder_canvas = __esm({
         if (provider === "openrouter" && modelId) {
           ctx = { provider, modelId };
         } else {
-          ctx = await resolveDefaultModel();
+          ctx = await resolveBuilderModel();
         }
         const priceSnapshot = await snapshotPrice(ctx);
         const budgetConfig = { ...DEFAULT_BUILD_BUDGET };
@@ -70175,14 +72809,14 @@ var init_builder_canvas = __esm({
         try {
           await builderClient.startBuild(build.id);
         } catch (err) {
-          await db.update(jkaiBuilds).set({ status: "failed" }).where(eq102(jkaiBuilds.id, build.id));
+          await db.update(jkaiBuilds).set({ status: "failed" }).where(eq103(jkaiBuilds.id, build.id));
           const msg = err instanceof Error ? err.message : String(err);
           return {
             output: { success: false, error: `started build ${build.id} but builder unavailable: ${msg}`, buildId: build.id },
             rowCount: 1
           };
         }
-        const [refreshed] = await db.select().from(jkaiBuilds).where(eq102(jkaiBuilds.id, build.id));
+        const [refreshed] = await db.select().from(jkaiBuilds).where(eq103(jkaiBuilds.id, build.id));
         return {
           output: {
             success: true,
@@ -70239,7 +72873,7 @@ var init_builder_canvas = __esm({
         const maxWait = Math.max(5e3, pickNumber(config.maxWaitMs) ?? 8 * 60 * 60 * 1e3);
         const start = Date.now();
         if (!waitForCompletion) {
-          const [row] = await db.select().from(jkaiBuilds).where(eq102(jkaiBuilds.id, buildId));
+          const [row] = await db.select().from(jkaiBuilds).where(eq103(jkaiBuilds.id, buildId));
           if (!row) return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
           return {
             output: {
@@ -70258,7 +72892,7 @@ var init_builder_canvas = __esm({
           };
         }
         while (Date.now() - start < maxWait) {
-          const [row] = await db.select().from(jkaiBuilds).where(eq102(jkaiBuilds.id, buildId));
+          const [row] = await db.select().from(jkaiBuilds).where(eq103(jkaiBuilds.id, buildId));
           if (!row) {
             return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
           }
@@ -70330,13 +72964,13 @@ var init_builder_canvas = __esm({
         if (!buildId) {
           return { output: { success: false, error: "buildId is required" }, rowCount: 1 };
         }
-        const [row] = await db.select().from(jkaiBuilds).where(eq102(jkaiBuilds.id, buildId));
+        const [row] = await db.select().from(jkaiBuilds).where(eq103(jkaiBuilds.id, buildId));
         if (!row) {
           return { output: { success: false, error: `build ${buildId} not found` }, rowCount: 1 };
         }
         let workflowName = "";
         if (context.workflowId) {
-          const [wf] = await db.select().from(workflows).where(eq102(workflows.id, context.workflowId));
+          const [wf] = await db.select().from(workflows).where(eq103(workflows.id, context.workflowId));
           if (wf?.name) workflowName = wf.name.replace(/^canvas:/, "");
         }
         const previewUrl = row.publishedSlug ? publishedLink(row.publishedSlug)?.href ?? null : row.serveConfig ? `/api/jkai/proxy/${row.id}/` : null;
@@ -70565,7 +73199,7 @@ var init_intelligence = __esm({
 });
 
 // src/lib/workflows/nodes/research-result.ts
-import { eq as eq103 } from "drizzle-orm";
+import { eq as eq104 } from "drizzle-orm";
 async function fetchDeepReport(sessionId) {
   const result = await executeTool("research_get_report", { id: sessionId });
   if (!result?.success) {
@@ -70580,7 +73214,7 @@ async function fetchDeepReport(sessionId) {
   };
 }
 async function fetchQuickAnswer(sessionId) {
-  const [row] = await db.select().from(quickAnswers).where(eq103(quickAnswers.id, sessionId)).limit(1);
+  const [row] = await db.select().from(quickAnswers).where(eq104(quickAnswers.id, sessionId)).limit(1);
   if (!row) {
     return { status: "failed", report: "", sources: [], durationMs: void 0 };
   }
@@ -70740,7 +73374,7 @@ Respond with JSON: { "queries": ["query1", "query2", ...] }`;
 });
 
 // src/lib/quickanswer/worker.ts
-import { eq as eq104 } from "drizzle-orm";
+import { eq as eq105 } from "drizzle-orm";
 function emit3(id, event) {
   const emitter4 = activeEmitters2.get(id);
   if (emitter4) {
@@ -70748,7 +73382,7 @@ function emit3(id, event) {
   }
 }
 async function updateStatus(id, status) {
-  await db.update(quickAnswers).set({ status }).where(eq104(quickAnswers.id, id));
+  await db.update(quickAnswers).set({ status }).where(eq105(quickAnswers.id, id));
   emit3(id, { type: "status", data: { status } });
 }
 function getDomain4(url) {
@@ -70801,10 +73435,10 @@ async function runQuickAnswerSync(id) {
     await runQuickAnswer(id);
   } catch (err) {
     console.error(`[quickanswer] Failed for ${id}:`, err);
-    await db.update(quickAnswers).set({ status: "failed", errorMessage: err?.message ?? "Unknown error", completedAt: /* @__PURE__ */ new Date() }).where(eq104(quickAnswers.id, id)).catch(() => {
+    await db.update(quickAnswers).set({ status: "failed", errorMessage: err?.message ?? "Unknown error", completedAt: /* @__PURE__ */ new Date() }).where(eq105(quickAnswers.id, id)).catch(() => {
     });
   }
-  const [row] = await db.select().from(quickAnswers).where(eq104(quickAnswers.id, id)).limit(1);
+  const [row] = await db.select().from(quickAnswers).where(eq105(quickAnswers.id, id)).limit(1);
   if (!row) throw new Error("Quick answer row missing after run");
   return row;
 }
@@ -70813,7 +73447,7 @@ async function runQuickAnswer(id) {
   abortControllers2.set(id, ac);
   const start = Date.now();
   try {
-    const [row] = await db.select().from(quickAnswers).where(eq104(quickAnswers.id, id));
+    const [row] = await db.select().from(quickAnswers).where(eq105(quickAnswers.id, id));
     if (!row) throw new Error("Quick answer not found");
     const topic = row.topic;
     const goals = row.goals ?? [];
@@ -70845,7 +73479,7 @@ async function runQuickAnswer(id) {
       queries = [topic];
       emit3(id, { type: "log", message: "Query gen empty, using topic directly." });
     }
-    await db.update(quickAnswers).set({ queries }).where(eq104(quickAnswers.id, id));
+    await db.update(quickAnswers).set({ queries }).where(eq105(quickAnswers.id, id));
     emit3(id, { type: "log", message: `Searching: ${queries.length} queries in parallel...` });
     const refinedResults = await Promise.allSettled(
       queries.map(
@@ -70876,7 +73510,7 @@ async function runQuickAnswer(id) {
       }
     }
     if (sources3.length === 0) throw new Error("No search results found");
-    await db.update(quickAnswers).set({ sources: sources3 }).where(eq104(quickAnswers.id, id));
+    await db.update(quickAnswers).set({ sources: sources3 }).where(eq105(quickAnswers.id, id));
     emit3(id, { type: "sources", data: { sources: sources3 } });
     emit3(id, { type: "log", message: `Found ${sources3.length} sources. Synthesising answer...` });
     await updateStatus(id, "synthesising");
@@ -70896,7 +73530,7 @@ async function runQuickAnswer(id) {
       tokensUsed,
       durationMs,
       completedAt: /* @__PURE__ */ new Date()
-    }).where(eq104(quickAnswers.id, id));
+    }).where(eq105(quickAnswers.id, id));
     emit3(id, { type: "complete", data: { durationMs } });
     emit3(id, { type: "status", data: { status: "complete" } });
   } catch (err) {
@@ -70907,7 +73541,7 @@ async function runQuickAnswer(id) {
       errorMessage: message,
       durationMs,
       completedAt: /* @__PURE__ */ new Date()
-    }).where(eq104(quickAnswers.id, id));
+    }).where(eq105(quickAnswers.id, id));
     emit3(id, { type: "error", message });
   } finally {
     abortControllers2.delete(id);
@@ -72329,7 +74963,7 @@ The user's goal describes what each ITEM should contain. The user's searchQuery 
 
 // src/lib/workflows/nodes/stealth-scrape.ts
 import os6 from "os";
-import { eq as eq105 } from "drizzle-orm";
+import { eq as eq106 } from "drizzle-orm";
 function countScrapeRows(pages) {
   if (!pages || pages.length === 0) return 0;
   let total = 0;
@@ -72349,7 +74983,7 @@ async function waitForInteractionResolution(interactionId, maxWaitMs) {
     const [row] = await db.select({
       resolvedAt: workflowInteractions.resolvedAt,
       cancelled: workflowInteractions.cancelled
-    }).from(workflowInteractions).where(eq105(workflowInteractions.id, interactionId));
+    }).from(workflowInteractions).where(eq106(workflowInteractions.id, interactionId));
     if (!row) throw new Error(`interaction ${interactionId} disappeared`);
     if (row.cancelled) throw new Error(`interaction ${interactionId} was cancelled`);
     if (row.resolvedAt) return;
@@ -73070,13 +75704,13 @@ var init_whatsapp_trigger = __esm({
 });
 
 // src/lib/workflows/nodes/gmail-fetch.ts
-import { eq as eq106 } from "drizzle-orm";
+import { eq as eq107 } from "drizzle-orm";
 async function loadAccount(config, input) {
   const accountId = Number(
     config.accountId ?? input.accountId ?? 0
   );
   if (!accountId) throw new Error("accountId is required (in config or input)");
-  const rows = await db.select().from(gmailAccounts).where(eq106(gmailAccounts.id, accountId));
+  const rows = await db.select().from(gmailAccounts).where(eq107(gmailAccounts.id, accountId));
   const acct = rows[0];
   if (!acct) throw new Error(`Gmail account ${accountId} not found`);
   return acct;
@@ -73122,13 +75756,13 @@ var init_gmail_fetch = __esm({
 });
 
 // src/lib/workflows/nodes/gmail-send.ts
-import { eq as eq107 } from "drizzle-orm";
+import { eq as eq108 } from "drizzle-orm";
 async function loadAccount2(config, input) {
   const accountId = Number(
     config.accountId ?? input.accountId ?? 0
   );
   if (!accountId) throw new Error("accountId is required (in config or input)");
-  const rows = await db.select().from(gmailAccounts).where(eq107(gmailAccounts.id, accountId));
+  const rows = await db.select().from(gmailAccounts).where(eq108(gmailAccounts.id, accountId));
   const acct = rows[0];
   if (!acct) throw new Error(`Gmail account ${accountId} not found`);
   return acct;
@@ -73192,13 +75826,13 @@ var init_gmail_send = __esm({
 });
 
 // src/lib/workflows/nodes/gmail-reply.ts
-import { eq as eq108 } from "drizzle-orm";
+import { eq as eq109 } from "drizzle-orm";
 async function loadAccount3(config, input) {
   const accountId = Number(
     config.accountId ?? input.accountId ?? 0
   );
   if (!accountId) throw new Error("accountId is required (in config or input)");
-  const rows = await db.select().from(gmailAccounts).where(eq108(gmailAccounts.id, accountId));
+  const rows = await db.select().from(gmailAccounts).where(eq109(gmailAccounts.id, accountId));
   const acct = rows[0];
   if (!acct) throw new Error(`Gmail account ${accountId} not found`);
   return acct;
@@ -73272,13 +75906,13 @@ var init_gmail_reply = __esm({
 });
 
 // src/lib/workflows/nodes/gmail-label.ts
-import { eq as eq109 } from "drizzle-orm";
+import { eq as eq110 } from "drizzle-orm";
 async function loadAccount4(config, input) {
   const accountId = Number(
     config.accountId ?? input.accountId ?? 0
   );
   if (!accountId) throw new Error("accountId is required (in config or input)");
-  const rows = await db.select().from(gmailAccounts).where(eq109(gmailAccounts.id, accountId));
+  const rows = await db.select().from(gmailAccounts).where(eq110(gmailAccounts.id, accountId));
   const acct = rows[0];
   if (!acct) throw new Error(`Gmail account ${accountId} not found`);
   return acct;
@@ -73339,13 +75973,13 @@ var init_gmail_label = __esm({
 });
 
 // src/lib/workflows/nodes/gmail-search.ts
-import { eq as eq110 } from "drizzle-orm";
+import { eq as eq111 } from "drizzle-orm";
 async function loadAccount5(config, input) {
   const accountId = Number(
     config.accountId ?? input.accountId ?? 0
   );
   if (!accountId) throw new Error("accountId is required (in config or input)");
-  const rows = await db.select().from(gmailAccounts).where(eq110(gmailAccounts.id, accountId));
+  const rows = await db.select().from(gmailAccounts).where(eq111(gmailAccounts.id, accountId));
   const acct = rows[0];
   if (!acct) throw new Error(`Gmail account ${accountId} not found`);
   return acct;
@@ -73709,7 +76343,7 @@ var init_intel_query = __esm({
 
 // src/lib/workflows/nodes/chat.ts
 var chatExecutor, chatDef2;
-var init_chat = __esm({
+var init_chat2 = __esm({
   "src/lib/workflows/nodes/chat.ts"() {
     "use strict";
     chatExecutor = {
@@ -73767,7 +76401,7 @@ var init_chat = __esm({
 });
 
 // src/lib/workflows/nodes/file-store.ts
-import { eq as eq111, like as like4 } from "drizzle-orm";
+import { eq as eq112, like as like4 } from "drizzle-orm";
 function resolvePath8(obj2, path4) {
   const parts = path4.split(".");
   let current = obj2;
@@ -73840,7 +76474,7 @@ var init_file_store = __esm({
         if (!fileName) {
           throw new Error("file-store: fileName is required for " + operation);
         }
-        const [existing] = await db.select().from(workflowFiles).where(eq111(workflowFiles.name, fileName));
+        const [existing] = await db.select().from(workflowFiles).where(eq112(workflowFiles.name, fileName));
         const perms = existing ? permissionsFor(existing.permissions) : null;
         if (operation === "read") {
           if (!existing) throw new Error(`file-store: file not found: ${fileName}`);
@@ -73868,7 +76502,7 @@ var init_file_store = __esm({
             throw new Error(`file-store: delete permission denied on ${fileName}`);
           }
           await deleteFile(existing.diskPath);
-          await db.delete(workflowFiles).where(eq111(workflowFiles.id, existing.id));
+          await db.delete(workflowFiles).where(eq112(workflowFiles.id, existing.id));
           queueDerivedIntelDelete("file", existing.id);
           return { output: { ok: true, deleted: true, name: fileName }, rowCount: 1 };
         }
@@ -73881,7 +76515,7 @@ var init_file_store = __esm({
           const buf = coerceToBuffer(raw, encoding);
           if (existing) {
             await saveBuffer2(existing.diskPath, buf);
-            await db.update(workflowFiles).set({ sizeBytes: buf.byteLength, updatedAt: /* @__PURE__ */ new Date() }).where(eq111(workflowFiles.id, existing.id));
+            await db.update(workflowFiles).set({ sizeBytes: buf.byteLength, updatedAt: /* @__PURE__ */ new Date() }).where(eq112(workflowFiles.id, existing.id));
             return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false }, rowCount: 1 };
           }
           const diskPath = newDiskPath(fileName);
@@ -73904,7 +76538,7 @@ var init_file_store = __esm({
           const raw = contentPath ? resolvePath8(input, contentPath) : input.content !== void 0 ? input.content : input;
           const buf = coerceToBuffer(raw, encoding);
           const newSize = await appendBuffer(existing.diskPath, buf);
-          await db.update(workflowFiles).set({ sizeBytes: newSize, updatedAt: /* @__PURE__ */ new Date() }).where(eq111(workflowFiles.id, existing.id));
+          await db.update(workflowFiles).set({ sizeBytes: newSize, updatedAt: /* @__PURE__ */ new Date() }).where(eq112(workflowFiles.id, existing.id));
           return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength }, rowCount: 1 };
         }
         throw new Error(`file-store: unknown operation: ${operation}`);
@@ -73952,7 +76586,7 @@ var init_file_store = __esm({
 });
 
 // src/lib/workflows/nodes/file-extract.ts
-import { eq as eq112 } from "drizzle-orm";
+import { eq as eq113 } from "drizzle-orm";
 function permissionsFor2(raw) {
   const p = raw ?? {};
   return {
@@ -73990,10 +76624,10 @@ function toBool(v) {
 }
 async function writeWorkflowFile(name, buffer, mimeType) {
   const cleanName = name.replace(/^\/+/, "").slice(0, 200);
-  const [existing] = await db.select().from(workflowFiles).where(eq112(workflowFiles.name, cleanName));
+  const [existing] = await db.select().from(workflowFiles).where(eq113(workflowFiles.name, cleanName));
   if (existing) {
     await saveBuffer2(existing.diskPath, buffer);
-    await db.update(workflowFiles).set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: /* @__PURE__ */ new Date() }).where(eq112(workflowFiles.id, existing.id));
+    await db.update(workflowFiles).set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: /* @__PURE__ */ new Date() }).where(eq113(workflowFiles.id, existing.id));
     return { id: existing.id, name: existing.name };
   }
   const diskPath = newDiskPath(cleanName);
@@ -74024,7 +76658,7 @@ var init_file_extract = __esm({
         if (mode === "extract") {
           const fileName = interpolateTemplate(config.fileName || "", input).trim();
           if (!fileName) throw new Error("file-extract: fileName is required for extract mode");
-          const [existing] = await db.select().from(workflowFiles).where(eq112(workflowFiles.name, fileName));
+          const [existing] = await db.select().from(workflowFiles).where(eq113(workflowFiles.name, fileName));
           if (!existing) throw new Error(`file-extract: file not found: ${fileName}`);
           const perms = permissionsFor2(existing.permissions);
           if (!perms.read) throw new Error(`file-extract: read permission denied on ${fileName}`);
@@ -74121,7 +76755,7 @@ var init_file_extract = __esm({
 });
 
 // src/lib/workflows/nodes/file-text-extract.ts
-import { eq as eq113 } from "drizzle-orm";
+import { eq as eq114 } from "drizzle-orm";
 function permissionsFor3(raw) {
   const p = raw ?? {};
   return {
@@ -74138,10 +76772,10 @@ function toBool2(v) {
 }
 async function writeWorkflowFile2(name, buffer, mimeType) {
   const cleanName = name.replace(/^\/+/, "").slice(0, 200);
-  const [existing] = await db.select().from(workflowFiles).where(eq113(workflowFiles.name, cleanName));
+  const [existing] = await db.select().from(workflowFiles).where(eq114(workflowFiles.name, cleanName));
   if (existing) {
     await saveBuffer2(existing.diskPath, buffer);
-    await db.update(workflowFiles).set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: /* @__PURE__ */ new Date() }).where(eq113(workflowFiles.id, existing.id));
+    await db.update(workflowFiles).set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: /* @__PURE__ */ new Date() }).where(eq114(workflowFiles.id, existing.id));
     return { id: existing.id, name: existing.name };
   }
   const diskPath = newDiskPath(cleanName);
@@ -74169,7 +76803,7 @@ var init_file_text_extract = __esm({
       async execute(input, config, _context) {
         const fileName = interpolateTemplate(config.fileName || "", input).trim();
         if (!fileName) throw new Error("file-text-extract: fileName is required");
-        const [existing] = await db.select().from(workflowFiles).where(eq113(workflowFiles.name, fileName));
+        const [existing] = await db.select().from(workflowFiles).where(eq114(workflowFiles.name, fileName));
         if (!existing) throw new Error(`file-text-extract: file not found: ${fileName}`);
         const perms = permissionsFor3(existing.permissions);
         if (!perms.read) throw new Error(`file-text-extract: read permission denied on ${fileName}`);
@@ -74256,7 +76890,7 @@ var init_file_text_extract = __esm({
 });
 
 // src/lib/workflows/nodes/file-build.ts
-import { eq as eq114 } from "drizzle-orm";
+import { eq as eq115 } from "drizzle-orm";
 function resolvePath10(obj2, path4) {
   const parts = path4.split(".");
   let current = obj2;
@@ -74285,10 +76919,10 @@ function toBool3(v) {
 }
 async function writeWorkflowFile3(name, buffer, mimeType) {
   const cleanName = name.replace(/^\/+/, "").slice(0, 200);
-  const [existing] = await db.select().from(workflowFiles).where(eq114(workflowFiles.name, cleanName));
+  const [existing] = await db.select().from(workflowFiles).where(eq115(workflowFiles.name, cleanName));
   if (existing) {
     await saveBuffer2(existing.diskPath, buffer);
-    await db.update(workflowFiles).set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: /* @__PURE__ */ new Date() }).where(eq114(workflowFiles.id, existing.id));
+    await db.update(workflowFiles).set({ sizeBytes: buffer.byteLength, mimeType, updatedAt: /* @__PURE__ */ new Date() }).where(eq115(workflowFiles.id, existing.id));
     return { id: existing.id, name: existing.name };
   }
   const diskPath = newDiskPath(cleanName);
@@ -74426,7 +77060,7 @@ var init_file_build = __esm({
 });
 
 // src/lib/workflows/nodes/file-ops.ts
-import { eq as eq115, like as like5 } from "drizzle-orm";
+import { eq as eq116, like as like5 } from "drizzle-orm";
 function resolvePath11(obj2, path4) {
   const parts = path4.split(".");
   let current = obj2;
@@ -74478,7 +77112,7 @@ var init_file_ops = __esm({
         const fileName = interpolateTemplate(config.fileName || "", input).trim();
         if (!fileName) throw new Error("file-read: fileName is required");
         const encoding = config.encoding || "utf8";
-        const [existing] = await db.select().from(workflowFiles).where(eq115(workflowFiles.name, fileName));
+        const [existing] = await db.select().from(workflowFiles).where(eq116(workflowFiles.name, fileName));
         if (!existing) throw new Error(`file-read: file not found: ${fileName}`);
         const perms = permissionsFor4(existing.permissions);
         if (!perms.read) throw new Error(`file-read: read permission denied on ${fileName}`);
@@ -74559,19 +77193,19 @@ var init_file_ops = __esm({
         const contentPath = config.contentPath;
         const raw = contentPath ? resolvePath11(input, contentPath) : input.content !== void 0 ? input.content : input;
         const buf = coerceToBuffer2(raw, encoding);
-        const [existing] = await db.select().from(workflowFiles).where(eq115(workflowFiles.name, fileName));
+        const [existing] = await db.select().from(workflowFiles).where(eq116(workflowFiles.name, fileName));
         const perms = existing ? permissionsFor4(existing.permissions) : null;
         if (append) {
           if (!existing) throw new Error(`file-write (append): file not found: ${fileName}. Use append=false to create.`);
           if (!perms || !perms.append) throw new Error(`file-write: append permission denied on ${fileName}`);
           const newSize = await appendBuffer(existing.diskPath, buf);
-          await db.update(workflowFiles).set({ sizeBytes: newSize, updatedAt: /* @__PURE__ */ new Date() }).where(eq115(workflowFiles.id, existing.id));
+          await db.update(workflowFiles).set({ sizeBytes: newSize, updatedAt: /* @__PURE__ */ new Date() }).where(eq116(workflowFiles.id, existing.id));
           return { output: { ok: true, name: fileName, sizeBytes: newSize, appendedBytes: buf.byteLength, mode: "append" }, rowCount: 1 };
         }
         if (existing) {
           if (!perms || !perms.write) throw new Error(`file-write: write permission denied on ${fileName}`);
           await saveBuffer2(existing.diskPath, buf);
-          await db.update(workflowFiles).set({ sizeBytes: buf.byteLength, updatedAt: /* @__PURE__ */ new Date() }).where(eq115(workflowFiles.id, existing.id));
+          await db.update(workflowFiles).set({ sizeBytes: buf.byteLength, updatedAt: /* @__PURE__ */ new Date() }).where(eq116(workflowFiles.id, existing.id));
           return { output: { ok: true, name: fileName, sizeBytes: buf.byteLength, created: false }, rowCount: 1 };
         }
         const diskPath = newDiskPath(fileName);
@@ -74648,12 +77282,12 @@ var init_file_ops = __esm({
         if (ctx.dryRun) {
           return { output: { ok: true, dryRun: true, deleted: false, name: fileName }, rowCount: 1 };
         }
-        const [existing] = await db.select().from(workflowFiles).where(eq115(workflowFiles.name, fileName));
+        const [existing] = await db.select().from(workflowFiles).where(eq116(workflowFiles.name, fileName));
         if (!existing) return { output: { ok: true, deleted: false, reason: "not-found", name: fileName }, rowCount: 1 };
         const perms = permissionsFor4(existing.permissions);
         if (!perms.delete) throw new Error(`file-delete: delete permission denied on ${fileName}`);
         await deleteFile(existing.diskPath);
-        await db.delete(workflowFiles).where(eq115(workflowFiles.id, existing.id));
+        await db.delete(workflowFiles).where(eq116(workflowFiles.id, existing.id));
         queueDerivedIntelDelete("file", existing.id);
         return { output: { ok: true, deleted: true, name: fileName }, rowCount: 1 };
       },
@@ -75170,19 +77804,19 @@ var init_deep_dive_ops = __esm({
 });
 
 // src/lib/workflows/engine-resume.ts
-import { eq as eq116, and as and53, isNull as isNull16 } from "drizzle-orm";
+import { eq as eq117, and as and55, isNull as isNull16 } from "drizzle-orm";
 async function resolveInteraction(opts) {
   const { runId, nodeId, formValues, resolvedBy = null } = opts;
   const [pending] = await db.select().from(workflowInteractions).where(
-    and53(
-      eq116(workflowInteractions.runId, runId),
-      eq116(workflowInteractions.nodeId, nodeId),
+    and55(
+      eq117(workflowInteractions.runId, runId),
+      eq117(workflowInteractions.nodeId, nodeId),
       isNull16(workflowInteractions.resolvedAt)
     )
   );
   if (!pending) return { resolved: false, reason: "not_pending" };
   if (pending.cancelled) return { resolved: false, reason: "cancelled" };
-  await db.update(workflowInteractions).set({ resolvedAt: /* @__PURE__ */ new Date(), resolvedBy, formValues }).where(eq116(workflowInteractions.id, pending.id));
+  await db.update(workflowInteractions).set({ resolvedAt: /* @__PURE__ */ new Date(), resolvedBy, formValues }).where(eq117(workflowInteractions.id, pending.id));
   emitWorkflowEvent({
     type: "interaction_resolved",
     runId,
@@ -75190,7 +77824,7 @@ async function resolveInteraction(opts) {
     data: { interactionId: pending.id },
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
-  const [run] = await db.select({ status: workflowRuns.status }).from(workflowRuns).where(eq116(workflowRuns.id, runId));
+  const [run] = await db.select({ status: workflowRuns.status }).from(workflowRuns).where(eq117(workflowRuns.id, runId));
   if (run?.status === "awaiting_human") {
     const nodeOutput = {
       completed: true,
@@ -75203,7 +77837,7 @@ async function resolveInteraction(opts) {
   return { resolved: true };
 }
 async function resumeRun(runId, resolvedNodeOutput) {
-  const [run] = await db.select().from(workflowRuns).where(eq116(workflowRuns.id, runId));
+  const [run] = await db.select().from(workflowRuns).where(eq117(workflowRuns.id, runId));
   if (!run) {
     throw new Error(`resumeRun: run ${runId} not found`);
   }
@@ -75215,12 +77849,12 @@ async function resumeRun(runId, resolvedNodeOutput) {
   }
   const pausedNodeId = run.pausedAtNodeId;
   const workflowId = run.workflowId;
-  const [workflow] = await db.select().from(workflows).where(eq116(workflows.id, workflowId));
+  const [workflow] = await db.select().from(workflows).where(eq117(workflows.id, workflowId));
   if (!workflow) {
     throw new Error(`resumeRun: workflow ${workflowId} not found`);
   }
-  const nodes = await db.select().from(workflowNodes).where(eq116(workflowNodes.workflowId, workflowId));
-  const edges = await db.select().from(workflowEdges).where(eq116(workflowEdges.workflowId, workflowId));
+  const nodes = await db.select().from(workflowNodes).where(eq117(workflowNodes.workflowId, workflowId));
+  const edges = await db.select().from(workflowEdges).where(eq117(workflowEdges.workflowId, workflowId));
   const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
   const runnableEdges = edges.filter((e) => {
     const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
@@ -75245,7 +77879,7 @@ async function resumeRun(runId, resolvedNodeOutput) {
       targetHandle: e.targetHandle ?? void 0
     }))
   };
-  const executions = await db.select().from(nodeExecutions).where(eq116(nodeExecutions.runId, runId));
+  const executions = await db.select().from(nodeExecutions).where(eq117(nodeExecutions.runId, runId));
   const seededOutputs = {};
   for (const exec2 of executions) {
     if (exec2.status === "completed" && exec2.outputData && exec2.nodeId !== pausedNodeId) {
@@ -75262,15 +77896,15 @@ async function resumeRun(runId, resolvedNodeOutput) {
     outputData: resolvedOutput,
     completedAt: /* @__PURE__ */ new Date()
   }).where(
-    and53(
-      eq116(nodeExecutions.runId, runId),
-      eq116(nodeExecutions.nodeId, pausedNodeId)
+    and55(
+      eq117(nodeExecutions.runId, runId),
+      eq117(nodeExecutions.nodeId, pausedNodeId)
     )
   );
   await db.update(workflowRuns).set({
     status: "running",
     pausedAtNodeId: null
-  }).where(eq116(workflowRuns.id, runId));
+  }).where(eq117(workflowRuns.id, runId));
   const originalStartedAt = run.startedAt?.getTime() ?? Date.now();
   engine.executeWithPreSeededOutputs(definition, runId, seededOutputs, workflowId).then(async (result) => {
     const healingHistory = result.healingHistory || [];
@@ -75283,7 +77917,7 @@ async function resumeRun(runId, resolvedNodeOutput) {
         error: result.error || null,
         healingHistory: healingHistory.length > 0 ? healingHistory : void 0,
         ...isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}
-      }).where(eq116(workflowRuns.id, runId));
+      }).where(eq117(workflowRuns.id, runId));
       if (completedAt && result.status === "failed") {
         emitObs("run.failed", {
           workflowId,
@@ -75312,9 +77946,9 @@ async function resumeRun(runId, resolvedNodeOutput) {
           completedAt: /* @__PURE__ */ new Date(),
           ...usage ?? {}
         }).where(
-          and53(
-            eq116(nodeExecutions.runId, runId),
-            eq116(nodeExecutions.nodeId, nodeId)
+          and55(
+            eq117(nodeExecutions.runId, runId),
+            eq117(nodeExecutions.nodeId, nodeId)
           )
         );
       }
@@ -75328,9 +77962,9 @@ async function resumeRun(runId, resolvedNodeOutput) {
           completedAt: /* @__PURE__ */ new Date(),
           ...usage ?? {}
         }).where(
-          and53(
-            eq116(nodeExecutions.runId, runId),
-            eq116(nodeExecutions.nodeId, nodeId)
+          and55(
+            eq117(nodeExecutions.runId, runId),
+            eq117(nodeExecutions.nodeId, nodeId)
           )
         );
       }
@@ -75346,7 +77980,7 @@ async function resumeRun(runId, resolvedNodeOutput) {
         status: "failed",
         completedAt: failedAt,
         error: message
-      }).where(eq116(workflowRuns.id, runId));
+      }).where(eq117(workflowRuns.id, runId));
     } catch {
     }
     emitObs("run.failed", {
@@ -75374,14 +78008,14 @@ var approval_inbound_exports = {};
 __export(approval_inbound_exports, {
   handleApprovalReply: () => handleApprovalReply
 });
-import { sql as sql48 } from "drizzle-orm";
+import { sql as sql49 } from "drizzle-orm";
 function isOwner(from) {
   const ownerDigits = getOwnerPhone().replace(/\D+/g, "");
   if (!ownerDigits) return false;
   return from.replace(/\D+/g, "") === ownerDigits;
 }
 async function findPendingApprovalByCode(code) {
-  const res = await db.execute(sql48`
+  const res = await db.execute(sql49`
     SELECT
       i.run_id            AS "runId",
       i.node_id           AS "nodeId",
@@ -75457,6 +78091,607 @@ var init_approval_inbound = __esm({
   }
 });
 
+// src/lib/daydream/types.ts
+function errMsg3(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+var LOCAL_TZ, OBSERVE_CADENCE_SECONDS, POLL_INTERVAL_MINS, SETTINGS_MUTED_KINDS_KEY;
+var init_types9 = __esm({
+  "src/lib/daydream/types.ts"() {
+    "use strict";
+    LOCAL_TZ = "Europe/London";
+    OBSERVE_CADENCE_SECONDS = 120;
+    POLL_INTERVAL_MINS = OBSERVE_CADENCE_SECONDS / 60;
+    SETTINGS_MUTED_KINDS_KEY = "daydream.muted_kinds";
+  }
+});
+
+// src/lib/daydream/refutations.ts
+import { and as and56, desc as desc35, eq as eq118, isNotNull as isNotNull6, sql as sql50 } from "drizzle-orm";
+function claimRefs(evidence) {
+  const out = /* @__PURE__ */ new Set();
+  if (!Array.isArray(evidence)) return out;
+  for (const raw of evidence) {
+    const e = raw;
+    if (!e || typeof e.kind !== "string" || typeof e.id !== "string") continue;
+    if (GENERIC_KINDS.has(e.kind)) continue;
+    if (!e.id.trim()) continue;
+    out.add(`${e.kind}:${e.id}`);
+  }
+  return out;
+}
+function isSameClaim(candidate, refuted) {
+  if (refuted.size === 0 || candidate.size === 0) return false;
+  let shared = 0;
+  const [small, large] = candidate.size <= refuted.size ? [candidate, refuted] : [refuted, candidate];
+  for (const ref of small) if (large.has(ref)) shared++;
+  if (shared < MIN_SHARED_REFS) return false;
+  return shared === small.size;
+}
+function echoOf(candidate, refuted) {
+  const refs = claimRefs(candidate.evidence);
+  if (refs.size === 0) return null;
+  for (const r of refuted) {
+    if (r.dedupeKey === candidate.dedupeKey) continue;
+    if (isSameClaim(refs, r.refs)) return r;
+  }
+  return null;
+}
+async function loadRefutedClaims(limit2 = 60) {
+  const since = new Date(Date.now() - REFUTATION_WINDOW_DAYS * 864e5);
+  const rows = await db.select({
+    id: daydreamThoughts.id,
+    dedupeKey: daydreamThoughts.dedupeKey,
+    title: daydreamThoughts.title,
+    evidence: daydreamThoughts.evidence
+  }).from(daydreamThoughts).where(
+    and56(
+      eq118(daydreamThoughts.reviewVerdict, "refuted"),
+      isNotNull6(daydreamThoughts.reviewAt),
+      sql50`${daydreamThoughts.reviewAt} >= ${since}`
+    )
+  ).orderBy(desc35(daydreamThoughts.reviewAt)).limit(Math.max(1, Math.min(200, limit2)));
+  return rows.map((r) => ({
+    id: r.id,
+    dedupeKey: r.dedupeKey,
+    title: r.title,
+    refs: claimRefs(r.evidence)
+  }));
+}
+var GENERIC_KINDS, MIN_SHARED_REFS, REFUTATION_WINDOW_DAYS;
+var init_refutations = __esm({
+  "src/lib/daydream/refutations.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    GENERIC_KINDS = /* @__PURE__ */ new Set(["features"]);
+    MIN_SHARED_REFS = 2;
+    REFUTATION_WINDOW_DAYS = 120;
+  }
+});
+
+// src/lib/daydream/scoring.ts
+function sourceWeight(source) {
+  if (!source) return SOURCE_WEIGHTS.explicit;
+  return SOURCE_WEIGHTS[source] ?? SOURCE_WEIGHTS.explicit;
+}
+function decayFactor(at, now, halfLifeDays = FEEDBACK_HALF_LIFE_DAYS) {
+  const ageDays = (now.getTime() - at.getTime()) / 864e5;
+  if (!Number.isFinite(ageDays) || ageDays <= 0) return 1;
+  return Math.pow(0.5, ageDays / halfLifeDays);
+}
+function tallyFeedback(rows, now, halfLifeDays = FEEDBACK_HALF_LIFE_DAYS) {
+  let useful = 0;
+  let notUseful = 0;
+  let n = 0;
+  for (const r of rows) {
+    if (r.feedback !== "useful" && r.feedback !== "not_useful") continue;
+    const w = decayFactor(r.feedbackAt, now, halfLifeDays) * sourceWeight(r.feedbackSource);
+    if (r.feedback === "useful") useful += w;
+    else notUseful += w;
+    n++;
+  }
+  return { useful, notUseful, n };
+}
+function kindWeight(counts) {
+  const posterior = (counts.useful + PRIOR_USEFUL) / (counts.useful + counts.notUseful + PRIOR_USEFUL + PRIOR_NOT_USEFUL);
+  const raw = posterior * 2;
+  return Math.min(MAX_WEIGHT, Math.max(MIN_WEIGHT, Math.round(raw * 1e3) / 1e3));
+}
+function hourBand(hour) {
+  if (hour < 6) return "night";
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  if (hour < 22) return "evening";
+  return "night";
+}
+function contextKey(kind, placeId, band2) {
+  return `${kind}|${placeId ?? "_nowhere"}|${band2}`;
+}
+function coldStartThreshold(feedbackCount, opts = {}) {
+  const start = opts.start ?? THRESHOLD_START;
+  const floor = opts.floor ?? THRESHOLD_FLOOR;
+  const decayN = opts.decayN ?? THRESHOLD_DECAY_N;
+  const n = Math.max(0, feedbackCount);
+  const t = floor + (start - floor) * Math.exp(-n / decayN);
+  return Math.round(t * 1e3) / 1e3;
+}
+function adaptiveThreshold(rows, now) {
+  const counts = tallyFeedback(rows, now);
+  const effectiveN = counts.useful + counts.notUseful;
+  const learned = coldStartThreshold(effectiveN);
+  const posterior = (counts.useful + PRIOR_USEFUL) / (effectiveN + PRIOR_USEFUL + PRIOR_NOT_USEFUL);
+  const precisionPenalty = Math.max(0, 0.5 - posterior) * 0.6;
+  return Math.round(
+    Math.min(0.9, Math.max(THRESHOLD_FLOOR, learned + precisionPenalty)) * 1e3
+  ) / 1e3;
+}
+function contextualWeight(kindCounts, contextCounts) {
+  const base2 = kindWeight(kindCounts);
+  const localN = contextCounts.useful + contextCounts.notUseful;
+  if (localN <= 0) return base2;
+  const blend = localN / (localN + 5);
+  return Math.round((base2 * (1 - blend) + kindWeight(contextCounts) * blend) * 1e3) / 1e3;
+}
+function finalScore(rawScore, weight, components2 = {}) {
+  const clampedRaw = Math.min(1, Math.max(0, rawScore));
+  const score = Math.min(1, Math.max(0, clampedRaw * weight));
+  return {
+    score: Math.round(score * 1e3) / 1e3,
+    components: {
+      ...components2,
+      raw: Math.round(clampedRaw * 1e3) / 1e3,
+      kindWeight: weight
+    }
+  };
+}
+function relevanceVote(relevance) {
+  if (!Number.isFinite(relevance)) return 0;
+  const clamped = Math.min(RELEVANCE_MAX, Math.max(RELEVANCE_MIN, Math.round(relevance)));
+  return (clamped - RELEVANCE_NEUTRAL) / (RELEVANCE_MAX - RELEVANCE_NEUTRAL);
+}
+function tallyRelevance(rows, now, halfLifeDays = FEEDBACK_HALF_LIFE_DAYS) {
+  let useful = 0;
+  let notUseful = 0;
+  let n = 0;
+  for (const r of rows) {
+    const vote = relevanceVote(r.relevance);
+    if (vote === 0) continue;
+    const w = decayFactor(r.relevanceAt, now, halfLifeDays) * RELEVANCE_SOURCE_WEIGHT;
+    if (vote > 0) useful += vote * w;
+    else notUseful += -vote * w;
+    n++;
+  }
+  return { useful, notUseful, n };
+}
+function mergeCounts(a, b) {
+  return { useful: a.useful + b.useful, notUseful: a.notUseful + b.notUseful, n: a.n + b.n };
+}
+var PRIOR_USEFUL, PRIOR_NOT_USEFUL, FEEDBACK_HALF_LIFE_DAYS, MIN_WEIGHT, MAX_WEIGHT, SOURCE_WEIGHTS, THRESHOLD_START, THRESHOLD_FLOOR, THRESHOLD_DECAY_N, RELEVANCE_MIN, RELEVANCE_MAX, RELEVANCE_NEUTRAL, RELEVANCE_SOURCE_WEIGHT;
+var init_scoring2 = __esm({
+  "src/lib/daydream/scoring.ts"() {
+    "use strict";
+    PRIOR_USEFUL = 2;
+    PRIOR_NOT_USEFUL = 2;
+    FEEDBACK_HALF_LIFE_DAYS = 45;
+    MIN_WEIGHT = 0.2;
+    MAX_WEIGHT = 1.3;
+    SOURCE_WEIGHTS = {
+      explicit: 1,
+      triage: 0.7,
+      action: 0.4
+    };
+    THRESHOLD_START = 0.75;
+    THRESHOLD_FLOOR = 0.45;
+    THRESHOLD_DECAY_N = 25;
+    RELEVANCE_MIN = 1;
+    RELEVANCE_MAX = 5;
+    RELEVANCE_NEUTRAL = 3;
+    RELEVANCE_SOURCE_WEIGHT = 0.8;
+  }
+});
+
+// src/lib/daydream/thought-store.ts
+var thought_store_exports = {};
+__export(thought_store_exports, {
+  EMPTY_PERSIST: () => EMPTY_PERSIST,
+  PROTECTED_STATUSES: () => PROTECTED_STATUSES,
+  archiveThought: () => archiveThought,
+  buildScoringContext: () => buildScoringContext,
+  listUndelivered: () => listUndelivered,
+  loadFeedback: () => loadFeedback,
+  loadRelevanceRows: () => loadRelevanceRows,
+  loadTriageDeck: () => loadTriageDeck,
+  mutedKinds: () => mutedKinds,
+  persistCandidates: () => persistCandidates,
+  recordFeedback: () => recordFeedback,
+  recordTriageBatch: () => recordTriageBatch,
+  setRelevance: () => setRelevance,
+  thoughtCounts: () => thoughtCounts,
+  wakeSnoozed: () => wakeSnoozed
+});
+import { and as and57, desc as desc36, eq as eq119, gte as gte11, inArray as inArray25, isNotNull as isNotNull7, isNull as isNull17, lt as lt3, or as or8, sql as sql51 } from "drizzle-orm";
+async function mutedKinds() {
+  const raw = await getSetting(SETTINGS_MUTED_KINDS_KEY);
+  return new Set(Array.isArray(raw) ? raw : []);
+}
+async function loadFeedback(sinceDays = 180) {
+  const since = new Date(Date.now() - sinceDays * 864e5);
+  const rows = await db.select({
+    kind: daydreamThoughts.kind,
+    feedback: daydreamThoughts.feedback,
+    feedbackAt: daydreamThoughts.feedbackAt,
+    placeId: daydreamThoughts.placeId,
+    feedbackSource: daydreamThoughts.feedbackSource,
+    createdAt: daydreamThoughts.createdAt
+  }).from(daydreamThoughts).where(and57(isNotNull7(daydreamThoughts.feedback), gte11(daydreamThoughts.feedbackAt, since)));
+  return rows.filter((r) => r.feedbackAt != null).map((r) => ({
+    kind: r.kind,
+    feedback: r.feedback,
+    feedbackAt: r.feedbackAt,
+    placeId: r.placeId,
+    feedbackSource: r.feedbackSource,
+    hourBand: hourBand(
+      Number(new Intl.DateTimeFormat("en-GB", {
+        timeZone: LOCAL_TZ,
+        hour: "2-digit",
+        hour12: false
+      }).format(r.createdAt)) % 24
+    )
+  }));
+}
+async function loadRelevanceRows(sinceDays = 180) {
+  const since = new Date(Date.now() - sinceDays * 864e5);
+  const rows = await db.select({
+    kind: daydreamThoughts.kind,
+    relevance: daydreamThoughts.relevance,
+    relevanceAt: daydreamThoughts.relevanceAt,
+    placeId: daydreamThoughts.placeId,
+    createdAt: daydreamThoughts.createdAt
+  }).from(daydreamThoughts).where(and57(isNotNull7(daydreamThoughts.relevance), gte11(daydreamThoughts.relevanceAt, since)));
+  return rows.filter((r) => r.relevanceAt != null && r.relevance != null).map((r) => ({
+    kind: r.kind,
+    relevance: r.relevance,
+    relevanceAt: r.relevanceAt,
+    placeId: r.placeId,
+    // Banded off when the THOUGHT landed, exactly as feedback is — the
+    // per-context weight asks "is this kind worth hearing here, at this hour",
+    // and the hour that matters is the one it arrived in.
+    hourBand: hourBand(
+      Number(new Intl.DateTimeFormat("en-GB", {
+        timeZone: LOCAL_TZ,
+        hour: "2-digit",
+        hour12: false
+      }).format(r.createdAt)) % 24
+    )
+  }));
+}
+async function setRelevance(thoughtId, relevance) {
+  let value = null;
+  if (relevance != null) {
+    if (!Number.isFinite(relevance)) throw new Error("relevance must be a number");
+    const rounded = Math.round(relevance);
+    if (rounded < RELEVANCE_MIN || rounded > RELEVANCE_MAX) {
+      throw new Error(`relevance must be ${RELEVANCE_MIN}..${RELEVANCE_MAX}`);
+    }
+    value = rounded;
+  }
+  const now = /* @__PURE__ */ new Date();
+  const [row] = await db.update(daydreamThoughts).set({
+    relevance: value,
+    // Cleared with the value. A timestamp left behind on a null rating would
+    // survive into `loadRelevanceRows`' window filter and describe a rating
+    // that no longer exists.
+    relevanceAt: value == null ? null : now,
+    updatedAt: now
+  }).where(eq119(daydreamThoughts.id, thoughtId)).returning({ kind: daydreamThoughts.kind });
+  if (!row) throw new Error(`no such thought: ${thoughtId}`);
+  return { kind: row.kind, relevance: value };
+}
+function buildScoringContext(feedback, now, relevance = []) {
+  const byKind = /* @__PURE__ */ new Map();
+  const byContext = /* @__PURE__ */ new Map();
+  for (const f of feedback) {
+    const list = byKind.get(f.kind) ?? [];
+    list.push(f);
+    byKind.set(f.kind, list);
+    if (f.hourBand) {
+      const key = contextKey(f.kind, f.placeId, f.hourBand);
+      const local = byContext.get(key) ?? [];
+      local.push(f);
+      byContext.set(key, local);
+    }
+  }
+  const relByKind = /* @__PURE__ */ new Map();
+  const relByContext = /* @__PURE__ */ new Map();
+  for (const r of relevance) {
+    const list = relByKind.get(r.kind) ?? [];
+    list.push(r);
+    relByKind.set(r.kind, list);
+    if (r.hourBand) {
+      const key = contextKey(r.kind, r.placeId, r.hourBand);
+      const local = relByContext.get(key) ?? [];
+      local.push(r);
+      relByContext.set(key, local);
+    }
+  }
+  const countsByKind = /* @__PURE__ */ new Map();
+  for (const kind of /* @__PURE__ */ new Set([...byKind.keys(), ...relByKind.keys()])) {
+    countsByKind.set(
+      kind,
+      mergeCounts(
+        tallyFeedback(byKind.get(kind) ?? [], now),
+        tallyRelevance(relByKind.get(kind) ?? [], now)
+      )
+    );
+  }
+  return {
+    weightFor: (kind, placeId, band2) => {
+      const kindCounts = countsByKind.get(kind);
+      if (!kindCounts) return 1;
+      if (!band2) return kindWeight(kindCounts);
+      const key = contextKey(kind, placeId, band2);
+      const rows = byContext.get(key);
+      const relRows = relByContext.get(key);
+      if (!rows && !relRows) return kindWeight(kindCounts);
+      return contextualWeight(
+        kindCounts,
+        mergeCounts(tallyFeedback(rows ?? [], now), tallyRelevance(relRows ?? [], now))
+      );
+    },
+    // The global bar stays a measure of feedback alone. It answers "how
+    // cautious should the system be about INTERRUPTING", and a rating given on
+    // a card that was never sent is not evidence about that — see the cold-start
+    // note in scoring.ts. Relevance moves the per-kind weight instead, which is
+    // the lever that actually reorders the feed.
+    threshold: adaptiveThreshold(feedback, now),
+    feedbackCount: feedback.length
+  };
+}
+async function persistCandidates(candidates, opts) {
+  const now = opts.now ?? /* @__PURE__ */ new Date();
+  const result = { ...EMPTY_PERSIST, createdKeys: [] };
+  if (candidates.length === 0) return result;
+  const muted = await mutedKinds();
+  const [feedback, relevance] = await Promise.all([loadFeedback(), loadRelevanceRows()]);
+  const scoring = buildScoringContext(feedback, now, relevance);
+  let refuted = [];
+  try {
+    refuted = await loadRefutedClaims();
+  } catch (err) {
+    console.warn(`[daydream] could not read the refutations: ${errMsg3(err)}`);
+  }
+  const keys = candidates.map((c4) => c4.dedupeKey);
+  const existing = keys.length ? await db.select({
+    id: daydreamThoughts.id,
+    dedupeKey: daydreamThoughts.dedupeKey,
+    status: daydreamThoughts.status,
+    reviewVerdict: daydreamThoughts.reviewVerdict
+  }).from(daydreamThoughts).where(inArray25(daydreamThoughts.dedupeKey, keys)) : [];
+  const byKey = new Map(existing.map((r) => [r.dedupeKey, r]));
+  for (const candidate of candidates) {
+    if (muted.has(candidate.kind)) {
+      result.muted++;
+      continue;
+    }
+    const localHour = Number(new Intl.DateTimeFormat("en-GB", {
+      timeZone: LOCAL_TZ,
+      hour: "2-digit",
+      hour12: false
+    }).format(now)) % 24;
+    const weight = scoring.weightFor(candidate.kind, candidate.placeId, hourBand(localHour));
+    const { score, components: components2 } = finalScore(candidate.rawScore, weight, candidate.components);
+    const found = byKey.get(candidate.dedupeKey);
+    const belowThreshold = score < scoring.threshold;
+    const rejectedByReview = found?.reviewVerdict === "refuted" || found?.reviewVerdict === "uncertain";
+    const echo = found?.reviewVerdict ? null : echoOf(candidate, refuted);
+    const status = rejectedByReview || echo ? "suppressed" : found?.reviewVerdict === "verified" ? "new" : belowThreshold ? "suppressed" : "new";
+    const suppressedReason = rejectedByReview ? found.reviewVerdict === "refuted" ? "refuted_by_review" : "uncertain_after_review" : echo ? `already_refuted (${echo.title.slice(0, 80)})` : belowThreshold && found?.reviewVerdict !== "verified" ? `below_threshold (${score} < ${scoring.threshold})` : null;
+    if (status === "suppressed") result.suppressed++;
+    if (echo) result.alreadyRefuted++;
+    if (found) {
+      if (PROTECTED_STATUSES.includes(found.status)) {
+        result.protectedSkipped++;
+        continue;
+      }
+      await db.update(daydreamThoughts).set({
+        title: candidate.title,
+        explanation: candidate.explanation,
+        score,
+        components: components2,
+        evidence: candidate.evidence,
+        placeId: candidate.placeId ?? null,
+        proposedActions: candidate.proposedActions,
+        status,
+        suppressedReason,
+        runId: opts.runId,
+        // How many ticks have re-proposed this exact thing. The row is still
+        // one standing proposal rather than 144 a day, but the count survives
+        // — which is what lets the triage deck lead with the things that keep
+        // almost being said instead of whatever happened to be newest.
+        recurrenceCount: sql51`${daydreamThoughts.recurrenceCount} + 1`,
+        updatedAt: now
+      }).where(eq119(daydreamThoughts.id, found.id));
+      result.updated++;
+    } else {
+      await db.insert(daydreamThoughts).values({
+        kind: candidate.kind,
+        title: candidate.title,
+        explanation: candidate.explanation,
+        score,
+        components: components2,
+        evidence: candidate.evidence,
+        placeId: candidate.placeId ?? null,
+        dedupeKey: candidate.dedupeKey,
+        status,
+        suppressedReason,
+        proposedActions: candidate.proposedActions,
+        runId: opts.runId,
+        createdAt: now,
+        updatedAt: now
+      }).onConflictDoNothing({ target: daydreamThoughts.dedupeKey });
+      result.created++;
+      result.createdKeys.push(candidate.dedupeKey);
+    }
+  }
+  return result;
+}
+async function listUndelivered(limit2 = 10) {
+  return db.select().from(daydreamThoughts).where(
+    or8(
+      and57(
+        eq119(daydreamThoughts.status, "new"),
+        or8(
+          isNull17(daydreamThoughts.reviewVerdict),
+          eq119(daydreamThoughts.reviewVerdict, "verified")
+        )
+      ),
+      and57(
+        eq119(daydreamThoughts.status, "suppressed"),
+        eq119(daydreamThoughts.reviewVerdict, "verified"),
+        isNull17(daydreamThoughts.deliveredAt)
+      )
+    )
+  ).orderBy(desc36(daydreamThoughts.score)).limit(limit2);
+}
+async function wakeSnoozed(now = /* @__PURE__ */ new Date()) {
+  const woken = await db.update(daydreamThoughts).set({ status: "new", snoozeUntil: null, updatedAt: now }).where(
+    and57(
+      eq119(daydreamThoughts.status, "snoozed"),
+      isNotNull7(daydreamThoughts.snoozeUntil),
+      lt3(daydreamThoughts.snoozeUntil, now)
+    )
+  ).returning({ id: daydreamThoughts.id });
+  return woken.length;
+}
+async function archiveThought(thoughtId) {
+  const [row] = await db.update(daydreamThoughts).set({ status: "archived", updatedAt: /* @__PURE__ */ new Date() }).where(eq119(daydreamThoughts.id, thoughtId)).returning({ kind: daydreamThoughts.kind });
+  if (!row) throw new Error(`no such thought: ${thoughtId}`);
+  return { kind: row.kind };
+}
+async function recordFeedback(thoughtId, verdict, note, source = "explicit") {
+  const now = /* @__PURE__ */ new Date();
+  const [row] = await db.update(daydreamThoughts).set({
+    feedback: verdict,
+    feedbackSource: source,
+    feedbackNote: note?.slice(0, 500) ?? null,
+    feedbackAt: now,
+    status: verdict === "useful" ? "actioned" : "dismissed",
+    updatedAt: now
+  }).where(eq119(daydreamThoughts.id, thoughtId)).returning({ kind: daydreamThoughts.kind });
+  if (!row) throw new Error(`no such thought: ${thoughtId}`);
+  if (verdict === "never_kind") {
+    const { setSetting: setSetting2 } = await Promise.resolve().then(() => (init_settings(), settings_exports));
+    const current = await mutedKinds();
+    current.add(row.kind);
+    await setSetting2(SETTINGS_MUTED_KINDS_KEY, [...current]);
+    return { kind: row.kind, muted: true };
+  }
+  return { kind: row.kind, muted: false };
+}
+async function loadTriageDeck(limit2 = 30) {
+  return db.select({
+    id: daydreamThoughts.id,
+    kind: daydreamThoughts.kind,
+    title: daydreamThoughts.title,
+    explanation: daydreamThoughts.explanation,
+    narrative: daydreamThoughts.narrative,
+    verified: daydreamThoughts.verified,
+    score: daydreamThoughts.score,
+    recurrenceCount: daydreamThoughts.recurrenceCount,
+    suppressedReason: daydreamThoughts.suppressedReason,
+    createdAt: daydreamThoughts.createdAt
+  }).from(daydreamThoughts).where(and57(eq119(daydreamThoughts.status, "suppressed"), isNull17(daydreamThoughts.feedback))).orderBy(desc36(daydreamThoughts.recurrenceCount), desc36(daydreamThoughts.score)).limit(limit2);
+}
+async function recordTriageBatch(items) {
+  const muted = [];
+  const failed = [];
+  let recorded = 0;
+  for (const item of items) {
+    try {
+      const res = await recordFeedback(item.id, item.verdict, void 0, "triage");
+      recorded++;
+      if (res.muted) muted.push(res.kind);
+    } catch (err) {
+      failed.push({ id: item.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { recorded, muted, failed };
+}
+async function thoughtCounts() {
+  const rows = await db.select({ status: daydreamThoughts.status, n: sql51`count(*)::int` }).from(daydreamThoughts).groupBy(daydreamThoughts.status);
+  return Object.fromEntries(rows.map((r) => [r.status, r.n]));
+}
+var PROTECTED_STATUSES, EMPTY_PERSIST;
+var init_thought_store = __esm({
+  "src/lib/daydream/thought-store.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    init_settings();
+    init_types9();
+    init_refutations();
+    init_scoring2();
+    PROTECTED_STATUSES = ["dismissed", "snoozed", "actioned", "archived"];
+    EMPTY_PERSIST = {
+      created: 0,
+      updated: 0,
+      protectedSkipped: 0,
+      suppressed: 0,
+      muted: 0,
+      alreadyRefuted: 0,
+      createdKeys: []
+    };
+  }
+});
+
+// src/lib/daydream/wa-feedback.ts
+var wa_feedback_exports = {};
+__export(wa_feedback_exports, {
+  REPLY_WINDOW_HOURS: () => REPLY_WINDOW_HOURS,
+  interceptDaydreamFeedback: () => interceptDaydreamFeedback,
+  matchFeedbackReply: () => matchFeedbackReply
+});
+import { and as and58, desc as desc37, eq as eq120, gte as gte12, inArray as inArray26, isNull as isNull18 } from "drizzle-orm";
+function matchFeedbackReply(text4) {
+  const t = (text4 ?? "").trim().toLowerCase().replace(/[.!]+$/, "");
+  if (!t || t.length > 40) return null;
+  if (USEFUL.has(t)) return "useful";
+  if (NOT_USEFUL.has(t)) return "not_useful";
+  if (NEVER.has(t)) return "never_kind";
+  return null;
+}
+async function interceptDaydreamFeedback(text4) {
+  const verdict = matchFeedbackReply(text4);
+  if (!verdict) return { handled: false };
+  const since = new Date(Date.now() - REPLY_WINDOW_HOURS * 36e5);
+  const [awaiting] = await db.select({ id: daydreamThoughts.id, title: daydreamThoughts.title, kind: daydreamThoughts.kind }).from(daydreamThoughts).where(
+    and58(
+      inArray26(daydreamThoughts.channel, ["whatsapp", "chat", "push"]),
+      eq120(daydreamThoughts.status, "delivered"),
+      isNull18(daydreamThoughts.feedback),
+      gte12(daydreamThoughts.deliveredAt, since)
+    )
+  ).orderBy(desc37(daydreamThoughts.deliveredAt)).limit(1);
+  if (!awaiting) return { handled: false };
+  const { recordFeedback: recordFeedback2 } = await Promise.resolve().then(() => (init_thought_store(), thought_store_exports));
+  const { muted } = await recordFeedback2(awaiting.id, verdict, void 0, "explicit");
+  const reply = verdict === "never_kind" ? `Muted ${muted ? awaiting.kind : "that kind"} \u2014 it won't raise those again. (Un-mute on /jkai/daydreams if you change your mind.)` : verdict === "useful" ? `Noted \u{1F44D} \u2014 "${awaiting.title.slice(0, 60)}" marked useful. It learns from this.` : `Noted \u2014 "${awaiting.title.slice(0, 60)}" marked not useful. It will aim better.`;
+  return { handled: true, reply };
+}
+var REPLY_WINDOW_HOURS, USEFUL, NOT_USEFUL, NEVER;
+var init_wa_feedback = __esm({
+  "src/lib/daydream/wa-feedback.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    REPLY_WINDOW_HOURS = 12;
+    USEFUL = /* @__PURE__ */ new Set(["\u{1F44D}", "useful", "helpful", "good one", "nice one", "yes useful"]);
+    NOT_USEFUL = /* @__PURE__ */ new Set(["\u{1F44E}", "not useful", "not that", "not helpful", "no thanks", "meh"]);
+    NEVER = /* @__PURE__ */ new Set(["never", "never that", "never this", "never this kind", "never these", "stop these"]);
+  }
+});
+
 // src/lib/workflows/whatsapp/workflow-dispatch.ts
 var workflow_dispatch_exports = {};
 __export(workflow_dispatch_exports, {
@@ -75467,7 +78702,7 @@ __export(workflow_dispatch_exports, {
   isReservedKeyword: () => isReservedKeyword,
   matchWhatsAppKeyword: () => matchWhatsAppKeyword
 });
-import { eq as eq117 } from "drizzle-orm";
+import { eq as eq121 } from "drizzle-orm";
 function isOwnerSender(from) {
   const ownerDigits = getOwnerPhone().replace(/\D+/g, "");
   if (!ownerDigits) return false;
@@ -75512,7 +78747,7 @@ async function findMatchingWhatsAppWorkflows(text4) {
     id: workflowNodes.id,
     workflowId: workflowNodes.workflowId,
     config: workflowNodes.config
-  }).from(workflowNodes).where(eq117(workflowNodes.type, "whatsapp-trigger"));
+  }).from(workflowNodes).where(eq121(workflowNodes.type, "whatsapp-trigger"));
   if (triggerNodes.length === 0) return [];
   const matched = [];
   for (const node of triggerNodes) {
@@ -75524,7 +78759,7 @@ async function findMatchingWhatsAppWorkflows(text4) {
     const stripKeyword = config.stripKeyword !== false;
     const result = matchWhatsAppKeyword(text4, keyword, matchMode, stripKeyword);
     if (!result.matched) continue;
-    const [wf] = await db.select({ id: workflows.id, name: workflows.name }).from(workflows).where(eq117(workflows.id, node.workflowId)).limit(1);
+    const [wf] = await db.select({ id: workflows.id, name: workflows.name }).from(workflows).where(eq121(workflows.id, node.workflowId)).limit(1);
     if (!wf) continue;
     matched.push({
       workflowId: wf.id,
@@ -75536,10 +78771,10 @@ async function findMatchingWhatsAppWorkflows(text4) {
   return matched;
 }
 async function dispatchRun(workflowId, initialInput) {
-  const [wf] = await db.select({ id: workflows.id, name: workflows.name }).from(workflows).where(eq117(workflows.id, workflowId)).limit(1);
+  const [wf] = await db.select({ id: workflows.id, name: workflows.name }).from(workflows).where(eq121(workflows.id, workflowId)).limit(1);
   if (!wf) return;
-  const nodes = await db.select().from(workflowNodes).where(eq117(workflowNodes.workflowId, workflowId));
-  const edges = await db.select().from(workflowEdges).where(eq117(workflowEdges.workflowId, workflowId));
+  const nodes = await db.select().from(workflowNodes).where(eq121(workflowNodes.workflowId, workflowId));
+  const edges = await db.select().from(workflowEdges).where(eq121(workflowEdges.workflowId, workflowId));
   const definition = {
     id: wf.id,
     name: wf.name,
@@ -75574,14 +78809,14 @@ async function dispatchRun(workflowId, initialInput) {
     return;
   }
   engine.execute(definition, runId, initialInput, void 0, workflowId).then(async (result) => {
-    await db.update(workflowRuns).set({ status: result.status, completedAt: /* @__PURE__ */ new Date(), error: result.error ?? null }).where(eq117(workflowRuns.id, runId));
+    await db.update(workflowRuns).set({ status: result.status, completedAt: /* @__PURE__ */ new Date(), error: result.error ?? null }).where(eq121(workflowRuns.id, runId));
   }).catch(async (err) => {
     console.error(
       `[whatsapp-dispatch] workflow execution error (runId=${runId}):`,
       err instanceof Error ? err.message : err
     );
     try {
-      await db.update(workflowRuns).set({ status: "failed", completedAt: /* @__PURE__ */ new Date(), error: err instanceof Error ? err.message : String(err) }).where(eq117(workflowRuns.id, runId));
+      await db.update(workflowRuns).set({ status: "failed", completedAt: /* @__PURE__ */ new Date(), error: err instanceof Error ? err.message : String(err) }).where(eq121(workflowRuns.id, runId));
     } catch {
     }
   });
@@ -75632,6 +78867,9 @@ async function interceptOwnerInbound(from, text4) {
   const { handleApprovalReply: handleApprovalReply2 } = await Promise.resolve().then(() => (init_approval_inbound(), approval_inbound_exports));
   const approval = await handleApprovalReply2(from, text4 ?? "");
   if (approval.handled) return { handled: true, reply: approval.reply };
+  const { interceptDaydreamFeedback: interceptDaydreamFeedback2 } = await Promise.resolve().then(() => (init_wa_feedback(), wa_feedback_exports));
+  const feedback = await interceptDaydreamFeedback2(text4 ?? "");
+  if (feedback.handled) return { handled: true, reply: feedback.reply };
   const { dispatchWhatsAppWorkflow: dispatchWhatsAppWorkflow2 } = await Promise.resolve().then(() => (init_workflow_dispatch(), workflow_dispatch_exports));
   const dispatch = await dispatchWhatsAppWorkflow2(from, text4 ?? "");
   if (dispatch.dispatched) return { handled: true, reply: `\u25B6 Started ${dispatch.workflowName}` };
@@ -75644,7 +78882,7 @@ var init_inbound_intercept = __esm({
 });
 
 // src/lib/workflows/whatsapp/orchestrator-bridge.ts
-import { eq as eq118, asc as asc12 } from "drizzle-orm";
+import { eq as eq122, asc as asc12 } from "drizzle-orm";
 var OrchestratorBridge;
 var init_orchestrator_bridge = __esm({
   "src/lib/workflows/whatsapp/orchestrator-bridge.ts"() {
@@ -75672,7 +78910,7 @@ var init_orchestrator_bridge = __esm({
       }
       /** Get or create a jkai_conversations row for this phone number. */
       async ensureConversation(phoneNumber) {
-        const [existing] = await db.select({ id: conversations.id }).from(conversations).where(eq118(conversations.whatsappPhoneNumber, phoneNumber)).limit(1);
+        const [existing] = await db.select({ id: conversations.id }).from(conversations).where(eq122(conversations.whatsappPhoneNumber, phoneNumber)).limit(1);
         if (existing) return existing.id;
         const modelContext = await resolveDefaultModel();
         const [created] = await db.insert(conversations).values({
@@ -75739,7 +78977,7 @@ var init_orchestrator_bridge = __esm({
             content: responseText
           }).returning({ id: orchestratorChats.id });
           const assistantMsgId = assistantMsg?.id;
-          const generatedAtts = assistantMsgId ? await db.select().from(jkaiAttachments).where(eq118(jkaiAttachments.messageId, assistantMsgId)) : [];
+          const generatedAtts = assistantMsgId ? await db.select().from(jkaiAttachments).where(eq122(jkaiAttachments.messageId, assistantMsgId)) : [];
           if (generatedAtts.length === 0) {
             await this.sendFn(replyTo, responseText);
           } else if (this.sendAttachmentFn) {
@@ -75758,13 +78996,13 @@ var init_orchestrator_bridge = __esm({
           }
         } catch (err) {
           await this.typingDoneFn?.(replyTo);
-          const errMsg3 = err instanceof Error ? err.message : "Unknown error";
-          console.error(`[whatsapp-bridge] Error handling message from ${from}:`, errMsg3);
+          const errMsg4 = err instanceof Error ? err.message : "Unknown error";
+          console.error(`[whatsapp-bridge] Error handling message from ${from}:`, errMsg4);
           await this.sendFn(replyTo, "Something went wrong. Try again in a moment.");
         }
       }
       async getConversationHistory(conversationId) {
-        const rows = await db.select().from(orchestratorChats).where(eq118(orchestratorChats.conversationId, conversationId)).orderBy(asc12(orchestratorChats.createdAt));
+        const rows = await db.select().from(orchestratorChats).where(eq122(orchestratorChats.conversationId, conversationId)).orderBy(asc12(orchestratorChats.createdAt));
         return rows.map((r) => ({
           role: r.role,
           content: r.content,
@@ -75773,9 +79011,9 @@ var init_orchestrator_bridge = __esm({
         }));
       }
       async clearConversation(phoneNumber) {
-        const [conv] = await db.select({ id: conversations.id }).from(conversations).where(eq118(conversations.whatsappPhoneNumber, phoneNumber)).limit(1);
+        const [conv] = await db.select({ id: conversations.id }).from(conversations).where(eq122(conversations.whatsappPhoneNumber, phoneNumber)).limit(1);
         if (conv) {
-          await db.delete(orchestratorChats).where(eq118(orchestratorChats.conversationId, conv.id));
+          await db.delete(orchestratorChats).where(eq122(orchestratorChats.conversationId, conv.id));
         }
       }
     };
@@ -75783,35 +79021,40 @@ var init_orchestrator_bridge = __esm({
 });
 
 // src/lib/workflows/chat/memory-review.ts
-import { eq as eq119, and as and54, isNull as isNull17, desc as desc36, gt } from "drizzle-orm";
+import { eq as eq123, and as and59, isNull as isNull19, desc as desc39, gt } from "drizzle-orm";
 async function reviewConversation(conversationId) {
-  const [conv] = await db.select().from(conversations).where(eq119(conversations.id, conversationId)).limit(1);
+  const [conv] = await db.select().from(conversations).where(eq123(conversations.id, conversationId)).limit(1);
   if (!conv) return 0;
-  const conditions = [eq119(orchestratorChats.conversationId, conversationId)];
+  const conditions = [eq123(orchestratorChats.conversationId, conversationId)];
   if (conv.lastMemoryReview) {
     conditions.push(gt(orchestratorChats.createdAt, conv.lastMemoryReview));
   }
-  const messages = await db.select().from(orchestratorChats).where(and54(...conditions)).orderBy(orchestratorChats.createdAt);
+  const messages = await db.select().from(orchestratorChats).where(and59(...conditions)).orderBy(orchestratorChats.createdAt);
   if (messages.length === 0) {
-    await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq119(conversations.id, conversationId));
+    await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq123(conversations.id, conversationId));
     return 0;
   }
   const conversationText = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
-  const existingMemories = await db.select().from(jkaiMemories).where(isNull17(jkaiMemories.supersededBy));
+  const existingMemories = await db.select().from(jkaiMemories).where(isNull19(jkaiMemories.supersededBy));
   const existingText = existingMemories.length > 0 ? existingMemories.map((m) => `[${m.category}] ${m.content}`).join("\n") : "(none)";
   const prompt = EXTRACTION_PROMPT.replace("{EXISTING_MEMORIES}", existingText);
-  const { client, model } = await getLLMClient(await resolveDefaultModel());
+  const { client, model } = await getLLMClient(
+    currentSessionModel() ?? await resolveChatMaintenanceModel()
+  );
   let response;
   try {
-    response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: conversationText }
-      ],
-      temperature: 0.3,
-      max_tokens: 1024
-    });
+    response = await withActivity(
+      "chat-maintenance",
+      () => client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: prompt },
+          { role: "user", content: conversationText }
+        ],
+        temperature: 0.3,
+        max_tokens: 1024
+      })
+    );
   } catch (err) {
     console.error(`[memory-review] LLM call failed for conversation ${conversationId}:`, err instanceof Error ? err.message : err);
     return 0;
@@ -75822,11 +79065,11 @@ async function reviewConversation(conversationId) {
     extractions = JSON.parse(raw);
   } catch {
     console.warn(`[memory-review] Failed to parse LLM output for conversation ${conversationId}:`, raw.slice(0, 200));
-    await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq119(conversations.id, conversationId));
+    await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq123(conversations.id, conversationId));
     return 0;
   }
   if (!Array.isArray(extractions) || extractions.length === 0) {
-    await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq119(conversations.id, conversationId));
+    await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq123(conversations.id, conversationId));
     return 0;
   }
   let saved = 0;
@@ -75838,7 +79081,7 @@ async function reviewConversation(conversationId) {
         (m) => m.content.toLowerCase().includes(ext.updates.toLowerCase().slice(0, 50)) || ext.updates.toLowerCase().includes(m.content.toLowerCase().slice(0, 50))
       );
       if (match) {
-        await db.update(jkaiMemories).set({ supersededBy: newId, updatedAt: /* @__PURE__ */ new Date() }).where(eq119(jkaiMemories.id, match.id));
+        await db.update(jkaiMemories).set({ supersededBy: newId, updatedAt: /* @__PURE__ */ new Date() }).where(eq123(jkaiMemories.id, match.id));
       }
     }
     await db.insert(jkaiMemories).values({
@@ -75850,7 +79093,7 @@ async function reviewConversation(conversationId) {
     });
     saved++;
   }
-  await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq119(conversations.id, conversationId));
+  await db.update(conversations).set({ lastMemoryReview: /* @__PURE__ */ new Date() }).where(eq123(conversations.id, conversationId));
   if (saved > 0) {
     console.log(`[memory-review] Extracted ${saved} memory/memories from conversation ${conversationId}`);
   }
@@ -75861,7 +79104,7 @@ async function runMemoryReview() {
   try {
     const allConvs = await db.select({ id: conversations.id, lastMemoryReview: conversations.lastMemoryReview }).from(conversations);
     for (const conv of allConvs) {
-      const [latest] = await db.select({ createdAt: orchestratorChats.createdAt }).from(orchestratorChats).where(eq119(orchestratorChats.conversationId, conv.id)).orderBy(desc36(orchestratorChats.createdAt)).limit(1);
+      const [latest] = await db.select({ createdAt: orchestratorChats.createdAt }).from(orchestratorChats).where(eq123(orchestratorChats.conversationId, conv.id)).orderBy(desc39(orchestratorChats.createdAt)).limit(1);
       if (!latest) continue;
       if (latest.createdAt > staleThreshold) continue;
       if (conv.lastMemoryReview && conv.lastMemoryReview >= latest.createdAt) continue;
@@ -75883,8 +79126,10 @@ var init_memory_review = __esm({
     "use strict";
     init_db();
     init_schema();
-    init_llm_client();
-    init_settings();
+    init_client();
+    init_workload_settings();
+    init_chat();
+    init_activity();
     REVIEW_INTERVAL_MS = 30 * 60 * 1e3;
     STALE_THRESHOLD_MS = 30 * 60 * 1e3;
     EXTRACTION_PROMPT = `Review this conversation and extract facts worth remembering about the user.
@@ -75914,7 +79159,7 @@ var migrate_exports = {};
 __export(migrate_exports, {
   migrateWorkflowsToCanvas: () => migrateWorkflowsToCanvas
 });
-import { and as and55, eq as eq120, ne as ne6, or as or10 } from "drizzle-orm";
+import { and as and60, eq as eq124, ne as ne6, or as or10 } from "drizzle-orm";
 async function migrateWorkflowsToCanvas() {
   const all = await db.select().from(workflows);
   let renamed = 0;
@@ -75927,7 +79172,7 @@ async function migrateWorkflowsToCanvas() {
       let slug = baseSlug;
       let attempt = 1;
       while (attempt < 60) {
-        const clash = await db.select({ id: workflows.id }).from(workflows).where(and55(eq120(workflows.name, `canvas:${slug}`), ne6(workflows.id, wf.id)));
+        const clash = await db.select({ id: workflows.id }).from(workflows).where(and60(eq124(workflows.name, `canvas:${slug}`), ne6(workflows.id, wf.id)));
         if (clash.length === 0) break;
         attempt += 1;
         slug = `${baseSlug}-${attempt}`;
@@ -75936,15 +79181,15 @@ async function migrateWorkflowsToCanvas() {
         name: `canvas:${slug}`,
         description: wf.description || originalName,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq120(workflows.id, wf.id));
+      }).where(eq124(workflows.id, wf.id));
       renamed += 1;
     }
     const nodes = await db.select().from(workflowNodes).where(
-      and55(
-        eq120(workflowNodes.workflowId, wf.id),
+      and60(
+        eq124(workflowNodes.workflowId, wf.id),
         or10(
-          eq120(workflowNodes.type, "trigger"),
-          eq120(workflowNodes.type, "manual-trigger")
+          eq124(workflowNodes.type, "trigger"),
+          eq124(workflowNodes.type, "manual-trigger")
         )
       )
     );
@@ -75957,7 +79202,7 @@ async function migrateWorkflowsToCanvas() {
           type: "trigger",
           label: t.label || "Trigger",
           config: { ...cfg, kind: "manual" }
-        }).where(eq120(workflowNodes.id, t.id));
+        }).where(eq124(workflowNodes.id, t.id));
         convertedTriggers += 1;
       }
     } else if (!hasNewTrigger && legacyTriggers.length === 0) {
@@ -75968,8 +79213,8 @@ async function migrateWorkflowsToCanvas() {
         position: { x: 20, y: 20 },
         config: { kind: "manual" }
       }).returning();
-      const allNodes = await db.select().from(workflowNodes).where(eq120(workflowNodes.workflowId, wf.id));
-      const allEdges = await db.select().from(workflowEdges).where(eq120(workflowEdges.workflowId, wf.id));
+      const allNodes = await db.select().from(workflowNodes).where(eq124(workflowNodes.workflowId, wf.id));
+      const allEdges = await db.select().from(workflowEdges).where(eq124(workflowEdges.workflowId, wf.id));
       const roots = allNodes.filter((n) => n.id !== triggerNode.id).filter((n) => !allEdges.some((e) => e.targetNodeId === n.id));
       const firstRoot = roots.sort((a, b) => {
         const ap = a.position ?? {};
@@ -76013,16 +79258,16 @@ __export(run_worker_exports, {
   startRunWorker: () => startRunWorker,
   stopRunWorker: () => stopRunWorker
 });
-import { eq as eq121, and as and56 } from "drizzle-orm";
+import { eq as eq125, and as and61 } from "drizzle-orm";
 import { hostname } from "os";
 function getWorkerId() {
   return workerId;
 }
 async function loadDefinition(workflowId) {
-  const [workflow] = await db.select().from(workflows).where(eq121(workflows.id, workflowId)).limit(1);
+  const [workflow] = await db.select().from(workflows).where(eq125(workflows.id, workflowId)).limit(1);
   if (!workflow) return null;
-  const nodes = await db.select().from(workflowNodes).where(eq121(workflowNodes.workflowId, workflowId));
-  const edges = await db.select().from(workflowEdges).where(eq121(workflowEdges.workflowId, workflowId));
+  const nodes = await db.select().from(workflowNodes).where(eq125(workflowNodes.workflowId, workflowId));
+  const edges = await db.select().from(workflowEdges).where(eq125(workflowEdges.workflowId, workflowId));
   const runnableNodes = nodes.filter((n) => !isDisplayOnlyType(n.type));
   const runnableEdges = edges.filter((e) => {
     const src = runnableNodes.find((n) => n.id === e.sourceNodeId);
@@ -76049,7 +79294,7 @@ async function loadDefinition(workflowId) {
   };
 }
 async function ensureNodeExecutions(runId, def3) {
-  const existing = await db.select({ nodeId: nodeExecutions.nodeId }).from(nodeExecutions).where(eq121(nodeExecutions.runId, runId));
+  const existing = await db.select({ nodeId: nodeExecutions.nodeId }).from(nodeExecutions).where(eq125(nodeExecutions.runId, runId));
   const have = new Set(existing.map((r) => r.nodeId));
   for (const node of def3.nodes) {
     if (!have.has(node.id)) {
@@ -76068,7 +79313,7 @@ async function persistResult(claimed, result, runStartedAt) {
     error: result.error ?? null,
     healingHistory: healingHistory.length > 0 ? healingHistory : void 0,
     ...isPaused ? { pausedAtNodeId: result.pausedAtNodeId ?? null } : {}
-  }).where(eq121(workflowRuns.id, runId));
+  }).where(eq125(workflowRuns.id, runId));
   for (const [nodeId, output] of result.nodeOutputs) {
     const inputData = result.nodeInputs.get(nodeId);
     const usage = result.nodeUsage.get(nodeId);
@@ -76079,7 +79324,7 @@ async function persistResult(claimed, result, runStartedAt) {
       outputData: output,
       completedAt: /* @__PURE__ */ new Date(),
       ...usage ?? {}
-    }).where(and56(eq121(nodeExecutions.runId, runId), eq121(nodeExecutions.nodeId, nodeId)));
+    }).where(and61(eq125(nodeExecutions.runId, runId), eq125(nodeExecutions.nodeId, nodeId)));
   }
   for (const [nodeId, error] of result.nodeErrors) {
     const usage = result.nodeUsage.get(nodeId);
@@ -76089,10 +79334,10 @@ async function persistResult(claimed, result, runStartedAt) {
       error,
       completedAt: /* @__PURE__ */ new Date(),
       ...usage ?? {}
-    }).where(and56(eq121(nodeExecutions.runId, runId), eq121(nodeExecutions.nodeId, nodeId)));
+    }).where(and61(eq125(nodeExecutions.runId, runId), eq125(nodeExecutions.nodeId, nodeId)));
   }
   for (const entry of healingHistory) {
-    await db.update(workflowNodes).set({ config: entry.newConfig }).where(eq121(workflowNodes.id, entry.nodeId));
+    await db.update(workflowNodes).set({ config: entry.newConfig }).where(eq125(workflowNodes.id, entry.nodeId));
   }
   const done = /* @__PURE__ */ new Date();
   if (result.status === "failed") {
@@ -76118,7 +79363,7 @@ async function executeClaimed(claimed) {
   try {
     const def3 = await loadDefinition(workflowId);
     if (!def3) {
-      await db.update(workflowRuns).set({ status: "failed", completedAt: /* @__PURE__ */ new Date(), error: `workflow ${workflowId} not found` }).where(eq121(workflowRuns.id, runId));
+      await db.update(workflowRuns).set({ status: "failed", completedAt: /* @__PURE__ */ new Date(), error: `workflow ${workflowId} not found` }).where(eq125(workflowRuns.id, runId));
       return;
     }
     await ensureNodeExecutions(runId, def3);
@@ -76134,7 +79379,7 @@ async function executeClaimed(claimed) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[run-worker] run ${runId} threw:`, message);
     try {
-      await db.update(workflowRuns).set({ status: "failed", completedAt: /* @__PURE__ */ new Date(), error: message }).where(eq121(workflowRuns.id, runId));
+      await db.update(workflowRuns).set({ status: "failed", completedAt: /* @__PURE__ */ new Date(), error: message }).where(eq125(workflowRuns.id, runId));
     } catch {
     }
   } finally {
@@ -76215,11 +79460,11 @@ __export(workflows_exports, {
   engine: () => engine,
   registry: () => registry
 });
-import { eq as eq122 } from "drizzle-orm";
+import { eq as eq126 } from "drizzle-orm";
 async function bootWhatsApp() {
   const delegated = !!whatsappBridgeUrl() && !ownsWhatsAppSession();
   try {
-    const [config] = await db.select().from(whatsappConfig).where(eq122(whatsappConfig.id, "default")).limit(1);
+    const [config] = await db.select().from(whatsappConfig).where(eq126(whatsappConfig.id, "default")).limit(1);
     if (!delegated && !config?.enabled) {
       console.log("[whatsapp] Not enabled \u2014 skipping boot");
       return;
@@ -76248,7 +79493,7 @@ async function bootWhatsApp() {
 }
 async function bootHomeAssistant() {
   try {
-    const [config] = await db.select().from(homeAssistantConfig).where(eq122(homeAssistantConfig.id, "default")).limit(1);
+    const [config] = await db.select().from(homeAssistantConfig).where(eq126(homeAssistantConfig.id, "default")).limit(1);
     if (!config?.token) {
       console.log("[ha] No token configured \u2014 skipping boot");
       return;
@@ -76263,7 +79508,7 @@ async function bootHomeAssistant() {
           areaRegistry: areas,
           lastSynced: /* @__PURE__ */ new Date(),
           updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq122(homeAssistantConfig.id, "default"));
+        }).where(eq126(homeAssistantConfig.id, "default"));
         console.log(`[ha] Synced ${entityCount} entities, ${areas.length} areas`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
@@ -76346,7 +79591,7 @@ var init_workflows2 = __esm({
     init_intel_write();
     init_interactive_step();
     init_intel_query();
-    init_chat();
+    init_chat2();
     init_trigger();
     init_inspector();
     init_file_store();

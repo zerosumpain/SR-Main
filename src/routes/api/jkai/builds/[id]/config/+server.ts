@@ -134,6 +134,10 @@ export const GET: RequestHandler = async ({ params }) => {
     (enforceDesign && mode !== 'studio' ? designSystemPromptBlock(mode) : '');
 
   const builder = await probeBuilderSocket();
+  const repoConfig = build.gitTargetConfig as {
+    gateCommand?: string;
+    finalGateCommand?: string;
+  } | null;
 
   const manifest = getToolsetManifest().map((t) => ({
     toolset: t.toolset,
@@ -164,6 +168,26 @@ export const GET: RequestHandler = async ({ params }) => {
       chapterCount: (build.chapterPlan ?? []).length,
       hasPort: port > 0,
       checks: GATE_CHECKS,
+    },
+    verification: {
+      applies: mode === 'repo',
+      steps: [
+        {
+          phase: 'feedback_gate',
+          label: 'Structural checks, typecheck and tests',
+          command: repoConfig?.gateCommand ?? null,
+          owner: 'builder',
+        },
+        {
+          phase: 'release_candidate',
+          label: 'Production web and sidecar bundles',
+          command: repoConfig?.finalGateCommand ?? null,
+          owner: 'builder',
+        },
+        { phase: 'publish', label: 'Publish candidate', command: null, owner: 'builder' },
+        { phase: 'ci', label: 'GitHub CI and review', command: null, owner: 'github' },
+        { phase: 'deploy', label: 'Production deployment', command: null, owner: 'production' },
+      ],
     },
     sidecar: {
       name: 'jkai-builder',

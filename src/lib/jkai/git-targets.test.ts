@@ -38,8 +38,12 @@ describe('the SR-Main gate proves what a repo build can break', () => {
    * change breaking it would open a green PR and only fail later in
    * ci-stage-builder.sh.
    */
-  it('runs the builder bundle in the final gate', () => {
-    expect(SR_MAIN_GIT_TARGET.finalGateCommand).toContain('build:builder');
+  it('runs every release sidecar bundle in the final gate', () => {
+    expect(SR_MAIN_GIT_TARGET.finalGateCommand).toContain('build:release-sidecars');
+  });
+
+  it('shares the structural gate script with CI, including measure checks', () => {
+    expect(SR_MAIN_GIT_TARGET.gateCommand).toContain('gate-structural.sh');
   });
 
   it('still proves the site build too', () => {

@@ -304,8 +304,8 @@
       <div class="kicker">
         JKAI build ·
         <!-- The bucket, not the raw status: `completed` is claimed by a
-             delivery, a budget cap-out, a hand-kill and a chat
-             registration, and this pill painted all four the same green. -->
+             delivery, an open PR, a budget cap-out, a hand-kill and a chat
+             registration. Only the first belongs in green. -->
         <span class="status-pill" data-status={detailBucket} title={outcomeNote(detailBucket) ?? ''}
           >{bucketLabel(detailBucket)}</span
         >
@@ -547,6 +547,9 @@
   }
   .status-pill[data-status='delivered'] {
     color: var(--status-success);
+  }
+  .status-pill[data-status='proposed'] {
+    color: var(--accent);
   }
   .status-pill[data-status='capped'],
   .status-pill[data-status='stopped'],
