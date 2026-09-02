@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { registerJkaiSW } from '$lib/jkai/pwa/register';
+  import { registerJkaiSW, shortBuildId } from '$lib/jkai/pwa/register';
   import { startAutoSync } from '$lib/jkai/pwa/syncManager';
   import OfflineBanner from '$lib/components/jkai/OfflineBanner.svelte';
   import AppUpdateNotice from '$lib/components/jkai/AppUpdateNotice.svelte';
@@ -13,6 +13,7 @@
   import { PUBLIC_VAPID_PUBLIC_KEY } from '$env/static/public';
 
   let { children, data } = $props();
+  const clientBuildId = __JKAI_BUILD_ID__;
 
   // Global JKAI hub navigation — a command-palette launcher reachable from every
   // /jkai page via ⌘/Ctrl-K or the header's ⌘K chip. The floating fallback
@@ -21,7 +22,7 @@
   onMount(() => {
     let disposePwa: (() => void) | undefined;
     let unmounted = false;
-    void registerJkaiSW(data.deploy.sha).then((dispose) => {
+    void registerJkaiSW(clientBuildId).then((dispose) => {
       if (unmounted) dispose();
       else disposePwa = dispose;
     });
@@ -73,7 +74,7 @@
 
 <div class="jkai-root">
   <OfflineBanner />
-  <AppUpdateNotice currentVersion={data.deploy.short} />
+  <AppUpdateNotice currentVersion={shortBuildId(clientBuildId)} />
   <PushOptInCard vapidPublicKey={PUBLIC_VAPID_PUBLIC_KEY} />
   <ActivityStrip />
 

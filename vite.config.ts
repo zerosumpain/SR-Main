@@ -1,11 +1,30 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import tailwindcss from '@tailwindcss/vite';
+import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'url';
 import { routeManifest } from './vite-plugins/route-manifest.mjs';
 
+function readBuildId(): string {
+	const supplied = process.env.JKAI_BUILD_ID?.trim();
+	if (supplied) return supplied;
+	try {
+		// A tree identifies the browser bundle's actual source. Unlike a commit
+		// SHA, it survives CI's verified-candidate promotion, where the PR and
+		// squash-merge commits deliberately share content but not commit IDs.
+		return execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
+	} catch {
+		return 'development';
+	}
+}
+
+const jkaiBuildId = readBuildId();
+
 export default defineConfig({
+	define: {
+		__JKAI_BUILD_ID__: JSON.stringify(jkaiBuildId),
+	},
 	plugins: [
 		tailwindcss(),
 		// Bakes the route inventory into the build for /admin/estate. Must run
@@ -14,21 +33,33 @@ export default defineConfig({
 		routeManifest(),
 		sveltekit(),
 		SvelteKitPWA({
-				// Long-lived chat sessions may contain unsent text. Download updates in
-				// the background, then let the user choose the safe moment to reload.
-				registerType: 'prompt',
+			// Long-lived chat sessions may contain unsent text. Download updates in
+			// the background, then let the user choose the safe moment to reload.
+			registerType: 'prompt',
 			injectRegister: false,
-			scope: '/jkai/',
+			// SvelteKit canonicalises /jkai/ to /jkai. A trailing slash here leaves
+			// the installed app's start page outside the worker's control.
+			scope: '/jkai',
+			// SvelteKit builds with a relative asset base. Service-worker URLs are
+			// resolved against the PAGE, not the importing chunk, so force /sw.js;
+			// otherwise nested routes try /jkai/.../sw.js.
+			buildBase: '/',
 			strategies: 'generateSW',
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+				// JKAI is an authenticated live view. Never answer one of its
+				// navigations with the precached public-site fallback.
+				navigateFallback: null,
+				// Once the user accepts an update, make the activated worker control
+				// the open page so controllerchange can complete the reload handshake.
+				clientsClaim: true,
 			},
 			manifest: {
 				id: '/jkai/',
 				name: 'jkai',
 				short_name: 'jkai',
 				description: 'jkai chat hub',
-				scope: '/jkai/',
+				scope: '/jkai',
 				start_url: '/jkai',
 				display: 'standalone',
 				theme_color: '#0a0a0a',
