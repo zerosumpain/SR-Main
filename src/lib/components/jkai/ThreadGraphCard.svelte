@@ -241,6 +241,32 @@
   const shownRelations = $derived(relations.slice(0, RELATION_LIMIT));
   const hiddenRelationCount = $derived(Math.max(0, relations.length - RELATION_LIMIT));
 
+  /**
+   * Where a node goes when you follow it, and what to call the destination.
+   *
+   * The server already sets `href` per kind — an intel entity page, a deep dive,
+   * a canvas, /drive. What was missing is that only the SELECTED node's name was
+   * ever a link, so a match the graph had already resolved to an intel entity or
+   * a research session was a dead end everywhere else: in the ranked topics, in
+   * the relations, and on the chips themselves. Naming the destination matters
+   * as much as offering it — "→" tells you there is somewhere to go, "intel →"
+   * tells you whether it is worth going.
+   */
+  const DESTINATION: Partial<Record<ThreadNodeKind, string>> = {
+    concept: 'intel',
+    intel: 'intel',
+    run: 'research',
+    doc: 'drive',
+    image: 'drive',
+    artefact: 'canvas',
+    model: 'model',
+  };
+
+  function destinationOf(node: ThreadGraphNode | null): { href: string; label: string } | null {
+    if (!node?.href) return null;
+    return { href: node.href, label: DESTINATION[node.kind] ?? 'open' };
+  }
+
   function relativeSeen(iso: string | null): string {
     if (!iso) return '';
     const ms = Date.now() - new Date(iso).getTime();
@@ -353,23 +379,28 @@
       </div>
       <div class="tg-rows">
         {#each topics as t, i (t.id)}
-          <button
-            type="button"
-            class="tp"
-            class:selected={t.id === selected?.id}
-            onclick={() => (selectedId = t.id)}
-            title="{t.name} — {t.type}, named in {t.mentions} {t.mentions === 1 ? 'message' : 'messages'}"
-          >
-            <span class="tp-rank">{i + 1}</span>
-            <span class="tp-name">{t.name}</span>
-            <span class="tp-n">{t.mentions}</span>
-            <span class="tp-bar" aria-hidden="true">
-              <span
-                class="tp-fill"
-                style="width: {Math.round((t.mentions / topMentions) * 100)}%; background: {nodeStyle(t).color};"
-              ></span>
-            </span>
-          </button>
+          {@const dest = destinationOf(t)}
+          <div class="tp-wrap" class:selected={t.id === selected?.id}>
+            <button
+              type="button"
+              class="tp"
+              onclick={() => (selectedId = t.id)}
+              title="{t.name} — {t.type}, named in {t.mentions} {t.mentions === 1 ? 'message' : 'messages'}"
+            >
+              <span class="tp-rank">{i + 1}</span>
+              <span class="tp-name">{t.name}</span>
+              <span class="tp-n">{t.mentions}</span>
+              <span class="tp-bar" aria-hidden="true">
+                <span
+                  class="tp-fill"
+                  style="width: {Math.round((t.mentions / topMentions) * 100)}%; background: {nodeStyle(t).color};"
+                ></span>
+              </span>
+            </button>
+            {#if dest}
+              <a class="tp-go" href={dest.href} title="Open {t.name} in {dest.label}">{dest.label} →</a>
+            {/if}
+          </div>
         {/each}
       </div>
       {#if conceptNodes.length > topics.length}
@@ -381,10 +412,15 @@
   {/if}
 
   {#if selected}
+    {@const dest = destinationOf(selected)}
     <section class="tg-sec tg-selected">
       <div class="tg-sec-hd">
         <span class="tg-eyebrow">Selected</span>
-        <span class="tg-meta">{relativeSeen(selected.lastSeen)}</span>
+        {#if dest}
+          <a class="tg-open" href={dest.href}>open in {dest.label} →</a>
+        {:else}
+          <span class="tg-meta">{relativeSeen(selected.lastSeen)}</span>
+        {/if}
       </div>
       <div class="sel-type" style="--n-color: {nodeStyle(selected).color};">{selected.type}</div>
       {#if selected.href}
@@ -409,15 +445,21 @@
       {:else}
         <div class="tg-rows">
           {#each shownRelations as r, i (i)}
-            <button
-              type="button"
-              class="rel"
-              onclick={() => (selectedId = r.target.id)}
-              title="{r.verb} {r.target.name}"
-            >
-              <span class="rel-verb">{r.verb}</span>
-              <span class="rel-target">{r.target.name}</span>
-            </button>
+            {@const dest = destinationOf(r.target)}
+            <div class="rel-wrap">
+              <button
+                type="button"
+                class="rel"
+                onclick={() => (selectedId = r.target.id)}
+                title="{r.verb} {r.target.name}"
+              >
+                <span class="rel-verb">{r.verb}</span>
+                <span class="rel-target">{r.target.name}</span>
+              </button>
+              {#if dest}
+                <a class="rel-go" href={dest.href} title="Open {r.target.name} in {dest.label}">{dest.label} →</a>
+              {/if}
+            </div>
           {/each}
         </div>
         {#if hiddenRelationCount > 0}
@@ -593,6 +635,17 @@
     color: var(--text-ghost);
     cursor: default;
   }
+  .tg-open {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .tg-open:hover {
+    color: var(--accent-hover);
+  }
 
   /* ── Canvas ──────────────────────────────────────────────────────────── */
   /* The dot grid runs the full width of the column — it is the drafting paper
@@ -754,23 +807,69 @@
   /* Rank, name and count on the line; the bar underneath at full width. A bar
      squeezed between a name and a number in this column is too short to be
      comparable, and an incomparable bar is decoration. */
+  /* The row selects; the link beside it navigates. Two jobs, two targets — a
+     row that did both on one click would make "look at this in the graph" and
+     "leave the page" the same gesture. */
+  .tp-wrap,
+  .rel-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    margin: 0 -6px;
+    transition: background 0.15s ease-out;
+  }
+  .tp-wrap:hover,
+  .tp-wrap.selected,
+  .rel-wrap:hover {
+    background: var(--surface-sunken);
+  }
   .tp {
+    flex: 1;
+    min-width: 0;
     display: grid;
     grid-template-columns: 15px 1fr auto;
     align-items: baseline;
     gap: 0 8px;
-    width: 100%;
-    padding: 6px 6px 7px;
-    margin: 0 -6px;
+    padding: 6px 0 7px 6px;
     border: none;
     background: none;
     cursor: pointer;
     text-align: left;
-    transition: background 0.15s ease-out;
   }
-  .tp:hover,
-  .tp.selected {
-    background: var(--surface-sunken);
+  /* The destination word, not a bare arrow: "intel →" says whether following it
+     is worth the navigation, which "→" never does. */
+  .tp-go,
+  .rel-go {
+    flex: none;
+    align-self: center;
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-ghost);
+    text-decoration: none;
+    opacity: 0;
+    transition: opacity 0.15s ease-out, color 0.15s ease-out;
+  }
+  .tp-wrap:hover .tp-go,
+  .tp-wrap.selected .tp-go,
+  .rel-wrap:hover .rel-go,
+  .tp-go:focus-visible,
+  .rel-go:focus-visible {
+    opacity: 1;
+  }
+  .tp-go:hover,
+  .rel-go:hover {
+    color: var(--accent);
+  }
+  /* Keyboard users never hover, so the link must not be opacity-hidden from
+     them — focus-visible above restores it, and this keeps it reachable. */
+  .tp-go:focus-visible,
+  .rel-go:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
   }
   .tp-rank {
     font-family: var(--font-mono);
@@ -787,8 +886,8 @@
     font-size: var(--fs-label);
     color: var(--text-secondary);
   }
-  .tp:hover .tp-name,
-  .tp.selected .tp-name {
+  .tp-wrap:hover .tp-name,
+  .tp-wrap.selected .tp-name {
     color: var(--text-primary);
   }
   .tp-n {
@@ -846,19 +945,17 @@
   /* ── Relations ───────────────────────────────────────────────────────── */
   /* The verb is the line that scans, so it leads and the target sits under it. */
   .rel {
-    display: block;
-    width: 100%;
-    padding: 6px 6px 7px;
-    margin: 0 -6px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 0 7px 6px;
     border: none;
     border-left: 2px solid var(--line-hair);
     background: none;
     cursor: pointer;
     text-align: left;
-    transition: border-color 0.15s ease-out, background 0.15s ease-out;
+    transition: border-color 0.15s ease-out;
   }
-  .rel:hover {
-    background: var(--surface-sunken);
+  .rel-wrap:hover .rel {
     border-left-color: var(--accent);
   }
   .rel-verb {
@@ -878,7 +975,7 @@
     color: var(--text-secondary);
     overflow-wrap: anywhere;
   }
-  .rel:hover .rel-target {
+  .rel-wrap:hover .rel-target {
     color: var(--text-primary);
   }
 
@@ -952,6 +1049,11 @@
     .rel {
       padding-top: 9px;
       padding-bottom: 10px;
+    }
+    /* No hover on a touch screen, so the drill-through is always shown. */
+    .tp-go,
+    .rel-go {
+      opacity: 1;
     }
   }
 </style>

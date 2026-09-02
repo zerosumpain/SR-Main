@@ -2122,7 +2122,7 @@
     }
     // A const, so the narrowing below survives into the map callback.
     const from = found;
-    if (!from?.toolSteps) return { live: false, steps: [] };
+    if (!from?.toolSteps) return { live: false, steps: [], messageId: null };
     const steps = from.toolSteps.map((s, i) => {
       const tool = resolveDisplayTool(s.tool, s.args).tool;
       return {
@@ -2136,7 +2136,7 @@
         startedAt: s.startedAt ?? null,
       };
     });
-    return { live: from.isProgress === true, steps };
+    return { live: from.isProgress === true, steps, messageId: from.id };
   });
 
   /** The most recent turn that recorded a tool-call chain. */
@@ -2156,6 +2156,8 @@
       workers: activityWorkers,
       steps: activitySteps.steps,
       stepsAreLive: activitySteps.live,
+      // A live turn has no trace row yet, so there is nothing to open.
+      stepsMessageId: activitySteps.live ? null : activitySteps.messageId,
       build: activeBuild ?? null,
       traceId: lastTraceId,
     };

@@ -636,6 +636,23 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           }
         }
 
+        // Grow the thread's knowledge graph. Cadenced and fire-and-forget — the
+        // reply is already written by this point, and an extraction failure must
+        // never cost the user their turn.
+        //
+        // This call used to live ONLY in `handleWithHermes`. When Hermes was
+        // removed (#489) the branch went and took the call with it, leaving the
+        // import behind and nothing calling it — so chat entity extraction was
+        // silently dead from 2026-08-24, the last day Hermes answered a chat,
+        // until this. Production kept taking turns and stopped producing
+        // `intel_notes` with source='chat' entirely; the knowledge graph beside
+        // every thread since has been empty, which reads as a broken rail and is
+        // not one. There is a test asserting this call exists, because "imported
+        // but never called" is not something the type checker or the gate sees.
+        if (conversationId) {
+          void maybeExtractThreadConcepts(conversationId, null).catch(() => {});
+        }
+
         job.result = {
           success: true,
           workflow: null,
