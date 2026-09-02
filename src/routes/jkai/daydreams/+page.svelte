@@ -1476,6 +1476,7 @@
   let memoriesOpen = $state(false);
   let memoriesLoading = $state(false);
   let memoriesError = $state<string | null>(null);
+  let consolidationError = $state<string | null>(null);
   let memories = $state<Memory[]>([]);
   let memoryThemes = $state<DaydreamMemoryThemeView[]>([]);
   let lastConsolidation = $state<MemoryConsolidationView | null>(null);
@@ -1535,26 +1536,49 @@
     });
   });
 
+  type MemoryOverviewResponse = {
+    memories?: Memory[];
+    themes?: DaydreamMemoryThemeView[];
+    lastConsolidation?: MemoryConsolidationView | null;
+    error?: string;
+    message?: string;
+  };
+
+  async function readMemoryOverview(): Promise<MemoryOverviewResponse> {
+    const res = await fetch('/api/daydream/thoughts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'memories', limit: 200 }),
+    });
+    const out = (await res.json().catch(() => ({}))) as MemoryOverviewResponse;
+    if (!res.ok || out.error || out.message) {
+      throw new Error(out.error ?? out.message ?? `memory request failed (${res.status})`);
+    }
+    return out;
+  }
+
+  function applyMemoryOverview(out: MemoryOverviewResponse) {
+    memories = out.memories ?? [];
+    memoryThemes = out.themes ?? [];
+    lastConsolidation = out.lastConsolidation ?? null;
+  }
+
+  function consolidationSummary(result: {
+    memoriesReviewed: number;
+    themesCreated: number;
+    themesUpdated: number;
+  }): string {
+    return result.memoriesReviewed
+      ? `Reviewed ${result.memoriesReviewed}: ${result.themesCreated} themes created and ${result.themesUpdated} updated.`
+      : 'Nothing new was waiting for consolidation.';
+  }
+
   async function loadMemories() {
     memoriesOpen = true;
     memoriesLoading = true;
     memoriesError = null;
     try {
-      const res = await fetch('/api/daydream/thoughts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'memories', limit: 200 }),
-      });
-      const out = (await res.json().catch(() => ({}))) as {
-        memories?: Memory[];
-        themes?: DaydreamMemoryThemeView[];
-        lastConsolidation?: MemoryConsolidationView | null;
-        error?: string;
-      };
-      if (out.error) throw new Error(out.error);
-      memories = out.memories ?? [];
-      memoryThemes = out.themes ?? [];
-      lastConsolidation = out.lastConsolidation ?? null;
+      applyMemoryOverview(await readMemoryOverview());
     } catch (err) {
       memoriesError = err instanceof Error ? err.message : String(err);
       memories = [];
@@ -1566,7 +1590,7 @@
 
   async function consolidateMemoriesNow() {
     consolidating = true;
-    memoriesError = null;
+    consolidationError = null;
     consolidationNote = null;
     try {
       const res = await fetch('/api/daydream/thoughts', {
@@ -1575,17 +1599,49 @@
         body: JSON.stringify({ action: 'consolidate_memories' }),
       });
       const out = (await res.json().catch(() => ({}))) as {
-        result?: { memoriesReviewed: number; themesCreated: number; themesUpdated: number };
+        accepted?: boolean;
+        localDay?: string;
+        result?: {
+          status: string;
+          memoriesReviewed: number;
+          themesCreated: number;
+          themesUpdated: number;
+          error?: string | null;
+        };
         error?: string;
+        message?: string;
       };
-      if (!res.ok || out.error) throw new Error(out.error ?? 'consolidation failed');
-      const r = out.result;
-      consolidationNote = r?.memoriesReviewed
-        ? `Reviewed ${r.memoriesReviewed}: ${r.themesCreated} themes created and ${r.themesUpdated} updated.`
-        : 'Nothing new was waiting for consolidation.';
-      await loadMemories();
+      if (!res.ok || out.error || out.message) {
+        throw new Error(out.error ?? out.message ?? `consolidation request failed (${res.status})`);
+      }
+
+      if (!out.accepted) {
+        if (!out.result) throw new Error('consolidation returned no result');
+        consolidationNote = consolidationSummary(out.result);
+        applyMemoryOverview(await readMemoryOverview());
+        return;
+      }
+
+      consolidationNote = 'Consolidation is running in the background…';
+      const deadline = Date.now() + 5 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 2_500));
+        const overview = await readMemoryOverview();
+        applyMemoryOverview(overview);
+        const latest = overview.lastConsolidation;
+        if (!latest || (out.localDay && latest.localDay !== out.localDay) || latest.status === 'running') {
+          continue;
+        }
+        if (latest.status === 'failed') {
+          throw new Error(latest.error ?? 'the consolidator failed without recording a reason');
+        }
+        consolidationNote = consolidationSummary(latest);
+        return;
+      }
+
+      consolidationNote = 'Consolidation is still running in the background. You can leave this page and refresh later.';
     } catch (err) {
-      memoriesError = err instanceof Error ? err.message : String(err);
+      consolidationError = err instanceof Error ? err.message : String(err);
     } finally {
       consolidating = false;
     }
@@ -2641,6 +2697,7 @@
         </div>
 
         {#if consolidationNote}<p class="note good">{consolidationNote}</p>{/if}
+        {#if consolidationError}<p class="note warn">Consolidation failed: {consolidationError}</p>{/if}
         {#if memoriesLoading}
           <div class="card t-watch"><p class="card-body">Reading what it knows…</p></div>
         {:else if memoriesError}

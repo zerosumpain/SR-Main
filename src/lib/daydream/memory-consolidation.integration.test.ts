@@ -108,7 +108,12 @@ describe('nightly memory consolidation', () => {
   it('stores one theme, two source links, pack-ready guidance, and visible influence', async () => {
     if (!dbReady) return expect(dbReady).toBe(false);
 
-    const result = await runMemoryConsolidation({ now: new Date('2099-09-02T21:45:00Z') });
+    const started: Array<{ localDay: string; startedAt: Date }> = [];
+    const result = await runMemoryConsolidation({
+      now: new Date('2099-09-02T21:45:00Z'),
+      onStarted: (run) => started.push(run),
+    });
+    expect(started).toEqual([{ localDay: DAY, startedAt: new Date('2099-09-02T21:45:00Z') }]);
     expect(result).toMatchObject({
       status: 'completed',
       memoriesReviewed: 2,

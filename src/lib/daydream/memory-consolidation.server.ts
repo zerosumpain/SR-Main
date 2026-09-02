@@ -35,6 +35,22 @@ export interface MemoryConsolidationResult {
   error: string | null;
 }
 
+export interface MemoryConsolidationStarted {
+  localDay: string;
+  startedAt: Date;
+}
+
+export interface MemoryConsolidationOptions {
+  now?: Date;
+  allowRepeat?: boolean;
+  /**
+   * Resolves an interactive caller as soon as the durable run row exists.
+   * The model pass can then continue outside a browser request without racing
+   * a poll against an older completed row for the same local day.
+   */
+  onStarted?: (run: MemoryConsolidationStarted) => void;
+}
+
 export function consolidationLocalDay(now: Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: LOCAL_TZ,
@@ -123,7 +139,7 @@ async function activeThemes(): Promise<ExistingMemoryTheme[]> {
 
 /** Run once per local day; failed attempts remain retryable inside the window. */
 export async function runMemoryConsolidation(
-  opts: { now?: Date; allowRepeat?: boolean } = {},
+  opts: MemoryConsolidationOptions = {},
 ): Promise<MemoryConsolidationResult> {
   const now = opts.now ?? new Date();
   const localDay = consolidationLocalDay(now);
@@ -164,6 +180,8 @@ export async function runMemoryConsolidation(
       set: { status: 'running', error: null, startedAt: now, completedAt: null, updatedAt: now },
     })
     .returning({ id: daydreamMemoryConsolidations.id });
+
+  opts.onStarted?.({ localDay, startedAt: now });
 
   try {
     const [memories, themes] = await Promise.all([pendingMemories(), activeThemes()]);
