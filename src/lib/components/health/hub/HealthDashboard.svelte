@@ -15,9 +15,24 @@
   // #1a1008, everything between them on paper. That rhythm is the structure —
   // measurement is dark, argument is light.
   //
-  // The anonymous /health is a different document entirely and never reaches
-  // this component; the split is made in the loader, so an anonymous visitor is
-  // not sent the data and then shown a smaller view of it.
+  // 2026-09-02: the anonymous /health is now the SAME document, one section
+  // shorter. It used to be a separate eight-chapter page, and the gap had
+  // stopped being a privacy decision and started being a maintenance one — the
+  // public page was two redesigns behind.
+  //
+  // What the anonymous reader does not get, and why it is decided HERE as well
+  // as in the loader:
+  //
+  //  * G, Routes & plan, is not rendered. Its four route cards are FIXED
+  //    editorial copy naming real corridors near where he lives, so a null
+  //    `coach` would have hidden the proposal and left the geography.
+  //  * F keeps its four count tiles and loses the gettable board and the chain
+  //    tile, which are the only things in this component that name ground.
+  //  * the header nav is empty. Every link on it goes to an owner-gated child.
+  //
+  // The loader has already stripped the data behind all three — `{#if owner}`
+  // in a template still ships the bytes — so this is the second belt, and it is
+  // the one that covers the copy the components carry themselves.
   import HealthShell from './HealthShell.svelte';
   import StateOfPlay from './StateOfPlay.svelte';
   import InstrumentDeck from './InstrumentDeck.svelte';
@@ -28,14 +43,29 @@
   import RoutesPlan from './RoutesPlan.svelte';
   import ExperimentsSection from './ExperimentsSection.svelte';
   import VerdictSection from './VerdictSection.svelte';
+  import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
   import { fmtAgo } from '$lib/components/health/v2/utils';
-  import type { OwnerHealthData } from './types';
+  import type { HealthAudience, OwnerHealthData, PublicHealthData } from './types';
 
   interface Props {
-    data: OwnerHealthData;
+    data: OwnerHealthData | PublicHealthData;
+    audience?: HealthAudience;
   }
 
-  let { data }: Props = $props();
+  let { data, audience = 'owner' }: Props = $props();
+
+  const owner = $derived(audience === 'owner');
+
+  /**
+   * Section letters, after G is dropped. The letters are the document's spine —
+   * the shell's kicker and footer both quote the range — so they close up
+   * rather than leaving a hole where the routes section was.
+   */
+  const experimentsLetter = $derived(owner ? 'H' : 'G');
+  const verdictLetter = $derived(owner ? 'I' : 'H');
+
+  /** The public page's only interactive thing below the fold. */
+  let methodOpen = $state(false);
 
   /** Twelve hours without a reading and "live" is a claim, not a fact. */
   const stale = $derived(data.syncedAgoSeconds > 12 * 3600);
@@ -73,24 +103,42 @@
   });
 </script>
 
+{#snippet methodButton()}
+  <button type="button" class="hd-method" onclick={() => (methodOpen = true)}>
+    How these numbers are computed
+  </button>
+{/snippet}
+
 <HealthShell
   path="/health"
-  kicker="Full read · 8 signal families · sections A–I"
-  nav={[
-    { href: '/health/activities', label: 'Activities' },
-    { href: '/health/segments', label: 'Segments' },
-    { href: '/health/plan', label: 'Plan' },
-    { href: '/health/routes', label: 'Routes' },
-    { href: '/health/record', label: 'Record' },
-  ]}
+  footerAction={owner ? undefined : methodButton}
+  kicker={owner
+    ? 'Full read · 8 signal families · sections A–I'
+    : 'Public read · 8 signal families · sections A–H'}
+  nav={owner
+    ? [
+        { href: '/health/activities', label: 'Activities' },
+        { href: '/health/segments', label: 'Segments' },
+        { href: '/health/plan', label: 'Plan' },
+        { href: '/health/routes', label: 'Routes' },
+        { href: '/health/record', label: 'Record' },
+      ]
+    : []}
   live={stale || seriesIsMock ? null : 'Whoop · Apple · Strava'}
   {meta}
-  footer={[
-    'strangeramblings.com/health · full read · sections A–I',
-    'Whoop · Apple Health · Strava · OSM/Overpass · openrouteservice',
-    'Advisory only · not medical advice',
-    `Dashboard updated ${dashboardUpdated}`,
-  ]}
+  footer={owner
+    ? [
+        'strangeramblings.com/health · full read · sections A–I',
+        'Whoop · Apple Health · Strava · OSM/Overpass · openrouteservice',
+        'Advisory only · not medical advice',
+        `Dashboard updated ${dashboardUpdated}`,
+      ]
+    : [
+        'strangeramblings.com/health · public read · sections A–H',
+        'Whoop · Apple Health · Strava',
+        'Advisory only · not medical advice · routes and locations withheld',
+        `Dashboard updated ${dashboardUpdated}`,
+      ]}
 >
   {#if seriesIsMock}
     <p class="hd-provenance">
@@ -130,23 +178,54 @@
   <TripwireTable tripwires={data.tripwires} />
 
   <SegmentsSection
+    {audience}
     segmentForms={data.segmentForms}
     totals={data.segments ? data.segments.totals : null}
     chains={data.chains}
   />
 
-  <RoutesPlan coach={data.coach} />
+  <!-- G is owner-only, and it is the section this whole split exists for: the
+       four route cards are hardcoded editorial naming real trail corridors near
+       home, so they are markup, not data, and nothing the loader withholds can
+       reach them. -->
+  {#if owner}
+    <RoutesPlan coach={data.coach} />
+  {/if}
 
-  <ExperimentsSection experiments={data.experiments} />
+  <ExperimentsSection experiments={data.experiments} letter={experimentsLetter} />
 
-  <VerdictSection verdict={data.verdict} />
+  <VerdictSection verdict={data.verdict} letter={verdictLetter} />
+
 </HealthShell>
+
+<!-- The one thing carried over from the retired public document. Nine sections
+     of derived figures earn a page that says how each one is derived. -->
+{#if !owner}
+  <MethodologyDrawer open={methodOpen} focusId={null} onclose={() => (methodOpen = false)} />
+{/if}
 
 <style>
   /* The one loud thing on this page, and deliberately: it is the difference
      between a dashboard and a mock-up. Same warn tokens and same copy as the
      anonymous landing's banner, so the two states read identically wherever
      the reader meets them. */
+  .hd-method {
+    background: none;
+    border: 1px solid var(--line-strong);
+    padding: 9px 16px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 0;
+  }
+  .hd-method:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
   .hd-provenance {
     margin: 0;
     padding: 12px clamp(20px, 3vw, 44px);

@@ -11,6 +11,16 @@
 // shared object later is absent from the anonymous payload by default rather
 // than present by accident; and `disclosureLeaks` is the second belt, walking
 // whatever was built and naming anything that could place John somewhere.
+//
+// 2026-09-02: anonymous visitors now read the SAME nine-section dashboard the
+// owner does, minus the two sections that carry ground. That moved a whole
+// derived layer onto this list — every one of those keys is a rule over numbers
+// already published, and none of them names a place. Two structs could not be
+// allow-listed at all, because they carry a place inside an otherwise
+// publishable shape: `TrailsDashboard.workouts` (Strava titles ARE place names)
+// and the gettable board (segment names, and an id that deep-links the ground).
+// Those are PROJECTED by the two functions at the foot of this file, and the
+// projection is what the loader ships — the allow-list never sees them.
 
 /**
  * The only keys an anonymous visitor receives.
@@ -19,24 +29,38 @@
  * Adding a key here is a deliberate, reviewable act — which is the point.
  */
 export const PUBLIC_FIELDS = [
+  // ——— the body, as the landing has published it since launch ————————
   'series', // 30 days of daily numbers — no timestamps, no places
   'today',
-  'yesterday',
-  'headline',
-  'strap',
   'rhrBaseline',
-  'rings',
   'todayDeltas',
   'syncedAgoSeconds',
-  'narrative',
-  'annotations',
   'provenance',
   'readiness',
-  'trainingLoad',
   'vo2max',
   'sleepRegularity',
-  'stats',
-  'featuredActivities',
+
+  // ——— the derived instrument layer (sections B–E, H, I) ————————————
+  //
+  // Added 2026-09-02 with the shared dashboard. Every one of these is a pure
+  // rule over the metrics above — no query of its own, no model, and nothing
+  // that names a segment, an outing or a piece of ground. `tripwires` is the
+  // one that had to be built differently rather than merely allowed: its
+  // segment row quotes the nearest record BY NAME, so the loader passes it a
+  // `nearest`-stripped summary and the row falls back to counts.
+  'dashboardUpdatedAt',
+  'acwr',
+  'monotony',
+  'polarised',
+  'circadian',
+  'autonomic',
+  'recoveryDebt',
+  'volume',
+  'forecast',
+  'moves',
+  'tripwires',
+  'experiments',
+  'verdict',
 ] as const;
 
 export type PublicField = (typeof PUBLIC_FIELDS)[number];
@@ -53,12 +77,23 @@ export function pickPublic<T extends Record<string, unknown>>(
 }
 
 /**
- * `featuredActivities` is the one carve-out and it is deliberate: those rows are
- * opt-in, flagged `featured` by hand on `strava_activities`, and the page has
- * shown their routes publicly since it launched. Everything under this key is
- * skipped by the walker below; nothing else is.
+ * Root keys the walker steps over, and the reason for each.
+ *
+ * `featuredActivities` used to be the only entry: hand-flagged rows whose
+ * routes the landing's closing chapter drew, public since launch. That chapter
+ * went with the old public document on 2026-09-02, so the last PLACE-BEARING
+ * exemption is gone and a polyline under that key is now a leak like any other.
+ *
+ * What is left is a different kind of thing, and the distinction is the point:
+ * `dashboardUpdatedAt` is the ISO instant the SERVER finished assembling the
+ * payload — always within a second of the request that asked for it, and
+ * therefore something the reader already knows. It is here because
+ * `LOCAL_TIMESTAMP` cannot tell it apart from the clock an outing started at,
+ * which is a real thing to catch; loosening that pattern to spare a UTC instant
+ * would blind it to `2026-08-20T06:41:12Z` on an activity, which is exactly the
+ * disclosure it exists for. Naming the one field is the narrower fix.
  */
-const DISCLOSURE_EXEMPT_ROOTS = new Set(['featuredActivities']);
+const DISCLOSURE_EXEMPT_ROOTS = new Set(['dashboardUpdatedAt']);
 
 /**
  * Keys that carry a route. Matched as a SUBSTRING, not an exact name: this repo
@@ -147,4 +182,58 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
 
   walk(value, path, 0);
   return found;
+}
+
+// ---------------------------------------------------------------------------
+// The two projections
+//
+// An allow-list answers "which KEYS go out". These answer the harder question:
+// what to do with a struct that is publishable apart from the two fields inside
+// it that place him. Picking cannot express that, and `disclosureLeaks` would
+// not catch either case — `name` is in neither key pattern, and `SEGMENT_NAME`
+// is anchored, so a segment name inside a sentence walks straight past it. So
+// they are reshaped here, generically over the shape rather than against an
+// imported type: this module sits in the domain layer and the structs it
+// narrows are declared in the database and UI layers above it.
+// ---------------------------------------------------------------------------
+
+/**
+ * `TrailsDashboard`, with the workouts reduced to the one field the dashboard
+ * actually reads off them.
+ *
+ * Section A takes exactly one thing from `dashboard.workouts`: how many fall
+ * inside the headline week (`StateOfPlay.svelte`, the week-volume tile). The
+ * rows themselves carry `id`, `startDate` and `name` — and a Strava title is a
+ * place name most of the time ("Morning run, Teesdale Way"), which is the whole
+ * category this page exists to keep off the public internet. A count needs none
+ * of it, so a count is all that ships.
+ *
+ * Everything else on the dashboard — the trend series, the load days, the week
+ * buckets, the HR profile — is an aggregate over time with no geometry in it,
+ * and passes through unchanged.
+ */
+export function publicDashboard<T extends { workouts: Array<{ day: string }> }>(
+  dashboard: T | null | undefined,
+): (Omit<T, 'workouts'> & { workouts: Array<{ day: string }> }) | null {
+  if (!dashboard) return null;
+  const { workouts, ...rest } = dashboard;
+  return { ...rest, workouts: workouts.map((w) => ({ day: w.day })) };
+}
+
+/**
+ * The segment form summary, reduced to its counts.
+ *
+ * Section F's four taxonomy tiles are counts over the whole corpus — improving,
+ * holding, slipping, no form read — and say nothing about where any of that
+ * ground is. The two things beside them do: `board` names five segments and
+ * deep-links `/health/segments/{id}`, and `nearest` is the name the segment
+ * tripwire quotes in section E. Both are dropped rather than blanked in the
+ * template, so an anonymous browser is never sent them at all.
+ */
+export function publicSegmentForms<T extends { nearest: unknown; board: unknown[] }>(
+  forms: T | null | undefined,
+): (Omit<T, 'nearest' | 'board'> & { nearest: null; board: never[] }) | null {
+  if (!forms) return null;
+  const { nearest: _nearest, board: _board, ...rest } = forms;
+  return { ...rest, nearest: null, board: [] };
 }

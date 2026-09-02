@@ -10,16 +10,18 @@
 
   interface Props {
     verdict: Verdict | null;
+    /** See `ExperimentsSection` — the anonymous document is one section shorter. */
+    letter?: string;
   }
 
-  let { verdict }: Props = $props();
+  let { verdict, letter = 'I' }: Props = $props();
 </script>
 
 {#if verdict}
   <section class="i">
     <div class="i-inner">
       <div class="i-left">
-        <p class="i-kicker">I / The verdict</p>
+        <p class="i-kicker">{letter} / The verdict</p>
         <h2 class="i-headline">
           {verdict.headline[0]}<br /><span class="i-headline-fade">{verdict.headline[1]}</span>
         </h2>

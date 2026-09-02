@@ -62,6 +62,21 @@ export interface SegmentForms {
   board: GettableRow[];
 }
 
+/**
+ * The dashboard's view of `TrailsDashboard`.
+ *
+ * Identical to it apart from the workouts, which are narrowed to the one field
+ * section A reads — a per-week session count. A full `TrailsDashboard` is
+ * assignable to this, so the owner path passes its own struct through
+ * unchanged; the anonymous path passes `publicDashboard()`'s projection, which
+ * has dropped the `id`, `name` and `startDate` that would name an outing and
+ * the ground it covered. Widening the type here is what makes that projection
+ * type-check instead of needing a cast.
+ */
+export type DashboardRead = Omit<TrailsDashboard, 'workouts'> & {
+  workouts: Array<{ day: string }>;
+};
+
 export interface WeeklyVolumeRead {
   weekKm: number;
   medianKm: number;
@@ -94,7 +109,7 @@ export interface OwnerHealthData {
   volume: WeeklyVolumeRead | null;
 
   // ——— section B ————————————————————————————————————————————————
-  dashboard: TrailsDashboard | null;
+  dashboard: DashboardRead | null;
   acwr: MetricResult<ACWRResult> | null;
   monotony: MetricResult<MonotonyResult> | null;
   polarised: MetricResult<PolarisedResult> | null;
@@ -115,3 +130,67 @@ export interface OwnerHealthData {
   chains: SegmentChain[];
   coach: DailyPlan | null;
 }
+
+
+/**
+ * What an anonymous visitor's /health is built from — the same document, minus
+ * the ground.
+ *
+ * Structurally a subset of `OwnerHealthData`, and deliberately expressed as its
+ * own type rather than as `Partial<OwnerHealthData>`: which fields are absent
+ * is the privacy contract, so it is written down where a reviewer will see it
+ * change. What is missing, and why:
+ *
+ *  * `coach` — section G is not rendered at all. Its route cards are FIXED
+ *    editorial copy naming real corridors near where he lives, so passing null
+ *    would not have hidden them; and `getDailyPlan` spends an
+ *    openrouteservice call against a daily quota, which has no business on a
+ *    page crawlers hit.
+ *  * `chains` and `segments` — an ordered segment pair and the corpus roster
+ *    are both names on the ground. Section F keeps only its four count tiles.
+ *  * `segmentForms.board` / `.nearest` — present as a type, empty by
+ *    construction: `publicSegmentForms()` strips them, so the gettable board
+ *    and the tripwire's "closest is …" clause have nothing to print.
+ *  * `narrative`, `annotations`, `featuredActivities`, `stats`, `rings`,
+ *    `headline`, `strap`, `trainingLoad` — furniture of the retired public
+ *    document. Nothing in the nine sections reads them.
+ */
+export interface PublicHealthData
+  extends Pick<
+    OwnerHealthData,
+    | 'dashboardUpdatedAt'
+    | 'provenance'
+    | 'today'
+    | 'series'
+    | 'rhrBaseline'
+    | 'todayDeltas'
+    | 'syncedAgoSeconds'
+    | 'readiness'
+    | 'volume'
+    | 'dashboard'
+    | 'acwr'
+    | 'monotony'
+    | 'polarised'
+    | 'sleepRegularity'
+    | 'circadian'
+    | 'autonomic'
+    | 'recoveryDebt'
+    | 'vo2max'
+    | 'forecast'
+    | 'moves'
+    | 'tripwires'
+    | 'experiments'
+    | 'verdict'
+    | 'segmentForms'
+  > {
+  segments: null;
+  chains: [];
+  coach: null;
+}
+
+/**
+ * Who the document is being drawn for. It gates the two sections that carry
+ * ground, the header nav into the owner-only children, and the section
+ * lettering — not the data, which the loader has already decided.
+ */
+export type HealthAudience = 'owner' | 'public';
