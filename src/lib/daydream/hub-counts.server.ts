@@ -1,4 +1,4 @@
-// src/lib/daydream/hub-counts.ts
+// src/lib/daydream/hub-counts.server.ts
 //
 // What the daydream hub's chrome needs on EVERY room: the rail badges, the
 // cover tiles and the readout. COUNT queries and two pulse reads, nothing
@@ -11,8 +11,9 @@ import { db } from '$lib/db';
 import { daydreamPlaces, daydreamRules, daydreamThoughts, heartbeatActions } from '$lib/db/schema';
 import { loadEngineState, loadThreshold, type EngineState } from './ledger';
 import { MIN_VISITS_TO_ASK } from './types';
+import type { BadgeCounts } from './hub';
 
-export interface HubCounts {
+export interface HubCounts extends BadgeCounts {
   /** Live and waiting on nobody but the owner: status `new`. */
   undecided: number;
   /** Reached him and never rated — the starved input. */
@@ -123,77 +124,4 @@ export function emptyHubCounts(): HubCounts {
     },
     threshold: { value: 0, feedbackCount: 0 },
   };
-}
-
-export const HUB_BASE = '/jkai/daydreams';
-
-/** One tab in the rail. Structurally the shell's `ShellTab`, declared here so
- *  the domain layer never imports a UI module (the boundary gate). */
-export interface HubTab {
-  id: RoomId;
-  label: string;
-  href: string;
-  count?: number;
-  tone?: 'action' | 'watch' | 'quiet';
-}
-
-/** The eleven rooms, in rail order, each a real route. */
-export const ROOMS = [
-  'feed',
-  'memory',
-  'briefing',
-  'watches',
-  'family',
-  'discoveries',
-  'calendar',
-  'places',
-  'money',
-  'engine',
-  'improvement',
-] as const;
-export type RoomId = (typeof ROOMS)[number];
-
-export function isRoom(s: string | null | undefined): s is RoomId {
-  return !!s && (ROOMS as readonly string[]).includes(s);
-}
-
-/** PURE. The rail, with its badges. Tested so a badge can never count the
- *  wrong population without a test saying so. */
-export function hubTabs(c: Pick<HubCounts,
-  'needsRating' | 'unrememberedRulings' | 'activeWatches' | 'needsNaming' | 'proposedRules' | 'failingJobs'
->): HubTab[] {
-  const room = (id: RoomId, label: string, extra: Partial<HubTab> = {}): HubTab => ({
-    id,
-    label,
-    href: `${HUB_BASE}/${id}`,
-    ...extra,
-  });
-  return [
-    room('feed', 'Feed', { count: c.needsRating, tone: 'action' }),
-    room('memory', 'Memory', { count: c.unrememberedRulings, tone: 'watch' }),
-    room('briefing', 'Briefing'),
-    room('watches', 'Watches', { count: c.activeWatches, tone: 'quiet' }),
-    room('family', 'Family'),
-    room('discoveries', 'Discoveries'),
-    room('calendar', 'Calendar'),
-    room('places', 'Places', { count: c.needsNaming, tone: 'action' }),
-    room('money', 'Money'),
-    room('engine', 'Engine', {
-      count: c.proposedRules || c.failingJobs,
-      tone: c.failingJobs ? 'watch' : 'action',
-    }),
-    room('improvement', 'Improvement'),
-  ];
-}
-
-/** Where an old `?tab=` link lands. Unknown tabs go to the feed; the rest of
- *  the query (`?rate=`) rides along, because a notification's deep link is
- *  the one link that must keep working. */
-export function legacyTabTarget(url: URL): string {
-  const tab = url.searchParams.get('tab');
-  const room: RoomId = isRoom(tab) ? tab : 'feed';
-  const q = new URLSearchParams(url.searchParams);
-  q.delete('tab');
-  const qs = q.toString();
-  return `${HUB_BASE}/${room}${qs ? `?${qs}` : ''}${url.hash ?? ''}`;
 }

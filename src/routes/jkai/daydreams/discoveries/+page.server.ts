@@ -2,7 +2,10 @@ import type { PageServerLoad } from './$types';
 import { errMsg } from '$lib/daydream/types';
 import { loadDiscoveries, loadLatestDigest } from '$lib/daydream/ledger';
 
-type Discoveries = Awaited<ReturnType<typeof loadDiscoveries>>;
+type Loaded = Awaited<ReturnType<typeof loadDiscoveries>>;
+/** `sweep` is the last sweep PULSE, and there has not always been one —
+ *  `lastPulseFor` hands back the first row of a query that can be empty. */
+type Discoveries = Omit<Loaded, 'sweep'> & { sweep: Loaded['sweep'] | null };
 
 /** The same keys with nothing in them, so the union the page sees carries
  *  every field whether the query answered or not. */

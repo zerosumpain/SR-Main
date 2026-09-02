@@ -1,7 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { getSetting } from '$lib/server/models/settings';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
-import { emptyHubCounts, loadHubCounts } from '$lib/daydream/hub-counts';
+import { emptyHubCounts, loadHubCounts } from '$lib/daydream/hub-counts.server';
 import { listMonitors } from '$lib/monitors/monitors.server';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only).

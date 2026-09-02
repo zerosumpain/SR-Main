@@ -34,6 +34,8 @@
     ontoggleLive?: () => void;
     tabs: ShellTab[];
     active: string;
+    /** For a tab with no `href` — in-page state, the shape /jkai/agents keeps. */
+    ontab?: (id: string) => void;
     /** The tile deck under the headline. Named `masthead`, not `deck`, because
      *  a snippet's name shadows the page's own bindings and the daydream page
      *  already has a `deck` — the triage cards. */
@@ -54,6 +56,7 @@
     ontoggleLive = undefined,
     tabs,
     active,
+    ontab = undefined,
     masthead = undefined,
     footer = [],
     children,
@@ -115,16 +118,29 @@
   <nav class="ds-rail" aria-label="Daydream sections">
     <div class="ds-inner ds-rail-inner">
       {#each tabs as t (t.id)}
-        <a
-          class="ds-tab"
-          class:on={active === t.id}
-          aria-current={active === t.id ? 'page' : undefined}
-          href={t.href}
-          data-sveltekit-preload-data="tap"
-        >
-          {t.label}
-          {#if t.count}<span class="ds-tab-n tone-{t.tone ?? 'quiet'}">{t.count}</span>{/if}
-        </a>
+        {#if t.href}
+          <a
+            class="ds-tab"
+            class:on={active === t.id}
+            aria-current={active === t.id ? 'page' : undefined}
+            href={t.href}
+            data-sveltekit-preload-data="tap"
+          >
+            {t.label}
+            {#if t.count}<span class="ds-tab-n tone-{t.tone ?? 'quiet'}">{t.count}</span>{/if}
+          </a>
+        {:else}
+          <button
+            type="button"
+            class="ds-tab"
+            class:on={active === t.id}
+            aria-current={active === t.id ? 'page' : undefined}
+            onclick={() => ontab?.(t.id)}
+          >
+            {t.label}
+            {#if t.count}<span class="ds-tab-n tone-{t.tone ?? 'quiet'}">{t.count}</span>{/if}
+          </button>
+        {/if}
       {/each}
     </div>
   </nav>

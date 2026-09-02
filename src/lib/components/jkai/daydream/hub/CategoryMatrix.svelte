@@ -38,7 +38,7 @@
     {@const t = colTotal(c.id)}
     {@const h = t ? href(null, c.id) : null}
     {#if h}
-      <a class="cm-head cm-col t-{c.tone ?? 'steady'}" class:active={isActive(null, c.id)} {href}>
+      <a class="cm-head cm-col t-{c.tone ?? 'steady'}" class:active={isActive(null, c.id)} href={h}>
         <span class="cm-col-label">{c.label}</span>
         <span class="cm-col-n">{t}</span>
       </a>

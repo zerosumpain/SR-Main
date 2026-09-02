@@ -11,9 +11,12 @@ import type { Tone } from '$lib/daydream/priority';
 export interface ShellTab {
   id: string;
   label: string;
-  /** A real route. Every room of the hub is its own page, so a tab is a link,
-   *  never a `?tab=` state change — that was the same-route navigation trap. */
-  href: string;
+  /** A real route. Every room of the daydream hub is its own page, so a tab
+   *  is a link, never a `?tab=` state change — that was the same-route
+   *  navigation trap. Optional only for the shell's other tenant
+   *  (`/jkai/agents`), whose two tabs are still in-page state and go through
+   *  `ontab`. */
+  href?: string;
   /** Rendered as a pill count. Omit or `0` and nothing renders. */
   count?: number;
   /** Colours the count — `action` is the only one that shouts. */

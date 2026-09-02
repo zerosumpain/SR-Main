@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { legacyTabTarget } from '$lib/daydream/hub-counts';
+import { legacyTabTarget } from '$lib/daydream/hub';
 
 // Every room of the hub is its own route now. The bare path — and every old
 // `?tab=` link, of which there were dozens in notifications, evidence trails

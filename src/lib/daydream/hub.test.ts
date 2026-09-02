@@ -1,9 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('./ledger', () => ({ loadEngineState: vi.fn(), loadThreshold: vi.fn() }));
-
-import { ROOMS, hubTabs, isRoom, legacyTabTarget } from './hub-counts';
+import { ROOMS, hubTabs, isRoom, legacyTabTarget } from './hub';
 
 describe('hubTabs', () => {
   const base = { needsRating: 0, unrememberedRulings: 0, activeWatches: 0, needsNaming: 0, proposedRules: 0, failingJobs: 0 };
@@ -32,8 +29,8 @@ describe('hubTabs', () => {
 });
 
 describe('legacyTabTarget', () => {
-  it('maps ?tab= to the room and keeps the rest of the query and the hash', () => {
-    expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=places#place-p1'))).toBe('/jkai/daydreams/places#place-p1');
+  it('maps ?tab= to the room and keeps the rest of the query; the browser keeps the hash', () => {
+    expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=places#place-p1'))).toBe('/jkai/daydreams/places');
     expect(legacyTabTarget(new URL('https://x/jkai/daydreams?tab=feed&rate=abc'))).toBe('/jkai/daydreams/feed?rate=abc');
   });
   it('lands unknown or missing tabs on the feed', () => {

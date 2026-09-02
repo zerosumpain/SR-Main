@@ -18,7 +18,7 @@
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
-  import { HUB_BASE, hubTabs, isRoom } from '$lib/daydream/hub-counts';
+  import { HUB_BASE, hubTabs, isRoom } from '$lib/daydream/hub';
   import type { LayoutData } from './$types';
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
