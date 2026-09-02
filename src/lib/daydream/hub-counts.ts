@@ -9,7 +9,6 @@
 import { and, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamPlaces, daydreamRules, daydreamThoughts, heartbeatActions } from '$lib/db/schema';
-import type { ShellTab } from '$lib/components/jkai/daydream/hub/types';
 import { loadEngineState, loadThreshold, type EngineState } from './ledger';
 import { MIN_VISITS_TO_ASK } from './types';
 
@@ -37,7 +36,6 @@ export interface HubCounts {
   threshold: { value: number; feedbackCount: number };
 }
 
-const SHOWN = ['delivered', 'seen', 'actioned'];
 
 export async function loadHubCounts(opts: { activeWatches?: number } = {}): Promise<HubCounts> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
@@ -129,6 +127,16 @@ export function emptyHubCounts(): HubCounts {
 
 export const HUB_BASE = '/jkai/daydreams';
 
+/** One tab in the rail. Structurally the shell's `ShellTab`, declared here so
+ *  the domain layer never imports a UI module (the boundary gate). */
+export interface HubTab {
+  id: RoomId;
+  label: string;
+  href: string;
+  count?: number;
+  tone?: 'action' | 'watch' | 'quiet';
+}
+
 /** The eleven rooms, in rail order, each a real route. */
 export const ROOMS = [
   'feed',
@@ -153,8 +161,8 @@ export function isRoom(s: string | null | undefined): s is RoomId {
  *  wrong population without a test saying so. */
 export function hubTabs(c: Pick<HubCounts,
   'needsRating' | 'unrememberedRulings' | 'activeWatches' | 'needsNaming' | 'proposedRules' | 'failingJobs'
->): ShellTab[] {
-  const room = (id: RoomId, label: string, extra: Partial<ShellTab> = {}): ShellTab => ({
+>): HubTab[] {
+  const room = (id: RoomId, label: string, extra: Partial<HubTab> = {}): HubTab => ({
     id,
     label,
     href: `${HUB_BASE}/${id}`,
