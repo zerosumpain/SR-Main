@@ -20,10 +20,11 @@
 
 /** Why a build stopped. Null on rows written before this column existed. */
 export type BuildOutcome =
-  "delivered" | "budget_cap" | "stopped_by_user" | "registered";
+  "delivered" | "pr_open" | "budget_cap" | "stopped_by_user" | "registered";
 
 export const BUILD_OUTCOMES: readonly BuildOutcome[] = [
   "delivered",
+  "pr_open",
   "budget_cap",
   "stopped_by_user",
   "registered",
@@ -43,6 +44,7 @@ export type BuildBucket =
   | "awaiting"
   | "failed"
   | "delivered"
+  | "proposed"
   | "capped"
   | "stopped"
   | "registered"
@@ -75,6 +77,7 @@ export function bucketOf(b: BucketInput): BuildBucket {
   // reader as `stopped_by_user`, so it lands in the same bucket.
   if (b.status === "cancelled") return "stopped";
   if (b.status === "completed") {
+    if (b.outcome === "pr_open") return "proposed";
     if (b.outcome === "budget_cap") return "capped";
     if (b.outcome === "stopped_by_user") return "stopped";
     if (b.outcome === "registered") return "registered";
@@ -98,6 +101,7 @@ const LABELS: Record<BuildBucket, string> = {
   awaiting: "Awaiting",
   failed: "Failed",
   delivered: "Delivered",
+  proposed: "PR open",
   capped: "Hit cap",
   stopped: "Stopped",
   registered: "Registered",
@@ -114,6 +118,8 @@ export function outcomeNote(bucket: BuildBucket): string | null {
     return "Stopped on its budget, not because the work was done";
   if (bucket === "stopped") return "Stopped by hand";
   if (bucket === "registered") return "Filed from chat — the builder never ran";
+  if (bucket === "proposed")
+    return "Candidate checks passed and a PR is open; CI, merge and production are not yet verified here";
   if (bucket === "unknown") return "Unrecognised status";
   return null;
 }

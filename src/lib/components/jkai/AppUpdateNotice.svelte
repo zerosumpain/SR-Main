@@ -9,6 +9,7 @@
     <span>
       A newer build{appUpdate.nextVersion ? ` (${appUpdate.nextVersion})` : ''} is ready.
       <small>Current {currentVersion}</small>
+      {#if appUpdate.error}<small class="update-error">{appUpdate.error}</small>{/if}
     </span>
     <button type="button" onclick={applyAppUpdate} disabled={appUpdate.installing}>
       {appUpdate.installing ? 'Updating…' : 'Update now'}
@@ -39,6 +40,10 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
+  }
+
+  .update-error {
+    color: var(--danger, #a33);
   }
 
   button {

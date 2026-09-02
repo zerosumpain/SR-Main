@@ -122,6 +122,16 @@ describe('laneStats', () => {
 		expect(app.medianIterations).toBe(2);
 	});
 
+	it('keeps an open PR out of the delivered numerator', () => {
+		const rows = [
+			b({ gitTargetConfig: { repoUrl: 'git@x:y.git' }, outcome: 'pr_open', publishedSlug: 'https://github.test/pull/1' }),
+		];
+		const repo = laneStats(rows).find((s) => s.lane === 'repo')!;
+		expect(repo.proposed).toBe(1);
+		expect(repo.delivered).toBe(0);
+		expect(repo.successRate).toBe(0);
+	});
+
 	it('reads a null outcome as delivered so old rows are not demoted', () => {
 		const rows = [b({ outcome: null, iterationCount: 3 })];
 		const app = laneStats(rows).find((s) => s.lane === 'app')!;

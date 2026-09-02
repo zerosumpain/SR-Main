@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import { buildIdFrom, isDifferentBuild, isLegacyJkaiScope, shortBuildId } from './register';
+
+describe('JKAI PWA build identity', () => {
+	it('compares the content tree rather than the deploy commit', () => {
+		const version = { sha: 'new-merge-commit', short: 'new-merg', tree: 'same-tree' };
+		expect(buildIdFrom(version)).toBe('same-tree');
+		expect(isDifferentBuild(version, 'same-tree')).toBe(false);
+		expect(isDifferentBuild(version, 'old-tree')).toBe(true);
+	});
+
+	it('formats the same identity used for comparison', () => {
+		expect(shortBuildId('240290b3401a3b6f')).toBe('240290b3');
+		expect(shortBuildId(null)).toBe('unknown');
+	});
+
+	it('only selects the obsolete trailing-slash registration', () => {
+		expect(isLegacyJkaiScope('https://example.test/jkai/', 'https://example.test')).toBe(true);
+		expect(isLegacyJkaiScope('https://example.test/jkai', 'https://example.test')).toBe(false);
+		expect(isLegacyJkaiScope('https://other.test/jkai/', 'https://example.test')).toBe(false);
+	});
+});

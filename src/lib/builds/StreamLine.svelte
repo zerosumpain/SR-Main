@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { parseRepoVerification } from '$lib/verification/repo';
+
   /**
    * One line in the V3 single-pane stream. Renders with a colored type tag,
    * the content (truncated for long bodies behind a click-to-expand), and
@@ -18,7 +20,6 @@
     };
     buildId: string;
   } = $props();
-
   // Map raw log/live-event types to a small set of display tags + colors.
   const tagInfo = $derived.by(() => {
     const t = line.type;
@@ -30,15 +31,22 @@
     if (t === 'lint') return { tag: 'lint', cls: 'lint' };
     if (t === 'system') return { tag: 'sys', cls: 'sys' };
     if (t === 'tool') return { tag: 'tool', cls: 'tool' };
+    if (t === 'verification') return { tag: 'verify', cls: 'verify' };
     return { tag: t, cls: 'sys' };
   });
 
   const COLLAPSED_LENGTH = 240;
-  const isLong = $derived(line.content.length > COLLAPSED_LENGTH);
+  const verification = $derived(line.type === 'verification' ? parseRepoVerification(line.content) : null);
+  const readableContent = $derived(
+    verification
+      ? `${verification.label}: ${verification.status.replace('_', ' ')}${verification.detail ? ` — ${verification.detail}` : ''}`
+      : line.content,
+  );
+  const isLong = $derived(readableContent.length > COLLAPSED_LENGTH);
   let expanded = $state(false);
   // Auto-expand streaming items so the user sees content arriving live.
   const showFull = $derived(expanded || !isLong || line.streaming);
-  const display = $derived(showFull ? line.content : line.content.slice(0, COLLAPSED_LENGTH));
+  const display = $derived(showFull ? readableContent : readableContent.slice(0, COLLAPSED_LENGTH));
 
   void buildId; // reserved for future per-line actions (e.g. "open file at path")
 </script>
@@ -82,6 +90,7 @@
   .tag[data-tag='error'] { color: var(--status-error, #c0392b); }
   .tag[data-tag='lint'] { color: var(--status-error, #c0392b); }
   .tag[data-tag='sys'] { color: var(--text-ghost); }
+  .tag[data-tag='verify'] { color: var(--accent); }
   .body {
     white-space: pre-wrap;
     word-break: break-word;
@@ -94,6 +103,7 @@
   .line[data-tag='error'] .body { color: var(--status-error, #c0392b); }
   .line[data-tag='lint'] .body { color: var(--status-error, #c0392b); }
   .line[data-tag='sys'] .body { color: var(--text-ghost); }
+  .line[data-tag='verify'] .body { color: var(--text-primary); font-weight: 600; }
   .cursor {
     display: inline-block;
     color: var(--accent);

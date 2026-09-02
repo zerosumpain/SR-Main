@@ -193,7 +193,7 @@ register({
 register({
   name: 'build_list',
   description:
-    'List recent JKAI builds with status (pending/running/completed/failed) and `outcome` — `completed` alone does NOT mean it worked: read `outcome` for delivered | budget_cap | stopped_by_user | registered. ' +
+    'List recent JKAI builds with status (pending/running/completed/failed) and `outcome` — `completed` alone does NOT mean it deployed: read `outcome` for delivered | pr_open | budget_cap | stopped_by_user | registered. `pr_open` means the builder proved a candidate and proposed it, not that CI merged or production serves it. ' +
     'Compact by default — returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. ' +
     'Pass verbose:true to return the full rows including heavy columns (prompt, config, serve_config, model fields).',
   parameters: {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build each systemd sidecar and STAGE it. Never restarts anything.
+# Stage each pre-built systemd sidecar. Never restarts anything.
 #
 # Runs in the `prebuild` job, and that placement is the whole point: the
 # `release` job deliberately has no `setup-node` and no `npm ci` (it says so in
@@ -23,7 +23,7 @@
 #                  build in flight with no resume. Do not fold it into this.
 #   jkai-run-worker  No unit file, and inert on the VPS (JKAI_RUN_WORKER unset).
 #   services/webframe  Docker, not systemd.
-set -uo pipefail
+set -euo pipefail
 
 VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
 SHA="$(git rev-parse HEAD)"
@@ -38,23 +38,24 @@ SIDECARS=(
 warn() { echo "::warning::$*"; echo "!!  $*" >&2; }
 
 STAGED=0
+FAILED=0
 for entry in "${SIDECARS[@]}"; do
   IFS='|' read -r NAME SCRIPT UNIT <<< "$entry"
   PKG="packages/$NAME"
   echo "==> Staging $NAME @ $SHA"
 
-  if [ ! -d "$PKG" ]; then warn "$NAME: $PKG missing — manifest and tree disagree"; continue; fi
+  if [ ! -d "$PKG" ]; then warn "$NAME: $PKG missing — manifest and tree disagree"; FAILED=$((FAILED+1)); continue; fi
 
   # Built by the prebuild job on porkserv (`npm run $SCRIPT`) and delivered in
   # the release artifact. Nothing is built here: this job has no node_modules.
   BUNDLE="$PKG/dist/start.js"
   if [ ! -f "$BUNDLE" ]; then
     warn "$NAME: $BUNDLE missing from the release artifact — did the prebuild step for '$SCRIPT' fail? The previous bundle stays live"
-    continue
+    FAILED=$((FAILED+1)); continue
   fi
   if [ ! -f "$PKG/$UNIT" ]; then
     warn "$NAME: unit $UNIT not found in $PKG — manifest is wrong"
-    continue
+    FAILED=$((FAILED+1)); continue
   fi
 
   # A staged directory either exists complete or does not exist, so the apply
@@ -78,4 +79,7 @@ for entry in "${SIDECARS[@]}"; do
 done
 
 echo "==> sidecars staged: $STAGED/${#SIDECARS[@]}"
-exit 0
+if [ "$FAILED" -ne 0 ] || [ "$STAGED" -ne "${#SIDECARS[@]}" ]; then
+  echo "==> ERROR: the release payload is incomplete; refusing to deploy a mixed-version candidate" >&2
+  exit 1
+fi

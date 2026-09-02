@@ -27,11 +27,55 @@ VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
 SERVICE="${SERVICE:-strange-rambling-svelte}"
 PUBLIC_URL="${PUBLIC_URL:-https://strangeramblings.com}"
 KEEP_RELEASES="${KEEP_RELEASES:-3}"
+PUBLIC_BASE="${PUBLIC_URL%/}"
 
 SHA="$(git rev-parse HEAD)"
 RELEASE_DIR="$VPS_DIR/releases/$SHA"
 STATE_DIR="$VPS_DIR/.deploy-state"
 mkdir -p "$STATE_DIR"
+
+public_sha() {
+  local body
+  body="$(curl -fsS -H 'Cache-Control: no-cache' "$PUBLIC_BASE/api/version?expected=$1" 2>/dev/null)" || return 1
+  printf '%s' "$body" | sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+
+wait_for_public_release() {
+  local expected="$1"
+  local timeout_seconds="$2"
+  local deadline actual
+  deadline=$(( $(date +%s) + timeout_seconds ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    actual="$(public_sha "$expected" || true)"
+    if [ "$actual" = "$expected" ] && curl -fsS -o /dev/null -H 'Cache-Control: no-cache' "$PUBLIC_BASE/"; then
+      return 0
+    fi
+    if [ -n "$actual" ]; then
+      echo "    waiting: public /api/version reports $actual, expected $expected"
+    fi
+    sleep 3
+  done
+  return 1
+}
+
+rollback_web_release() {
+  if [ -z "$PREV_SHA" ] || [ ! -d "$VPS_DIR/releases/$PREV_SHA" ]; then
+    echo "==> Automatic rollback unavailable: previous release ${PREV_SHA:-<none>} is not present." >&2
+    return 1
+  fi
+
+  echo "==> Rolling web release back to $PREV_SHA..." >&2
+  ln -sfn "releases/$PREV_SHA" "$VPS_DIR/build.rollback"
+  mv -Tf "$VPS_DIR/build.rollback" "$VPS_DIR/build"
+  sudo systemctl restart "$SERVICE"
+
+  if wait_for_public_release "$PREV_SHA" 60; then
+    echo "==> Rollback verified: public /api/version reports $PREV_SHA" >&2
+    return 0
+  fi
+  echo "==> ERROR: rollback restart did not restore $PREV_SHA publicly within 60s." >&2
+  return 1
+}
 
 [ -d "$RELEASE_DIR" ] || { echo "no staged release at $RELEASE_DIR — prebuild did not run or did not finish" >&2; exit 1; }
 [ -f "$RELEASE_DIR/handler.js" ] || { echo "staged release has no handler.js" >&2; exit 1; }
@@ -206,23 +250,30 @@ echo "    build -> $(readlink "$VPS_DIR/build")"
 echo "==> Restarting $SERVICE (builder is unaffected)..."
 sudo systemctl restart "$SERVICE"
 
-# ---- Sidecars -------------------------------------------------------------
-# APPLY only. The bundles were built and staged in the prebuild job, because THIS
-# job deliberately has no node_modules (see the checkout step in ci.yml) — the
-# first version of this tried to `npm run build:...` here and silently staged
-# nothing. Applying after the web restart also keeps the ordering honest: a gate
-# failure leaves the sidecars untouched.
-#
-# Never fails the release: a stale sidecar is a smaller problem than a web deploy
-# that did not happen, so the script warns and exits 0 on its own.
-echo "==> Applying staged sidecars..."
-./scripts/ci-apply-sidecars.sh
-
 echo "==> Verifying against the PUBLIC url (not localhost — Caddy/cloudflared and"
 echo "    the static cache come up on different timelines than the node process)..."
-if timeout 90 bash -c "until curl -fsS -o /dev/null '$PUBLIC_URL'; do sleep 3; done"; then
-  echo "==> Deployed successfully to $PUBLIC_URL"
+echo "    requiring /api/version to report the exact candidate sha: $SHA"
+if wait_for_public_release "$SHA" 90; then
+  echo "==> Deployed exact commit successfully to $PUBLIC_URL"
   echo "    $(curl -fsS -o /dev/null -w 'HTTP %{http_code} in %{time_total}s' "$PUBLIC_URL")"
+
+  # Apply sidecars only after the web candidate proves that its own commit is
+  # publicly visible. A failed web candidate is rolled back without touching
+  # the running systemd sidecars; their staged directories are inert.
+  echo "==> Applying staged sidecars..."
+  ./scripts/ci-apply-sidecars.sh
+
+  # The builder's staged directory has deliberately been inert until now. Its
+  # watchdog must never apply a candidate merely because staging succeeded:
+  # schema application, web restart or the public SHA proof may still fail.
+  BUILDER_STAGE="$VPS_DIR/builder-releases/$SHA"
+  if [ ! -d "$BUILDER_STAGE" ]; then
+    echo "==> ERROR: matching jkai-builder candidate was not staged at $BUILDER_STAGE" >&2
+    exit 1
+  fi
+  echo "==> Activating jkai-builder candidate for apply-when-idle..."
+  ln -sfn "$SHA" "$VPS_DIR/builder-releases/pending.tmp"
+  mv -Tf "$VPS_DIR/builder-releases/pending.tmp" "$VPS_DIR/builder-releases/pending"
 
   # Record what just went live (/admin/ops/releases). Deliberately AFTER the
   # public-URL check, so a build that never reached production is never logged
@@ -261,11 +312,10 @@ if timeout 90 bash -c "until curl -fsS -o /dev/null '$PUBLIC_URL'; do sleep 3; d
       || echo "    warn: codegraph tree pass failed (deploy is fine)"
   fi
 else
-  echo "==> ERROR: $PUBLIC_URL did not return 200 within 90s. Service state:" >&2
+  echo "==> ERROR: $PUBLIC_URL did not serve candidate sha $SHA with a healthy root within 90s. Service state:" >&2
   systemctl is-active "$SERVICE" >&2 || true
   sudo journalctl -u "$SERVICE" --no-pager -n 30 >&2
-  echo "==> Rollback: point build/ back at the previous release and restart:" >&2
-  echo "    ln -sfn releases/${PREV_SHA:-<sha>} $VPS_DIR/build.tmp && mv -Tf $VPS_DIR/build.tmp $VPS_DIR/build && sudo systemctl restart $SERVICE" >&2
+  rollback_web_release || true
   exit 1
 fi
 

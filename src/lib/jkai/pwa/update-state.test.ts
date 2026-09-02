@@ -6,6 +6,7 @@ afterEach(() => {
   appUpdate.installing = false;
   appUpdate.nextVersion = null;
   appUpdate.apply = null;
+  appUpdate.error = null;
 });
 
 describe('PWA update state', () => {
@@ -18,5 +19,18 @@ describe('PWA update state', () => {
 
     await applyAppUpdate();
     expect(apply).toHaveBeenCalledOnce();
+    expect(appUpdate.available).toBe(false);
+  });
+
+  it('keeps the update available and reports an apply failure', async () => {
+    offerAppUpdate(async () => {
+      throw new Error('worker activation timed out');
+    }, 'deadbeef');
+
+    await applyAppUpdate();
+
+    expect(appUpdate.available).toBe(true);
+    expect(appUpdate.installing).toBe(false);
+    expect(appUpdate.error).toBe('worker activation timed out');
   });
 });

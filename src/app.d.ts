@@ -4,6 +4,9 @@
 import type { Session } from '@auth/sveltekit';
 
 declare global {
+	/** Git tree baked into the client bundle by vite.config.ts. */
+	const __JKAI_BUILD_ID__: string;
+
 	namespace App {
 		// interface Error {}
 		interface Locals {

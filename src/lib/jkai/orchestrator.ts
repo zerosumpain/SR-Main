@@ -33,6 +33,23 @@ import type { BudgetConfig, FailureEnvelope } from './types';
 import { formatRescuePrBody } from './rescue-body';
 import { emitStage } from './stage-events';
 import { notifyAllSubscribers } from '$lib/server/push';
+import type {
+  RepoVerificationEvent,
+  RepoVerificationPhase,
+} from '$lib/verification/repo';
+
+async function emitRepoVerification(
+  buildId: string,
+  event: Omit<RepoVerificationEvent, 'version'>,
+  iterationId: string | null = null,
+): Promise<void> {
+  await emitLog(
+    buildId,
+    'verification',
+    JSON.stringify({ version: 1, ...event } satisfies RepoVerificationEvent),
+    iterationId,
+  );
+}
 
 /**
  * How often a running iteration stamps `jkai_builds.heartbeat_at`.
@@ -1431,7 +1448,14 @@ class Orchestrator {
       if (build.gitTargetConfig) {
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         const dev = `/home/jkai/workspace/${buildId}/dev`;
-        const runGate = async (cmd: string) => {
+        const runGate = async (cmd: string, phase: RepoVerificationPhase, label: string) => {
+          const started = Date.now();
+          await emitRepoVerification(buildId, {
+            phase,
+            label,
+            status: 'running',
+            command: cmd,
+          }, iteration.id);
           await emitLog(buildId, 'system', `Running gate: ${cmd} ...`, iteration.id);
           // NO_COLOR/FORCE_COLOR: vitest colours its output even through a
           // pipe, and the escapes cost budget in a 2,000-character diagnostic
@@ -1441,7 +1465,16 @@ class Orchestrator {
             `cd ${dev} && NO_COLOR=1 FORCE_COLOR=0 ${cmd} 2>&1`,
             1_200_000,
           );
-          return { out: (g.stdout + '\n' + g.stderr).trim(), passed: g.exitCode === 0 };
+          const passed = g.exitCode === 0;
+          await emitRepoVerification(buildId, {
+            phase,
+            label,
+            status: passed ? 'passed' : 'failed',
+            command: cmd,
+            durationMs: Date.now() - started,
+            detail: passed ? 'Command exited 0.' : `Command exited ${g.exitCode}.`,
+          }, iteration.id);
+          return { out: (g.stdout + '\n' + g.stderr).trim(), passed };
         };
 
         // Re-proving a tree nobody touched is the single largest piece of dead
@@ -1459,6 +1492,31 @@ class Orchestrator {
 
         if (fingerprint && cached && cached.buildId === buildId && cached.fingerprint === fingerprint) {
           gate = { out: cached.out, passed: cached.passed, command: cached.command };
+          const finalCommand = build.gitTargetConfig.finalGateCommand;
+          if (finalCommand && cached.command === finalCommand) {
+            await emitRepoVerification(buildId, {
+              phase: 'feedback_gate',
+              label: 'Structural checks, typecheck and tests',
+              status: 'reused_passed',
+              command: build.gitTargetConfig.gateCommand,
+              detail: 'Workspace fingerprint is unchanged; reusing the previous passing result.',
+            }, iteration.id);
+            await emitRepoVerification(buildId, {
+              phase: 'release_candidate',
+              label: 'Production web and sidecar bundles',
+              status: cached.passed ? 'reused_passed' : 'reused_failed',
+              command: finalCommand,
+              detail: `Workspace fingerprint is unchanged; reusing the previous ${cached.passed ? 'passing' : 'failing'} result.`,
+            }, iteration.id);
+          } else {
+            await emitRepoVerification(buildId, {
+              phase: 'feedback_gate',
+              label: 'Structural checks, typecheck and tests',
+              status: cached.passed ? 'reused_passed' : 'reused_failed',
+              command: build.gitTargetConfig.gateCommand,
+              detail: `Workspace fingerprint is unchanged; reusing the previous ${cached.passed ? 'passing' : 'failing'} result.`,
+            }, iteration.id);
+          }
           await emitLog(
             buildId,
             'system',
@@ -1715,7 +1773,14 @@ class Orchestrator {
       if (build.gitTargetConfig) {
         if (testResult.passed) {
           await emitLog(buildId, 'system', 'Gate passed — publishing via GitHub PR (no auto-merge; human review required).', iteration.id);
-          let prUrl: string | null = null;
+          await emitRepoVerification(buildId, {
+            phase: 'publish',
+            label: 'Publish candidate',
+            status: 'running',
+            detail: 'Committing the verified tree, pushing its branch and opening a PR.',
+          }, iteration.id);
+          let publishedRef: string | null = null;
+          let openedPr = false;
           try {
             const summary = (build.title || result.goals || build.prompt || 'autonomous changes').slice(0, 120);
             const prBody = [
@@ -1736,8 +1801,15 @@ class Orchestrator {
               summary,
               body: prBody,
             });
-            prUrl = published?.prUrl ?? published?.branchRef ?? null;
+            openedPr = Boolean(published?.prUrl);
+            publishedRef = published?.prUrl ?? published?.branchRef ?? null;
           } catch (err: any) {
+            await emitRepoVerification(buildId, {
+              phase: 'publish',
+              label: 'Publish candidate',
+              status: 'failed',
+              detail: err.message,
+            }, iteration.id);
             // Publish failed (push/PR error). Don't silently complete — surface
             // it and keep the build available for retry via the normal failure
             // path. The branch may already be pushed; the human can inspect.
@@ -1748,55 +1820,74 @@ class Orchestrator {
             });
             return;
           }
+          await emitRepoVerification(buildId, {
+            phase: 'publish',
+            label: 'Publish candidate',
+            status: 'passed',
+            detail: openedPr
+              ? `Pull request opened: ${publishedRef}`
+              : publishedRef
+                ? `Verified branch pushed: ${publishedRef}`
+                : 'The verified tree contained no changes to publish.',
+          }, iteration.id);
+          if (openedPr) {
+            await emitRepoVerification(buildId, {
+              phase: 'ci',
+              label: 'GitHub CI and review',
+              status: 'pending',
+              detail: 'The builder has opened the PR but has not received an authoritative CI or merge callback.',
+            }, iteration.id);
+            await emitRepoVerification(buildId, {
+              phase: 'deploy',
+              label: 'Production deployment',
+              status: 'pending',
+              detail: 'Not verified: opening a PR does not prove that its commit is serving in production.',
+            }, iteration.id);
+          }
           await db
             .update(jkaiBuilds)
             .set({
               status: 'completed',
-              outcome: 'delivered',
-              publishedSlug: prUrl,
+              outcome: openedPr ? 'pr_open' : 'delivered',
+              publishedSlug: publishedRef,
               updatedAt: new Date(),
             })
             .where(eq(jkaiBuilds.id, buildId));
 
-          // Resolve any codegraph serve that is still open.
-          //
-          // Feedback otherwise runs ONLY at the start of the next iteration,
-          // and a build that gets it right first time has no next iteration —
-          // so its serve stayed unresolved forever and the evidence never
-          // accrued. The loop could learn from builds that struggled but not
-          // from ones that went well, which is backwards: a first-time pass is
-          // the strongest possible evidence that what was served was right.
-          //
-          // Found by running a real build (e71e7b33): the push served 4,987
-          // characters, the build completed in one iteration with a green gate
-          // and an open PR, and helpful/unhelpful both stayed at 0.
-          //
-          // Only on the SUCCESS path, deliberately. A failed build is not
-          // evidence against what it was served — it fails for provider errors,
-          // token caps and stalls far more often than for bad context — and
-          // counting those as `unhelpful` would punish good intelligence for
-          // unrelated infrastructure faults.
+          // Resolve codegraph evidence only when this process actually reached
+          // its terminal delivery. An open PR is a proposed candidate: CI,
+          // review, merge and the exact production SHA remain unproved, so
+          // treating it as successful feedback would train on an unknown result.
           try {
-            const { resolveCompletedBuildServes } = await import('$lib/codegraph/feedback');
-            const r = await resolveCompletedBuildServes(buildId);
-            if (r.resolved > 0) {
+            if (openedPr) {
               await emitLog(
                 buildId,
                 'system',
-                `Codegraph feedback: ${r.resolved} serve(s) resolved as helpful on first-pass completion — ${r.lessons} lesson(s), ${r.episodes} episode(s)`,
+                'Codegraph feedback deferred — a green local candidate and open PR are not yet evidence that the change deployed successfully.',
                 iteration.id,
               );
+            } else {
+              const { resolveCompletedBuildServes } = await import('$lib/codegraph/feedback');
+              const r = await resolveCompletedBuildServes(buildId);
+              if (r.resolved > 0) {
+                await emitLog(
+                  buildId,
+                  'system',
+                  `Codegraph feedback: ${r.resolved} serve(s) resolved as helpful on first-pass completion — ${r.lessons} lesson(s), ${r.episodes} episode(s)`,
+                  iteration.id,
+                );
+              }
             }
           } catch {
             // Never let bookkeeping fail a build that has already succeeded.
           }
 
-          await emitLog(buildId, 'system', prUrl ? `Build complete — PR: ${prUrl}` : 'Build complete — no changes to publish.', iteration.id);
-          await emitStage(buildId, { stage: 'completed', message: prUrl ?? undefined } as any);
+          await emitLog(buildId, 'system', openedPr ? `Candidate complete — PR opened: ${publishedRef}. CI, merge and production verification remain pending.` : publishedRef ? `Candidate complete — branch pushed: ${publishedRef}.` : 'Build complete — no changes to publish.', iteration.id);
+          await emitStage(buildId, { stage: 'completed', message: publishedRef ?? undefined } as any);
           try {
             await notifyAllSubscribers({
               title: 'Forge PR ready',
-              body: prUrl ? prUrl : (build.title ?? 'Forge build finished'),
+              body: publishedRef ? publishedRef : (build.title ?? 'Forge build finished'),
               url: `/jkai/builds/${buildId}`,
             });
           } catch (e) {
@@ -2001,12 +2092,24 @@ class Orchestrator {
    * build. See `finalGateCommand` in git-targets.ts for the split.
    */
   private async runGateChain(
-    runGate: (cmd: string) => Promise<{ out: string; passed: boolean }>,
+    runGate: (
+      cmd: string,
+      phase: RepoVerificationPhase,
+      label: string,
+    ) => Promise<{ out: string; passed: boolean }>,
     cfg: { gateCommand: string; finalGateCommand?: string },
   ): Promise<{ out: string; passed: boolean; command: string }> {
-    const gate = await runGate(cfg.gateCommand);
+    const gate = await runGate(
+      cfg.gateCommand,
+      'feedback_gate',
+      'Structural checks, typecheck and tests',
+    );
     if (gate.passed && cfg.finalGateCommand) {
-      const finalGate = await runGate(cfg.finalGateCommand);
+      const finalGate = await runGate(
+        cfg.finalGateCommand,
+        'release_candidate',
+        'Production web and sidecar bundles',
+      );
       return { ...finalGate, command: cfg.finalGateCommand };
     }
     return { ...gate, command: cfg.gateCommand };

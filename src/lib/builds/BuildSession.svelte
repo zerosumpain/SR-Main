@@ -31,10 +31,13 @@
   import IterationInspector from './IterationInspector.svelte';
   import BuildControls from './BuildControls.svelte';
   import BuildBlueprint from './BuildBlueprint.svelte';
+  import RepoVerificationPanel from './RepoVerificationPanel.svelte';
   import IterApproval from './IterApproval.svelte';
   import { buildCockpitMetrics } from './cockpit-metrics';
   import type { ChapterPlanEntry } from './settings';
   import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
+  import { bucketLabel, bucketOf, outcomeNote } from './build-status';
+  import type { RepoVerificationPhase } from '$lib/verification/repo';
 
   interface PageData {
     build: JkaiBuild;
@@ -68,10 +71,12 @@
   );
 
   let livePreviewUrl = $state<string | null>(null);
+  const published = $derived(publishedLink(build.publishedSlug));
   const previewLink = $derived(
-    publishedLink(build.publishedSlug)?.href
+    published?.href
       ?? ((build.serveConfig || livePreviewUrl) ? `/api/jkai/proxy/${build.id}/` : null),
   );
+  const previewIsPr = $derived(published?.external === true && !!build.gitTargetConfig);
 
   // Elapsed timer.
   let nowMs = $state(Date.now());
@@ -87,11 +92,17 @@
     return `${Math.floor(m / 60)}h ${m % 60}m`;
   }
   const iterationCount = $derived(iterations.filter((i) => i.number > 0).length);
+  const buildBucket = $derived(bucketOf({
+    status: build.status,
+    planStatus: build.planStatus,
+    outcome: build.outcome,
+  }));
 
   // --- Panes -----------------------------------------------------------
-  type Tab = 'stream' | 'iterations' | 'instruments' | 'controls' | 'blueprint';
+  type Tab = 'stream' | 'verification' | 'iterations' | 'instruments' | 'controls' | 'blueprint';
   const TABS: Array<{ key: Tab; label: string }> = [
     { key: 'stream', label: 'Stream' },
+    { key: 'verification', label: 'Verification' },
     { key: 'iterations', label: 'Iterations' },
     { key: 'instruments', label: 'Instruments' },
     { key: 'controls', label: 'Controls' },
@@ -117,6 +128,15 @@
     toolsets: Array<{ toolset: string; description: string; toolCount: number }>;
     lint: { enabled: boolean; svelteOnly: boolean; rules: Array<{ rule: string; summary: string; detail: string }>; exemptMounts: string[] };
     gate: { applies: boolean; chapterCount: number; hasPort: boolean; checks: Array<{ rule: string; scope: string; summary: string }> };
+    verification: {
+      applies: boolean;
+      steps: Array<{
+        phase: RepoVerificationPhase;
+        label: string;
+        command: string | null;
+        owner: 'builder' | 'github' | 'production';
+      }>;
+    };
     sidecar: { name: string; socket: string; up: boolean; detail: string };
   }
   let config = $state<BuildConfig | null>(null);
@@ -153,7 +173,7 @@
 
   function selectTab(next: Tab): void {
     tab = next;
-    if (next === 'controls' || next === 'blueprint') void loadConfig();
+    if (next === 'verification' || next === 'controls' || next === 'blueprint') void loadConfig();
     if (next === 'stream') {
       // Re-arm the follow. Leaving the tab unmounts the scroller, so `onScroll`
       // cannot run and `stickToBottom` keeps whatever it held when the user last
@@ -374,7 +394,7 @@
       const saved = sessionStorage.getItem(`jkai:buildtab:${build.id}`) as Tab | null;
       if (saved && TABS.some((t) => t.key === saved)) {
         tab = saved;
-        if (saved === 'controls' || saved === 'blueprint') void loadConfig();
+        if (saved === 'verification' || saved === 'controls' || saved === 'blueprint') void loadConfig();
       }
     } catch {
       /* private mode */
@@ -434,12 +454,18 @@
   <!-- Status rail — always visible, never scrolls away. -->
   <header class="bs-rail">
     <a class="bs-back" href="/jkai/builds" title="All builds">←</a>
-    <span class="bs-pill" data-status={build.status}>{build.status}</span>
+    <span class="bs-pill" data-status={buildBucket} title={outcomeNote(buildBucket) ?? ''}>{bucketLabel(buildBucket)}</span>
     <h1 class="bs-title">{build.title ?? build.prompt.slice(0, 60)}</h1>
     <span class="bs-meta bs-meta-iter">iter {iterationCount}</span>
     <span class="bs-meta bs-elapsed" class:running={!isTerminal}>{fmt(elapsedMs)}</span>
     {#if previewLink}
-      <a class="bs-open" href={previewLink} target="_blank" rel="noreferrer" title="Open the running app">↗ app</a>
+      <a
+        class="bs-open"
+        href={previewLink}
+        target="_blank"
+        rel="noreferrer"
+        title={previewIsPr ? 'Open the pull request' : 'Open the running app'}
+      >↗ {previewIsPr ? 'PR' : 'app'}</a>
     {/if}
     <span class="bs-actions">
       {#if build.status === 'running'}
@@ -532,6 +558,19 @@
     <div class="bs-pane">
       {#if tab === 'iterations'}
         <IterationInspector {iterations} buildPrompt={build?.prompt ?? null} />
+      {:else if tab === 'verification'}
+        {#if build.gitTargetConfig}
+          <RepoVerificationPanel
+            logs={lines}
+            outcome={build.outcome}
+            publishedSlug={build.publishedSlug}
+            config={config?.verification ?? null}
+            loading={configLoading}
+            error={configError}
+          />
+        {:else}
+          <p class="bs-empty">Verification chain is available for repository builds. App and Studio builds use their live preview and Studio gate.</p>
+        {/if}
       {:else if tab === 'instruments'}
         {#if cockpitMetrics}
           <BuildCockpit metrics={cockpitMetrics} />
@@ -631,6 +670,8 @@
   }
   .bs-pill[data-status='running'] { color: var(--accent); }
   .bs-pill[data-status='completed'] { color: var(--status-success, #10b981); }
+  .bs-pill[data-status='delivered'] { color: var(--status-success, #10b981); }
+  .bs-pill[data-status='proposed'] { color: var(--accent); }
   .bs-pill[data-status='failed'] { color: var(--status-error, #c0392b); }
   .bs-title {
     font-family: var(--font-display);

@@ -65,6 +65,7 @@
   } = $props();
 
   const isStudio = $derived(build.origin === 'studio');
+  const isRepo = $derived(config?.mode === 'repo');
 
   type StageState = 'done' | 'active' | 'pending' | 'skipped' | 'blocked';
 
@@ -134,9 +135,11 @@
 
     out.push({
       key: 'publish',
-      label: 'Publish',
+      label: isRepo ? 'PR proposal' : 'Publish',
       detail: publishedLink(build.publishedSlug)
-        ? `live at ${publishedLink(build.publishedSlug)!.href}`
+        ? isRepo
+          ? `candidate at ${publishedLink(build.publishedSlug)!.href}; CI, merge and production are not proved here`
+          : `live at ${publishedLink(build.publishedSlug)!.href}`
         : build.publishedSlug
           ? `pushed as ${build.publishedSlug}`
           : build.serveConfig

@@ -32,8 +32,9 @@ describe("bucketOf", () => {
     expect(bucketOf(b({ status: "cancelled" }))).toBe("stopped");
   });
 
-  it("splits the four things `completed` was being used to mean", () => {
+  it("splits the things `completed` is used to mean", () => {
     expect(bucketOf(b({ outcome: "delivered" }))).toBe("delivered");
+    expect(bucketOf(b({ outcome: "pr_open" }))).toBe("proposed");
     expect(bucketOf(b({ outcome: "budget_cap" }))).toBe("capped");
     expect(bucketOf(b({ outcome: "stopped_by_user" }))).toBe("stopped");
     expect(bucketOf(b({ outcome: "registered" }))).toBe("registered");
@@ -75,6 +76,7 @@ describe("bucketOf", () => {
 describe("isDelivered", () => {
   it("is true only for the bucket that means the work was produced", () => {
     expect(isDelivered(b({ outcome: "delivered" }))).toBe(true);
+    expect(isDelivered(b({ outcome: "pr_open" }))).toBe(false);
     expect(isDelivered(b({ outcome: "budget_cap" }))).toBe(false);
     expect(isDelivered(b({ status: "cancelled" }))).toBe(false);
     expect(isDelivered(b({ status: "nonsense" }))).toBe(false);
@@ -82,8 +84,9 @@ describe("isDelivered", () => {
 });
 
 describe("isBuildOutcome", () => {
-  it("accepts only the four written values", () => {
+  it("accepts only the written values", () => {
     expect(isBuildOutcome("delivered")).toBe(true);
+    expect(isBuildOutcome("pr_open")).toBe(true);
     expect(isBuildOutcome("budget_cap")).toBe(true);
     expect(isBuildOutcome("stopped_by_user")).toBe(true);
     expect(isBuildOutcome("registered")).toBe(true);
@@ -110,6 +113,7 @@ describe("labels", () => {
 
   it("explains only the endings that need explaining", () => {
     expect(outcomeNote("delivered")).toBe(null);
+    expect(outcomeNote("proposed")).toMatch(/not yet verified/i);
     expect(outcomeNote("running")).toBe(null);
     expect(outcomeNote("capped")).toMatch(/budget/i);
     expect(outcomeNote("registered")).toMatch(/never ran/i);

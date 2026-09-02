@@ -66,22 +66,19 @@ export const SR_MAIN_GIT_TARGET = {
   // touched. CI never sees it (2 cores, one worker), which is exactly why it
   // has to be pinned here rather than in the shared script's defaults.
   gateCommand:
-    'npm run gate:public-routes && npm run gate:font-sizes && GATE_TEST_MAX_WORKERS=3 ./scripts/gate-concurrent.sh',
+    './scripts/gate-structural.sh && GATE_TEST_MAX_WORKERS=3 ./scripts/gate-concurrent.sh',
   // What the per-iteration gate no longer proves, proved once before the PR.
   //
-  // `build:builder` is here because this target can reach the agent's OWN
-  // harness. There is no path allowlist on a repo build — the clone is the whole
-  // repo — so a build may edit `packages/jkai-builder/**`, and until this line
-  // nothing in the chain ever ran `node packages/jkai-builder/build.mjs`. A
-  // change that broke the sidecar bundle would pass `gate:build` (which is a
-  // vite build of the SITE, a different bundle entirely), open a green PR, and
-  // only fail when `ci-stage-builder.sh` tried to stage it — or worse, stage a
-  // bundle that builds but is wrong.
+  // `build:release-sidecars` is here because this target can reach the agent's
+  // own harness and both integration workers. There is no path allowlist on a
+  // repo build — the clone is the whole repo — so a build may edit any of those
+  // packages. `gate:build` only proves the site bundle; without this command a
+  // broken sidecar could open a green PR and fail only while staging a release.
   //
   // It runs in the FINAL gate rather than per iteration for the same reason
   // `gate:build` does: it is expensive and re-proving it on an iteration that
   // only touched a test buys nothing.
-  finalGateCommand: 'npm run gate:build && npm run build:builder',
+  finalGateCommand: 'npm run gate:build && npm run build:release-sidecars',
   openPr: true,
   prTitlePrefix: 'Agent: ',
 } as const satisfies GitTargetConfig;

@@ -434,11 +434,12 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
   );
 
   // `--include=dev` is required: the builder runs under NODE_ENV=production,
-  // which makes a plain `npm install` skip devDependencies → the gate's
-  // `vite build` would fail (exit 127, vite missing). The gate needs devDeps.
-  const installRes = await execInSandbox(`cd ${dev} && npm install --include=dev 2>&1 | tail -5`, 300000);
+  // which makes a plain install skip devDependencies → the gate's `vite build`
+  // would fail (exit 127, vite missing). Use `ci`, not `install`, so the exact
+  // lockfile graph proved by GitHub is also the graph proved in the workspace.
+  const installRes = await execInSandbox(`cd ${dev} && npm ci --include=dev 2>&1 | tail -5`, 300000);
   if (installRes.exitCode !== 0) {
-    throw new Error(`npm install failed in git workspace: ${installRes.stdout}\n${installRes.stderr}`.slice(0, 2000));
+    throw new Error(`npm ci failed in git workspace: ${installRes.stdout}\n${installRes.stderr}`.slice(0, 2000));
   }
 
   await writeGateEnv(buildId, dev);

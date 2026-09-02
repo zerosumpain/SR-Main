@@ -17,10 +17,10 @@
  *    success rate and dragged the median toward zero. Rates here are over
  *    builds that actually ran.
  *
- * A third trap, fixed later: `completed` is claimed by four different endings.
- * Only `delivered` means the builder produced the thing that was asked for —
- * budget cap-outs, hand-kills and chat registrations all filed the same word.
- * Rates here are over deliveries, which is why the headline moved 61% → 43%.
+ * A third trap, fixed later: `completed` is claimed by materially different
+ * endings. Only `delivered` means the builder produced the thing that was asked
+ * for — an open PR is still a proposal, and budget cap-outs, hand-kills and chat
+ * registrations are not deliveries either. Rates here are over deliveries.
  *
  * Imports nothing but its sibling pure module: it is unit-tested, and anything
  * reaching `$lib/workflows` boots WhatsApp for real under vitest.
@@ -51,6 +51,8 @@ export interface LaneStat {
   completed: number;
   /** Ended as `completed` AND actually produced the work. The honest numerator. */
   delivered: number;
+  /** Repo candidate proposed in a PR, not yet known here to be deployed. */
+  proposed: number;
   failed: number;
   /** Ran out of budget and filed `completed`. */
   capped: number;
@@ -106,6 +108,7 @@ export function laneStats(builds: LaneInput[]): LaneStat[] {
       ran: ran.length,
       completed: completed.length,
       delivered: delivered.length,
+      proposed: inBucket("proposed").length,
       failed: failed.length,
       capped: inBucket("capped").length,
       stopped: inBucket("stopped").length,
