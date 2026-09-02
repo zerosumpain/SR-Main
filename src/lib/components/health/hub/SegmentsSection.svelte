@@ -11,22 +11,35 @@
   // ground covered twice.
   import type { SegmentChain } from '$lib/trails/highlights-service';
   import SectionHead from './SectionHead.svelte';
-  import type { SegmentForms } from './types';
+  import type { HealthAudience, SegmentForms } from './types';
   import { duration, shortDate } from './format';
 
   interface Props {
     segmentForms: SegmentForms | null;
     totals: { segments: number; efforts: number } | null;
     chains: SegmentChain[];
+    /**
+     * The four tiles are counts over the whole corpus and name nothing, so they
+     * are the same document for everybody. The gettable board and the chain
+     * tile are not: both print segment names, and a board row deep-links
+     * `/health/segments/{id}`. On `public` the loader has already stripped
+     * them, so this only decides what is said in their place — which matters,
+     * because the empty-board copy below reads "nothing clears all four today"
+     * and that would be a claim rather than a withholding.
+     */
+    audience?: HealthAudience;
   }
 
-  let { segmentForms, totals, chains }: Props = $props();
+  let { segmentForms, totals, chains, audience = 'owner' }: Props = $props();
 
+  const owner = $derived(audience === 'owner');
   const corpus = $derived(totals?.segments ?? segmentForms?.taxonomy.total ?? 0);
   const kicker = $derived(
     totals
       ? `F / Segments · ${totals.segments} in the corpus · ${totals.efforts} efforts`
-      : 'F / Segments',
+      : corpus
+        ? `F / Segments · ${corpus} in the corpus`
+        : 'F / Segments',
   );
 
   interface Tile {
@@ -100,7 +113,11 @@
         <p class="f-board-lede">
           Ranked by one composite instead of by name:
           <span class="f-strong">improving direction, gap under 3%, an old PB, six or more efforts.</span>
-          {#if board.length}
+          {#if !owner}
+            The board itself is the one thing on this page that names ground, so it is withheld
+            here rather than shown empty — the four counts above are the same corpus it is drawn
+            from, and the rules it applies are the three below.
+          {:else if board.length}
             That is {board.length} segment{board.length === 1 ? '' : 's'} where a PB is a realistic
             afternoon rather than a fantasy — and it is exactly the list that makes the hard-effort
             move measurable.
@@ -125,7 +142,7 @@
           </div>
         </div>
 
-        {#if board.length}
+        {#if owner && board.length}
           <div class="f-list">
             <p class="f-list-label">In range now</p>
             {#each board.slice(0, 5) as row (row.id)}
@@ -160,7 +177,13 @@
 
         <div class="f-chain-tile">
           <p class="f-def-label">Most-taken chain</p>
-          {#if topChain}
+          {#if !owner}
+            <!-- A chain is two named stretches and the order they were taken in,
+                 which is a route. Saying so beats printing the no-data line,
+                 which would be a claim about the corpus rather than about what
+                 this copy of the page carries. -->
+            <p class="f-chain-meta">Named ground · owner's copy only.</p>
+          {:else if topChain}
             <p class="f-chain-name">{topChain.firstName} → {topChain.secondName}</p>
             <p class="f-chain-meta">
               {topChain.occurrences} times · best {duration(topChain.bestElapsedS)} · last {shortDate(

@@ -54,6 +54,13 @@
      * the grain rather than under it.
      */
     actions?: Snippet;
+    /**
+     * A control in the footer strip, beside the mono lines — the anonymous
+     * /health's "how these numbers are computed" button. It sits here rather
+     * than in `footer`, which is plain text by design, and it is the only
+     * interactive thing below the fold on that page.
+     */
+    footerAction?: Snippet;
     children: Snippet;
   }
 
@@ -68,6 +75,7 @@
     note = null,
     footer = [],
     actions = undefined,
+    footerAction = undefined,
     children,
   }: Props = $props();
 </script>
@@ -105,7 +113,7 @@
     {@render children()}
   </main>
 
-  {#if note || footer.length}
+  {#if note || footer.length || footerAction}
     <footer class="hs-foot">
       <div class="hs-foot-inner">
         {#if note}<p class="hs-note">{note}</p>{/if}
@@ -114,12 +122,19 @@
             {#each footer as line, i (i)}<p>{line}</p>{/each}
           </div>
         {/if}
+        {#if footerAction}
+          <div class="hs-foot-action">{@render footerAction()}</div>
+        {/if}
       </div>
     </footer>
   {/if}
 </div>
 
 <style>
+  .hs-foot-action {
+    margin-top: 14px;
+  }
+
   .hs {
     width: 100%;
     background: var(--bg);

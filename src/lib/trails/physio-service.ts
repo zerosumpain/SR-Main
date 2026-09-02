@@ -182,7 +182,35 @@ export async function resolveHrProfile(): Promise<HrProfile & { hrMaxSource: str
 // ---------------------------------------------------------------------------
 // Dashboard
 
-export async function getTrailsDashboard(): Promise<TrailsDashboard> {
+/**
+ * The whole physio suite is six queries over 180 days of readings and 90 days
+ * of activities, and from 2026-09-02 it runs for ANONYMOUS visitors too — the
+ * public /health reads the same sections A–E that the owner's does. That put an
+ * unauthenticated, crawler-visible page in front of the most expensive read on
+ * the site, so a short memo collapses a burst into one pass.
+ *
+ * Sixty seconds, on a bare clock rather than on a corpus fingerprint: unlike
+ * `listSegments`, nothing here is invalidated by an ingest in a way a reader
+ * would notice, and the sources behind it sync on the order of minutes. It is
+ * deliberately short enough that the owner's own reload is never looking at a
+ * different number from the one a recalculation would produce.
+ */
+const DASHBOARD_TTL_MS = 60 * 1000;
+let dashboardMemo: { at: number; value: Promise<TrailsDashboard> } | null = null;
+
+export function getTrailsDashboard(): Promise<TrailsDashboard> {
+  if (dashboardMemo && Date.now() - dashboardMemo.at < DASHBOARD_TTL_MS) return dashboardMemo.value;
+  const value = loadTrailsDashboard();
+  dashboardMemo = { at: Date.now(), value };
+  // A failed read must not be remembered as the answer for the next minute —
+  // the same rule the segment corpus memos follow.
+  value.catch(() => {
+    if (dashboardMemo?.value === value) dashboardMemo = null;
+  });
+  return value;
+}
+
+async function loadTrailsDashboard(): Promise<TrailsDashboard> {
   // The profile queries are independent of the batch below — run everything
   // in one round trip's worth of wall clock.
   const [profile, vo2, whoopDaily, sdnnDaily, activityRows, strainAcwr] = await Promise.all([

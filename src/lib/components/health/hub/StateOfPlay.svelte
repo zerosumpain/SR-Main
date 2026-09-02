@@ -14,7 +14,7 @@
   // dash, never as a resting heart rate of nought.
   import type { HealthDay } from '$lib/health/series-30d-service';
   import type { ReadinessResponse } from '$lib/health/types';
-  import type { TrailsDashboard } from '$lib/trails/physio-service';
+  import type { DashboardRead } from './types';
   import type { MetricResult } from '$lib/health/analytics/types';
   import type { ACWRResult } from '$lib/health/analytics/acwr';
   import type { VO2Result } from '$lib/health/analytics/vo2max-percentile';
@@ -31,7 +31,7 @@
     todayDeltas: { recDelta: number; hrvDeltaPct: number; rhrDelta: number; sleepDelta: number } | null;
     syncedAgoSeconds: number;
     readiness: ReadinessResponse | null;
-    dashboard: TrailsDashboard | null;
+    dashboard: DashboardRead | null;
     vo2max: MetricResult<VO2Result> | null;
     acwr: MetricResult<ACWRResult> | null;
     volume: WeeklyVolumeRead | null;

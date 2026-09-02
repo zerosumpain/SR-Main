@@ -47,6 +47,10 @@ function ownerData(over: Partial<OwnerHealthData> = {}): OwnerHealthData {
 
 const html = (data: OwnerHealthData) => render(HealthDashboard, { props: { data } }).body;
 
+/** The same document as an anonymous visitor gets it: sections A–F, H, I. */
+const publicHtml = (data: OwnerHealthData) =>
+  render(HealthDashboard, { props: { data, audience: 'public' } }).body;
+
 describe('HealthDashboard — refresh flag', () => {
   it('shows when this dashboard payload was assembled in the footer', () => {
     const body = html(ownerData());
@@ -96,5 +100,113 @@ describe('HealthDashboard — mock-series provenance', () => {
     const firstSection = body.indexOf('State of play');
     expect(banner).toBeGreaterThan(-1);
     if (firstSection > -1) expect(banner).toBeLessThan(firstSection);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The public audience — 2026-09-02.
+//
+// The loader has already withheld the data behind sections F and G, so these
+// assertions are about the half a payload cannot reach: the header nav into
+// owner-gated children, and the FIXED editorial copy inside RoutesPlan, which
+// names real trail corridors near home and would have rendered in full behind a
+// null `coach`.
+
+/** Every place name hardcoded into `RoutesPlan.svelte`'s four route cards. */
+const HOME_GROUND = ['Darlington', 'Teesdale', 'Tees riverside', 'North York Moors', 'Cleveland Way'];
+
+describe('HealthDashboard — the public audience', () => {
+  it('does not render section G, or any of the ground it names', () => {
+    const body = publicHtml(ownerData());
+    for (const place of HOME_GROUND) {
+      expect(body).not.toContain(place);
+    }
+    expect(body).not.toContain('Routes &amp; plan');
+    expect(body).not.toContain('discovery radius');
+  });
+
+  it('still renders section G for the owner — this is a split, not a deletion', () => {
+    const body = html(ownerData());
+    expect(body).toContain('Darlington');
+  });
+
+  it('offers no way into the owner-only children', () => {
+    const body = publicHtml(ownerData());
+    for (const child of [
+      '/health/activities',
+      '/health/segments',
+      '/health/plan',
+      '/health/routes',
+      '/health/record',
+    ]) {
+      expect(body).not.toContain(`href="${child}"`);
+    }
+  });
+
+  it('keeps the nav for the owner', () => {
+    expect(html(ownerData())).toContain('href="/health/activities"');
+  });
+
+  it('closes the section lettering up rather than leaving a hole where G was', () => {
+    const body = publicHtml(
+      ownerData({
+        experiments: [
+          {
+            id: 'sleep-window',
+            code: 'X1',
+            state: 'LIVE',
+            title: 'Fixed wake time',
+            hypothesis: 'A fixed wake time lifts the regularity index.',
+            change: 'Wake at 06:30 daily.',
+            measure: 'SRI over 21 days.',
+            horizon: '21 days',
+            entry: null,
+          },
+        ] as unknown as OwnerHealthData['experiments'],
+        verdict: {
+          headline: ['HOLDING', 'sleep is the lever'],
+          body: ['One paragraph.'],
+          pullQuoteLabel: 'The one thing',
+          pullQuote: 'Hold the window.',
+          pullQuoteFollow: 'Everything else follows it.',
+          reviews: [],
+        },
+      }),
+    );
+    expect(body).toContain('G / Experiments');
+    expect(body).toContain('H / The verdict');
+    expect(body).not.toContain('H / Experiments');
+    expect(body).not.toContain('I / The verdict');
+  });
+
+  it('says how far the document runs, in the kicker and in the footer', () => {
+    const body = publicHtml(ownerData());
+    expect(body).toContain('sections A–H');
+    expect(body).not.toContain('sections A–I');
+    expect(body).toContain('routes and locations withheld');
+  });
+
+  it('carries the methodology drawer, which is the one thing kept from the old page', () => {
+    expect(publicHtml(ownerData())).toContain('How these numbers are computed');
+    // The owner reaches methodology from the activity pages; adding a second
+    // entry point here would have changed a surface this work did not touch.
+    expect(html(ownerData())).not.toContain('How these numbers are computed');
+  });
+
+  it('withholds the gettable board rather than claiming there is nothing on it', () => {
+    const forms = {
+      gettable: 2,
+      improving: 9,
+      withForm: 61,
+      nearest: null,
+      taxonomy: { improving: 9, holding: 22, slipping: 30, noRead: 326, total: 387 },
+      board: [],
+    };
+    const body = publicHtml(ownerData({ segmentForms: forms }));
+    // The four counts are the same document for everybody.
+    expect(body).toContain('387');
+    expect(body).toContain('so it is withheld');
+    // The empty-board copy is a claim about the corpus, and it would be false.
+    expect(body).not.toContain('Nothing clears all four today');
   });
 });

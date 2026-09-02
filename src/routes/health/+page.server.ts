@@ -1,8 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
-import { disclosureLeaks, pickPublic } from '$lib/health/public-payload';
+import {
+  disclosureLeaks,
+  pickPublic,
+  publicDashboard,
+  publicSegmentForms,
+} from '$lib/health/public-payload';
 import { getHealthSeries30d } from '$lib/health/series-30d-service';
-import { getFeaturedActivities } from '$lib/health/featured-activities-service';
 import { getReadiness } from '$lib/health/readiness-service';
 import { getTrainingLoad } from '$lib/health/training-load-service';
 import { getMonotony } from '$lib/health/services/monotony-service';
@@ -38,8 +42,25 @@ import { computeVerdict } from '$lib/health/verdict';
 // The split is enforced HERE, in the payload, not in the template. An anonymous
 // visitor is never sent the owner data and then shown a different view of it:
 // a GPS trace starts at the front door, and `{#if owner}` still ships the bytes
-// to the browser. The two branches below have no overlap beyond the body
-// metrics that have always been public.
+// to the browser.
+//
+// 2026-09-02: the two audiences now read the SAME nine-section document, and
+// the split moved from "two pages" to "two payloads for one page, one section
+// shorter". The anonymous branch had been left byte-identical through three
+// redesigns and was visibly two generations behind. What still does not cross:
+//
+//   * anything that names GROUND — the coach's plan and its route cards, the
+//     segment corpus roster, the chains, the gettable board, and the "closest
+//     record is …" clause in the segment tripwire;
+//   * anything that names an OUTING — `dashboard.workouts` keeps only the day
+//     it fell on, because a Strava title is usually a place;
+//   * the three queries behind them. `getDailyPlan` in particular spends an
+//     openrouteservice call against a DAILY quota, and this is the page
+//     crawlers hit.
+//
+// Everything that does cross is an aggregate over time or a pure rule over one:
+// the eight instruments, the four forecasts, the moves, the tripwires, the
+// experiments and the verdict.
 //
 // /health is matched EXACTLY in hooks.server.ts, so /health/activities and the
 // rest of the hub's children go through the normal owner gate. `isOwnerRequest`
@@ -139,13 +160,12 @@ export const load: PageServerLoad = async (event) => {
   event.setHeaders({ Vary: 'Cookie' });
   if (owner) event.setHeaders({ 'Cache-Control': 'private, no-store' });
 
-  // getHealthSeries30d and getFeaturedActivities used to sit UNWRAPPED in this
-  // Promise.all, so a database hiccup in either 500'd the whole page while the
-  // ten analytics beside them degraded to a hidden section. They fail soft now
-  // too; the page renders its own empty state.
+  // getHealthSeries30d used to sit UNWRAPPED in this Promise.all, so a database
+  // hiccup in it 500'd the whole page while the ten analytics beside it
+  // degraded to a hidden section. It fails soft now too; the page renders its
+  // own empty state.
   const [
     data,
-    featuredActivities,
     readiness,
     trainingLoad,
     monotony,
@@ -158,10 +178,6 @@ export const load: PageServerLoad = async (event) => {
     stats,
   ] = await Promise.all([
     safe('series-30d', getHealthSeries30d()),
-    // Anonymous only. The hand-picked outings are the public landing's closing
-    // chapter and nothing the owner dashboard renders reads them, so an owner
-    // request paid for the query and shipped the rows for nothing.
-    owner ? Promise.resolve(null) : safe('featured-activities', getFeaturedActivities()),
     safe('readiness', getReadiness()),
     safe('training-load', getTrainingLoad()),
     safe('monotony', getMonotony()),
@@ -192,63 +208,50 @@ export const load: PageServerLoad = async (event) => {
     vo2max,
     sleepRegularity,
     stats,
-    featuredActivities: featuredActivities ?? [],
   };
 
-  if (!owner) {
-    // Everything an anonymous visitor gets — and nothing else, because it is
-    // built by PICKING from PUBLIC_FIELDS rather than by spreading. A field
-    // added to `shared` later is therefore absent from the anonymous payload by
-    // default, instead of present by accident.
-    //
-    // The correlations are deliberately not on that list: when nothing
-    // correlates the service substitutes four hard-coded example findings
-    // complete with r values and sample sizes, and a public page must not
-    // present an invented result as a measurement.
-    const publicPayload = pickPublic(shared);
-
-    // The second belt, and it is buckled: the allow-list decides which KEYS go
-    // out, this walks the VALUES that came back. It is a few hundred numbers,
-    // so it costs microseconds, and it never blocks the page — an anonymous
-    // visitor seeing an empty dashboard because a walker got clever is a worse
-    // outcome than a logged line. If this ever fires, it is a real leak and the
-    // log is where it will be noticed.
-    const leaks = disclosureLeaks(publicPayload);
-    if (leaks.length) {
-      console.error(
-        `[health] ANONYMOUS PAYLOAD DISCLOSURE — ${leaks.length} field(s): ${leaks.join(', ')}`,
-      );
-    }
-
-    return { mode: 'public' as const, ...publicPayload };
-  }
 
   // The dashboard is fetched FIRST and handed to the coach, which would
   // otherwise load the whole physio suite a second time inside the same
   // request. One extra round trip in sequence is cheaper than doing the
   // expensive half of this page twice.
+  //
+  // Both audiences need it: sections A, B and C are drawn from it. It carries a
+  // 60-second memo of its own (`physio-service`), which is what makes it
+  // affordable on a page an anonymous crawler can hit.
   const dashboard = await safe('trails-dashboard', getTrailsDashboard());
   const [segments, chains, coach, segmentRows] = await Promise.all([
-    safe('segment-highlights', getSegmentHighlights()),
+    // The three OWNER-ONLY reads. Each one exists to feed a section the
+    // anonymous document does not render, so skipping them is not an
+    // optimisation on top of the privacy split — it IS the privacy split,
+    // costed. `getDailyPlan` is the one that would have hurt: it spends an
+    // openrouteservice call against a daily quota, and a 403 there is the whole
+    // coach down for the rest of the day.
+    owner ? safe('segment-highlights', getSegmentHighlights()) : Promise.resolve(null),
     // Memoised on the same fingerprint as the highlight corpus, so the hub and
     // the segments explorer share one computation rather than each reloading
     // 1,136 activities and 6,317 efforts.
-    safe('segment-chains', getSegmentChains(5)),
-    safe(
-      'coach',
-      getDailyPlan({
-        dashboard: dashboard ?? undefined,
-        monotony,
-        polarised,
-        // The composite this page already computed. Without it the coach reads
-        // readiness only as a downward veto, and proposed the same two-kilometre
-        // walk on the best day of the fortnight as on the worst.
-        readiness: readiness?.score ?? null,
-      }),
-    ),
+    owner ? safe('segment-chains', getSegmentChains(5)) : Promise.resolve(null),
+    owner
+      ? safe(
+          'coach',
+          getDailyPlan({
+            dashboard: dashboard ?? undefined,
+            monotony,
+            polarised,
+            // The composite this page already computed. Without it the coach
+            // reads readiness only as a downward veto, and proposed the same
+            // two-kilometre walk on the best day of the fortnight as on the
+            // worst.
+            readiness: readiness?.score ?? null,
+          }),
+        )
+      : Promise.resolve(null),
     // Form on every segment, for the taxonomy tiles and the positive tripwire.
     // No geometry comes back — `listSegments` projects around `coordinates` —
     // and the effort read is three columns, the same one the explorer makes.
+    // Both audiences: section F's four count tiles are the same numbers for
+    // everybody, and its two name-bearing parts are stripped downstream.
     safe('segment-forms', listSegments({ limit: SEGMENT_LIMIT })),
   ]);
 
@@ -271,6 +274,11 @@ export const load: PageServerLoad = async (event) => {
   // verdict a day behind for the hour after midnight BST.
   const today = localToday();
   const segmentForms = segmentRows ? summariseSegmentForms(segmentRows.rows) : null;
+  // The same summary with its two name-bearing fields removed. Section F reads
+  // it for the tiles, and section E's segment row reads it for the counts — the
+  // row's "Closest is <name>, 1.4% off it" clause falls away with `nearest`,
+  // and what is left is still a true tripwire rather than a blanked one.
+  const publicForms = publicSegmentForms(segmentForms);
   if (segmentRows && segmentRows.rows.length >= SEGMENT_LIMIT) {
     console.warn(
       `[health] segment form list hit the ${SEGMENT_LIMIT}-row cap — the taxonomy tiles and the ` +
@@ -336,7 +344,7 @@ export const load: PageServerLoad = async (event) => {
         rhr: dashboard?.rhr ?? null,
         recovery: dashboard?.recovery ?? null,
         weeks: dashboard?.weeks ?? null,
-        segments: segmentForms,
+        segments: owner ? segmentForms : publicForms,
       }),
     ) ?? [];
   const experiments =
@@ -363,46 +371,97 @@ export const load: PageServerLoad = async (event) => {
     }),
   );
 
-  return {
-    mode: 'owner' as const,
-    ...shared,
+  // ——— the layer both audiences read ——————————————————————————————
+  //
+  // Assembled once. Everything on it is either an aggregate over time or a pure
+  // rule over one, and none of it names a segment, an outing or a place — which
+  // is what lets `pickPublic` hand the whole thing to an anonymous browser
+  // below rather than the loader rebuilding a second, smaller document.
+  const derived = {
     // The moment this exact dashboard payload finished being assembled. This
     // is deliberately different from `syncedAgoSeconds`: a source can have
     // synced hours ago while a reload has only just recalculated every panel.
     dashboardUpdatedAt: new Date().toISOString(),
-    // Four fields the owner dashboard has no reader for, dropped here rather
-    // than shipped and ignored. `recentOutings()` was the expensive one: five
-    // rows through `listActivities({ withPolyline: true })` plus the highlight
-    // corpus, per request, for a route card no section on this page draws.
-    // `correlations` and `narrative` cost no query — they arrive on `shared`
-    // for the anonymous landing, which still renders both — but they are the
-    // landing's furniture, so the owner payload does not carry them.
-    narrative: null,
-    // Whoop workouts back the Breakdown cards. Owner-only: each one carries a
-    // sport and a clock, which is a routine, which is the thing the public
-    // landing does not get.
-    workouts: data?.workouts ?? [],
     monotony,
     recoveryDebt,
     autonomic,
     circadian,
     polarised,
-    dashboard,
-    segments,
-    chains: chains ?? [],
-    coach,
-    // The two instrument-deck panels this payload did not already carry.
+    // The two instrument-deck panels the base batch did not already carry.
     acwr,
-    efficiency,
-    // Section C, D, E, H and I, all derived — no model, no schema change.
+    // Sections C, D, E, H and I, all derived — no model, no schema change.
     forecast,
     moves,
     tripwires,
     experiments,
     verdict,
+    volume,
+  };
+
+  if (!owner) {
+    // Everything an anonymous visitor gets — and nothing else, because it is
+    // built by PICKING from PUBLIC_FIELDS rather than by spreading. A field
+    // added to `shared` or `derived` later is therefore absent from the
+    // anonymous payload by default, instead of present by accident.
+    //
+    // The correlations are deliberately not on that list: when nothing
+    // correlates the service substitutes four hard-coded example findings
+    // complete with r values and sample sizes, and a public page must not
+    // present an invented result as a measurement.
+    const publicPayload = {
+      ...pickPublic({ ...shared, ...derived }),
+      // The two structs an allow-list cannot express: publishable apart from
+      // the fields inside them that place him. They are reshaped rather than
+      // picked, and what the projection returns is the only version that
+      // exists on this branch.
+      dashboard: publicDashboard(dashboard),
+      segmentForms: publicForms,
+      // Sections the anonymous document does not render at all. Declared as
+      // empty rather than omitted so `PublicHealthData` and the component's
+      // props stay one shape — and so that a reader of this file can see that
+      // the decision was made, not forgotten.
+      segments: null,
+      chains: [],
+      coach: null,
+    };
+
+    // The second belt, and it is buckled: the allow-list decides which KEYS go
+    // out, this walks the VALUES that came back — the two projections above
+    // included, which is the half the allow-list cannot cover. It is a few
+    // hundred numbers, so it costs microseconds, and it never blocks the page —
+    // an anonymous visitor seeing an empty dashboard because a walker got
+    // clever is a worse outcome than a logged line. If this ever fires, it is a
+    // real leak and the log is where it will be noticed.
+    const leaks = disclosureLeaks(publicPayload);
+    if (leaks.length) {
+      console.error(
+        `[health] ANONYMOUS PAYLOAD DISCLOSURE — ${leaks.length} field(s): ${leaks.join(', ')}`,
+      );
+    }
+
+    return { mode: 'public' as const, ...publicPayload };
+  }
+
+  return {
+    mode: 'owner' as const,
+    ...shared,
+    ...derived,
+    // Two fields the owner dashboard has no reader for, dropped here rather
+    // than shipped and ignored. They cost no query — they arrive on `shared`
+    // for the anonymous branch — but that branch no longer renders them
+    // either, so nothing on this page reads them at all.
+    narrative: null,
+    // Whoop workouts back the Breakdown cards. Owner-only: each one carries a
+    // sport and a clock, which is a routine, which is the thing the public
+    // landing does not get.
+    workouts: data?.workouts ?? [],
+    dashboard,
+    segments,
+    chains: chains ?? [],
+    coach,
+    efficiency,
     // Section F: the form taxonomy, the gettable board, and the counts behind
     // the positive tripwire.
     segmentForms,
-    volume,
   };
 };

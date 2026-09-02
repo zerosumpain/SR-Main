@@ -11,14 +11,21 @@
 
   interface Props {
     experiments: Experiment[];
+    /**
+     * The section letter. Fixed at H for the owner, but the anonymous document
+     * does not render G — its route cards name real corridors near home — and
+     * a run of section heads that goes E, F, H reads as a page with a hole in
+     * it rather than as a shorter page.
+     */
+    letter?: string;
   }
 
-  let { experiments }: Props = $props();
+  let { experiments, letter = 'H' }: Props = $props();
 
   const live = $derived(experiments.filter((e) => e.state === 'LIVE').length);
   const queued = $derived(experiments.length - live);
   const kicker = $derived(
-    `H / Experiments · ${countWord(live).toLowerCase()} live, ${countWord(queued).toLowerCase()} queued`,
+    `${letter} / Experiments · ${countWord(live).toLowerCase()} live, ${countWord(queued).toLowerCase()} queued`,
   );
 </script>
 
