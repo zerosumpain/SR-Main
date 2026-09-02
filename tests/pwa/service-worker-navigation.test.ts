@@ -27,6 +27,11 @@ describe('JKAI service-worker navigation policy', () => {
 		expect(vite).toContain("buildBase: '/'");
 		expect(vite).toContain("start_url: '/jkai'");
 	});
+
+	it('content-addresses the worker URL so an edge cache cannot retain the previous release', () => {
+		const vite = viteSource();
+		expect(vite).toContain('filename: `jkai-sw-${jkaiBuildId}.js`');
+	});
 });
 
 describe('local type-check memory parity', () => {
