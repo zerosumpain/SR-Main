@@ -43,7 +43,8 @@
   import { subscribeFollowups } from '$lib/jkai/followup-stream';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
   import { shortModelLabel } from '$lib/jkai/model-label';
-  import { setThreadLedger, clearThreadLedger, setLiveRuns, bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
+  import { setThreadLedger, clearThreadLedger, setThreadActivity, setLiveRuns, bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
+  import type { ThreadActivity } from '$lib/jkai/hub-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
@@ -2071,8 +2072,94 @@
       threadCostUsd,
       turns: threadTurns,
       modelId: currentModel.modelId,
+      turnCostsUsd: turnStamps.map((s) => s.costUsd),
     };
     untrack(() => setThreadLedger(next));
+  });
+
+  // ── Thread activity ───────────────────────────────────────────────────────
+  // The same publish, for what the thread is DOING rather than what it costs.
+  // The inspector's Activity mode draws it; see `ThreadActivity` in hub-bus for
+  // why this is a flat snapshot rather than a handle on the pane's own state.
+
+  /** Running workers first, then failures, then the finished ones — the order a
+   *  glance wants, and stable while a turn is in flight because the rank is a
+   *  function of status alone. */
+  const WORKER_RANK = { running: 0, error: 1, done: 2 } as const;
+  const activityWorkers = $derived(
+    Object.values(subAgents)
+      .map((a) => ({
+        id: a.agentId,
+        task: a.task,
+        status: a.status,
+        step: a.toolSteps[a.toolSteps.length - 1]?.summary ?? null,
+        startedAt: a.startedAt ?? null,
+      }))
+      .sort((x, y) => WORKER_RANK[x.status] - WORKER_RANK[y.status]),
+  );
+
+  /**
+   * The tool steps worth showing: the in-flight turn's if there is one, else the
+   * most recent turn that called anything. Falling back matters — a thread whose
+   * last turn ran six tools should not read as "nothing happened here" the
+   * moment that turn finishes, which is exactly what a live-only list does.
+   */
+  const activitySteps = $derived.by(() => {
+    // Backwards, and stop at the first hit. This recomputes on every token —
+    // `messages` is reassigned per delta — so a forward pass over the whole
+    // thread would be a full scan tens of times a second for a list that only
+    // changes when a tool starts or ends. The in-flight progress bubble is
+    // always the last message, so the first match from the end is the live turn
+    // when there is one and the most recent turn that called anything when
+    // there is not.
+    let found: Message | null = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.toolSteps && m.toolSteps.length > 0) {
+        found = m;
+        break;
+      }
+    }
+    // A const, so the narrowing below survives into the map callback.
+    const from = found;
+    if (!from?.toolSteps) return { live: false, steps: [] };
+    const steps = from.toolSteps.map((s, i) => {
+      const tool = resolveDisplayTool(s.tool, s.args).tool;
+      return {
+        // Restored history has no step id (it is stamped live only), and the
+        // keyed `{#each}` in the inspector needs one that cannot collide.
+        id: s.id ?? `${from.id}:${i}`,
+        tool,
+        category: categorizeTool(tool) as string,
+        status: s.status,
+        summary: s.summary ?? null,
+        startedAt: s.startedAt ?? null,
+      };
+    });
+    return { live: from.isProgress === true, steps };
+  });
+
+  /** The most recent turn that recorded a tool-call chain. */
+  const lastTraceId = $derived.by(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const id = messages[i].traceId;
+      if (id) return id;
+    }
+    return null;
+  });
+
+  $effect(() => {
+    // Same on-screen gate as the ledger, for the same reason.
+    if (!active) return;
+    const next: ThreadActivity = {
+      streaming: loading,
+      workers: activityWorkers,
+      steps: activitySteps.steps,
+      stepsAreLive: activitySteps.live,
+      build: activeBuild ?? null,
+      traceId: lastTraceId,
+    };
+    untrack(() => setThreadActivity(next));
   });
 
   // Closing a background tab must not blank the header — those numbers belong to

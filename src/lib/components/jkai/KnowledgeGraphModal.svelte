@@ -188,6 +188,7 @@
               onclick={() => onSelect(node.id)}
               title="{node.name} — {s.hint}"
             >
+              <span class="gm-node-bar" aria-hidden="true"></span>
               <span class="gm-glyph" aria-hidden="true">{GLYPH[node.kind]}</span>
               <span class="gm-label">{node.name}</span>
             </button>
@@ -434,31 +435,42 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 0 10px;
+    padding: 0 10px 0 0;
     overflow: hidden;
     /* Per-node provenance colour — see $lib/jkai/graph-colors. */
     background: var(--n-fill, var(--bg));
     border: 1px solid var(--n-color, rgba(26, 16, 8, 0.3));
     border-radius: 0;
     cursor: pointer;
-    transition: border-color 0.2s ease-out, background 0.2s ease-out;
+    transition: background 0.2s ease-out;
+  }
+  /* Same chip as the inspector's card draws, down to the leading provenance bar
+     and the inverted selected state. The two pictures are the same picture at
+     two sizes, so a chip that meant one thing in the column and another in the
+     modal would be the drift graph-colors exists to prevent. */
+  .gm-node-bar {
+    flex: none;
+    align-self: stretch;
+    width: 4px;
+    background: var(--n-color);
   }
   .gm-node:hover {
-    border-color: var(--accent-tint-35);
+    filter: brightness(0.97);
   }
   .gm-node.selected {
-    background: var(--n-color);
-    border: 2px solid var(--n-color);
+    background: var(--text-primary);
+    border-color: var(--text-primary);
   }
   .gm-glyph {
     flex: none;
+    margin-left: 6px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     line-height: 1;
     color: var(--n-color, var(--accent));
   }
   .gm-node.selected .gm-glyph {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.75);
   }
   .gm-label {
     min-width: 0;
@@ -471,7 +483,7 @@
     text-overflow: ellipsis;
   }
   .gm-node.selected .gm-label {
-    color: #fff;
+    color: var(--bg);
   }
 
   .gm-side {
