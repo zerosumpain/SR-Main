@@ -8,6 +8,7 @@
 #
 src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts
+src/lib/jkai/intel/chat-extract.wiring.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts

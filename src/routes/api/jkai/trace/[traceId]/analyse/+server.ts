@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { jkaiToolTraces, orchestratorChats } from '$lib/db/schema';
+import { orchestratorChats } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { ToolTrace } from '$lib/jkai/tool-trace';
 import { getTools } from '$lib/workflows/site-tools/registry';
@@ -16,6 +16,7 @@ import {
 } from '$lib/jkai/chain-analysis';
 import { parseJsonLoose } from '$lib/selfimprove/types';
 import { withActivity } from '$lib/context/activity';
+import { loadTraceRow } from '$lib/jkai/tool-trace.server';
 
 // Read one turn's tool-call chain and say where the calls went. Owner-gated by
 // hooks, like the rest of /api/jkai.
@@ -27,18 +28,8 @@ import { withActivity } from '$lib/context/activity';
 // so a finding means the same thing whichever surface produced it — the
 // engine's own phases are pinned the same way, and this feeds the same backlog.
 
-/** Accepts the trace id (= the chat job id) or the assistant message id, the
- *  same pair the page loader accepts — the client only ever holds one of them. */
-async function loadTrace(id: string) {
-  let [row] = await db.select().from(jkaiToolTraces).where(eq(jkaiToolTraces.id, id)).limit(1);
-  if (!row) {
-    [row] = await db.select().from(jkaiToolTraces).where(eq(jkaiToolTraces.messageId, id)).limit(1);
-  }
-  return row ?? null;
-}
-
 export const POST: RequestHandler = async ({ params, request }) => {
-  const row = await loadTrace(params.traceId);
+  const row = await loadTraceRow(params.traceId);
   if (!row) return json({ error: 'No tool trace for that turn' }, { status: 404 });
 
   const body = (await request.json().catch(() => ({}))) as { send?: unknown };

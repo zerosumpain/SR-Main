@@ -38,6 +38,7 @@
   import { hub } from '$lib/jkai/hub-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { shortModelLabel } from '$lib/jkai/model-label';
+  import type { TraceStep } from '$lib/jkai/tool-trace';
   import ContextCard from './context/ContextCard.svelte';
   import ThreadGraphCard from './ThreadGraphCard.svelte';
 
@@ -294,6 +295,110 @@
       : null,
   );
 
+  /**
+   * Opening a tool row.
+   *
+   * The published step carries a summary and a status and nothing else — enough
+   * to read the chain, not enough to answer "what did it actually send". The
+   * arguments and the result live in the recorded trace, which is fetched ONCE
+   * per turn on the first click and cached here. Publishing them through the hub
+   * bus instead would push a page of `web_extract` text into shared client state
+   * on every token of every turn, to serve a click that usually never comes.
+   *
+   * Rows are addressed by index because that is what survives: the published
+   * list and the recorded chain are the same steps in the same order, and a
+   * restored step has no id of its own to match on.
+   */
+  let openStep = $state<number | null>(null);
+  let traceSteps = $state<TraceStep[] | null>(null);
+  let traceError = $state<string | null>(null);
+  let traceLoading = $state(false);
+  /** Which message id `traceSteps` describes — a plain let, nothing reads it
+   *  reactively and as $state it would re-trigger the loader that writes it. */
+  let tracedMessageId: string | null = null;
+
+  async function toggleStep(i: number): Promise<void> {
+    if (openStep === i) {
+      openStep = null;
+      return;
+    }
+    openStep = i;
+    const id = activity.stepsMessageId;
+    if (!id || tracedMessageId === id || traceLoading) return;
+    traceLoading = true;
+    traceError = null;
+    try {
+      const res = await fetch(`/api/jkai/trace/${id}`);
+      if (!res.ok) throw new Error(res.status === 404 ? 'No recorded chain for this turn.' : `Trace returned ${res.status}`);
+      const body = (await res.json()) as { trace?: { steps?: TraceStep[] } };
+      traceSteps = body.trace?.steps ?? [];
+      tracedMessageId = id;
+    } catch (cause) {
+      traceError = cause instanceof Error ? cause.message : 'Could not read the recorded chain.';
+    } finally {
+      traceLoading = false;
+    }
+  }
+
+  function detailFor(i: number): TraceStep | null {
+    return traceSteps?.[i] ?? null;
+  }
+
+  function preview(value: unknown, cap = 1200): string {
+    if (value === undefined) return '';
+    let text: string;
+    try {
+      text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    } catch {
+      return '[unserialisable]';
+    }
+    if (text === undefined) return '';
+    return text.length > cap ? `${text.slice(0, cap)}\n… ${text.length - cap} more characters` : text;
+  }
+
+  /**
+   * Chain analysis. It is an LLM call pinned to the SELFIMPROVE workload, so it
+   * is never automatic — the endpoint also refuses to spend when the
+   * deterministic pass finds no repeat, ladder or discovery pattern, and says so
+   * rather than returning an empty answer.
+   */
+  let analysis = $state<{
+    analysis?: { calls: number; discoveryCalls: number; discoveryShare: number; signals: unknown[] };
+    findings?: Array<{ tool: string; calls: number; couldHaveBeen: number; cheaperRoute?: string; evidence: string; rationale: string }>;
+    note?: string;
+    error?: string;
+    model?: string | null;
+  } | null>(null);
+  let analysing = $state(false);
+
+  async function analyseChainNow(): Promise<void> {
+    const id = activity.stepsMessageId ?? activity.traceId;
+    if (!id || analysing) return;
+    analysing = true;
+    analysis = null;
+    try {
+      const res = await fetch(`/api/jkai/trace/${id}/analyse`, { method: 'POST' });
+      analysis = await res.json();
+    } catch (cause) {
+      analysis = { error: cause instanceof Error ? cause.message : 'Analysis failed' };
+    } finally {
+      analysing = false;
+    }
+  }
+
+  // A new turn invalidates whatever was open.
+  $effect(() => {
+    const id = activity.stepsMessageId;
+    untrack(() => {
+      if (id !== tracedMessageId) {
+        openStep = null;
+        traceSteps = null;
+        traceError = null;
+        analysis = null;
+      }
+    });
+  });
+
   // ── Ledger ────────────────────────────────────────────────────────────────
 
   const contextPct = $derived(
@@ -345,39 +450,17 @@
     aria-label="Close the thread inspector"
   ><span></span></button>
 
-  <!-- Chrome 1 — what this column is, whether the thread is working, and the
-       one action the current mode affords. -->
-  <header class="ins-hd">
-    <span class="ins-title">Thread</span>
-    {#if activity.streaming}
-      <span class="ins-live" title="A turn is in flight">
-        <span class="ins-pip" aria-hidden="true"></span>{turnElapsed}
-      </span>
-    {:else if loading}
-      <span class="ins-live ins-live--quiet" title="Re-reading the thread">
-        <span class="ins-pip" aria-hidden="true"></span>reading
-      </span>
-    {/if}
-    <span class="ins-hd-sp"></span>
-    {#if mode === 'ledger'}
-      <a class="ins-act" href="/admin/ops/costs" title="Every thread's spend">ledger →</a>
-    {:else if mode === 'activity' && activity.build?.id}
-      <a class="ins-act" href="/jkai/builds/{activity.build.id}" title="Open this build">build →</a>
-    {:else if mode === 'context' && conversationId}
-      <button
-        type="button"
-        class="ins-act"
-        onclick={() => conversationId && load(conversationId, manualLens)}
-        title="Re-read the thread"
-        disabled={loading}
-      >refresh ↻</button>
-    {/if}
-  </header>
-
-  <!-- Chrome 2 — the mode keys. Three equal cells, hairline-divided; the lit one
-       takes the paper ground and an accent bar along its TOP edge, so the panel
-       reads as a row of keys rather than three links, and which one is live
-       survives a greyscale print. -->
+  <!-- Chrome 1 — the mode keys, and the panel's ONLY top row.
+       Geometry is copied from `.tab-strip` in ConversationTabs — 40px on
+       `--surface-rail`, closed with the same 2px ink rule — so the two columns
+       share a baseline and the chrome reads as one bar across the page rather
+       than two bars at different heights. There used to be a `THREAD` header
+       above this; its three jobs each had a better home (the live state is the
+       badge below and the Working cell inside ACTIVITY, and each mode's action
+       moved onto the first cell it belongs to), and removing it is what let the
+       row line up.
+       The lit key takes the paper ground and an accent bar along its TOP edge,
+       so which one is live survives a greyscale print. -->
   <div class="ins-modes" role="tablist" aria-label="Inspector mode">
     {#each MODES as m (m.key)}
       <button
@@ -426,9 +509,18 @@
       <!-- Chrome 4 — the classifier's reading, in one cell. This replaced a
            92px gradient header whose job was the same sentence. -->
       <div class="ins-focus">
-        <span class="ins-eyebrow">
-          Focus{panel.selectedLens === panel.automaticLens ? '' : ' · pinned'}
-        </span>
+        <div class="fc-top">
+          <span class="ins-eyebrow">
+            Focus{panel.selectedLens === panel.automaticLens ? '' : ' · pinned'}
+          </span>
+          <button
+            type="button"
+            class="ins-act"
+            onclick={() => conversationId && load(conversationId, manualLens)}
+            title="Re-read the thread"
+            disabled={loading || !conversationId}
+          >{loading ? 'reading…' : 'refresh ↻'}</button>
+        </div>
         <strong class="fc-label" title={panel.focus.label}>{panel.focus.label}</strong>
         <span class="fc-reason">{panel.focus.reason}</span>
         <span class="fc-mark" aria-hidden="true">J/A</span>
@@ -531,22 +623,109 @@
             </span>
           </div>
           <div class="ins-rows">
-            {#each activity.steps as s (s.id)}
-              <div class="st-row" data-status={s.status} data-tone={stepTone(s.category)}>
-                <span class="st-cat">{s.category}</span>
-                <span class="st-tool" title={s.tool}>{s.tool}</span>
-                <span class="st-mark" aria-hidden="true">
-                  {#if s.status === 'running'}<span class="ins-pip"></span>
-                  {:else if s.status === 'error'}✗
-                  {:else}✓
+            {#each activity.steps as s, i (s.id)}
+              {@const d = openStep === i ? detailFor(i) : null}
+              <div class="st" class:open={openStep === i}>
+                <button
+                  type="button"
+                  class="st-row"
+                  data-status={s.status}
+                  data-tone={stepTone(s.category)}
+                  aria-expanded={openStep === i}
+                  onclick={() => toggleStep(i)}
+                  title="Show what this call sent and what came back"
+                >
+                  <span class="st-cat">{s.category}</span>
+                  <span class="st-tool">{s.tool}</span>
+                  <span class="st-mark" aria-hidden="true">
+                    {#if s.status === 'running'}<span class="ins-pip"></span>
+                    {:else if s.status === 'error'}✗
+                    {:else}✓
+                    {/if}
+                  </span>
+                  {#if s.summary}
+                    <span class="st-summary">{s.summary}</span>
                   {/if}
-                </span>
-                {#if s.summary}
-                  <span class="st-summary" title={s.summary}>{s.summary}</span>
+                </button>
+
+                {#if openStep === i}
+                  <div class="st-detail">
+                    {#if activity.stepsAreLive}
+                      <p class="ins-note">
+                        The chain is recorded when the turn finishes — the
+                        arguments and result appear then.
+                      </p>
+                    {:else if traceLoading}
+                      <p class="ins-note">reading the recorded chain…</p>
+                    {:else if traceError}
+                      <p class="ins-note st-err">{traceError}</p>
+                    {:else if d}
+                      <dl class="st-meta">
+                        {#if d.durationMs !== undefined}
+                          <div><dt>Took</dt><dd>{elapsed(d.durationMs) || `${d.durationMs}ms`}</dd></div>
+                        {/if}
+                        <div><dt>Called</dt><dd>{d.tool}</dd></div>
+                      </dl>
+                      <span class="ins-eyebrow st-lbl">Sent</span>
+                      <pre class="st-pre">{preview(d.args)}</pre>
+                      {#if d.error}
+                        <span class="ins-eyebrow st-lbl">Error</span>
+                        <pre class="st-pre st-err">{d.error}</pre>
+                      {:else}
+                        <span class="ins-eyebrow st-lbl">Came back</span>
+                        <pre class="st-pre">{preview(d.result) || '(nothing)'}</pre>
+                      {/if}
+                    {:else}
+                      <p class="ins-note">No recorded detail for this step.</p>
+                    {/if}
+                  </div>
                 {/if}
               </div>
             {/each}
           </div>
+
+          <!-- Analysis is an LLM call, so it is never automatic. The endpoint
+               refuses to spend when the deterministic pass finds no repeat,
+               ladder or discovery pattern, and says so. -->
+          {#if !activity.stepsAreLive && (activity.stepsMessageId || activity.traceId)}
+            <div class="st-actions">
+              <button type="button" class="ins-more" disabled={analysing} onclick={analyseChainNow}>
+                {analysing ? 'analysing…' : 'analyse this chain →'}
+              </button>
+              <a class="ins-act" href="/jkai/trace/{activity.stepsMessageId ?? activity.traceId}">full trace →</a>
+            </div>
+          {/if}
+
+          {#if analysis}
+            <div class="st-analysis">
+              {#if analysis.error}
+                <p class="ins-note st-err">{analysis.error}</p>
+              {:else if analysis.note}
+                <p class="ins-note">{analysis.note}</p>
+              {:else}
+                <div class="an-head">
+                  <span class="ins-meta">
+                    {analysis.analysis?.calls ?? 0} calls · {analysis.analysis?.discoveryCalls ?? 0} discovery
+                  </span>
+                  {#if analysis.model}<span class="ins-meta">{shortModelLabel(analysis.model)}</span>{/if}
+                </div>
+                {#if (analysis.findings ?? []).length === 0}
+                  <p class="ins-note">Nothing worth changing in this chain.</p>
+                {:else}
+                  {#each analysis.findings ?? [] as f (f.tool + f.evidence)}
+                    <div class="an-finding">
+                      <span class="an-tool">{f.tool}</span>
+                      <span class="an-count">{f.calls} → {f.couldHaveBeen}</span>
+                      <p class="an-why">{f.rationale}</p>
+                      {#if f.cheaperRoute}
+                        <p class="an-route">use <strong>{f.cheaperRoute}</strong></p>
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+              {/if}
+            </div>
+          {/if}
         </section>
       {/if}
 
@@ -575,14 +754,20 @@
   <!-- ══ LEDGER ══════════════════════════════════════════════════════════ -->
   {:else}
     <div class="ins-scroll" id="ins-panel" role="tabpanel" tabindex="0" aria-labelledby="ins-tab-{mode}">
-      <section class="ins-cell ld-figures">
-        <div class="ld-fig">
+      <section class="ins-cell">
+        <div class="ins-cell-hd">
           <span class="ins-eyebrow">Thread spend</span>
-          <span class="ld-val accent">{formatGbp(hub.threadCostUsd)}</span>
+          <a class="ins-act" href="/admin/ops/costs" title="Every thread's spend">ledger →</a>
         </div>
-        <div class="ld-fig">
-          <span class="ins-eyebrow">Turns</span>
-          <span class="ld-val">{hub.turns ?? '—'}</span>
+        <div class="ld-figures">
+          <div class="ld-fig">
+            <span class="ld-val accent">{formatGbp(hub.threadCostUsd)}</span>
+            <span class="ins-meta">total</span>
+          </div>
+          <div class="ld-fig">
+            <span class="ld-val">{hub.turns ?? '—'}</span>
+            <span class="ins-meta">turns</span>
+          </div>
         </div>
       </section>
 
@@ -779,45 +964,9 @@
     color: var(--error);
   }
 
-  /* ── Chrome 1: head ──────────────────────────────────────────────────── */
-  .ins-hd {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    height: 34px;
-    padding: 0 15px;
-    border-bottom: 1px solid var(--line-strong);
-  }
-  .ins-title {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label-wide);
-    color: var(--text-secondary);
-  }
-  .ins-hd-sp {
-    flex: 1;
-  }
-  .ins-live {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-variant-numeric: tabular-nums;
-    color: var(--accent);
-  }
-  .ins-live--quiet {
-    color: var(--text-ghost);
-  }
-  .ins-live--quiet .ins-pip {
-    background: var(--text-ghost);
-  }
-  /* The one animated thing in the column. Live state is the only claim worth
-     moving for, and a pulse rather than a spinner keeps a still screenshot
-     readable. */
+  /* The live pulse, used by the running marks in ACTIVITY. The one animated
+     thing in the column — live state is the only claim worth moving for, and a
+     pulse rather than a spinner keeps a still screenshot readable. */
   .ins-pip {
     display: inline-block;
     width: 6px;
@@ -831,6 +980,7 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.25; }
   }
+
   .ins-act {
     padding: 0;
     border: none;
@@ -852,13 +1002,22 @@
     cursor: default;
   }
 
-  /* ── Chrome 2: mode keys ─────────────────────────────────────────────── */
+  /* ── Chrome 1: mode keys ─────────────────────────────────────────────── */
+  /* 40px on --surface-rail, closed with a 2px ink rule. Those three values are
+     `.tab-strip` / `.strip-row` in ConversationTabs, copied deliberately: they
+     are what makes the panel's top bar and the thread tabs one continuous band
+     across the page. Change them there and change them here. */
   .ins-modes {
     flex: none;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    border-bottom: 1px solid var(--line-strong);
-    background: var(--surface-sunken);
+    /* 42, not 40: `.strip-row` is 40px and `.tab-strip` puts the 2px rule
+       OUTSIDE it, so the band is 42 in total. Under border-box this height
+       includes the rule, which leaves the keys the same 40px as the tabs and
+       lands the two bottom edges on the same pixel. */
+    height: 42px;
+    border-bottom: 2px solid var(--text-primary);
+    background: var(--surface-rail);
   }
   .ins-key {
     position: relative;
@@ -866,7 +1025,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 31px;
+    height: 100%;
     padding: 0 4px;
     border: none;
     border-right: 1px solid var(--line-hair);
@@ -988,6 +1147,13 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+  .fc-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 1px;
     padding: 11px 15px 13px;
     border-bottom: 1px solid var(--line-strong);
     background: var(--bg);
@@ -1163,16 +1329,147 @@
 
   /* Tool calls — the category is a fixed gutter, so the list reads as a column
      of KINDS and the tool names line up whatever the kind. */
+  .st {
+    margin: 0 -8px;
+  }
+  .st.open {
+    background: var(--surface-sunken);
+  }
   .st-row {
     display: grid;
     grid-template-columns: 46px 1fr 12px;
     align-items: baseline;
     gap: 3px 8px;
+    width: 100%;
     padding: 6px 8px 7px;
-    margin: 0 -8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease-out;
+  }
+  .st-row:hover {
+    background: var(--surface-sunken);
   }
   .st-row[data-status='running'] {
     background: var(--surface-sunken);
+  }
+
+  /* What the call actually sent and got back. Read from the recorded chain, so
+     it is the same text the trace page shows rather than a second rendering of
+     the same facts. */
+  .st-detail {
+    padding: 2px 8px 10px;
+    border-left: 2px solid var(--accent);
+  }
+  .st-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 0 0 8px;
+  }
+  .st-meta > div {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .st-meta dt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+  }
+  .st-meta dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+  }
+  .st-lbl {
+    display: block;
+    margin: 8px 0 4px;
+  }
+  .st-lbl:first-of-type {
+    margin-top: 0;
+  }
+  /* Wraps rather than scrolls sideways: a 390px column with a horizontally
+     scrolling code block inside a vertically scrolling cell is two gestures
+     fighting, and `overflow-x` would clip the other axis too. */
+  .st-pre {
+    margin: 0;
+    padding: 7px 8px;
+    max-height: 190px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--line-hair);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .st-err {
+    color: var(--error);
+  }
+
+  .st-actions {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 9px;
+    padding-top: 7px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .st-actions .ins-more {
+    margin-top: 0;
+  }
+
+  .st-analysis {
+    margin-top: 10px;
+    padding: 9px 10px 10px;
+    background: var(--bg);
+    border-left: 3px solid var(--accent-ink);
+  }
+  .an-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+  }
+  .an-finding {
+    padding-top: 7px;
+    border-top: 1px dotted var(--line-hair);
+  }
+  .an-finding:first-of-type {
+    padding-top: 0;
+    border-top: none;
+  }
+  .an-tool {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-primary);
+  }
+  .an-count {
+    margin-left: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .an-why,
+  .an-route {
+    margin: 3px 0 6px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  .an-route strong {
+    color: var(--accent-ink);
+    font-family: var(--font-mono);
   }
   .st-cat {
     font-family: var(--font-mono);
@@ -1229,12 +1526,11 @@
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 16px;
-    background: var(--bg);
   }
   .ld-fig {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 3px;
     min-width: 0;
   }
   .ld-fig:last-child {

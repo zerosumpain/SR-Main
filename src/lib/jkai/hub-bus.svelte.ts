@@ -107,6 +107,15 @@ export interface ThreadActivity {
   steps: ThreadToolStep[];
   /** Whether `steps` describes the turn in flight or a finished one. */
   stepsAreLive: boolean;
+  /**
+   * Id of the message those steps belong to. The inspector uses it to fetch the
+   * recorded chain when a row is opened — `/api/jkai/trace/<id>` accepts a
+   * message id as well as a trace id, which is what makes a reloaded thread
+   * work. Null while a turn is in flight: the trace row is not written until the
+   * turn ends, so there is nothing to fetch yet and the UI says so rather than
+   * showing a 404.
+   */
+  stepsMessageId: string | null;
   /** A build this thread kicked off and is still watching. */
   build: { id: string; status: string } | null;
   /**
@@ -126,6 +135,7 @@ const NO_ACTIVITY: ThreadActivity = {
   workers: [],
   steps: [],
   stepsAreLive: false,
+  stepsMessageId: null,
   build: null,
   traceId: null,
 };
