@@ -663,9 +663,47 @@ export const POST: RequestHandler = async ({ request }) => {
         const budget = await budgetStatus({ now: new Date(), isCodexModel: model.provider === 'codex' });
         if (budget.blocked) return json({ error: `budget: ${budget.blockedReason}` }, { status: 429 });
         const { runMemoryConsolidation } = await import('$lib/daydream/memory-consolidation.server');
-        const result = await runMemoryConsolidation({ allowRepeat: true });
-        if (result.status === 'failed') return json({ error: result.error, result }, { status: 502 });
-        return json({ ok: true, result });
+
+        // A production-sized model pass can outlive Cloudflare's 100-second
+        // request limit. Wait only until the run row has been claimed, then let
+        // the work continue while the Memory tab polls that durable status.
+        // This also means a gateway timeout can no longer make successful work
+        // look like a failure in the browser.
+        type Started = { localDay: string; startedAt: Date };
+        let markStarted: (started: Started) => void = () => undefined;
+        const started = new Promise<Started>((resolve) => { markStarted = resolve; });
+        const work = runMemoryConsolidation({ allowRepeat: true, onStarted: markStarted });
+        const first = await Promise.race([
+          started.then((value) => ({ kind: 'started' as const, value })),
+          work.then((result) => ({ kind: 'finished' as const, result })),
+        ]);
+
+        if (first.kind === 'finished') {
+          if (first.result.status === 'failed') {
+            return json({ error: first.result.error, result: first.result }, { status: 502 });
+          }
+          if (first.result.status === 'already_running') {
+            return json({ ok: true, accepted: true, localDay: first.result.localDay, alreadyRunning: true }, { status: 202 });
+          }
+          return json({ ok: true, result: first.result });
+        }
+
+        void work
+          .then((result) => {
+            if (result.status === 'failed') {
+              console.error('[daydream] background memory consolidation failed:', result.error);
+            }
+          })
+          .catch((err) => {
+            console.error('[daydream] background memory consolidation crashed:', errMsg(err));
+          });
+
+        return json({
+          ok: true,
+          accepted: true,
+          localDay: first.value.localDay,
+          startedAt: first.value.startedAt.toISOString(),
+        }, { status: 202 });
       }
 
       // ── How a line of enquiry is going ────────────────────────────────
