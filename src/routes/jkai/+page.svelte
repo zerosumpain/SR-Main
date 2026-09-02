@@ -529,10 +529,10 @@
 
   <!-- Contextual workspace / phone bottom sheet. -->
   <div class="graph-slot" class:collapsed={!graphRailOpen} class:sheet-open={hub.graphSheet !== 'closed'}>
+    <!-- The inspector reads the thread ledger straight off the hub bus now, so
+         the page no longer relays two of its numbers as props. -->
     <ContextRail
       conversationId={activeId}
-      threadCostUsd={hub.threadCostUsd}
-      contextFraction={hub.contextFraction}
       sheetDetent={hub.graphSheet}
       onCloseSheet={closeGraphSheet}
     />
