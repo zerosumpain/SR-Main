@@ -16,7 +16,6 @@
   // expensive one, a full surprise sweep — is not fetched at all until it is
   // opened.
 
-  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
   import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
   import ClusterPicker from '$lib/components/intel/ClusterPicker.svelte';
@@ -906,6 +905,11 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     alerts: data.recentAlerts.length,
   } as Record<string, number>);
 
+  /** Items actually present in the three compact signal previews. */
+  const signalCount = $derived(
+    data.recentAlerts.length + data.upcomingTimeline.length + data.recentNotes.length,
+  );
+
   const LOOP_CELLS = $derived(
     LOOP_STAGES.map((stage) => {
       const surface = SURFACES.find((sfc) => sfc.stage === stage)!;
@@ -954,8 +958,6 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   }
 </script>
 
-<JkaiPageTitle title="INTEL" />
-
 <div class="wrap">
   <CommissionBar
     busy={!!busyId}
@@ -964,7 +966,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     onSearch={(t) => (liveSearch = t)}
   />
 
-  <!-- Vital signs -->
+  <!-- Vital signs. The low, dark ledger borrows /health's instrument register:
+       paper figures on brown ink, with lifted orange reserved for a backlog or
+       data-quality problem. Ten readings, one compact scan line. -->
   <div class="tiles cellgrid">
     <a class="tile" class:narrowed href="/jkai/intel/entities">
       <span class="n">{entityCount ?? data.stats.entityCount}</span>
@@ -992,10 +996,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       <span class="l">Duplicates</span>
     </a>
     <!-- Stage 00, and the only tile that is about what has NOT reached the graph
-         yet. It sits with the others rather than in the loop below because the
-         loop is six stages in a 3-column grid and a seventh cell would leave a
-         row of one — and because the gate happens BEFORE capture, not inside
-         it. `warnAbove` matches the surface definition in workbench.ts. -->
+         yet. It sits with the other vital signs rather than in the six-stage
+         loop because the gate happens BEFORE capture, not inside it.
+         `warnAbove` matches the surface definition in workbench.ts. -->
     <a class="tile" class:warn={(data.intelCounts?.heldMail ?? 0) > 200} href="/jkai/intel/mail">
       <span class="n">{data.intelCounts?.heldMail ?? '—'}</span>
       <span class="l">Held mail</span>
@@ -1040,13 +1043,16 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   <!-- Network explorer -->
   <section class="explorer">
     <aside class="rail">
-      {#if filterCount > 0}
-        <div class="filters-on">
-          <button type="button" class="link-btn" onclick={clearFilters}>
-            Clear {filterCount} filter{filterCount === 1 ? '' : 's'}
+      <div class="rail-heading">
+        <span class="rail-title">Graph controls</span>
+        {#if filterCount > 0}
+          <button type="button" class="rail-clear" onclick={clearFilters}>
+            Clear {filterCount}
           </button>
-        </div>
-      {/if}
+        {:else}
+          <span class="rail-state">All data</span>
+        {/if}
+      </div>
 
       <RailSection title="Search" badge={keywordApplied ? 1 : null}>
         <input
@@ -1067,7 +1073,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         {/if}
       </RailSection>
 
-      <RailSection title="Colour &amp; highlight" badge={paintCount || null}>
+      <RailSection title="Colour &amp; highlight" badge={paintCount || null} open={false}>
         <!-- Sits directly under Search because it answers the same shape of
              question — "show me the X in here" — without the removal a filter
              does. The type filter below still exists for when removal IS what
@@ -1135,7 +1141,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         {/if}
       </RailSection>
 
-      <RailSection title="Recency" badge={windowActive ? (network?.stats.recentNodes ?? 0) : null}>
+      <RailSection title="Recency" badge={windowActive ? (network?.stats.recentNodes ?? 0) : null} open={false}>
         <!-- Sits above Sources because it is the filter most often reached for
              first: "what happened since yesterday" is a narrower and more
              useful opening question than "which channel said it". -->
@@ -1154,7 +1160,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         />
       </RailSection>
 
-      <RailSection title="Sources" badge={sourceFilterCount || null}>
+      <RailSection title="Sources" badge={sourceFilterCount || null} open={false}>
         <SourcePicker
           sources={network?.sources ?? []}
           sourceKinds={network?.sourceKinds ?? []}
@@ -1168,7 +1174,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
         />
       </RailSection>
 
-      <RailSection title="Clusters" badge={focusCommunities.length || null}>
+      <RailSection title="Clusters" badge={focusCommunities.length || null} open={false}>
         <!-- The roster describes clusters of the ENTITY graph. The evidence
              view is a different graph with a different partition, so its groups
              have no durable key, no stored name and nothing to narrate —
@@ -1562,9 +1568,16 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   <!-- Signals: what came looking for you, what is coming, what was read last.
        All three were already loaded and only the alert COUNT was being shown. -->
   <aside class="signals" aria-label="Signals">
+    <div class="signals-heading">
+      <span class="signals-title">Signals</span>
+      <span class="signals-state">{signalCount ? `${signalCount} shown` : 'Quiet'}</span>
+    </div>
+
     <div class="sig-cell">
       <div class="sig-hd">
-        <span class="metric-label">Alerts · unprompted</span>
+        <span class="sig-label">
+          <span class="metric-label">Alerts</span><b>{data.recentAlerts.length}</b>
+        </span>
         <a class="sig-more" href="/jkai/intel/alerts">All →</a>
       </div>
       {#if data.recentAlerts.length > 0}
@@ -1579,12 +1592,17 @@ import type { NetworkPayload } from '$lib/codegraph/types';
           {/each}
         </ul>
       {:else}
-        <p class="sig-none">Nothing has come looking for you.</p>
+        <p class="sig-none">No unprompted alerts.</p>
       {/if}
     </div>
 
     <div class="sig-cell">
-      <div class="sig-hd"><span class="metric-label">Upcoming · timeline</span></div>
+      <div class="sig-hd">
+        <span class="sig-label">
+          <span class="metric-label">Upcoming</span><b>{data.upcomingTimeline.length}</b>
+        </span>
+        <a class="sig-more" href="/jkai/intel/timeline">All →</a>
+      </div>
       {#if data.upcomingTimeline.length > 0}
         <ul class="sig-list">
           {#each data.upcomingTimeline as e (e.id)}
@@ -1595,13 +1613,15 @@ import type { NetworkPayload } from '$lib/codegraph/types';
           {/each}
         </ul>
       {:else}
-        <p class="sig-none">Nothing dated ahead.</p>
+        <p class="sig-none">Nothing scheduled.</p>
       {/if}
     </div>
 
     <div class="sig-cell">
       <div class="sig-hd">
-        <span class="metric-label">Recent notes</span>
+        <span class="sig-label">
+          <span class="metric-label">Recent notes</span><b>{data.recentNotes.length}</b>
+        </span>
         <a class="sig-more" href="/jkai/intel/notes">All →</a>
       </div>
       {#if data.recentNotes.length > 0}
@@ -1660,36 +1680,53 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     box-sizing: border-box;
   }
 
-  /* ── Tiles ── one cell grid, not a row of rounded cards with gaps. ─────── */
+  /* ── Tiles ── /health's dark instrument register, compressed to a ledger. */
   .tiles {
     grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
     flex: none;
-    background: var(--bg);
+    background: var(--text-primary);
+    border-color: rgba(237, 228, 212, 0.18);
   }
   .tiles > .tile {
-    padding: 10px 13px;
+    min-height: 40px;
+    padding: 7px 11px;
     display: flex;
-    flex-direction: column;
-    gap: 1px;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    border-color: rgba(237, 228, 212, 0.18);
     text-decoration: none;
-    color: inherit;
+    color: var(--bg);
     transition: background var(--t-fast) var(--ease-out);
   }
   a.tile:hover {
-    background: var(--accent-tint-04);
+    background: rgba(237, 228, 212, 0.08);
   }
   .tile.warn {
-    background: var(--warn-bg);
+    background: rgba(232, 134, 58, 0.1);
+  }
+  @media (max-width: 1200px) {
+    /* Two complete rows instead of an eight-plus-two ledger with a blank dark
+       tail. The height is unchanged; the scan order is clearer. */
+    .tiles {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 700px) {
+    .tiles {
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    }
   }
 
   /* ── The loop ── six stages, each saying what it is for. ───────────────── */
   .loop {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     flex: none;
-    background: var(--bg);
+    background: var(--surface-card);
   }
   .loop-cell {
     display: block;
+    padding: 9px 11px;
     text-decoration: none;
     color: inherit;
     transition: background var(--t-fast) var(--ease-out);
@@ -1717,26 +1754,26 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     color: var(--accent-ink);
   }
   .loop-q {
-    margin: 8px 0 0;
-    font-size: var(--fs-label);
-    line-height: 1.5;
+    margin: 4px 0 0;
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
     color: var(--text-muted);
   }
-  @media (max-width: 900px) {
+  @media (max-width: 1200px) {
     .loop {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
-  @media (max-width: 560px) {
+  @media (max-width: 700px) {
     .loop {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
   /* ── Board + signals rail ─────────────────────────────────────────────── */
   .intel-board {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 288px;
     gap: 12px;
     align-items: start;
     min-width: 0;
@@ -1752,8 +1789,31 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     border: 1px solid var(--line-strong);
     min-width: 0;
   }
+  .signals-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 13px;
+    background: var(--text-primary);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.18);
+  }
+  .signals-title,
+  .signals-state {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+  }
+  .signals-title {
+    letter-spacing: 0.14em;
+    color: rgba(237, 228, 212, 0.62);
+  }
+  .signals-state {
+    letter-spacing: 0.08em;
+    color: rgba(237, 228, 212, 0.4);
+  }
   .sig-cell {
-    padding: 13px 15px 15px;
+    padding: 11px 13px 13px;
     border-bottom: 1px solid var(--line-hair);
   }
   .sig-cell:last-child {
@@ -1764,7 +1824,20 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 10px;
+    margin-bottom: 7px;
+  }
+  .sig-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+  }
+  .sig-label b {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 400;
+    color: var(--text-ghost);
+    font-variant-numeric: tabular-nums;
   }
   .sig-more {
     font-family: var(--font-mono);
@@ -1783,12 +1856,13 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .sig-none {
     margin: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    line-height: 1.4;
     color: var(--text-ghost);
   }
 
@@ -1813,10 +1887,10 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   .alert-meta,
   .note-meta {
     display: block;
-    margin-top: 4px;
+    margin-top: 3px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-ghost);
   }
@@ -1870,6 +1944,9 @@ import type { NetworkPayload } from '$lib/codegraph/types';
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+    .signals-heading {
+      grid-column: 1 / -1;
+    }
     .sig-cell {
       border-bottom: none;
       border-right: 1px solid var(--line-hair);
@@ -1894,26 +1971,28 @@ import type { NetworkPayload } from '$lib/codegraph/types';
      "narrowed" rather than "the graph shrank". The label says so too; this is
      the glanceable half of the same statement. */
   .tile.narrowed {
-    border-color: var(--accent-tint-35);
+    border-color: rgba(232, 134, 58, 0.55);
   }
   .tile.narrowed .l {
-    color: var(--accent);
+    color: var(--accent-on-dark);
   }
   .tile .n {
     font-family: var(--font-display);
-    font-size: 1.4rem;
-    line-height: 1.05;
-    color: var(--accent-ink);
+    font-size: 1.125rem;
+    line-height: 1;
+    color: var(--bg);
+    font-variant-numeric: tabular-nums;
   }
   .tile.warn .n {
-    color: var(--warn);
+    color: var(--accent-on-dark);
   }
   .tile .l {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-ghost);
+    letter-spacing: 0.1em;
+    color: rgba(237, 228, 212, 0.55);
+    white-space: nowrap;
   }
 
   /* ── Explorer ──────────────────────────────────────────────────────────── */
@@ -1922,7 +2001,7 @@ import type { NetworkPayload } from '$lib/codegraph/types';
      graph as the same card chat uses. */
   .explorer {
     display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: 288px minmax(0, 1fr);
     gap: 10px;
     /*
      * A DEFINITE height, viewport-relative. 62vh is the old fixed 620px at the
@@ -1970,6 +2049,42 @@ import type { NetworkPayload } from '$lib/codegraph/types';
   .rail::-webkit-scrollbar-thumb {
     background: var(--card-border);
     border-radius: var(--radius-round);
+  }
+  .rail-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -4px -12px 2px;
+    padding: 10px 13px;
+    background: var(--text-primary);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.18);
+  }
+  .rail-title,
+  .rail-state,
+  .rail-clear {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+  }
+  .rail-title {
+    letter-spacing: 0.14em;
+    color: rgba(237, 228, 212, 0.62);
+  }
+  .rail-state {
+    letter-spacing: 0.08em;
+    color: rgba(237, 228, 212, 0.4);
+  }
+  .rail-clear {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    letter-spacing: 0.08em;
+    color: var(--accent-on-dark);
+    cursor: pointer;
+  }
+  .rail-clear:hover {
+    color: var(--bg);
   }
 
   .canvas {
@@ -2226,12 +2341,6 @@ import type { NetworkPayload } from '$lib/codegraph/types';
     margin-top: 6px;
   }
 
-  .filters-on {
-    margin: 8px 0 2px;
-    background: var(--accent-tint-04);
-    border-radius: var(--radius-sharp);
-    padding: 7px 8px;
-  }
   .focus-box {
     display: flex;
     flex-direction: column;
