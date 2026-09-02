@@ -19,7 +19,7 @@
 
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamPlaces, jkaiMemories } from '$lib/db/schema';
+import { daydreamMemoryThemes, daydreamPlaces, jkaiMemories } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { getSetting } from '$lib/server/models/settings';
@@ -91,11 +91,29 @@ export async function gatherFacts(evidence: EvidenceRef[]): Promise<string[]> {
     for (const m of memories) facts.push(`MEMORY: ${m.content}`);
   }
 
+  const themeIds = evidence.filter((e) => e.kind === 'memory-theme').map((e) => e.id);
+  if (themeIds.length) {
+    const themes = await db
+      .select({
+        kind: daydreamMemoryThemes.kind,
+        statement: daydreamMemoryThemes.statement,
+        guidance: daydreamMemoryThemes.guidance,
+        confidence: daydreamMemoryThemes.confidence,
+      })
+      .from(daydreamMemoryThemes)
+      .where(inArray(daydreamMemoryThemes.id, themeIds));
+    for (const theme of themes) {
+      facts.push(
+        `MEMORY ${theme.kind.toUpperCase()}: ${theme.statement} Apply when relevant: ${theme.guidance} (${theme.confidence} confidence).`,
+      );
+    }
+  }
+
   // Everything else travels as the note the detector already wrote. Those notes
   // are rule-generated and therefore trustworthy; resolving them back to live
   // rows here would be a second, unaudited way for data to reach the prompt.
   for (const e of evidence) {
-    if (e.kind === 'place' || e.kind === 'memory') continue;
+    if (e.kind === 'place' || e.kind === 'memory' || e.kind === 'memory-theme') continue;
     if (e.note) facts.push(`${e.kind.toUpperCase()}: ${e.note}`);
   }
 

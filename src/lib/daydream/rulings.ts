@@ -269,11 +269,10 @@ export async function listRulings(limit = 50): Promise<RulingRow[]> {
  * Rulings as pack cards, for the ponder cycle.
  *
  * This is the half that makes the loop close. A memory sitting in the table is
- * only read by the snapshot's 200-row sweep, which has no ordering guarantee —
- * the same reason `noteCards` exists rather than trusting that sweep. A
- * refutation of the exact claim the engine is about to make again is the most
- * valuable card in the pack and must not be competing for a slot with a
- * two-year-old note about coffee.
+ * normally leaves the raw pack after the nightly consolidation. A refutation
+ * of the exact claim the engine is about to make again is different: it is a
+ * binding prohibition and must remain available even after its broader lesson
+ * has been distilled.
  *
  * Refutations first, deliberately: they are the ones that change what gets
  * said. A confirmation only tells the engine to carry on.

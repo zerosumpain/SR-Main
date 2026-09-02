@@ -90,7 +90,7 @@
       {#each items as e, i (`${e.kind}-${e.id}-${i}`)}
         <li class="ev-item" class:missing={e.missing}>
           <div class="ev-hd">
-            <span class="ev-kind">{e.kind}</span>
+            <span class="ev-kind">{e.kind === 'memory-theme' ? 'memory' : e.kind}</span>
             {#if e.href}
               <a class="ev-title link" href={e.href}>{e.title}</a>
             {:else}

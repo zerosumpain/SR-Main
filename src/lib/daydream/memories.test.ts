@@ -1,27 +1,47 @@
 import { describe, it, expect } from 'vitest';
-import { CATEGORY_ORDER, MEMORIES_PER_PACK, groupByCategory, memoryUse } from './memories';
+import {
+  CATEGORY_ORDER,
+  MEMORY_THEMES_PER_PACK,
+  groupByCategory,
+  groupThemesByKind,
+  memoryUse,
+} from './memories';
 import { PACK_LIMITS } from './ponder/pack';
 
 describe('memoryUse', () => {
-  it('always names the one mechanism every memory has', () => {
-    const { lines, binding } = memoryUse({ category: 'health', origin: 'elsewhere', verdict: null });
-    expect(lines[0]).toContain('Known (health)');
-    expect(lines[0]).toContain('verbatim');
+  it('explains that raw detail waits for consolidation', () => {
+    const { lines, binding } = memoryUse({
+      category: 'health', origin: 'elsewhere', verdict: null, consolidatedAt: null, themeIds: [],
+    });
+    expect(lines[0].toLowerCase()).toContain('awaiting tonight');
+    expect(lines[0]).toContain('stays out of ponder packs');
     expect(binding).toBe(false);
+  });
+
+  it('explains that a consolidated row becomes provenance, not prompt prose', () => {
+    const { lines } = memoryUse({
+      category: 'health', origin: 'elsewhere', verdict: null,
+      consolidatedAt: '2026-09-02T22:30:00Z', themeIds: ['theme-1'],
+    });
+    expect(lines[0]).toContain('source evidence');
+    expect(lines[0]).toContain('broader lesson/value');
   });
 
   it('marks a refutation as BINDING, and nothing else', () => {
     // The distinction the Canva case cost eight repeats to learn: being carded
     // is material the proposer may ignore; the refutation block is an
     // instruction it may not.
-    expect(memoryUse({ category: 'situations', origin: 'ruling', verdict: 'refuted' }).binding).toBe(true);
-    expect(memoryUse({ category: 'situations', origin: 'ruling', verdict: 'verified' }).binding).toBe(false);
-    expect(memoryUse({ category: 'situations', origin: 'ruling', verdict: 'uncertain' }).binding).toBe(false);
-    expect(memoryUse({ category: 'situations', origin: 'note', verdict: null }).binding).toBe(false);
+    const rest = { category: 'situations', consolidatedAt: 'now', themeIds: [] as string[] };
+    expect(memoryUse({ ...rest, origin: 'ruling', verdict: 'refuted' }).binding).toBe(true);
+    expect(memoryUse({ ...rest, origin: 'ruling', verdict: 'verified' }).binding).toBe(false);
+    expect(memoryUse({ ...rest, origin: 'ruling', verdict: 'uncertain' }).binding).toBe(false);
+    expect(memoryUse({ ...rest, origin: 'note', verdict: null }).binding).toBe(false);
   });
 
   it('says what a named place additionally unlocks', () => {
-    const { lines } = memoryUse({ category: 'places', origin: 'place', verdict: null });
+    const { lines } = memoryUse({
+      category: 'places', origin: 'place', verdict: null, consolidatedAt: 'now', themeIds: ['place-theme'],
+    });
     expect(lines.some((l) => l.includes('un-mute'))).toBe(true);
   });
 });
@@ -54,11 +74,15 @@ describe('groupByCategory', () => {
   });
 });
 
-describe('MEMORIES_PER_PACK', () => {
-  it('agrees with the pack that actually does the slicing', () => {
-    // The page prints "N of M reach a pack". If this drifts from PACK_LIMITS
-    // the page states a falsehood about the engine, which is the one thing
-    // this hub is not allowed to do.
-    expect(MEMORIES_PER_PACK).toBe(PACK_LIMITS.memories);
+describe('MEMORY_THEMES_PER_PACK', () => {
+  it('agrees with the theme cap that the page describes', () => {
+    expect(MEMORY_THEMES_PER_PACK).toBe(PACK_LIMITS.memoryThemes);
+  });
+});
+
+describe('groupThemesByKind', () => {
+  it('puts explicit values before lessons', () => {
+    const groups = groupThemesByKind([{ kind: 'lesson' }, { kind: 'value' }]);
+    expect(groups.map((g) => g.kind)).toEqual(['value', 'lesson']);
   });
 });

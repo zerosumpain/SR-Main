@@ -16,9 +16,10 @@
 // something the owner typed is the store every part of jkai already reads. The
 // column here is the display copy and the link, not the record.
 //
-// A note is never interpreted at write time. It goes in verbatim, is carded
-// verbatim, and the model has to cite it like any other card — so a note can
-// correct a musing without becoming a new surface for inventing one.
+// A note is never interpreted at write time. It goes into the raw archive
+// verbatim, then the nightly consolidator extracts a sourced lesson or value.
+// Only that durable theme can reach a future ponder pack; the incident-specific
+// sentence remains available as provenance.
 
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '$lib/db';

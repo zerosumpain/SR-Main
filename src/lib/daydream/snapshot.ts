@@ -11,10 +11,11 @@
 //
 // No new data sources. Everything here already existed; the value is the join.
 
-import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamPlaces,
+  daydreamMemoryThemes,
   daydreamSpend,
   daydreamTrail,
   heartbeatActions,
@@ -411,21 +412,40 @@ export async function buildSnapshot(
 
   // ── Memories ───────────────────────────────────────────────────────────
   let memories: DaydreamSnapshot['memories'] = [];
+  let memoryThemes: DaydreamSnapshot['memoryThemes'] = [];
   try {
-    memories = await db
-      .select({ id: jkaiMemories.id, category: jkaiMemories.category, content: jkaiMemories.content })
-      .from(jkaiMemories)
-      .where(sql`${jkaiMemories.supersededBy} is null`)
-      // Newest first, and not decoration: `pack.ts` takes `slice(0, 16)` of
-      // this array, so without an ORDER BY *which* sixteen memories reached a
-      // pack was whatever order the planner happened to return — stable enough
-      // to look deliberate and arbitrary enough that a memory written this
-      // morning might never be read. The Memory tab now states which sixteen
-      // they are, and a page may not state something the query does not
-      // guarantee.
-      .orderBy(desc(jkaiMemories.createdAt))
-      .limit(200);
-    sources.push({ key: 'memories', status: memories.length ? 'ok' : 'empty', detail: `${memories.length} live` });
+    [memories, memoryThemes] = await Promise.all([
+      db
+        .select({ id: jkaiMemories.id, category: jkaiMemories.category, content: jkaiMemories.content })
+        .from(jkaiMemories)
+        .where(and(isNull(jkaiMemories.supersededBy), isNull(jkaiMemories.consolidatedAt)))
+        // Raw rows are a short-lived bridge: something learned during the day
+        // can matter before tonight, then leaves this list once it has either
+        // joined a theme or been explicitly judged non-durable.
+        .orderBy(desc(jkaiMemories.createdAt))
+        .limit(40),
+      db
+        .select({
+          id: daydreamMemoryThemes.id,
+          kind: daydreamMemoryThemes.kind,
+          title: daydreamMemoryThemes.title,
+          statement: daydreamMemoryThemes.statement,
+          guidance: daydreamMemoryThemes.guidance,
+          confidence: daydreamMemoryThemes.confidence,
+          sourceCount: daydreamMemoryThemes.sourceCount,
+        })
+        .from(daydreamMemoryThemes)
+        .where(eq(daydreamMemoryThemes.status, 'active'))
+        // Repeatedly-supported themes earn the front of the pack. Recency only
+        // breaks a tie; one noisy new episode must not evict a durable value.
+        .orderBy(desc(daydreamMemoryThemes.sourceCount), desc(daydreamMemoryThemes.updatedAt))
+        .limit(80),
+    ]);
+    sources.push({
+      key: 'memories',
+      status: memories.length || memoryThemes.length ? 'ok' : 'empty',
+      detail: `${memoryThemes.length} themes · ${memories.length} awaiting tonight`,
+    });
   } catch (err) {
     sources.push({ key: 'memories', status: 'failed', detail: errMsg(err) });
   }
@@ -592,6 +612,7 @@ export async function buildSnapshot(
     interests,
     offers,
     memories,
+    memoryThemes,
     emailFacts,
     spend,
     family,

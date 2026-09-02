@@ -93,6 +93,17 @@ export interface MemoryRow {
   content: string;
 }
 
+/** A sourced principle produced by the end-of-day memory pass. */
+export interface MemoryThemeRow {
+  id: string;
+  kind: string;
+  title: string;
+  statement: string;
+  guidance: string;
+  confidence: string;
+  sourceCount: number;
+}
+
 /** One gathered signal and whether it actually produced anything. Same shape
  *  and same purpose as the briefing engine's source rows: a snapshot that
  *  silently lacks a source produces detectors that are silently wrong. */
@@ -168,7 +179,10 @@ export interface DaydreamSnapshot {
     items: Offer[];
   };
 
+  /** New raw memories not yet reviewed by tonight's consolidation. */
   memories: MemoryRow[];
+  /** Durable roll-ups. These, rather than old episode prose, are the normal memory surface. */
+  memoryThemes: MemoryThemeRow[];
 
   /**
    * Dated facts the email ingest already extracted — renewals, appointments,
@@ -233,7 +247,7 @@ export interface FamilyMember {
 // ── What a detector returns ──────────────────────────────────────────────────
 
 export interface EvidenceRef {
-  /** 'trail' | 'place' | 'memory' | 'email' | 'research' | 'calendar' | 'health' */
+  /** 'trail' | 'place' | 'memory' | 'memory-theme' | 'email' | 'research' | 'calendar' | 'health' */
   kind: string;
   id: string;
   note?: string;

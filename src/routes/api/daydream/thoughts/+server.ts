@@ -649,8 +649,23 @@ export const POST: RequestHandler = async ({ request }) => {
       // checked" and "what does it know" are different questions.
       case 'memories': {
         const limit = Number(body.limit);
-        const { listDaydreamMemories } = await import('$lib/daydream/memories.server');
-        return json({ memories: await listDaydreamMemories(Number.isFinite(limit) ? limit : 200) });
+        const { loadMemoryOverview } = await import('$lib/daydream/memories.server');
+        return json(await loadMemoryOverview(Number.isFinite(limit) ? limit : 200));
+      }
+
+      // A visible bootstrap/retry for the nightly process. The same idempotent
+      // writer and validator as the scheduled activity; `allowRepeat` only
+      // means "look for memories added after tonight's completed run".
+      case 'consolidate_memories': {
+        const { budgetStatus } = await import('$lib/daydream/budget');
+        const { resolveDaydreamModel } = await import('$lib/daydream/compose');
+        const model = await resolveDaydreamModel();
+        const budget = await budgetStatus({ now: new Date(), isCodexModel: model.provider === 'codex' });
+        if (budget.blocked) return json({ error: `budget: ${budget.blockedReason}` }, { status: 429 });
+        const { runMemoryConsolidation } = await import('$lib/daydream/memory-consolidation.server');
+        const result = await runMemoryConsolidation({ allowRepeat: true });
+        if (result.status === 'failed') return json({ error: result.error, result }, { status: 502 });
+        return json({ ok: true, result });
       }
 
       // ── How a line of enquiry is going ────────────────────────────────

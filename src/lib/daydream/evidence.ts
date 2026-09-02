@@ -43,6 +43,8 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamHypotheses,
+  daydreamMemoryThemes,
+  daydreamMemoryThemeSources,
   daydreamPlaces,
   daydreamSpend,
   daydreamTrail,
@@ -166,6 +168,7 @@ export async function resolveEvidence(refs: EvidenceRef[]): Promise<ResolvedEvid
     resolvePlaces(idsOf('place'), fill),
     resolveSpend(idsOf('spend'), fill),
     resolveMemories(idsOf('memory'), fill),
+    resolveMemoryThemes(idsOf('memory-theme'), fill),
     resolveHypotheses(idsOf('hypothesis'), fill),
     resolveInsights(idsOf('intel'), fill),
     resolveEntities(idsOf('intel-entity'), fill),
@@ -357,6 +360,70 @@ async function resolveMemories(ids: string[], fill: Fill): Promise<void> {
       // No memories surface exists to link to. A link to a 404 is worse than
       // no link — the card already carries the memory's full text.
       href: null,
+    });
+  }
+}
+
+async function resolveMemoryThemes(ids: string[], fill: Fill): Promise<void> {
+  if (ids.length === 0) return;
+  const rows = await db
+    .select({
+      id: daydreamMemoryThemes.id,
+      kind: daydreamMemoryThemes.kind,
+      title: daydreamMemoryThemes.title,
+      statement: daydreamMemoryThemes.statement,
+      guidance: daydreamMemoryThemes.guidance,
+      confidence: daydreamMemoryThemes.confidence,
+      sourceCount: daydreamMemoryThemes.sourceCount,
+      status: daydreamMemoryThemes.status,
+      updatedAt: daydreamMemoryThemes.updatedAt,
+    })
+    .from(daydreamMemoryThemes)
+    .where(inArray(daydreamMemoryThemes.id, ids));
+
+  const found = new Set(rows.map((r) => r.id));
+  for (const id of ids) {
+    if (!found.has(id)) {
+      fill('memory-theme', id, {
+        missing: true,
+        title: 'This memory theme is no longer stored',
+        lines: ['The thought cited it when it was formed, so its influence can no longer be inspected.'],
+      });
+    }
+  }
+
+  const sources = rows.length
+    ? await db
+        .select({
+          themeId: daydreamMemoryThemeSources.themeId,
+          content: jkaiMemories.content,
+          category: jkaiMemories.category,
+          supersededBy: jkaiMemories.supersededBy,
+        })
+        .from(daydreamMemoryThemeSources)
+        .innerJoin(jkaiMemories, eq(jkaiMemories.id, daydreamMemoryThemeSources.memoryId))
+        .where(inArray(daydreamMemoryThemeSources.themeId, rows.map((r) => r.id)))
+    : [];
+  const byTheme = new Map<string, typeof sources>();
+  for (const source of sources) {
+    byTheme.set(source.themeId, [...(byTheme.get(source.themeId) ?? []), source]);
+  }
+
+  for (const row of rows) {
+    const sourceLines = (byTheme.get(row.id) ?? [])
+      .slice(0, 5)
+      .map((s) => `Source memory (${s.category}): ${s.content.slice(0, 240)}${s.supersededBy ? ' [later superseded]' : ''}`);
+    fill('memory-theme', row.id, {
+      title: `${row.kind === 'value' ? 'Value' : 'Lesson'}: ${row.title}`,
+      lines: [
+        row.statement,
+        `How it shaped this: ${row.guidance}`,
+        `Rolled up from ${row.sourceCount} raw ${row.sourceCount === 1 ? 'memory' : 'memories'} · ${row.confidence} confidence${row.status === 'active' ? '' : ` · ${row.status}`}`,
+        ...sourceLines,
+        row.sourceCount > sourceLines.length ? `${row.sourceCount - sourceLines.length} more source memories are shown on the Memory tab.` : '',
+      ].filter(Boolean),
+      at: row.updatedAt.toISOString(),
+      href: `/jkai/daydreams?tab=memory#memory-theme-${row.id}`,
     });
   }
 }

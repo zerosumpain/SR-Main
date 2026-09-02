@@ -41,6 +41,7 @@ function snap(over: Partial<DaydreamSnapshot> = {}): DaydreamSnapshot {
     interests: [],
     offers: { available: true, items: [] },
     memories: [{ id: 'm1', category: 'people', content: 'Jemima swims on Tuesdays.' }],
+    memoryThemes: [],
     emailFacts: {
       available: true,
       upcoming: [{ id: 'te1', date: '2026-09-12', type: 'renewal', title: 'Car insurance renewal £744', noteId: 'n1' }],
@@ -93,6 +94,65 @@ describe('assemblePack', () => {
     const pack = assemblePack(inputs());
     const rory = pack.cards.find((c) => c.ref.id === 'rory');
     expect(rory?.text).toContain('not tracked');
+  });
+
+  it('keeps unconsolidated raw memories out of the reasoning pack', () => {
+    const pack = assemblePack(inputs());
+    expect(pack.cards.some((c) => c.ref.kind === 'memory')).toBe(false);
+    expect(renderPack(pack)).not.toContain('Jemima swims on Tuesdays');
+  });
+
+  it('cards consolidated memory as a sourced lesson and preserves that ref in a musing', () => {
+    const pack = assemblePack(inputs({
+      snapshot: snap({
+        memories: [],
+        memoryThemes: [{
+          id: 'theme-health',
+          kind: 'lesson',
+          title: 'Readiness has contextual modifiers',
+          statement: 'Alcohol can lower readiness even when sleep looks strong.',
+          guidance: 'Consider alcohol as one possible modifier without assuming it was the cause.',
+          confidence: 'high',
+          sourceCount: 2,
+        }],
+      }),
+    }));
+    const card = pack.cards.find((c) => c.ref.kind === 'memory-theme');
+    expect(card?.text).toContain('Lesson — Readiness has contextual modifiers');
+    expect(card?.text).toContain('When relevant');
+
+    const out = validatePonderOutput({
+      musings: [{
+        slug: 'sleep-readiness-context',
+        theme: 'health',
+        title: 'Sleep and readiness diverged',
+        text: 'Sleep looked strong while readiness did not; context may be part of the gap.',
+        salience: 0.7,
+        cites: [card?.id],
+      }],
+    }, pack);
+    expect(out.musings[0].candidate.evidence).toContainEqual(
+      expect.objectContaining({ kind: 'memory-theme', id: 'theme-health' }),
+    );
+  });
+
+  it('does not truncate practical guidance behind a long lesson statement', () => {
+    const pack = assemblePack(inputs({
+      snapshot: snap({
+        memories: [],
+        memoryThemes: [{
+          id: 'theme-long',
+          kind: 'lesson',
+          title: 'Context changes interpretation',
+          statement: 'A'.repeat(210),
+          guidance: 'PRACTICAL GUIDANCE MUST REACH THE PONDER MODEL.',
+          confidence: 'medium',
+          sourceCount: 3,
+        }],
+      }),
+    }));
+    expect(pack.cards.find((c) => c.ref.id === 'theme-long')?.text)
+      .toContain('PRACTICAL GUIDANCE MUST REACH THE PONDER MODEL');
   });
 });
 
