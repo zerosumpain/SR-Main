@@ -217,7 +217,12 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
   if (!isAutoExtractEnabled()) return { status: 'disabled' };
 
   const text = (input.text ?? '').trim();
-  if (text.length < MIN_EXTRACT_CHARS) return { status: 'too-short' };
+  // The floor exists to avoid spending a model call on a note too thin to hold
+  // anything. A caller that SUPPLIES the extraction is not spending one, and
+  // the graph it brought is the payload — so a research session with 29
+  // entities and a two-line report must not be turned away for the length of
+  // its prose.
+  if (!input.extraction && text.length < MIN_EXTRACT_CHARS) return { status: 'too-short' };
 
   try {
     const existing = await findDerivedNote(input.kind, input.refId);

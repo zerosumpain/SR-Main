@@ -440,6 +440,12 @@ export async function commitSessionGraph(
   if (outcome.status === 'disabled') {
     return { status: 'disabled', reason: 'Intel auto-extraction is switched off on this host' };
   }
+  if (outcome.status === 'held') {
+    // The note landed in the admission queue rather than the graph. Only the
+    // mail path asks for that, so it should be unreachable here — but reporting
+    // it as a plain failure would say the wrong thing about where the data went.
+    return { status: 'failed', reason: 'The note is waiting to be admitted to the graph' };
+  }
   return { status: 'failed', reason: `Intel refused the merge (${outcome.status})` };
 }
 

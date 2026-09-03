@@ -279,6 +279,22 @@ function runResearch(sessionId: string): Promise<void> {
   return runWithResearchMeter(sessionId, () => runResearchPhases(sessionId));
 }
 
+/**
+ * Did the intel graph commission this run?
+ *
+ * `POST /api/jkai/intel/commission` stamps `seedContext.fromIntel`. Read
+ * defensively: `seed_context` is free-form jsonb that several other paths write
+ * with shapes of their own (`type: 'fact'`, `parentTopic`, …), so a missing or
+ * differently-shaped value simply means "not commissioned".
+ */
+function isCommissionedByIntel(seedContext: unknown): boolean {
+  return (
+    !!seedContext &&
+    typeof seedContext === 'object' &&
+    (seedContext as Record<string, unknown>).fromIntel === true
+  );
+}
+
 async function runResearchPhases(sessionId: string): Promise<void> {
   const emitter = getEmitter(sessionId);
   const ac = new AbortController();
@@ -505,17 +521,39 @@ async function runResearchPhases(sessionId: string): Promise<void> {
       emitLog(sessionId, '\u26A0\uFE0F', `Cross-session linking error: ${err.message ?? 'unknown'}`);
     }
 
-    // The findings are NOT pushed into the intel graph here.
+    // The findings are NOT pushed into the intel graph here — with one
+    // exception.
     //
     // They used to be, on every completed investigation. That made the durable
     // graph the union of every question anyone had ever asked — including
     // one-off probes, tests and dead ends — and there was no way to run
-    // research without contributing to it.
+    // research without contributing to it. A session's `entity`/`relationship`
+    // rows are its own graph now, scoped by `session_id` and deleted with the
+    // session, and merging is an explicit act: POST /api/research/<id>/to-intel
+    // → `commitSessionGraph` in $lib/deepdive/graph-commit.
     //
-    // A session's `entity`/`relationship` rows are its own graph, scoped by
-    // `session_id` and deleted with the session. Merging them into intel is now
-    // an explicit act: POST /api/research/<id>/to-intel, which runs
-    // `commitSessionGraph` in $lib/deepdive/graph-commit.
+    // The exception is research the INTEL GRAPH ITSELF commissioned. Asking the
+    // graph to go and find something out is the request to commit; a commission
+    // whose answer never came back would be a feature that does nothing.
+    if (isCommissionedByIntel(session.seedContext)) {
+      try {
+        if (!budget.expired()) {
+          const { commitSessionGraph } = await import('./graph-commit');
+          const outcome = await commitSessionGraph(sessionId);
+          if (outcome.status === 'committed') {
+            emitLog(
+              sessionId,
+              '\u{1F517}',
+              `Committed ${outcome.entities} entities and ${outcome.relationships} relationships to the knowledge graph.`,
+            );
+          }
+        }
+      } catch (err: any) {
+        // Housekeeping. The research itself succeeded either way, and the owner
+        // can still commit it by hand from the research page.
+        console.error('[deepdive] commissioned graph commit failed:', err);
+      }
+    }
 
     // Complete
     await finish(sessionId, startTime, priorMs);

@@ -106,7 +106,13 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
           topic: payload.slice(0, 2000),
           goals: [],
           config: {},
-          seedContext: context ? { fromIntel: true, context } : null,
+          // ALWAYS marked, context or not. Research no longer merges itself
+          // into the graph when it finishes (see $lib/deepdive/graph-commit) —
+          // and a commission is the graph asking to learn something, so this
+          // flag is what tells the worker to commit this one on the way out.
+          // Gated on `context` before, so a commission with nothing to seed it
+          // carried no mark at all.
+          seedContext: { fromIntel: true, ...(context ? { context } : {}) },
         })
         .returning({ id: researchSessions.id });
 
