@@ -14,6 +14,7 @@ import { db } from '$lib/db';
 import { standardRegistryEntries, standardRegistrySourceRuns } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 
 export interface Candidate {
   canonicalId: string;
@@ -216,16 +217,19 @@ async function classifyBatch(items: Candidate[]): Promise<Map<string, Classifica
   const sys =
     'You classify UK government publications for a registry of DATA STANDARDS. For each item decide: is it actually a data standard, data dictionary, metadata standard, API/technical data standard, identifier scheme, or closely-related guidance — versus unrelated news/policy/forms. Return STRICT JSON: {"items":[{"i":<index>,"isStandard":<bool>,"kind":"data-standard|data-dictionary|metadata|api-standard|identifier|guidance|other","confidence":"high|medium|low","domain":"education|childrens-social-care|child-protection|health|local-gov|cross-gov|metadata|other","summary":"<=160 chars"}]}. Be conservative: news, consultations, statistics releases and forms are "other" with isStandard=false.';
   try {
-    const res = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: sys },
-        { role: 'user', content: JSON.stringify({ items: payload }) },
-      ],
-      temperature: 0.1,
-      max_tokens: 3000,
-      response_format: { type: 'json_object' },
-    });
+    // Tagged `project-chat`, the role already resolved on the line above.
+    const res = await withActivity('project-chat', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: JSON.stringify({ items: payload }) },
+        ],
+        temperature: 0.1,
+        max_tokens: 3000,
+        response_format: { type: 'json_object' },
+      }),
+    );
     const parsed = JSON.parse(res.choices?.[0]?.message?.content ?? '{}');
     for (const c of parsed?.items || []) {
       const cand = items[c.i];

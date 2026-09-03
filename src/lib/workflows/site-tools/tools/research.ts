@@ -5,6 +5,7 @@ import { desc, eq } from 'drizzle-orm';
 import { searchResearch } from '$lib/deepdive/research-search';
 import { coerceDepth, depthPreset, RESEARCH_DEPTHS } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
+import { withActivity } from '$lib/context/activity';
 
 // ==========================================
 // Existing Tools (moved)
@@ -274,15 +275,20 @@ Instructions:
    SUGGEST: branch "<subtopic>" — to research a specific subtopic in depth
    SUGGEST: web_search "<query>" — for a quick factual lookup`;
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: args.question as string },
-      ],
-      temperature: 0.3,
-      max_tokens: 1024,
-    });
+    // Tagged `research-deep` — the role resolved just above. These two calls are
+    // the TOOL's own synthesis over a finished report, made outside the research
+    // worker's own tag, so untagged they recorded as anonymous gateway spend.
+    const response = await withActivity('research-deep', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: args.question as string },
+        ],
+        temperature: 0.3,
+        max_tokens: 1024,
+      }),
+    );
 
     const text = response.choices[0]?.message?.content?.trim() || '';
 
@@ -404,15 +410,17 @@ register({
 
     const systemPrompt = `Research Topic: ${session.topic}\n\nResearch Findings:\n${reportText}\n\n${instruction}${focus ? `\n\nFocus specifically on: ${focus}` : ''}`;
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extract the research into ${format} format.` },
-      ],
-      temperature: 0.5,
-      max_tokens: 2048,
-    });
+    const response = await withActivity('research-deep', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Extract the research into ${format} format.` },
+        ],
+        temperature: 0.5,
+        max_tokens: 2048,
+      }),
+    );
 
     const content = response.choices[0]?.message?.content?.trim() || '';
     return { success: true, data: { format, content } };
@@ -484,7 +492,14 @@ register({
     const limit = args.limit !== undefined ? Number(args.limit) : undefined;
     const sessionId = typeof args.sessionId === 'string' ? args.sessionId : undefined;
     try {
-      const hits = await searchResearch(query, { topK: limit, sessionId });
+      // Embeds the query to search the research index. Tagged `embeddings`
+      // because that is what it is — the research WORKER tags its own embedding
+      // passes `research-deep` as part of a run, but this one is a bare lookup
+      // from chat with no run around it, and untagged it recorded as anonymous
+      // gateway spend.
+      const hits = await withActivity('embeddings', () =>
+        searchResearch(query, { topK: limit, sessionId }),
+      );
       return {
         success: true,
         data: {

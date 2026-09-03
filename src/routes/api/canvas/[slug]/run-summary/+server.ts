@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { resolveLLMClient } from '$lib/workflows/nodes/llm-helpers';
+import { withActivity } from '$lib/context/activity';
 
 type NodeIn = {
   id: string;
@@ -55,16 +56,21 @@ export const POST: RequestHandler = async ({ request }) => {
 
   try {
     const { client, model } = await resolveLLMClient(undefined);
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: sysPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 600,
-      response_format: { type: 'json_object' },
-    });
+    // `resolveLLMClient(undefined)` above means this runs on the `workflow-node`
+    // role. The summary is written AFTER the run, so there is no execution
+    // context to give it `source: workflow` — it needs the tag explicitly.
+    const resp = await withActivity('workflow-node', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 600,
+        response_format: { type: 'json_object' },
+      }),
+    );
     const raw = resp.choices[0]?.message?.content ?? '';
     let parsed: { overall?: string; perNode?: Record<string, string> } = {};
     try {

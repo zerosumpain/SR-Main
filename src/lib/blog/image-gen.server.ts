@@ -6,7 +6,7 @@
  *
  * Both halves follow paths that already exist rather than inventing new ones:
  *
- *  - the DRAFTING call goes through the LLM gateway (`resolveDefaultModel` →
+ *  - the DRAFTING call goes through the LLM gateway (`resolveBlogModel` →
  *    `getLLMClient`), like every other model call on the site;
  *  - the GENERATION call is a bare `fetch` to OpenRouter's images endpoint,
  *    because that is the only way to reach it — there is no SDK wrapper — and
@@ -22,12 +22,12 @@
 
 import { randomUUID } from 'node:crypto';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
 import { saveBlogImage } from '$lib/blog/image-store';
 import { recordUpload } from '$lib/blog/media.server';
 import { plainTextFromHtml } from '$lib/blog/readability';
 import { BRIEF_SYSTEM_PROMPT, cleanBrief, composePrompt, type ImageAspect } from './image-gen';
+import { resolveBlogModel } from '$lib/server/models/workload-settings';
 
 /**
  * How much of the post the drafting model reads.
@@ -83,7 +83,9 @@ export async function draftImageBrief(post: BriefInput): Promise<string> {
   // Below this there is no article to read a scene out of.
   if (body.length < 200 && !post.excerpt) return '';
 
-  const ctx = await resolveDefaultModel();
+  // The `blog` role: this is the drafting call that reads the post, not the
+  // image call below it (that one is `image-tool`, resolved separately).
+  const ctx = await resolveBlogModel();
   const { client, model } = await getLLMClient(ctx);
 
   const res = await client.chat.completions.create({

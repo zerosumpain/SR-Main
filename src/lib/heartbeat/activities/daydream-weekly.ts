@@ -18,6 +18,7 @@ import {
 } from '$lib/daydream/digest/weekly';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { withActivity } from '$lib/context/activity';
 
 const NAME = 'daydream-weekly';
 
@@ -77,37 +78,44 @@ export const daydreamWeekly: ActivityHandler = {
         const { getLLMClient } = await import('$lib/llm/client');
         const { client, model: modelId } = await getLLMClient(model);
 
-        const res = await client.chat.completions.create({
-          model: modelId,
-          temperature: 0.5,
-          max_tokens: 400,
-          messages: [
-            {
-              role: 'system',
-              content:
-                "Write John's weekly second-brain letter: 2-4 plain sentences over the FACTS below — what the week held, what was learned or refuted, what deserves watching next. Every number and claim must appear in the facts; a quiet week is stated as quiet, never padded. No greeting, no sign-off, no emoji.",
-            },
-            { role: 'user', content: `FACTS:\n${factLines.join('\n')}` },
-          ],
-        });
+        // Tagged `daydream`, the role whose model this resolves. Without it the
+        // heartbeat engine's own tag applies — the ACTIVITY's name, which is not
+        // a workload id, so the spend lands on a row nothing can switch.
+        const res = await withActivity('daydream', () =>
+          client.chat.completions.create({
+            model: modelId,
+            temperature: 0.5,
+            max_tokens: 400,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  "Write John's weekly second-brain letter: 2-4 plain sentences over the FACTS below — what the week held, what was learned or refuted, what deserves watching next. Every number and claim must appear in the facts; a quiet week is stated as quiet, never padded. No greeting, no sign-off, no emoji.",
+              },
+              { role: 'user', content: `FACTS:\n${factLines.join('\n')}` },
+            ],
+          }),
+        );
         promptTokens += res.usage?.prompt_tokens ?? 0;
         completionTokens += res.usage?.completion_tokens ?? 0;
         const draft = (res.choices[0]?.message?.content ?? '').trim();
 
         if (draft && draft.length <= 900) {
-          const check = await client.chat.completions.create({
-            model: modelId,
-            temperature: 0,
-            max_tokens: 10,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'Answer with exactly one word. SUPPORTED if every claim and number in the draft appears in the facts; otherwise UNSUPPORTED. Default to UNSUPPORTED when unsure.',
-              },
-              { role: 'user', content: `FACTS:\n${factLines.join('\n')}\n\nDRAFT:\n${draft}` },
-            ],
-          });
+          const check = await withActivity('daydream', () =>
+            client.chat.completions.create({
+              model: modelId,
+              temperature: 0,
+              max_tokens: 10,
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Answer with exactly one word. SUPPORTED if every claim and number in the draft appears in the facts; otherwise UNSUPPORTED. Default to UNSUPPORTED when unsure.',
+                },
+                { role: 'user', content: `FACTS:\n${factLines.join('\n')}\n\nDRAFT:\n${draft}` },
+              ],
+            }),
+          );
           promptTokens += check.usage?.prompt_tokens ?? 0;
           completionTokens += check.usage?.completion_tokens ?? 0;
           const word = (check.choices[0]?.message?.content ?? '').trim().toUpperCase();

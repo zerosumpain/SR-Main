@@ -16,7 +16,7 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { agentActions, openrouterModels } from '$lib/db/schema';
-import { sql, gte, eq, and, isNotNull } from 'drizzle-orm';
+import { sql, gte, eq, and, isNotNull, isNull } from 'drizzle-orm';
 import { describeSiteWorkloads } from '$lib/server/models/workload-settings';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterKeyUsage } from '$lib/server/models/openrouter-usage';
@@ -55,6 +55,9 @@ const T_REASON = sql<number>`coalesce(sum(${agentActions.reasoningTokens}), 0)::
 const UNPRICED = sql<number>`count(*) filter (where ${agentActions.costUsd} is null)::int`;
 const ACTIVITY = sql<string | null>`${agentActions.input} ->> 'activity'`;
 const SOURCE = sql<string | null>`${agentActions.input} ->> 'source'`;
+/** `fn@chunk:line` for a call that carried no activity tag — see
+ *  `untaggedOrigin` in $lib/context/activity. */
+const ORIGIN = sql<string | null>`${agentActions.input} ->> 'origin'`;
 
 const IS_LLM = eq(agentActions.actionType, 'llm_call');
 
@@ -163,6 +166,7 @@ export const load: PageServerLoad = async ({ url }) => {
     byActivityModel,
     topSessions,
     firstTagged,
+    untaggedOrigins,
     catalogueRows,
     siteWorkloads,
     siteDefault,
@@ -279,6 +283,20 @@ export const load: PageServerLoad = async ({ url }) => {
       .limit(12),
 
     taggingSince(),
+
+    // What is actually IN the untagged bucket.
+    //
+    // The row has always been able to say how much it cost and never what spent
+    // it, which is the one question an operator has when they look at it. Rows
+    // written before this shipped carry no origin and are counted separately
+    // rather than dropped, so the list never implies it covers the whole total.
+    db
+      .select({ origin: ORIGIN, calls: CALLS, cost: COST })
+      .from(agentActions)
+      .where(and(inWindow, isNull(ACTIVITY), isNotNull(ORIGIN)))
+      .groupBy(ORIGIN)
+      .orderBy(sql`coalesce(sum(${agentActions.costUsd}), 0) desc, count(*) desc`)
+      .limit(12),
 
     db
       .select({
@@ -471,5 +489,11 @@ export const load: PageServerLoad = async ({ url }) => {
       .filter((c) => c.promptPrice != null)
       .sort((a, b) => (a.promptPrice ?? 0) - (b.promptPrice ?? 0)),
     taggingSince: firstTagged[0]?.at ?? null,
+    /** The call sites behind `source:gateway`, dearest first. */
+    untaggedOrigins: untaggedOrigins.map((o) => ({
+      origin: o.origin as string,
+      calls: n(o.calls),
+      cost: n(o.cost),
+    })),
   };
 };

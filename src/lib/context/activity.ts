@@ -49,3 +49,54 @@ export function withActivity<T>(id: string, fn: () => Promise<T>): Promise<T> {
 export function currentActivityId(): string | null {
   return activity.getStore()?.id ?? null;
 }
+
+/**
+ * A compact "who spent this" hint for a call that carried NO activity tag.
+ *
+ * The `source:gateway` row on /admin/ops/costs is, by construction, spend that
+ * nothing has claimed — and for months it was the largest line on the bill with
+ * no way to find out what was in it. Every diagnosis meant auditing every LLM
+ * call site by hand and reasoning from model ids and cron times. This makes the
+ * bucket say what is in it.
+ *
+ * Only called when there is no ambient activity, so the cost falls to nothing
+ * as the leaks are closed — and even then it sits next to a network round trip
+ * measured in hundreds of milliseconds.
+ *
+ * The server bundle is NOT minified and keeps its function names, and chunks are
+ * named after the module they came from, so a frame reads as something like
+ * `groundClaim@ground.server-BqK1z.js:274` — enough to open the right file. It
+ * deliberately does not try to resolve sourcemaps: reading 1,476 `.map` files at
+ * runtime to prettify a diagnostic would cost more than the thing it diagnoses.
+ */
+export function untaggedOrigin(): string | null {
+  if (activity.getStore()) return null;
+  const prev = Error.stackTraceLimit;
+  Error.stackTraceLimit = 24;
+  const stack = new Error().stack ?? '';
+  Error.stackTraceLimit = prev;
+
+  for (const raw of stack.split('\n').slice(2)) {
+    const line = raw.trim();
+    if (/node:internal|node_modules|[/\\]openai[/\\]/.test(line)) continue;
+
+    // "at fnName (/path/to/chunk.js:12:34)" or "at /path/to/chunk.js:12:34"
+    const m = /^at\s+(?:(.+?)\s+\()?(.*?):(\d+):\d+\)?$/.exec(line);
+    if (!m) continue;
+    const [, fn, file, lineNo] = m;
+    const base = file.split(/[/\\]/).pop() ?? file;
+    if (!base || base === 'index.js') continue;
+    // The plumbing every LLM call passes through. Matched on the BASENAME, not
+    // the path: an earlier version tested the whole frame, which also excluded
+    // any legitimate caller whose directory happened to contain one of these
+    // words — it would have blanked exactly the frames worth reporting.
+    // This module's own frames need no rule; `slice(2)` has already dropped
+    // them, and `withActivity` cannot be on the stack when there is no tag.
+    if (/^(usage-capture|usage-log|client|keys)[.-]/.test(base)) continue;
+
+    const name = (fn ?? '').replace(/^(async|new)\s+/, '').split('.').pop();
+    const hint = `${name && name !== '<anonymous>' ? `${name}@` : ''}${base}:${lineNo}`;
+    return hint.slice(0, 120);
+  }
+  return null;
+}

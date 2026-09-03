@@ -13,6 +13,7 @@ import { STRATEGIES } from './strategies';
 import { PRESSURES } from './pressures';
 import { VALID_REFS } from './policy';
 import { coerceJson } from './jsonsafe';
+import { withActivity } from '$lib/context/activity';
 
 const UA = 'strangeramblings-keystone-intel/1.0';
 const STRAT_BY_ID = Object.fromEntries(STRATEGIES.map((s) => [s.id, s.name]));
@@ -197,15 +198,18 @@ ${strategyIndex()}`;
   const user = `NEW ITEM:\nTitle: ${c.title}\nPublisher: ${c.publisher ?? '—'}\nType: ${c.docType ?? '—'}\nDate: ${c.publishedAt?.toISOString()?.slice(0, 10) ?? '—'}\nDescription: ${c.description ?? '—'}\nURL: ${c.url}`;
   try {
     const { client, model } = await getLLMClient(await resolveProjectChatModel());
-    const res = await client.chat.completions.create(
-      {
-        model,
-        messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
-        temperature: 0.2,
-        max_tokens: 1500,
-        response_format: { type: 'json_object' },
-      },
-      { signal: AbortSignal.timeout(60_000) as any },
+    // Tagged `project-chat`, the role already resolved on the line above.
+    const res = await withActivity('project-chat', () =>
+      client.chat.completions.create(
+        {
+          model,
+          messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
+          temperature: 0.2,
+          max_tokens: 1500,
+          response_format: { type: 'json_object' },
+        },
+        { signal: AbortSignal.timeout(60_000) as any },
+      ),
     );
     const p = coerceJson(res.choices?.[0]?.message?.content ?? '{}');
     const influences = (Array.isArray(p?.influences) ? p.influences : [])

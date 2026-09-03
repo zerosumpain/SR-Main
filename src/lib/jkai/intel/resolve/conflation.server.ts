@@ -26,6 +26,7 @@ import {
   type CandidateEntity,
   type SplitProposal,
 } from './conflation';
+import { withActivity } from '$lib/context/activity';
 
 export const SYSTEM_ACTOR = 'system';
 /** Pinned — renaming this re-asks the model about every entity it has judged. */
@@ -221,20 +222,25 @@ async function judge(candidate: Candidate, neighbours: string[]): Promise<SplitP
   const modelCtx = await resolveExtractionModel();
   const { client, model } = await getLLMClient(modelCtx);
 
-  const res = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: `Entity: "${candidate.name}" (type: ${candidate.typeName}, ${candidate.degree} edges)
+  // Tagged `extraction` — the role whose model this already resolves. Untagged
+  // it recorded as `source:gateway`, and conflation repair is a bulk pass, so it
+  // was a meaningful slice of a bucket nobody could attribute.
+  const res = await withActivity('extraction', () =>
+    client.chat.completions.create({
+      model,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `Entity: "${candidate.name}" (type: ${candidate.typeName}, ${candidate.degree} edges)
 Relation types on it: ${[...new Set(candidate.relations)].join(', ')}
 Some neighbours: ${neighbours.slice(0, 40).join(', ')}`,
-      },
-    ],
-  });
+        },
+      ],
+    }),
+  );
 
   const raw = res.choices?.[0]?.message?.content ?? '';
   // Defensive, for the reason extract.ts is: the request is throughput-routed and

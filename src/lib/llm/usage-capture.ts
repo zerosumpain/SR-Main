@@ -5,7 +5,7 @@ import { openrouterModels } from '$lib/db/schema';
 import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/context/execution';
 import { priceFor, computeCost } from '$lib/llm/pricing';
 import { recordDurableLLMCall } from '$lib/llm/usage-log';
-import { currentActivityId } from '$lib/context/activity';
+import { currentActivityId, untaggedOrigin } from '$lib/context/activity';
 import { currentChatContext, noteChatRound } from '$lib/context/chat';
 import { currentResearchSessionId } from '$lib/context/research-meter';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
@@ -129,6 +129,10 @@ function captureUsage(
       // every non-workflow, non-research call is indistinguishable in the
       // ledger — see $lib/context/activity.
       activity: currentActivityId(),
+      // Only computed when there is no tag, and it is what makes the untagged
+      // row on /admin/ops/costs able to name its own contents instead of being
+      // an anonymous total nobody could chase.
+      origin: untaggedOrigin(),
       sessionId: store?.runId ?? researchId ?? chat?.jobId ?? chat?.conversationId ?? null,
       conversationId: chat?.conversationId ?? null,
       durationMs: timing ? Math.max(0, endedAt - timing.startedAt) : null,
@@ -345,6 +349,7 @@ function installEmbeddingCapture(client: OpenAI, provider: ModelProvider): void 
       costUsd,
       source: store ? 'workflow' : researchId ? 'research' : chat ? 'jkai-chat' : 'gateway',
       activity: currentActivityId(),
+      origin: untaggedOrigin(),
       sessionId: store?.runId ?? researchId ?? chat?.jobId ?? chat?.conversationId ?? null,
       conversationId: chat?.conversationId ?? null,
       durationMs: Math.max(0, endedAt - startedAt),

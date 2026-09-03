@@ -484,6 +484,26 @@
                 <td colspan="6">
                   <p>{r.blurb}</p>
                   {#if r.reason}<p class="reason"><strong>Pinned off the default:</strong> {r.reason}</p>{/if}
+                  {#if r.key === 'source:gateway'}
+                    {#if data.untaggedOrigins.length}
+                      <p class="reason">
+                        <strong>What is in here.</strong> Each line is the code that made the call, dearest
+                        first. Wrap it in a <code>withActivity()</code> naming one of the roles above and the
+                        spend moves onto that row, where it can be switched.
+                      </p>
+                      <ul class="origins mono small">
+                        {#each data.untaggedOrigins as o (o.origin)}
+                          <li><span class="o-where">{o.origin}</span> <span class="o-num">{usd(o.cost)} · {num(o.calls)} call{o.calls === 1 ? '' : 's'}</span></li>
+                        {/each}
+                      </ul>
+                    {:else}
+                      <p class="reason">
+                        No call in this window recorded where it came from. Origins are captured from the
+                        first deploy that shipped them, so an older window is expected to be blank rather
+                        than empty — the spend is real, it simply predates the record of who spent it.
+                      </p>
+                    {/if}
+                  {/if}
                   {#if spendByKey.get(r.key)?.models.length}
                     <p class="mono small">
                       Models seen this window:
@@ -812,6 +832,28 @@
     padding-top: 0.2rem;
     padding-bottom: 0.2rem;
   }
+  .origins {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.15rem;
+  }
+  .origins li {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+  }
+  .o-where {
+    overflow-wrap: anywhere;
+  }
+  .o-num {
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+
   .per-call {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);

@@ -16,11 +16,11 @@
  */
 
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';
 import { anchorHash } from './anchor';
 import type { Evidence, Finding } from './types';
+import { resolveBlogModel } from '$lib/server/models/workload-settings';
 
 /** A claim as pulled from the draft, with the query that will be used to check
  *  it. `snippet` is verbatim post text: it is both the editor's scroll-to
@@ -170,7 +170,11 @@ export async function extractClaims(plainText: string, max: number = MAX_CLAIMS)
   const cap = Math.max(0, Math.min(max, MAX_CLAIMS));
   if (cap === 0) return [];
 
-  const ctx = await resolveDefaultModel();
+  // The `blog` role, not the bare site default. The writing desk IS the blog
+  // assistant's other half — the assistant endpoints have resolved `blog` since
+  // it was registered, and these two calls quietly did not, so the switch on
+  // /admin/ops/costs moved half of blog and left the desk behind.
+  const ctx = await resolveBlogModel();
   const { client, model } = await getLLMClient(ctx);
   const res = await client.chat.completions.create({
     model,
@@ -251,7 +255,7 @@ export async function groundClaim(claim: GroundedClaim): Promise<ClaimVerdict> {
     .map((c, i) => `[${i}] ${c.title} (${hostnameOf(c.url)})\n${c.snippet}`)
     .join('\n\n');
 
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveBlogModel();
   const { client, model } = await getLLMClient(ctx);
   const res = await client.chat.completions.create({
     model,
