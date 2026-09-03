@@ -1,4 +1,4 @@
-import { getCollectionBySlug, queryRecords } from '$lib/datastore';
+import { getCollectionBySlug, getRecordByKey, queryRecords } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { db } from '$lib/db';
 import { workflowNodes, workflows } from '$lib/db/schema';
@@ -24,6 +24,47 @@ function describeCron(expr: string | null): string {
   const days =
     dow === '*' ? 'daily' : dow === '1-5' ? 'weekdays' : dow === '0,6' || dow === '6,0' ? 'weekends' : `days ${dow}`;
   return `${time} ${days}`;
+}
+
+/**
+ * One day's briefing, by its record key — which is the local date, `YYYY-MM-DD`
+ * (the `Build record + message` transform sets `record.id = briefing.date`).
+ *
+ * `null` rather than a throw for every "there is nothing here" case — a missing
+ * collection, an unknown day — so the route can answer 404 once and the caller
+ * never has to tell a datastore error apart from an absent record.
+ */
+export async function loadBriefingDay(id: string): Promise<BriefingData | null> {
+  if (!id || !(await getCollectionBySlug(BRIEFINGS_COLLECTION))) return null;
+  try {
+    const record = await getRecordByKey(BRIEFINGS_COLLECTION, id, OWNER);
+    return record.data as unknown as BriefingData;
+  } catch {
+    return null;
+  }
+}
+
+/** The day strip: the newest briefings, thinnest shape that renders a link. */
+export async function listBriefingDays(
+  limit = 30,
+): Promise<Array<{ id: string; title: string; startedAt: string; status: string }>> {
+  if (!(await getCollectionBySlug(BRIEFINGS_COLLECTION))) return [];
+  const { records } = await queryRecords(
+    BRIEFINGS_COLLECTION,
+    { sort: { field: 'createdAt', dir: 'desc' }, limit },
+    OWNER,
+  );
+  return records
+    .map((r) => {
+      const day = r.data as unknown as BriefingData;
+      return {
+        id: day?.id ?? r.key ?? '',
+        title: day?.title ?? '',
+        startedAt: day?.startedAt ?? '',
+        status: day?.status ?? '',
+      };
+    })
+    .filter((day) => day.id);
 }
 
 // Owner-gated by hooks. The briefing is produced by the `canvas:morning-briefing`

@@ -11,7 +11,9 @@ import {
   type EngineState,
 } from '$lib/daydream/ledger';
 import { loadProvenance } from '$lib/daydream/provenance';
-import { loadJobSchedules, type JobSchedule } from '$lib/daydream/rooms/engine.server';
+import { loadDeliveryStats, loadJobSchedules, type DeliveryStats, type JobSchedule } from '$lib/daydream/rooms/engine.server';
+import { loadRoutes } from '$lib/daydream/routes.server';
+import type { RouteOverrides } from '$lib/daydream/routes';
 
 // The engine room reads only what the engine room draws: the state, the
 // detectors, the budget, the rules, the counts, the telemetry, the delivery
@@ -26,18 +28,31 @@ export const load: PageServerLoad = async ({ parent }) => {
   try {
     // `engine` is already on the layout (`counts.engine`) — read it from there
     // rather than running the same pulse queries a second time.
-    const [{ counts: hub }, detectors, budget, rules, counts, telemetry, delivery, provenance, schedules] =
-      await Promise.all([
-        parent(),
-        loadDetectorRows(),
-        loadBudget(),
-        loadRules(),
-        loadCounts(),
-        loadTelemetry(),
-        loadDelivery(),
-        loadProvenance(),
-        loadJobSchedules(),
-      ]);
+    const [
+      { counts: hub },
+      detectors,
+      budget,
+      rules,
+      counts,
+      telemetry,
+      delivery,
+      provenance,
+      schedules,
+      routes,
+      deliveryStats,
+    ] = await Promise.all([
+      parent(),
+      loadDetectorRows(),
+      loadBudget(),
+      loadRules(),
+      loadCounts(),
+      loadTelemetry(),
+      loadDelivery(),
+      loadProvenance(),
+      loadJobSchedules(),
+      loadRoutes(),
+      loadDeliveryStats(),
+    ]);
     const engine = hub.engine;
     return {
       engine,
@@ -49,6 +64,8 @@ export const load: PageServerLoad = async ({ parent }) => {
       delivery,
       provenance,
       schedules,
+      routes,
+      deliveryStats,
       loadError: null,
     };
   } catch (err) {
@@ -65,6 +82,11 @@ export const load: PageServerLoad = async ({ parent }) => {
     const detectors: DetectorRow[] = [];
     const rules: Awaited<ReturnType<typeof loadRules>> = [];
     const schedules: JobSchedule[] = [];
+    // Same keys on both branches: a key present on only one is a property the
+    // page's union type does not have. An empty override map is a real value —
+    // it means "every route is still the default" — so it is `{}`, not null.
+    const routes: RouteOverrides = {};
+    const deliveryStats: DeliveryStats | null = null;
     const counts: Awaited<ReturnType<typeof loadCounts>> = {
       byStatus: {},
       places: 0,
@@ -88,6 +110,8 @@ export const load: PageServerLoad = async ({ parent }) => {
       delivery: null as Awaited<ReturnType<typeof loadDelivery>> | null,
       provenance,
       schedules,
+      routes,
+      deliveryStats,
       loadError: errMsg(err),
     };
   }

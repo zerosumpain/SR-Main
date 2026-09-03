@@ -77,6 +77,13 @@ export interface BriefingDetail {
   facts: BriefingFactRow[];
   gaps: Array<{ section: string; reason: string }>;
   sources: BriefingSourceRow[];
+  /**
+   * The Daydreams block exactly as the WhatsApp message carries it (≤ 8 lines).
+   * Written by `briefing-compose` from 2026-09-03; absent on older records.
+   */
+  daydreamsText?: string;
+  /** The local day that block describes, `YYYY-MM-DD`. */
+  daydreamsDay?: string | null;
 }
 
 export interface BriefingData {

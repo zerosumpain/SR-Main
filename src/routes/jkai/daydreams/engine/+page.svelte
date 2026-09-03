@@ -20,6 +20,8 @@
   import EngineRules from '$lib/components/jkai/daydream/rooms/EngineRules.svelte';
   import EngineDetectors from '$lib/components/jkai/daydream/rooms/EngineDetectors.svelte';
   import EngineProvenance from '$lib/components/jkai/daydream/rooms/EngineProvenance.svelte';
+  import EngineRoutes from '$lib/components/jkai/daydream/rooms/EngineRoutes.svelte';
+  import EngineDelivery from '$lib/components/jkai/daydream/rooms/EngineDelivery.svelte';
   import { ago, pct } from '$lib/components/jkai/daydream/rooms/engine-format';
 
   let { data }: { data: PageData } = $props();
@@ -32,6 +34,11 @@
   const telemetry = $derived(data.telemetry);
   const delivery = $derived(data.delivery);
   const provenance = $derived(data.provenance);
+  const routes = $derived(data.routes ?? {});
+  const deliveryStats = $derived(data.deliveryStats);
+  /** The kinds the routes grid can offer as a new exception. The detectors are
+   *  the engine's own list; the mail lanes reach the grid through the defaults. */
+  const detectorKinds = $derived(detectors.map((d) => d.kind));
 
   const readyCount = $derived(detectors.filter((d) => d.readiness?.ready).length);
   const mutedCount = $derived(detectors.filter((d) => d.muted).length);
@@ -370,6 +377,32 @@
       its worst one; a path closed on purpose is drawn differently from one that is broken.
     </p>
     <EngineProvenance sources={provenance.sources} />
+  </div>
+</section>
+
+<section class="band" id="dd-routes">
+  <div class="inner">
+    <SectionHead
+      kicker="I / Where each kind may go"
+      title={['A ceiling,', 'never a promise']}
+      strap="Set the highest channel a family — or one kind inside it — is allowed to reach. Kind beats family; clearing an override puts the row back on the default, so a later change to the defaults still moves it."
+    />
+    <EngineRoutes {routes} kinds={detectorKinds} onchanged={invalidateAll} />
+  </div>
+</section>
+
+<section class="band sunken" id="dd-delivery">
+  <div class="inner">
+    <SectionHead
+      kicker="J / What reached you"
+      title={['Sent, held,', 'and the next slot']}
+      strap="The interruption budget, and every reason a thought was held today. A hold is the routes and the policy doing their job — it is only a fault when the same reason is the whole column."
+    />
+    {#if deliveryStats}
+      <EngineDelivery stats={deliveryStats} />
+    {:else}
+      <div class="card t-quiet"><p class="card-body">The delivery ledger could not be read.</p></div>
+    {/if}
   </div>
 </section>
 
