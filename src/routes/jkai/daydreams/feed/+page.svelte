@@ -21,6 +21,7 @@
   import ThoughtDrill from '$lib/components/jkai/daydream/rooms/ThoughtDrill.svelte';
   import TriageDeck from '$lib/components/jkai/daydream/rooms/TriageDeck.svelte';
   import type { Facet, MatrixAxis } from '$lib/components/jkai/daydream/hub/types';
+  import type { FeedRow } from '$lib/daydream/ledger';
   import { FAMILIES, FEED_STATES, familyMark, kindLabel, likelihoodBand } from '$lib/daydream/thought-groups';
   import { thoughtDestination } from '$lib/daydream/destination';
   import { bandTone, reviewTone, thoughtRank, thoughtTone } from '$lib/daydream/priority';
@@ -352,7 +353,7 @@
 {#if openRow}
   <ThoughtDrill
     thought={openRow}
-    memoryThemes={'memoryThemes' in openRow ? openRow.memoryThemes : []}
+    memoryThemes={(openRow as Partial<FeedRow>).memoryThemes ?? []}
     threshold={data.threshold}
     learned={learningFor(openRow.kind)}
     onclose={() => (openId = null)}
