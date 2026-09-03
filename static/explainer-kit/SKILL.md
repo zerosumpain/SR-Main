@@ -22,7 +22,9 @@ guidance below has never actually reached a build.
    `createSteps`. A composition is `createStackBar`. A proportion is
    `createIconArray`. A quantity across a set is `createScene`. Reaching for
    the 3D scene to draw nine boxes is the most common wrong answer here — both
-   pages this style comes from contain zero WebGL.
+   pages this style comes from contain zero WebGL. Competing routes through a
+   system use `createNetworkSimulator`; policy moving people between reached,
+   missed or comparison groups uses `createCohortSimulator`.
 3. **Put it in an instrument.** `createInstrument` gives every visual the same
    frame: label, title, a line saying what is plotted, the control, the visual,
    then at most one sentence of payoff underneath.
@@ -51,4 +53,6 @@ guidance below has never actually reached a build.
 
 - `api.md` — every signature.
 - `scenes.md` — which visual mode suits which concept.
-- `examples/chapter.html` — a complete chapter to copy.
+- `examples/chapter.html` — the ordinary chapter recipe.
+- `examples/network-simulator.html` — read only for a data-spine/system route.
+- `examples/cohort-simulator.html` — read only for a policy cohort instrument.

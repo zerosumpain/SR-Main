@@ -104,7 +104,7 @@ CONSTRAINTS YOUR PLAN MUST RESPECT:
 1. 6-10 chapters. Each is a real route the reader can link to.
 2. Every chapter has ONE idea and follows explain → manipulate → consequence: say what the thing is, let the reader change something, show them what that did.
 3. Sequence so each chapter can only be understood after the last. A workable spine: what the thing is → what drives it → the mechanism in the middle → what happens when you push it → where it breaks → what is genuinely uncertain. The final chapter names the brief's GAPS honestly.
-4. Each chapter names its visual mode from the explainer kit: createScene (spatial/allocation), createDiagram (mechanisms and flow), createSim (levers and consequence), createChart (over time or across categories). Do not use a 3D scene for a time series.
+4. Each chapter names its visual mode from the explainer kit: createScene (spatial/allocation), createDiagram (one mechanism), createSim (parameters and consequence), createChart (time/categories), createNetworkSimulator (competing routes through a system), or createCohortSimulator (policy reaching, missing or redistributing groups). Do not use a 3D scene for a time series. When the system itself is the argument, make one chapter the centrepiece network. When policy changes who is reached, make its T5 instrument a sourced cohort with explicit assumptions and uncertainty.
 5. Iteration 1 is the skeleton ONLY: serve.json, navigation shell, every chapter reachable with its title and a one-line placeholder. Then one complete chapter per iteration.
 6. Real data only, named from the brief's LIVE DATA section.
 
@@ -158,9 +158,9 @@ VARY BOTH. A build where every chapter has the same form and the same control is
 
 ### Chapter 1: [title]
 - Idea: [the single thing this chapter teaches]
-- Visual: [the kit factory and what it shows — createSteps for a process, createStackBar for a composition, createIconArray for a proportion, createComparison for before/after, createTimeline for events, createDiagram for a mechanism, createScene for a quantity across a set]
+- Visual: [the kit factory and what it shows — createSteps for a process, createStackBar for composition, createIconArray for proportion, createComparison for before/after, createTimeline for events, createDiagram for one mechanism, createScene for a quantity across a set, createNetworkSimulator for competing routes, createCohortSimulator for policy reach]
 - Manipulate: [what the reader changes]
-- Consequence: [what visibly moves, and why that is the lesson]
+- Consequence: [what changes in the outcome AND in the visual, and why that is the lesson]
 - Grounded in: [which numbered FACTS from the brief]
 
 (repeat for every chapter)
@@ -256,9 +256,9 @@ VARY BOTH. A build where every chapter has the same form and the same control is
 
 ### Chapter 1: [title]
 - Idea: [the single thing this chapter teaches]
-- Visual: [the kit factory and what it shows — createSteps for a process, createStackBar for a composition, createIconArray for a proportion, createComparison for before/after, createTimeline for events, createDiagram for a mechanism, createScene for a quantity across a set]
+- Visual: [the kit factory and what it shows — createSteps for a process, createStackBar for composition, createIconArray for proportion, createComparison for before/after, createTimeline for events, createDiagram for one mechanism, createScene for a quantity across a set, createNetworkSimulator for competing routes, createCohortSimulator for policy reach]
 - Manipulate: [what the reader changes]
-- Consequence: [what visibly moves, and why that is the lesson]
+- Consequence: [what changes in the outcome AND in the visual, and why that is the lesson]
 - Grounded in: [which numbered FACTS from the brief]
 
 (repeat for every chapter)

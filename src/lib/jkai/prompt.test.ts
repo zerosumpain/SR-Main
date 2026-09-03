@@ -141,6 +141,15 @@ describe('studio prompt mode', () => {
     expect(p).toContain('scenes.md');
   });
 
+  it('routes systems and policy cohorts to the high-fidelity recipes', () => {
+    expect(p).toContain('examples/network-simulator.html');
+    expect(p).toContain('examples/cohort-simulator.html');
+    expect(p).toContain('createNetworkSimulator');
+    expect(p).toContain('createCohortSimulator');
+    expect(p).toContain('COHORT MODELS HAVE AN EXTRA CONTRACT');
+    expect(p).toMatch(/outcome.*AND the visual/);
+  });
+
   it('still carries the port and workspace footer', () => {
     expect(p).toContain('/home/jkai/workspace/b1/dev');
     expect(p).toContain('8123');

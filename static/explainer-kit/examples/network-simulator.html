@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Worked recipe — operated data spine</title>
+    <link rel="stylesheet" href="explainer-kit/tokens.css" />
+    <link rel="stylesheet" href="explainer-kit/shell.css" />
+    <link rel="stylesheet" href="explainer-kit/field-study/field-study.css" />
+  </head>
+  <body>
+    <article data-chapter="3">
+      <p>
+        <span class="fs-chip fs-chip--fact">Fact</span> A system can offer
+        several routes from source to decision; the active route determines
+        which transformations and failure points matter.
+      </p>
+      <div id="network"></div>
+      <p class="fs-limits">
+        This teaching network shows declared routes, not live traffic.
+      </p>
+      <p>
+        <a
+          data-citation
+          href="https://www.gov.uk/government/publications/essential-digital-skills-framework"
+          >Source for the worked example</a
+        >
+      </p>
+      <aside class="fs-open">
+        <strong>Open question</strong> Which route survives when one exchange is
+        unavailable?
+      </aside>
+      <p class="fs-falsifier">
+        <strong>What would change this view:</strong> operational traces showing
+        a different route.
+      </p>
+    </article>
+    <script src="explainer-kit/shell.js"></script>
+    <script src="explainer-kit/instruments.js"></script>
+    <script src="explainer-kit/sim.js"></script>
+    <script src="explainer-kit/scenario.js"></script>
+    <script>
+      Explainer.mountShell({
+        project: "The data spine",
+        chapters: [
+          { n: 1, title: "Inputs" },
+          { n: 2, title: "Exchanges" },
+          { n: 3, title: "Operate the route" },
+        ],
+        current: 3,
+        form: "open",
+      });
+      const inst = Explainer.createInstrument({
+        mount: "#network",
+        kicker: "worked network",
+        title: "Switch the route",
+        reading: "Line weight shows the active path.",
+        takeaway:
+          "The selected route changes <b>how many exchanges must succeed</b>.",
+      });
+      Explainer.createNetworkSimulator({
+        mount: inst.body,
+        id: "route-network",
+        lever: {
+          id: "route",
+          label: "Route",
+          options: ["Direct", "Brokered"],
+          value: "Direct",
+        },
+        outcomes: [{ id: "hops", label: "Exchanges" }],
+        nodes: [
+          { id: "source", label: "Source", x: 90, y: 200 },
+          { id: "broker", label: "Broker", x: 375, y: 95 },
+          { id: "decision", label: "Decision", x: 660, y: 200 },
+        ],
+        edges: [
+          { id: "direct", from: "source", to: "decision", label: "direct" },
+          { id: "in", from: "source", to: "broker" },
+          { id: "out", from: "broker", to: "decision" },
+        ],
+        scenarios: {
+          Direct: { edges: { direct: 1 }, outcomes: { hops: 1 } },
+          Brokered: { edges: { in: 1, out: 1 }, outcomes: { hops: 2 } },
+        },
+      });
+    </script>
+  </body>
+</html>

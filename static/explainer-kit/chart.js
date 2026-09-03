@@ -23,8 +23,10 @@
     const svg = svgEl('svg', {
       viewBox: `0 0 ${w} ${h}`, width: '100%', role: 'img',
       'aria-label': spec.title || 'Chart',
+      'data-visual-version': '0',
     });
     mount.appendChild(svg);
+    let visualVersion = 0;
 
     function draw(series) {
       while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -65,6 +67,9 @@
           }));
         }
       });
+      visualVersion += 1;
+      svg.setAttribute('data-visual-version', String(visualVersion));
+      svg.setAttribute('data-visual-state', JSON.stringify(series));
     }
 
     draw(spec.series || []);

@@ -2,7 +2,7 @@
 /**
  * Studio gate — does the explainer actually teach?
  *
- * Five checks per served project: the explainer kit actually mounted (once,
+ * Core checks per served project: the explainer kit actually mounted (once,
  * across the whole project — see below), then per chapter: reachable, has a
  * kit-produced visual, has a control that changes an outcome when driven,
  * cites a source from the brief.
@@ -105,6 +105,26 @@ async function lever0Kind(root, leverId) {
     if (n.querySelector('button')) return 'buttons';
     return tag;
   }).catch(() => null);
+}
+
+/** Browser-observable semantic state for SVG and canvas visuals. */
+async function visualFingerprint(root) {
+  return root
+    .locator('[data-visual-version], canvas[data-scene], svg')
+    .evaluateAll((els) =>
+      els
+        .map((node) => {
+          if (node.tagName.toLowerCase() === 'svg') return node.outerHTML;
+          return [
+            node.tagName,
+            node.getAttribute('data-scene') || '',
+            node.getAttribute('data-visual-version') || '',
+            node.getAttribute('data-visual-state') || '',
+          ].join('|');
+        })
+        .join('\n'),
+    )
+    .catch(() => '');
 }
 
 async function serveLikeAHuman(page, baseUrl) {
@@ -369,6 +389,73 @@ async function main() {
           });
         }
 
+        const cohortAudits = await root
+          .locator('[data-cohort-sim]')
+          .evaluateAll((sims) =>
+            sims.map((sim) => ({
+              valid: sim.getAttribute('data-model-valid'),
+              baseline: sim.getAttribute('data-baseline-valid'),
+              deterministic: sim.getAttribute('data-deterministic'),
+              population: Number(sim.getAttribute('data-population-total')),
+              current: Number(sim.getAttribute('data-cohort-total')),
+              errors: (sim.querySelector('.ex-cohort-errors')?.textContent || '')
+                .trim()
+                .slice(0, 300),
+              hasCard: Boolean(sim.querySelector('[data-model-card]')),
+              observed: sim.querySelectorAll('[data-evidence-kind="observed"]').length,
+              assumed: sim.querySelectorAll('[data-evidence-kind="assumed"]').length,
+              derived: sim.querySelectorAll('[data-evidence-kind="derived"]').length,
+              hasLimits: Boolean(
+                (sim.querySelector('.ex-model-limits')?.textContent || '').trim(),
+              ),
+              forecast: sim.getAttribute('data-forecast') === 'true',
+              hasUncertainty: Boolean(sim.querySelector('[data-uncertainty]')),
+              hasExemption: Boolean(
+                (sim.querySelector('[data-uncertainty-exemption]')?.textContent || '').trim(),
+              ),
+            })),
+          )
+          .catch(() => []);
+        for (const audit of cohortAudits) {
+          const totalsAgree =
+            Number.isFinite(audit.population) &&
+            Number.isFinite(audit.current) &&
+            Math.abs(audit.population - audit.current) <=
+              Math.max(0.01, Math.abs(audit.population) * 0.000001);
+          if (audit.valid !== 'true' || audit.baseline !== 'true' || audit.deterministic !== 'true' || !totalsAgree) {
+            findings.push({
+              chapter: ch.n,
+              rule: 'model-invalid',
+              message: `Chapter ${ch.n}'s cohort model failed its integrity contract${audit.errors ? `: ${audit.errors}` : '.'}`,
+              remedy: `Fix createCohortSimulator in ${ch.path}: every state must conserve the population, baselineValues must reproduce the baseline, values and ranges must be finite, and identical inputs must return identical results.`,
+            });
+          }
+          if (!audit.hasCard || !audit.observed || !audit.derived || !audit.hasLimits) {
+            findings.push({
+              chapter: ch.n,
+              rule: 'no-model-card',
+              message: `Chapter ${ch.n}'s cohort simulator does not visibly separate observed inputs, derived outputs and limitations.`,
+              remedy: `Pass modelCard to createCohortSimulator in ${ch.path}, with sourced observed inputs, derived outputs and a specific limitations statement.`,
+            });
+          }
+          if (audit.forecast && !audit.assumed) {
+            findings.push({
+              chapter: ch.n,
+              rule: 'assumptions-hidden',
+              message: `Chapter ${ch.n} presents a forecast but its model card names no assumptions.`,
+              remedy: `List forecast choices under modelCard.assumptions in ${ch.path}; do not present policy-effect assumptions as observations.`,
+            });
+          }
+          if (audit.forecast && !audit.hasUncertainty && !audit.hasExemption) {
+            findings.push({
+              chapter: ch.n,
+              rule: 'false-precision',
+              message: `Chapter ${ch.n} presents a forecast without a range or a reason no range is meaningful.`,
+              remedy: `Return finite low ≤ central ≤ high uncertainty/trajectory values, or state the specific exemption in modelCard.uncertaintyExemption.`,
+            });
+          }
+        }
+
         // ——— Field Study invariants ———
         //
         // The mechanical half of field-study-system/CHECKLIST.md. The
@@ -444,6 +531,7 @@ async function main() {
           });
         } else {
           const before = (await outcome.textContent()) ?? '';
+          const visualBefore = await visualFingerprint(root);
           const tagName = await lever.evaluate((el) => el.tagName.toLowerCase());
           const inputType = tagName === 'input'
             ? (await lever.getAttribute('type') || 'text').toLowerCase()
@@ -504,29 +592,33 @@ async function main() {
             await lever.dispatchEvent('change').catch(() => {});
           };
 
-          // Poll rather than a fixed wait: re-read the outcome every 100ms
-          // for up to 2000ms, stopping the moment it differs. Faster than a
-          // fixed sleep in the common synchronous case, and tolerant of an
-          // outcome that updates asynchronously and lands after the old
-          // hardcoded 400ms.
+          // Poll both the outcome and semantic visual state. A readout beside
+          // a static decorative graphic is not an explanation.
           const pollForChange = async () => {
             const deadline = Date.now() + 2000;
             let last = before;
+            let lastVisual = visualBefore;
             while (Date.now() < deadline) {
               last = (await outcome.textContent()) ?? '';
-              if (last.trim() !== before.trim()) return last;
+              lastVisual = await visualFingerprint(root);
+              if (last.trim() !== before.trim() && lastVisual !== visualBefore) {
+                return { outcome: last, visualChanged: true };
+              }
               await page.waitForTimeout(100);
             }
-            return last;
+            return { outcome: last, visualChanged: lastVisual !== visualBefore };
           };
 
           const tried = [];
           let changed = false;
+          let visualChanged = false;
           for (const val of candidates) {
             tried.push(val);
             await setValue(val);
             const after = await pollForChange();
-            if (after.trim() !== before.trim()) { changed = true; break; }
+            changed = changed || after.outcome.trim() !== before.trim();
+            visualChanged = visualChanged || after.visualChanged;
+            if (changed && visualChanged) break;
           }
 
           // tried.length === 0 only for a <select> with no alternative
@@ -537,6 +629,71 @@ async function main() {
               message: `Chapter ${ch.n}: driving data-lever="${ch.leverId}" through ${tried.join(', ')} left data-outcome="${ch.outcomeId}" at "${before.trim().slice(0, 40)}" the whole time.`,
               remedy: `data-outcome="${ch.outcomeId}" in ${ch.path} showed no observable change while data-lever="${ch.leverId}" was driven through ${tried.join(', ')}. Either the model genuinely does not depend on this lever — wire step() so the outcome depends on it — or the outcome's display formatting (rounding, bucketing) is hiding a real change; show a value the check can observe moving.`,
             });
+          } else if (changed && visuals > 0 && !visualChanged) {
+            findings.push({
+              chapter: ch.n,
+              rule: 'inert-visual',
+              message: `Chapter ${ch.n}: the outcome changed, but the SVG/canvas state did not.`,
+              remedy: `Update the visual in the same interaction in ${ch.path}. Use createChart.update(), createDiagram, createScene, createNetworkSimulator or createCohortSimulator; hand-written canvas code must advance data-visual-version when semantic state changes.`,
+            });
+          }
+        }
+
+        // Re-audit after operation: a clean baseline is not proof that the
+        // policy state selected above conserves population or carries a range.
+        if (cohortAudits.length) {
+          const operatedAudits = await root
+            .locator('[data-cohort-sim]')
+            .evaluateAll((sims) =>
+              sims.map((sim) => ({
+                valid: sim.getAttribute('data-model-valid'),
+                population: Number(sim.getAttribute('data-population-total')),
+                current: Number(sim.getAttribute('data-cohort-total')),
+                errors: (sim.querySelector('.ex-cohort-errors')?.textContent || '')
+                  .trim()
+                  .slice(0, 300),
+                forecast: sim.getAttribute('data-forecast') === 'true',
+                hasUncertainty: Boolean(sim.querySelector('[data-uncertainty]')),
+                hasExemption: Boolean(
+                  (sim.querySelector('[data-uncertainty-exemption]')?.textContent || '').trim(),
+                ),
+              })),
+            )
+            .catch(() => []);
+          for (const audit of operatedAudits) {
+            const totalsAgree =
+              Number.isFinite(audit.population) &&
+              Number.isFinite(audit.current) &&
+              Math.abs(audit.population - audit.current) <=
+                Math.max(0.01, Math.abs(audit.population) * 0.000001);
+            if (
+              (audit.valid !== 'true' || !totalsAgree) &&
+              !findings.some(
+                (finding) => finding.chapter === ch.n && finding.rule === 'model-invalid',
+              )
+            ) {
+              findings.push({
+                chapter: ch.n,
+                rule: 'model-invalid',
+                message: `Chapter ${ch.n}'s cohort model becomes invalid when operated${audit.errors ? `: ${audit.errors}` : '.'}`,
+                remedy: `Fix every reachable createCohortSimulator state in ${ch.path}; counts must conserve the population and values/ranges must remain valid.`,
+              });
+            }
+            if (
+              audit.forecast &&
+              !audit.hasUncertainty &&
+              !audit.hasExemption &&
+              !findings.some(
+                (finding) => finding.chapter === ch.n && finding.rule === 'false-precision',
+              )
+            ) {
+              findings.push({
+                chapter: ch.n,
+                rule: 'false-precision',
+                message: `Chapter ${ch.n}'s operated forecast has no range or exemption.`,
+                remedy: `Return uncertainty for every operated forecast state in ${ch.path}, or state why a range would mislead.`,
+              });
+            }
           }
         }
 

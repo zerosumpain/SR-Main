@@ -221,6 +221,22 @@ describe('per-chapter checks stay scoped to the chapter', () => {
       expect(src).toContain(rule);
     }
   });
+
+  it('requires a working control to move the visual as well as its outcome', async () => {
+    const src = await readFile('scripts/studio-gate.mjs', 'utf-8');
+    expect(src).toContain('async function visualFingerprint(root)');
+    expect(src).toContain("rule: 'inert-visual'");
+    expect(src).toContain('createNetworkSimulator');
+    expect(src).toContain('createCohortSimulator');
+  });
+
+  it('audits cohort arithmetic, disclosure, operated state and uncertainty', async () => {
+    const src = await readFile('scripts/studio-gate.mjs', 'utf-8');
+    for (const rule of ['model-invalid', 'no-model-card', 'assumptions-hidden', 'false-precision']) expect(src).toContain(`rule: '${rule}'`);
+    for (const marker of ['data-model-valid', 'data-baseline-valid', 'data-deterministic', 'data-population-total', 'data-cohort-total', 'data-uncertainty']) expect(src).toContain(marker);
+    expect(src).toContain('const operatedAudits');
+    expect(src).toContain('becomes invalid when operated');
+  });
 });
 
 // runStudioGate accepted chaptersDue and dropped it from the payload between
