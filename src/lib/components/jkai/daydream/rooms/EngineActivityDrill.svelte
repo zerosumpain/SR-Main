@@ -42,6 +42,16 @@
     pulses: Array<{ ts: string; outcome: string; summary: string; costUsd: number; details: Record<string, unknown> | null }>;
     cost7dUsd: number;
     cost30dUsd: number;
+    ledger: {
+      calls7: number;
+      calls30: number;
+      cashUsd7: number;
+      cashUsd30: number;
+      quota7: number;
+      quota30: number;
+      unpriced30: number;
+      models: string[];
+    } | null;
   }
 
   interface Props {
@@ -73,6 +83,18 @@
 
   const money = (n: number) => (n > 0 ? (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`) : '—');
 
+  // The ledger is what the usage capture recorded under this activity's tag:
+  // the provider's own price per call, and "quota" for a Codex call.
+  const ledgerLine = (d: Detail): string => {
+    const l = d.ledger;
+    if (!l || l.calls30 === 0) return d.mechanics?.model ? 'no call tagged in 30 days — tagging starts with this release' : 'no model calls — rules only';
+    const models = l.models.length ? ` on ${l.models.join(', ')}` : '';
+    const cash = l.cashUsd30 > 0 ? `cash ${money(l.cashUsd7)} in 7 days, ${money(l.cashUsd30)} in 30` : l.quota30 === l.calls30 ? 'subscription quota, no cash' : 'no cash recorded';
+    const quota = l.quota30 && l.quota30 !== l.calls30 ? ` · ${l.quota30} on quota` : '';
+    const unpriced = l.unpriced30 ? ` · ${l.unpriced30} unpriced` : '';
+    return `${l.calls30} call${l.calls30 === 1 ? '' : 's'} in 30 days (${l.calls7} this week)${models} — ${cash}${quota}${unpriced}`;
+  };
+
   const schedule = $derived.by((): FactRow[] => {
     const d = detail;
     if (!d?.row) return [];
@@ -87,8 +109,9 @@
       { label: 'Last run', value: d.row.lastRunAt ? `${stamp(d.row.lastRunAt)} · ${ago(d.row.lastRunAt)}` : 'never', mono: true },
       { label: 'Next run', value: d.row.nextRunAt ? `${stamp(d.row.nextRunAt)} · ${when(d.row.nextRunAt)}` : '—', mono: true },
       { label: 'Runs', value: `${d.row.totalRuns} all time`, mono: true },
-      { label: 'Spend', value: d.spendsQuota ? `Codex quota (under the caps) · cash ${money(d.cost7dUsd)} in 7 days, ${money(d.cost30dUsd)} in 30` : `cash ${money(d.cost7dUsd)} in 7 days, ${money(d.cost30dUsd)} in 30`, tone: d.cost7dUsd > 0 ? 'watch' : 'steady' },
+      { label: 'In the ledger', value: ledgerLine(d), tone: d.ledger && d.ledger.cashUsd30 > 0.5 ? 'watch' : 'steady' },
     ];
+    if (d.cost30dUsd > 0) rows.push({ label: 'On its pulses', value: `${money(d.cost7dUsd)} in 7 days, ${money(d.cost30dUsd)} in 30`, mono: true });
     if (d.row.consecutiveFailures) rows.push({ label: 'Failing', value: `${d.row.consecutiveFailures} in a row${d.row.lastError ? ` — ${d.row.lastError.slice(0, 160)}` : ''}`, tone: 'urgent' });
     return rows;
   });

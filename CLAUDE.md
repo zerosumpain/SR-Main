@@ -157,7 +157,10 @@ redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is
 - `src/lib/selfimprove/` — nightly self-improvement engine. **Scheduled by the heartbeat, not a cron of its own**: the `daydream-improve` activity, window 02:30–03:55 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`. This file used to say "03:30" and a private croner; the second scheduler was retired 2026-08-30 (see `docs/superpowers/specs/2026-08-30-daydream-absorbs-selfimprove.md`). Dashboards: `/admin/ai/improvement` + `/jkai/improvement`, both reading the live heartbeat row for the schedule rather than a constant.
 
   Phases: `gather → learn → discover → build → repair → optimise → propose → report`. All LLM calls are pinned to
-  `SELFIMPROVE_MODEL` (`deepseek/deepseek-v4-flash`), not the chat default.
+  the `jkai.selfimprove.model` setting (falling back to `SELFIMPROVE_MODEL`, shipped as
+  `deepseek/deepseek-v4-flash`), not the chat default. On production that setting pointed
+  at a Codex model as of 2026-09-03, so its calls were quota, not cash — the
+  Engine room's cash deck reads the ledger rather than the run's own (unpriced) total.
 
   **Tools it builds are auto-enabled and registered live** — no restart, no approval step. That is only
   safe because of `verify.ts`, which every candidate must clear: a deny-list `staticScan` over the

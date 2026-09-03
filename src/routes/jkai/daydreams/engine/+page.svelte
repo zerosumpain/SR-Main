@@ -137,32 +137,44 @@
   // carry it because a run's mechanics are the same on every visit.
   let openActivity = $state<{ name: string; mark: string } | null>(null);
 
-  const money = (n: number) => (n > 0 ? (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`) : '$0');
+  const money = (n: number) => (n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : '$0');
   const spend = $derived(data.spend);
+  type Line = NonNullable<typeof spend>['daydream'];
+  // One tile from one ledger line: cash where there was cash, "quota" where
+  // every call went through the subscription, and a dash where nothing ran.
+  const lineTile = (key: string, label: string, l: Line | null, days: 7 | 30, empty: string): DeckTile => {
+    const calls = days === 7 ? (l?.calls7 ?? 0) : (l?.calls30 ?? 0);
+    const cash = days === 7 ? (l?.cashUsd7 ?? 0) : (l?.cashUsd30 ?? 0);
+    const quota = days === 7 ? (l?.quota7 ?? 0) : (l?.quota30 ?? 0);
+    if (!l || calls === 0) return { key, label, value: '—', tone: 'quiet', sub: empty };
+    const models = l.models.length ? ` on ${l.models.join(', ')}` : '';
+    const unpriced = days === 30 && l.unpriced30 ? ` · ${l.unpriced30} unpriced` : '';
+    if (cash > 0) {
+      return {
+        key,
+        label,
+        value: money(cash),
+        tone: cash > 0.5 ? 'watch' : 'steady',
+        sub: `${calls} call${calls === 1 ? '' : 's'}${models}${quota ? ` · ${quota} on quota` : ''}${unpriced}`,
+      };
+    }
+    if (quota === calls) {
+      return { key, label, value: 'quota', tone: 'good', sub: `${calls} call${calls === 1 ? '' : 's'}${models} — subscription, no cash` };
+    }
+    return { key, label, value: '$0', tone: 'steady', sub: `${calls} call${calls === 1 ? '' : 's'}${models}${quota ? ` · ${quota} on quota` : ''}${unpriced}` };
+  };
   const spendTiles = $derived<DeckTile[]>(
     spend
       ? [
-          {
-            key: 'improve7',
-            label: 'Improve, cash 7 days',
-            value: money(spend.improve7dUsd),
-            tone: spend.improve7dUsd > 0.5 ? 'watch' : 'steady',
-            sub: 'the toolsmith on OpenRouter — outside the Codex caps',
-          },
-          {
-            key: 'improve30',
-            label: 'Improve, cash 30 days',
-            value: money(spend.improve30dUsd),
-            tone: 'steady',
-            sub: `${spend.improveRuns30d} night${spend.improveRuns30d === 1 ? '' : 's'} recorded`,
-          },
-          {
-            key: 'all30',
-            label: 'Every activity, cash 30 days',
-            value: money(spend.all30dUsd),
-            tone: spend.all30dUsd > spend.improve30dUsd + 0.01 ? 'watch' : 'good',
-            sub: spend.all30dUsd > spend.improve30dUsd + 0.01 ? 'something besides improve is billing cash' : 'everything else runs on quota',
-          },
+          lineTile('improve7', 'Improve, 7 days', spend.improve, 7, 'no self-improve call in the ledger this week'),
+          lineTile('improve30', 'Improve, 30 days', spend.improve, 30, 'no self-improve call in the ledger this month'),
+          lineTile(
+            'daydream30',
+            'Every daydream activity, 30 days',
+            spend.daydream,
+            30,
+            'no activity has tagged a call yet — tagging starts with this release',
+          ),
         ]
       : [],
   );
@@ -325,7 +337,7 @@
       </p>
     {/if}
     {#if spendTiles.length}
-      <p class="field-label spend-label">Cash, beside the quota</p>
+      <p class="field-label spend-label">Cash, beside the quota — from the ledger, not the run’s own count</p>
       <StatDeck tiles={spendTiles} min={230} />
     {/if}
   </div>

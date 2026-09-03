@@ -262,7 +262,7 @@ export const MECHANICS: Readonly<Record<string, Mechanics>> = {
     reads: ['orchestrator chats', 'custom_tools health', 'improvement_backlog', 'daydream_faults', 'daydream_hypotheses (starvation)', 'api_catalog'],
     writes: ['improvement_backlog', 'custom_tools (live)', 'api_catalog', 'improvement_runs', 'draft PRs', 'WhatsApp report'],
     gates: ['`selfimprove.enabled`', 'production host only', 'window 02:30–03:55 Europe/London', '40 LLM calls / ~$0.50 / 25 min'],
-    model: 'deepseek/deepseek-v4-flash via OpenRouter (cash, outside the Codex caps)',
+    model: 'The `jkai.selfimprove.model` setting (falls back to SELFIMPROVE_MODEL) — pinned apart from the chat default so an unattended run does not move when the picker does. The ledger line below says what it actually ran on and whether that was cash or quota.',
     effort: [],
     config: { allowDevHost: 'let it run on homeserv' },
   },

@@ -14,7 +14,7 @@
 
 import { and, desc, gte, eq, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamThoughts, heartbeatActions, heartbeatPulses } from '$lib/db/schema';
+import { agentActions, daydreamThoughts, heartbeatActions, heartbeatPulses } from '$lib/db/schema';
 import { MAX_PER_DAY, MIN_GAP_HOURS, QUIET_HOURS, isInterruptingChannel } from '$lib/daydream/deliver';
 import { localDayStart } from '$lib/daydream/budget';
 import { mechanicsFor, spendsQuota, type Mechanics } from '$lib/daydream/mechanics';
@@ -183,6 +183,8 @@ export interface ActivityDetail {
   pulses: Array<{ ts: string; outcome: string; summary: string; costUsd: number; details: Record<string, unknown> | null }>;
   cost7dUsd: number;
   cost30dUsd: number;
+  /** What the ledger holds under this activity's tag, or null when nothing. */
+  ledger: LedgerLine | null;
 }
 
 export async function loadActivityDetail(name: string): Promise<ActivityDetail> {
@@ -215,6 +217,8 @@ export async function loadActivityDetail(name: string): Promise<ActivityDetail> 
         .from(heartbeatPulses)
         .where(eq(heartbeatPulses.actionId, row.id))
     : [{ d7: '0', d30: '0' }];
+  const tag = ledgerTagFor(clean);
+  const ledger = (await ledgerByActivity(new Date(), sql`${ACTIVITY} = ${tag}`)).get(tag) ?? null;
   return {
     name: clean,
     short: clean.replace(/^daydream-/, ''),
@@ -252,47 +256,114 @@ export async function loadActivityDetail(name: string): Promise<ActivityDetail> 
     })),
     cost7dUsd: Number(cost?.d7 ?? 0),
     cost30dUsd: Number(cost?.d30 ?? 0),
+    ledger,
   };
 }
 
-// ── Cash, as a cell ──────────────────────────────────────────────────────
+// ── Cash, from the ledger ────────────────────────────────────────────────
 //
-// The Codex caps govern quota, not money. The one activity that spends cash
-// is `daydream-improve` (OpenRouter), and its pulses carry the cost; this is
-// that figure beside the quota lines, plus everything daydream-* recorded.
+// The Codex caps govern quota, not money, and the quota tiles hide when the
+// caps do not apply — which is exactly when cash is the question. The pulses
+// cannot answer it: self-improve priced its own calls from a catalogue that
+// has no row for the model it runs on, so every night's cost was a fabricated
+// zero. The ledger (`agent_actions`, kept by the usage capture on every client)
+// carries the provider's own price per call and the activity that made it, so
+// the figure here is that ledger's, and a Codex call shows as quota, not $0.
 
-export interface DaydreamSpend {
-  improve7dUsd: number;
-  improve30dUsd: number;
-  all30dUsd: number;
-  improveRuns30d: number;
+export interface LedgerLine {
+  activity: string;
+  calls7: number;
+  calls30: number;
+  cashUsd7: number;
+  cashUsd30: number;
+  /** Calls served by the Codex bridge — subscription quota, priced null. */
+  quota7: number;
+  quota30: number;
+  /** Cash-provider calls the ledger could not price — an honest blank, not $0. */
+  unpriced30: number;
+  models: string[];
 }
 
-export async function loadDaydreamSpend(now = new Date()): Promise<DaydreamSpend> {
+const ACTIVITY = sql<string>`coalesce(${agentActions.input} ->> 'activity', '')`;
+
+async function ledgerByActivity(now: Date, only: ReturnType<typeof sql>): Promise<Map<string, LedgerLine>> {
   const since7 = new Date(now.getTime() - 7 * DAY_MS);
   const since30 = new Date(now.getTime() - 30 * DAY_MS);
   const rows = await db
     .select({
-      name: heartbeatActions.name,
-      d7: sql<string>`coalesce(sum(case when ${heartbeatPulses.ts} >= ${since7} then ${heartbeatPulses.costUsd} else 0 end), 0)::text`,
-      d30: sql<string>`coalesce(sum(${heartbeatPulses.costUsd}), 0)::text`,
-      runs30: sql<number>`count(*)::int`,
+      activity: ACTIVITY,
+      calls7: sql<number>`count(*) filter (where ${agentActions.createdAt} >= ${since7})::int`,
+      calls30: sql<number>`count(*)::int`,
+      cash7: sql<string>`coalesce(sum(${agentActions.costUsd}) filter (where ${agentActions.createdAt} >= ${since7}), 0)::text`,
+      cash30: sql<string>`coalesce(sum(${agentActions.costUsd}), 0)::text`,
+      quota7: sql<number>`count(*) filter (where ${agentActions.provider} = 'codex' and ${agentActions.createdAt} >= ${since7})::int`,
+      quota30: sql<number>`count(*) filter (where ${agentActions.provider} = 'codex')::int`,
+      unpriced30: sql<number>`count(*) filter (where ${agentActions.costUsd} is null and coalesce(${agentActions.provider}, '') <> 'codex')::int`,
+      models: sql<string | null>`string_agg(distinct ${agentActions.model}, ',')`,
     })
-    .from(heartbeatPulses)
-    .innerJoin(heartbeatActions, eq(heartbeatActions.id, heartbeatPulses.actionId))
-    .where(and(sql`${heartbeatActions.name} like 'daydream%'`, gte(heartbeatPulses.ts, since30)))
-    .groupBy(heartbeatActions.name);
-  let improve7 = 0;
-  let improve30 = 0;
-  let improveRuns = 0;
-  let all30 = 0;
+    .from(agentActions)
+    .where(and(gte(agentActions.createdAt, since30), only))
+    .groupBy(ACTIVITY);
+  const out = new Map<string, LedgerLine>();
   for (const r of rows) {
-    all30 += Number(r.d30);
-    if (r.name === 'daydream-improve') {
-      improve7 = Number(r.d7);
-      improve30 = Number(r.d30);
-      improveRuns = r.runs30;
-    }
+    out.set(r.activity, {
+      activity: r.activity,
+      calls7: r.calls7,
+      calls30: r.calls30,
+      cashUsd7: Number(r.cash7),
+      cashUsd30: Number(r.cash30),
+      quota7: r.quota7,
+      quota30: r.quota30,
+      unpriced30: r.unpriced30,
+      models: (r.models ?? '').split(',').filter(Boolean).sort(),
+    });
   }
-  return { improve7dUsd: improve7, improve30dUsd: improve30, all30dUsd: all30, improveRuns30d: improveRuns };
+  return out;
+}
+
+/** The ledger tag an activity's calls carry: self-improve tags its own. */
+export function ledgerTagFor(activityName: string): string {
+  return activityName === 'daydream-improve' ? 'selfimprove' : activityName;
+}
+
+export interface DaydreamSpend {
+  /** Self-improve's line, or null when the ledger has no call of its in 30 days. */
+  improve: LedgerLine | null;
+  /** Every `daydream-*` tagged activity folded into one line. */
+  daydream: LedgerLine;
+  /** The per-activity lines behind `daydream`, most calls first. */
+  lines: LedgerLine[];
+}
+
+export async function loadDaydreamSpend(now = new Date()): Promise<DaydreamSpend> {
+  const byActivity = await ledgerByActivity(
+    now,
+    sql`(${ACTIVITY} = 'selfimprove' or ${ACTIVITY} like 'daydream-%')`,
+  );
+  const improve = byActivity.get('selfimprove') ?? null;
+  const lines = [...byActivity.values()].filter((l) => l.activity.startsWith('daydream-')).sort((a, b) => b.calls30 - a.calls30);
+  const daydream: LedgerLine = {
+    activity: 'daydream-*',
+    calls7: 0,
+    calls30: 0,
+    cashUsd7: 0,
+    cashUsd30: 0,
+    quota7: 0,
+    quota30: 0,
+    unpriced30: 0,
+    models: [],
+  };
+  const models = new Set<string>();
+  for (const l of lines) {
+    daydream.calls7 += l.calls7;
+    daydream.calls30 += l.calls30;
+    daydream.cashUsd7 += l.cashUsd7;
+    daydream.cashUsd30 += l.cashUsd30;
+    daydream.quota7 += l.quota7;
+    daydream.quota30 += l.quota30;
+    daydream.unpriced30 += l.unpriced30;
+    for (const m of l.models) models.add(m);
+  }
+  daydream.models = [...models].sort();
+  return { improve, daydream, lines };
 }
