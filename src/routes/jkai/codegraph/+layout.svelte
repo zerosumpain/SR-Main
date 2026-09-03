@@ -18,7 +18,11 @@
 
   const menu = $derived<PageMenu>({
     label: 'codegraph',
-    back: { label: 'chat', href: '/jkai' },
+    // No `back` published. The hub header derives it from $lib/nav/site-nav
+    // instead, which walks ONE level at a time — /jkai/codegraph/ask goes to
+    // /jkai/codegraph, not straight out to the chat. Publishing a shortcut
+    // here made this surface the one place on the site where "back" skipped
+    // levels, which is the inconsistency the shared bar exists to remove.
     groups: [
       {
         heading: 'The loop',

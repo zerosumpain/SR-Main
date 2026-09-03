@@ -31,9 +31,11 @@
 
   const menu = $derived<PageMenu>({
     label: 'intel',
-    // Chat, not the hub landing page: the way out of a surface is back to the
-    // conversation you left, which is where every other route into intel starts.
-    back: { label: 'chat', href: '/jkai' },
+    // No `back` published. The hub header derives it from $lib/nav/site-nav
+    // instead, which walks ONE level at a time — /jkai/intel/notes/9 goes to
+    // /jkai/intel/notes, not straight out to the chat. Publishing a shortcut
+    // here made this surface the one place on the site where "back" skipped
+    // levels, which is the inconsistency the shared bar exists to remove.
     groups: [
       {
         heading: 'The loop',
