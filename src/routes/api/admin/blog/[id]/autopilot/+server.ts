@@ -26,7 +26,6 @@
 
 import { getPostById, updatePostFields } from '$lib/blog';
 import { getLLMClient } from '$lib/llm/client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { voiceBlock } from '$lib/voice/block';
 import { scoreVoiceServer } from '$lib/voice/score.server';
 import { segmentBody, getSentence } from '$lib/blog/assistant/segment';
@@ -40,6 +39,8 @@ import {
   type AutopilotMode,
 } from '$lib/blog/assistant/autopilot';
 import type { RequestHandler } from './$types';
+import { withActivity } from '$lib/context/activity';
+import { resolveBlogModel } from '$lib/server/models/workload-settings';
 
 const MODES = new Set<AutopilotMode>(['readability', 'context', 'voice']);
 const MAX_REWRITES = 8;
@@ -53,7 +54,14 @@ function collapse(s: string): string {
   return s.replace(/\s+/g, ' ');
 }
 
-export const POST: RequestHandler = async ({ params, request }) => {
+/**
+ * Tagged `blog` so every model call this request makes — including any made
+ * from inside a stream callback, which runs in the same async context — lands
+ * on the row that sets the blog model. Untagged it recorded as `source:gateway`.
+ */
+export const POST: RequestHandler = (event) => withActivity('blog', async () => handlePost(event));
+
+const handlePost: RequestHandler = async ({ params, request }) => {
   const id = Number.parseInt(params.id, 10);
   if (!Number.isFinite(id)) {
     return new Response(JSON.stringify({ error: 'Invalid id' }), { status: 400 });
@@ -97,7 +105,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
           }…`,
         });
 
-        const ctx = await resolveDefaultModel();
+        // The `blog` role — the autopilot rewrite is blog work, and until now it
+        // took the bare site default, so the blog switch did not reach it.
+        const ctx = await resolveBlogModel();
         const { client, model } = await getLLMClient(ctx);
 
         send({ type: 'phase', phase: 'thinking', message: `Running the ${mode} pass…` });

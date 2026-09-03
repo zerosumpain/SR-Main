@@ -89,9 +89,11 @@ export async function getOpenRouterKey(): Promise<string | undefined> {
 export async function getOpenRouterClient(): Promise<OpenAI> {
   const apiKey = await getOpenRouterKey();
   if (!apiKey) throw new Error('OpenRouter API key not configured');
-  // Wrapped so CHAT usage is cost-captured. Embeddings via this client are
-  // still uncaptured — installUsageCapture only patches chat.completions.create,
-  // not embeddings.create.
+  // Wrapped so usage is cost-captured. This comment used to say embeddings were
+  // NOT captured through this client; that stopped being true when
+  // `installUsageCapture` started calling `installEmbeddingCapture` itself, and
+  // a stale note claiming spend is invisible sends the next reader chasing a
+  // gap that is already closed.
   return installUsageCapture(
     new OpenAI({
       apiKey,

@@ -22,6 +22,7 @@ import { getPostById } from '$lib/blog';
 import { DEFAULT_ASPECT, DEFAULT_STYLE, MAX_SUBJECT_LENGTH, isAspect } from '$lib/blog/image-gen';
 import { draftImageBrief, generateBlogImage } from '$lib/blog/image-gen.server';
 import type { RequestHandler } from './$types';
+import { withActivity } from '$lib/context/activity';
 
 /**
  * A cheap in-process ceiling.
@@ -46,7 +47,14 @@ function withinBudget(): boolean {
   return windowCount <= MAX_PER_WINDOW;
 }
 
-export const POST: RequestHandler = async ({ params, request, url }) => {
+/**
+ * Tagged `blog` so every model call this request makes — including any made
+ * from inside a stream callback, which runs in the same async context — lands
+ * on the row that sets the blog model. Untagged it recorded as `source:gateway`.
+ */
+export const POST: RequestHandler = (event) => withActivity('blog', async () => handlePost(event));
+
+const handlePost: RequestHandler = async ({ params, request, url }) => {
   const id = Number.parseInt(params.id, 10);
   if (!Number.isFinite(id)) return json({ error: 'Invalid post id' }, { status: 400 });
 

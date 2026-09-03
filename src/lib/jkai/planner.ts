@@ -8,6 +8,7 @@ import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
 import { formatBriefForPrompt, type ResearchBrief } from './research-brief';
+import { withActivity } from '$lib/context/activity';
 
 // --- System Prompts ---
 
@@ -552,10 +553,26 @@ async function streamPlannerCall(opts: {
 
 // --- Planning Functions ---
 
-export async function planBuild(
+/**
+ * Plan a build.
+ *
+ * Tagged `builder` so the planner's spend — the proposer and critic streams, and
+ * every retry inside them — lands on the row that sets its model. It is a long
+ * multi-round call on the site default, and untagged it was one of the largest
+ * anonymous contributors to `source:gateway` on /admin/ops/costs.
+ */
+export function planBuild(
   buildId: string,
   prompt: string,
   timeLimitMs: number = 4 * 60 * 1000,
+): Promise<void> {
+  return withActivity('builder', () => runPlanBuild(buildId, prompt, timeLimitMs));
+}
+
+async function runPlanBuild(
+  buildId: string,
+  prompt: string,
+  timeLimitMs: number,
 ): Promise<void> {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   const { client, model } = await getLLMClient({
@@ -766,7 +783,12 @@ export async function planBuild(
 
 // --- Re-planning Phase (triggered on completion detection) ---
 
-export async function replanBuild(buildId: string): Promise<boolean> {
+/** Re-plan after failed iterations. Tagged `builder` for the same reason. */
+export function replanBuild(buildId: string): Promise<boolean> {
+  return withActivity('builder', () => runReplanBuild(buildId));
+}
+
+async function runReplanBuild(buildId: string): Promise<boolean> {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   if (!build) return false;
 

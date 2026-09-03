@@ -33,6 +33,7 @@ import {
 } from '$lib/blog/desk/store.server';
 import { extractClaims, groundClaim, verdictToFinding } from '$lib/blog/desk/ground.server';
 import type { RequestHandler } from './$types';
+import { withActivity } from '$lib/context/activity';
 
 /** Copied from the review-claims endpoint, which pays the same Tavily bill. */
 const SEARCH_CONCURRENCY = 3;
@@ -169,7 +170,14 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   return json({ ok: true });
 };
 
-export const POST: RequestHandler = async ({ params, request }) => {
+/**
+ * Tagged `blog` so every model call this request makes — including any made
+ * from inside a stream callback, which runs in the same async context — lands
+ * on the row that sets the blog model. Untagged it recorded as `source:gateway`.
+ */
+export const POST: RequestHandler = (event) => withActivity('blog', async () => handlePost(event));
+
+const handlePost: RequestHandler = async ({ params, request }) => {
   const postId = postIdFrom(params);
   if (postId === null) return json({ error: 'Invalid post id' }, { status: 400 });
 

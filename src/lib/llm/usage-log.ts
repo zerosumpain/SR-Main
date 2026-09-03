@@ -34,6 +34,16 @@ export interface DurableLLMCall {
    * and are entirely different bills.
    */
   activity?: string | null;
+  /**
+   * For a call with NO `activity`: a compact `fn@chunk:line` naming the code
+   * that made it, from `$lib/context/activity`.
+   *
+   * The untagged bucket used to be anonymous by construction, so the only way
+   * to find what was in it was to audit every LLM call site by hand. This is
+   * how the row on /admin/ops/costs names its own contents. Never set when the
+   * call IS tagged — the role is a better answer than a stack frame.
+   */
+  origin?: string | null;
   /** Optional correlation id (e.g. a workflow runId or chat jobId). */
   sessionId?: string | null;
   /**
@@ -72,6 +82,7 @@ function buildInput(call: DurableLLMCall): Record<string, unknown> | null {
   const input: Record<string, unknown> = {};
   if (call.source) input.source = call.source;
   if (call.activity) input.activity = call.activity;
+  if (!call.activity && call.origin) input.origin = call.origin;
   if (call.conversationId) input.conversationId = call.conversationId;
   if (typeof call.ttftMs === 'number') input.ttftMs = call.ttftMs;
   return Object.keys(input).length > 0 ? input : null;

@@ -23,6 +23,7 @@ import { MAIL_FACT_KEYS, STRING_MAIL_FACTS, BOOLEAN_MAIL_FACTS } from '../mail-f
 import { ownerDecisions } from '../mail-decisions';
 import { listMailRules } from './store';
 import { MAX_ADMIT_SHARE, MAX_ADMITS_PER_WEEK } from './backtest';
+import { withActivity } from '$lib/context/activity';
 
 export interface ProposalBatch {
   proposals: Array<Record<string, unknown>>;
@@ -169,18 +170,21 @@ export async function proposeMailRules(maxProposals = 3): Promise<ProposalBatch>
     const context = await gatherProposalContext();
     const { client, model } = await getLLMClient(await resolveExtractionModel());
 
-    const res = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          role: 'user',
-          content: `${context}\n\nPropose at most ${maxProposals} rules. Prefer narrow rules, and prefer a reject rule for a noisy sender over a broad admit rule.`,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 1600,
-    });
+    // Tagged `extraction`, the role whose model it resolves above.
+    const res = await withActivity('extraction', () =>
+      client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          {
+            role: 'user',
+            content: `${context}\n\nPropose at most ${maxProposals} rules. Prefer narrow rules, and prefer a reject rule for a noisy sender over a broad admit rule.`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 1600,
+      }),
+    );
     result.tokens = (res.usage?.prompt_tokens ?? 0) + (res.usage?.completion_tokens ?? 0);
 
     const raw = (res.choices[0]?.message?.content ?? '')
