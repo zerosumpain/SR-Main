@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
 import { getConversationList } from '$lib/jkai/queries';
-import { resolveDefaultModel, resolveDefaultThinkingLevel } from '$lib/server/models/settings';
+import { resolveDefaultThinkingLevel } from '$lib/server/models/settings';
+import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { modelSupportsThinking } from '$lib/server/models/capabilities';
 import type { ModelContext } from '$lib/server/models/types';
@@ -17,7 +18,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
 	const { title, source, whatsappPhoneNumber, modelProvider, modelId } = body;
 
-	// Resolve model: body override > admin chat default.
+	// Resolve model: body override > the `chat` workload (which itself follows
+	// the site default until pinned — see $lib/models/workloads).
 	//
 	// Which of the two it was is recorded, not just the result. A body override
 	// is the composer's picker — a deliberate choice that the rest of the session
@@ -29,7 +31,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		ctx = { provider: modelProvider, modelId };
 		pinnedByUser = true;
 	} else {
-		ctx = await resolveDefaultModel();
+		ctx = await resolveChatTurnModel();
 	}
 
 	const priceSnapshot = await snapshotPrice(ctx);

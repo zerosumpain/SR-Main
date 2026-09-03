@@ -17,6 +17,9 @@ vi.mock('$lib/llm/keys', () => ({
 vi.mock('$lib/server/models/settings', () => ({
   resolveDefaultModel: vi.fn().mockResolvedValue({ provider: 'zai', modelId: 'glm-4-flash' }),
   getOpenRouterApiKey: vi.fn().mockResolvedValue('test'),
+  // The workload registry reads `getSetting` before falling through to the
+  // site default, so a settings mock without it throws rather than resolving.
+  getSetting: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('$lib/db', () => ({

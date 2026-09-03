@@ -138,6 +138,32 @@ export const DEFAULT_ART_DIRECTOR_MODEL_ID = 'z-ai/glm-5.2';
  */
 export const DEFAULT_RESEARCH_FAST_MODEL_ID = 'google/gemini-3.5-flash';
 
+/**
+ * The daydream REVIEWER — the pass that decides whether a thought is true
+ * before John is interrupted with it.
+ *
+ * Pinned off the daydream model rather than following it. Luna is the fast 5.6
+ * at the lowest quota cost and the catalogue's own words for it are "best fit
+ * for background site tasks", which is exactly this; the money goes on
+ * reasoning effort (`xhigh`) against a small, well-bounded question instead of
+ * on a heavier model doing a shallow pass.
+ *
+ * Moved here from `$lib/daydream/adjudicate.ts` on 2026-09-03 so the role can
+ * have a settings key like every other one — it was one of the last two models
+ * on the site that could only be changed by editing the source.
+ */
+export const DEFAULT_DAYDREAM_REVIEW_MODEL_ID = 'codex/gpt-5.6-luna';
+
+/**
+ * The notebook note reviewer on /jkai/notes.
+ *
+ * Same reasoning as the daydream reviewer: reading one note and naming a couple
+ * of useful lookups is not a hard problem, and the money is better spent on the
+ * research the plan asks for than on the planning. Moved out of
+ * `$lib/daydream/notebook/review.ts` for the same reason, on the same day.
+ */
+export const DEFAULT_NOTE_REVIEW_MODEL_ID = 'codex/gpt-5.6-luna';
+
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client
 // localStorage) can still carry bare ids; coerce instead of 400ing at OpenRouter.

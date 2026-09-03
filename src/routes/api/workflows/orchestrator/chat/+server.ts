@@ -12,7 +12,6 @@ import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOl
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { getChatInputCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
@@ -33,6 +32,7 @@ import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
+import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -80,7 +80,10 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
       if (exists) conversationId = pinned;
     }
     if (!conversationId) {
-      const defaultCtx = await resolveDefaultModel();
+      // Opening a conversation, so the `chat` workload answers — see
+      // $lib/models/workloads. The turn itself still runs on whatever the
+      // conversation ends up stamped with.
+      const defaultCtx = await resolveChatTurnModel();
       const [conv] = await db.insert(conversations).values({
         title: message.slice(0, 50),
         source: 'web',
@@ -120,7 +123,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
       return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
     }
 
-    let ctx: ModelContext = await resolveDefaultModel();
+    let ctx: ModelContext = await resolveChatTurnModel();
     if (conversationId) {
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
       if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
@@ -347,7 +350,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
 
         // Resolve the model pinned at conversation creation (or admin default).
         // Workflow-context chats (workflowId present) use the builder model; general /jkai chats use the chat model.
-        let modelContext: ModelContext = await resolveDefaultModel();
+        let modelContext: ModelContext = await resolveChatTurnModel();
         // Non-null ONLY when the owner chose the model in the picker. That is
         // what makes the rest of the session follow it — tools, sub-agents,
         // recall, compaction, OCR on an attachment, and any build this turn

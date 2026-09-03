@@ -28,6 +28,7 @@ import {
   type ExistingMemoryTheme,
   type MemoryForConsolidation,
 } from './memory-consolidation';
+import { withActivity } from '$lib/context/activity';
 
 export interface MemoryConsolidationResult {
   status: 'completed' | 'failed' | 'already_complete' | 'already_running';
@@ -272,12 +273,14 @@ export async function runMemoryConsolidation(
     // model contract. Give the model one precise repair turn before falling
     // back to partial, evidence-safe progress.
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const response = await client.chat.completions.create({
-        model,
-        temperature: attempt === 1 ? 0.2 : 0,
-        max_tokens: 3_000,
-        messages,
-      });
+      const response = await withActivity('daydream', () =>
+        client.chat.completions.create({
+          model,
+          temperature: attempt === 1 ? 0.2 : 0,
+          max_tokens: 3_000,
+          messages,
+        }),
+      );
       tokens.prompt += response.usage?.prompt_tokens ?? 0;
       tokens.completion += response.usage?.completion_tokens ?? 0;
       raw = response.choices[0]?.message?.content ?? '';

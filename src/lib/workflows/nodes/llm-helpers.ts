@@ -1,5 +1,5 @@
 import type OpenAI from 'openai';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveWorkflowNodeModel } from '$lib/server/models/workload-settings';
 import { getLLMClient } from '$lib/llm/client';
 import {
   DEFAULT_NODE_MAX_TOKENS,
@@ -14,8 +14,12 @@ export { DEFAULT_NODE_MAX_TOKENS };
  * Resolve an LLM client + model ID from a node's `config.model` string.
  *
  * Routing rules:
- *   - empty / missing / "default" / "jkai-default" → admin site default
- *     (set from /admin/ai/models, key `jkai.chat.default_model`)
+ *   - empty / missing / "default" / "jkai-default" → the `workflow-node`
+ *     workload (`jkai.workflow.node_model`), which itself follows the site
+ *     default until it is pinned. Settable on /admin/ops/costs — before that
+ *     row existed a blank field read as "cannot be changed", and the only way
+ *     to move canvas nodes was to move the site default and everything else
+ *     with it.
  *   - starts with "codex/" → the Codex bridge (ChatGPT Pro subscription)
  *   - contains "/" (e.g. "openai/gpt-4o") → used verbatim as an OpenRouter slug
  *   - bare legacy GLM id (e.g. "glm-5-turbo", from configs saved in the
@@ -50,7 +54,7 @@ export async function resolveLLMClient(
     );
   }
 
-  const ctx = await resolveDefaultModel();
+  const ctx = await resolveWorkflowNodeModel();
   return { ...(await getLLMClient(ctx)), provider: ctx.provider };
 }
 

@@ -4,10 +4,10 @@ import type { JkaiAttachment } from '$lib/db/schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { HistoryMessage } from '$lib/workflows/chat/conversation-history';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { extensionForMime } from '$lib/jkai/media/mime';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
+import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
 type SendAttachmentFn = (to: string, att: JkaiAttachment, caption?: string) => Promise<WhatsAppSendResult>;
@@ -50,7 +50,9 @@ export class OrchestratorBridge {
 
 		if (existing) return existing.id;
 
-		const modelContext = await resolveDefaultModel();
+		// A WhatsApp thread is a jkai conversation like any other, so it opens on
+		// the `chat` workload rather than the raw site default.
+		const modelContext = await resolveChatTurnModel();
 		const [created] = await db
 			.insert(conversations)
 			.values({
@@ -132,8 +134,10 @@ export class OrchestratorBridge {
 			const history = await this.getConversationHistory(convId);
 			const priorHistory = history.slice(0, -1);
 
-			// Call general chat with admin default model (WhatsApp flow has no pinned conversation).
-			const modelContext = await resolveDefaultModel();
+			// The WhatsApp flow has no pinned conversation, so the turn runs on the
+			// `chat` workload — the same row on /admin/ops/costs that new web threads
+			// open on, rather than the raw site default every background role shares.
+			const modelContext = await resolveChatTurnModel();
 			const { response: responseText } = await generalChat(
 				{ text: displayText, attachments: attachment ? [attachment] : [] },
 				priorHistory,

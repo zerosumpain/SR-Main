@@ -7,10 +7,10 @@ import { orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { generalChat } from './general-chat';
 import type { HistoryMessage } from './conversation-history';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { isThinkingLevel, type ThinkingLevel } from '$lib/models/thinking';
+import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 
 export interface FollowUpCheck {
   done: boolean;
@@ -255,8 +255,10 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
     const resultContext = check.summary || JSON.stringify(check.result ?? {});
     const followUpMessage = `[SYSTEM FOLLOW-UP] A background task has completed.\n\nTask: ${item.taskType} (ID: ${item.taskId})\nResult:\n${resultContext}\n\n${item.completionPrompt}`;
 
-    // Resolve pinned model for this conversation (falls back to admin default).
-    let modelContext: ModelContext = await resolveDefaultModel();
+    // Resolve the pinned model for this conversation, falling back to the `chat`
+    // workload — a follow-up IS a chat turn, so it starts where a new thread
+    // would rather than on the raw site default.
+    let modelContext: ModelContext = await resolveChatTurnModel();
     let sessionModel: ModelContext | null = null;
     let thinkingLevel: ThinkingLevel | null = null;
     let priceSnapshot: PriceSnapshot | null = null;

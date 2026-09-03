@@ -7,13 +7,23 @@
  *  - calls made inside a named LLM ROLE carry a workload id
  *    (`$lib/models/workloads`) — extraction, vision, embeddings and the rest.
  *    These are switchable: the same id addresses the model picker's API.
- *  - everything else carries only a `source` — a chat turn, a canvas node, a
- *    deep-research run. These are real spenders with no single model to switch,
- *    because the model is chosen per conversation or per node.
+ *  - everything else carries only a `source`, written by
+ *    `$lib/llm/usage-capture`: `jkai-chat`, `workflow`, `research`, `gateway`.
  *
- * Both kinds get a row. Hiding the second kind would leave the biggest line on
- * the bill unexplained; pretending it is switchable from here would be a button
- * that lies.
+ * Two of those four sources NAME a role even though the call carried no tag,
+ * and since 2026-09-03 they are mapped onto it (`SOURCE_ROLE` below). A call
+ * recorded inside a chat turn IS the chat role; one recorded inside a workflow
+ * run IS the canvas-node role. Both of those roles now have a settings key and
+ * a switch, so folding the spend onto them makes the row that reports the money
+ * the same row that changes it.
+ *
+ * What is left is genuinely not a role — `research`, which cannot say WHICH
+ * tier spent it, and `gateway`, which is the untagged remainder. Those keep a
+ * `source:` row of their own, reported and unswitchable, because the honest
+ * thing to say about them is that nobody named them yet.
+ *
+ * Both kinds get a row. Hiding the second kind would leave a line on the bill
+ * unexplained; pretending it is switchable would be a button that lies.
  *
  * Client-importable (plain data, no `$lib/server`), same rule as the workload
  * registry it reads.
@@ -31,47 +41,50 @@ export interface ActivityDef {
 }
 
 /**
- * Spend that is not inside a named role.
+ * Ledger `source` values that name a role the registry already owns.
  *
- * Only two kinds are left, and both are genuinely per-call: a chat turn takes
- * the model its conversation was pinned to at creation, and a canvas node takes
- * the model in its own config. Neither has one model to switch, so the row
- * reports and offers no control — a switch there would be a button that lies.
- * Both start from the SITE DEFAULT, which is the first row on the page and IS
- * switchable.
+ * Not a guess. `usage-capture` writes `jkai-chat` when the call was made inside
+ * a chat turn and `workflow` when it was made inside a workflow run, so these
+ * two are definitional rather than inferred — the same reason `activityKey`
+ * refuses to fold `source:unknown` anywhere, where nothing is known at all.
  *
- * Everything else that used to live here now has a workload row of its own
- * (2026-09-01). `source:research` and `source:gateway` are kept as historical
- * buckets so spend recorded before those roles existed still has somewhere
- * honest to sit.
+ * Folding them fixes both halves of the same complaint. The spend joins the row
+ * that can switch it, and — because this is applied at read time — every row
+ * already in the ledger joins it too, including the months recorded before
+ * either role had a name.
+ */
+const SOURCE_ROLE: Record<string, string> = {
+  'jkai-chat': 'chat',
+  workflow: 'workflow-node',
+};
+
+/**
+ * Spend that is not inside a named role, and cannot be moved into one.
+ *
+ * Two are left. `source:research` knows a research run spent the money but not
+ * WHICH tier, and the two tiers have different models and different budgets, so
+ * picking one would be inventing the half that matters; current runs carry a
+ * real tag (`research-fast` / `research-deep`) and land on their own switchable
+ * rows. `source:gateway` is the untagged remainder — by definition a call
+ * nobody has named, which is a gap in `withActivity` coverage rather than a
+ * role with a model to pick.
+ *
+ * Neither gets a switch, and both should shrink toward nothing: the fix for a
+ * row here is a tag at the call site, not a control on this page.
  */
 export const SOURCE_ACTIVITIES: ActivityDef[] = [
-  {
-    key: 'source:jkai-chat',
-    label: 'jkai chat turns',
-    blurb:
-      'Chat replies on /jkai, billed per conversation. The model is the one the conversation was pinned to when it was created — change the Site default above to move new ones.',
-    workloadId: null,
-  },
-  {
-    key: 'source:workflow',
-    label: 'Canvas workflow nodes',
-    blurb:
-      'LLM nodes inside canvas workflows. Each node carries its own model in its config; a node with that field blank uses the Site default.',
-    workloadId: null,
-  },
   {
     key: 'source:research',
     label: 'Deep research (pre-tagging)',
     blurb:
-      'Research spend recorded before the tiers had roles of their own. Current runs land on "Research — fast tiers" or "Research — Investigation", both switchable.',
+      'Research spend recorded before the tiers had roles of their own. It cannot say which tier spent it, which is why there is no switch here. Current runs land on "Research — fast tiers" or "Research — Investigation", both switchable.',
     workloadId: null,
   },
   {
     key: 'source:gateway',
     label: 'Untagged site calls',
     blurb:
-      'LLM calls through the site gateway that are not inside a named role. Anything still landing here is worth naming — a task nobody has registered in $lib/models/workloads yet.',
+      'LLM calls through the site gateway that are not inside a named role. There is nothing to switch because nothing has claimed them: they run on whatever their caller resolved, usually the Site default. Anything landing here needs a withActivity() tag at the call site — that is the fix, not a control on this page.',
     workloadId: null,
   },
 ];
@@ -95,9 +108,14 @@ export function allActivities(): ActivityDef[] {
  * Rows written before activity tagging shipped have neither, and land under
  * `source:unknown` rather than being folded into a role they may not belong to.
  * A cost page that back-dates an attribution is inventing history.
+ *
+ * The two `SOURCE_ROLE` sources are the exception and not a contradiction of
+ * that rule: they are not a guess about which role spent the money, they are
+ * the recorded fact of it. See the map's own note.
  */
 export function activityKey(activity: string | null, source: string | null): string {
   if (activity) return activity;
+  if (source && SOURCE_ROLE[source]) return SOURCE_ROLE[source];
   return `source:${source ?? 'unknown'}`;
 }
 

@@ -17,6 +17,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from '../compose';
 import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from '../types';
 import { shortlist, verifyAmount } from './extract';
+import { withActivity } from '$lib/context/activity';
 
 export const MAX_TOKENS = 220;
 /** How much of a message the model sees. Receipts put the total near the top,
@@ -122,15 +123,17 @@ export async function extractSpend(
     }
 
     try {
-      const res = await client.chat.completions.create({
-        model: modelId,
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: `SUBJECT: ${note.title ?? ''}\n\n${body}` },
-        ],
-        temperature: 0,
-        max_tokens: MAX_TOKENS,
-      });
+      const res = await withActivity('daydream', () =>
+        client.chat.completions.create({
+          model: modelId,
+          messages: [
+            { role: 'system', content: SYSTEM },
+            { role: 'user', content: `SUBJECT: ${note.title ?? ''}\n\n${body}` },
+          ],
+          temperature: 0,
+          max_tokens: MAX_TOKENS,
+        }),
+      );
       result.tokens += (res.usage?.prompt_tokens ?? 0) + (res.usage?.completion_tokens ?? 0);
 
       const raw = (res.choices[0]?.message?.content ?? '')

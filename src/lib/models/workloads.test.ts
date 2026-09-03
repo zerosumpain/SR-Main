@@ -30,6 +30,24 @@ describe('workload registry', () => {
     }
   });
 
+  it('gives the four formerly per-call reasons a key of their own', () => {
+    // The whole point of the 2026-09-03 change: every reason on
+    // /admin/ops/costs names a model you can set. A missing key here puts the
+    // row back to "per-call", which is how it read for months.
+    for (const id of ['chat', 'workflow-node', 'daydream-review', 'notebook-review']) {
+      const w = getWorkload(id);
+      expect(w, `${id} is not registered`).toBeTruthy();
+      expect(w!.key, `${id} has no settings key`).toMatch(/^jkai\./);
+    }
+  });
+
+  it('does not let the chat role collide with the site default key', () => {
+    // `jkai.chat.default_model` IS the site default. A workload reading it
+    // would make "move chat" and "move everything" the same switch again.
+    expect(getWorkload('chat')!.key).not.toBe('jkai.chat.default_model');
+    expect(WORKLOADS.some((w) => w.key === 'jkai.chat.default_model')).toBe(false);
+  });
+
   it('looks roles up by id', () => {
     expect(getWorkload('extraction')?.key).toBe('jkai.intel.extract_model');
     expect(getWorkload('nope')).toBeNull();
@@ -94,6 +112,44 @@ describe('activity tags match the registry', () => {
       }
     }
     expect(bad, `unregistered activity tags:\n${bad.join('\n')}`).toEqual([]);
+  });
+
+  /**
+   * The hole the literal scan above cannot see.
+   *
+   * `heartbeat/engine.ts` tags each system-scan with `withActivity(row.name)` —
+   * a VARIABLE, so the regex above never looked at it, and `row.name` is a
+   * heartbeat action name rather than a workload id. The result was six keys in
+   * the production ledger (`daydream-ponder`, `workflow-review`, …) that no row
+   * on /admin/ops/costs could name, switch, or even display: the page's loop
+   * skipped every non-`source:` key it did not recognise, so the spend was
+   * invisible AND counted as attributed.
+   *
+   * The page now renders them, badged `unregistered`. This test holds the other
+   * half: a dynamic tag must be a deliberate, documented exception, so if a
+   * second one appears someone has to come here and say why.
+   */
+  it('keeps dynamic activity tags to the one documented case', async () => {
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const name of readdirSync(dir)) {
+        if (name === 'node_modules' || name.startsWith('.')) continue;
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) walk(full, out);
+        else if (/\.(ts|svelte)$/.test(full) && !full.endsWith('.test.ts')) out.push(full);
+      }
+      return out;
+    };
+    const allowed = new Set(['src/lib/heartbeat/engine.ts', 'src/lib/deepdive/worker.ts']);
+    const dynamic: string[] = [];
+    for (const file of walk('src')) {
+      const src = readFileSync(file, 'utf8');
+      for (const m of src.matchAll(/withActivity\(\s*([^'\s)][^,)]*)/g)) {
+        if (!allowed.has(file.replace(/\\/g, '/'))) dynamic.push(`${file}: ${m[1].trim()}`);
+      }
+    }
+    expect(dynamic, `undocumented dynamic activity tags:\n${dynamic.join('\n')}`).toEqual([]);
   });
 
   it('registers both research tiers, which DepthPreset.modelRole names', () => {

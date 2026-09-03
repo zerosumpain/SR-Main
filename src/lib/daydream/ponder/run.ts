@@ -38,6 +38,7 @@ import {
   MUSING_THEMES,
   validatePonderOutput,
 } from './schema';
+import { withActivity } from '$lib/context/activity';
 
 export interface PonderResult {
   cards: number;
@@ -531,15 +532,17 @@ export async function runPonder(
 
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
-    const res = await client.chat.completions.create({
-      model: modelId,
-      temperature: 0.7,
-      max_tokens: 1800,
-      messages: [
-        { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines, caps) },
-        { role: 'user', content: renderPack(pack) },
-      ],
-    });
+    const res = await withActivity('daydream', () =>
+      client.chat.completions.create({
+        model: modelId,
+        temperature: 0.7,
+        max_tokens: 1800,
+        messages: [
+          { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines, caps) },
+          { role: 'user', content: renderPack(pack) },
+        ],
+      }),
+    );
     result.tokens.prompt = res.usage?.prompt_tokens ?? 0;
     result.tokens.completion = res.usage?.completion_tokens ?? 0;
 

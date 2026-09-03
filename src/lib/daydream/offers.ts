@@ -25,6 +25,7 @@ import { daydreamOffers, intelNotes } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDaydreamModel } from './compose';
 import { errMsg } from './types';
+import { withActivity } from '$lib/context/activity';
 
 /** How far back to look for offers. Anything older has almost certainly
  *  expired, and scanning it costs the same as scanning something useful. */
@@ -254,18 +255,20 @@ export async function extractOffer(
   try {
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
-    const res = await client.chat.completions.create({
-      model: modelId,
-      messages: [
-        { role: 'system', content: EXTRACT_SYSTEM },
-        {
-          role: 'user',
-          content: `FROM: ${candidate.senderDomain ?? 'unknown'}\nSUBJECT: ${candidate.title}\n\n${candidate.body}`,
-        },
-      ],
-      temperature: 0,
-      max_tokens: 220,
-    });
+    const res = await withActivity('daydream', () =>
+      client.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: EXTRACT_SYSTEM },
+          {
+            role: 'user',
+            content: `FROM: ${candidate.senderDomain ?? 'unknown'}\nSUBJECT: ${candidate.title}\n\n${candidate.body}`,
+          },
+        ],
+        temperature: 0,
+        max_tokens: 220,
+      }),
+    );
     const raw = res.choices[0]?.message?.content ?? '';
     const tokens = (res.usage?.prompt_tokens ?? 0) + (res.usage?.completion_tokens ?? 0);
     return { offer: parseExtraction(raw, now), tokens, error: null };

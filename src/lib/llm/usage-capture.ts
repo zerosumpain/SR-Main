@@ -117,6 +117,13 @@ function captureUsage(
       cacheReadTokens,
       reasoningTokens,
       costUsd,
+      // Two of these four values NAME a role on their own: a call recorded
+      // inside a chat turn is the `chat` role and one inside a workflow run is
+      // the `workflow-node` role, both of which have a settings key since
+      // 2026-09-03. `$lib/costs/activities` folds them onto those roles at read
+      // time, which also reaches every row already written. `research` cannot
+      // say WHICH tier and `gateway` is the unclaimed remainder, so those two
+      // stay as their own rows — untagged, and reported as such.
       source: store ? 'workflow' : researchId ? 'research' : chat ? 'jkai-chat' : 'gateway',
       // The workload this call is serving, when it is serving one. Without it
       // every non-workflow, non-research call is indistinguishable in the

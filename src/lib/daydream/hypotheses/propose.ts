@@ -28,6 +28,7 @@ import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { hypothesisKey, validateHypothesis, type HypothesisSpec } from './spec';
 import { activeSteerNotes, renderSteers } from './steer';
 import { raiseFault, unknownMetricsIn } from '../faults';
+import { withActivity } from '$lib/context/activity';
 
 export const MAX_TOKENS = 1400;
 
@@ -255,18 +256,20 @@ export async function proposeHypotheses(
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
 
-    const res = await client.chat.completions.create({
-      model: modelId,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          role: 'user',
-          content: `${context}\n\nPropose at most ${maxProposals} questions worth investigating.`,
-        },
-      ],
-      temperature: 0.6,
-      max_tokens: MAX_TOKENS,
-    });
+    const res = await withActivity('daydream', () =>
+      client.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          {
+            role: 'user',
+            content: `${context}\n\nPropose at most ${maxProposals} questions worth investigating.`,
+          },
+        ],
+        temperature: 0.6,
+        max_tokens: MAX_TOKENS,
+      }),
+    );
     result.tokens = (res.usage?.prompt_tokens ?? 0) + (res.usage?.completion_tokens ?? 0);
 
     const raw = (res.choices[0]?.message?.content ?? '')
