@@ -17,7 +17,9 @@ function state(over: Partial<RateState> = {}): RateState {
   return { todayCount: 0, lastDeliveredAt: null, lastByKind: new Map(), ...over };
 }
 
-const opts = { now: NOW, threshold: 0.5, hasPushSubscriber: true };
+// `near_offer` is a pattern and patterns wait for the briefing by default, so
+// the fixture routes them to WhatsApp — these tests are about the caps.
+const opts = { now: NOW, threshold: 0.5, hasPushSubscriber: true, routes: { patterns: 'whatsapp' as const } };
 // Every gate below the verdict is only reachable by a thought that passed the
 // review, so the shared fixture carries one. A test that wants to exercise the
 // review gate itself overrides it explicitly.
@@ -34,8 +36,39 @@ describe('chooseChannel', () => {
   // The threshold no longer gates delivery. It was a cold-start proxy for "is
   // this any good"; a reviewer that has read the sources answers that directly,
   // so a verified thought is not held back by a score it beat anyway.
-  it('sends a verified thought that the old threshold would have held', () => {
+  it('holds a verified thought below the bar for the briefing', () => {
     const d = chooseChannel({ ...thought, score: 0.2 }, state(), opts);
+    expect(d.channel).toBe('silent');
+    expect(d.suppressedReason).toBe('briefing_only');
+  });
+
+  it('holds a verified thought of a kind he has rated down for the briefing', () => {
+    const d = chooseChannel({ ...thought, kindWeight: 0.8 }, state(), opts);
+    expect(d.channel).toBe('silent');
+    expect(d.suppressedReason).toBe('briefing_only');
+  });
+
+  it('routes a graph link to the briefing however good it is', () => {
+    const d = chooseChannel({ kind: 'intel_missing_link', score: 0.99, ...VERIFIED }, state(), opts);
+    expect(d.suppressedReason).toBe('briefing_only');
+  });
+
+  it('lets an owner override send a family to WhatsApp, and a kind override win over it', () => {
+    expect(chooseChannel({ kind: 'free_window', score: 0.9, ...VERIFIED }, state(), { ...opts, routes: {} }).suppressedReason).toBe('briefing_only');
+    expect(chooseChannel({ kind: 'free_window', score: 0.9, ...VERIFIED }, state(), { ...opts, routes: { patterns: 'whatsapp', free_window: 'feed' } }).suppressedReason).toBe('feed_only');
+  });
+
+  it('shortens the cooldown for a kind he rates up and lengthens it for one he rates down', () => {
+    const s = state({ lastByKind: new Map([[thought.kind, hoursAgo(10)]]) });
+    expect(chooseChannel(thought, s, opts).suppressedReason).toBe('kind_cooldown');
+    expect(chooseChannel(thought, s, { ...opts, kindRelevance: new Map([[thought.kind, 5]]) }).channel).toBe('push');
+    const s2 = state({ lastByKind: new Map([[thought.kind, hoursAgo(30)]]) });
+    expect(chooseChannel(thought, s2, opts).channel).toBe('push');
+    expect(chooseChannel(thought, s2, { ...opts, kindRelevance: new Map([[thought.kind, 1]]) }).suppressedReason).toBe('kind_cooldown');
+  });
+
+  it('a verified thought at the bar with a neutral weight goes out', () => {
+    const d = chooseChannel({ ...thought, score: 0.5, kindWeight: 1 }, state(), opts);
     expect(d.channel).toBe('push');
     expect(d.suppressedReason).toBeNull();
   });
@@ -212,9 +245,10 @@ describe('only a reviewed thought interrupts him', () => {
   });
 
   it('lets a verified thought through the gates that remain', () => {
-    // Verified lifts the threshold and NOTHING else: quiet hours still hold.
+    // A verdict does not override quiet hours: at the bar and verified, the
+    // hour still holds it.
     const night = new Date('2026-08-26T02:00:00Z');
-    const d = chooseChannel({ ...thought, score: 0.01 }, state(), { ...opts, now: night });
+    const d = chooseChannel({ ...thought, score: 0.9 }, state(), { ...opts, now: night });
     expect(d.suppressedReason).toBe('quiet_hours');
   });
 

@@ -345,6 +345,23 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'routes': {
+        const { loadRoutes } = await import('$lib/daydream/routes.server');
+        return json({ routes: await loadRoutes() });
+      }
+
+      case 'set_route': {
+        // Where a family or kind may go: whatsapp | briefing | feed, or null
+        // to fall back to the default. A route is a ceiling, never a promise.
+        const key = str('key');
+        const route = body.route == null ? null : str('route');
+        if (!key) return json({ error: 'key is required' }, { status: 400 });
+        const { setRoute } = await import('$lib/daydream/routes.server');
+        const { isRoute } = await import('$lib/daydream/routes');
+        if (route != null && !isRoute(route)) return json({ error: `unknown route: ${route}` }, { status: 400 });
+        return json({ ok: true, routes: await setRoute(key, route) });
+      }
+
       case 'decide_rule': {
         const ruleId = str('ruleId');
         const decision = str('decision');

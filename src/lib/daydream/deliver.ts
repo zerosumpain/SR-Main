@@ -16,6 +16,7 @@ import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { LOCAL_TZ } from './types';
+import { DEFAULT_FEED_KINDS, cooldownHoursFor, routeFor, type RouteOverrides } from './routes';
 
 /** At most one interrupting notification in this many hours. */
 export const MIN_GAP_HOURS = 3;
@@ -120,27 +121,32 @@ export async function readRateState(now: Date): Promise<RateState> {
  * feedback. `feed_only` is a destination, not a suppression, and the page
  * renders it as one.
  */
-export const FEED_ONLY_KINDS: ReadonlyArray<string> = [
-  'mail_money_admin',
-  'mail_official',
-  'mail_unusual',
-];
+export const FEED_ONLY_KINDS: ReadonlyArray<string> = DEFAULT_FEED_KINDS;
 
-export function isFeedOnly(kind: string): boolean {
-  return FEED_ONLY_KINDS.includes(kind);
+export function isFeedOnly(kind: string, routes: RouteOverrides = {}): boolean {
+  return routeFor(kind, routes) === 'feed';
+}
+
+export interface ChannelOpts {
+  now: Date;
+  /** The adaptive bar — READ again. A verified thought below it is held for
+   *  the briefing rather than sent. */
+  threshold: number;
+  hasPushSubscriber: boolean;
+  hasWhatsApp?: boolean;
+  /** Owner route overrides by family or kind; defaults apply beneath. */
+  routes?: RouteOverrides;
+  /** Mean relevance he has given each kind (1..5); absent = neutral. */
+  kindRelevance?: ReadonlyMap<string, number>;
 }
 
 export function chooseChannel(
-  thought: { kind: string; score: number; reviewVerdict?: string | null },
+  thought: { kind: string; score: number; reviewVerdict?: string | null; kindWeight?: number | null },
   state: RateState,
-  opts: { now: Date; threshold: number; hasPushSubscriber: boolean; hasWhatsApp?: boolean },
+  opts: ChannelOpts,
 ): DeliveryDecision {
   const { now } = opts;
-  // `opts.threshold` is deliberately no longer read here. It was the delivery
-  // gate until the reviewer existed; a verified thought now passes regardless
-  // of it, and an unverified one is silent regardless of it, so it gates
-  // nothing. It is still what the feed measures likelihood against, so it
-  // stays on the signature rather than being ripped out of every caller.
+  const routes = opts.routes ?? {};
 
   // ── The review decides whether he hears about it at all ─────────────────
   //
@@ -182,10 +188,27 @@ export function chooseChannel(
   // ordering is what makes a mute absolute rather than something a confident
   // model can talk past.
 
-  // Checked before the interruption budget, not after: a feed-only thought
-  // must not consume a slot it was never going to use.
-  if (isFeedOnly(thought.kind)) {
-    return { channel: 'silent', suppressedReason: 'feed_only' };
+  // ── The route, then the policy ───────────────────────────────────────────
+  //
+  // Checked before the interruption budget, not after: a thought that was
+  // never going to buzz must not consume a slot. `feed` waits on the hub;
+  // `briefing` waits for the morning card, which reads `briefing_only` back.
+  const route = routeFor(thought.kind, routes);
+  if (route === 'feed') return { channel: 'silent', suppressedReason: 'feed_only' };
+  if (route === 'briefing') return { channel: 'silent', suppressedReason: 'briefing_only' };
+
+  // Owner's ask (2026-09-02): "what gets sent vs what doesn't, linked to
+  // relevance". The gate now reads all three instruments. The verdict says
+  // the claim is RIGHT; the score against the adaptive bar says the engine
+  // thought it worth saying; the kind weight says what he has told it about
+  // this KIND — verdicts and relevance ratings in one currency, neutral at
+  // 1.0. A verified claim that fails either of the last two is not lost: it
+  // is held for the briefing, where a quiet true thing belongs.
+  if (thought.score < opts.threshold) {
+    return { channel: 'silent', suppressedReason: 'briefing_only' };
+  }
+  if ((thought.kindWeight ?? 1) < 1) {
+    return { channel: 'silent', suppressedReason: 'briefing_only' };
   }
 
   const hour = localHour(now);
@@ -193,8 +216,11 @@ export function chooseChannel(
     return { channel: 'silent', suppressedReason: 'quiet_hours' };
   }
 
+  // The cooldown is the second visible effect of the relevance dial: a kind
+  // he rates 5 may come back in eight hours, one he rates 1 not for two days.
+  const cooldown = cooldownHoursFor(opts.kindRelevance?.get(thought.kind));
   const lastKind = state.lastByKind.get(thought.kind);
-  if (lastKind && now.getTime() - lastKind.getTime() < PER_KIND_COOLDOWN_HOURS * 3_600_000) {
+  if (lastKind && now.getTime() - lastKind.getTime() < cooldown * 3_600_000) {
     return { channel: 'silent', suppressedReason: 'kind_cooldown' };
   }
 

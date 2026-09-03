@@ -11,6 +11,9 @@ import { composeNarrative, resolveDaydreamModel, saveNarrative } from '$lib/dayd
 import { chooseChannel, deliver, hasPushSubscriber, hasWhatsAppOwner, readRateState } from '$lib/daydream/deliver';
 import { listUndelivered } from '$lib/daydream/thought-store';
 import { loadThreshold } from '$lib/daydream/ledger';
+import { loadRoutes } from '$lib/daydream/routes.server';
+import { loadRelevanceRows } from '$lib/daydream/thought-store';
+import { meanRelevance } from '$lib/daydream/scoring';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
@@ -91,7 +94,24 @@ export const daydreamCompose: ActivityHandler = {
     const plan = budget.plan;
 
     const { value: threshold } = await loadThreshold();
-    const [rateState, pushable, waOwner] = await Promise.all([readRateState(now), hasPushSubscriber(), hasWhatsAppOwner()]);
+    const [rateState, pushable, waOwner, routes, relevanceRows] = await Promise.all([
+      readRateState(now),
+      hasPushSubscriber(),
+      hasWhatsAppOwner(),
+      loadRoutes().catch(() => ({})),
+      loadRelevanceRows().catch(() => []),
+    ]);
+    // What he has said about each KIND's subject, once per tick — the
+    // cooldown reads it. Neutral for a kind never rated.
+    const kindRelevance = new Map<string, number>();
+    {
+      const byKind = new Map<string, typeof relevanceRows>();
+      for (const r of relevanceRows) byKind.set(r.kind, [...(byKind.get(r.kind) ?? []), r]);
+      for (const [kind, rows] of byKind) {
+        const m = meanRelevance(rows);
+        if (m) kindRelevance.set(kind, m.mean);
+      }
+    }
 
     const considered = pending.slice(0, plan.maxCandidates);
     const outcomes: Array<Record<string, unknown>> = [];
@@ -107,6 +127,7 @@ export const daydreamCompose: ActivityHandler = {
     let completionTokens = 0;
 
     for (const thought of considered) {
+      const components = (thought.components ?? {}) as Record<string, unknown>;
       const decision = chooseChannel(
         {
           kind: thought.kind,
@@ -114,9 +135,11 @@ export const daydreamCompose: ActivityHandler = {
           // Load-bearing. Omitting this field makes every reviewed thought look
           // unreviewed at the final gate, so nothing can ever interrupt.
           reviewVerdict: thought.reviewVerdict,
+          // The multiplier the score was built with — the third instrument.
+          kindWeight: typeof components.kindWeight === 'number' ? components.kindWeight : null,
         },
         rateState,
-        { now, threshold, hasPushSubscriber: pushable, hasWhatsApp: waOwner },
+        { now, threshold, hasPushSubscriber: pushable, hasWhatsApp: waOwner, routes, kindRelevance },
       );
 
       // Awaiting review is a queue state, not a delivery outcome. Calling

@@ -49,6 +49,8 @@ export interface BriefingFactRow {
   label: string;
   value: string;
   source: string;
+  /** Where the fact can be checked — a room of the hub, a thought's drill. */
+  href?: string | null;
 }
 
 /**
