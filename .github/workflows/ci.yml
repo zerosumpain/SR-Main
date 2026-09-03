@@ -215,13 +215,27 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.22.3
           cache: npm
 
       - run: npm ci
 
       - name: Audit production dependencies
-        run: timeout 300 npm audit --omit=dev --audit-level=high
+        # The npm advisory endpoint occasionally accepts the connection and
+        # then never returns (the install registry remains healthy). Bound each
+        # attempt so a transient audit-service fault is retried instead of
+        # consuming the whole job; a real advisory still fails every attempt.
+        run: |
+          status=1
+          for attempt in 1 2 3; do
+            echo "Audit attempt $attempt/3"
+            if timeout 60 npm audit --omit=dev --audit-level=high; then
+              exit 0
+            else
+              status=$?
+            fi
+          done
+          exit "$status"
 
       - name: Type check
         run: ./scripts/gate-check.sh
@@ -305,7 +319,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.22.3
           cache: npm
 
       - run: npm ci
@@ -364,7 +378,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.22.3
           cache: npm
 
       - run: npm ci
