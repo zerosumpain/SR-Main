@@ -193,8 +193,6 @@
   --fs-label-xs: 0.75rem;    /* 12px — FLOOR. Nothing smaller. */
 
   /* Layout */
-  --site-nav-height: 56px;
-  --site-nav-height-mobile: 48px;
   --radius-sharp: 2px;
   --radius-pill: 100px;
   --radius-round: 4px;
@@ -300,6 +298,13 @@ body {
  * .jkai-root       — /jkai/+layout.svelte, the hub shell (all sub-pages).
  * .jkai-runner     — /jkai/run, which uses +page@.svelte to reset to the ROOT
  *                    layout on purpose and therefore has no .jkai-root above it.
+ * .jkai-shared     — /jkai/shared/<token>, the read-only public snapshot of a
+ *                    conversation. Same story as .jkai-runner: it resets to the
+ *                    root layout so an anonymous share-link holder never inherits
+ *                    the hub masthead's spend/credit/quota figures, and loses
+ *                    .jkai-root with it. It renders ChatMessage — the component
+ *                    this scope exists for — so a shared snapshot has to read in
+ *                    the same face as the conversation it is a snapshot of.
  *
  * Only the body/reading token moves. --font-display (Archivo Black headings)
  * and --font-mono (JetBrains Mono labels, code, metrics) are unchanged.
@@ -313,7 +318,8 @@ body {
  * glyph.
  */
 body:has(.jkai-root),
-body:has(.jkai-runner) {
+body:has(.jkai-runner),
+body:has(.jkai-shared) {
   /* The stack itself is --font-read in :root above; this is the same value, not
      a second copy of it. */
   --font-body: var(--font-read);
@@ -341,7 +347,8 @@ body:has(.jkai-runner) {
  * preformatted output WITHOUT a <pre>/<code> element cannot be caught here and
  * name --font-code themselves. */
 body:has(.jkai-root) :is(pre, code, kbd, samp),
-body:has(.jkai-runner) :is(pre, code, kbd, samp) {
+body:has(.jkai-runner) :is(pre, code, kbd, samp),
+body:has(.jkai-shared) :is(pre, code, kbd, samp) {
   font-family: var(--font-code);
 }
 

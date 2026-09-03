@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
   /**
    * Landgrab — the family territory board.
    *
@@ -110,6 +111,8 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
+<SiteHeader />
+
 <div class="lg">
   <header class="page-hdr">
     <div class="hdr-l">
@@ -122,7 +125,6 @@
       </p>
     </div>
     <div class="hdr-r">
-      <a class="back-link" href="/projects">Projects</a>
       <p class="hdr-stat">
         <span class="metric-label muted">Ground in play</span>
         <span class="hdr-num">{km2(lg.totals.areaM2)}<span class="hdr-unit">km²</span></span>

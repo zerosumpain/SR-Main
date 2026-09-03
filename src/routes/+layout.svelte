@@ -51,6 +51,12 @@
 </div>
 
 <style>
+  /* The bar's height, and the ONE declaration of it. `src/app.css` used to
+     carry a second `--site-nav-height: 56px` at the same specificity, decided
+     purely by stylesheet order, while twelve places did arithmetic on the token
+     — the landing hero, all three /heart heroes, the admin sub-nav's sticky
+     offset, ProseContent's scroll-margin. Two values for one measurement is a
+     bug waiting for a stylesheet to be reordered. */
   :global(:root) {
     --site-nav-height: 48px;
   }
@@ -84,5 +90,14 @@
     border-bottom: none;
     display: flex;
     align-items: stretch;
+  }
+
+  /* Paper does not need wayfinding, and an ink band across the top of every
+     printed page costs a toner cartridge to say nothing. Only six files in the
+     repo carried a print rule and none of them was the nav. */
+  @media print {
+    :global(.site-nav-bar) {
+      display: none;
+    }
   }
 </style>

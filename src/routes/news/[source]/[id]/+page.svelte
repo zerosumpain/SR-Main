@@ -222,7 +222,9 @@
 </HealthShell>
 
 <style>
-  .reader-page { min-height: calc(100vh - var(--site-nav-height)); padding: 30px clamp(20px, 4vw, 58px) 80px; }
+  /* 100vh flat: this page wears HealthShell, not `.site-nav-bar`, so there is
+     no 48px strip above it to subtract. See the sticky rails below. */
+  .reader-page { min-height: 100vh; padding: 30px clamp(20px, 4vw, 58px) 80px; }
   .article-head { max-width: 1120px; margin: 0 auto; padding: 0 0 34px; border-bottom: 2px solid var(--text-primary); }
   .source-lockup { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
   .source-code { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--accent); color: var(--accent); font-weight: 700; }
@@ -233,7 +235,12 @@
   .article-summary .rail-label { margin: 4px 0 0; }
   .article-summary > p:last-child { margin: 0; font-family: var(--font-read); font-size: var(--fs-body-lg); font-weight: 600; line-height: 1.55; color: var(--text-secondary); text-wrap: balance; }
   .reader-grid { display: grid; grid-template-columns: 150px minmax(0, 700px) minmax(260px, 320px); gap: clamp(26px, 4vw, 58px); max-width: 1120px; margin: 0 auto; padding-top: 36px; align-items: start; }
-  .reading-rail, .action-rail { position: sticky; top: calc(var(--site-nav-height) + 24px); }
+  /* A literal, not `calc(var(--site-nav-height) + 24px)`. The header these rails
+     have to clear is HealthShell's `.hs-head`, which is ~45px of padded content
+     and has no fixed height — `--site-nav-height` describes a different bar that
+     this page does not render, so the arithmetic was measuring the wrong header.
+     72px clears the head with the same 24px gap the rails were designed with. */
+  .reading-rail, .action-rail { position: sticky; top: 72px; }
   .rail-label { margin: 0 0 14px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--accent); }
   .reading-rail dl { margin: 0 0 18px; border-top: 1px solid var(--line-strong); }
   .reading-rail dl div { display: grid; gap: 3px; padding: 10px 0; border-bottom: 1px solid var(--line-hair); }
@@ -274,7 +281,6 @@
   }
   @media (max-width: 700px) {
     .reader-page { padding-top: 22px; }
-    .back { margin-bottom: 24px; }
     .reader-grid { grid-template-columns: 1fr; }
     .action-rail { position: static; grid-row: 1; }
     .reading-copy { grid-row: 2; }

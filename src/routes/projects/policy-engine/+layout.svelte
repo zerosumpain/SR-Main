@@ -13,6 +13,7 @@
   import SectionNav from './components/SectionNav.svelte';
   import Onboarding from './components/Onboarding.svelte';
   import AskModel from './components/AskModel.svelte';
+  import FieldStudyNav from '$lib/components/FieldStudyNav.svelte';
 
   let { children } = $props();
   const STORAGE = 'whitehall-model-levers-v1';
@@ -89,8 +90,8 @@
   <Onboarding />
 
   <div class="topstack" bind:clientHeight={topH}>
+    <FieldStudyNav />
     <header class="masthead">
-      <a class="back" href="/projects" title="Back to the field studies">←&nbsp;<span class="lbl">Field studies</span></a>
       <a class="brand" href="/projects/policy-engine">Education Policy Modelling</a>
       <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the policy levers beside the data">☰<span class="lbl">&nbsp;Levers</span></button>
       <span class="tagline">ENGLAND SCHOOLS · 2025–2040</span>
@@ -179,8 +180,6 @@
   .topstack { position: sticky; top: 0; z-index: 20; background: rgba(241,234,214,0.94); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(28,22,17,0.12); }
 
   .masthead { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding: 9px 28px 8px; }
-  .back { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); text-decoration: none; }
-  .back:hover { color: var(--ink); }
   .brand { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body); color: var(--ink); text-decoration: none; letter-spacing: -0.01em; }
   .levers-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 5px 11px; border-radius: var(--radius-sharp); border: 1px solid rgba(28,22,17,0.25);
     background: rgba(255,255,255,0.55); color: var(--ink); cursor: pointer; }
@@ -294,7 +293,7 @@
   }
   @media (max-width: 600px) {
     /* collapse the chrome buttons to icons so the masthead fits ~1 row */
-    .back .lbl, .levers-btn .lbl, .help-btn .lbl { display: none; }
+    .levers-btn .lbl, .help-btn .lbl { display: none; }
     .brand { font-size: var(--fs-nav); }
     .help-btn, .levers-btn { padding: 5px 9px; }
   }

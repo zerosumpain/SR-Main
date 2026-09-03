@@ -254,7 +254,6 @@
            take five iterations": the answer is what it was, or was not, told. -->
       <a class="back-link" href="/jkai/codegraph">⌗ Codegraph</a>
       <a class="back-link" href="/jkai/codegraph/serves">Build impact</a>
-      <a class="back-link" href="/jkai">← JKAI</a>
     </nav>
   </header>
 

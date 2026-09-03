@@ -14,6 +14,8 @@
   import RunControls from '$lib/components/research/RunControls.svelte';
   import RunSpend from '$lib/components/research/RunSpend.svelte';
   import { goto, invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -282,6 +284,8 @@
 
 <svelte:head><title>{data.session.topic} — Research</title></svelte:head>
 
+<SiteHeader isOwner={page.data?.isOwner !== false} />
+
 <div class="wrap">
   <header class="page-hdr">
     <div>
@@ -291,7 +295,6 @@
       <h1>{data.session.topic}</h1>
       <p class="scope-line">{data.session.scopeLabel}</p>
     </div>
-    <a class="back-link" href="/research">All research</a>
   </header>
 
   <section class="statusbar">
@@ -514,7 +517,6 @@
   .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
   .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 1.8rem; font-weight: 900; line-height: 1.1; }
   .scope-line { margin: 0.5rem 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .back-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; flex-shrink: 0; }
 
   .statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; font-family: var(--font-mono); font-size: var(--fs-label); }
   .pill { text-transform: uppercase; letter-spacing: 0.12em; padding: 2px 8px; border: 1px solid var(--accent); color: var(--accent); font-size: var(--fs-label-xs); }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { getContext } from 'svelte';
-  import { ADMIN_SECTIONS, isSectionActive } from './admin-nav';
+  import { ADMIN_SECTIONS, activeSection, isSectionActive } from './admin-nav';
 
   const adminToken = getContext<string>('adminToken');
 
@@ -10,15 +10,85 @@
     const sep = href.includes('?') ? '&' : '?';
     return `${href}${sep}token=${adminToken}`;
   }
+
+  const path = $derived(page.url.pathname);
+
+  /**
+   * The way back, one level up.
+   *
+   * Admin answers this from its OWN manifest rather than from
+   * `$lib/nav/site-nav`'s `parentHref()`. Not because that function 404s —
+   * checked, it does not: `SECTIONS` has no /admin entry so it falls through to
+   * generic path-walking, but its `GROUPING_SEGMENTS` already lists
+   * `/admin/ai`, `/admin/content` and `/admin/ops`, so `/admin/ops/costs`
+   * correctly reaches `/admin`. Two other answers are the reason:
+   *
+   *  * `parentHref('/admin')` is `/` — which is exactly what the home icon two
+   *    cells to the left already is. Here that case has no back cell at all.
+   *  * `parentHref` sends `/admin/access/security` to `/admin/access` and
+   *    `/admin/connections/gmail` to `/admin/connections`. Both targets are
+   *    entries in the SAME sub-nav strip sitting directly under this bar — a
+   *    sideways move dressed up as an up-move. `admin-nav.ts` is the only file
+   *    that knows which paths are in that strip, so it has to decide.
+   *
+   * THE RULE: every ADMIN_SECTIONS entry's `href` IS its own first sub-nav
+   * item, and the sections strip is permanently on screen. So a page that
+   * appears in either strip has one honest parent, `/admin`. Only a page BELOW
+   * the sub-nav — a post editor, a datastore collection, the WhatsApp pairing
+   * page — walks up to the strip entry that owns it.
+   */
+  const back = $derived.by((): { href: string; label: string } | null => {
+    const clean = path.length > 1 ? path.replace(/\/+$/, '') : path;
+    if (clean === '/admin') return null;
+
+    const section = activeSection(clean);
+    if (section) {
+      const inStrip = clean === section.href || section.items.some((i) => i.href === clean);
+      if (!inStrip) {
+        // Deepest strip entry that genuinely owns this path.
+        const owner = [section.href, ...section.items.map((i) => i.href)]
+          .filter((h) => clean.startsWith(h + '/'))
+          .sort((a, b) => b.length - a.length)[0];
+        if (owner) {
+          const label = section.items.find((i) => i.href === owner)?.label ?? section.label;
+          return { href: owner, label };
+        }
+      }
+    }
+
+    return { href: '/admin', label: 'Admin' };
+  });
 </script>
 
 <header class="site-nav-bar admin-top-nav">
+  <!-- Top-left on every page, sitewide. NOT token-threaded: it leaves admin for
+       the public site, where a ?token= is meaningless and would only follow the
+       reader around. -->
+  <a href="/" class="admin-home" aria-label="Home" title="Home">
+    <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+      <path
+        d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+      />
+    </svg>
+  </a>
+
+  {#if back}
+    <a class="admin-back" href={tokenHref(back.href)} title="Back to {back.label}">
+      <span class="back-arrow" aria-hidden="true">←</span>
+      <span class="back-word">{back.label}</span>
+    </a>
+  {/if}
+
   <a
     href={tokenHref('/admin')}
     class="brand admin-wordmark"
     aria-label="Strange Ramblings admin — dashboard"
   >
-    strange ramblings<span class="admin-tag">admin</span>
+    <span class="wordmark-text">strange ramblings</span><span class="admin-tag">admin</span>
   </a>
 
   <nav class="admin-sections" aria-label="Admin sections">
@@ -48,6 +118,52 @@
      accent seam. Cells own their own padding — .site-nav-bar has none.
      That strip is INK now, so every paper token here is relit the same way
      SiteNav and PageHeader were. */
+
+  /* The first two cells are the ones SiteHeader.svelte carries sitewide: the
+     home icon, then the way back. Same shape, same padding rhythm, same
+     cream-alpha hairline as every other cell on the ink band. */
+  .admin-home,
+  .admin-back {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+  }
+
+  .admin-home {
+    padding: 0 14px;
+    color: rgba(237, 228, 212, 0.72);
+  }
+  .admin-home:hover {
+    color: var(--bg);
+    background: rgba(237, 228, 212, 0.07);
+  }
+  .admin-home svg {
+    display: block;
+  }
+
+  .admin-back {
+    gap: 7px;
+    padding: 0 14px;
+    font-family: var(--font-code);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: rgba(237, 228, 212, 0.62);
+  }
+  .admin-back:hover {
+    color: var(--accent-on-dark);
+    background: rgba(237, 228, 212, 0.07);
+  }
+  .back-arrow {
+    font-size: var(--fs-label);
+    line-height: 1;
+  }
+
   .admin-wordmark {
     flex-shrink: 0;
     font-size: var(--fs-body-sm);
@@ -62,6 +178,12 @@
   .admin-wordmark::before {
     color: var(--accent-on-dark);
     opacity: 1;
+  }
+  .wordmark-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .admin-tag {
     font-family: var(--font-mono);
@@ -144,8 +266,34 @@
     .admin-tag {
       display: none;
     }
-    .view-site {
+    /* Same trade SiteHeader makes: the back cell keeps its arrow, drops its
+       word, and the sections strip gets the width back. */
+    .back-word {
+      display: none;
+    }
+    .admin-home,
+    .admin-back {
       padding: 0 12px;
+    }
+
+    /* MEASURED, at 375px: home 39 + back 38 + wordmark 172 + view-site 85 =
+       334 of 375, which left `.admin-sections` — Overview, Content,
+       Connections, AI, Ops, Estate, Access, i.e. the whole of admin's
+       wayfinding — at ZERO pixels, and pushed the document into horizontal
+       scroll. Two cells give the width back:
+
+        * The wordmark is capped the way SiteHeader caps its title cell
+          (38vw, ellipsis), because on a phone the brand is not the thing
+          you came to the bar for.
+        * `.view-site` goes. Its destination is `/` — the SAME destination
+          as the home icon two cells to its left, which is present at every
+          width now and was not before. It is kept on a wide screen, where
+          the label is worth its 85px and nothing is competing for them. */
+    .admin-wordmark {
+      max-width: 38vw;
+    }
+    .view-site {
+      display: none;
     }
   }
 </style>

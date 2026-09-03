@@ -6,6 +6,7 @@
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
+  import { SECTIONS, activeSection, parentHref, parentLabel } from '$lib/nav/site-nav';
 
   let {
     tokensToday,
@@ -67,6 +68,42 @@
    */
   const pageMenu = $derived(hub.pageMenu);
 
+  /**
+   * Every href the manifest actually names — section roots plus sub-nav cells.
+   *
+   * `parentHref()` walks the PATH, which is right where the parent is a real
+   * page (/jkai/builds/42 -> /jkai/builds) and wrong where it is only a routing
+   * segment (/jkai/trace/<id> -> /jkai/trace, which has no +page). Checked so a
+   * back chip can never point at a 404.
+   */
+  const NAV_HREFS = new Set<string>([
+    ...SECTIONS.map((s) => s.rootHref),
+    ...SECTIONS.flatMap((s) => s.items.map((i) => i.href)),
+  ]);
+
+  /**
+   * The way out, on every surface rather than only the ones that asked.
+   *
+   * A surface's own opinion always wins — Intel publishes `pageMenu.back`
+   * because it knows something the path does not. Everything else falls back to
+   * the nav manifest, which answers "one level up" for any path: /jkai/builds/42
+   * gets `← Builds` without /jkai/builds publishing anything, and a new surface
+   * inherits a back link the day it is routed. Null only where there is no up —
+   * /jkai itself, where the home icon on the left is already the answer.
+   */
+  const backTo = $derived.by(() => {
+    if (pageMenu?.back) return pageMenu.back;
+    const path = page.url.pathname;
+    const href = parentHref(path);
+    if (!href) return null;
+    if (NAV_HREFS.has(href)) return { href, label: parentLabel(path) ?? 'Back' };
+    // A routing segment with no page behind it. /jkai/trace/<id>'s parent by
+    // path is /jkai/trace, which 404s — there is only a [traceId] route under
+    // it. The family root is the honest answer in that case.
+    const section = activeSection(path);
+    return section ? { href: section.rootHref, label: section.label } : null;
+  });
+
   // Live runs: the layout load snapshotted a count at navigation time; the chat
   // page publishes a fresher one as jobs start and finish.
   const runs = $derived(hub.liveRuns ?? activeRuns);
@@ -93,7 +130,10 @@
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
     { label: 'News', href: '/news', meta: 'LIVE WIRE' },
     { label: 'Research', href: '/research', meta: 'DEEP DIVE' },
-    { label: 'Daydreams', href: '/jkai/daydreams/feed', meta: 'BRIEF · WATCH · LEARN' },
+    // The family prefix, matching SECTIONS in $lib/nav/site-nav — it 307s to the
+    // feed, so the destination is unchanged, but the row now lights as `current`
+    // on every daydream page instead of only on the feed.
+    { label: 'Daydreams', href: '/jkai/daydreams', meta: 'BRIEF · WATCH · LEARN' },
   ];
   const system = $derived<MenuRow[]>([
     { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },
@@ -175,6 +215,21 @@
 <header class="hub-hdr">
   <div class="hdr-row">
     <div class="hdr-left">
+      <!-- Top-left on every page of the site, this one included. The same house
+           SiteHeader draws — path data copied verbatim so the two marks are the
+           same shape, not two drawings of a house. -->
+      <a class="hdr-home" href="/" aria-label="Home" title="Home">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+          <path
+            d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="square"
+            stroke-linejoin="miter"
+          />
+        </svg>
+      </a>
+      <span class="hdr-divider" aria-hidden="true"></span>
       <!-- `.brand` is the site-wide mark: it supplies the accent `>` via
            ::before, so the word is all this needs to carry. -->
       <a class="brand" href="/jkai" title="jkai">jkai</a>
@@ -211,13 +266,13 @@
         ⌘K
       </button>
 
-      {#if pageMenu?.back}
+      {#if backTo}
         <!-- The way out, always visible rather than a row inside the dropdown:
              leaving a surface is the one navigation that should never need a
              menu opened first. -->
-        <a class="chip back-chip" href={pageMenu.back.href} title="Back to {pageMenu.back.label}">
+        <a class="chip back-chip" href={backTo.href} title="Back to {backTo.label}">
           <span aria-hidden="true">←</span>
-          <span class="back-word">{pageMenu.back.label}</span>
+          <span class="back-word">{backTo.label}</span>
         </a>
       {/if}
 
@@ -329,11 +384,11 @@
     z-index: 60;
     background: var(--text-primary);
     color: var(--bg);
-    /* A hairline, not nothing: on every jkai sub-page an ink `.site-nav-bar`
-       now sits directly beneath this, and two ink bands with no rule between
-       them read as one undifferentiated slab. With it they read as a two-tier
-       masthead — hub metrics above, destinations below — which is the shape
-       /health's shell already had. */
+    /* A hairline, not nothing. This band is the only bar a jkai surface wears —
+       nothing under /jkai mounts a `.site-nav-bar` of its own any more — so the
+       rule is what separates the masthead from the page rather than one ink
+       band from another. Without it the header bleeds into a dark page header
+       and the two read as one undifferentiated slab. */
     border-bottom: 1px solid rgba(237, 228, 212, 0.16);
     padding-top: env(safe-area-inset-top);
   }
@@ -365,6 +420,26 @@
   }
   .brand:hover {
     color: var(--accent-on-dark);
+  }
+  /* Cream-alpha on the ink band, the weight `.chip` uses for its own label —
+     `--text-muted` is a paper token and would be ink on ink here. It lifts to
+     the accent on hover, the way `.brand` beside it does. */
+  .hdr-home {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    color: rgba(237, 228, 212, 0.72);
+    transition: color 0.2s ease-out;
+  }
+  .hdr-home:hover {
+    color: var(--accent-on-dark);
+  }
+  .hdr-home:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
+  }
+  .hdr-home svg {
+    display: block;
   }
   .hdr-divider {
     width: 1px;
@@ -557,6 +632,15 @@
     .menu-word,
     .menu-glyph {
       display: none;
+    }
+    /* A 15px glyph is not a thumb target. Padding + a matching negative margin
+       widens the hit area to ~39x44 without moving the mark off the 16px gutter
+       the row is drawn on. */
+    .hdr-home {
+      height: 44px;
+      padding: 0 12px;
+      margin: 0 -12px;
+      justify-content: center;
     }
     /* The arrow alone, at a thumb-sized target. The word is what costs width on
        a phone, and "←" beside a surface header is not ambiguous. */

@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { browser } from '$app/environment';
   import { hydrate, persist, s } from './lib/state.svelte';
+  import FieldStudyNav from '$lib/components/FieldStudyNav.svelte';
 
   let { children } = $props();
 
@@ -36,8 +37,13 @@
 </svelte:head>
 
 <div class="bth-shell">
+  <!-- The wordmark used to BE the way out (href=/projects, "Back to projects"), which
+       made one element mean both "you are here" and "go up". The nav row owns the way
+       out now, so the brand goes where a brand goes: this planner's own front page. -->
+  <div class="bth-topnav"><FieldStudyNav /></div>
+
   <header class="bth-bar">
-    <a class="bth-brand" href="/projects" aria-label="Back to projects">
+    <a class="bth-brand" href={BASE}>
       <span class="bth-monogram">sr.</span>
       <span class="bth-wordmark">Bathroom&nbsp;Planner</span>
     </a>
@@ -63,6 +69,20 @@
     min-height: 100dvh;
     background: var(--bg);
     color: var(--text-primary);
+  }
+  /* Matches the bar beneath it, so the two read as one header block rather than
+     a strip floating on the page ground. */
+  .bth-topnav {
+    background: var(--surface-rail);
+  }
+  /* FieldStudyNav ships the paper studies' fixed 28px gutter, because their
+     mastheads use one. This planner's rail is a clamp, so the home icon landed
+     12px left of the "sr." wordmark directly beneath it. Re-gutter the cells
+     onto the same left edge rather than change the shared component, which
+     would then be wrong on the five studies that do use 28px. */
+  .bth-topnav :global(.fsn) {
+    padding-left: clamp(1rem, 4vw, 2.5rem);
+    padding-right: clamp(1rem, 4vw, 2.5rem);
   }
   .bth-bar {
     display: flex;

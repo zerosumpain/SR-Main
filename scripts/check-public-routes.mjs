@@ -201,7 +201,7 @@ function assertNoUnclassifiedHookPaths() {
 /** src/routes/api/agent/foo/+server.ts → /api/agent/foo */
 function routePath(file) {
   const rel = relative(ROUTES, file).split('\\').join('/');
-  const dir = rel.replace(/\/\+(server\.ts|page\.svelte|page\.server\.ts)$/, '');
+  const dir = rel.replace(/\/\+(server\.ts|page(@[a-zA-Z0-9_-]*)?\.svelte|page\.server\.ts)$/, '');
   const cleaned = dir
     .split('/')
     .filter((seg) => seg && !/^\(.*\)$/.test(seg)) // drop (route groups)
@@ -209,11 +209,17 @@ function routePath(file) {
   return '/' + cleaned;
 }
 
+// `+page@.svelte` (and `+page@name.svelte`) counts. A layout reset changes which
+// layout the route renders inside — it does NOT change how the route is
+// addressed, so such a page is exactly as anonymously reachable as a plain
+// `+page.svelte`. Matching only `+page.svelte` here made /jkai/shared/[token]
+// vanish from the inventory the moment it took the `@` suffix, and the script
+// then reported the live public share page as "no longer reachable".
 function walk(dir, acc = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) walk(full, acc);
-    else if (/^\+(server\.ts|page\.svelte)$/.test(entry)) acc.push(full);
+    else if (/^\+(server\.ts|page(@[a-zA-Z0-9_-]*)?\.svelte)$/.test(entry)) acc.push(full);
   }
   return acc;
 }

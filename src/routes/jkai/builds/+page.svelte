@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BuildsListV2 from '$lib/builds/BuildsListV2.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
   import { listBuilds, putBuild, type BuildCacheRecord } from '$lib/jkai/pwa/db';
 
   let { data } = $props();
@@ -55,32 +54,14 @@
 </script>
 
 <!--
-  The page header lives here, not inside BuildsListV2. It is page chrome, and a
-  list component that renders the page's own title cannot be reused anywhere
-  else — which is also what made $lib/builds (a feature module) import
-  $lib/components. Mirrors /jkai/canvas, which does the same thing.
-
-  Outside the {#key} block deliberately: a cache rehydrate or network refresh
-  re-keys the list, and there is no reason to tear the header down with it.
+  No page header here. `/jkai/builds` sits under the jkai layout, whose
+  HubHeader is already the shared bar for this family — it carries the home
+  icon and the way back to /jkai. A PageHeader here drew a SECOND
+  `.site-nav-bar` directly beneath it, and BuildsListV2's own `.page-hdr` made
+  a third band. The build count it used to show is the `total` stat in the
+  list's own overview.
 -->
-<PageHeader title="Builds">
-  {#snippet meta()}
-    <span class="idx-head-meta">
-      <span>{builds.length} {builds.length === 1 ? 'build' : 'builds'}</span>
-    </span>
-  {/snippet}
-</PageHeader>
-
 {#key renderKey}
   <BuildsListV2 builds={builds as any} lanes={data?.lanes ?? []} />
 {/key}
 
-<style>
-  /* Rendered inside the ink `.site-nav-bar`, so cream at an alpha rather than
-     --text-muted, which is ink on ink there. */
-  .idx-head-meta {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    color: rgba(237, 228, 212, 0.62);
-  }
-</style>

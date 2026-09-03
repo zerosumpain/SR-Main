@@ -5,6 +5,8 @@
   import ScopeEditor from '$lib/components/research/ScopeEditor.svelte';
   import type { ScopeDraft } from '$lib/components/research/ScopeEditor.svelte';
   import { GROUNDING_OPTIONS, groundingOption, type Grounding } from '$lib/deepdive/grounding';
+  import { page } from '$app/state';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -163,6 +165,8 @@
   }
 </script>
 
+<SiteHeader isOwner={page.data?.isOwner !== false} />
+
 <div class="wrap">
   <header class="page-hdr">
     <div>
@@ -173,7 +177,6 @@
         to a full investigation with sources, facts and a red team.
       </p>
     </div>
-    <a class="back-link" href="/jkai">JKAI</a>
   </header>
 
   <section class="launch">
@@ -321,8 +324,6 @@
   .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
   .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; line-height: 1.05; }
   .sub { margin: 0.6rem 0 0; font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary); max-width: 64ch; }
-  .back-link { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); text-decoration: none; flex-shrink: 0; }
-  .back-link:hover { text-decoration: underline; }
 
   .launch { margin-bottom: 2.25rem; }
   .prompt-input {

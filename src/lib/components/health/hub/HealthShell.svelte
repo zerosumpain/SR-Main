@@ -8,8 +8,12 @@
   //
   // Three things live here and nowhere else:
   //
-  //  * the sticky header — z-index 80, above the grain, with the wordmark, an
-  //    optional back link, optional nav, and a pulsing dot marking live sync;
+  //  * the sticky header — z-index 80, above the grain, with the home icon, the
+  //    wordmark, the way back, the sub-nav, and a pulsing dot marking live sync.
+  //    The home icon is on every page in the site; the back link and the nav
+  //    now DEFAULT from `$lib/nav/site-nav` (the same manifest `SiteHeader`
+  //    reads) and a caller only passes them to override, so this family speaks
+  //    the same wayfinding as the shared bar while keeping its own register;
   //  * the grain — fixed, inert, z-index 70, so it sits UNDER the header. It is
   //    an inline feTurbulence data URI, no file, and it is brand-defining:
   //    every page in this set wears it;
@@ -20,12 +24,16 @@
   // shadows either, except the live dot's glow — which is a glow, not
   // elevation.
   import type { Snippet } from 'svelte';
+  import { currentIsOwner, currentPath } from '$lib/nav/page-path';
+  import { isItemActive, parentHref, parentLabel, subnavFor } from '$lib/nav/site-nav';
 
   interface NavLink {
     href: string;
     label: string;
     /** Muted rather than accent — a destination that is not this page's sibling. */
     muted?: boolean;
+    /** Marks the cell you are stood on. Set by the manifest default, not callers. */
+    current?: boolean;
   }
 
   interface Props {
@@ -33,8 +41,20 @@
     path: string;
     /** Small mono label beside the wordmark. */
     kicker?: string | null;
-    /** `← ALL 387 SEGMENTS` — sits with the wordmark, not with the nav. */
+    /**
+     * `← ALL 387 SEGMENTS` — sits with the wordmark, not with the nav.
+     *
+     * THREE states, and the difference matters: omit it and the way back is
+     * derived from the nav manifest (`parentHref`), which is what gives every
+     * page in this family the same "one level up" the rest of the site has;
+     * pass `null` to suppress it deliberately; pass a link to override it.
+     */
     back?: NavLink | null;
+    /**
+     * Omit and the section's siblings come from the manifest
+     * (`subnavFor`, owner-filtered). Pass an array — `[]` included — to
+     * override it, which is how the anonymous /health keeps a bare header.
+     */
     nav?: NavLink[];
     /** Label beside the pulsing dot. Omit and no dot renders. */
     live?: string | null;
@@ -67,8 +87,8 @@
   let {
     path,
     kicker = null,
-    back = null,
-    nav = [],
+    back = undefined,
+    nav = undefined,
     live = null,
     meta = [],
     maxWidth = 1400,
@@ -78,6 +98,28 @@
     footerAction = undefined,
     children,
   }: Props = $props();
+
+  const here = $derived(currentPath());
+  const isOwner = $derived(currentIsOwner());
+
+  // `undefined` means "not passed" and takes the manifest's answer; an explicit
+  // `null` still suppresses the link. Defaulting the prop to `null` would have
+  // collapsed those two into one and made suppression impossible.
+  const backLink = $derived.by((): NavLink | null => {
+    if (back !== undefined) return back;
+    const href = parentHref(here);
+    const label = href ? parentLabel(here) : null;
+    return href && label ? { href, label: `← ${label}` } : null;
+  });
+
+  const navLinks = $derived.by((): NavLink[] => {
+    if (nav !== undefined) return nav;
+    return subnavFor(here, isOwner).map((item) => ({
+      href: item.href,
+      label: item.label,
+      current: isItemActive(item, here),
+    }));
+  });
 </script>
 
 <div class="hs" style="--hs-max: {maxWidth}px">
@@ -86,18 +128,40 @@
 
   <header class="hs-head">
     <div class="hs-head-left">
-      <span class="hs-mark"><span class="hs-caret">&gt;</span> strangeramblings.com<span class="hs-path">{path}</span></span>
-      {#if back}
-        <a class="hs-back" href={back.href}>{back.label}</a>
+      <!-- Top-left on every page in the site, this family included. An icon,
+           not a word: the one destination that never needs naming. -->
+      <a class="hs-home" href="/" aria-label="Home" title="Home">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+          <path
+            d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="square"
+            stroke-linejoin="miter"
+          />
+        </svg>
+      </a>
+      <!-- home -> back -> mark, the same reading order the shared
+           `.site-nav-bar` uses (SiteHeader: home cell, back cell, title cell).
+           The wordmark is this family's title cell; the way back belongs
+           between it and the home icon, not trailing after it. -->
+      {#if backLink}
+        <a class="hs-back" href={backLink.href}>{backLink.label}</a>
       {/if}
+      <span class="hs-mark"><span class="hs-caret">&gt;</span> strangeramblings.com<span class="hs-path">{path}</span></span>
       {#if kicker}
         <span class="hs-kicker">{kicker}</span>
       {/if}
     </div>
 
     <div class="hs-head-right">
-      {#each nav as link (link.href + link.label)}
-        <a class="hs-nav" class:muted={link.muted} href={link.href}>{link.label}</a>
+      {#each navLinks as link (link.href + link.label)}
+        <a
+          class="hs-nav"
+          class:muted={link.muted}
+          href={link.href}
+          aria-current={link.current ? 'page' : undefined}>{link.label}</a
+        >
       {/each}
       {#if live}
         <span class="hs-live"><span class="hs-dot"></span>{live}</span>
@@ -184,6 +248,22 @@
     text-transform: uppercase;
   }
 
+  /* The head is an INK ground, so cream-alpha resting and full cream on hover,
+     the same two values the shared `.site-nav-bar` home cell uses. */
+  .hs-home {
+    display: inline-flex;
+    align-self: center;
+    color: rgba(237, 228, 212, 0.72);
+    text-decoration: none;
+    transition: color 0.2s ease-out;
+  }
+  .hs-home:hover {
+    color: var(--bg);
+  }
+  .hs-home svg {
+    display: block;
+  }
+
   .hs-mark {
     font-family: var(--font-brand);
     font-weight: 500;
@@ -230,6 +310,14 @@
   }
   .hs-nav:hover {
     color: var(--bg);
+  }
+  /* The cell you are stood on: full cream with an accent seam under it. The
+     shared bar cuts its current cell out of the band, which needs full-height
+     cells this header does not have — this is the same signal in this register. */
+  .hs-nav[aria-current='page'] {
+    color: var(--bg);
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--accent-on-dark);
   }
 
   .hs-live {

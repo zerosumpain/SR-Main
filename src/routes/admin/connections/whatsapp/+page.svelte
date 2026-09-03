@@ -43,7 +43,8 @@
 <svelte:head><title>WhatsApp · Connections</title></svelte:head>
 
 <main class="wa">
-  <p class="crumb"><a href="/admin/connections">← Connections</a></p>
+  <!-- No in-page crumb: the top bar's back cell is the way up now, and unlike a
+       hand-written link it carries the ?token= an admin session is holding. -->
   <h1>WhatsApp</h1>
 
   <p class="status">
@@ -71,7 +72,6 @@
 
 <style>
   .wa { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
-  .crumb { font-size: 0.85rem; margin: 0 0 1rem; }
   h1 { font-size: 1.5rem; margin: 0 0 1rem; }
   .status { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
   .dot { width: 0.6rem; height: 0.6rem; border-radius: 100px; background: #888; flex: none; }

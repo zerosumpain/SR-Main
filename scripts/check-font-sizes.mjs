@@ -59,7 +59,10 @@ const SCOPE = [
   ['src/app.css', false],
   ['src/lib/styles/nm-tokens.css', false],
   ['src/lib/components/drive/FileViewerModal.svelte', false],
-  ['src/lib/components/SiteNav.svelte', false],
+  // SiteNav.svelte was retired when the site moved to one shared bar; these two
+  // are what render chrome now, and the floor follows the markup.
+  ['src/lib/components/SiteHeader.svelte', false],
+  ['src/lib/components/FieldStudyNav.svelte', false],
   ['src/lib/components/PageHeader.svelte', false],
 ];
 

@@ -5,6 +5,7 @@
 </svelte:head>
 
 <script lang="ts">
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
   import { onDestroy, onMount, tick } from 'svelte';
   import type {
     FamilyLocationState,
@@ -119,6 +120,8 @@
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
 </script>
+
+<SiteHeader />
 
 <div class="wrap">
   <header class="page-hdr">
