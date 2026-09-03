@@ -307,10 +307,6 @@
       </div>
     {:else}
       <StatDeck tiles={budgetTiles} min={230} />
-    {/if}
-    {#if spendTiles.length}
-      <p class="field-label spend-label">Cash, beside the quota</p>
-      <StatDeck tiles={spendTiles} min={230} />
       {#if budget.blocked}
         <div class="card t-urgent">
           <p class="card-kicker">Paused</p>
@@ -327,6 +323,10 @@
         adds a verification pass and more candidates considered. What reaches your phone is capped
         separately at {delivery?.maxPerDay ?? 4} a day.
       </p>
+    {/if}
+    {#if spendTiles.length}
+      <p class="field-label spend-label">Cash, beside the quota</p>
+      <StatDeck tiles={spendTiles} min={230} />
     {/if}
   </div>
 </section>
