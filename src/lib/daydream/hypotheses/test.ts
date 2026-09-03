@@ -12,7 +12,7 @@ import { and, eq, inArray, isNull, or, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamHypotheses } from '$lib/db/schema';
 import { benjaminiHochberg, correlate, DEFAULT_FDR } from '../stats/tests';
-import { column, loadSeries, loadSignalColumns } from '../stats/sweep';
+import { loadSeries, loadSignalColumns } from '../stats/sweep';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { isSignalKey, judge, type Direction } from './spec';
 

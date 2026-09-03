@@ -117,7 +117,7 @@ export async function computeHealthDerived(): Promise<HealthDerived> {
   const acwrForecast = safeSync('forecast-acwr', () =>
     dashboard?.load.days.length ? computeForecast(trend(acwrSeries(dashboard.load.days)), { min: 0 }) : null,
   );
-  const acwrForecastDelta = acwrForecast ? acwrForecast.then - acwrForecast.now : null;
+  const acwrForecastDelta = acwrForecast?.value ? acwrForecast.value.then - acwrForecast.value.now : null;
 
   return {
     today,
