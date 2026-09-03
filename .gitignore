@@ -52,7 +52,11 @@ scraper-scripts/
 # Claude Code agent scratch space
 .claude/worktrees/
 .claude/settings.json
-.claude/skills/
+# .claude/skills/ is TRACKED — these are the repo's own runbooks (ship, local-qa,
+# sr-design, project-page, workflow-node) and losing them to a disk rebuild has
+# cost real time. They carry NO host addresses, users, key paths or secrets:
+# this repo is public, so the VPS is reached through the `sr-vps` alias in
+# ~/.ssh/config (see the local-qa skill). Keep it that way.
 
 # Playwright artifacts
 test-results/
