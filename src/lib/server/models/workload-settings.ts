@@ -284,6 +284,31 @@ export const resolveIntelAnalysisModel = () => resolveById('intel-analysis');
 /** The notebook's scan / brief passes. */
 export const resolveNotebookModel = () => resolveById('notebook');
 
+/**
+ * The model a NEW jkai conversation is opened on.
+ *
+ * Separate from `resolveDefaultModel()` on purpose. A conversation stamps this
+ * value at creation and keeps it for life, so this is not "what chat runs on"
+ * so much as "what the next thread will start on" — and until it had a key of
+ * its own the only way to move chat was to move the site default, which drags
+ * every unpinned background role along with it.
+ */
+export const resolveChatTurnModel = () => resolveById('chat');
+
+/**
+ * The model a canvas LLM node runs on when its own `config.model` is blank.
+ *
+ * Resolved per run rather than stamped, so a change here reaches existing
+ * workflows. A node that names its own model still wins — see `resolveLLMClient`.
+ */
+export const resolveWorkflowNodeModel = () => resolveById('workflow-node');
+
+/** The daydream reviewer. Drives tools; see the registry entry on the caps. */
+export const resolveDaydreamReviewModel = () => resolveById('daydream-review');
+
+/** The notebook's note reviewer — decides what to look up, not what to say. */
+export const resolveNoteReviewModel = () => resolveById('notebook-review');
+
 /** The study chats and authoring aids on /projects. */
 export const resolveProjectChatModel = () => resolveById('project-chat');
 

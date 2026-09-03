@@ -109,19 +109,34 @@
       });
     }
 
-    // Spend that is not inside a named role. Reported, never offered a switch:
-    // the model for a chat turn or a canvas node is chosen per conversation and
-    // per node, so a control here would be a button that lies.
+    // Whatever is left in the ledger that no role above claimed.
+    //
+    // Two kinds, and the row says which. A `source:` key is spend that carried
+    // no tag at all — nothing to switch, because nothing has named it. Anything
+    // else is a tag that WAS written but is not in the registry, which is a
+    // typo or a caller passing a variable: `heartbeat/engine.ts` tags each scan
+    // with the action's own name, so `daydream-ponder` and friends arrive here.
+    //
+    // Both are rendered. Until 2026-09-03 this loop skipped every non-`source:`
+    // key, so an unregistered tag was dropped from the table entirely while
+    // still counting toward "attributed" — spend that was both invisible and
+    // reported as understood, which is the worst of the three states.
+    const claimed = new Set(data.workloads.site.map((w) => w.id));
     for (const a of data.byActivity) {
-      if (!a.key.startsWith('source:')) continue;
+      if (claimed.has(a.key)) continue;
+      const untagged = a.key.startsWith('source:');
       const def2 = activityIndex.get(a.key);
       rows.push({
         key: a.key,
         label: activityLabel(a.key, activityIndex),
-        blurb: def2?.blurb ?? 'Spend recorded before activity tagging shipped.',
+        blurb:
+          def2?.blurb ??
+          (untagged
+            ? 'Spend recorded before activity tagging shipped.'
+            : `Tagged "${a.key}", which is not a role in $lib/models/workloads — so there is no settings key behind it and nothing here can change what it runs on. Register it, or tag the call with a role that exists.`),
         workload: null,
         effectiveModelId: a.models[0]?.model ?? '—',
-        source: 'per-call',
+        source: untagged ? 'untagged' : 'unregistered',
         scope: 'n/a',
         reason: null,
         costUsd: a.costUsd,
@@ -381,10 +396,12 @@
       <span class="nm-sec-meta">{routes.length} roles</span>
     </div>
     <p class="sec-lede">
-      Every LLM role on the site and in the engine, dearest first. The model is changed here — a site
-      role takes effect immediately. Rows
-      marked <em>per-call</em> pick their model per conversation or per node, so there is nothing on
-      them to switch.
+      Every LLM role on the site and in the engine, dearest first. The model is changed here and takes
+      effect immediately — except for the two roles that STAMP their pick at creation (chat threads and
+      builds), where it moves the next one rather than the ones already running. A row
+      marked <em>untagged</em> or <em>unregistered</em> has no model to set: the call reached the
+      ledger without naming a role that exists, and the fix is a
+      <code>withActivity()</code> tag at the call site, not a control here.
     </p>
 
     <div class="nm-table-scroll">
@@ -408,6 +425,8 @@
                 </button>
                 {#if r.source === 'pinned'}<span class="nm-pill" data-state="active">pinned</span>{/if}
                 {#if r.source === 'code'}<span class="nm-pill" data-state="warn">code fallback</span>{/if}
+                {#if r.source === 'env'}<span class="nm-pill" data-state="warn">env var</span>{/if}
+                {#if r.source === 'unregistered'}<span class="nm-pill" data-state="warn">unregistered tag</span>{/if}
               </td>
               <td><code>{r.effectiveModelId}</code></td>
               <td class="num">
@@ -434,7 +453,7 @@
                     {switching === r.key ? 'close' : 'change model'}
                   </button>
                 {:else}
-                  <span class="per-call">per-call</span>
+                  <span class="per-call">{r.source === 'unregistered' ? 'unregistered' : 'untagged'}</span>
                 {/if}
               </td>
             </tr>

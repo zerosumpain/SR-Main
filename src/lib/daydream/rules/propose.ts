@@ -23,6 +23,7 @@ import { resolveDaydreamModel } from '../compose';
 import { errMsg } from '../types';
 import { FACT_KEYS, STRING_FACTS, BOOLEAN_FACTS } from './spec';
 import { listActiveRules, retirementCandidates } from './store';
+import { withActivity } from '$lib/context/activity';
 
 export interface ProposalBatch {
   proposals: Array<{ proposalKind: 'new' | 'tweak' | 'deprecate'; spec: unknown; supersedesKind?: string }>;
@@ -139,18 +140,20 @@ export async function proposeRules(maxProposals = 3): Promise<ProposalBatch> {
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
 
-    const res = await client.chat.completions.create({
-      model: modelId,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          role: 'user',
-          content: `${context}\n\nPropose at most ${maxProposals} changes. Prefer tweaking or deprecating what exists over adding more.`,
-        },
-      ],
-      temperature: 0.4,
-      max_tokens: 1600,
-    });
+    const res = await withActivity('daydream', () =>
+      client.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          {
+            role: 'user',
+            content: `${context}\n\nPropose at most ${maxProposals} changes. Prefer tweaking or deprecating what exists over adding more.`,
+          },
+        ],
+        temperature: 0.4,
+        max_tokens: 1600,
+      }),
+    );
     result.tokens = (res.usage?.prompt_tokens ?? 0) + (res.usage?.completion_tokens ?? 0);
 
     const raw = (res.choices[0]?.message?.content ?? '')

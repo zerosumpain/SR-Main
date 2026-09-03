@@ -3,6 +3,7 @@ import { workflowRuns, workflows, nodeExecutions, heartbeatPulses } from '$lib/d
 import { and, desc, eq, gt, isNotNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'workflow-review';
@@ -122,15 +123,21 @@ Bullet list of concrete concerns (timeouts, retries, missing error handling, bro
 ## One concrete improvement
 A single, actionable change to the workflow nodes or config. If the run was clean, write "none — pattern looks correct".`;
 
-    const response = await client.chat.completions.create({
-      model: modelId,
-      messages: [
-        { role: 'system', content: 'You analyse automation runs and produce short, useful reviews. Plain markdown. No preamble.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.4,
-      max_tokens: cfg.reviewMaxTokens,
-    });
+    // Tagged `heartbeat` — the role whose model this actually resolves. Without
+    // it the engine's own tag applies, which is this activity's NAME
+    // ('workflow-review'), and that is not a workload: the spend then lands on
+    // a row /admin/ops/costs can name but not switch.
+    const response = await withActivity('heartbeat', () =>
+      client.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: 'You analyse automation runs and produce short, useful reviews. Plain markdown. No preamble.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.4,
+        max_tokens: cfg.reviewMaxTokens,
+      }),
+    );
 
     const review = response.choices[0]?.message?.content?.trim() ?? '';
     const promptTokens = response.usage?.prompt_tokens ?? 0;

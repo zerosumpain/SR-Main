@@ -17,12 +17,8 @@ import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/selfimprove/run';
 import { listJobs } from '$lib/workflows/chat/job-store';
 import { attributeSpend, budgetStatus, readQuotaMark, ZERO_SPEND } from '$lib/daydream/budget';
-import {
-  pendingReview,
-  recordReview,
-  reviewThought,
-  REVIEW_MODEL_ID,
-} from '$lib/daydream/adjudicate';
+import { pendingReview, recordReview, reviewThought } from '$lib/daydream/adjudicate';
+import { resolveDaydreamReviewModel } from '$lib/server/models/workload-settings';
 import { recordRulingMemory, unrememberedRulings } from '$lib/daydream/rulings';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
@@ -113,11 +109,17 @@ export const daydreamReview: ActivityHandler = {
     // behind a quota block would leave that broken for as long as the quota is.
     const backfilled = await catchUpMemory(cfg.backfillPerRun);
 
-    // The reviewer is pinned to Codex, so it spends the same weekly quota as
-    // every other daydream model call and answers to the same caps. "Spare
-    // budget buys THINKING, never talking" was written for exactly this — the
-    // reviewer only ever decides whether to say less.
-    const budget = await budgetStatus({ now, isCodexModel: true });
+    // The reviewer's model, resolved rather than assumed. It defaults to Codex,
+    // in which case it spends the same weekly quota as every other daydream
+    // model call and answers to the same caps — "spare budget buys THINKING,
+    // never talking" was written for exactly this, since the reviewer only ever
+    // decides whether to say less. Since 2026-09-03 the role is switchable
+    // (`daydream-review` in $lib/models/workloads), and on an OpenRouter model
+    // there is no subscription window to protect: the caps stop applying and
+    // the spend becomes cash. Hard-coding `true` here would have gone on
+    // blocking on a quota the reviewer was no longer touching.
+    const reviewCtx = await resolveDaydreamReviewModel();
+    const budget = await budgetStatus({ now, isCodexModel: reviewCtx.provider === 'codex' });
     if (budget.blocked) {
       return {
         outcome: 'skipped',
@@ -229,7 +231,7 @@ export const daydreamReview: ActivityHandler = {
       details: {
         // Load-bearing: budget.ts reads this key back to enforce the caps.
         quota,
-        model: REVIEW_MODEL_ID,
+        model: reviewCtx.modelId,
         ...counts,
         remembered,
         backfilled,

@@ -28,6 +28,7 @@ import { describePlaceRhythm } from './places';
 import { errMsg } from './types';
 import type { EvidenceRef } from './snapshot-types';
 import type { DaydreamThought } from '$lib/db/schema';
+import { withActivity } from '$lib/context/activity';
 
 /** app_settings key for the daydream model carve-out. Declared in
  *  $lib/models/workloads so the picker and the resolver cannot disagree. */
@@ -211,15 +212,17 @@ export async function composeNarrative(
   ].join('\n');
 
   try {
-    const res = await client.chat.completions.create({
-      model: modelId,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-      max_tokens: MAX_TOKENS,
-    });
+    const res = await withActivity('daydream', () =>
+      client.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.3,
+        max_tokens: MAX_TOKENS,
+      }),
+    );
     result.tokens.prompt = res.usage?.prompt_tokens ?? 0;
     result.tokens.completion = res.usage?.completion_tokens ?? 0;
 
@@ -241,24 +244,26 @@ export async function composeNarrative(
   // draft, and answers whether every claim in the draft is supported. This is
   // what the spare quota buys: precision, not volume.
   try {
-    const verifyRes = await client.chat.completions.create({
-      model: modelId,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You check a draft notification against the facts it was written from. ' +
-            'Answer with exactly one word: SUPPORTED if every claim in the draft appears in the facts, ' +
-            'or UNSUPPORTED if the draft states anything the facts do not. Be strict. Default to UNSUPPORTED when unsure.',
-        },
-        {
-          role: 'user',
-          content: `FACTS:\n${facts.map((f) => `- ${f}`).join('\n')}\n\nDRAFT:\n${result.narrative}`,
-        },
-      ],
-      temperature: 0,
-      max_tokens: VERIFY_MAX_TOKENS,
-    });
+    const verifyRes = await withActivity('daydream', () =>
+      client.chat.completions.create({
+        model: modelId,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You check a draft notification against the facts it was written from. ' +
+              'Answer with exactly one word: SUPPORTED if every claim in the draft appears in the facts, ' +
+              'or UNSUPPORTED if the draft states anything the facts do not. Be strict. Default to UNSUPPORTED when unsure.',
+          },
+          {
+            role: 'user',
+            content: `FACTS:\n${facts.map((f) => `- ${f}`).join('\n')}\n\nDRAFT:\n${result.narrative}`,
+          },
+        ],
+        temperature: 0,
+        max_tokens: VERIFY_MAX_TOKENS,
+      }),
+    );
     result.tokens.prompt += verifyRes.usage?.prompt_tokens ?? 0;
     result.tokens.completion += verifyRes.usage?.completion_tokens ?? 0;
 

@@ -10,6 +10,7 @@ import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { currentSessionModel, currentSessionThinkingLevel } from '$lib/context/chat';
 import { getAgent } from './store';
 import { TEAM_MEMORY_COLLECTION } from './types';
+import { withActivity } from '$lib/context/activity';
 
 // Always allow the meta-tool escape hatch so a restricted agent can still reach
 // a needed toolset via jkai_extended, and can activate one on demand.
@@ -56,7 +57,11 @@ export async function delegateToAgent(
     `Shared team memory lives in the datastore collection "${TEAM_MEMORY_COLLECTION}": read it for prior team findings ` +
     `(datastore_query) and write durable results back (datastore_save) so other agents can build on your work.`;
 
-  const { response } = await generalChat(
+  // Tagged as `delegation` so a sub-agent's spend — its own turn AND every tool
+  // call it makes — lands on the row that sets its model, instead of the
+  // untagged gateway bucket. The tag beats the ambient chat source, which is
+  // what we want: this is the team member's spend, not the thread's.
+  const { response } = await withActivity('delegation', () => generalChat(
     { text: trimmed },
     [],
     {
@@ -73,7 +78,7 @@ export async function delegateToAgent(
       useIntelContext: false,
       onStreamEvent: onEvent,
     },
-  );
+  ));
 
   return { agent: agent.name, role: agent.role, response };
 }

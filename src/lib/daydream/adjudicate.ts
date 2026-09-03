@@ -54,21 +54,30 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
-import { coerceModelContext } from '$lib/constants/default-models';
+import { DEFAULT_DAYDREAM_REVIEW_MODEL_ID } from '$lib/constants/default-models';
+import { resolveDaydreamReviewModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { thinkingRequestParams } from '$lib/models/thinking';
 import { executeTool, getTool } from '$lib/workflows/site-tools/registry';
 import { resolveEvidence } from './evidence';
 import { errMsg } from './types';
 
 /**
- * The reviewer's model, pinned rather than following the daydream default.
+ * The reviewer's model when nothing is pinned.
  *
- * Luna is the fast 5.6 at the lowest quota cost and the catalogue's own words
- * for it are "best fit for background site tasks" — which is exactly this. The
- * effort is where the money goes instead: `xhigh` on a small, well-bounded
- * question is a better buy than a heavier model on a shallow pass.
+ * This is now the FALLBACK, not the answer: the role is the `daydream-review`
+ * workload and its effective model comes from `resolveDaydreamReviewModel()`,
+ * settable on /admin/ops/costs. Until 2026-09-03 the literal here was the only
+ * way to change it — an invisible carve-out of exactly the kind the workload
+ * registry exists to abolish. Re-exported under the old name because callers
+ * (and the tests that hold the default) refer to it.
+ *
+ * Why Luna: the fast 5.6 at the lowest quota cost, and the catalogue's own
+ * words for it are "best fit for background site tasks" — which is exactly
+ * this. The effort is where the money goes instead: `xhigh` on a small,
+ * well-bounded question is a better buy than a heavier model on a shallow pass.
  */
-export const REVIEW_MODEL_ID = 'codex/gpt-5.6-luna';
+export const REVIEW_MODEL_ID = DEFAULT_DAYDREAM_REVIEW_MODEL_ID;
 export const REVIEW_EFFORT = 'xhigh' as const;
 
 export type Verdict = 'verified' | 'refuted' | 'uncertain';
@@ -149,6 +158,10 @@ export interface ReviewResult {
   sources: string[];
   tokens: { prompt: number; completion: number };
   toolCalls: number;
+  /** The model that actually answered. Recorded rather than assumed: the role
+   *  is switchable now, so a stored `REVIEW_MODEL_ID` would name the fallback
+   *  on every row the moment someone pinned something else. */
+  model: string;
   /** The likelihood contradicted its verdict and was turned round. */
   likelihoodFlipped: boolean;
   error: string | null;
@@ -243,7 +256,16 @@ export interface ThoughtToReview {
  * direction, and a failed review that recorded `refuted` would silently bury a
  * claim nobody had actually checked.
  */
-export async function reviewThought(thought: ThoughtToReview): Promise<ReviewResult> {
+export function reviewThought(thought: ThoughtToReview): Promise<ReviewResult> {
+  // Tagged so the spend lands on the `daydream-review` row of /admin/ops/costs
+  // — the same row that switches the model. The heartbeat already tags its own
+  // scan with this name, but a review kicked off by hand from
+  // /api/daydream/thoughts does not, and used to record as untagged gateway
+  // spend.
+  return withActivity('daydream-review', () => runReview(thought));
+}
+
+async function runReview(thought: ThoughtToReview): Promise<ReviewResult> {
   const empty: ReviewResult = {
     verdict: 'uncertain',
     likelihood: 0,
@@ -252,6 +274,7 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
     sources: [],
     tokens: { prompt: 0, completion: 0 },
     toolCalls: 0,
+    model: REVIEW_MODEL_ID,
     likelihoodFlipped: false,
     error: null,
   };
@@ -277,7 +300,11 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
       evidenceLines = [`(the evidence could not be resolved: ${errMsg(err)})`];
     }
 
-    const { client, model } = await getLLMClient(coerceModelContext({ modelId: REVIEW_MODEL_ID }));
+    const ctx = await resolveDaydreamReviewModel();
+    const { client, model } = await getLLMClient(ctx);
+    // Recorded on every return below, so a switched model shows up in the row
+    // rather than the fallback being asserted.
+    empty.model = model;
     const messages: Array<Record<string, unknown>> = [
       { role: 'system', content: SYSTEM },
       {
@@ -316,7 +343,7 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
         // rather than by hand: the Codex bridge wants `reasoning_effort` and
         // OpenRouter wants a `reasoning` object, and getting that wrong fails
         // silently by simply not thinking any harder.
-        ...thinkingRequestParams('codex', REVIEW_EFFORT),
+        ...thinkingRequestParams(ctx.provider, REVIEW_EFFORT),
         max_tokens: 1400,
       } as never);
       promptTokens += res.usage?.prompt_tokens ?? 0;
@@ -357,6 +384,7 @@ export async function reviewThought(thought: ThoughtToReview): Promise<ReviewRes
         likelihoodFlipped: v.likelihoodFlipped ?? false,
         tokens: { prompt: promptTokens, completion: completionTokens },
         toolCalls,
+        model,
         error: null,
       };
     }
@@ -511,7 +539,7 @@ export async function recordReview(id: string, r: ReviewResult): Promise<void> {
       reviewReasoning: r.reasoning || null,
       reviewNarrative: r.narrative,
       reviewSources: r.sources,
-      reviewModel: REVIEW_MODEL_ID,
+      reviewModel: r.model,
       reviewAt: new Date(),
       reviewPromptTokens: r.tokens.prompt,
       reviewCompletionTokens: r.tokens.completion,

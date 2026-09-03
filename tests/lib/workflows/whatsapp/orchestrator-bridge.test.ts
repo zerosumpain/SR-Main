@@ -57,6 +57,9 @@ vi.mock('$lib/server/models/settings', () => ({
 		modelId: 'glm-5',
 		displayName: 'GLM 5',
 	}),
+	// The workload registry reads `getSetting` before falling through to the
+	// site default, so a settings mock without it throws rather than resolving.
+	getSetting: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock media utilities

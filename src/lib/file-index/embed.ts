@@ -8,6 +8,7 @@
 
 import { getLLMClient } from '$lib/llm/client';
 import { normalize } from '$lib/rag/retrieve';
+import { withActivity } from '$lib/context/activity';
 
 /** Pinned global model + dim for the @files index. Do not change without a full re-embed. */
 export const FILE_INDEX_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
@@ -21,7 +22,11 @@ const BATCH_SIZE = 48;
 async function embedOnce(inputs: string[]): Promise<number[][]> {
   const { client } = await getLLMClient({ provider: 'openrouter', modelId: FILE_INDEX_EMBEDDING_MODEL });
   const truncated = inputs.map((t) => t.slice(0, MAX_INPUT_CHARS));
-  const response = await client.embeddings.create({ model: FILE_INDEX_EMBEDDING_MODEL, input: truncated });
+  // Tagged so file-index embedding spend joins the `embeddings` row instead of
+  // the untagged gateway bucket.
+  const response = await withActivity('embeddings', () =>
+    client.embeddings.create({ model: FILE_INDEX_EMBEDDING_MODEL, input: truncated }),
+  );
   const out = [...response.data]
     .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
     .map((d) => d.embedding as number[]);

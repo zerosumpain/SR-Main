@@ -13,7 +13,7 @@ import {
 import { and, eq } from 'drizzle-orm';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { runWorkflowAndPersist } from '$lib/workflows/run-helpers';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 
 /**
  * POST /api/workflows/:id/chat
@@ -66,7 +66,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   if (!conversationId) {
-    const defaultCtx = await resolveDefaultModel();
+    // The `chat` workload, not the bare site default: a conversation stamps
+    // this at creation and keeps it, so it is the row on /admin/ops/costs that
+    // says what new threads open on.
+    const defaultCtx = await resolveChatTurnModel();
     const [conv] = await db
       .insert(conversations)
       .values({

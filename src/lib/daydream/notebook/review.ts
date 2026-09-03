@@ -23,7 +23,9 @@
 // produce an empty plan, not a research session about dairy.
 
 import { getLLMClient } from '$lib/llm/client';
-import { coerceModelContext } from '$lib/constants/default-models';
+import { DEFAULT_NOTE_REVIEW_MODEL_ID } from '$lib/constants/default-models';
+import { resolveNoteReviewModel } from '$lib/server/models/workload-settings';
+import { withActivity } from '$lib/context/activity';
 import { errMsg } from '../types';
 import {
   MAX_CONTEXT,
@@ -34,14 +36,20 @@ import {
 } from './actions';
 
 /**
- * The reviewer's model.
+ * The reviewer's model when nothing is pinned.
  *
- * Same reasoning as the adjudicator: Luna is the cheap 5.6 the catalogue calls
- * "best fit for background site tasks", which is exactly this. Reading one note
- * and naming a couple of useful lookups is not a hard problem — the money is
- * better spent on the research the plan asks for than on the planning.
+ * The FALLBACK, not the answer — the role is the `notebook-review` workload and
+ * its effective model comes from `resolveNoteReviewModel()`, settable on
+ * /admin/ops/costs. Until 2026-09-03 this literal was the only way to change
+ * it.
+ *
+ * Same reasoning as the adjudicator for the default: Luna is the cheap 5.6 the
+ * catalogue calls "best fit for background site tasks", which is exactly this.
+ * Reading one note and naming a couple of useful lookups is not a hard problem
+ * — the money is better spent on the research the plan asks for than on the
+ * planning.
  */
-export const NOTE_REVIEW_MODEL = 'codex/gpt-5.6-luna';
+export const NOTE_REVIEW_MODEL = DEFAULT_NOTE_REVIEW_MODEL_ID;
 
 /** At most this many actions from one note. A note is an idea, not a project
  *  plan, and an unbounded list is how one note spends the whole cap. */
@@ -178,11 +186,15 @@ export interface NoteForReview {
  * the safe direction: an unreviewed note is exactly a note, and the notebook
  * works perfectly without any of this.
  */
-export async function reviewNote(note: NoteForReview): Promise<NotePlan> {
+export function reviewNote(note: NoteForReview): Promise<NotePlan> {
+  // Tagged so the call lands on the `notebook-review` row of /admin/ops/costs
+  // rather than in the untagged gateway bucket — the row that switches it.
+  return withActivity('notebook-review', () => runNoteReview(note));
+}
+
+async function runNoteReview(note: NoteForReview): Promise<NotePlan> {
   try {
-    const { client, model } = await getLLMClient(
-      coerceModelContext({ modelId: NOTE_REVIEW_MODEL }),
-    );
+    const { client, model } = await getLLMClient(await resolveNoteReviewModel());
 
     const refs = (note.knownRefs ?? []).slice(0, 25);
     const userMsg = [

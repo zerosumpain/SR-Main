@@ -15,6 +15,7 @@ import { POLICY_ENGINE_BRIEF } from '$lib/dfe-data-strategy/policy';
 import { COMMITMENTS, DOCUMENTS_BY_ID, STATUS_META, ROLE_META } from './commitments';
 import { COMPARATORS } from './comparators';
 import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/llm/keys';
+import { withActivity } from '$lib/context/activity';
 
 export interface Chunk {
   id: string;
@@ -296,7 +297,11 @@ async function embedTexts(texts: string[]): Promise<number[][] | null> {
     const model = getEmbeddingModel();
     const out: number[][] = [];
     for (let i = 0; i < texts.length; i += 96) {
-      const res = await client.embeddings.create({ model, input: texts.slice(i, i + 96).map((t) => t.slice(0, 6000)) });
+      // Tagged `embeddings`, the role this actually is — untagged it landed in
+      // the gateway bucket alongside every other unnamed call.
+      const res = await withActivity('embeddings', () =>
+        client.embeddings.create({ model, input: texts.slice(i, i + 96).map((t) => t.slice(0, 6000)) }),
+      );
       for (const d of [...res.data].sort((a: any, b: any) => a.index - b.index)) out.push(d.embedding as number[]);
     }
     return out.length === texts.length ? out : null;

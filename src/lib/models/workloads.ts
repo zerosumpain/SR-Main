@@ -44,6 +44,8 @@ import {
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_ART_DIRECTOR_MODEL_ID,
   DEFAULT_RESEARCH_FAST_MODEL_ID,
+  DEFAULT_DAYDREAM_REVIEW_MODEL_ID,
+  DEFAULT_NOTE_REVIEW_MODEL_ID,
 } from '$lib/constants/default-models';
 
 /** Where the setting lives, which decides how a change is applied. */
@@ -513,6 +515,74 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     requires: null,
     catalogue: 'tools',
     reason: null,
+  },
+
+  // ── The last four unswitchable reasons ───────────────────────────────────
+  //
+  // Added 2026-09-03 (John, reading /admin/ops/costs: "some are classed
+  // per-call and not changeable. I want to be able to change these. Bring the
+  // rest of the call reasons in line so i can define the model that's being
+  // used").
+  //
+  // The first two were argued to be un-switchable on the grounds that the model
+  // is chosen per conversation and per node. That is true of an EXISTING
+  // conversation and of a node that names its own model — but both of those
+  // start from a model something resolved for them, and until now that
+  // something was `resolveDefaultModel()` with no key of its own. So the choice
+  // existed; it just could not be expressed anywhere except by moving the site
+  // default, which moves everything else with it. These two roles are that
+  // starting point, named. The rule they follow is the one `builder` already
+  // documents: the pick is stamped at creation, so a change moves new ones.
+  //
+  // The last two were plain hidden pins — a model id in a `const` with no
+  // settings key at all, the exact shape this registry was built to abolish.
+  {
+    id: 'chat',
+    scope: 'site',
+    label: 'jkai chat turns',
+    blurb: 'Chat replies on /jkai — the model a NEW conversation is opened on.',
+    key: 'jkai.chat.turn_model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default. A conversation STAMPS this model when it is created and keeps it for life, so changing it moves new threads only — the existing ones are on what they were opened with, and the composer\'s own picker still beats both. Deliberately separate from the site default so chat can be moved without moving every unpinned background role with it.',
+  },
+  {
+    id: 'workflow-node',
+    scope: 'site',
+    label: 'Canvas LLM nodes',
+    blurb: 'LLM nodes in canvas workflows whose own model field is blank.',
+    key: 'jkai.workflow.node_model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default. A node that names a model in its own config still wins — this is what the blank field means, and it is resolved fresh on every run rather than stamped, so a change here moves existing workflows too.',
+  },
+  {
+    id: 'daydream-review',
+    scope: 'site',
+    label: 'Daydream reviewer',
+    blurb: 'The verifier that decides whether a daydream thought is true before it is sent.',
+    key: 'jkai.daydream.review_model',
+    fallbackModelId: DEFAULT_DAYDREAM_REVIEW_MODEL_ID,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Pinned off the daydream model: this pass is small and well-bounded, so the budget is better spent on reasoning effort (xhigh) than on a heavier model. It drives tools to go and read the cited sources, so a model without tool support cannot serve it. Worth knowing before changing it: on a Codex model the daydream caps in $lib/daydream/budget.ts apply, and the heartbeat records this id so those caps can be enforced — move it to an OpenRouter model and the spend becomes cash with nothing capping it.',
+  },
+  {
+    id: 'notebook-review',
+    scope: 'site',
+    label: 'Notebook note reviewer',
+    blurb: 'Reads a new note on /jkai/notes and names the lookups worth running.',
+    key: 'jkai.notebook.review_model',
+    fallbackModelId: DEFAULT_NOTE_REVIEW_MODEL_ID,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Pinned cheap on purpose, and separate from "Notebook research" — this one only decides WHAT to look up, and the money belongs in the lookups it asks for rather than in the asking. A failure here leaves the note unreviewed, which is simply a note.',
   },
 ];
 

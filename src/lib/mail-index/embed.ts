@@ -12,6 +12,7 @@
 
 import { getLLMClient } from '$lib/llm/client';
 import { normalize } from '$lib/rag/retrieve';
+import { withActivity } from '$lib/context/activity';
 
 export const MAIL_INDEX_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 export const MAIL_INDEX_EMBEDDING_DIM = 1536;
@@ -27,10 +28,17 @@ async function embedOnce(inputs: string[]): Promise<number[][]> {
     modelId: MAIL_INDEX_EMBEDDING_MODEL,
   });
   const truncated = inputs.map((t) => t.slice(0, MAX_INPUT_CHARS));
-  const response = await client.embeddings.create({
-    model: MAIL_INDEX_EMBEDDING_MODEL,
-    input: truncated,
-  });
+  // Tagged so mail-index embedding spend joins the `embeddings` row rather than
+  // the untagged gateway bucket. The model here is a constant of the INDEX (a
+  // change re-vectors every stored row), so the tag names where the money went
+  // without implying the picker can move it — see FILE_INDEX_EMBEDDING_MODEL's
+  // sibling note.
+  const response = await withActivity('embeddings', () =>
+    client.embeddings.create({
+      model: MAIL_INDEX_EMBEDDING_MODEL,
+      input: truncated,
+    }),
+  );
   const out = [...response.data]
     .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
     .map((d) => d.embedding as number[]);
