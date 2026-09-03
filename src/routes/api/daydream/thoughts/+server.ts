@@ -345,6 +345,15 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'activity_detail': {
+        // One instrument, opened: the row, the handler, the mechanics and the
+        // last ten pulses. On demand, so the room's arrival stays light.
+        const name = str('name');
+        if (!name) return json({ error: 'name is required' }, { status: 400 });
+        const { loadActivityDetail } = await import('$lib/daydream/rooms/engine.server');
+        return json({ detail: await loadActivityDetail(name) });
+      }
+
       case 'effort': {
         const { loadEffort } = await import('$lib/daydream/effort.server');
         const { describeEffort, resolveEffort } = await import('$lib/daydream/effort');

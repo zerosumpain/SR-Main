@@ -13,7 +13,14 @@ import {
 import { DEFAULT_EFFORT, type Effort } from '$lib/daydream/effort';
 import { loadEffort } from '$lib/daydream/effort.server';
 import { loadProvenance } from '$lib/daydream/provenance';
-import { loadDeliveryStats, loadJobSchedules, type DeliveryStats, type JobSchedule } from '$lib/daydream/rooms/engine.server';
+import {
+  loadDaydreamSpend,
+  loadDeliveryStats,
+  loadJobSchedules,
+  type DaydreamSpend,
+  type DeliveryStats,
+  type JobSchedule,
+} from '$lib/daydream/rooms/engine.server';
 import { loadRoutes } from '$lib/daydream/routes.server';
 import type { RouteOverrides } from '$lib/daydream/routes';
 
@@ -43,6 +50,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       routes,
       deliveryStats,
       effort,
+      spend,
     ] = await Promise.all([
       parent(),
       loadDetectorRows(),
@@ -56,6 +64,12 @@ export const load: PageServerLoad = async ({ parent }) => {
       loadRoutes(),
       loadDeliveryStats(),
       loadEffort(),
+      // Cash is a fact beside the quota, and the quota tiles hide when the caps
+      // do not apply — so this is its own read, and its failure is its own `null`.
+      loadDaydreamSpend().catch((err: unknown) => {
+        console.error('[daydream] spend read failed:', errMsg(err));
+        return null;
+      }),
     ]);
     const engine = hub.engine;
     return {
@@ -71,6 +85,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       routes,
       deliveryStats,
       effort,
+      spend,
       loadError: null,
     };
   } catch (err) {
@@ -95,6 +110,7 @@ export const load: PageServerLoad = async ({ parent }) => {
     // The dial is a SETTING, not a measurement: if the ledger read failed the
     // shipped shares are still the honest answer, so the sliders render at 50.
     const effort: Effort = DEFAULT_EFFORT;
+    const spend: DaydreamSpend | null = null;
     const counts: Awaited<ReturnType<typeof loadCounts>> = {
       byStatus: {},
       places: 0,
@@ -121,6 +137,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       routes,
       deliveryStats,
       effort,
+      spend,
       loadError: errMsg(err),
     };
   }

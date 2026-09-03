@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getHandler } from './registry';
+import { withActivity } from '$lib/context/activity';
 import { recordPulse, prunePulses } from './audit';
 import { seedDefaultActions } from './seed';
 import { runTargetedAction } from './handlers/targeted';
@@ -128,11 +129,17 @@ async function runOne(row: HeartbeatAction, now: Date): Promise<void> {
       if (!handler) {
         result = { outcome: 'skipped' as const, summary: `no handler registered for ${row.name}` };
       } else {
-        result = await handler.run({
-          now: now.getTime(),
-          config: (row.config as Record<string, unknown>) ?? {},
-          action: row,
-        });
+        // Tagged with the activity's name so every LLM call it makes lands in
+        // the ledger under it — before this, 9,889 of the month's calls sat in
+        // an untagged bucket and no room could say what an activity cost. An
+        // inner tag (self-improve wraps its own calls) still wins.
+        result = await withActivity(row.name, () =>
+          handler.run({
+            now: now.getTime(),
+            config: (row.config as Record<string, unknown>) ?? {},
+            action: row,
+          }),
+        );
       }
     } else if (row.kind === 'targeted') {
       result = await runTargetedAction(row);

@@ -41,9 +41,11 @@
   interface Props {
     jobs: JobRow[];
     schedules: Schedule[];
+    /** A cell is an instrument: clicking opens its mechanics. */
+    onopen?: (name: string, stageMark: string) => void;
   }
 
-  let { jobs, schedules }: Props = $props();
+  let { jobs, schedules, onopen = undefined }: Props = $props();
 
   /** The loop, in the order it runs. `mark` is the three-letter stage tag the
    *  cell wears, so a cell still says which stage it belongs to once the grid
@@ -118,6 +120,7 @@
       value: a.job.pulse ? a.job.pulse.outcome : 'never',
       tone: jobTone(a.job),
       corner: usd(a.schedule?.costUsd24h),
+      onclick: onopen ? () => onopen(a.job.name, a.stage.mark) : null,
       sub:
         `${paused}every ${cadence(a.job.cadenceSeconds)} · ` +
         `last ${ago(a.job.pulse?.ts ?? a.job.lastRunAt)} · ` +

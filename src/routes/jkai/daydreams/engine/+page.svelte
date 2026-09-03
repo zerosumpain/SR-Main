@@ -17,6 +17,7 @@
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
   import EngineActivityPanel from '$lib/components/jkai/daydream/rooms/EngineActivityPanel.svelte';
+  import EngineActivityDrill from '$lib/components/jkai/daydream/rooms/EngineActivityDrill.svelte';
   import EngineEffort from '$lib/components/jkai/daydream/rooms/EngineEffort.svelte';
   import EngineRules from '$lib/components/jkai/daydream/rooms/EngineRules.svelte';
   import EngineDetectors from '$lib/components/jkai/daydream/rooms/EngineDetectors.svelte';
@@ -132,6 +133,52 @@
     },
   ]);
 
+  // The instrument under the cursor. One drill at a time; the URL does not
+  // carry it because a run's mechanics are the same on every visit.
+  let openActivity = $state<{ name: string; mark: string } | null>(null);
+
+  const money = (n: number) => (n >= 0.01 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : '$0');
+  const spend = $derived(data.spend);
+  type Line = NonNullable<typeof spend>['daydream'];
+  // One tile from one ledger line: cash where there was cash, "quota" where
+  // every call went through the subscription, and a dash where nothing ran.
+  const lineTile = (key: string, label: string, l: Line | null, days: 7 | 30, empty: string): DeckTile => {
+    const calls = days === 7 ? (l?.calls7 ?? 0) : (l?.calls30 ?? 0);
+    const cash = days === 7 ? (l?.cashUsd7 ?? 0) : (l?.cashUsd30 ?? 0);
+    const quota = days === 7 ? (l?.quota7 ?? 0) : (l?.quota30 ?? 0);
+    if (!l || calls === 0) return { key, label, value: '—', tone: 'quiet', sub: empty };
+    const models = l.models.length ? ` on ${l.models.join(', ')}` : '';
+    const unpriced = days === 30 && l.unpriced30 ? ` · ${l.unpriced30} unpriced` : '';
+    if (cash > 0) {
+      return {
+        key,
+        label,
+        value: money(cash),
+        tone: cash > 0.5 ? 'watch' : 'steady',
+        sub: `${calls} call${calls === 1 ? '' : 's'}${models}${quota ? ` · ${quota} on quota` : ''}${unpriced}`,
+      };
+    }
+    if (quota === calls) {
+      return { key, label, value: 'quota', tone: 'good', sub: `${calls} call${calls === 1 ? '' : 's'}${models} — subscription, no cash` };
+    }
+    return { key, label, value: '$0', tone: 'steady', sub: `${calls} call${calls === 1 ? '' : 's'}${models}${quota ? ` · ${quota} on quota` : ''}${unpriced}` };
+  };
+  const spendTiles = $derived<DeckTile[]>(
+    spend
+      ? [
+          lineTile('improve7', 'Improve, 7 days', spend.improve, 7, 'no self-improve call in the ledger this week'),
+          lineTile('improve30', 'Improve, 30 days', spend.improve, 30, 'no self-improve call in the ledger this month'),
+          lineTile(
+            'daydream30',
+            'Every daydream activity, 30 days',
+            spend.daydream,
+            30,
+            'no activity has tagged a call yet — tagging starts with this release',
+          ),
+        ]
+      : [],
+  );
+
   const budgetTiles = $derived.by((): DeckTile[] => {
     if (!budget || !budget.applies) return [];
     return [
@@ -175,7 +222,8 @@
     {/if}
     {#if actionError}<p class="err">{actionError}</p>{/if}
 
-    <EngineActivityPanel jobs={telemetry?.jobs ?? []} schedules={data.schedules ?? []} />
+    <EngineActivityPanel jobs={telemetry?.jobs ?? []} schedules={data.schedules ?? []} onopen={(name, mark) => (openActivity = { name, mark })} />
+    <p class="note">Every cell is an instrument — open one to see what it reads, what it writes, what gates it, and its last ten runs.</p>
   </div>
 </section>
 
@@ -287,6 +335,10 @@
         adds a verification pass and more candidates considered. What reaches your phone is capped
         separately at {delivery?.maxPerDay ?? 4} a day.
       </p>
+    {/if}
+    {#if spendTiles.length}
+      <p class="field-label spend-label">Cash, beside the quota — from the ledger, not the run’s own count</p>
+      <StatDeck tiles={spendTiles} min={230} />
     {/if}
   </div>
 </section>
@@ -419,7 +471,14 @@
   </div>
 </section>
 
+{#if openActivity}
+  <EngineActivityDrill name={openActivity.name} stageMark={openActivity.mark} onclose={() => (openActivity = null)} />
+{/if}
+
 <style>
+  .spend-label {
+    margin-top: 18px;
+  }
   .chart {
     border: 1px solid var(--card-border);
     background: var(--surface-card);

@@ -126,8 +126,14 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
         const tout = usage.completion_tokens ?? 0;
         budget.tokensIn += tin;
         budget.tokensOut += tout;
+        // The provider's own `usage.cost` first, the catalogue price second —
+        // the same order the ledger uses. The catalogue has no row for the
+        // flash model this runs on, so before this every night's cost was a
+        // fabricated zero on the pulse and the run record (seen 2026-09-03).
+        const reported = (usage as { cost?: unknown }).cost;
         const pricing = priceFor('openrouter', resp.model || model);
-        if (pricing) budget.costUsd += computeCost(pricing, tin, tout);
+        if (typeof reported === 'number' && Number.isFinite(reported)) budget.costUsd += reported;
+        else if (pricing) budget.costUsd += computeCost(pricing, tin, tout);
       }
       const content = resp.choices?.[0]?.message?.content ?? '';
       const { parseJsonLoose } = await import('./types');
