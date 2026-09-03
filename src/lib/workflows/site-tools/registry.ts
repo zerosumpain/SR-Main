@@ -50,6 +50,7 @@ import './tools/custom-tool-admin';
 import './tools/web';
 import './tools/node-builder';
 import './tools/site-signals';
+import './tools/news';
 import './tools/presentations';
 import './tools/datastore';
 import './tools/apis';
@@ -141,6 +142,7 @@ export function getToolsetManifest(): Array<{
     'node-builder': 'Workflow node codegen — scaffold, validate, and commit/deploy new canvas node types (repo-modifying; deploy ships to production and is confirmation-gated)',
     'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
     'site-signals': 'Live site signals (read-only) — current GPS walk/ride status, family presence (who is home), and DfE policy-engine tracking indicators',
+    news: 'Live technical news — search the current Hacker News and Lobsters wires and return source links',
     decks: 'sr. decks presentations — list, build from a spec, inspect, and manage block-based slide decks',
     datastore: 'Permanent sitewide datastore — full CRUD over collections of JSON records with filters/aggregates and row-level permissions (structured/queryable data that persists across chats and workflows)',
     apis: 'API catalogue + integration register — search catalogued external data sources, call them for live data (SSRF-guarded), authenticate with owner-registered secret handles you can use but never read (api_secrets_list), and RECORD a working call as a reusable named integration (api_integration_save/test) that also appears in the no-code canvas node',
