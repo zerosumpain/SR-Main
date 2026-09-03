@@ -1,6 +1,6 @@
 // `monitors` toolset — natural-language monitors. monitor_create turns "watch X,
 // tell me when Y" into a scheduled watch workflow; monitor_list shows them.
-// Management (pause/resume/delete) is on the /jkai/daydreams?tab=watches page.
+// Management (pause/resume/delete) is on the /jkai/daydreams/watches page.
 import { register } from '../registry-internal';
 import { createMonitor, listMonitors } from '$lib/monitors/monitors.server';
 
@@ -25,7 +25,7 @@ register({
     try {
       const marker = await createMonitor(description, cron, ctx?.emit);
       const url = `${(process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '')}/jkai/canvas/${marker.slug}`;
-      return { success: true, data: { ...marker, url, manageUrl: '/jkai/daydreams?tab=watches' } };
+      return { success: true, data: { ...marker, url, manageUrl: '/jkai/daydreams/watches' } };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'monitor_create failed' };
     }

@@ -47,7 +47,7 @@
     { href: '/research', label: 'Research' },
     { href: '/jkai/builds', label: 'Builds' },
     { href: '/jkai/canvas', label: 'Canvases' },
-    { href: '/jkai/daydreams', label: 'Daydreams' },
+    { href: '/jkai/daydreams/feed', label: 'Daydreams' },
     { href: '/jkai/agents', label: 'Agent team' },
     { href: '/jkai/doctor', label: 'Doctor' },
   ];

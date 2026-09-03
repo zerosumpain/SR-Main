@@ -9,7 +9,7 @@
 // saw when it last ran. The page's job is to report the engine, not to
 // impersonate it.
 
-import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   daydreamDigests,
@@ -35,6 +35,15 @@ import {
 } from './scoring';
 import { mutedKinds, loadFeedback, loadRelevanceRows } from './thought-store';
 import type { Readiness, SnapshotSource } from './snapshot-types';
+import {
+  FAMILIES,
+  FAMILY_ORDER,
+  FEED_STATES,
+  familyOf,
+  feedStateOf,
+  statusesFor,
+  type FeedState,
+} from './thought-groups';
 
 export interface LedgerThought {
   id: string;
@@ -297,7 +306,7 @@ export async function loadThreshold(): Promise<{ value: number; feedbackCount: n
   return { value: adaptiveThreshold(feedback, new Date()), feedbackCount: feedback.length };
 }
 
-export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
+export async function loadThoughts(limit = 60, where?: SQL): Promise<LedgerThought[]> {
   const rows = await db
     .select({
       id: daydreamThoughts.id,
@@ -344,6 +353,7 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     })
     .from(daydreamThoughts)
     .leftJoin(daydreamPlaces, eq(daydreamThoughts.placeId, daydreamPlaces.id))
+    .where(where)
     .orderBy(desc(daydreamThoughts.createdAt))
     .limit(limit);
 
@@ -386,6 +396,90 @@ export async function loadThoughts(limit = 60): Promise<LedgerThought[]> {
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   }));
+}
+
+// ── The feed matrix ──────────────────────────────────────────────────────
+//
+// Families down, reader states across, a count in every cell — over the WHOLE
+// table, not the last sixty rows. The old feed took sixty rows by created_at
+// and grouped those, so a family that had been quiet for a week vanished from
+// the page rather than reading "0 undecided, 14 filed".
+
+/** SQL for "this kind belongs to family F". Mirrors `familyOf`; the two are
+ *  pinned together by `feed-matrix.test.ts`. */
+export function familyWhere(family: string): SQL {
+  const k = daydreamThoughts.kind;
+  switch (family) {
+    case 'musings':
+      return sql`${k} like 'musing_%'`;
+    case 'mail':
+      return sql`${k} like 'mail_%'`;
+    case 'graph':
+      return sql`${k} like 'intel_%'`;
+    case 'rules':
+      return sql`(${k} like 'rule_%' or ${k} = 'rule_driven')`;
+    case 'places':
+      return sql`${k} in ('unknown_place', 'unknown_frequent_place')`;
+    default:
+      return sql`not (${k} like 'musing_%' or ${k} like 'mail_%' or ${k} like 'intel_%' or ${k} like 'rule_%' or ${k} = 'rule_driven' or ${k} in ('unknown_place', 'unknown_frequent_place'))`;
+  }
+}
+
+export interface FeedMatrix {
+  rows: Array<{ id: string; label: string; mark: string }>;
+  cols: Array<{ id: FeedState; label: string }>;
+  /** cells[family][state] */
+  cells: Record<string, Record<FeedState, number>>;
+  /** Undecided rows that are ALSO unrated deliveries — the rail badge. */
+  total: number;
+}
+
+export async function loadFeedMatrix(): Promise<FeedMatrix> {
+  const { FAMILY_MARK } = await import('./thought-groups');
+  const grouped = await db
+    .select({ kind: daydreamThoughts.kind, status: daydreamThoughts.status, n: sql<number>`count(*)::int` })
+    .from(daydreamThoughts)
+    .groupBy(daydreamThoughts.kind, daydreamThoughts.status);
+
+  const cells: Record<string, Record<FeedState, number>> = {};
+  for (const id of FAMILY_ORDER) cells[id] = { undecided: 0, sent: 0, held: 0, filed: 0 };
+  let total = 0;
+  for (const g of grouped) {
+    const fam = familyOf(g.kind).id;
+    const state = feedStateOf(g.status);
+    cells[fam] ??= { undecided: 0, sent: 0, held: 0, filed: 0 };
+    cells[fam][state] += g.n;
+    total += g.n;
+  }
+  return {
+    rows: FAMILY_ORDER.map((id) => ({ id, label: FAMILIES[id].label, mark: FAMILY_MARK[id] })),
+    cols: FEED_STATES.map((s) => ({ id: s.id, label: s.label })),
+    cells,
+    total,
+  };
+}
+
+export const FEED_CELL_LIMIT = 50;
+
+/** The rows behind one cell of the matrix — or one whole column, or one whole
+ *  row, when only one axis is given. Nothing given: the undecided column. */
+export async function loadFeedCell(
+  family: string | null,
+  state: FeedState | null,
+  limit = FEED_CELL_LIMIT,
+): Promise<LedgerThought[]> {
+  const clauses: SQL[] = [];
+  if (family && family in FAMILIES) clauses.push(familyWhere(family));
+  const statuses = statusesFor(state ?? 'undecided');
+  if (state || !family) clauses.push(inArray(daydreamThoughts.status, statuses));
+  return loadThoughts(limit, clauses.length ? and(...clauses) : undefined);
+}
+
+/** One thought by id, in the ledger shape — for a deep link that names a row
+ *  outside the selected cell (`?rate=` from a notification). */
+export async function loadThoughtById(id: string): Promise<LedgerThought | null> {
+  const [row] = await loadThoughts(1, eq(daydreamThoughts.id, id));
+  return row ?? null;
 }
 
 /** The most recent morning card, if there is one. */
@@ -501,77 +595,84 @@ export async function loadFamily() {
   const { localDayStart } = await import('./budget');
   const now = new Date();
   const dayStart = localDayStart(now);
+  const subjects = FAMILY_SUBJECTS.map((f) => f.subject);
 
-  const members = [] as Array<{
-    subject: string;
-    isHome: boolean | null;
-    placeLabel: string | null;
-    distanceHomeKm: number | null;
-    batteryPct: number | null;
-    ageMins: number | null;
-    lastSeenAt: Date | null;
-    today: { firstOutMins: number | null; minutesOut: number; placesVisited: number; fixes: number };
-  }>;
+  // Three queries for the whole household, not three per person. The old
+  // loop ran 2–3 queries a subject and then a label lookup each — on every
+  // arrival at the hub, for a tab most arrivals never opened.
+  const [latestRows, todayAgg] = await Promise.all([
+    db.execute(sql`
+      select distinct on (${daydreamTrail.subject})
+        ${daydreamTrail.subject} as subject,
+        ${daydreamTrail.ts} as ts,
+        ${daydreamTrail.isHome} as is_home,
+        ${daydreamTrail.placeId} as place_id,
+        ${daydreamTrail.distanceHomeKm} as distance_home_km,
+        ${daydreamTrail.batteryPct} as battery_pct
+      from ${daydreamTrail}
+      where ${daydreamTrail.lat} is not null and ${daydreamTrail.subject} in ${subjects}
+      order by ${daydreamTrail.subject}, ${daydreamTrail.ts} desc
+    `).then((r) => r.rows as Array<{
+      subject: string;
+      ts: Date | string;
+      is_home: boolean | null;
+      place_id: string | null;
+      distance_home_km: number | null;
+      battery_pct: number | null;
+    }>),
+    db.execute(sql`
+      select
+        ${daydreamTrail.subject} as subject,
+        count(*)::int as fixes,
+        count(*) filter (where ${daydreamTrail.lat} is not null and ${daydreamTrail.isHome} = false)::int as out_rows,
+        min(${daydreamTrail.ts}) filter (where ${daydreamTrail.lat} is not null and ${daydreamTrail.isHome} = false) as first_out,
+        count(distinct ${daydreamTrail.placeId}) filter (where ${daydreamTrail.lat} is not null)::int as places_visited
+      from ${daydreamTrail}
+      where ${daydreamTrail.ts} >= ${dayStart} and ${daydreamTrail.subject} in ${subjects}
+      group by ${daydreamTrail.subject}
+    `).then((r) => r.rows as Array<{
+      subject: string;
+      fixes: number;
+      out_rows: number;
+      first_out: Date | string | null;
+      places_visited: number;
+    }>),
+  ]);
 
-  for (const f of FAMILY_SUBJECTS) {
-    const [latest] = await db
-      .select({
-        ts: daydreamTrail.ts,
-        isHome: daydreamTrail.isHome,
-        placeId: daydreamTrail.placeId,
-        distanceHomeKm: daydreamTrail.distanceHomeKm,
-        batteryPct: daydreamTrail.batteryPct,
-      })
-      .from(daydreamTrail)
-      .where(and(eq(daydreamTrail.subject, f.subject), isNotNull(daydreamTrail.lat)))
-      .orderBy(desc(daydreamTrail.ts))
-      .limit(1);
-
-    const todayRows = await db
-      .select({
-        ts: daydreamTrail.ts,
-        isHome: daydreamTrail.isHome,
-        placeId: daydreamTrail.placeId,
-        lat: daydreamTrail.lat,
-      })
-      .from(daydreamTrail)
-      .where(and(eq(daydreamTrail.subject, f.subject), gte(daydreamTrail.ts, dayStart)))
-      .orderBy(daydreamTrail.ts);
-
-    const positioned = todayRows.filter((r) => r.lat != null);
-    const outRows = positioned.filter((r) => r.isHome === false);
-    const firstOut = outRows[0] ?? null;
-    const firstOutMins = firstOut
-      ? Math.round((firstOut.ts.getTime() - dayStart.getTime()) / 60_000)
-      : null;
-
-    let placeLabel: string | null = null;
-    if (latest?.placeId) {
-      const [pl] = await db
-        .select({ label: daydreamPlaces.label })
+  const latestBy = new Map(latestRows.map((r) => [r.subject, r]));
+  const todayBy = new Map(todayAgg.map((r) => [r.subject, r]));
+  const placeIds = [...new Set(latestRows.map((r) => r.place_id).filter((x): x is string => !!x))];
+  const labels = placeIds.length
+    ? await db
+        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label })
         .from(daydreamPlaces)
-        .where(eq(daydreamPlaces.id, latest.placeId))
-        .limit(1);
-      placeLabel = pl?.label ?? null;
-    }
+        .where(inArray(daydreamPlaces.id, placeIds))
+    : [];
+  const labelBy = new Map(labels.map((l) => [l.id, l.label]));
+  const asDate = (v: Date | string | null | undefined) => (v == null ? null : v instanceof Date ? v : new Date(v));
 
-    members.push({
+  const members = FAMILY_SUBJECTS.map((f) => {
+    const latest = latestBy.get(f.subject);
+    const today = todayBy.get(f.subject);
+    const latestTs = asDate(latest?.ts);
+    const firstOut = asDate(today?.first_out);
+    return {
       subject: f.subject,
-      isHome: latest?.isHome ?? null,
-      placeLabel,
-      distanceHomeKm: latest?.distanceHomeKm ?? null,
-      batteryPct: latest?.batteryPct ?? null,
-      ageMins: latest ? Math.round((now.getTime() - latest.ts.getTime()) / 60_000) : null,
-      lastSeenAt: latest?.ts ?? null,
+      isHome: latest?.is_home ?? null,
+      placeLabel: latest?.place_id ? (labelBy.get(latest.place_id) ?? null) : null,
+      distanceHomeKm: latest?.distance_home_km == null ? null : Number(latest.distance_home_km),
+      batteryPct: latest?.battery_pct == null ? null : Number(latest.battery_pct),
+      ageMins: latestTs ? Math.round((now.getTime() - latestTs.getTime()) / 60_000) : null,
+      lastSeenAt: latestTs,
       today: {
-        firstOutMins,
+        firstOutMins: firstOut ? Math.round((firstOut.getTime() - dayStart.getTime()) / 60_000) : null,
         // Each positioned fix stands for one observe interval (2 min).
-        minutesOut: Math.round(outRows.length * 2),
-        placesVisited: new Set(positioned.map((r) => r.placeId).filter(Boolean)).size,
-        fixes: todayRows.length,
+        minutesOut: Math.round((today?.out_rows ?? 0) * 2),
+        placesVisited: today?.places_visited ?? 0,
+        fixes: today?.fixes ?? 0,
       },
-    });
-  }
+    };
+  });
   // ── Per person: their own questions, findings and suggestions ──────────
   //
   // The Family tab was a presence map. Four of the five people in the trail
@@ -585,12 +686,11 @@ export async function loadFamily() {
   // reference. Matching on names would file "Katie's usual Tuesday" under
   // Katie and also under any other thought that happened to mention her.
   const { loadBoard } = await import('./hypotheses/store');
-  const sweepPulse = await lastPulseFor('daydream-sweep');
-  const sweepBySubject = ((sweepPulse?.details ?? {}) as Record<string, unknown>).perSubject as
-    | Record<string, { testsRun?: number; naiveHits?: number; findings?: unknown[]; errors?: string[] }>
-    | undefined;
-
-  const recentThoughts = await db
+  // Independent of the trail and of each other: one round of latency, not
+  // four in a row.
+  const [sweepPulse, recentThoughts, boards] = await Promise.all([
+    lastPulseFor('daydream-sweep'),
+    db
     .select({
       id: daydreamThoughts.id,
       kind: daydreamThoughts.kind,
@@ -603,7 +703,12 @@ export async function loadFamily() {
     })
     .from(daydreamThoughts)
     .orderBy(desc(daydreamThoughts.createdAt))
-    .limit(200);
+    .limit(200),
+    Promise.all(FAMILY_SUBJECTS.map((f) => loadBoard(20, f.subject))),
+  ]);
+  const sweepBySubject = ((sweepPulse?.details ?? {}) as Record<string, unknown>).perSubject as
+    | Record<string, { testsRun?: number; naiveHits?: number; findings?: unknown[]; errors?: string[] }>
+    | undefined;
 
   const detail: Record<string, {
     hypotheses: Awaited<ReturnType<typeof loadBoard>>;
@@ -611,10 +716,10 @@ export async function loadFamily() {
     thoughts: Array<{ id: string; kind: string; title: string; score: number; status: string; createdAt: string }>;
   }> = {};
 
-  for (const f of FAMILY_SUBJECTS) {
+  FAMILY_SUBJECTS.forEach((f, i) => {
     const sw = sweepBySubject?.[f.subject];
     detail[f.subject] = {
-      hypotheses: await loadBoard(20, f.subject),
+      hypotheses: boards[i],
       sweep: sw
         ? {
             testsRun: sw.testsRun ?? 0,
@@ -637,7 +742,7 @@ export async function loadFamily() {
           createdAt: t.createdAt.toISOString(),
         })),
     };
-  }
+  });
 
   return { members, detail };
 }
@@ -921,28 +1026,3 @@ export async function loadDelivery() {
   };
 }
 
-/** Everything the page needs, in one round of queries. */
-export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry, provenance] = await Promise.all([
-    loadEngineState(),
-    loadDetectorRows(),
-    loadThreshold(),
-    loadThoughts(),
-    loadPlaces(),
-    loadCounts(),
-    loadBudget(),
-    loadRules(),
-    loadLatestDigest(),
-    listSteers(),
-    loadDelivery(),
-    loadFamily(),
-    loadMoney(),
-    loadDiscoveries(),
-    loadTelemetry(),
-    // Whether each source is actually reaching the reasoning, measured. See
-    // provenance.ts — the page could show 242 registered signals and 13 green
-    // jobs while 185 of those signals reached nothing at all.
-    loadProvenance(),
-  ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry, provenance };
-}

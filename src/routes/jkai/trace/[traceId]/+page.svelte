@@ -836,7 +836,7 @@
 {/snippet}
 
 <style>
-  /* Shell mirrors /jkai/daydreams?tab=improvement + /jkai/doctor, widened because a call
+  /* Shell mirrors /jkai/daydreams/improvement + /jkai/doctor, widened because a call
      chain is a wide table. */
   .wrap {
     max-width: 1280px;

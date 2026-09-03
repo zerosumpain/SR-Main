@@ -31,7 +31,7 @@
   const ACTIONS: NavItem[] = [
     { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
     { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
-    { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/daydreams?tab=watches') },
+    { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/daydreams/watches') },
     { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel/search') },
   ];
 
@@ -58,7 +58,7 @@
     {
       section: 'Proactive',
       items: [
-        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams', desc: 'Briefings, watches and spare-cycle learning', keywords: 'daydream notice pattern idle location places suggestions monitor watch alert digest briefing improvement ledger' },
+        { code: 'DAY', label: 'Daydreams', href: '/jkai/daydreams/feed', desc: 'Briefings, watches and spare-cycle learning', keywords: 'daydream notice pattern idle location places suggestions monitor watch alert digest briefing improvement ledger' },
       ],
     },
     {

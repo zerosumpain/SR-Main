@@ -1,7 +1,7 @@
 // Natural-language Monitors — "watch X, tell me when Y". createMonitor turns a
 // description into a SCHEDULED workflow (via the existing generator), attaches a
 // cron schedule (the generate path does not create the schedule row itself), and
-// records a marker in the `monitors` datastore collection so the /jkai/daydreams?tab=watches
+// records a marker in the `monitors` datastore collection so the /jkai/daydreams/watches
 // page can list + manage them. SERVER ONLY (generator + DB + scheduler).
 import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowSchedules, workflowRuns, nodeExecutions } from '$lib/db/schema';
@@ -180,6 +180,23 @@ export async function createMonitor(
  *  Lazily re-enables any snoozed monitor whose snoozeUntil has passed.
  *  Batched: schedules in one query, per-monitor run/hit lookups in parallel
  *  (was a ~4N sequential round-trip N+1). */
+/**
+ * How many watches are live — for a badge. READ-ONLY and two queries: the
+ * markers and their schedules. `listMonitors()` is the wrong tool for a badge:
+ * it walks every monitor's run history and, as a side effect of a read,
+ * re-enables lapsed snoozes with writes. A layout load must do neither.
+ */
+export async function countActiveMonitors(): Promise<number> {
+  const { records } = await queryRecords(MONITORS_COLLECTION, { limit: 200 }, ACTOR);
+  const ids = records.map((r) => (r.data as unknown as MonitorMarker).workflowId).filter(Boolean);
+  if (!ids.length) return 0;
+  const scheds = await db
+    .select({ enabled: workflowSchedules.enabled })
+    .from(workflowSchedules)
+    .where(inArray(workflowSchedules.workflowId, ids));
+  return scheds.filter((s) => s.enabled).length;
+}
+
 export async function listMonitors(): Promise<MonitorStatus[]> {
   await ensureMonitorsCollection();
   const { records } = await queryRecords(MONITORS_COLLECTION, { sort: { field: 'createdAt', dir: 'desc' }, limit: 200 }, ACTOR);
@@ -245,7 +262,7 @@ export async function setMonitorEnabled(workflowId: string, enabled: boolean): P
 
 /**
  * Snooze a monitor for N hours: disable its schedule and stamp snoozeUntil on
- * the marker. Re-enabling is LAZY — checked on listMonitors (the /jkai/daydreams?tab=watches
+ * the marker. Re-enabling is LAZY — checked on listMonitors (the /jkai/daydreams/watches
  * page load). Passing hours <= 0 clears the snooze and re-enables now.
  */
 export async function snoozeMonitor(workflowId: string, hours: number): Promise<{ ok: boolean; snoozeUntil: string | null }> {

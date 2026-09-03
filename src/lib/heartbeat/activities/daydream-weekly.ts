@@ -134,7 +134,7 @@ export const daydreamWeekly: ActivityHandler = {
         const message =
           `🗞 *The week, according to your second brain*\n\n${narrative ?? summary}` +
           (narrative ? `\n\n_${summary}_` : '') +
-          `\n\nhttps://strangeramblings.com/jkai/daydreams?tab=discoveries`;
+          `\n\nhttps://strangeramblings.com/jkai/daydreams/discoveries`;
         const res = await executeTool('whatsapp_send', { to, message: message.slice(0, 1200) });
         if (res?.success) channel = 'whatsapp';
       }

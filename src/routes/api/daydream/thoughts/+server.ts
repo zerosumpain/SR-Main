@@ -7,7 +7,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { loadLedger, snoozeThought, unmuteKind } from '$lib/daydream/ledger';
+import { snoozeThought, unmuteKind } from '$lib/daydream/ledger';
 import { loadTriageDeck, recordFeedback, recordTriageBatch } from '$lib/daydream/thought-store';
 import {
   confirmPlace,
@@ -20,14 +20,6 @@ import { errMsg } from '$lib/daydream/types';
 import { loadBoard, rateQuestion } from '$lib/daydream/hypotheses/store';
 import { addSteer, listSteers, setSteerStatus } from '$lib/daydream/hypotheses/steer';
 
-export const GET: RequestHandler = async () => {
-  try {
-    return json(await loadLedger());
-  } catch (err) {
-    console.error('[daydream] ledger read failed:', errMsg(err));
-    return json({ error: errMsg(err) }, { status: 500 });
-  }
-};
 
 /**
  * One endpoint, an `action` discriminator, because every one of these is the

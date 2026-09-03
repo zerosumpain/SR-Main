@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/daydream/ledger', () => ({
-  loadLedger: vi.fn(),
   snoozeThought: vi.fn(),
   unmuteKind: vi.fn(),
 }));

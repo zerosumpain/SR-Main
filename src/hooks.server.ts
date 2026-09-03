@@ -339,9 +339,9 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // are presented as features. Existing query parameters are retained unless
   // they would override the destination tab.
   const retiredJkaiPage = new Map<string, string>([
-    ['/jkai/briefing', '/jkai/daydreams?tab=briefing'],
-    ['/jkai/monitors', '/jkai/daydreams?tab=watches'],
-    ['/jkai/improvement', '/jkai/daydreams?tab=improvement'],
+    ['/jkai/briefing', '/jkai/daydreams/briefing'],
+    ['/jkai/monitors', '/jkai/daydreams/watches'],
+    ['/jkai/improvement', '/jkai/daydreams/improvement'],
     ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],
   ]).get(pathname);

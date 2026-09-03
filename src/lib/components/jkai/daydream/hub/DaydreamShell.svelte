@@ -34,7 +34,8 @@
     ontoggleLive?: () => void;
     tabs: ShellTab[];
     active: string;
-    ontab: (id: string) => void;
+    /** For a tab with no `href` — in-page state, the shape /jkai/agents keeps. */
+    ontab?: (id: string) => void;
     /** The tile deck under the headline. Named `masthead`, not `deck`, because
      *  a snippet's name shadows the page's own bindings and the daydream page
      *  already has a `deck` — the triage cards. */
@@ -55,7 +56,7 @@
     ontoggleLive = undefined,
     tabs,
     active,
-    ontab,
+    ontab = undefined,
     masthead = undefined,
     footer = [],
     children,
@@ -108,22 +109,38 @@
   </section>
 
   <!-- ——— the rail ————————————————————————————————————————————————
+       Real links: every room is its own route, so a tab is a navigation and
+       the browser's back button means what it says. Preload on tap, not
+       hover — eleven rooms hovered across is eleven server loads.
        Sticky at the top of the jkai scroll container. Horizontally scrollable
        on a phone rather than wrapping to three rows: ten tabs wrapped is a
        block of chrome taller than the first card under it. -->
   <nav class="ds-rail" aria-label="Daydream sections">
     <div class="ds-inner ds-rail-inner">
       {#each tabs as t (t.id)}
-        <button
-          type="button"
-          class="ds-tab"
-          class:on={active === t.id}
-          aria-current={active === t.id ? 'page' : undefined}
-          onclick={() => ontab(t.id)}
-        >
-          {t.label}
-          {#if t.count}<span class="ds-tab-n tone-{t.tone ?? 'quiet'}">{t.count}</span>{/if}
-        </button>
+        {#if t.href}
+          <a
+            class="ds-tab"
+            class:on={active === t.id}
+            aria-current={active === t.id ? 'page' : undefined}
+            href={t.href}
+            data-sveltekit-preload-data="tap"
+          >
+            {t.label}
+            {#if t.count}<span class="ds-tab-n tone-{t.tone ?? 'quiet'}">{t.count}</span>{/if}
+          </a>
+        {:else}
+          <button
+            type="button"
+            class="ds-tab"
+            class:on={active === t.id}
+            aria-current={active === t.id ? 'page' : undefined}
+            onclick={() => ontab?.(t.id)}
+          >
+            {t.label}
+            {#if t.count}<span class="ds-tab-n tone-{t.tone ?? 'quiet'}">{t.count}</span>{/if}
+          </button>
+        {/if}
       {/each}
     </div>
   </nav>
@@ -335,6 +352,7 @@
     color: var(--text-muted);
     background: none;
     border: 0;
+    text-decoration: none;
     border-bottom: 3px solid transparent;
     border-radius: 0;
     cursor: pointer;

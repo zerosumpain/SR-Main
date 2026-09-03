@@ -362,7 +362,7 @@
             <span class="eyebrow">Shared back from daydreaming</span>
             <h2 id="memories-title">New memories</h2>
           </div>
-          <a href="/jkai/daydreams?tab=memory">Open shared memory →</a>
+          <a href="/jkai/daydreams/memory">Open shared memory →</a>
         </header>
         {#if learnedMemories.length}
           <p class="section-intro">Durable facts learned inside the {profile.memoryLookbackHours}-hour window and carried into this briefing.</p>

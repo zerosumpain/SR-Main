@@ -74,6 +74,59 @@ export function familyOf(kind: string): ThoughtFamily {
   return FAMILIES.patterns;
 }
 
+/**
+ * The mono kicker a family wears on every line and cell.
+ *
+ * A MARK, not a colour. Colour on the hub is priority and is decided in one
+ * place (`priority.ts`); a second colour axis for category would make every
+ * card carry two hues and neither would be readable. Six short words in the
+ * label face do the job the raw slug never did.
+ */
+export const FAMILY_MARK: Record<string, string> = {
+  places: 'PLACE',
+  mail: 'MAIL',
+  musings: 'MUSE',
+  graph: 'GRAPH',
+  rules: 'RULE',
+  patterns: 'PATTERN',
+};
+
+export function familyMark(kind: string): string {
+  return FAMILY_MARK[familyOf(kind).id] ?? 'PATTERN';
+}
+
+/** The order families appear down the feed matrix — by what a reader acts on
+ *  first, not by count. Counts change hourly; a matrix whose rows reorder
+ *  hourly cannot be learned. */
+export const FAMILY_ORDER = ['musings', 'mail', 'places', 'graph', 'patterns', 'rules'] as const;
+
+/**
+ * The four states a thought can be in from the reader's side.
+ *
+ * The engine has nine statuses; a reader has four questions — did it reach
+ * me, is it waiting on me, did the engine hold it back, or is it dealt with.
+ * `actioned` files with `archived`: a place question already answered is not
+ * waiting on anyone.
+ */
+export type FeedState = 'sent' | 'undecided' | 'held' | 'filed';
+
+export const FEED_STATES: Array<{ id: FeedState; label: string; statuses: string[] }> = [
+  { id: 'undecided', label: 'Undecided', statuses: ['new'] },
+  { id: 'sent', label: 'Sent', statuses: ['delivered', 'seen'] },
+  { id: 'held', label: 'Held', statuses: ['suppressed'] },
+  { id: 'filed', label: 'Filed', statuses: ['archived', 'dismissed', 'actioned', 'snoozed', 'expired'] },
+];
+
+export function feedStateOf(status: string): FeedState {
+  for (const s of FEED_STATES) if (s.statuses.includes(status)) return s.id;
+  // An unknown status is the one a reader most needs to see, not the one to hide.
+  return 'undecided';
+}
+
+export function statusesFor(state: FeedState): string[] {
+  return FEED_STATES.find((s) => s.id === state)?.statuses ?? [];
+}
+
 /** A reader's name for a kind — the family, plus whatever the suffix said. */
 export function kindLabel(kind: string): string {
   if (kind.startsWith('musing_')) return kind.slice(7).replace(/_/g, ' ');
@@ -110,106 +163,4 @@ export function likelihoodBand(score: number, threshold: number): LikelihoodBand
     return { id: 'likely', label: 'likely', meaning: `${score.toFixed(2)}, clear of the ${threshold.toFixed(2)} bar` };
   }
   return { id: 'marginal', label: 'marginal', meaning: `${score.toFixed(2)}, only just over the ${threshold.toFixed(2)} bar` };
-}
-
-export interface GroupableThought {
-  kind: string;
-  score: number;
-  status: string;
-  feedback: string | null;
-  createdAt: string;
-}
-
-export interface GroupStats {
-  count: number;
-  /** Mean score, for a sense of how strongly this family fires. */
-  meanScore: number;
-  delivered: number;
-  held: number;
-  rated: number;
-  usefulRate: number | null;
-  /** ISO of the most recent member. */
-  latest: string | null;
-}
-
-/**
- * Statistics for one group.
- *
- * `usefulRate` is NULL below MIN_RATED_FOR_RATE rather than a percentage of
- * two votes. This is the same discipline the hypothesis board follows and the
- * same reason: a rate printed over a handful of votes reads as a measurement
- * and is noise, and once it is on a card nobody remembers the denominator.
- */
-export const MIN_RATED_FOR_RATE = 5;
-
-export function groupStats(items: GroupableThought[]): GroupStats {
-  const count = items.length;
-  if (count === 0) {
-    return { count: 0, meanScore: 0, delivered: 0, held: 0, rated: 0, usefulRate: null, latest: null };
-  }
-  const rated = items.filter((t) => t.feedback);
-  const useful = rated.filter((t) => t.feedback === 'useful').length;
-  return {
-    count,
-    meanScore: items.reduce((a, t) => a + t.score, 0) / count,
-    delivered: items.filter((t) => t.status === 'delivered' || t.status === 'actioned').length,
-    held: items.filter((t) => t.status === 'suppressed').length,
-    rated: rated.length,
-    usefulRate: rated.length >= MIN_RATED_FOR_RATE ? useful / rated.length : null,
-    latest: items.reduce((a, t) => (t.createdAt > a ? t.createdAt : a), items[0].createdAt),
-  };
-}
-
-export interface ThoughtGroup<T extends GroupableThought> {
-  key: string;
-  label: string;
-  blurb: string | null;
-  items: T[];
-  stats: GroupStats;
-}
-
-/** Group by family, biggest first, each group's items newest first. */
-export function groupByFamily<T extends GroupableThought>(items: T[]): ThoughtGroup<T>[] {
-  const buckets = new Map<string, T[]>();
-  for (const t of items) {
-    const f = familyOf(t.kind);
-    const list = buckets.get(f.id) ?? [];
-    list.push(t);
-    buckets.set(f.id, list);
-  }
-  return [...buckets.entries()]
-    .map(([id, list]) => ({
-      key: id,
-      label: FAMILIES[id]?.label ?? id,
-      blurb: FAMILIES[id]?.blurb ?? null,
-      items: list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-      stats: groupStats(list),
-    }))
-    .sort((a, b) => b.stats.count - a.stats.count || a.label.localeCompare(b.label));
-}
-
-const BAND_ORDER: LikelihoodBand['id'][] = ['strong', 'likely', 'marginal', 'held'];
-
-/** Group by how sure the engine was, strongest first. */
-export function groupByLikelihood<T extends GroupableThought>(
-  items: T[],
-  threshold: number,
-): ThoughtGroup<T>[] {
-  const buckets = new Map<string, { band: LikelihoodBand; list: T[] }>();
-  for (const t of items) {
-    const band = likelihoodBand(t.score, threshold);
-    const entry = buckets.get(band.id) ?? { band, list: [] };
-    entry.list.push(t);
-    buckets.set(band.id, entry);
-  }
-  return BAND_ORDER.filter((id) => buckets.has(id)).map((id) => {
-    const { band, list } = buckets.get(id)!;
-    return {
-      key: id,
-      label: band.label,
-      blurb: band.meaning,
-      items: list.slice().sort((a, b) => b.score - a.score),
-      stats: groupStats(list),
-    };
-  });
 }
