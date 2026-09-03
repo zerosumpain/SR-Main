@@ -25,7 +25,7 @@
 /** Mirrors the theme cap in `ponder/pack.ts`; tested to prevent UI drift. */
 export const MEMORY_THEMES_PER_PACK = 20;
 
-export type MemoryOrigin = 'ruling' | 'note';
+export type MemoryOrigin = 'ruling' | 'note' | 'place';
 
 export interface DaydreamMemory {
   id: string;
@@ -88,6 +88,7 @@ export interface MemoryConsolidationView {
 export const ORIGIN_LABEL: Record<MemoryOrigin, string> = {
   ruling: 'It went and checked',
   note: 'You told it',
+  place: 'You named a place',
 };
 
 /**

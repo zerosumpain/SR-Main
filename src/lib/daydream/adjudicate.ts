@@ -465,14 +465,43 @@ export async function pendingReview(limit: number): Promise<ThoughtToReview[]> {
   return rows as ThoughtToReview[];
 }
 
+/**
+ * An `uncertain` that is really "I could not reach the rows".
+ *
+ * The largest verdict bucket on production was uncertain, and most of those
+ * were the reviewer failing to retrieve what it was handed — an engine fault
+ * wearing a verdict. Such a thought is held as `needs_source` rather than
+ * `uncertain_after_review`: the verdict column stays what the reviewer said,
+ * the reason says why it is held, and the weekly counter leaves it out. The
+ * fault ledger that turns these into work is P5.
+ */
+export function isRetrievalFailure(r: Pick<ReviewResult, 'verdict' | 'sources' | 'reasoning'>): boolean {
+  if (r.verdict !== 'uncertain') return false;
+  if (!r.sources || r.sources.length === 0) return true;
+  return /could not (?:be )?(?:retriev|resolv|find|locat|read|fetch|access)|not retrievable|unable to (?:retriev|resolv|find|read|fetch|access)|(?:no|none of the) (?:cited )?(?:source|record|row|message|email)s? (?:was|were|could be) (?:found|retrieved|read)|evidence could not be resolved/i.test(
+    r.reasoning ?? '',
+  );
+}
+
 /** Record a verdict against a thought. */
 export async function recordReview(id: string, r: ReviewResult): Promise<void> {
-  const reviewStatus = r.verdict === 'verified' ? 'new' : 'suppressed';
-  const reviewReason =
-    r.verdict === 'refuted'
+  const [row] = await db
+    .select({ kind: daydreamThoughts.kind })
+    .from(daydreamThoughts)
+    .where(eq(daydreamThoughts.id, id))
+    .limit(1);
+  const { isGraphKind, applyVerifiedGraphLink } = await import('./graph-apply');
+  // A verified GRAPH thought is applied, never announced — see graph-apply.ts.
+  const graph = !!row && isGraphKind(row.kind) && r.verdict === 'verified';
+  const reviewStatus = graph ? 'archived' : r.verdict === 'verified' ? 'new' : 'suppressed';
+  const reviewReason = graph
+    ? 'applied'
+    : r.verdict === 'refuted'
       ? 'refuted_by_review'
       : r.verdict === 'uncertain'
-        ? 'uncertain_after_review'
+        ? isRetrievalFailure(r)
+          ? 'needs_source'
+          : 'uncertain_after_review'
         : null;
   await db
     .update(daydreamThoughts)
@@ -495,4 +524,11 @@ export async function recordReview(id: string, r: ReviewResult): Promise<void> {
       updatedAt: new Date(),
     })
     .where(eq(daydreamThoughts.id, id));
+  if (graph) {
+    try {
+      await applyVerifiedGraphLink(id);
+    } catch (err) {
+      console.warn(`[daydream] graph link ${id} verified but not applied: ${errMsg(err)}`);
+    }
+  }
 }

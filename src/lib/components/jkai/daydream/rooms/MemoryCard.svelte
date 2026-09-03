@@ -21,7 +21,7 @@
   const tone = $derived(memoryTone(memory));
 </script>
 
-<article class="card t-{tone}">
+<article class="card anchored t-{tone}" id="memory-{memory.id}">
   <div class="card-hd">
     <span class="card-kicker">{ORIGIN_LABEL[memory.origin]}</span>
     {#if use.binding}

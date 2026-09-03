@@ -1,7 +1,7 @@
 import { getSetting } from '$lib/server/models/settings';
 import { buildSnapshot } from '$lib/daydream/snapshot';
 import { DETECTORS } from '$lib/daydream/detectors';
-import { persistCandidates, wakeSnoozed } from '$lib/daydream/thought-store';
+import { expireStale, persistCandidates, wakeSnoozed } from '$lib/daydream/thought-store';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { Candidate, Readiness } from '$lib/daydream/snapshot-types';
 import type { ActivityHandler } from '../types';
@@ -70,6 +70,8 @@ export const daydreamDetect: ActivityHandler = {
     }
 
     const woken = await wakeSnoozed(snapshot.now);
+    // And the other way: delivered, verified, unrated for a week files itself.
+    const expired = await expireStale(snapshot.now);
 
     const candidates: Candidate[] = [];
     const readiness: Record<string, Readiness> = {};
@@ -140,6 +142,7 @@ export const daydreamDetect: ActivityHandler = {
         candidates: candidates.length,
         ...persisted,
         woken,
+        expired,
         notReady: notReadyCount,
         readiness,
         coverage: snapshot.coverage,

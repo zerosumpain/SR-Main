@@ -22,6 +22,8 @@ import { PROTECTED_STATUSES } from './thought-store';
 describe('archiving is durable', () => {
   it('protects `archived` from the detect tick', () => {
     expect(PROTECTED_STATUSES).toContain('archived');
+    // Auto-filed rows must survive the ten-minute re-detection the same way.
+    expect(PROTECTED_STATUSES).toContain('expired');
   });
 
   it('still protects the three verdicts that predate it', () => {

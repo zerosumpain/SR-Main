@@ -29,6 +29,8 @@
 
   interface Props {
     thought: LedgerThought;
+    /** Cited memory themes by name, when the caller has them. */
+    memoryThemes?: Array<{ id: string; title: string }>;
     threshold: { value: number; feedbackCount: number };
     learned: DetectorRow | null;
     onclose: () => void;
@@ -36,7 +38,7 @@
     onarchive: (t: LedgerThought) => void;
   }
 
-  let { thought: t, threshold, learned, onclose, onarchive }: Props = $props();
+  let { thought: t, memoryThemes: themes = [], threshold, learned, onclose, onarchive }: Props = $props();
 
   let busy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
@@ -123,8 +125,11 @@
     }
     if (t.feedback) rows.push({ label: 'You said', value: t.feedback.replace('_', ' '), tone: 'good' });
     if (t.intelNoteId) rows.push({ label: 'Graph', value: 'woven into Intel', tone: 'good', href: `/jkai/intel/notes?note=${t.intelNoteId}` });
-    if (t.reviewMemoryId) rows.push({ label: 'Memory', value: 'the ruling is remembered', tone: 'good', href: '/jkai/daydreams/memory' });
-    if (memoryThemes) rows.push({ label: 'Guided by', value: `${memoryThemes} memory theme${memoryThemes === 1 ? '' : 's'}`, tone: 'good', href: '/jkai/daydreams/memory' });
+    if (t.reviewMemoryId) rows.push({ label: 'Memory made', value: 'the ruling is remembered', tone: 'good', href: `/jkai/daydreams/memory#memory-${t.reviewMemoryId}` });
+    if (t.noteMemoryId) rows.push({ label: 'Your note', value: 'kept as a memory', tone: 'good', href: `/jkai/daydreams/memory#memory-${t.noteMemoryId}` });
+    for (const m of themes) rows.push({ label: 'Guided by', value: m.title, tone: 'good', href: `/jkai/daydreams/memory#memory-theme-${m.id}` });
+    if (!themes.length && memoryThemes) rows.push({ label: 'Guided by', value: `${memoryThemes} memory theme${memoryThemes === 1 ? '' : 's'}`, tone: 'good', href: '/jkai/daydreams/memory' });
+    if (t.recurrenceCount > 1) rows.push({ label: 'Re-proposed', value: `${t.recurrenceCount} times — one standing card` });
     if (!t.placeLabel && t.placeAddress) rows.push({ label: 'Address', value: t.placeAddress });
     if (t.placeVisits) rows.push({ label: 'Visits', value: String(t.placeVisits) });
     if (t.promptTokens + t.completionTokens > 0) rows.push({ label: 'Tokens', value: String(t.promptTokens + t.completionTokens), mono: true });

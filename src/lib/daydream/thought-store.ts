@@ -17,7 +17,8 @@ import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
 import { LOCAL_TZ, SETTINGS_MUTED_KINDS_KEY, errMsg } from './types';
-import { echoOf, loadRefutedClaims, type RefutedClaim } from './refutations';
+import { echoOf, loadRefutedClaims, loadLiveClaims, liveEchoOf, type RefutedClaim, type LiveClaim } from './refutations';
+import { familyOf } from './thought-groups';
 import {
   adaptiveThreshold,
   contextKey,
@@ -55,7 +56,7 @@ import type { Candidate } from './snapshot-types';
  * status must be added here in the same commit that introduces it, and
  * `archive.test.ts` asserts that without needing a database.
  */
-export const PROTECTED_STATUSES = ['dismissed', 'snoozed', 'actioned', 'archived'] as const;
+export const PROTECTED_STATUSES = ['dismissed', 'snoozed', 'actioned', 'archived', 'expired'] as const;
 
 export interface PersistResult {
   created: number;
@@ -73,9 +74,12 @@ export interface PersistResult {
   /** Dedupe keys inserted (not updated) this run — what lets a caller act
    *  exactly once per NEW thought instead of once per tick. */
   createdKeys: string[];
+  /** Candidates that were the same claim as a LIVE row and were folded into it. */
+  merged: number;
 }
 
 export const EMPTY_PERSIST: PersistResult = {
+  merged: 0,
   created: 0,
   updated: 0,
   protectedSkipped: 0,
@@ -320,6 +324,16 @@ export async function persistCandidates(
   } catch (err) {
     console.warn(`[daydream] could not read the refutations: ${errMsg(err)}`);
   }
+  // And the rows still LIVE. A candidate that is the same claim as one of
+  // these is folded into it rather than inserted beside it — the second
+  // "clear window before school" card. Soft, for the same reason.
+  let live: LiveClaim[] = [];
+  try {
+    live = await loadLiveClaims();
+  } catch (err) {
+    console.warn(`[daydream] could not read the live claims: ${errMsg(err)}`);
+  }
+  const familyId = (kind: string) => familyOf(kind).id;
 
   const keys = candidates.map((c) => c.dedupeKey);
   const existing = keys.length
@@ -412,6 +426,22 @@ export async function persistCandidates(
         .where(eq(daydreamThoughts.id, found.id));
       result.updated++;
     } else {
+      // The same claim, already live under another key: fold in, do not add.
+      // The existing row keeps its text — a verdict, a ruling memory and a
+      // note attach to THAT sentence — and records the re-proposal.
+      const twin = liveEchoOf(candidate, live, familyId, now);
+      if (twin) {
+        await db
+          .update(daydreamThoughts)
+          .set({
+            recurrenceCount: sql`${daydreamThoughts.recurrenceCount} + 1`,
+            score: sql`greatest(${daydreamThoughts.score}, ${score})`,
+            updatedAt: now,
+          })
+          .where(eq(daydreamThoughts.id, twin.id));
+        result.merged++;
+        continue;
+      }
       await db
         .insert(daydreamThoughts)
         .values({
@@ -488,6 +518,38 @@ export async function wakeSnoozed(now = new Date()): Promise<number> {
     )
     .returning({ id: daydreamThoughts.id });
   return woken.length;
+}
+
+/** How long a verified, delivered, unrated thought sits before it files itself. */
+export const EXPIRE_AFTER_DAYS = 7;
+
+/**
+ * Low-stakes thoughts file themselves.
+ *
+ * Delivered, verified, and unrated a week later: he saw it, it was right, and
+ * it was not worth an opinion. That is the ordinary fate of a true and
+ * unremarkable observation, and without this the feed accretes them. No
+ * verdict is recorded — `expired` moves no weight and does not count towards
+ * the threshold, exactly like `archived`. It is in `PROTECTED_STATUSES` for
+ * the same reason `archived` is: the ten-minute re-detection rewrites any
+ * status not on that list.
+ */
+export async function expireStale(now = new Date()): Promise<number> {
+  const before = new Date(now.getTime() - EXPIRE_AFTER_DAYS * 86_400_000);
+  const rows = await db
+    .update(daydreamThoughts)
+    .set({ status: 'expired', suppressedReason: 'expired_unrated', updatedAt: now })
+    .where(
+      and(
+        inArray(daydreamThoughts.status, ['delivered', 'seen']),
+        eq(daydreamThoughts.reviewVerdict, 'verified'),
+        isNull(daydreamThoughts.feedback),
+        isNotNull(daydreamThoughts.deliveredAt),
+        lt(daydreamThoughts.deliveredAt, before),
+      ),
+    )
+    .returning({ id: daydreamThoughts.id });
+  return rows.length;
 }
 
 /**

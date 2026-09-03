@@ -128,7 +128,7 @@ export async function gatherWeek(now: Date): Promise<WeekFacts> {
     .select({
       reviewed: sql<number>`count(*) filter (where ${daydreamThoughts.reviewAt} >= ${since})::int`,
       refuted: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} = 'refuted' and ${daydreamThoughts.reviewAt} >= ${since})::int`,
-      uncertain: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} = 'uncertain' and ${daydreamThoughts.reviewAt} >= ${since})::int`,
+      uncertain: sql<number>`count(*) filter (where ${daydreamThoughts.reviewVerdict} = 'uncertain' and coalesce(${daydreamThoughts.suppressedReason}, '') <> 'needs_source' and ${daydreamThoughts.reviewAt} >= ${since})::int`,
     })
     .from(daydreamThoughts);
 

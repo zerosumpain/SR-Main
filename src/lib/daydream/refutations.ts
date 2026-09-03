@@ -35,7 +35,7 @@
 // of one: a guard whose work is invisible is a guard nobody can tell has
 // misfired.
 
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
 import type { EvidenceRef } from './snapshot-types';
@@ -158,6 +158,121 @@ export async function loadRefutedClaims(limit = 60): Promise<RefutedClaim[]> {
     id: r.id,
     dedupeKey: r.dedupeKey,
     title: r.title,
+    refs: claimRefs(r.evidence),
+  }));
+}
+
+// ── The same claim, still LIVE ────────────────────────────────────────────
+//
+// The refuted guard above stops a settled claim being made again. This stops
+// an UNSETTLED one being made twice: two unfiled rows on the same evidence
+// were both live on the feed ("A clear window before school resumes" under
+// two musing kinds), because nothing compared a candidate with anything but
+// refuted rows. Same containment rule, applied to what is live.
+
+/**
+ * Trigram similarity of two titles, 0..1 (Jaccard over character trigrams
+ * of the lower-cased letters and digits). In code rather than `pg_trgm` so
+ * it costs one query for the live rows and no round trip per candidate, and
+ * so the threshold is testable.
+ */
+export function titleSimilarity(a: string, b: string): number {
+  const grams = (t: string): Set<string> => {
+    const clean = ` ${t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+    const out = new Set<string>();
+    for (let i = 0; i + 3 <= clean.length; i++) out.add(clean.slice(i, i + 3));
+    return out;
+  };
+  const ga = grams(a);
+  const gb = grams(b);
+  if (ga.size === 0 || gb.size === 0) return 0;
+  let shared = 0;
+  for (const g of ga) if (gb.has(g)) shared++;
+  return shared / (ga.size + gb.size - shared);
+}
+
+/** Two musings whose titles read as one claim. 0.6 is where "A clear window
+ *  before school resumes" and "A clear window before the school term" meet
+ *  and "A clear window" and "A clear diary" do not. */
+export const TITLE_ECHO_SIMILARITY = 0.6;
+export const TITLE_ECHO_WINDOW_DAYS = 7;
+export const LIVE_CLAIM_WINDOW_DAYS = 30;
+
+export interface LiveClaim {
+  id: string;
+  dedupeKey: string;
+  kind: string;
+  title: string;
+  score: number;
+  status: string;
+  createdAt: Date;
+  refs: Set<string>;
+}
+
+/**
+ * The live row this candidate would duplicate, or null.
+ *
+ * Two tests, in order: the evidence containment the refuted guard uses, and —
+ * for a candidate in the same family within a week — a title that reads as
+ * the same claim. The second exists because a money musing resting on
+ * aggregates plus one row falls under `MIN_SHARED_REFS` and would otherwise
+ * be a fresh card every time the model re-slugged it.
+ */
+export function liveEchoOf(
+  candidate: { dedupeKey: string; kind: string; title: string; evidence: unknown },
+  live: LiveClaim[],
+  familyOf: (kind: string) => string,
+  now = new Date(),
+): LiveClaim | null {
+  const refs = claimRefs(candidate.evidence);
+  const fam = familyOf(candidate.kind);
+  const weekAgo = now.getTime() - TITLE_ECHO_WINDOW_DAYS * 86_400_000;
+  for (const r of live) {
+    if (r.dedupeKey === candidate.dedupeKey) continue;
+    if (refs.size && isSameClaim(refs, r.refs)) return r;
+  }
+  for (const r of live) {
+    if (r.dedupeKey === candidate.dedupeKey) continue;
+    if (familyOf(r.kind) !== fam) continue;
+    if (r.createdAt.getTime() < weekAgo) continue;
+    if (titleSimilarity(candidate.title, r.title) >= TITLE_ECHO_SIMILARITY) return r;
+  }
+  return null;
+}
+
+/** Every unfiled row inside the window, with its rows. */
+export async function loadLiveClaims(limit = 300): Promise<LiveClaim[]> {
+  const since = new Date(Date.now() - LIVE_CLAIM_WINDOW_DAYS * 86_400_000);
+  const rows = await db
+    .select({
+      id: daydreamThoughts.id,
+      dedupeKey: daydreamThoughts.dedupeKey,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      score: daydreamThoughts.score,
+      status: daydreamThoughts.status,
+      evidence: daydreamThoughts.evidence,
+      createdAt: daydreamThoughts.createdAt,
+    })
+    .from(daydreamThoughts)
+    .where(
+      and(
+        inArray(daydreamThoughts.status, ['new', 'delivered', 'seen', 'suppressed']),
+        sql`${daydreamThoughts.createdAt} >= ${since}`,
+        // A row already refuted is the OTHER guard's business.
+        sql`coalesce(${daydreamThoughts.reviewVerdict}, '') <> 'refuted'`,
+      ),
+    )
+    .orderBy(desc(daydreamThoughts.createdAt))
+    .limit(Math.max(1, Math.min(1000, limit)));
+  return rows.map((r) => ({
+    id: r.id,
+    dedupeKey: r.dedupeKey,
+    kind: r.kind,
+    title: r.title,
+    score: r.score,
+    status: r.status,
+    createdAt: r.createdAt,
     refs: claimRefs(r.evidence),
   }));
 }
