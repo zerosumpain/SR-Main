@@ -27,27 +27,27 @@ if [ "$MODE" = prepare ]; then
     services/webframe/ "$VPS_DIR/services/webframe/"
   install -m 644 docker-compose.webframe.yml "$COMPOSE_FILE"
 
-  touch "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
-  if ! grep -Eq '^WEBFRAME_SERVICE_TOKEN=.+$' "$ENV_FILE"; then
+  sudo touch "$ENV_FILE"
+  sudo chmod 600 "$ENV_FILE"
+  if ! sudo grep -Eq '^WEBFRAME_SERVICE_TOKEN=.+$' "$ENV_FILE"; then
     # Never print this credential: it authorises browser control and extraction.
-    sed -i '/^WEBFRAME_SERVICE_TOKEN=$/d' "$ENV_FILE"
+    sudo sed -i '/^WEBFRAME_SERVICE_TOKEN=$/d' "$ENV_FILE"
     token="$(openssl rand -hex 32)"
-    printf '\nWEBFRAME_SERVICE_TOKEN=%s\n' "$token" >> "$ENV_FILE"
+    printf '\nWEBFRAME_SERVICE_TOKEN=%s\n' "$token" | sudo tee -a "$ENV_FILE" >/dev/null
     unset token
   fi
-  if ! grep -Eq '^WEBFRAME_SERVICE_URL=.+$' "$ENV_FILE"; then
-    sed -i '/^WEBFRAME_SERVICE_URL=$/d' "$ENV_FILE"
-    printf 'WEBFRAME_SERVICE_URL=http://127.0.0.1:3303\n' >> "$ENV_FILE"
+  if ! sudo grep -Eq '^WEBFRAME_SERVICE_URL=.+$' "$ENV_FILE"; then
+    sudo sed -i '/^WEBFRAME_SERVICE_URL=$/d' "$ENV_FILE"
+    printf 'WEBFRAME_SERVICE_URL=http://127.0.0.1:3303\n' | sudo tee -a "$ENV_FILE" >/dev/null
   fi
 
-  (cd "$VPS_DIR" && docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build webframe)
+  (cd "$VPS_DIR" && sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build webframe)
   echo "==> Webframe image prepared; running container unchanged."
   exit 0
 fi
 
 echo "==> Activating hardened Webframe sidecar..."
-(cd "$VPS_DIR" && docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build webframe)
+(cd "$VPS_DIR" && sudo docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build webframe)
 for _ in $(seq 1 30); do
   if curl -fsS --max-time 2 http://127.0.0.1:3303/health | grep -q '"ok":true'; then
     echo "==> Webframe healthy."
@@ -55,6 +55,6 @@ for _ in $(seq 1 30); do
   fi
   sleep 1
 done
-docker logs --tail 50 webframe >&2 || true
+sudo docker logs --tail 50 webframe >&2 || true
 echo "==> ERROR: Webframe did not become healthy." >&2
 exit 1
