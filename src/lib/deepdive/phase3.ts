@@ -237,12 +237,24 @@ export async function runPhase3(
     emitStats(sessionId, stats);
   }
 
-  // Store red team report in session config
-  const currentConfig = (session.config ?? {}) as Record<string, unknown>;
-  currentConfig.red_team_report = report;
+  // Store the red team report in the session config.
+  //
+  // Merged in the database, not in this process. This used to spread onto the
+  // `session` object loaded at the START of the run and write the result back
+  // over the whole column — so a session whose config was empty at load ended
+  // the run with a config holding NOTHING but this report, and anything written
+  // to `config` in between was lost. `5a192132` in production is exactly that:
+  // an investigation whose stored config is one `red_team_report` key and no
+  // tier settings at all.
+  //
+  // `||` on jsonb is a shallow merge of the two objects with the right-hand
+  // side winning, which is precisely the intent — add one key, touch nothing
+  // else, and read the current row rather than a stale copy of it.
   await db
     .update(researchSessions)
-    .set({ config: currentConfig })
+    .set({
+      config: sql`coalesce(${researchSessions.config}, '{}'::jsonb) || ${JSON.stringify({ red_team_report: report })}::jsonb`,
+    })
     .where(eq(researchSessions.id, sessionId));
 
   emitLog(

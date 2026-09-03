@@ -1133,7 +1133,14 @@ export const entities = pgTable('entity', {
   deskState: text('desk_state').notNull().default('unfiled'), // 'unfiled'|'filed'|'synthesized'|'archived'
   deskCategory: text('desk_category'),
   synthesisRunId: text('synthesis_run_id'), // FK -> synthesis_runs.id (nullable, no DB constraint)
-});
+}, (t) => [
+  // Everything that touches entities scopes by session — the desk hydrate, the
+  // network endpoint, the frontier's novelty check, and the per-name existence
+  // check the extractor runs once PER ENTITY it recognises. The table had only
+  // its primary key, so each of those was a full scan of every entity from
+  // every dive ever run.
+  index('entity_session_idx').on(t.sessionId),
+]);
 
 export type Entity = typeof entities.$inferSelect;
 
@@ -1142,7 +1149,13 @@ export const entityMentions = pgTable('entity_mention', {
   entityId: text('entity_id').notNull().references(() => entities.id),
   factId: text('fact_id').notNull().references(() => facts.id),
   context: text('context'),
-});
+}, (t) => [
+  // entity_mention has no session_id (scope goes through the fact), so every
+  // read of it is by entity — centrality in post-processing, the inspector's
+  // "appears in", and the corroboration count a graph commit derives.
+  index('entity_mention_entity_idx').on(t.entityId),
+  index('entity_mention_fact_idx').on(t.factId),
+]);
 
 export type EntityMention = typeof entityMentions.$inferSelect;
 
@@ -1157,7 +1170,20 @@ export const relationships = pgTable('relationship', {
   sentiment: text('sentiment').notNull(),
   strength: doublePrecision('strength').notNull().default(0.5),
   sourceId: text('source_id').references(() => sources.id),
-});
+}, (t) => [
+  // Reads are always "this session's edges" — the network endpoint, the desk,
+  // the Word export, centrality.
+  index('relationship_session_idx').on(t.sessionId),
+  // The duplicate check the extractor runs before every insert. Without it,
+  // storing N relationships costs N scans of a table holding every edge from
+  // every dive — and now that extraction is no longer gated to one tier, N is
+  // in the thousands per investigation.
+  //
+  // NOT unique, deliberately: `.unique()` on a populated table silently breaks
+  // non-interactive `drizzle-kit push` (see the note on drizzle's rename
+  // prompt), and the dedup this supports is done in the application anyway.
+  index('relationship_session_pair_idx').on(t.sessionId, t.fromEntityId, t.toEntityId),
+]);
 
 export type Relationship = typeof relationships.$inferSelect;
 

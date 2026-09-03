@@ -9,7 +9,6 @@ import { runPhase2 } from './phase2';
 import { runPhase3 } from './phase3';
 import { runPostProcessing } from './postprocess';
 import { linkSessionEntitiesToGlobal } from './cross-session';
-import { extractResearchIntoIntel } from './intel-bridge';
 import { disposeArtefacts, flushArtefacts } from './desk-events';
 import { coerceDepth, depthPreset } from './depth';
 import { withActivity } from '$lib/context/activity';
@@ -280,6 +279,22 @@ function runResearch(sessionId: string): Promise<void> {
   return runWithResearchMeter(sessionId, () => runResearchPhases(sessionId));
 }
 
+/**
+ * Did the intel graph commission this run?
+ *
+ * `POST /api/jkai/intel/commission` stamps `seedContext.fromIntel`. Read
+ * defensively: `seed_context` is free-form jsonb that several other paths write
+ * with shapes of their own (`type: 'fact'`, `parentTopic`, …), so a missing or
+ * differently-shaped value simply means "not commissioned".
+ */
+function isCommissionedByIntel(seedContext: unknown): boolean {
+  return (
+    !!seedContext &&
+    typeof seedContext === 'object' &&
+    (seedContext as Record<string, unknown>).fromIntel === true
+  );
+}
+
 async function runResearchPhases(sessionId: string): Promise<void> {
   const emitter = getEmitter(sessionId);
   const ac = new AbortController();
@@ -296,6 +311,26 @@ async function runResearchPhases(sessionId: string): Promise<void> {
     if (!session) throw new Error('Session not found');
 
     const preset = depthPreset(coerceDepth(session.depth));
+
+    /**
+     * The tier's config, with whatever the row actually stores laid over it.
+     *
+     * `research_session.config` defaults to `{}` and `depth` defaults to
+     * `'investigation'`, so any insert that omits config — `research_branch`,
+     * the builder's research stage in $lib/jkai/research-brief — produced a run
+     * that took the FULL phase chain while every phase read tier defaults that
+     * were never written. `analysisDepth` fell through to `'standard'`, which
+     * is how a 453-entity investigation finished with zero relationships on
+     * 2026-09-03, and `maxSources`/`maxFactsBeforePhase3` were wrong the same
+     * way.
+     *
+     * Derived here rather than patched into each insert site: `depth` is the
+     * one thing a caller picks and the column is the authority on it, so this
+     * is the single place that can't be forgotten. A config the caller DID
+     * write still wins, key by key.
+     */
+    session.config = { ...preset.config, ...((session.config ?? {}) as Record<string, unknown>) };
+
     beat(sessionId, true);
 
     /**
@@ -486,15 +521,38 @@ async function runResearchPhases(sessionId: string): Promise<void> {
       emitLog(sessionId, '\u26A0\uFE0F', `Cross-session linking error: ${err.message ?? 'unknown'}`);
     }
 
-    // Feed the finished research into the intel graph. Deep dive keeps its own
-    // cross-session entity index (for dedup within research); this is the
-    // separate step that puts the findings in front of the intel graph the rest
-    // of jkai reasons over. One LLM call per completed session, on the report
-    // digest rather than every fact.
-    try {
-      if (!budget.expired()) await extractResearchIntoIntel(sessionId);
-    } catch (err: any) {
-      console.error('[deepdive] Intel extraction error:', err);
+    // The findings are NOT pushed into the intel graph here — with one
+    // exception.
+    //
+    // They used to be, on every completed investigation. That made the durable
+    // graph the union of every question anyone had ever asked — including
+    // one-off probes, tests and dead ends — and there was no way to run
+    // research without contributing to it. A session's `entity`/`relationship`
+    // rows are its own graph now, scoped by `session_id` and deleted with the
+    // session, and merging is an explicit act: POST /api/research/<id>/to-intel
+    // → `commitSessionGraph` in $lib/deepdive/graph-commit.
+    //
+    // The exception is research the INTEL GRAPH ITSELF commissioned. Asking the
+    // graph to go and find something out is the request to commit; a commission
+    // whose answer never came back would be a feature that does nothing.
+    if (isCommissionedByIntel(session.seedContext)) {
+      try {
+        if (!budget.expired()) {
+          const { commitSessionGraph } = await import('./graph-commit');
+          const outcome = await commitSessionGraph(sessionId);
+          if (outcome.status === 'committed') {
+            emitLog(
+              sessionId,
+              '\u{1F517}',
+              `Committed ${outcome.entities} entities and ${outcome.relationships} relationships to the knowledge graph.`,
+            );
+          }
+        }
+      } catch (err: any) {
+        // Housekeeping. The research itself succeeded either way, and the owner
+        // can still commit it by hand from the research page.
+        console.error('[deepdive] commissioned graph commit failed:', err);
+      }
     }
 
     // Complete

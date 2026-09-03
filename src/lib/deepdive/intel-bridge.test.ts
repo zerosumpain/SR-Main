@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildResearchDigest, collectFactIds, isOpaqueId, EMPTY_STRUCTURE } from './intel-bridge';
+import { buildResearchDigest, collectFactIds, isOpaqueId } from './intel-bridge';
 import type { ResearchReport } from './types';
 
 const base: ResearchReport = {
@@ -87,25 +87,15 @@ describe('buildResearchDigest', () => {
     expect(digest).toBe('Research topic: Sparse');
   });
 
-  it('offers research-side entities and relationships as extraction hints', () => {
-    const digest = buildResearchDigest('Church', base, new Map(), {
-      entities: [
-        { name: 'Brett Murphy', type: 'person', description: 'Presbyter-in-Charge' },
-        { name: 'Free Church of England', type: 'organisation', description: null },
-      ],
-      relationships: [
-        { from: 'Brett Murphy', to: 'Free Church of England', type: 'licensed_by', strength: 0.9 },
-      ],
-    });
-
-    expect(digest).toContain('- Brett Murphy [person] — Presbyter-in-Charge');
-    expect(digest).toContain('- Free Church of England [organisation]');
-    expect(digest).toContain('Brett Murphy —[licensed_by]→ Free Church of England');
-  });
-
-  it('omits hint sections entirely when there is no structure', () => {
-    const digest = buildResearchDigest('Bare', { ...base, executive_summary: 'x' }, new Map(), EMPTY_STRUCTURE);
+  it('carries no entity or relationship hints — the graph is committed structurally now', () => {
+    // The digest used to append the session's own entities and relationships as
+    // prose hints for a model that re-derived the graph from them. That path is
+    // gone (see $lib/deepdive/graph-commit): the structure is handed to intel
+    // directly, so restating it in the note body would be duplication a reader
+    // has to wade through.
+    const digest = buildResearchDigest('Church', { ...base, executive_summary: 'x' });
     expect(digest).not.toContain('already identified');
+    expect(digest).not.toContain('—[');
   });
 });
 

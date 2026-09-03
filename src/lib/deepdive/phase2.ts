@@ -15,6 +15,13 @@ import { pLimit, getLlmConcurrencyLimit } from './concurrency';
 import type { SessionConfig, SessionStats } from './types';
 import { completeLead, measureAlignment, countConnectedEntities } from './frontier';
 import { generateEmbedding as embedText } from './ai';
+import {
+  GRAPH_EXTRACTION_PROMPT,
+  loadSessionEntityIndex,
+  storeRelationships,
+  type ExtractedEntity,
+  type ExtractedRelationship,
+} from './extract-graph';
 
 function normalise(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -98,7 +105,21 @@ export async function runPhase2(
     factsExtracted: 0,
     entitiesIdentified: 0,
     counterfactualsRaised: 0,
+    relationshipsFound: 0,
   };
+
+  /**
+   * Names → ids for every entity in this session, so a relationship's endpoints
+   * resolve in memory rather than through the exact-name SQL lookup that used
+   * to drop them.
+   *
+   * Seeded from the table, not empty: phase 2 also runs on a RESUMED session,
+   * where most entities were stored by the previous attempt, and it processes
+   * sources in parallel, so a source routinely names an entity a sibling
+   * created a moment ago. Both cases are cross-source links, which are the ones
+   * worth having.
+   */
+  const entityIndex = await loadSessionEntityIndex(sessionId);
 
   let totalNewFacts = 0;
   let recentNewFacts = 0;
@@ -211,7 +232,11 @@ export async function runPhase2(
     }
   }
 
-  emitLog(sessionId, '\u2139\uFE0F', `Phase 2 complete: ${stats.factsExtracted} facts, ${stats.entitiesIdentified} entities`);
+  emitLog(
+    sessionId,
+    '\u2139\uFE0F',
+    `Phase 2 complete: ${stats.factsExtracted} facts, ${stats.entitiesIdentified} entities, ${stats.relationshipsFound ?? 0} relationships`,
+  );
 
   async function processSource(source: Source): Promise<number> {
     if (isTimeUp()) return 0;
@@ -253,16 +278,20 @@ export async function runPhase2(
       try {
         const combinedResult = await jsonCompletion<{
           facts: { content: string; event_date: string | null; confidence: number; tags: string[] }[];
-          entities: { name: string; type: string; description: string }[];
+          entities: ExtractedEntity[];
+          relationships: ExtractedRelationship[];
         }>(
           systemPrompt,
-          `Analyse this source content. Return two things:\n\n1. FACTS: Extract all factual claims. For each:\n- content: the factual claim as a single clear sentence\n- event_date: ISO date string or null\n- confidence: 0.0-1.0\n- tags: 2-4 short topic tags\n\n2. ENTITIES: Named Entity Recognition. For each:\n- name: the entity name\n- type: one of person, organisation, location, event, concept, product, other\n- description: a one-sentence description\n\nSource: ${source.title}\nContent:\n${contentSlice}\n\nRespond with JSON: { "facts": [...], "entities": [...] }`,
+          `Analyse this source content. Return three things:\n\n1. FACTS: Extract all factual claims. For each:\n- content: the factual claim as a single clear sentence\n- event_date: ISO date string or null\n- confidence: 0.0-1.0\n- tags: 2-4 short topic tags\n\n2. ENTITIES and 3. RELATIONSHIPS, as described below.\n\n${GRAPH_EXTRACTION_PROMPT}\n\nSource: ${source.title}\nContent:\n${contentSlice}\n\nRespond with JSON: { "facts": [...], "entities": [...], "relationships": [...] }`,
           { maxTokens: 8192 },
         );
 
         newFacts = await storeFacts(combinedResult.facts ?? [], source);
         if (depth !== 'shallow') {
+          // Entities first — the index they fill is what the edges resolve
+          // against.
           await storeEntities(combinedResult.entities ?? [], source);
+          await storeGraphEdges(combinedResult.relationships ?? [], source);
         }
       } catch (err) {
         console.error('[deepdive] Combined extraction failed:', err);
@@ -278,10 +307,16 @@ export async function runPhase2(
           { maxTokens: 8192 },
         ),
         jsonCompletion<{
-          entities: { name: string; type: string; description: string }[];
+          entities: ExtractedEntity[];
+          relationships: ExtractedRelationship[];
         }>(
           systemPrompt,
-          `Perform Named Entity Recognition on this content. For each entity found, return:\n- name: the entity name\n- type: one of person, organisation, location, event, concept, product, other\n- description: a one-sentence description\n\nContent:\n${contentSlice}\n\nRespond with JSON: { "entities": [...] }`,
+          `Extract the entities in this content and the relationships between them.\n\n${GRAPH_EXTRACTION_PROMPT}\n\nContent:\n${contentSlice}\n\nRespond with JSON: { "entities": [...], "relationships": [...] }`,
+          // Relationships share this response with the entities on purpose (see
+          // $lib/deepdive/extract-graph), so the budget has to cover both
+          // arrays; at the default 4096 a rich source lost the whole object to
+          // truncation.
+          { maxTokens: 8192 },
         ),
       ]);
 
@@ -293,6 +328,7 @@ export async function runPhase2(
 
       if (nerResult.status === 'fulfilled') {
         await storeEntities(nerResult.value.entities ?? [], source);
+        await storeGraphEdges(nerResult.value.relationships ?? [], source);
       } else {
         console.error('[deepdive] NER failed:', nerResult.reason);
       }
@@ -353,7 +389,7 @@ export async function runPhase2(
     }
 
     async function storeEntities(
-      extractedEntities: { name: string; type: string; description: string }[],
+      extractedEntities: ExtractedEntity[],
       src: Source,
     ): Promise<void> {
       for (const e of extractedEntities) {
@@ -397,6 +433,11 @@ export async function runPhase2(
           });
         }
 
+        // Registered on BOTH paths. An entity an earlier source already stored
+        // still has to be findable, or every cross-source link would be dropped
+        // as an unresolved endpoint.
+        entityIndex.add(e.name, entityId);
+
         const sourceFacts = await db
           .select()
           .from(facts)
@@ -415,95 +456,43 @@ export async function runPhase2(
       emitLog(sessionId, '\u{1F9E9}', `Entities from: ${src.title?.slice(0, 40) ?? 'source'}`);
     }
 
-    // Pass 3: Relationship extraction (Deep only)
-    if (depth === 'deep' && !shouldStop(sessionId)) {
-      try {
-        const relResult = await jsonCompletion<{
-          relationships: {
-            from_entity: string;
-            to_entity: string;
-            relationship_type: string;
-            sentiment: string;
-            strength: number;
-          }[];
-        }>(
-          systemPrompt,
-          `Identify relationships between entities in this content. For each relationship return:\n- from_entity: name of the first entity\n- to_entity: name of the second entity\n- relationship_type: e.g. "employs", "caused", "part_of", "founded", "opposed_to"\n- sentiment: positive, negative, neutral, or contested\n- strength: 0.0-1.0\n\nContent:\n${content.slice(0, 6000)}\n\nRespond with JSON: { "relationships": [...] }`,
+    /**
+     * Store the relationships that arrived with this source's entities.
+     *
+     * There is no separate relationship pass any more, and no depth gate on
+     * one. Both were wrong:
+     *
+     *   - The second call was never shown the entity list, so it named its
+     *     endpoints freely and the exact-name SQL lookup that resolved them
+     *     dropped whatever the two calls spelled differently — silently, with
+     *     no counter and no log.
+     *   - The gate keyed on `config.analysisDepth === 'deep'`, which a session
+     *     inserted without a config never satisfies however deep its `depth`
+     *     column says it is. Production held one session with edges and
+     *     twenty-four without.
+     *
+     * Relationships now ride in the SAME response as the entities they join
+     * (see $lib/deepdive/extract-graph), so they cost no extra call and their
+     * endpoints resolve by construction.
+     */
+    async function storeGraphEdges(
+      extracted: ExtractedRelationship[],
+      src: Source,
+    ): Promise<void> {
+      if (!extracted.length) return;
+      const outcome = await storeRelationships(sessionId, src.id, extracted, entityIndex);
+      stats.relationshipsFound = (stats.relationshipsFound ?? 0) + outcome.stored;
+      if (outcome.stored > 0) {
+        emitLog(
+          sessionId,
+          '\u{1F517}',
+          `${outcome.stored} links from: ${src.title?.slice(0, 40) ?? 'source'}`,
         );
-
-        for (const rel of relResult.relationships ?? []) {
-          if (!rel.from_entity || !rel.to_entity) continue;
-
-          // Look up entity IDs
-          const fromNorm = rel.from_entity.toLowerCase().trim();
-          const toNorm = rel.to_entity.toLowerCase().trim();
-
-          const [fromEntity] = await db
-            .select()
-            .from(entities)
-            .where(
-              and(
-                eq(entities.sessionId, sessionId),
-                sql`lower(trim(${entities.name})) = ${fromNorm}`,
-              ),
-            )
-            .limit(1);
-
-          const [toEntity] = await db
-            .select()
-            .from(entities)
-            .where(
-              and(
-                eq(entities.sessionId, sessionId),
-                sql`lower(trim(${entities.name})) = ${toNorm}`,
-              ),
-            )
-            .limit(1);
-
-          if (!fromEntity || !toEntity) continue;
-
-          // Check for duplicate relationship
-          const existingRel = await db
-            .select()
-            .from(relationships)
-            .where(
-              and(
-                eq(relationships.sessionId, sessionId),
-                eq(relationships.fromEntityId, fromEntity.id),
-                eq(relationships.toEntityId, toEntity.id),
-                eq(relationships.relationshipType, rel.relationship_type),
-              ),
-            )
-            .limit(1);
-
-          if (existingRel.length > 0) continue;
-
-          const [storedRel] = await db
-            .insert(relationships)
-            .values({
-              sessionId,
-              fromEntityId: fromEntity.id,
-              toEntityId: toEntity.id,
-              relationshipType: rel.relationship_type,
-              sentiment: rel.sentiment || 'neutral',
-              strength: Math.max(0, Math.min(1, rel.strength ?? 0.5)),
-              sourceId: source.id,
-            })
-            .returning();
-
-          // Desk: relationships render as edges only (orthPath), never cards.
-          emitArtefact(sessionId, 'relationship', 2, {
-            id: storedRel.id,
-            fromEntityId: storedRel.fromEntityId,
-            toEntityId: storedRel.toEntityId,
-            relationshipType: storedRel.relationshipType,
-            sentiment: storedRel.sentiment,
-            strength: storedRel.strength,
-            sourceId: storedRel.sourceId,
-          });
-        }
-      } catch (err) {
-        console.error('[deepdive] Relationship extraction failed:', err);
+      }
+      if (outcome.unresolved > 0) {
+        console.warn(
+          `[deepdive] phase2: ${outcome.unresolved} relationship endpoint(s) matched no entity for ${src.url}`,
+        );
       }
     }
 
@@ -581,6 +570,9 @@ export async function runPhase2(
                     connEntityId = created.id;
                     stats.entitiesIdentified++;
                   }
+                  // A later source naming this person should link onto the row
+                  // this pass just made, not create a second one.
+                  entityIndex.add(conn.name, connEntityId);
 
                   // Create relationship
                   await db.insert(relationships).values({
@@ -592,6 +584,7 @@ export async function runPhase2(
                     strength: 0.5,
                     sourceId: source.id,
                   });
+                  stats.relationshipsFound = (stats.relationshipsFound ?? 0) + 1;
                 }
 
                 emitLog(sessionId, '\u{1F517}', `LinkedIn connections for: ${pe.name}`);

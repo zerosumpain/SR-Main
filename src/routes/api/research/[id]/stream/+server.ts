@@ -14,7 +14,7 @@
  */
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, sources, facts, entities } from '$lib/db/schema';
+import { researchSessions, sources, facts, entities, relationships } from '$lib/db/schema';
 import { eq, and, count } from 'drizzle-orm';
 import { getEmitter, startResearch, isRunning } from '$lib/deepdive/worker';
 import type { SSEEvent } from '$lib/deepdive/types';
@@ -22,7 +22,7 @@ import type { SSEEvent } from '$lib/deepdive/types';
 const KEEPALIVE_MS = 15_000;
 
 async function currentStats(sessionId: string) {
-  const [[srcs], [fcts], [ents], [cfs]] = await Promise.all([
+  const [[srcs], [fcts], [ents], [cfs], [rels]] = await Promise.all([
     db.select({ n: count() }).from(sources).where(eq(sources.sessionId, sessionId)),
     db
       .select({ n: count() })
@@ -33,12 +33,19 @@ async function currentStats(sessionId: string) {
       .select({ n: count() })
       .from(facts)
       .where(and(eq(facts.sessionId, sessionId), eq(facts.isCounterfactual, true))),
+    // Counted alongside the entities, deliberately. Entities with no
+    // relationships is the failure mode this stream could not show.
+    db
+      .select({ n: count() })
+      .from(relationships)
+      .where(eq(relationships.sessionId, sessionId)),
   ]);
   return {
     sourcesFound: srcs?.n ?? 0,
     factsExtracted: fcts?.n ?? 0,
     entitiesIdentified: ents?.n ?? 0,
     counterfactualsRaised: cfs?.n ?? 0,
+    relationshipsFound: rels?.n ?? 0,
   };
 }
 

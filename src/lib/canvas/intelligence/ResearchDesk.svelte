@@ -46,6 +46,13 @@
     orthPath as shellOrthPath,
   } from '$lib/canvas/shell/geometry';
   import { computeMinimap } from '$lib/canvas/shell/minimap';
+  import {
+    visibleWorldRect,
+    quantiseRect,
+    intersects,
+    cullToRect,
+    isLowDetail,
+  } from '$lib/canvas/shell/cull';
 
   let {
     sessionId,
@@ -722,8 +729,11 @@
     return m;
   });
 
-  // Set of visible card IDs for edge filtering.
-  const visibleIds = $derived(new Set(visibleCards.map((c) => c.id)));
+  // Visible cards by id. Replaces both the id Set that gated `anchorRect` and
+  // the linear `visibleCards.find` that followed it — one structure answers
+  // "is it visible?" and "which card is it?" in one lookup.
+  const visibleCardById = $derived(new Map(visibleCards.map((c) => [c.id, c])));
+
 
   // Entity rail
   const railEntities = $derived.by(() =>
@@ -817,6 +827,12 @@
       const a = entityById.get(e.fromEntityId);
       const b = entityById.get(e.toEntityId);
       if (!a || !b) continue;
+      // An edge with both ends off screen draws nothing a viewer can see, and
+      // the biggest run in production holds 1,107 of them. Endpoints come from
+      // `entityById`, which still covers EVERY visible entity — so an edge from
+      // an on-screen card to an off-screen one still runs off the edge of the
+      // viewport correctly, as it should.
+      if (culling && !intersects(a, cullRect) && !intersects(b, cullRect)) continue;
       out.push({ id: e.id, d: orthPath(a, b) });
     }
     return out;
@@ -831,8 +847,12 @@
       return { x: h.pos.x, y: h.pos.y - 64, w: 220, h: 64 };
     }
     // Only produce a rect for cards that are currently visible.
-    if (!visibleIds.has(anchorId)) return null;
-    const card = visibleCards.find((c) => c.id === anchorId);
+    //
+    // Looked up in a map rather than scanned. This runs once per spark and once
+    // per synthesis edge, and the scan it replaces was O(visibleCards) EACH —
+    // quadratic on a desk holding thousands of cards, at exactly the moment the
+    // engine is streaming new ones in.
+    const card = visibleCardById.get(anchorId);
     if (!card) return null;
     const p = posFor(card);
     return { x: p.x, y: p.y, w: cardW(card), h: cardH(card) };
@@ -1327,6 +1347,79 @@
   const DRAG_THRESHOLD = 3;
   const GRID = 20;
   let selectedId = $state<string | null>(null);
+  // ——— viewport culling (see $lib/canvas/shell/cull) ———
+  //
+  // The desk used to render every filtered card as live DOM, plus a second node
+  // each in the minimap. Production's biggest investigation is 3,453 cards —
+  // about seventy thousand elements to show the forty you can actually see.
+  //
+  // Below the threshold nothing is culled: the bookkeeping costs more than it
+  // saves, and small runs keep the exact behaviour they have always had.
+  const CULL_THRESHOLD = 240;
+  /** World-space padding, so a card is already mounted before it scrolls in. */
+  const CULL_MARGIN = 700;
+  /** Grid the rect snaps to, so a pan inside a cell recomputes nothing. */
+  const CULL_STEP = 400;
+
+  const culling = $derived(visibleCards.length > CULL_THRESHOLD && viewportW > 0 && viewportH > 0);
+
+  /**
+   * The culling rectangle, held stable BY REFERENCE across pans that do not
+   * cross a cell boundary.
+   *
+   * A `$derived` propagates when its value changes, and an object literal is a
+   * new value every time — so returning a fresh rect each frame would re-run
+   * the cull on every pointer move even when the rect is numerically identical.
+   * `last` is a plain `let`, not `$state`: it is a memo cell, and making it
+   * reactive would be the write-inside-a-derived that Svelte 5 rightly refuses.
+   */
+  let lastCullRect: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+  const cullRect = $derived.by(() => {
+    const raw = quantiseRect(
+      visibleWorldRect({ panX, panY, zoom }, { width: viewportW, height: viewportH }, CULL_MARGIN),
+      CULL_STEP,
+    );
+    const p = lastCullRect;
+    if (p && p.minX === raw.minX && p.minY === raw.minY && p.maxX === raw.maxX && p.maxY === raw.maxY) {
+      return p;
+    }
+    lastCullRect = raw;
+    return raw;
+  });
+
+  /**
+   * The cards actually mounted. Everything else on the desk still reads
+   * `visibleCards` — counters, the entity rail, edge endpoints, the minimap —
+   * because those need to know about cards they do not draw.
+   *
+   * The pinned set is what stops culling breaking an interaction: a card being
+   * dragged owns the pointer capture, and a selected or focused card is the one
+   * the user is looking at. Unmounting any of those mid-gesture destroys the
+   * node under their finger.
+   */
+  const renderedCards = $derived.by(() => {
+    if (!culling) return visibleCards;
+    return cullToRect(
+      visibleCards,
+      cullRect,
+      (c) => {
+        const p = positionById.get(c.id) ?? posOf(c);
+        return { x: p.x, y: p.y, w: cardW(c), h: cardH(c) };
+      },
+      (c) => c.id === selectedId || !!dragOverrides[c.id] || focusedIds.has(c.id),
+    );
+  });
+
+  /**
+   * Zoomed far enough out that a card's text is a grey smear.
+   *
+   * Below this the cards render as plain blocks in their kind colour — the
+   * shape of the desk is all anyone can read at that scale, and it is exactly
+   * the moment the most cards are on screen. Only applied on a desk big enough
+   * to need it, so a ten-card run never changes appearance.
+   */
+  const lowDetail = $derived(culling && isLowDetail(zoom));
+
   let nodeDrag = $state<{
     cardId: string;
     startClientX: number;
@@ -1445,6 +1538,59 @@
     );
   });
 
+  // ——— minimap: draw, don't build ———
+  let minimapCanvas = $state<HTMLCanvasElement | undefined>(undefined);
+
+  /**
+   * Repaint the minimap whenever the projection or the card set changes.
+   *
+   * An `$effect` rather than markup because there is exactly one node and its
+   * contents are pixels, not elements. Reads `minimap` and `positionById`, and
+   * writes only to the canvas — no reactive state is assigned here, so it
+   * cannot feed itself (see the $state-in-effect trap in svelte5-pitfalls).
+   */
+  $effect(() => {
+    const canvas = minimapCanvas;
+    const m = minimap;
+    if (!canvas) return;
+
+    // Backing store at device resolution; CSS keeps the box at 146×60. Without
+    // this the sub-pixel card marks alias into an unreadable smudge on a
+    // retina display.
+    const dpr = Math.min(3, globalThis.devicePixelRatio || 1);
+    const w = MINIMAP_BODY_W;
+    const h = MINIMAP_BODY_H;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (!m) return;
+
+    // Colours resolved once per paint from the live theme, so the minimap
+    // follows a theme switch the way the CSS-driven version did.
+    const styles = getComputedStyle(canvas);
+    const accent = styles.getPropertyValue('--accent').trim() || '#c4570a';
+    const primary = styles.getPropertyValue('--text-primary').trim() || '#222';
+
+    for (const c of visibleCards) {
+      const p = positionById.get(c.id) ?? posOf(c);
+      const isEntity = c.kind === 'entity';
+      ctx.globalAlpha = isEntity ? 0.8 : 0.55;
+      ctx.fillStyle = isEntity ? primary : accent;
+      ctx.fillRect(
+        m.offsetX + (p.x - m.minX) * m.scale,
+        m.offsetY + (p.y - m.minY) * m.scale,
+        Math.max(2, cardW(c) * m.scale),
+        Math.max(2, cardH(c) * m.scale),
+      );
+    }
+    ctx.globalAlpha = 1;
+  });
+
   // ——— morph gating ———
   // The 720ms `transition: transform` is only worth paying for cards that
   // actually MOVED since the last flush (e.g. on the GATHER⇄SYNTHESIZE flip).
@@ -1552,8 +1698,12 @@
       <div class="desk-world" style:transform="translate({panX}px, {panY}px) scale({zoom})" style:transform-origin="0 0">
         <!-- edges (relationships between entity cards) -->
         <svg class="desk-edges" aria-hidden="true" overflow="visible">
+          <!-- One path per edge. There was a second, transparent 14px-wide
+               `.edge-hit` path under each stroke — a hit target for a click
+               handler that does not exist, with `pointer-events: none` set on
+               both the attribute and the rule. It caught nothing, drew nothing,
+               and doubled the node count of the densest layer on the desk. -->
           {#each edgePaths as e (e.id)}
-            <path class="edge-hit" d={e.d} stroke="transparent" stroke-width="14" fill="none" pointer-events="none" />
             <path class="edge-stroke" d={e.d} fill="none" stroke="var(--text-ghost)" stroke-width="1.25" vector-effect="non-scaling-stroke" pointer-events="none" />
           {/each}
 
@@ -1633,8 +1783,10 @@
           </div>
         {/each}
 
-        <!-- cards (filtered by typeFilters; counters still use store.cards directly) -->
-        {#each visibleCards as c (c.id)}
+        <!-- cards. `renderedCards` is `visibleCards` culled to the viewport once
+             the desk is big enough to need it — counters, the entity rail and
+             edge endpoints all still read the full `visibleCards`. -->
+        {#each renderedCards as c (c.id)}
           {@const p = positionById.get(c.id) ?? posOf(c)}
           {@const live = cardLive.get(c.id)}
           {@const pile = cardPileInfo.get(c.id)}
@@ -1655,19 +1807,26 @@
               onpointercancel={(e) => onCardPointerUp(e, c)}
               oncontextmenu={(e) => { if (readonly || deskMode === 'quick') return; openCardContextMenu(e, c); }}
             >
-              <CardLiveWrapper
-                enterDelayMs={live?.enterDelayMs ?? 0}
-                fresh={live?.fresh ?? false}
-                breathing={deskRunning}
-              >
-                <ArtefactCard
-                  card={c}
-                  selected={selectedId === c.id}
-                  analysing={c.kind === 'source' && analysingSourceId === c.id}
-                  onselect={(id) => { selectedId = id; openInspector(id); }}
-                  onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
-                />
-              </CardLiveWrapper>
+              {#if lowDetail}
+                <!-- Zoomed out past readability: a block of the card's size and
+                     kind colour. The liveness wrapper and the card subtree are
+                     the expensive part and neither is legible at this scale. -->
+                <div class="desk-card-lod" style:width="{cardW(c)}px" style:height="{cardH(c)}px"></div>
+              {:else}
+                <CardLiveWrapper
+                  enterDelayMs={live?.enterDelayMs ?? 0}
+                  fresh={live?.fresh ?? false}
+                  breathing={deskRunning}
+                >
+                  <ArtefactCard
+                    card={c}
+                    selected={selectedId === c.id}
+                    analysing={c.kind === 'source' && analysingSourceId === c.id}
+                    onselect={(id) => { selectedId = id; openInspector(id); }}
+                    onsummarize={(id) => { selectedId = id; openInspector(id, { summarize: true }); }}
+                  />
+                </CardLiveWrapper>
+              {/if}
             </div>
           {/if}
         {/each}
@@ -1765,18 +1924,12 @@
       <div class="desk-minimap">
         <div class="desk-minimap-head"><span>MINIMAP</span><span>{zoomPct}%</span></div>
         <div class="desk-minimap-body">
+          <!-- Drawn, not built. This used to be one absolutely-positioned div
+               per card — a second full copy of the desk in the DOM, 3,453
+               elements on the biggest run, to fill a box 146px wide where every
+               card is under two pixels. One canvas costs the same at any size. -->
+          <canvas class="desk-minimap-canvas" bind:this={minimapCanvas}></canvas>
           {#if minimap}
-            {#each visibleCards as c (c.id + '-m')}
-              {@const p = positionById.get(c.id) ?? posOf(c)}
-              <div
-                class="desk-minimap-node"
-                class:ent={c.kind === 'entity'}
-                style:left="{minimap.offsetX + (p.x - minimap.minX) * minimap.scale}px"
-                style:top="{minimap.offsetY + (p.y - minimap.minY) * minimap.scale}px"
-                style:width="{Math.max(2, cardW(c) * minimap.scale)}px"
-                style:height="{Math.max(2, cardH(c) * minimap.scale)}px"
-              ></div>
-            {/each}
             <div
               class="desk-minimap-frame"
               style:left="{minimap.frame.x}px"
@@ -1922,7 +2075,6 @@
   .desk-world-wrap.panning { cursor: grabbing; }
   .desk-world { position: absolute; top: 0; left: 0; }
   .desk-edges { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
-  .desk-edges .edge-hit { cursor: default; pointer-events: none; }
   .desk-card-host {
     position: absolute;
     top: 0;
@@ -1942,6 +2094,16 @@
     pointer-events: none;
     z-index: 1;
   }
+  /* Low-detail stand-in, drawn below LOD_ZOOM. Same footprint and the same kind
+     colour as the real card, so the shape of the desk is unchanged — it is the
+     text and the liveness wrapper that go, and neither is legible at that
+     scale. Inherits the host's ::before kind bar exactly as a real card does. */
+  .desk-card-lod {
+    background: var(--surface-elevated);
+    border: 1px solid var(--line-hair);
+    opacity: 0.85;
+  }
+
   .desk-card-host[data-kind='source']::before { background: var(--text-muted); }
   .desk-card-host[data-kind='fact']::before { background: var(--accent); }
   .desk-card-host[data-kind='entity']::before { background: var(--text-primary); }
@@ -2058,8 +2220,7 @@
     border-bottom: 1px solid rgba(26, 16, 8, 0.12);
   }
   .desk-minimap-body { position: relative; width: 146px; height: 60px; }
-  .desk-minimap-node { position: absolute; background: var(--accent); opacity: 0.55; }
-  .desk-minimap-node.ent { background: var(--text-primary); opacity: 0.8; }
+  .desk-minimap-canvas { position: absolute; inset: 0; width: 146px; height: 60px; }
   .desk-minimap-frame { position: absolute; border: 1px solid var(--accent); background: rgba(196, 87, 10, 0.08); }
 
   /* Zoom controls — workflow .hifi-zoomctl chrome, anchored bottom-left. */
