@@ -1698,8 +1698,12 @@
       <div class="desk-world" style:transform="translate({panX}px, {panY}px) scale({zoom})" style:transform-origin="0 0">
         <!-- edges (relationships between entity cards) -->
         <svg class="desk-edges" aria-hidden="true" overflow="visible">
+          <!-- One path per edge. There was a second, transparent 14px-wide
+               `.edge-hit` path under each stroke — a hit target for a click
+               handler that does not exist, with `pointer-events: none` set on
+               both the attribute and the rule. It caught nothing, drew nothing,
+               and doubled the node count of the densest layer on the desk. -->
           {#each edgePaths as e (e.id)}
-            <path class="edge-hit" d={e.d} stroke="transparent" stroke-width="14" fill="none" pointer-events="none" />
             <path class="edge-stroke" d={e.d} fill="none" stroke="var(--text-ghost)" stroke-width="1.25" vector-effect="non-scaling-stroke" pointer-events="none" />
           {/each}
 
@@ -2071,7 +2075,6 @@
   .desk-world-wrap.panning { cursor: grabbing; }
   .desk-world { position: absolute; top: 0; left: 0; }
   .desk-edges { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
-  .desk-edges .edge-hit { cursor: default; pointer-events: none; }
   .desk-card-host {
     position: absolute;
     top: 0;
