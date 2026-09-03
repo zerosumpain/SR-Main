@@ -293,6 +293,27 @@ async function sweepCards(): Promise<PackInputs['aggregates']> {
   }
 }
 
+/**
+ * Sources that joined recently — a self-built tool the loop shipped, a facet
+ * that registered this month — carded so the pack knows the facet exists.
+ * Sweepable only: a signal with a fortnight of days is a measurement; one
+ * with three is a promise.
+ */
+async function newSourceCards(): Promise<PackInputs['aggregates']> {
+  try {
+    const { listSweepableSignals } = await import('../signals/registry');
+    const { MIN_PAIRS } = await import('../stats/tests');
+    const since = Date.now() - 14 * 86_400_000;
+    const rows = await listSweepableSignals(MIN_PAIRS);
+    return rows
+      .filter((s) => s.firstSeenAt && new Date(s.firstSeenAt as unknown as string).getTime() >= since)
+      .slice(0, 6)
+      .map((s) => ({ key: `source:${s.key}`, text: `New source (${s.source}): ${s.label} — ${s.observedDays} days observed, now askable and swept.` }));
+  } catch {
+    return [];
+  }
+}
+
 async function recentVerdicts(): Promise<PackInputs['verdicts']> {
   try {
     return await db
@@ -464,7 +485,7 @@ export async function runPonder(
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep, newSources] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
@@ -474,6 +495,7 @@ export async function runPonder(
       rulingCardsFor(),
       notebookCards(),
       sweepCards(),
+      newSourceCards(),
     ]);
     const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
@@ -496,7 +518,7 @@ export async function runPonder(
       // reviewer has already SETTLED. Those two go nearest the instruction
       // because they are the two that override: a correction he typed, and a
       // claim that has been checked against the sources and found wanting.
-      aggregates: [...aggregates, ...signals, ...sweep, ...notebook, ...diaryNotes, ...rulings.cards],
+      aggregates: [...aggregates, ...signals, ...sweep, ...newSources, ...notebook, ...diaryNotes, ...rulings.cards],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
@@ -535,6 +557,21 @@ export async function runPonder(
     }
 
     const audit = validatePonderOutput(parsed, pack, caps);
+    // Faults, soft: a lead naming a metric nothing writes wants a source; a
+    // musing dropped for a citation is the audit doing its job and only
+    // counted.
+    try {
+      const { raiseFault, unknownMetricsIn } = await import('../faults');
+      for (const reason of audit.rejected) {
+        for (const m of unknownMetricsIn(reason)) {
+          void raiseFault({ kind: 'metric_unknown', identifier: m, site: 'ponder/leads', detail: reason.slice(0, 300), subject });
+        }
+      }
+      const drops = audit.rejected.filter((x) => /cite|citation|card|unknown card/i.test(x)).length;
+      if (drops) void raiseFault({ kind: 'audit_drop', identifier: 'ponder', site: 'ponder/audit', detail: `${drops} musing(s) dropped this pass for citing a card they were not given`, subject });
+    } catch {
+      // never the tick
+    }
     result.rejected = audit.rejected;
     result.coerced = audit.coerced;
 

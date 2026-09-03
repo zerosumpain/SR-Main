@@ -27,6 +27,7 @@ import { SWEEP_METRICS } from '../stats/sweep';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { hypothesisKey, validateHypothesis, type HypothesisSpec } from './spec';
 import { activeSteerNotes, renderSteers } from './steer';
+import { raiseFault, unknownMetricsIn } from '../faults';
 
 export const MAX_TOKENS = 1400;
 
@@ -286,6 +287,11 @@ export async function proposeHypotheses(
       const v = validateHypothesis(item, allowed);
       if (!v.ok || !v.spec) {
         result.rejected.push({ reason: v.reason ?? 'invalid' });
+        // A metric the proposer keeps asking for that nothing writes is the
+        // fault ledger's business — the toolsmith reads it first.
+        for (const m of unknownMetricsIn(v.reason ?? '')) {
+          void raiseFault({ kind: 'metric_unknown', identifier: m, site: 'hypotheses/propose', detail: `the proposer asked for "${m}", which no day feature or signal provides`, subject });
+        }
         continue;
       }
       // Two proposals for the same question in one batch is one question.

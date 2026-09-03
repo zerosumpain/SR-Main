@@ -196,6 +196,12 @@ export async function runExplorationRound(
           });
         result.leadsAbandoned++;
         result.stepsWritten++;
+        try {
+          const { raiseFault } = await import('../faults');
+          void raiseFault({ kind: 'lead_barren', identifier: s.lead.leadKey, site: 'leads/run', detail: `abandoned after ${s.stats.barrenRounds} barren rounds; metrics ${((s.lead.metrics ?? []) as string[]).join(', ')}`, subject });
+        } catch {
+          // never the round
+        }
         continue;
       }
 

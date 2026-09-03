@@ -233,15 +233,18 @@ export async function harvestToolSignals(
       res = await callWithTimeout(tool.name);
     } catch (err) {
       out.failed.push({ name: tool.name, error: errMsg(err).slice(0, 200) });
+      void import('../faults').then(({ raiseFault }) => raiseFault({ kind: 'tool_failed', identifier: tool.name, site: 'signals/tools', detail: errMsg(err).slice(0, 200) }));
       continue;
     }
     if (!res?.success) {
       out.failed.push({ name: tool.name, error: (res?.error ?? 'no result').slice(0, 200) });
+      void import('../faults').then(({ raiseFault }) => raiseFault({ kind: 'tool_failed', identifier: tool.name, site: 'signals/tools', detail: (res?.error ?? 'no result').slice(0, 200) }));
       continue;
     }
     const fields = numericFields(res.data);
     if (fields.length === 0) {
       out.barren.push(tool.name);
+      void import('../faults').then(({ raiseFault }) => raiseFault({ kind: 'tool_barren', identifier: tool.name, site: 'signals/tools', detail: 'returned no numeric top-level field' }));
       continue;
     }
     for (const { field, value } of fields) {

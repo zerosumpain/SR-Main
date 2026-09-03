@@ -27,7 +27,7 @@ import {
 export interface IdeaInput {
   title: string;
   detail: string;
-  kind: 'tool' | 'feature';
+  kind: 'tool' | 'feature' | 'engine';
   priority?: number;
 }
 
@@ -140,7 +140,7 @@ export async function addIdeas(ideas: IdeaInput[]): Promise<string[]> {
       slug,
       title: title.slice(0, 200),
       detail: (idea.detail ?? '').slice(0, 2000),
-      kind: idea.kind === 'feature' ? 'feature' : 'tool',
+      kind: idea.kind === 'feature' ? 'feature' : idea.kind === 'engine' ? 'engine' : 'tool',
       status: 'open',
       priority: Math.min(5, Math.max(1, Math.round(idea.priority ?? 3))),
       attempts: 0,
@@ -205,7 +205,7 @@ const RETRY_SHARE = 1 / 3;
 
 export function pickWork(
   items: BacklogItemData[],
-  kind: 'tool' | 'feature',
+  kind: 'tool' | 'feature' | 'engine',
   limit: number,
 ): BacklogItemData[] {
   if (limit <= 0) return [];

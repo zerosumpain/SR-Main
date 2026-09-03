@@ -228,12 +228,14 @@ export async function runLookups(
         if (!res?.success) {
           run.failed++;
           console.warn(`[daydream] lookup ${probe.key} failed: ${res?.error ?? 'no result'}`);
+          void import('../faults').then(({ raiseFault }) => raiseFault({ kind: 'lookup_failed', identifier: probe.key, site: 'ponder/lookups', detail: `${probe.tool}: ${(res?.error ?? 'no result').slice(0, 200)}` }));
           continue;
         }
         cards = probe.render(gap, res.data);
       } catch (err) {
         run.failed++;
         console.warn(`[daydream] lookup ${probe.key} threw: ${errMsg(err)}`);
+        void import('../faults').then(({ raiseFault }) => raiseFault({ kind: 'lookup_failed', identifier: probe.key, site: 'ponder/lookups', detail: `${probe.tool} threw: ${errMsg(err).slice(0, 200)}` }));
         continue;
       } finally {
         run.asked.push(`${probe.key}: ${gap.reason}`);

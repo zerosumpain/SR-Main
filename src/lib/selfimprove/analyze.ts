@@ -23,6 +23,8 @@ import type { Budget } from './run';
 import { addIdeas } from './backlog';
 import { collectStarvation } from '$lib/daydream/starvation';
 import { collectHealthFaults } from '$lib/daydream/health-quality';
+import { collectFaultIdeas } from '$lib/daydream/faults';
+import { engineProposals } from '$lib/daydream/engine-proposals';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -270,7 +272,23 @@ export async function learnInsights(
   } catch (err) {
     console.error('[selfimprove] health fault collection failed:', errMsg(err));
   }
-  for (const s of [...starving, ...healthFaults]) {
+  // The fault ledger, FIRST. Every site where daydreaming could not do
+  // something writes here with the shape of the fix; nothing else in this
+  // pass says as precisely what to build. Then the engine's proposals about
+  // itself — kind `engine`, never built, only listed.
+  let faultIdeas: Awaited<ReturnType<typeof collectFaultIdeas>> = [];
+  try {
+    faultIdeas = await collectFaultIdeas();
+  } catch (err) {
+    console.error('[selfimprove] fault ledger read failed:', errMsg(err));
+  }
+  let engineIdeas: Awaited<ReturnType<typeof engineProposals>> = [];
+  try {
+    engineIdeas = await engineProposals();
+  } catch (err) {
+    console.error('[selfimprove] engine proposals failed:', errMsg(err));
+  }
+  for (const s of [...faultIdeas, ...starving, ...healthFaults, ...engineIdeas]) {
     actions.push({
       kind: 'insight',
       detail: `${s.title} — ${s.evidence}`,
@@ -287,7 +305,7 @@ export async function learnInsights(
 
   try {
     const added = await addIdeas([
-      ...[...healthFaults, ...starving].map((s) => ({
+      ...[...faultIdeas, ...healthFaults, ...starving, ...engineIdeas].map((s) => ({
         title: s.title,
         detail: s.detail,
         kind: s.kind,
