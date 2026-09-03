@@ -14,6 +14,8 @@
   import BlockForm from './BlockForm.svelte';
   import SiteMediaPicker from './SiteMediaPicker.svelte';
   import { EDITABLE_FIELDS, htmlToMarkdownLite } from './canvas-text';
+  import { page } from '$app/state';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
 
   let { data } = $props();
 
@@ -763,11 +765,17 @@
 {/snippet}
 
 <div class="ed">
+  <SiteHeader isOwner={page.data?.isOwner !== false} />
+
   <header class="ed-bar">
-    <a class="back" href="/decks">← decks</a>
     <input class="ed-title" bind:value={deckTitle} onblur={saveMeta} />
     <button class="chip" class:public={isPublic} onclick={togglePublic}>{isPublic ? 'PUBLIC' : 'PRIVATE'}</button>
     <a class="chip play" href="/decks/{data.deck.slug}" target="_blank" rel="noopener">▶ play</a>
+    <!-- Lateral, not a back link: the shared bar's back cell walks ONE level up,
+         to the deck being edited, and the player it lands on carries no chrome
+         of its own. The gallery is a sideways move from here, so it keeps a
+         chip beside `play` rather than a second arrow beside the bar's. -->
+    <a class="chip" href="/decks">All decks</a>
     <span class="spacer"></span>
     {#if banner}<span class="banner {banner.kind}">{banner.text}</span>{/if}
   </header>
@@ -1041,14 +1049,6 @@
     gap: 12px;
     padding: 10px 16px;
     border-bottom: 2px solid var(--text-primary);
-  }
-  .back {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    text-decoration: none;
   }
   .ed-title {
     font-family: var(--font-display);

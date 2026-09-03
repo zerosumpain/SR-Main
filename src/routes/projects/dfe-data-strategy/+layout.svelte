@@ -13,6 +13,7 @@
   import ScenarioSelector from './components/ScenarioSelector.svelte';
   import AskModel from './components/AskModel.svelte';
   import PolicySuggester from './components/PolicySuggester.svelte';
+  import FieldStudyNav from '$lib/components/FieldStudyNav.svelte';
 
   let { children, data } = $props();
   const STORAGE = 'keystone-state-v1';
@@ -90,12 +91,16 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" />
 </svelte:head>
 
-<div class="page">
+<!-- --topH is published on .page, not only on .shell: the non-workbench branch below
+     renders no .shell, and FrameworkExplorer / RelationshipWeb / CommitShelf / the author
+     page all offset against var(--topH, 90px) from in there. The fallback was already a
+     guess; with a nav row in the topstack it would be ~30px short. -->
+<div class="page" style="--topH:{topH}px">
   <div class="paper-grain" aria-hidden="true"></div>
 
   <div class="topstack" bind:clientHeight={topH}>
+    <FieldStudyNav />
     <header class="masthead">
-      <a class="back" href="/projects" title="Back to the field studies">←&nbsp;<span class="lbl">Field studies</span></a>
       <a class="brand" href="/projects/dfe-data-strategy">Keystone</a>
       {#if isWorkbench}
         <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the strategy levers">☰<span class="lbl">&nbsp;Levers</span></button>
@@ -181,8 +186,6 @@
 
   .topstack { position: sticky; top: 0; z-index: 20; background: rgba(241,234,214,0.94); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(28,22,17,0.12); }
   .masthead { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding: 9px 28px 8px; }
-  .back { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); text-decoration: none; }
-  .back:hover { color: var(--ink); }
   .brand { font-family: var(--fs-serif); font-weight: 600; font-size: 17px; color: var(--ink); text-decoration: none; letter-spacing: -0.01em; }
   .levers-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 5px 11px; border-radius: var(--radius-sharp); border: 1px solid rgba(28,22,17,0.25);
     background: rgba(255,255,255,0.55); color: var(--ink); cursor: pointer; }

@@ -1,11 +1,10 @@
-# Tests whose real subject is a file they READ or a process they SPAWN,
-# not a module they import. An import graph cannot see that coupling, so
-# these run at EVERY gate level regardless of what changed.
 #
 # GENERATED — do not hand-edit. tests/scripts/select-tests.test.ts regenerates
-# this list from the source and fails if it has drifted, so a new filesystem-
+# Tests whose real subject is a file they READ or a process they SPAWN,
 # coupled test cannot be added without landing here too.
-#
+# not a module they import. An import graph cannot see that coupling, so
+# these run at EVERY gate level regardless of what changed.
+# this list from the source and fails if it has drifted, so a new filesystem-
 src/lib/estate/estate.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/intel/chat-extract.wiring.test.ts
@@ -27,6 +26,8 @@ tests/extract/pdf.test.ts
 tests/extract/scanned-pdf.test.ts
 tests/lib/config/owner.test.ts
 tests/lib/jkai/media/storage.test.ts
+tests/lib/nav/nav-coverage.test.ts
+tests/lib/nav/nav-parents.test.ts
 tests/lib/node-builder/codegen/definition.test.ts
 tests/lib/node-builder/codegen/docs.test.ts
 tests/lib/node-builder/codegen/executor.test.ts

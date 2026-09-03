@@ -1,18 +1,25 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  // Page title bar for the non-chat /jkai surfaces. Navigation lives in the hub
-  // header's `menu ▾` now, so these pages no longer carry a nav bar — just the
-  // thread-header treatment from the redesign (DM Mono title behind an accent
-  // `>`, hairline rule, mono metadata to the right).
+  // Page title bar for the non-chat /jkai surfaces — the thread-header
+  // treatment from the redesign (DM Mono title behind an accent `>`, hairline
+  // rule, mono metadata to the right).
+  //
+  // It says WHERE YOU ARE. It no longer says how to leave: the hub header
+  // carries the back chip on every /jkai surface now, computed from
+  // $lib/nav/site-nav, so a bare `←` here as well put two back arrows a
+  // centimetre apart on nineteen pages. `titleHref` is still accepted — every
+  // caller passes it, and each value it passes is exactly what parentHref()
+  // now computes — but it is no longer rendered.
   let {
     title,
-    titleHref,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    titleHref: _titleHref,
     meta,
     actions,
   }: {
     title: string;
-    /** Parent surface, rendered as a `←` back link before the title. */
+    /** @deprecated the hub header owns the back link — see $lib/nav/site-nav. */
     titleHref?: string;
     /** Mono metadata beside the title. */
     meta?: Snippet;
@@ -23,9 +30,6 @@
 
 <div class="page-title">
   <div class="pt-left">
-    {#if titleHref}
-      <a class="pt-back" href={titleHref} aria-label="Back">←</a>
-    {/if}
     <h1 class="pt-title"><span class="pt-mark" aria-hidden="true">&gt;</span>{title}</h1>
     {#if meta}
       <div class="pt-meta">{@render meta()}</div>
@@ -51,16 +55,6 @@
     align-items: baseline;
     gap: 12px;
     min-width: 0;
-  }
-  .pt-back {
-    font-family: var(--font-mono);
-    font-size: var(--fs-nav);
-    color: var(--text-muted);
-    text-decoration: none;
-    transition: color 0.2s ease-out;
-  }
-  .pt-back:hover {
-    color: var(--accent);
   }
   .pt-title {
     display: inline-flex;

@@ -61,7 +61,8 @@
   path="/health/segments"
   maxWidth={1400}
   nav={[
-    { href: '/health/segments', label: '← All segments' },
+    // No `← All segments` cell: the derived back link top-left already goes to
+    // /health/segments. Same note as ActivityDetailView.
     { href: '/health', label: 'Dashboard', muted: true },
     { href: '/health/activities', label: 'Activities', muted: true },
   ]}

@@ -4,6 +4,8 @@
   import StatCard from './components/StatCard.svelte';
   import ServiceCard from './components/ServiceCard.svelte';
   import Provenance from './components/Provenance.svelte';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
+  import { page } from '$app/state';
 
   let { data }: { data: PageData } = $props();
   const estate = $derived(data.estate);
@@ -77,11 +79,12 @@
   />
 </svelte:head>
 
+<SiteHeader isOwner={page.data?.isOwner !== false} />
+
 <div class="page">
   <div class="paper-grain" aria-hidden="true"></div>
 
   <header class="head">
-    <a class="back" href="/projects">← Field studies</a>
     <span class="tagline">DfE · Public data services · England</span>
     <h1>The Data Estate</h1>
     <p class="sub">
@@ -252,17 +255,6 @@
     margin: 0 auto;
     padding: 24px 28px 18px;
     border-bottom: 1px solid rgba(28, 22, 17, 0.1);
-  }
-  .back {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    text-decoration: none;
-  }
-  .back:hover {
-    color: var(--accent);
   }
   .tagline {
     display: block;

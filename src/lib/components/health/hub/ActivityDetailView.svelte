@@ -173,7 +173,10 @@
   path="/health/activities/{shortId}"
   maxWidth={1300}
   nav={[
-    { href: '/health/activities', label: '← All activities' },
+    // No `← All activities` cell. HealthShell derives the way back from the nav
+    // manifest and renders it top-left beside the home icon, where the rest of
+    // the site puts it; a second arrow to the same href over on the right was
+    // the duplicate this unification exists to remove.
     { href: '/health', label: 'Dashboard', muted: true },
     { href: '/health/segments', label: 'Segments', muted: true },
   ]}

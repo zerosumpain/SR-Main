@@ -6,6 +6,7 @@
   import { SOURCES } from './lib/sources';
   import SectionNav from './components/SectionNav.svelte';
   import AskModel from './components/AskModel.svelte';
+  import FieldStudyNav from '$lib/components/FieldStudyNav.svelte';
 
   let { children } = $props();
   let askOpen = $state(false);
@@ -31,8 +32,8 @@
   <div class="paper-grain" aria-hidden="true"></div>
 
   <div class="topstack" bind:clientHeight={topH}>
+    <FieldStudyNav />
     <header class="masthead">
-      <a class="back" href="/projects" title="Back to the field studies">←&nbsp;<span class="lbl">Field studies</span></a>
       <a class="brand" href="/projects/data-spine">The Data Spine</a>
       <span class="tagline">DFE · ANNOUNCED FEB 2026 · NOT YET BUILT</span>
     </header>
@@ -85,8 +86,6 @@
 
   .topstack { position: sticky; top: 0; z-index: 20; background: rgba(241,234,214,0.94); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(28,22,17,0.12); }
   .masthead { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding: 9px 28px 8px; }
-  .back { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); text-decoration: none; }
-  .back:hover { color: var(--ink); }
   .brand { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body); color: var(--ink); text-decoration: none; letter-spacing: -0.01em; }
   .tagline { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: rgba(28,22,17,0.42); white-space: nowrap; }
 

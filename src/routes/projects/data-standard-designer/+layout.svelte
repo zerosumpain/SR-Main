@@ -5,6 +5,7 @@
   import Onboarding from './components/Onboarding.svelte';
   import StandardDetail from './components/StandardDetail.svelte';
   import Stepper from './components/Stepper.svelte';
+  import FieldStudyNav from '$lib/components/FieldStudyNav.svelte';
 
   let { children } = $props();
   const STORAGE = 'dsd-state-v1';
@@ -60,7 +61,9 @@
 <div class="dsd-page">
   <header class="dsd-top">
     <div class="dsd-top-row">
-      <a class="dsd-back" href="/projects">← Projects</a>
+      <!-- Inline, not a row of its own: brief/schema/publish dock their rails at a
+           hard-coded top: 110px/130px measured off this header, so growing it hides them. -->
+      <FieldStudyNav inline />
       <a class="dsd-brand" href={base}>
         <span class="mark">⌗</span> Data Standard Designer
       </a>
@@ -134,8 +137,6 @@
 
   .dsd-top { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px) saturate(1.1); border-bottom: 2px solid var(--text-primary); }
   .dsd-top-row { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 10px 24px; }
-  .dsd-back { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
-  .dsd-back:hover { color: var(--accent); }
   .dsd-brand { font-family: var(--font-brand); font-weight: 500; font-size: var(--fs-body); color: var(--text-primary); display: inline-flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
   .dsd-brand .mark { color: var(--accent); font-size: 18px; }
   .dsd-brand:hover { color: var(--accent); }

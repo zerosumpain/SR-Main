@@ -2,7 +2,8 @@
   // Decks landing — public gallery of generated presentations (nav-bar
   // destination); the owner also sees private decks + edit links. SR site
   // register (page-hdr + card grid, modelled on /projects).
-  import SiteNav from '$lib/components/SiteNav.svelte';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
+  import { page } from '$app/state';
 
   let { data } = $props();
 
@@ -15,7 +16,7 @@
   <meta name="description" content="Zoomable editorial slide decks — presentations generated with jkai on strangeramblings.com." />
 </svelte:head>
 
-<SiteNav variant="compact" />
+<SiteHeader isOwner={page.data?.isOwner !== false} />
 
 <div class="wrap">
   <header class="page-hdr">

@@ -212,7 +212,12 @@
 </HealthShell>
 
 <style>
-  .news-page { min-height: calc(100vh - var(--site-nav-height)); background: var(--bg); }
+  /* 100vh flat, NOT `calc(100vh - var(--site-nav-height))`. This page wears
+     HealthShell, not `.site-nav-bar`, so there was never a 48px strip above it
+     to subtract — the old arithmetic just shortened the page by a header that
+     is not on it. HealthShell's head is sticky and in normal flow, so it takes
+     its own height out of the viewport without being told. */
+  .news-page { min-height: 100vh; background: var(--bg); }
   .news-lede { padding: clamp(32px, 4vw, 56px) clamp(20px, 3vw, 44px); border-bottom: 1px solid rgba(237, 228, 212, 0.16); background: var(--text-primary); color: var(--bg); }
   .lede-inner { width: min(1400px, 100%); margin: 0 auto; }
   .lede-copy { padding-bottom: clamp(38px, 6vw, 68px); }

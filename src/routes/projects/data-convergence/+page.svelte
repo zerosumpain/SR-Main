@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
+  import { page } from '$app/state';
   import Visualization from './components/Visualization.svelte';
   import ConfigTable from './components/ConfigTable.svelte';
   import Controls from './components/Controls.svelte';
@@ -242,6 +244,8 @@
   />
 </svelte:head>
 
+<SiteHeader isOwner={page.data?.isOwner !== false} />
+
 <div class="page">
   <div class="paper-grain" aria-hidden="true"></div>
 
@@ -370,8 +374,11 @@
     --ink: var(--text-primary);
     --ink-soft: var(--text-muted);
 
+    /* Full-viewport surface, but no longer edge-to-edge: the shared nav bar
+       sits in flow above it, so the fixed sheet starts below the strip rather
+       than under it. */
     position: fixed;
-    inset: 0;
+    inset: var(--site-nav-height) 0 0 0;
     background: var(--paper);
     color: var(--ink);
     font-family: var(--font-body);
@@ -506,8 +513,12 @@
   }
 
   .panel {
+    /* Fixed, so viewport-relative — and `.page` above is itself fixed, which
+       makes it a stacking context the drawer cannot climb out of. The nav strip
+       (z-index 30, one context up) therefore paints OVER anything in here, so
+       the drawer starts below the strip rather than sliding under it. */
     position: fixed;
-    top: 0; bottom: 0; right: 0;
+    top: var(--site-nav-height); bottom: 0; right: 0;
     width: min(880px, 96vw);
     background: var(--paper-deep);
     border-left: 1px solid rgba(28, 22, 17, 0.1);
@@ -520,7 +531,7 @@
   .panel-inner { padding: 22px 24px 80px; }
   .panel-backdrop {
     position: fixed;
-    inset: 0;
+    inset: var(--site-nav-height) 0 0 0;
     background: rgba(28, 22, 17, 0.35);
     backdrop-filter: blur(2px);
     z-index: 49;
