@@ -203,6 +203,10 @@ export async function buildSessionExtraction(sessionId: string): Promise<{
           isNotNull(facts.eventDate),
         ),
       )
+      // Ordered, because there is a LIMIT. Without it "the first 200" is
+      // whatever order the heap hands back, so a big dive would contribute an
+      // arbitrary scatter of dates rather than a timeline.
+      .orderBy(facts.eventDate)
       .limit(MAX_TIMELINE_EVENTS),
   ]);
 
