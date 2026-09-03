@@ -17,6 +17,7 @@
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
   import EngineActivityPanel from '$lib/components/jkai/daydream/rooms/EngineActivityPanel.svelte';
+  import EngineActivityDrill from '$lib/components/jkai/daydream/rooms/EngineActivityDrill.svelte';
   import EngineEffort from '$lib/components/jkai/daydream/rooms/EngineEffort.svelte';
   import EngineRules from '$lib/components/jkai/daydream/rooms/EngineRules.svelte';
   import EngineDetectors from '$lib/components/jkai/daydream/rooms/EngineDetectors.svelte';
@@ -132,6 +133,40 @@
     },
   ]);
 
+  // The instrument under the cursor. One drill at a time; the URL does not
+  // carry it because a run's mechanics are the same on every visit.
+  let openActivity = $state<{ name: string; mark: string } | null>(null);
+
+  const money = (n: number) => (n > 0 ? (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`) : '$0');
+  const spend = $derived(data.spend);
+  const spendTiles = $derived<DeckTile[]>(
+    spend
+      ? [
+          {
+            key: 'improve7',
+            label: 'Improve, cash 7 days',
+            value: money(spend.improve7dUsd),
+            tone: spend.improve7dUsd > 0.5 ? 'watch' : 'steady',
+            sub: 'the toolsmith on OpenRouter — outside the Codex caps',
+          },
+          {
+            key: 'improve30',
+            label: 'Improve, cash 30 days',
+            value: money(spend.improve30dUsd),
+            tone: 'steady',
+            sub: `${spend.improveRuns30d} night${spend.improveRuns30d === 1 ? '' : 's'} recorded`,
+          },
+          {
+            key: 'all30',
+            label: 'Every activity, cash 30 days',
+            value: money(spend.all30dUsd),
+            tone: spend.all30dUsd > spend.improve30dUsd + 0.01 ? 'watch' : 'good',
+            sub: spend.all30dUsd > spend.improve30dUsd + 0.01 ? 'something besides improve is billing cash' : 'everything else runs on quota',
+          },
+        ]
+      : [],
+  );
+
   const budgetTiles = $derived.by((): DeckTile[] => {
     if (!budget || !budget.applies) return [];
     return [
@@ -175,7 +210,8 @@
     {/if}
     {#if actionError}<p class="err">{actionError}</p>{/if}
 
-    <EngineActivityPanel jobs={telemetry?.jobs ?? []} schedules={data.schedules ?? []} />
+    <EngineActivityPanel jobs={telemetry?.jobs ?? []} schedules={data.schedules ?? []} onopen={(name, mark) => (openActivity = { name, mark })} />
+    <p class="note">Every cell is an instrument — open one to see what it reads, what it writes, what gates it, and its last ten runs.</p>
   </div>
 </section>
 
@@ -271,6 +307,10 @@
       </div>
     {:else}
       <StatDeck tiles={budgetTiles} min={230} />
+    {/if}
+    {#if spendTiles.length}
+      <p class="field-label spend-label">Cash, beside the quota</p>
+      <StatDeck tiles={spendTiles} min={230} />
       {#if budget.blocked}
         <div class="card t-urgent">
           <p class="card-kicker">Paused</p>
@@ -419,7 +459,14 @@
   </div>
 </section>
 
+{#if openActivity}
+  <EngineActivityDrill name={openActivity.name} stageMark={openActivity.mark} onclose={() => (openActivity = null)} />
+{/if}
+
 <style>
+  .spend-label {
+    margin-top: 18px;
+  }
   .chart {
     border: 1px solid var(--card-border);
     background: var(--surface-card);

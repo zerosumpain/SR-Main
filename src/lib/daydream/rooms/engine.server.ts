@@ -17,6 +17,7 @@ import { db } from '$lib/db';
 import { daydreamThoughts, heartbeatActions, heartbeatPulses } from '$lib/db/schema';
 import { MAX_PER_DAY, MIN_GAP_HOURS, QUIET_HOURS, isInterruptingChannel } from '$lib/daydream/deliver';
 import { localDayStart } from '$lib/daydream/budget';
+import { mechanicsFor, spendsQuota, type Mechanics } from '$lib/daydream/mechanics';
 
 export interface JobSchedule {
   name: string;
@@ -146,4 +147,152 @@ export async function loadDeliveryStats(now = new Date()): Promise<DeliveryStats
     nextSlot,
     quietHours: QUIET_HOURS,
   };
+}
+
+// ── One instrument, opened ───────────────────────────────────────────────
+//
+// What the Engine room shows when a cell is clicked: the row as scheduled,
+// the handler as written, the mechanics as documented (`mechanics.ts`), and
+// the last ten pulses with their cost. On demand — twenty-three of these on
+// every arrival would be the old page again.
+
+export interface ActivityDetail {
+  name: string;
+  short: string;
+  row: {
+    description: string;
+    status: string;
+    cadenceSeconds: number | null;
+    activeHours: { start: string | null; end: string | null; tz: string | null };
+    config: Record<string, unknown>;
+    totalRuns: number;
+    totalCostUsd: number;
+    consecutiveFailures: number;
+    lastError: string | null;
+    lastRunAt: string | null;
+    nextRunAt: string | null;
+  } | null;
+  handler: {
+    description: string;
+    defaultCadenceSeconds: number;
+    defaultConfig: Record<string, unknown>;
+    defaultActiveHours: { start: string; end: string; tz: string } | null;
+  } | null;
+  mechanics: Mechanics | null;
+  spendsQuota: boolean;
+  pulses: Array<{ ts: string; outcome: string; summary: string; costUsd: number; details: Record<string, unknown> | null }>;
+  cost7dUsd: number;
+  cost30dUsd: number;
+}
+
+export async function loadActivityDetail(name: string): Promise<ActivityDetail> {
+  const clean = name.startsWith('daydream-') ? name : `daydream-${name}`;
+  // The registry pulls every handler in; loaded on demand so this module stays
+  // light for the page load that only wants schedules.
+  const { getHandler } = await import('$lib/heartbeat/registry');
+  const [row] = await db
+    .select()
+    .from(heartbeatActions)
+    .where(eq(heartbeatActions.name, clean))
+    .limit(1);
+  const handler = getHandler(clean);
+  const pulses = row
+    ? await db
+        .select({ ts: heartbeatPulses.ts, outcome: heartbeatPulses.outcome, summary: heartbeatPulses.summary, costUsd: heartbeatPulses.costUsd, details: heartbeatPulses.details })
+        .from(heartbeatPulses)
+        .where(eq(heartbeatPulses.actionId, row.id))
+        .orderBy(desc(heartbeatPulses.ts))
+        .limit(10)
+    : [];
+  const since7 = new Date(Date.now() - 7 * DAY_MS);
+  const since30 = new Date(Date.now() - 30 * DAY_MS);
+  const [cost] = row
+    ? await db
+        .select({
+          d7: sql<string>`coalesce(sum(case when ${heartbeatPulses.ts} >= ${since7} then ${heartbeatPulses.costUsd} else 0 end), 0)::text`,
+          d30: sql<string>`coalesce(sum(case when ${heartbeatPulses.ts} >= ${since30} then ${heartbeatPulses.costUsd} else 0 end), 0)::text`,
+        })
+        .from(heartbeatPulses)
+        .where(eq(heartbeatPulses.actionId, row.id))
+    : [{ d7: '0', d30: '0' }];
+  return {
+    name: clean,
+    short: clean.replace(/^daydream-/, ''),
+    row: row
+      ? {
+          description: row.description,
+          status: row.status,
+          cadenceSeconds: row.cadenceSeconds,
+          activeHours: { start: row.activeHoursStart, end: row.activeHoursEnd, tz: row.activeHoursTz },
+          config: (row.config ?? {}) as Record<string, unknown>,
+          totalRuns: row.totalRuns,
+          totalCostUsd: Number(row.totalCostUsd ?? 0),
+          consecutiveFailures: row.consecutiveFailures ?? 0,
+          lastError: row.lastError,
+          lastRunAt: row.lastRunAt ? row.lastRunAt.toISOString() : null,
+          nextRunAt: row.nextRunAt ? row.nextRunAt.toISOString() : null,
+        }
+      : null,
+    handler: handler
+      ? {
+          description: handler.description,
+          defaultCadenceSeconds: handler.defaultCadenceSeconds,
+          defaultConfig: (handler.defaultConfig ?? {}) as Record<string, unknown>,
+          defaultActiveHours: handler.defaultActiveHours ?? null,
+        }
+      : null,
+    mechanics: mechanicsFor(clean),
+    spendsQuota: spendsQuota(clean),
+    pulses: pulses.map((p) => ({
+      ts: p.ts.toISOString(),
+      outcome: p.outcome,
+      summary: p.summary,
+      costUsd: Number(p.costUsd ?? 0),
+      details: (p.details ?? null) as Record<string, unknown> | null,
+    })),
+    cost7dUsd: Number(cost?.d7 ?? 0),
+    cost30dUsd: Number(cost?.d30 ?? 0),
+  };
+}
+
+// ── Cash, as a cell ──────────────────────────────────────────────────────
+//
+// The Codex caps govern quota, not money. The one activity that spends cash
+// is `daydream-improve` (OpenRouter), and its pulses carry the cost; this is
+// that figure beside the quota lines, plus everything daydream-* recorded.
+
+export interface DaydreamSpend {
+  improve7dUsd: number;
+  improve30dUsd: number;
+  all30dUsd: number;
+  improveRuns30d: number;
+}
+
+export async function loadDaydreamSpend(now = new Date()): Promise<DaydreamSpend> {
+  const since7 = new Date(now.getTime() - 7 * DAY_MS);
+  const since30 = new Date(now.getTime() - 30 * DAY_MS);
+  const rows = await db
+    .select({
+      name: heartbeatActions.name,
+      d7: sql<string>`coalesce(sum(case when ${heartbeatPulses.ts} >= ${since7} then ${heartbeatPulses.costUsd} else 0 end), 0)::text`,
+      d30: sql<string>`coalesce(sum(${heartbeatPulses.costUsd}), 0)::text`,
+      runs30: sql<number>`count(*)::int`,
+    })
+    .from(heartbeatPulses)
+    .innerJoin(heartbeatActions, eq(heartbeatActions.id, heartbeatPulses.actionId))
+    .where(and(sql`${heartbeatActions.name} like 'daydream%'`, gte(heartbeatPulses.ts, since30)))
+    .groupBy(heartbeatActions.name);
+  let improve7 = 0;
+  let improve30 = 0;
+  let improveRuns = 0;
+  let all30 = 0;
+  for (const r of rows) {
+    all30 += Number(r.d30);
+    if (r.name === 'daydream-improve') {
+      improve7 = Number(r.d7);
+      improve30 = Number(r.d30);
+      improveRuns = r.runs30;
+    }
+  }
+  return { improve7dUsd: improve7, improve30dUsd: improve30, all30dUsd: all30, improveRuns30d: improveRuns };
 }
