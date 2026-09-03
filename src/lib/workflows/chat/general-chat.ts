@@ -888,6 +888,14 @@ async function runGeneralChat(
     ? `\n\n--- Web scraping ---\nThe \`stealth-scrape\` node is the pattern for reading live web pages — job boards, listings, prices, schedules, content behind cookie walls. It runs a stealth-patched Playwright on homeserv's residential IP and dispatches through a saved Python script keyed to a stable per-domain \`profile\` (e.g. \`civilservicejobs-gov-uk\`). Scripts have \`page\` (persistent context, cookies retained) and \`vars\` (string dict) in scope and \`return\` a list of dicts.\n\nWhen designing a scrape:\n1. \`scraper_script_list\` first — reuse an existing profile if one matches.\n2. If editing: \`scraper_script_read\` → modify → \`scraper_script_save\` → \`scraper_script_test\` to verify.\n3. If none exists: set \`goal\` + \`searchQuery\` on the \`stealth-scrape\` node — the first run authors and saves a script; subsequent runs replay it.\n\nTypical scrape canvas: \`trigger → (data-store get, stealth-scrape) → merge → transform (diff vs stored URLs) → llm-call (format) → gmail-send / whatsapp → data-store set\`. Keep transforms small (in-process, no sandbox); cap LLM prompts (few hundred chars per description); use \`bodyHtml\` not \`bodyText\` on \`gmail-send\` when output has links or lists.`
     : '';
 
+  // A news-shaped request should consult the two sources behind /news, not
+  // disappear into the generic API catalogue or be answered from model
+  // memory. Conditional keeps this policy and its tool name out of ordinary
+  // turns, while the classifier below pre-loads the matching schema.
+  const newsSection = inferred.includes('news')
+    ? `\n\n--- News sources ---\nFor a request specifically about news or current stories, call \`news_search\` first. It searches the live Hacker News and Lobsters wires behind /news. Use the returned original or discussion URLs as inline sources in the answer. If neither wire has a relevant story, say so; use broader web/API search only when the user asked for wider coverage or those two sources do not cover the topic.`
+    : '';
+
   // API-first data answering — always on and deliberately compact. For any
   // factual / numeric / current / external question the model should reach a
   // real data source (api_search → api_call) before answering from memory.
@@ -948,7 +956,7 @@ async function runGeneralChat(
   // block and still sits below the instructions, which `07-memory.md` promises
   // the model it does.
   const stablePrefix = `${personaSection}${basePrompt}${siteSection}${skillsSection}${apiFirstSection}${memorySection}${canvasSection}`;
-  const perTurnSuffix = `${compressionSection}${scraperSection}${pastedUrlsSection}${graphSection}${clarifySection}${planSection}`;
+  const perTurnSuffix = `${compressionSection}${scraperSection}${newsSection}${pastedUrlsSection}${graphSection}${clarifySection}${planSection}`;
   const systemContent = `${stablePrefix}${perTurnSuffix}`;
 
   // Build messages
