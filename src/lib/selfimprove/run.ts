@@ -268,12 +268,37 @@ export async function runImprovementNow(
       [
         'learn',
         async () => {
-          const r = await learnInsights(state.signals ?? { messages: [], toolAudit: null, customTools: [], currentInsights: null }, budget);
+          const r = await learnInsights(
+            state.signals ?? {
+              messages: [],
+              toolAudit: null,
+              customTools: [],
+              currentInsights: null,
+              capabilityInventory: null,
+            },
+            budget,
+          );
           state.insights = r.insights;
           return r.actions;
         },
       ],
-      ['discover', async () => discoverApis(state.insights, budget, await faultNeeds().catch(() => []))],
+      [
+        'discover',
+        async () => {
+          const portfolioNeeds = (state.insights?.opportunities ?? [])
+            .filter((o) => o.kind === 'data_source' || o.kind === 'online_service')
+            .map(
+              (o) =>
+                `${o.title}: ${o.need} Consumer: ${o.consumer}. Value: ${o.value}` +
+                (o.integrationHint ? ` Suggested integration: ${o.integrationHint}` : ''),
+            );
+          return discoverApis(
+            state.insights,
+            budget,
+            [...(await faultNeeds().catch(() => [])), ...portfolioNeeds],
+          );
+        },
+      ],
       ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
       // Repair runs AFTER build so a night that ships nothing new still has a
       // chance to fix something that already exists.

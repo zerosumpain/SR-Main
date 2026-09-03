@@ -6,9 +6,15 @@
 // (`latest` + `weekly:<YYYY-WW>`).
 
 import { db } from '$lib/db';
-import { orchestratorChats, customTools } from '$lib/db/schema';
-import { and, eq, gte, desc } from 'drizzle-orm';
-import { DatastoreError, getRecordByKey, upsertRecord } from '$lib/datastore';
+import { orchestratorChats, customTools, daydreamSignals } from '$lib/db/schema';
+import { and, eq, gte, desc, sql } from 'drizzle-orm';
+import {
+  DatastoreError,
+  getCollectionBySlug,
+  getRecordByKey,
+  queryRecords,
+  upsertRecord,
+} from '$lib/datastore';
 import { getToolAudit } from '$lib/server/tool-audit';
 import {
   COLLECTIONS,
@@ -16,6 +22,7 @@ import {
   asData,
   errMsg,
   isoWeekKey,
+  type CapabilityOpportunity,
   type QuestionInsights,
   type RunAction,
 } from './types';
@@ -35,6 +42,71 @@ export interface GatheredSignals {
   toolAudit: unknown | null;
   customTools: Array<{ name: string; runCount: number; errorCount: number }>;
   currentInsights: QuestionInsights | null;
+  capabilityInventory: CapabilityInventory | null;
+}
+
+export interface CapabilityInventory {
+  platformToolsets: Array<{ name: string; tools: number }>;
+  catalogApis: Array<{ name: string; status: string; capabilities: string[] }>;
+  daydreamSources: Array<{ source: string; signals: number; observing: number }>;
+}
+
+/** Give the learner the source/service portfolio, not only a list of tools. */
+async function loadCapabilityInventory(): Promise<CapabilityInventory | null> {
+  const inventory: CapabilityInventory = {
+    platformToolsets: [],
+    catalogApis: [],
+    daydreamSources: [],
+  };
+
+  try {
+    const { getToolsetManifest } = await import('$lib/workflows/site-tools/registry');
+    inventory.platformToolsets = getToolsetManifest()
+      .map((t) => ({ name: t.toolset, tools: t.tools.length }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    console.error('[selfimprove] capability toolsets failed:', errMsg(err));
+  }
+
+  try {
+    if (await getCollectionBySlug(COLLECTIONS.apiCatalog)) {
+      const { records } = await queryRecords(COLLECTIONS.apiCatalog, { limit: 200 }, SYSTEM_ACTOR);
+      inventory.catalogApis = records
+        .map((r) => r.data as Record<string, unknown>)
+        .filter((d) => (d.status ?? 'seeded') !== 'broken')
+        .map((d) => ({
+          name: String(d.name ?? ''),
+          status: String(d.status ?? 'seeded'),
+          capabilities: Array.isArray(d.capabilities) ? d.capabilities.slice(0, 6).map(String) : [],
+        }))
+        .filter((a) => a.name)
+        .slice(0, 100);
+    }
+  } catch (err) {
+    console.error('[selfimprove] capability API catalogue failed:', errMsg(err));
+  }
+
+  try {
+    const rows = await db
+      .select({
+        source: daydreamSignals.source,
+        signals: sql<number>`count(*)::int`,
+        observing: sql<number>`count(*) filter (where ${daydreamSignals.observedDays} > 0)::int`,
+      })
+      .from(daydreamSignals)
+      .groupBy(daydreamSignals.source);
+    inventory.daydreamSources = rows.map((r) => ({
+      source: r.source,
+      signals: Number(r.signals ?? 0),
+      observing: Number(r.observing ?? 0),
+    }));
+  } catch (err) {
+    console.error('[selfimprove] capability daydream sources failed:', errMsg(err));
+  }
+
+  return inventory.platformToolsets.length || inventory.catalogApis.length || inventory.daydreamSources.length
+    ? inventory
+    : null;
 }
 
 /** GATHER: recent user questions + tool telemetry + custom-tool health + current insights. */
@@ -91,7 +163,9 @@ export async function gatherSignals(): Promise<GatheredSignals> {
     }
   }
 
-  return { messages, toolAudit, customTools: ctRows, currentInsights };
+  const capabilityInventory = await loadCapabilityInventory();
+
+  return { messages, toolAudit, customTools: ctRows, currentInsights, capabilityInventory };
 }
 
 function compactToolAudit(audit: unknown): unknown {
@@ -109,19 +183,27 @@ function compactToolAudit(audit: unknown): unknown {
 function buildLearnMessages(signals: GatheredSignals): Array<{ role: 'system' | 'user'; content: string }> {
   const system =
     'You are the analysis brain of a personal AI assistant ("jkai") for its single technical owner. ' +
-    'You are given the owner\'s recent questions plus tool-usage telemetry. Classify the questions into ' +
-    'a small set of INTENTS, and identify UNMET NEEDS — recurring questions with no good live data source or ' +
-    'tool behind them (these become candidates for new API integrations or custom tools). ' +
+    'You are given the owner\'s recent questions, tool telemetry, and an inventory of current APIs, integrations ' +
+    'and Daydream signal sources. Classify questions into a small set of INTENTS and identify UNMET NEEDS. Then ' +
+    'perform a CAPABILITY PORTFOLIO audit: look for valuable missing datasets/feeds, APIs, online services, and ' +
+    'site functionality that could improve JKAI answers, Daydream intelligence, or the site itself. Do not default ' +
+    'to another wrapper tool. A tool is appropriate only when it turns an existing source/platform operation into ' +
+    'a useful repeatable outcome. Prefer durable, current, authoritative data and services over novelty utilities. ' +
+    'Every opportunity must state who consumes it and the concrete value unlocked; do not duplicate inventory. ' +
     'Respond with ONLY a JSON object of the form: ' +
     '{"summary": string, "intents": [{"intent": string, "count": number, "examples": string[], ' +
-    '"servedWell": boolean, "missingCapability": string}], "topUnmet": string[]}. ' +
-    'Keep intents to at most 10, examples to at most 3 each, topUnmet to at most 5 short phrases. No prose outside the JSON.';
+    '"servedWell": boolean, "missingCapability": string}], "topUnmet": string[], "opportunities": [' +
+    '{"title": string, "need": string, "kind":"tool"|"data_source"|"online_service"|"site_feature", ' +
+    '"consumer":"jkai"|"daydream"|"site"|"shared", "value": string, "integrationHint": string}]}. ' +
+    'Keep intents to 10, examples to 3, topUnmet to 5, and opportunities to 4. Include at least one non-tool ' +
+    'opportunity when a defensible portfolio gap exists. No prose outside the JSON.';
 
   const payload = {
     questionCount: signals.messages.length,
     recentQuestions: signals.messages.slice(0, 200).map((m) => m.content),
     toolUsage: compactToolAudit(signals.toolAudit),
     customToolHealth: signals.customTools.slice(0, 30),
+    capabilityInventory: signals.capabilityInventory,
     previousInsightsSummary: signals.currentInsights?.summary ?? null,
   };
   const user = `Signals (last 7 days):\n\n${JSON.stringify(payload, null, 2)}`;
@@ -131,7 +213,7 @@ function buildLearnMessages(signals: GatheredSignals): Array<{ role: 'system' | 
   ];
 }
 
-function coerceInsights(json: unknown, period: string): QuestionInsights {
+export function coerceInsights(json: unknown, period: string): QuestionInsights {
   const obj = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
   const intentsRaw = Array.isArray(obj.intents) ? obj.intents : [];
   const intents = intentsRaw.slice(0, 10).map((i) => {
@@ -145,12 +227,38 @@ function coerceInsights(json: unknown, period: string): QuestionInsights {
     };
   });
   const topUnmet = Array.isArray(obj.topUnmet) ? obj.topUnmet.slice(0, 5).map(String) : [];
+  const opportunities: CapabilityOpportunity[] = (Array.isArray(obj.opportunities) ? obj.opportunities : [])
+    .map((raw): CapabilityOpportunity | null => {
+      const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+      const title = typeof o.title === 'string' ? o.title.trim() : '';
+      const need = typeof o.need === 'string' ? o.need.trim() : '';
+      const value = typeof o.value === 'string' ? o.value.trim() : '';
+      const kinds = new Set(['tool', 'data_source', 'online_service', 'site_feature']);
+      const consumers = new Set(['jkai', 'daydream', 'site', 'shared']);
+      if (!title || !need || !value || !kinds.has(String(o.kind)) || !consumers.has(String(o.consumer))) {
+        return null;
+      }
+      return {
+        title: title.slice(0, 160),
+        need: need.slice(0, 600),
+        kind: String(o.kind) as CapabilityOpportunity['kind'],
+        consumer: String(o.consumer) as CapabilityOpportunity['consumer'],
+        value: value.slice(0, 600),
+        integrationHint:
+          typeof o.integrationHint === 'string' && o.integrationHint.trim()
+            ? o.integrationHint.trim().slice(0, 600)
+            : undefined,
+      };
+    })
+    .filter((o): o is CapabilityOpportunity => o !== null)
+    .slice(0, 4);
   return {
     period,
     generatedAt: new Date().toISOString(),
     summary: obj.summary ? String(obj.summary) : undefined,
     intents,
     topUnmet,
+    opportunities,
   };
 }
 
@@ -161,15 +269,17 @@ export async function learnInsights(
 ): Promise<{ insights: QuestionInsights; actions: RunAction[] }> {
   const week = isoWeekKey(new Date());
 
-  // No questions at all → still record an empty insight (idempotent, cheap) and
-  // spend no LLM budget.
-  if (signals.messages.length === 0) {
+  // With neither questions nor a source inventory there is genuinely nothing
+  // to audit. An inventory on its own is still useful: portfolio discovery is
+  // proactive and must not stop merely because the owner had a quiet week.
+  if (signals.messages.length === 0 && !signals.capabilityInventory) {
     const empty: QuestionInsights = {
       period: week,
       generatedAt: new Date().toISOString(),
       summary: 'No user questions in the last 7 days.',
       intents: [],
       topUnmet: [],
+      opportunities: [],
     };
     await upsertRecord(COLLECTIONS.questionInsights, { key: 'latest', data: asData(empty) }, SYSTEM_ACTOR);
     await upsertRecord(COLLECTIONS.questionInsights, { key: `weekly:${week}`, data: asData(empty) }, SYSTEM_ACTOR);
@@ -182,11 +292,10 @@ export async function learnInsights(
   });
   let insights = coerceInsights(json, week);
 
-  // Zero intents from a non-empty question set means the model's JSON did not
-  // survive parsing — it is not a real finding. This happened twice in ten
-  // nights (60 questions → 0 intents on 29 Jul) and silently starved discover
-  // and build of everything they needed. Retry once, tightly.
-  if (insights.intents.length === 0) {
+  // No intents AND no portfolio opportunities means the model's JSON did not
+  // survive parsing. A quiet week may legitimately have no intents, but should
+  // still produce an inventory-backed opportunity. Retry once, tightly.
+  if (insights.intents.length === 0 && (insights.opportunities?.length ?? 0) === 0) {
     console.warn(
       `[selfimprove] learn produced 0 intents from ${signals.messages.length} questions; raw head: ${content.slice(0, 200)}`,
     );
@@ -197,19 +306,23 @@ export async function learnInsights(
           content:
             'Output ONLY a JSON object, no markdown fence, no commentary. Shape: {"summary": string, ' +
             '"intents": [{"intent": string, "count": number, "examples": string[], "servedWell": boolean, ' +
-            '"missingCapability": string}], "topUnmet": string[]}. At least one intent is required.',
+            '"missingCapability": string}], "topUnmet": string[], "opportunities": [{"title": string, ' +
+            '"need": string, "kind":"tool"|"data_source"|"online_service"|"site_feature", ' +
+            '"consumer":"jkai"|"daydream"|"site"|"shared", "value": string, "integrationHint": string}]}. ' +
+            'Return at least one intent when questions exist, or one concrete opportunity from the inventory.',
         },
         {
           role: 'user',
-          content: `Group these questions into intents and list unmet needs:\n${JSON.stringify(
-            signals.messages.slice(0, 120).map((m) => m.content),
-          )}`,
+          content: `Audit these questions and the capability inventory:\n${JSON.stringify({
+            questions: signals.messages.slice(0, 120).map((m) => m.content),
+            inventory: signals.capabilityInventory,
+          })}`,
         },
       ],
       { maxTokens: 3000, temperature: 0.1 },
     );
     const second = coerceInsights(retry.json, week);
-    if (second.intents.length > 0) insights = second;
+    if (second.intents.length > 0 || (second.opportunities?.length ?? 0) > 0) insights = second;
   }
 
   await upsertRecord(COLLECTIONS.questionInsights, { key: 'latest', data: asData(insights) }, SYSTEM_ACTOR);
@@ -218,7 +331,9 @@ export async function learnInsights(
   const actions: RunAction[] = [
     {
       kind: 'insight',
-      detail: `${insights.intents.length} intents, ${insights.topUnmet.length} unmet need(s) across ${signals.messages.length} questions`,
+      detail:
+        `${insights.intents.length} intents, ${insights.topUnmet.length} unmet need(s), ` +
+        `${insights.opportunities?.length ?? 0} portfolio opportunity(s) across ${signals.messages.length} questions`,
     },
   ];
 
@@ -239,6 +354,14 @@ export async function learnInsights(
         kind: 'tool' as const,
         priority: 2,
       })),
+    ...(insights.opportunities ?? []).map((o) => ({
+      title: o.title,
+      detail:
+        `[${o.kind} for ${o.consumer}] ${o.need} Value: ${o.value}` +
+        (o.integrationHint ? ` Integration path: ${o.integrationHint}` : ''),
+      kind: o.kind === 'tool' || o.kind === 'data_source' ? ('tool' as const) : ('feature' as const),
+      priority: o.consumer === 'shared' || o.consumer === 'daydream' ? 1 : 2,
+    })),
   ];
 
   // Starvation leads, questions follow.

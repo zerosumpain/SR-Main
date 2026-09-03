@@ -43,6 +43,7 @@ import { buildContextPack, renderContext, type ContextPack } from './context';
 import { staticScan, smokeTest, type SmokeCase, type SmokeResult } from './verify';
 import { addIdeas, listBacklog, markAttempt, pickWork } from './backlog';
 import { findRelatedIdea } from './narrative';
+import { jkaiTestPromptFor } from './deployment';
 
 const NAME_RE = /^[a-z][a-z0-9_]{2,60}$/;
 
@@ -63,6 +64,8 @@ export interface ToolSpec {
    * label as inferred rather than recorded.
    */
   serves?: string;
+  /** Ordinary user request that should make JKAI discover this capability. */
+  jkai_test_prompt?: string;
 }
 
 interface ToolsmithPlan {
@@ -151,9 +154,14 @@ function buildAuthorMessages(
     'Describe the question a person could not get answered — never what the code does. ' +
     'Good: "You could not ask what the front door battery level is." ' +
     'Bad: "Queries Home Assistant entities by ID." A tool without "serves" is incomplete.\n\n' +
+    'EVERY tool MUST also include "jkai_test_prompt": one natural request the owner can paste into a NEW JKAI ' +
+    'chat to prove the assistant discovers and uses the capability. Ask for the OUTCOME without naming the tool. ' +
+    'Use real but non-destructive values that match a smoke case, request current/live data where relevant, and ' +
+    'ask JKAI to briefly name the capability it used.\n\n' +
     HANDLER_RULES + '\n\n' + HANDLER_EXAMPLE +
     '\n\nRespond with ONLY JSON: {"tools": [{"name": snake_case, "description": string, "toolset": string, ' +
-    '"serves": string, "parameters": {"type":"object","properties":{...},"required":[...]}, ' +
+    '"serves": string, "jkai_test_prompt": string, ' +
+    '"parameters": {"type":"object","properties":{...},"required":[...]}, ' +
     '"handler_code": string, ' +
     '"smoke_cases": [{"args": {...}}]}], "ideas": [{"title": string, "detail": string, ' +
     '"kind": "tool"|"feature", "priority": 1-5}]}. ' +
@@ -208,7 +216,8 @@ function buildRepairMessages(
     'must return success:true.\n\n' +
     HANDLER_RULES + '\n\n' + HANDLER_EXAMPLE +
     '\n\nRespond with ONLY JSON: {"name": string, "description": string, "toolset": string, ' +
-    '"parameters": {...}, "handler_code": string, "smoke_cases": [{"args": {...}}]}. No prose outside the JSON.';
+    '"parameters": {...}, "handler_code": string, "smoke_cases": [{"args": {...}}], ' +
+    '"jkai_test_prompt": string}. No prose outside the JSON.';
 
   const user =
     `Tool: ${spec.name}\nDescription: ${spec.description}\n\n` +
@@ -262,6 +271,10 @@ export function coerceSpec(raw: unknown): ToolSpec | null {
     handler_code,
     smoke_cases,
     serves: typeof o.serves === 'string' && o.serves.trim() ? o.serves.trim().slice(0, 400) : undefined,
+    jkai_test_prompt:
+      typeof o.jkai_test_prompt === 'string' && o.jkai_test_prompt.trim()
+        ? o.jkai_test_prompt.trim().slice(0, 600)
+        : undefined,
   };
 }
 
@@ -313,6 +326,11 @@ async function recordAttempt(
     parameters: spec.parameters as unknown as Record<string, unknown>,
     sampleArgs: spec.smoke_cases[0]?.args ?? {},
     attemptedAt: new Date().toISOString(),
+    jkaiTestPrompt: jkaiTestPromptFor({
+      authored: spec.jkai_test_prompt,
+      serves: spec.serves,
+      description: spec.description,
+    }),
     mode: 'create',
     ...extra,
   };
@@ -483,7 +501,14 @@ export async function buildTool(
       const fixed = coerceSpec(fixJson);
       if (!fixed) break;
       // Keep the original name so the ledger tracks one tool across rounds.
-      spec = { ...fixed, name: spec.name };
+      spec = {
+        ...fixed,
+        name: spec.name,
+        // Repair responses focus on code. Do not lose the acceptance contract
+        // authored with the original candidate if the model omits it here.
+        serves: fixed.serves ?? spec.serves,
+        jkai_test_prompt: fixed.jkai_test_prompt ?? spec.jkai_test_prompt,
+      };
       outcome = await verifyAndShip(spec);
     }
 

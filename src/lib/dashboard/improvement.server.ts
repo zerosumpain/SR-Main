@@ -8,6 +8,7 @@ import { getImprovementStatus } from '$lib/selfimprove/run';
 import { listBacklog } from '$lib/selfimprove/backlog';
 import { loadCustomToolHealth } from '$lib/selfimprove/context';
 import { buildStories, summariseStories } from '$lib/selfimprove/narrative';
+import { buildDeployedCapabilities } from '$lib/selfimprove/deployment';
 import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { CallEfficiency } from '$lib/selfimprove/call-efficiency';
 import { COLLECTIONS } from '$lib/selfimprove/types';
@@ -42,7 +43,10 @@ async function loadAttempts(): Promise<AttemptRow[]> {
   if (!(await getCollectionBySlug(COLLECTIONS.toolAttempts))) return [];
   const { records } = await queryRecords(
     COLLECTIONS.toolAttempts,
-    { sort: { field: 'createdAt', dir: 'desc' }, limit: 50 },
+    // One successful attempt per deployed tool is needed by the live-test
+    // cockpit. Fifty hid older still-live tools once the engine had accumulated
+    // repair attempts, so use the datastore's bounded single-page maximum.
+    { sort: { field: 'createdAt', dir: 'desc' }, limit: 500 },
     OWNER,
   );
   return records.map((r) => ({
@@ -182,6 +186,12 @@ export async function loadImprovementDashboard() {
   // returns newest first, and `publishPolicy` always moves the pointer to the
   // version it just wrote.
   const activePolicy = policyVersions[0] ?? null;
+  const deployedCapabilities = buildDeployedCapabilities(
+    attempts,
+    toolHealth,
+    activePolicy?.promoteToEssential ?? [],
+    activePolicy?.trial?.status === 'running' ? activePolicy.targetTool : undefined,
+  );
 
   // The plain-English narrative. Derived here rather than in the component so
   // the whole derivation stays testable without a browser, and so the page ships
@@ -201,6 +211,7 @@ export async function loadImprovementDashboard() {
     efficiency,
     policyVersions,
     activePolicy,
+    deployedCapabilities,
     stories,
     storySummary: summariseStories(stories),
     stats,

@@ -47,10 +47,13 @@ export interface CatalogApiSummary {
 export interface CustomToolHealth {
   name: string;
   description: string;
+  toolset?: string;
   enabled: boolean;
   runCount: number;
   errorCount: number;
   errorRate: number;
+  createdAt?: string;
+  lastRunAt?: string;
   handlerCode?: string;
 }
 
@@ -168,10 +171,13 @@ export async function loadCustomToolHealth(withCode = false): Promise<CustomTool
     return rows.map((t) => ({
       name: t.name,
       description: t.description,
+      toolset: t.toolset,
       enabled: t.enabled,
       runCount: t.runCount ?? 0,
       errorCount: t.errorCount ?? 0,
       errorRate: (t.runCount ?? 0) > 0 ? (t.errorCount ?? 0) / (t.runCount ?? 1) : 0,
+      createdAt: t.createdAt?.toISOString(),
+      lastRunAt: t.lastRunAt?.toISOString(),
       handlerCode: withCode ? t.handlerCode : undefined,
     }));
   } catch (err) {

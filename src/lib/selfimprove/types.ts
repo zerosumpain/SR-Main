@@ -267,13 +267,43 @@ export interface QuestionIntent {
   missingCapability?: string;
 }
 
+/**
+ * A way for the platform to become more useful, not merely another tool name.
+ *
+ * The old learner emitted only `missingCapability` strings, so every gap flowed
+ * into the toolsmith even when the valuable thing was a new dataset, a durable
+ * service integration, or site functionality. These fields keep the value,
+ * consumer and likely delivery shape together all the way into the backlog.
+ */
+export interface CapabilityOpportunity {
+  title: string;
+  need: string;
+  kind: 'tool' | 'data_source' | 'online_service' | 'site_feature';
+  consumer: 'jkai' | 'daydream' | 'site' | 'shared';
+  value: string;
+  integrationHint?: string;
+}
+
 /** Shape of a `question_insights` record's `data`. */
 export interface QuestionInsights {
   period: string;
   generatedAt: string;
   intents: QuestionIntent[];
   topUnmet: string[];
+  /** Proactive portfolio gaps, including sources/services/site features. */
+  opportunities?: CapabilityOpportunity[];
   summary?: string;
+}
+
+/** A rerun of a deployed tool from the Self Improvement room. */
+export interface LiveToolTest {
+  testedAt: string;
+  args: Record<string, unknown>;
+  success: boolean;
+  ms: number;
+  error?: string;
+  /** Short owner-only preview; full results are returned to the browser only. */
+  resultSummary?: string;
 }
 
 /** Shape of a `tool_attempts` record's `data` — one per BUILD attempt. */
@@ -300,6 +330,10 @@ export interface ToolAttemptData {
   shipped?: boolean;
   /** Per-case smoke results, so a failure is diagnosable from the ledger. */
   cases?: Array<{ args: Record<string, unknown>; ok: boolean; error?: string; ms?: number }>;
+  /** Natural request for proving discoverability through a fresh JKAI chat. */
+  jkaiTestPrompt?: string;
+  /** Durable owner-run acceptance tests against the currently deployed handler. */
+  liveTests?: LiveToolTest[];
   /** For repairs: the handler that was replaced, kept for rollback. */
   previousHandlerCode?: string;
 }

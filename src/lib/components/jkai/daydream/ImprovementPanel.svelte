@@ -5,10 +5,24 @@
 
   type Run = ImprovementDashboardData['runs'][number];
   type Attempt = ImprovementDashboardData['attempts'][number];
+  type Capability = ImprovementDashboardData['deployedCapabilities'][number];
+
+  interface TestResponse {
+    ok?: boolean;
+    data?: unknown;
+    error?: string;
+    recorded?: boolean;
+    test?: { testedAt: string; success: boolean; ms: number; error?: string };
+  }
 
   let expandedRun = $state<string | null>(null);
   let expandedAttempt = $state<string | null>(null);
   let attemptFilter = $state<'all' | 'created' | 'rejected'>('all');
+  let testArgs = $state<Record<string, string>>({});
+  let testingTool = $state<string | null>(null);
+  let testResults = $state<Record<string, TestResponse>>({});
+  let promotingTool = $state<string | null>(null);
+  let promotionErrors = $state<Record<string, string>>({});
 
   // ── Plain-English narrative ───────────────────────────────────────────────
   // `changes` leads because it answers the question the page is for: what is
@@ -40,6 +54,8 @@
 
   const stats = $derived(data.stats);
   const insights = $derived(data.insights);
+  const opportunities = $derived(insights?.opportunities ?? []);
+  const deployed = $derived(data.deployedCapabilities ?? []);
 
   // ── Prime outcome: tool calls per answered question ──────────────────────
   const eff = $derived(data.efficiency?.latest ?? null);
@@ -80,6 +96,75 @@
     } finally {
       reverting = null;
     }
+  }
+
+  function argsText(capability: Capability): string {
+    return testArgs[capability.name] ?? JSON.stringify(capability.sampleArgs, null, 2);
+  }
+
+  function updateArgs(name: string, event: Event) {
+    testArgs[name] = (event.currentTarget as HTMLTextAreaElement).value;
+  }
+
+  async function runLiveTest(capability: Capability) {
+    let args: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(argsText(capability)) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+      args = parsed as Record<string, unknown>;
+    } catch {
+      testResults[capability.name] = { error: 'Arguments must be a valid JSON object.' };
+      return;
+    }
+
+    testingTool = capability.name;
+    testResults[capability.name] = {};
+    try {
+      const res = await fetch('/api/admin/improvement/test-tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attemptKey: capability.attemptKey, name: capability.name, args }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as TestResponse;
+      testResults[capability.name] = res.ok ? payload : { error: payload.error ?? 'Live test failed.' };
+    } catch {
+      testResults[capability.name] = { error: 'Live test could not reach the server.' };
+    } finally {
+      testingTool = null;
+    }
+  }
+
+  async function startPromotionTrial(capability: Capability) {
+    promotingTool = capability.name;
+    promotionErrors[capability.name] = '';
+    try {
+      const res = await fetch('/api/admin/improvement/policy', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rationale:
+            `Promote self-improvement capability ${capability.name} after a successful deployed acceptance test ` +
+            'so JKAI can reach it without a discovery round-trip.',
+          promoteToEssential: [capability.name],
+          targetTool: capability.name,
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) promotionErrors[capability.name] = payload.error ?? 'Promotion trial could not start.';
+      else location.reload();
+    } catch {
+      promotionErrors[capability.name] = 'Promotion trial could not reach the server.';
+    } finally {
+      promotingTool = null;
+    }
+  }
+
+  function jkaiHref(capability: Capability): string {
+    return `/jkai?new=1&q=${encodeURIComponent(capability.jkaiTestPrompt)}`;
+  }
+
+  function hasPassedLiveTest(capability: Capability): boolean {
+    return capability.lastLiveTest?.success === true || testResults[capability.name]?.ok === true;
   }
 
   /** Sparkline path over the persisted daily means. */
@@ -253,6 +338,148 @@
       {/if}
     {/if}
   </section>
+
+  <!-- ── DEPLOYED ACCEPTANCE ──────────────────────────────────────────────
+       Smoke tests happened before deployment. These controls exercise the
+       handler that is registered now, then hand the same outcome to JKAI to
+       prove the assistant can discover it from an ordinary request. -->
+  <section class="block acceptance-block">
+    <div class="block-hd">
+      <span class="sr-label-tight">Prove what shipped</span>
+      <span class="block-meta">{deployed.length} deployed {deployed.length === 1 ? 'capability' : 'capabilities'}</span>
+    </div>
+    <p class="acceptance-lede">
+      A build-time smoke test is not live evidence. Run the deployed handler here, then open its
+      outcome-led prompt in a <strong>fresh JKAI chat</strong>. Do not add the tool name: JKAI finding it is
+      part of the test. Successful, repeated JKAI use makes a capability eligible for an automatic
+      direct-access promotion trial; you can also start that measured trial here after acceptance.
+    </p>
+
+    {#if deployed.length === 0}
+      <div class="empty">No self-improvement tools are currently deployed.</div>
+    {:else}
+      <div class="acceptance-list">
+        {#each deployed as capability (capability.name)}
+          <article class="acceptance-card" class:accepted={hasPassedLiveTest(capability)}>
+            <header class="acceptance-hd">
+              <div>
+                <span class="story-title mono">{capability.name}</span>
+                <span class="story-sub">{capability.description}</span>
+              </div>
+              <span class="story-pill">
+                {capability.promoted
+                  ? 'direct in JKAI'
+                  : capability.promotionTrial
+                    ? 'promotion trial'
+                    : hasPassedLiveTest(capability)
+                      ? 'live-tested'
+                      : 'needs live test'}
+              </span>
+            </header>
+
+            <div class="acceptance-grid">
+              <div class="acceptance-step">
+                <div class="step-label mono"><span>1</span> Test the deployed handler</div>
+                <p>These are the generated smoke arguments. Edit them to exercise a useful real case.</p>
+                <textarea
+                  class="args-editor mono"
+                  aria-label="Live test arguments for {capability.name}"
+                  value={argsText(capability)}
+                  oninput={(event) => updateArgs(capability.name, event)}
+                  rows="5"
+                ></textarea>
+                <button
+                  type="button"
+                  class="measure-btn"
+                  disabled={testingTool === capability.name || !capability.enabled}
+                  onclick={() => runLiveTest(capability)}
+                >
+                  {testingTool === capability.name ? 'Running live…' : 'Run live test'}
+                </button>
+                {#if !capability.enabled}<span class="inline-note bad">disabled — cannot test</span>{/if}
+                {#if testResults[capability.name]?.error}
+                  <pre class="test-result fail">{testResults[capability.name].error}</pre>
+                {:else if testResults[capability.name]?.test}
+                  <pre class="test-result" class:pass={testResults[capability.name].ok}>
+{testResults[capability.name].ok ? 'PASS' : 'FAIL'} · {testResults[capability.name].test?.ms ?? 0}ms
+{JSON.stringify(testResults[capability.name].data ?? testResults[capability.name].error ?? null, null, 2)}</pre>
+                {:else if capability.lastLiveTest}
+                  <p class="last-test mono" class:pass={capability.lastLiveTest.success}>
+                    Last live test {fmtDate(capability.lastLiveTest.testedAt)} ·
+                    {capability.lastLiveTest.success ? 'passed' : `failed: ${capability.lastLiveTest.error ?? 'unknown'}`}
+                  </p>
+                {/if}
+              </div>
+
+              <div class="acceptance-step">
+                <div class="step-label mono"><span>2</span> Test discovery in JKAI</div>
+                <p>Send this unchanged in a fresh chat. Check that the answer uses live data and names this capability.</p>
+                <blockquote class="jkai-prompt">{capability.jkaiTestPrompt}</blockquote>
+                <a class="measure-btn button-link" href={jkaiHref(capability)}>Open test in JKAI →</a>
+                <p class="usage mono">
+                  {capability.jkaiRuns} estimated JKAI/ambient run{capability.jkaiRuns === 1 ? '' : 's'} ·
+                  {capability.errorCount} error{capability.errorCount === 1 ? '' : 's'}
+                </p>
+              </div>
+
+              <div class="acceptance-step promotion-step">
+                <div class="step-label mono"><span>3</span> Promotion</div>
+                {#if capability.promoted}
+                  <p>Directly visible to JKAI. Its policy remains measured and reversible.</p>
+                {:else if capability.promotionTrial}
+                  <p>Direct access is on trial. Use a fresh JKAI chat so the refreshed manifest is tested.</p>
+                {:else}
+                  <p>
+                    Promotion removes the discovery round-trip, but adds this schema to every chat. Start only after
+                    the live result is useful; the trial will keep or revert it against calls per answer.
+                  </p>
+                  <button
+                    type="button"
+                    class="measure-btn"
+                    disabled={!hasPassedLiveTest(capability) || promotingTool === capability.name || activePolicy?.trial?.status === 'running'}
+                    onclick={() => startPromotionTrial(capability)}
+                  >
+                    {promotingTool === capability.name ? 'Starting…' : 'Start promotion trial'}
+                  </button>
+                  {#if activePolicy?.trial?.status === 'running'}
+                    <span class="inline-note">wait for policy v{activePolicy.version}</span>
+                  {:else if !hasPassedLiveTest(capability)}
+                    <span class="inline-note">pass step 1 first</span>
+                  {/if}
+                {/if}
+                {#if promotionErrors[capability.name]}
+                  <p class="inline-error">{promotionErrors[capability.name]}</p>
+                {/if}
+              </div>
+            </div>
+          </article>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
+  {#if opportunities.length > 0}
+    <section class="block frontier-block">
+      <div class="block-hd">
+        <span class="sr-label-tight">Value beyond more tools</span>
+        <span class="block-meta">latest portfolio audit</span>
+      </div>
+      <p class="acceptance-lede">
+        The cycle now audits missing data, online services and site functionality as separate investment choices.
+        A tool is only one delivery shape; each opportunity names who benefits and why it is worth connecting.
+      </p>
+      <div class="frontier-grid">
+        {#each opportunities as opportunity}
+          <article class="frontier-card">
+            <div class="frontier-meta mono">{opportunity.kind.replace(/_/g, ' ')} · {opportunity.consumer}</div>
+            <strong>{opportunity.title}</strong>
+            <p>{opportunity.value}</p>
+            {#if opportunity.integrationHint}<small>{opportunity.integrationHint}</small>{/if}
+          </article>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <!-- ── WHAT CHANGED AND WHY ────────────────────────────────────────────
        The lead. One card per improvement, each answering the same three
@@ -617,6 +844,44 @@
 </div>
 
 <style>
+  /* Deployed acceptance: three explicit gates, all against the live registry. */
+  .acceptance-block { margin-top: 1.5rem; }
+  .acceptance-lede { max-width: 76ch; margin: 0 0 0.9rem; color: var(--text-secondary); font-size: var(--fs-body-sm); line-height: 1.6; }
+  .acceptance-lede strong { color: var(--text-primary); }
+  .acceptance-list { display: flex; flex-direction: column; gap: 0.7rem; }
+  .acceptance-card { border: 1px solid var(--line-strong); border-left: 3px solid var(--warn, #b0892a); background: var(--surface-sunken); padding: 0.9rem 1rem 1rem; }
+  .acceptance-card.accepted { border-left-color: var(--success, #2d7a3a); }
+  .acceptance-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.8rem; }
+  .acceptance-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line-hair); }
+  .acceptance-step { min-width: 0; padding: 0.8rem 0.85rem 0 0; }
+  .acceptance-step + .acceptance-step { border-left: 1px solid var(--line-hair); padding-left: 0.85rem; }
+  .step-label { display: flex; align-items: center; gap: 0.45rem; font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-primary); }
+  .step-label span { display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; border: 1px solid var(--accent); color: var(--accent); }
+  .acceptance-step > p { margin: 0.55rem 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
+  .args-editor { display: block; box-sizing: border-box; width: 100%; resize: vertical; margin: 0.55rem 0; padding: 0.55rem; border: 1px solid var(--line-strong); border-radius: 0; background: var(--bg); color: var(--text-primary); font-size: var(--fs-label-xs); line-height: 1.45; }
+  .jkai-prompt { margin: 0.55rem 0; padding: 0.55rem 0.65rem; border-left: 2px solid var(--accent); background: var(--bg); color: var(--text-secondary); font-size: var(--fs-label); line-height: 1.5; }
+  .button-link { display: inline-block; box-sizing: border-box; text-decoration: none; }
+  .inline-note { margin-left: 0.45rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .inline-note.bad, .inline-error { color: var(--error, #c44); }
+  .inline-error { margin: 0.5rem 0 0; font-size: var(--fs-label); line-height: 1.45; }
+  .test-result { max-height: 12rem; overflow: auto; margin: 0.55rem 0 0; padding: 0.55rem; border: 1px solid var(--error, #c44); background: var(--bg); color: var(--error, #c44); font: var(--fs-label-xs)/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .test-result.pass { border-color: var(--success, #2d7a3a); color: var(--success, #2d7a3a); }
+  .last-test, .usage { font-size: var(--fs-label-xs) !important; color: var(--text-ghost) !important; }
+  .last-test.pass { color: var(--success, #2d7a3a) !important; }
+
+  .frontier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.55rem; }
+  .frontier-card { padding: 0.75rem 0.8rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
+  .frontier-meta { margin-bottom: 0.4rem; color: var(--accent); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+  .frontier-card strong { display: block; color: var(--text-primary); font-size: var(--fs-body-sm); }
+  .frontier-card p { margin: 0.35rem 0; color: var(--text-secondary); font-size: var(--fs-label); line-height: 1.5; }
+  .frontier-card small { color: var(--text-ghost); font-size: var(--fs-label-xs); line-height: 1.45; }
+
+  @media (max-width: 820px) {
+    .acceptance-grid { grid-template-columns: 1fr; }
+    .acceptance-step { padding-right: 0; }
+    .acceptance-step + .acceptance-step { border-left: 0; border-top: 1px solid var(--line-hair); margin-top: 0.8rem; padding-left: 0; }
+  }
+
   /* ── Plain-English improvement cards ──────────────────────────────────────
      A card is a three-row definition list so Driver / Solution / Outcome line
      up down the page and can be scanned column-wise. The status colour lives on
