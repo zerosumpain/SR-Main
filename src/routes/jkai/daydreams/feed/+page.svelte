@@ -140,7 +140,7 @@
     if (ok && verdict === 'useful') await postThought({ action: 'weave', id: t.id });
   }
   /** Optimistic: the row leaves at once, and comes back if the server refused. */
-  async function archive(t: Thought) {
+  async function archive(t: { id: string }) {
     archivedNow.add(t.id);
     if (openId === t.id) openId = null;
     const ok = await act({ action: 'archive', id: t.id }, `${t.id}:archive`);
