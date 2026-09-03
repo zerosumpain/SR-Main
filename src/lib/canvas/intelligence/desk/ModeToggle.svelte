@@ -4,11 +4,13 @@
     mode,
     synthesising = false,
     disabled = false,
+    dark = false,
     onmode,
   }: {
     mode: 'gather' | 'synthesize';
     synthesising?: boolean;
     disabled?: boolean;
+    dark?: boolean;
     onmode: (next: 'gather' | 'synthesize') => void;
   } = $props();
 
@@ -19,7 +21,7 @@
   }
 </script>
 
-<div class="mode-toggle" role="radiogroup" aria-label="Desk mode" class:disabled>
+<div class="mode-toggle" role="radiogroup" aria-label="Desk mode" class:disabled class:dark>
   <button
     type="button"
     role="radio"
@@ -58,6 +60,7 @@
     padding: 3px;
   }
   .mode-toggle.disabled { opacity: 0.55; }
+  .mode-toggle.dark { border-color: rgba(237, 228, 212, 0.18); background: rgba(237, 228, 212, 0.05); }
   .seg {
     display: inline-flex;
     align-items: center;
@@ -77,6 +80,8 @@
     white-space: nowrap;
   }
   .seg:hover:not(:disabled) { color: var(--text-primary, #1a1008); }
+  .dark .seg { color: rgba(237, 228, 212, 0.58); }
+  .dark .seg:hover:not(:disabled) { color: var(--bg); }
   .seg:disabled { cursor: default; }
   .seg.active {
     color: var(--text-primary, #1a1008);
@@ -84,7 +89,9 @@
     outline: 1px solid rgba(26, 16, 8, 0.18);
     outline-offset: -1px;
   }
+  .dark .seg.active { color: var(--text-primary); background: var(--bg); outline-color: var(--bg); }
   .seg.busy { color: var(--accent, #c4570a); }
+  .dark .seg.busy { color: var(--accent-on-dark); }
   .dot {
     width: 8px;
     height: 8px;
@@ -94,6 +101,8 @@
   }
   .dot.gather { background: var(--success, #2d7a3a); }
   .dot.synth { background: var(--accent, #c4570a); }
+  .dark .dot.gather { background: var(--good-on-dark); }
+  .dark .dot.synth { background: var(--accent-on-dark); }
   .seg:not(.active) .dot { opacity: 0.45; }
   .pulse { animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse {

@@ -1650,6 +1650,7 @@
     {mode}
     {synthesising}
     {counts}
+    compact={embedded}
     controlsHidden={readonly || deskMode === 'quick'}
     onmode={handleMode}
     onskip={handleSkip}
