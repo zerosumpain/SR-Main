@@ -1,4 +1,6 @@
 import type { RequestHandler } from './$types';
+import { guardedPublicFetch } from '$lib/server/safe-fetch';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 
 // Allowlist of safe domains to proxy — prevents abuse as an open proxy
 const ALLOWED_DOMAINS = [
@@ -52,7 +54,12 @@ function isDomainAllowed(hostname: string): boolean {
   return ALLOWED_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
 }
 
-export const GET: RequestHandler = async ({ params, url: reqUrl }) => {
+export const GET: RequestHandler = async (event) => {
+  const { params, url: reqUrl } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'jkai-cors', perClient: { capacity: 30, refillPerSecond: 30 / 60 },
+    global: { capacity: 180, refillPerSecond: 180 / 60 },
+  });
   const targetUrl = params.url;
   if (!targetUrl) {
     return new Response(JSON.stringify({ error: 'No URL provided' }), {
@@ -90,16 +97,18 @@ export const GET: RequestHandler = async ({ params, url: reqUrl }) => {
   }
 
   try {
-    const resp = await fetch(fullUrl, {
+    const resp = await guardedPublicFetch(fullUrl, {
+      timeoutMs: 8_000,
+      maxBytes: 2 * 1024 * 1024,
+      maxRedirects: 3,
+      allowUrl: (candidate) => isDomainAllowed(candidate.hostname),
       headers: {
         'User-Agent': 'JKAI-Proxy/1.0',
         'Accept': 'application/json, text/plain, */*',
       },
     });
 
-    const body = await resp.arrayBuffer();
-
-    return new Response(body, {
+    return new Response(resp.body, {
       status: resp.status,
       headers: {
         'Content-Type': resp.headers.get('content-type') || 'application/octet-stream',

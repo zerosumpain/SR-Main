@@ -126,8 +126,8 @@ const HOOK_NON_BYPASSES = arrayLiteralsFrom(GATE_BYPASSES_SRC, 'HOOK_NON_BYPASSE
 // which is a green gate for the worst possible reason. Assert the shape.
 {
   const expected = {
-    HOOK_BYPASSES: { list: HOOK_BYPASSES, min: 25, canary: '/api/mcp' },
-    HOOK_EXACT_BYPASSES: { list: HOOK_EXACT_BYPASSES, min: 1, canary: '/health' },
+    HOOK_BYPASSES: { list: HOOK_BYPASSES, min: 20, canary: '/api/mcp' },
+    HOOK_EXACT_BYPASSES: { list: HOOK_EXACT_BYPASSES, min: 7, canary: '/health' },
     HOOK_PAGE_PREFIX_BYPASSES: { list: HOOK_PAGE_PREFIX_BYPASSES, min: 1, canary: '/tools' },
     HOOK_NON_BYPASSES: { list: HOOK_NON_BYPASSES, min: 3, canary: '/api' },
   };

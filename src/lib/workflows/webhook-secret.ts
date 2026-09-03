@@ -1,21 +1,22 @@
 /**
  * D4 — Webhook hardening: per-workflow shared secret.
  *
- * A webhook-triggered workflow may carry an optional secret in its
- * `workflows.trigger` jsonb (no schema change). When present, `POST
- * /api/workflows/webhook/[id]` requires an `X-Webhook-Secret` header whose value
- * matches, using a timing-safe comparison. When absent, the endpoint keeps its
- * historical open behaviour (backwards compatible).
+ * A webhook-triggered workflow must carry a secret in its `workflows.trigger`
+ * jsonb (no schema change). External callers sign `<unix-seconds>.<raw-body>`
+ * with HMAC-SHA256. Missing secrets fail closed.
  *
  * Pure and DB-free so the accept/reject matrix is unit-testable in isolation;
- * the route just wires `isWebhookAuthorized` into its 401 branch.
+ * the route wires `isWebhookSignatureAuthorized` into its 401 branch.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
-/** The HTTP header carrying the caller's secret. Lower-cased for direct use
- *  with `Headers.get()` (case-insensitive, but we keep the canonical form). */
+/** Legacy raw-secret header, retained only for callers importing the constant.
+ *  The route no longer accepts it as authentication. */
 export const WEBHOOK_SECRET_HEADER = 'x-webhook-secret';
+export const WEBHOOK_TIMESTAMP_HEADER = 'x-webhook-timestamp';
+export const WEBHOOK_SIGNATURE_HEADER = 'x-webhook-signature';
+export const WEBHOOK_MAX_SKEW_SECONDS = 300;
 
 /** Loose shape of the `workflows.trigger` jsonb we read a secret out of. The
  *  secret can live at the top level (written by the trigger PUT route, matching
@@ -31,7 +32,7 @@ export interface TriggerLike {
 
 /**
  * Extract the configured webhook secret from a workflow's trigger jsonb. Returns
- * `''` when none is configured (which the gate treats as "open").
+ * `''` when none is configured (which the gate treats as disabled).
  */
 export function getWebhookSecret(trigger: TriggerLike | null | undefined): string {
   if (!trigger || typeof trigger !== 'object') return '';
@@ -58,16 +59,35 @@ export function secretsMatch(configured: string, provided: string | null | undef
 }
 
 /**
- * Combined gate. Returns `true` (authorised) when no secret is configured
- * (back-compat) or when the supplied header value matches the configured secret.
- * Returns `false` only when a secret is configured and the header is
- * missing/wrong.
+ * Legacy raw-secret comparator. Missing configuration fails closed. New HTTP
+ * callers must use the timestamped HMAC helpers below instead.
  */
 export function isWebhookAuthorized(
   trigger: TriggerLike | null | undefined,
   headerValue: string | null | undefined,
 ): boolean {
   const configured = getWebhookSecret(trigger);
-  if (!configured) return true; // no secret ⇒ open (backwards compatible)
+  if (!configured) return false;
   return secretsMatch(configured, headerValue ?? null);
+}
+
+export function webhookSignature(secret: string, timestamp: string, rawBody: string): string {
+  return `sha256=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`, 'utf8').digest('hex')}`;
+}
+
+export function isWebhookSignatureAuthorized(
+  trigger: TriggerLike | null | undefined,
+  timestamp: string | null | undefined,
+  signature: string | null | undefined,
+  rawBody: string,
+  nowMs = Date.now(),
+): boolean {
+  const configured = getWebhookSecret(trigger);
+  if (!configured || !timestamp || !signature) return false;
+  if (!/^\d{10}$/.test(timestamp)) return false;
+  const sentMs = Number(timestamp) * 1000;
+  if (!Number.isSafeInteger(sentMs) || Math.abs(nowMs - sentMs) > WEBHOOK_MAX_SKEW_SECONDS * 1000) {
+    return false;
+  }
+  return secretsMatch(webhookSignature(configured, timestamp, rawBody), signature);
 }

@@ -6,7 +6,7 @@
 //
 // Auth: DSD_INGEST_SECRET as a Bearer token (if set).
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
@@ -14,20 +14,21 @@ import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowSchedules } from '$lib/db/schema';
 import { registerCronJob } from '$lib/workflows/scheduler';
 import type { RequestHandler } from './$types';
+import { assertBearerSecret } from '$lib/server/service-auth';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 
 // Daily at 06:30 UTC — sources publish irregularly; the ingest route's
 // dedup + change-detection makes daily polling cheap (no-ops cost nothing).
 const CRON = '30 6 * * *';
 const NAME = 'canvas:dsd-standards-discovery';
 
-function authorized(request: Request): boolean {
-  const secret = env.DSD_INGEST_SECRET;
-  if (!secret) return true;
-  return (request.headers.get('authorization') ?? '') === `Bearer ${secret}`;
-}
-
-export const POST: RequestHandler = async ({ request, url }) => {
-  if (!authorized(request)) throw error(401, 'unauthorized');
+export const POST: RequestHandler = async (event) => {
+  const { request, url } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'dsd-seed', perClient: { capacity: 3, refillPerSecond: 3 / 3600 },
+    global: { capacity: 6, refillPerSecond: 6 / 3600 },
+  });
+  assertBearerSecret(request, env.DSD_INGEST_SECRET, 'DSD_INGEST_SECRET');
   const origin = url.origin;
   const secret = env.DSD_INGEST_SECRET;
 

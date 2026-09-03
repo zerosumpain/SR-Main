@@ -159,16 +159,14 @@ fi
 exit \$ec
 REMOTE
 
-echo "==> Syncing custom WS-aware server entry..."
+echo "==> Syncing graceful adapter-node server entry..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/scripts"
 rsync -avz -e "ssh -i $VPS_KEY" \
   scripts/server-with-ws.mjs "$VPS_USER@$VPS_HOST:$VPS_DIR/scripts/"
 
-echo "==> Updating systemd service to run the WS-aware entry..."
-# scripts/server-with-ws.mjs wraps adapter-node's handler.js with a
-# WebSocket-upgrade proxy that pipes /api/jkai/builds/<id>/session to
-# the jkai-builder unix socket. Required for phases 5/6 (interjection,
-# notes, shell). Falls back to vanilla index.js if the wrapper is missing.
+echo "==> Updating systemd service to run the graceful server entry..."
+# Session interjection, notes and shell use authenticated SvelteKit POSTs plus
+# SSE. This wrapper deliberately has no WebSocket upgrade surface.
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
   "sudo sed -i 's|ExecStart=.*build/index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/scripts/server-with-ws.mjs|' /etc/systemd/system/$SERVICE.service && sudo sed -i 's|ExecStart=.*index.js|ExecStart=/usr/bin/node /opt/strange-rambling-svelte/scripts/server-with-ws.mjs|' /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload"
 

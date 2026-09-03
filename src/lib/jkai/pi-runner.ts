@@ -14,6 +14,7 @@ import { toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
 import { stripNulls } from './strip-nulls';
 import { describeDbError } from './db-error';
+import { buildChildEnvironment } from './sandbox';
 
 /** pi's built-ins the agent always needs. Never narrowed at runtime. */
 export const BASE_PI_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
@@ -512,15 +513,14 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     spawnOpts = {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: workdir,
-      env: {
-        ...process.env,
+      env: buildChildEnvironment({
         ...(auth ? { [auth.envVar]: auth.value } : {}),
         PI_OFFLINE: '1',
         PI_TELEMETRY: '0',
         ...Object.fromEntries(
           Object.entries(opts.extraEnv ?? {}).filter(([, v]) => typeof v === 'string') as [string, string][],
         ),
-      },
+      }),
     };
   } else {
     const dockerArgs = [

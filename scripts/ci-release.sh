@@ -88,6 +88,11 @@ echo "==> Previously deployed sha: ${PREV_SHA:-<none>}"
 echo "==> Placing package manifests..."
 rsync -a package.json package-lock.json "$VPS_DIR/"
 
+# The runtime no longer honours this historical escape hatch. Remove stale
+# production configuration too, so posture checks cannot mistake it for an
+# active control and no rollback can accidentally revive it.
+sed -i '/^AUTH_BYPASS=/d' "$VPS_DIR/.env"
+
 # NOTE: no --delete. The VPS's data/jkai-projects/ holds pages published at
 # runtime by publish_page that do not exist in git; --delete would erase them.
 echo "==> Placing data files (additive)..."
@@ -141,7 +146,7 @@ LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
 if [ "$(cat "$STATE_DIR/lockfile.sha256" 2>/dev/null || true)" = "$LOCK_HASH" ]; then
   echo "    lockfile unchanged — skipping install"
 else
-  ( cd "$VPS_DIR" && npm install --omit=dev --silent )
+  ( cd "$VPS_DIR" && npm ci --omit=dev --silent )
   echo "$LOCK_HASH" > "$STATE_DIR/lockfile.sha256"
   echo "    installed"
 fi

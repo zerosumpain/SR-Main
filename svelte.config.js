@@ -7,14 +7,34 @@ const config = {
 		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter({ out: 'build' }),
-		// Disable SvelteKit's same-origin CSRF guard so WebDAV mount clients
-		// (Finder, Explorer, davfs2) can PUT/MOVE/COPY. They send no Origin
-		// header and frequently use text/plain content-type, both of which
-		// trip the default check. Defense-in-depth still applies: Auth.js
-		// session cookies are sameSite=lax (browser-level CSRF protection
-		// on the rest of the site) and /dav/* requires Basic Auth against
-		// webdav_credentials.
-		csrf: { checkOrigin: false },
+		// Keep SvelteKit's default same-origin form protection enabled. WebDAV
+		// carries Basic auth and is handled explicitly in hooks.server.ts; it is
+		// not a reason to turn browser CSRF protection off for every route.
+		csp: {
+			mode: 'auto',
+			directives: {
+				'default-src': ['self'],
+				'base-uri': ['self'],
+				'object-src': ['none'],
+				'frame-ancestors': ['self'],
+				'form-action': ['self'],
+				'script-src': ['self', 'https://unpkg.com', 'https://static.cloudflareinsights.com'],
+				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com', 'https://unpkg.com'],
+				'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
+				'img-src': ['self', 'data:', 'blob:', 'https:'],
+				'media-src': ['self', 'data:', 'blob:', 'https:'],
+				'connect-src': ['self', 'https:', 'wss:'],
+				'worker-src': ['self', 'blob:'],
+				'manifest-src': ['self'],
+				'frame-src': [
+					'self',
+					'https://vnc.strangeramblings.com',
+					'https://www.youtube.com',
+					'https://www.youtube-nocookie.com',
+					'https://player.vimeo.com'
+				]
+			}
+		},
 		serviceWorker: { register: false }
 	},
 	vitePlugin: {

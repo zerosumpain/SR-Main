@@ -7,17 +7,50 @@ Type=simple
 User=johnk
 Group=johnk
 WorkingDirectory=/opt/strange-rambling-svelte
-EnvironmentFile=/opt/strange-rambling-svelte/.env
 Environment=NODE_ENV=production
 Environment=JKAI_BUILDER_SOCKET=/run/jkai-builder/jkai-builder.sock
 Environment=JKAI_BUILDS_ROOT=/opt/jkai-builds
 Environment=JKAI_BUILDS_HOSTMODE=1
 Environment=JKAI_BUILDER_PROCESS=1
+# systemd reads the source file before constructing the service mount
+# namespace. The launcher immediately filters it with `env -i`; generated
+# commands therefore receive neither this full environment nor filesystem
+# access to the source file.
+EnvironmentFile=-/opt/strange-rambling-svelte/.env
 RuntimeDirectory=jkai-builder
 RuntimeDirectoryMode=0755
-ExecStart=/usr/bin/node /opt/strange-rambling-svelte/packages/jkai-builder/dist/start.js
+CacheDirectory=jkai-builder
+CacheDirectoryMode=0700
+ExecStart=/opt/strange-rambling-svelte/scripts/jkai-builder-launch.sh
 Restart=always
 RestartSec=5
+
+# The orchestrator is trusted; generated build code is not. Restrict what the
+# service can see and mutate even if an agent command escapes its workspace.
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/jkai/workspace /opt/jkai-builds /opt/strange-rambling-svelte/data/jkai-projects /run/jkai-builder
+InaccessiblePaths=-/opt/strange-rambling-svelte/.env -/home/johnk/.ssh -/home/johnk/.config/gh -/root/.ssh -/run/docker.sock -/var/run/docker.sock
+ProtectClock=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
 
 # Resource caps — a runaway agent shouldn't eat the whole VPS.
 #
@@ -63,6 +96,7 @@ RestartSec=5
 # gate run.
 MemoryMax=10G
 CPUQuota=600%
+TasksMax=512
 
 [Install]
 WantedBy=multi-user.target

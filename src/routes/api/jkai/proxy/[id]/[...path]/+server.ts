@@ -5,8 +5,10 @@ import { eq } from 'drizzle-orm';
 import { proxyToSandbox } from '$lib/jkai/serve';
 import { startProjectServer } from '$lib/jkai/sandbox';
 import type { ServeConfig } from '$lib/jkai/types';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { extname, join, resolve, sep } from 'node:path';
+import { isOwnerRequest } from '$lib/server/owner';
+import { safeGeneratedResponseHeaders } from '$lib/server/generated-content';
 
 // Track in-flight revive attempts so concurrent requests during the wake-up
 // window don't all fan out to startProjectServer (which is expensive).
@@ -60,9 +62,9 @@ async function serveStaticBuild(
   const workspaceRoot = `/home/jkai/workspace/${buildId}/live`;
   // Normalise the requested path and refuse absolute / parent-escaping paths.
   const cleanRequested = requestedPath.replace(/^\/+/, '') || 'index.html';
-  const resolved = resolve(workspaceRoot, cleanRequested);
-  const rootResolved = resolve(workspaceRoot) + sep;
-  if (resolved !== resolve(workspaceRoot) && !resolved.startsWith(rootResolved)) {
+  const rootResolved = resolve(workspaceRoot);
+  const resolved = resolve(rootResolved, cleanRequested);
+  if (resolved !== rootResolved && !resolved.startsWith(rootResolved + sep)) {
     return new Response('forbidden', { status: 403 });
   }
 
@@ -78,7 +80,13 @@ async function serveStaticBuild(
   const targetPath = st.isDirectory() ? join(resolved, 'index.html') : resolved;
   let body: Buffer;
   try {
-    body = await readFile(targetPath);
+    // `resolve` blocks lexical traversal; realpath also blocks symlinks that
+    // point out of the build root.
+    const [realRoot, realTarget] = await Promise.all([realpath(rootResolved), realpath(targetPath)]);
+    if (realTarget !== realRoot && !realTarget.startsWith(realRoot + sep)) {
+      return new Response('forbidden', { status: 403 });
+    }
+    body = await readFile(realTarget);
   } catch {
     return new Response('not found', { status: 404 });
   }
@@ -100,12 +108,13 @@ async function serveStaticBuild(
   }
 
   // Buffer → Uint8Array for the Response constructor's BodyInit shape.
+  const headers = safeGeneratedResponseHeaders(new Headers({
+    'content-type': mime,
+    'cache-control': 'no-cache',
+  }));
   return new Response(new Uint8Array(body), {
     status: 200,
-    headers: {
-      'content-type': mime,
-      'cache-control': 'no-cache',
-    },
+    headers,
   });
 }
 
@@ -158,7 +167,13 @@ function wakingUpHtml(refreshUrl: string): string {
 </html>`;
 }
 
-const handler: RequestHandler = async ({ params, request }) => {
+const handler: RequestHandler = async (event) => {
+  const { params, request } = event;
+  // Preview identifiers are not capabilities. Every preview request, including
+  // assets and mutations, requires a real owner session (or dev-only local
+  // access); public projects are served through /projects instead.
+  if (!(await isOwnerRequest(event))) return new Response('Not found', { status: 404 });
+
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
   if (!build?.serveConfig) return new Response('Project not serving', { status: 404 });
 
@@ -199,10 +214,10 @@ const handler: RequestHandler = async ({ params, request }) => {
     }
     return new Response(wakingUpHtml(`/api/jkai/proxy/${params.id}/`), {
       status: 503,
-      headers: {
+      headers: safeGeneratedResponseHeaders(new Headers({
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
-      },
+      })),
     });
   }
 

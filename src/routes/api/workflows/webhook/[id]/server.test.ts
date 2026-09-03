@@ -11,6 +11,7 @@ vi.mock('$lib/db/schema', () => ({
 }));
 
 vi.mock('drizzle-orm', () => ({ eq: (..._a: any[]) => ({}) }));
+vi.mock('$lib/server/access', () => ({ isOwnerEmail: (email: string | null | undefined) => email === 'owner@test' }));
 
 // engine.execute is fire-and-forget in the route; return a resolved outcome so
 // the trailing .then() (which calls db.update) has something to chain on.
@@ -36,13 +37,33 @@ vi.mock('$lib/db', () => {
 });
 
 import { POST } from './+server';
+import {
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  webhookSignature,
+} from '$lib/workflows/webhook-secret';
 
-function makeEvent(secretHeader?: string | null) {
+let requestId = 0;
+
+function makeEvent(options: { secret?: string; signature?: string; owner?: boolean } = {}) {
+  const raw = JSON.stringify({ payload: true, nonce: ++requestId });
+  const timestamp = String(Math.floor(Date.now() / 1000));
   const headers = new Headers();
-  if (typeof secretHeader === 'string') headers.set('x-webhook-secret', secretHeader);
+  headers.set('content-type', 'application/json');
+  if (options.secret) {
+    headers.set(WEBHOOK_TIMESTAMP_HEADER, timestamp);
+    headers.set(WEBHOOK_SIGNATURE_HEADER, webhookSignature(options.secret, timestamp, raw));
+  } else if (options.signature) {
+    headers.set(WEBHOOK_TIMESTAMP_HEADER, timestamp);
+    headers.set(WEBHOOK_SIGNATURE_HEADER, options.signature);
+  }
   return {
     params: { id: 'wf-1' },
-    request: { headers, json: async () => ({ payload: true }) },
+    request: new Request('https://example.test/api/workflows/webhook/wf-1', {
+      method: 'POST', headers, body: raw,
+    }),
+    locals: { auth: async () => options.owner ? { user: { email: 'owner@test' } } : null },
+    getClientAddress: () => '203.0.113.10',
   } as any;
 }
 
@@ -66,28 +87,26 @@ describe('POST /api/workflows/webhook/[id] — secret matrix', () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
-  it('no secret configured ⇒ accepts (202), header ignored', async () => {
+  it('no secret configured ⇒ rejects (401)', async () => {
     const res = await POST(makeEvent());
-    expect(res.status).toBe(202);
-    const body = await res.json();
-    expect(body.runId).toBe('run-1');
-    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(401);
+    expect(executeMock).not.toHaveBeenCalled();
   });
 
-  it('secret configured + correct header ⇒ 202', async () => {
+  it('secret configured + correct signature ⇒ 202', async () => {
     workflowRow = { id: 'wf-1', name: 'x', trigger: { type: 'webhook', secret: 's3cr3t' } };
-    const res = await POST(makeEvent('s3cr3t'));
+    const res = await POST(makeEvent({ secret: 's3cr3t' }));
     expect(res.status).toBe(202);
     expect(executeMock).toHaveBeenCalledTimes(1);
   });
 
-  it('secret configured (nested config) + correct header ⇒ 202', async () => {
+  it('secret configured (nested config) + correct signature ⇒ 202', async () => {
     workflowRow = {
       id: 'wf-1',
       name: 'x',
       trigger: { type: 'webhook', config: { secret: 'nested' } },
     };
-    const res = await POST(makeEvent('nested'));
+    const res = await POST(makeEvent({ secret: 'nested' }));
     expect(res.status).toBe(202);
     expect(executeMock).toHaveBeenCalledTimes(1);
   });
@@ -99,10 +118,16 @@ describe('POST /api/workflows/webhook/[id] — secret matrix', () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
-  it('secret configured + wrong header ⇒ 401, no run', async () => {
+  it('secret configured + wrong signature ⇒ 401, no run', async () => {
     workflowRow = { id: 'wf-1', name: 'x', trigger: { type: 'webhook', secret: 's3cr3t' } };
-    const res = await POST(makeEvent('wrong'));
+    const res = await POST(makeEvent({ signature: 'sha256=wrong' }));
     expect(res.status).toBe(401);
     expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it('allows an authenticated owner to test a disabled webhook', async () => {
+    const res = await POST(makeEvent({ owner: true }));
+    expect(res.status).toBe(202);
+    expect(executeMock).toHaveBeenCalledTimes(1);
   });
 });

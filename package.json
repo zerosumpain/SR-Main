@@ -11,6 +11,29 @@
     "//piUpstreamRepo": "The GitHub repo behind piPackage, checked ALONGSIDE npm rather than instead of it. The GitHub API answers a moved repo with a 301 to its new canonical name, so this is the identifier that survives a rename — it is how the 0.73.1 freeze was found at all. Update it only when upstream genuinely moves, and expect check-pi-version.mjs to tell you before you notice by hand.",
     "piUpstreamRepo": "earendil-works/pi"
   },
+  "overrides": {
+    "@xmldom/xmldom": "0.8.15",
+    "minimatch@<10": {
+      "brace-expansion": "2.1.4"
+    },
+    "minimatch@>=10": {
+      "brace-expansion": "5.0.9"
+    },
+    "docx": {
+      "nanoid": "5.1.16"
+    },
+    "electron-to-chromium": "1.5.420",
+    "fast-xml-parser": "5.11.1",
+    "lodash-es": "4.18.1",
+    "nanoid": "3.3.18",
+    "picomatch": "4.0.7",
+    "postcss": "8.5.28",
+    "postcss-selector-parser": "6.1.4",
+    "qs": "6.16.0",
+    "tmp": "0.2.7",
+    "uuid": "11.1.1",
+    "ws": "8.21.3"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -45,7 +68,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@sveltejs/adapter-auto": "^7.0.0",
-    "@sveltejs/kit": "^2.50.2",
+    "@sveltejs/kit": "^2.70.3",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.2.2",
     "@types/d3": "^7.4.3",
@@ -63,11 +86,11 @@
     "@vite-pwa/sveltekit": "^1.1.0",
     "drizzle-kit": "^0.31.10",
     "fake-indexeddb": "^6.2.5",
-    "svelte": "^5.51.0",
+    "svelte": "^5.57.0",
     "svelte-check": "^4.4.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1",
+    "vite": "^7.3.6",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.0",
     "workbox-expiration": "^7.4.1",
@@ -77,8 +100,8 @@
     "workbox-window": "^7.4.1"
   },
   "dependencies": {
-    "@auth/core": "^0.41.1",
-    "@auth/sveltekit": "^1.11.1",
+    "@auth/core": "^0.41.3",
+    "@auth/sveltekit": "^1.11.3",
     "@azure/storage-blob": "^12.33.0",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-markdown": "^6.5.0",
@@ -97,8 +120,7 @@
     "@tiptap/extension-text-style": "^3.30.5",
     "@tiptap/starter-kit": "^3.30.5",
     "@types/qrcode": "^1.5.6",
-    "@types/ws": "^8.18.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "^7.0.0-rc.14",
     "@xyflow/svelte": "^1.5.2",
     "3d-force-graph": "^1.80.0",
     "croner": "^10.0.1",
@@ -109,9 +131,9 @@
     "d3-scale": "^4.0.2",
     "d3-shape": "^3.2.0",
     "docx": "^9.6.1",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
-    "googleapis": "^144.0.0",
+    "googleapis": "^178.0.0",
     "highlight.js": "^11.11.1",
     "ical.js": "^2.2.1",
     "idb": "^8.0.3",
@@ -120,7 +142,7 @@
     "layerchart": "^1.0.13",
     "mammoth": "^1.12.0",
     "marked": "^17.0.6",
-    "nodemailer": "^7.0.13",
+    "nodemailer": "^9.1.1",
     "openai": "^6.32.0",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.296",
@@ -129,16 +151,16 @@
     "playwright": "^1.61.1",
     "prismjs": "^1.30.0",
     "qrcode": "^1.5.4",
-    "sanitize-html": "^2.17.3",
+    "sanitize-html": "^2.17.7",
     "shiki": "^4.0.2",
     "three": "^0.183.2",
     "topojson-client": "^3.1.0",
     "tsdav": "^2.2.2",
-    "vega": "^5.33.1",
-    "vega-embed": "^6.29.0",
-    "vega-lite": "^5.23.0",
+    "undici": "^7.29.0",
+    "vega": "^6.4.0",
+    "vega-embed": "^7.2.0",
+    "vega-lite": "^6.4.3",
     "web-push": "^3.6.7",
-    "ws": "^8.20.0",
     "zod": "^4.3.6"
   }
 }

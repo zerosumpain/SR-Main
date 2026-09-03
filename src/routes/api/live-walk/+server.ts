@@ -4,6 +4,9 @@ import { writeFile, readFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 
 import { env } from '$env/dynamic/private';
+import { secretsMatch } from '$lib/workflows/webhook-secret';
+import { readLimitedJson } from '$lib/server/service-auth';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 
 const LIVE_STATE_PATH = '/tmp/live-walk-state.json';
 const EXPIRE_MS = 4 * 60 * 60 * 1000;
@@ -28,15 +31,31 @@ export const OPTIONS: RequestHandler = async () => {
 /**
  * POST — receive live walk state from the maps PWA
  */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'live-walk-write',
+    perClient: { capacity: 30, refillPerSecond: 30 / 60 },
+    global: { capacity: 180, refillPerSecond: 180 / 60 },
+  });
   const secret = getBroadcastSecret();
   const key = request.headers.get('X-Broadcast-Key');
-  if (!secret || key !== secret) {
+  if (!secret || !secretsMatch(secret, key)) {
     return json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
   }
 
-  const incoming = await request.json();
+  const incoming = await readLimitedJson<Record<string, any>>(request, 256 * 1024);
   incoming.receivedAt = Date.now();
+  const track = Array.isArray(incoming.track)
+    ? incoming.track
+        .slice(-2_000)
+        .filter((p: any) =>
+          Number.isFinite(p?.lat) && p.lat >= -90 && p.lat <= 90 &&
+          Number.isFinite(p?.lng) && p.lng >= -180 && p.lng <= 180 &&
+          Number.isFinite(p?.timestamp),
+        )
+        .map((p: any) => ({ lat: p.lat, lng: p.lng, timestamp: p.timestamp }))
+    : [];
 
   // Merge: append incoming track points to existing accumulated track
   let existingTrack: { lat: number; lng: number; timestamp: number }[] = [];
@@ -53,12 +72,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const state = {
     ...incoming,
-    track: [...existingTrack, ...incoming.track]
+    track: [...existingTrack, ...track].slice(-2_000),
   };
 
   await writeFile(LIVE_STATE_PATH, JSON.stringify(state), 'utf-8');
 
-  if (state.status === 'finished') {
+  if (incoming.status === 'finished') {
     setTimeout(async () => {
       try { await unlink(LIVE_STATE_PATH); } catch {}
     }, 5 * 60 * 1000);
@@ -68,7 +87,7 @@ export const POST: RequestHandler = async ({ request }) => {
 };
 
 /**
- * GET — fetch current live walk state (public)
+ * GET — fetch current live walk state (owner-only via hooks.server.ts)
  */
 export const GET: RequestHandler = async () => {
   if (!existsSync(LIVE_STATE_PATH)) {
@@ -93,10 +112,16 @@ export const GET: RequestHandler = async () => {
 /**
  * DELETE — clear live walk state
  */
-export const DELETE: RequestHandler = async ({ request }) => {
+export const DELETE: RequestHandler = async (event) => {
+  const { request } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'live-walk-delete',
+    perClient: { capacity: 6, refillPerSecond: 6 / 60 },
+    global: { capacity: 30, refillPerSecond: 30 / 60 },
+  });
   const secret = getBroadcastSecret();
   const key = request.headers.get('X-Broadcast-Key');
-  if (!secret || key !== secret) {
+  if (!secret || !secretsMatch(secret, key)) {
     return json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
   }
   try { await unlink(LIVE_STATE_PATH); } catch {}

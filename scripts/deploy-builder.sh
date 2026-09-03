@@ -104,9 +104,13 @@ rsync -avz \
   -e "ssh -i $VPS_KEY" \
   packages/jkai-builder/jkai-builder.service \
   "$VPS_USER@$VPS_HOST:$VPS_DIR/packages/jkai-builder/"
+rsync -avz \
+  -e "ssh -i $VPS_KEY" \
+  scripts/jkai-builder-launch.sh \
+  "$VPS_USER@$VPS_HOST:$VPS_DIR/scripts/"
 
 echo "==> Ensuring builds root + installing systemd unit..."
-ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo install -d -m 755 -o $VPS_USER -g $VPS_USER $BUILDS_ROOT && sudo cp $VPS_DIR/packages/jkai-builder/jkai-builder.service /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload && sudo systemctl enable $SERVICE.service && sudo systemctl restart $SERVICE.service"
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "sudo install -d -m 755 -o $VPS_USER -g $VPS_USER $BUILDS_ROOT /home/jkai/workspace $VPS_DIR/data/jkai-projects && chmod 700 $VPS_DIR/scripts/jkai-builder-launch.sh && sudo cp $VPS_DIR/packages/jkai-builder/jkai-builder.service /etc/systemd/system/$SERVICE.service && sudo systemctl daemon-reload && sudo systemctl enable $SERVICE.service && sudo systemctl restart $SERVICE.service"
 
 echo "==> Clearing any staged bundle (this deploy supersedes it)..."
 # Without this the 60s watchdog would see a `pending` symlink from an earlier CI

@@ -15,6 +15,7 @@
   // box only ever contains what John typed.
   import { onMount } from 'svelte';
   import { marked } from 'marked';
+  import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -323,9 +324,13 @@
     return `${Math.round(h / 24)}d ago`;
   }
 
-  const rendered = $derived(marked.parse(body || '', { async: false }) as string);
+  const rendered = $derived(
+    sanitizeChatHtml(marked.parse(body || '', { async: false }) as string),
+  );
   const renderedSupport = $derived(
-    supporting ? (marked.parse(supporting, { async: false }) as string) : '',
+    supporting
+      ? sanitizeChatHtml(marked.parse(supporting, { async: false }) as string)
+      : '',
   );
 
   // ⌘S / Ctrl+S saves, Escape closes. A writing surface that needs the mouse to

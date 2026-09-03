@@ -72,11 +72,11 @@ jobs:
             pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
           echo "postgres pulling/booting in the background"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.22.3
           cache: npm
 
       - run: npm ci
@@ -173,7 +173,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Check the pin against npm AND the upstream repo
         id: check

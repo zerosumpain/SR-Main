@@ -1,6 +1,8 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
+import { assertPublicUrl } from '$lib/server/ssrf-guard';
+import { webframeConfig, webframeHeaders, webframeSessionId } from '$lib/server/webframe-client';
+import { safeGeneratedResponseHeaders } from '$lib/server/generated-content';
 
 const CLIENT_INJECT = `
 <script>
@@ -26,13 +28,14 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
   const target = url.searchParams.get('url');
   const session = url.searchParams.get('session');
   if (!target || !session) throw error(400, 'url and session required');
-  try { new URL(target); } catch { throw error(400, 'invalid url'); }
+  try { await assertPublicUrl(target); } catch { throw error(400, 'invalid or unsafe url'); }
 
-  const svc = env.WEBFRAME_SERVICE_URL;
-  if (!svc) throw error(503, 'webframe service not configured');
+  const svc = webframeConfig();
+  const internalSession = webframeSessionId(session, svc.token);
 
   const upstream = await fetch(
-    `${svc}/render?url=${encodeURIComponent(target)}&session=${encodeURIComponent(session)}`,
+    `${svc.url}/render?url=${encodeURIComponent(target)}&session=${internalSession}`,
+    { headers: webframeHeaders(svc.token) },
   );
   if (!upstream.ok) {
     const body = await upstream.text().catch(() => '');
@@ -43,10 +46,10 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
     ? html.replace('</head>', `${CLIENT_INJECT}</head>`)
     : `${CLIENT_INJECT}${html}`;
   return new Response(injected, {
-    headers: {
+    headers: safeGeneratedResponseHeaders(new Headers({
       'content-type': 'text/html; charset=utf-8',
       // The iframe loads this response — don't cache so reloads re-render.
       'cache-control': 'no-store',
-    },
+    })),
   });
 };

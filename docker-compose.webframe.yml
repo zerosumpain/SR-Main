@@ -3,8 +3,29 @@ services:
     build: ./services/webframe
     container_name: webframe
     restart: unless-stopped
+    environment:
+      WEBFRAME_SERVICE_TOKEN: ${WEBFRAME_SERVICE_TOKEN:?WEBFRAME_SERVICE_TOKEN must be set}
     ports:
       - "127.0.0.1:3303:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    shm_size: 512m
+    cap_drop:
+      - ALL
+    cap_add:
+      # Required by Chromium's namespace sandbox after it isolates a renderer.
+      - SYS_CHROOT
+    security_opt:
+      - no-new-privileges:true
+      # Ubuntu's AppArmor user-namespace restriction otherwise prevents
+      # Chromium's own renderer sandbox from starting. The container still has
+      # no capabilities, a read-only root, resource caps, and the egress proxy.
+      - apparmor:unconfined
+      - seccomp:./services/webframe/seccomp_profile.json
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2.0
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s

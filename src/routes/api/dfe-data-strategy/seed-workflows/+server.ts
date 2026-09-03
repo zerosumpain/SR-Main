@@ -4,7 +4,7 @@
 // (mirrors the policy-engine / data-standard-designer seed routes). Hit once after deploy.
 // Auth: KEYSTONE_INTEL_SECRET as a Bearer token (if set).
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
@@ -12,18 +12,19 @@ import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, workflowSchedules } from '$lib/db/schema';
 import { registerCronJob } from '$lib/workflows/scheduler';
 import type { RequestHandler } from './$types';
+import { assertBearerSecret } from '$lib/server/service-auth';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 
 const CRON = '40 6 * * *'; // daily 06:40 UTC (offset from the DSD sweep)
 const NAME = 'canvas:keystone-intel-radar';
 
-function authorized(request: Request): boolean {
-  const secret = env.KEYSTONE_INTEL_SECRET;
-  if (!secret) return true;
-  return (request.headers.get('authorization') ?? '') === `Bearer ${secret}`;
-}
-
-export const POST: RequestHandler = async ({ request, url }) => {
-  if (!authorized(request)) throw error(401, 'unauthorized');
+export const POST: RequestHandler = async (event) => {
+  const { request, url } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'keystone-seed', perClient: { capacity: 3, refillPerSecond: 3 / 3600 },
+    global: { capacity: 6, refillPerSecond: 6 / 3600 },
+  });
+  assertBearerSecret(request, env.KEYSTONE_INTEL_SECRET, 'KEYSTONE_INTEL_SECRET');
   const origin = url.origin;
   const secret = env.KEYSTONE_INTEL_SECRET;
 

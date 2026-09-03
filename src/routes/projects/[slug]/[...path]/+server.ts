@@ -6,8 +6,9 @@ import { eq, and } from 'drizzle-orm';
 import { isProjectPublic } from '$lib/projects/visibility';
 import { resolveShareToken } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
-import { readFile, stat } from 'fs/promises';
-import { join, extname } from 'path';
+import { open, realpath, type FileHandle } from 'fs/promises';
+import { join, extname, resolve, sep } from 'path';
+import { safeGeneratedResponseHeaders } from '$lib/server/generated-content';
 
 // Relocated static bundles (whitehall, brass-and-rails) use relative ./assets/
 // paths across multiple HTML files, so the trailing slash must be preserved —
@@ -42,14 +43,16 @@ function getMimeType(filePath: string): string {
   return MIME_TYPES[extname(filePath).toLowerCase()] || 'application/octet-stream';
 }
 
-async function tryFile(filePath: string): Promise<{ data: ArrayBuffer; mime: string } | null> {
+async function tryFile(filePath: string): Promise<{ handle: FileHandle; mime: string; path: string } | null> {
+  let handle: FileHandle | undefined;
   try {
-    const s = await stat(filePath);
+    handle = await open(filePath, 'r');
+    const s = await handle.stat();
     if (s.isFile()) {
-      const buf = await readFile(filePath);
-      return { data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), mime: getMimeType(filePath) };
+      return { handle, mime: getMimeType(filePath), path: filePath };
     }
   } catch {}
+  await handle?.close().catch(() => {});
   return null;
 }
 
@@ -90,11 +93,16 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
     return new Response(null, { status: 308, headers });
   }
 
-  const baseDir = join(getPublishedDir(), params.slug);
+  const publishedRoot = resolve(getPublishedDir());
+  const baseDir = resolve(publishedRoot, params.slug);
+  if (baseDir !== publishedRoot && !baseDir.startsWith(publishedRoot + sep)) {
+    return new Response('Forbidden', { status: 403 });
+  }
 
-  // Security: prevent path traversal
-  const resolved = join(baseDir, requestedPath);
-  if (!resolved.startsWith(baseDir)) {
+  // Lexical containment first, then realpath containment below to prevent an
+  // in-tree symlink escaping into deployment files or secrets.
+  const resolved = resolve(baseDir, requestedPath);
+  if (resolved !== baseDir && !resolved.startsWith(baseDir + sep)) {
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -115,6 +123,31 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
     return new Response('Not found', { status: 404 });
   }
 
+  let data: ArrayBuffer;
+  try {
+    const [realPublishedRoot, realBase, realFile] = await Promise.all([
+      realpath(publishedRoot),
+      realpath(baseDir),
+      // Resolve the already-open descriptor, not the path. A generated build
+      // cannot swap a checked symlink before the bytes are read.
+      realpath(`/proc/self/fd/${result.handle.fd}`),
+    ]);
+    if (
+      (realBase !== realPublishedRoot && !realBase.startsWith(realPublishedRoot + sep)) ||
+      (realFile !== realBase && !realFile.startsWith(realBase + sep))
+    ) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    const buf = await result.handle.readFile();
+    data = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  } catch {
+    return new Response('Not found', { status: 404 });
+  } finally {
+    await result.handle.close().catch(() => {});
+  }
+
+  let responseFile = { data, mime: result.mime, path: result.path };
+
   // Studio builds only: inject the same <base href> the preview proxy injects,
   // so the two surfaces resolve URLs identically.
   //
@@ -129,32 +162,36 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
   // Gated on studio origin on purpose. The relocated bundles under /projects/
   // (whitehall, brass-and-rails) use "./assets/..." from pages at varying
   // depths; a base tag would re-root those too and break them.
-  if (result.mime.startsWith('text/html')) {
+  if (responseFile.mime.startsWith('text/html')) {
     const [studio] = await db
       .select({ id: jkaiBuilds.id })
       .from(jkaiBuilds)
       .where(and(eq(jkaiBuilds.publishedSlug, params.slug), eq(jkaiBuilds.origin, 'studio')))
       .limit(1);
     if (studio) {
-      const text = new TextDecoder().decode(result.data);
+      const text = new TextDecoder().decode(responseFile.data);
       if (!/<base\s/i.test(text)) {
         const baseTag = `<base href="/projects/${params.slug}/">`;
         const headMatch = text.match(/<head[^>]*>/i);
         const injected = headMatch
           ? text.replace(headMatch[0], `${headMatch[0]}${baseTag}`)
           : `${baseTag}${text}`;
-        result = { data: new TextEncoder().encode(injected).buffer as ArrayBuffer, mime: result.mime };
+        responseFile = {
+          data: new TextEncoder().encode(injected).buffer as ArrayBuffer,
+          mime: responseFile.mime,
+          path: responseFile.path,
+        };
       }
     }
   }
 
-  const headers: Record<string, string> = { 'Content-Type': result.mime };
+  const headers = safeGeneratedResponseHeaders(new Headers({ 'Content-Type': responseFile.mime }));
   if (isPublic) {
-    headers['Cache-Control'] = 'public, max-age=3600';
+    if (!responseFile.mime.startsWith('text/html')) headers.set('Cache-Control', 'public, max-age=3600');
   } else {
     // Authed preview of a private project — never cache or index it.
-    headers['Cache-Control'] = 'private, no-store';
-    headers['X-Robots-Tag'] = 'noindex';
+    headers.set('Cache-Control', 'private, no-store');
+    headers.set('X-Robots-Tag', 'noindex');
   }
-  return new Response(result.data, { headers });
+  return new Response(responseFile.data, { headers });
 };
