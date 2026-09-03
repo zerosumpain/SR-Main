@@ -11,6 +11,7 @@
 // fact with a link into the hub.
 
 import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
 import { daydreamDigests, daydreamLeads, daydreamMemoryThemes, daydreamPlaces, daydreamThoughts } from '$lib/db/schema';
 import { localDayStart } from './budget';
@@ -59,7 +60,7 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   const dayEnd = localDayStart(now);
   const dayStart = new Date(dayEnd.getTime() - 86_400_000);
   const day = digestDay(now, 1);
-  const inDay = (col: typeof daydreamThoughts.createdAt) => and(gte(col, dayStart), lt(col, dayEnd));
+  const inDay = (col: AnyPgColumn) => and(gte(col, dayStart), lt(col, dayEnd));
 
   const [sent, held, refuted, applied, places, expired, themes, leads, digest] = await Promise.all([
     db
