@@ -26,6 +26,8 @@ import {
 import { recordRulingMemory, unrememberedRulings } from '$lib/daydream/rulings';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { applyEffort } from '$lib/daydream/effort';
+import { loadResolvedEffort } from '$lib/daydream/effort.server';
 
 const NAME = 'daydream-review';
 
@@ -82,7 +84,12 @@ export const daydreamReview: ActivityHandler = {
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
 
   async run(ctx) {
-    const cfg = { ...DEFAULTS, ...(ctx.config as ReviewConfig) };
+    const effort = await loadResolvedEffort();
+    const cfg = {
+      ...DEFAULTS,
+      ...(ctx.config as ReviewConfig),
+      ...applyEffort(ctx.config as Record<string, unknown>, { maxPerRun: effort.review.maxPerRun, backfillPerRun: effort.review.backfillPerRun }),
+    };
     const now = new Date(ctx.now);
 
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);

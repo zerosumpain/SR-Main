@@ -26,7 +26,7 @@ import { resolveDaydreamModel } from '../compose';
 import { SWEEP_METRICS } from '../stats/sweep';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
 import { hypothesisKey, validateHypothesis, type HypothesisSpec } from './spec';
-import { activeSteers, renderSteers } from './steer';
+import { activeSteerNotes, renderSteers } from './steer';
 
 export const MAX_TOKENS = 1400;
 
@@ -109,6 +109,17 @@ export async function gatherContext(subject = DEFAULT_SUBJECT): Promise<string> 
       ).join('\n'),
   );
 
+  // Registered SIGNALS — the open registry, the sensors and the self-built
+  // tools — are askable too. Only what has enough days to be tested, best
+  // attested first, capped so the menu stays a menu.
+  const signals = await sweepableSignalMenu();
+  if (signals.length) {
+    parts.push(
+      'SIGNALS (key — what it is — days with a reading). Use the key EXACTLY as written:\n' +
+        signals.map((s) => `- ${s.key} — ${s.label} — ${s.observedDays} days`).join('\n'),
+    );
+  }
+
   const asked = await db
     .select({
       key: daydreamHypotheses.hypothesisKey,
@@ -159,8 +170,9 @@ export async function gatherContext(subject = DEFAULT_SUBJECT): Promise<string> 
 
   // What he has asked for, if anything. Rendered last so it sits closest to the
   // request, and explicitly framed as preference over an unchanged allow-list.
-  const steers = await activeSteers(subject);
-  const steerBlock = renderSteers(steers);
+  // Steers are notebook notes tagged `steer` now (D4). Same block, same weight.
+  const steers = await activeSteerNotes();
+  const steerBlock = renderSteers(steers as never);
   if (steerBlock) parts.push(steerBlock);
 
   const liked = asked.filter((a) => a.feedback === 'useful').map((a) => a.q);
@@ -198,7 +210,7 @@ other with a delay, and be careful which way round you put them.
 direction is what you EXPECT. Say it plainly so the data can contradict you.
 
 Rules:
-- Only metric names from the list. Nothing else exists.
+- Only metric names from the METRICS list or keys from the SIGNALS list, exactly as written. Nothing else exists.
 - Never propose a pair where one is computed from the other — resting heart rate
   against recovery score is not a discovery, it is how the score is defined.
 - Prefer questions that CROSS domains: sleep against where he went, movement
@@ -211,6 +223,24 @@ Rules:
 
 No prose, no code fence. If nothing is worth asking, output [].`;
 
+export const MAX_SIGNALS_IN_MENU = 40;
+
+/** The signals a hypothesis may name: sweepable, best attested first. */
+async function sweepableSignalMenu(): Promise<Array<{ key: string; label: string; observedDays: number }>> {
+  try {
+    const { listSweepableSignals } = await import('../signals/registry');
+    const { MIN_PAIRS } = await import('../stats/tests');
+    const rows = await listSweepableSignals(MIN_PAIRS);
+    return rows
+      .filter((r) => !r.key.startsWith('feature:'))
+      .sort((a, b) => b.observedDays - a.observedDays || a.key.localeCompare(b.key))
+      .slice(0, MAX_SIGNALS_IN_MENU)
+      .map((r) => ({ key: r.key, label: r.label, observedDays: r.observedDays }));
+  } catch {
+    return [];
+  }
+}
+
 /** Ask for a batch of questions. Validation happens here; testing does not. */
 export async function proposeHypotheses(
   maxProposals = 5,
@@ -219,7 +249,8 @@ export async function proposeHypotheses(
   const result: ProposalBatch = { proposals: [], rejected: [], steerIds: [], tokens: 0, error: null };
   try {
     const context = await gatherContext(subject);
-    result.steerIds = (await activeSteers(subject)).map((s) => s.id);
+    const allowed = new Set<string>([...SWEEP_METRICS, ...(await sweepableSignalMenu()).map((s) => s.key)]);
+    result.steerIds = (await activeSteerNotes()).map((s) => s.id);
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
 
@@ -252,7 +283,7 @@ export async function proposeHypotheses(
 
     const seen = new Set<string>();
     for (const item of parsed.slice(0, maxProposals)) {
-      const v = validateHypothesis(item);
+      const v = validateHypothesis(item, allowed);
       if (!v.ok || !v.spec) {
         result.rejected.push({ reason: v.reason ?? 'invalid' });
         continue;

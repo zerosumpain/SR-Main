@@ -4785,6 +4785,42 @@ export const daydreamObservations = pgTable(
 export type DaydreamObservation = typeof daydreamObservations.$inferSelect;
 
 /**
+ * Sweep findings, persisted.
+ *
+ * The sweep used to write its survivors onto the heartbeat pulse and nowhere
+ * else, so a correlation that cleared the correction reached ponder, compose
+ * and the proposer never — discovery had no consumer. One row per surviving
+ * pair per sweep day; the pulse still carries the same summary.
+ */
+export const daydreamSweepFindings = pgTable(
+  'daydream_sweep_findings',
+  {
+    id: serial('id').primaryKey(),
+    subject: text('subject').notNull().default('john'),
+    /** Local day the sweep ran, `YYYY-MM-DD`. */
+    day: date('day').notNull(),
+    /** Signal keys, as the registry names them. */
+    a: text('a').notNull(),
+    b: text('b').notNull(),
+    aLabel: text('a_label'),
+    bLabel: text('b_label'),
+    lagDays: integer('lag_days').notNull().default(0),
+    r: doublePrecision('r').notNull(),
+    p: doublePrecision('p').notNull(),
+    qValue: doublePrecision('q_value').notNull(),
+    n: integer('n').notNull(),
+    windowDays: integer('window_days').notNull().default(120),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_sweep_findings_key_idx').on(t.subject, t.day, t.a, t.b, t.lagDays),
+    index('daydream_sweep_findings_day_idx').on(t.day),
+  ],
+);
+
+export type DaydreamSweepFinding = typeof daydreamSweepFindings.$inferSelect;
+
+/**
  * One row per local day, per subject — the table that makes a cross-domain
  * correlation computable at all.
  *

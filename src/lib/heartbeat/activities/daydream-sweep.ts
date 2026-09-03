@@ -3,6 +3,9 @@ import { describeSweep, runSweep } from '$lib/daydream/stats/sweep';
 import { DEFAULT_FDR } from '$lib/daydream/stats/tests';
 import { FAMILY_SUBJECTS, SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { applyEffort } from '$lib/daydream/effort';
+import { loadResolvedEffort } from '$lib/daydream/effort.server';
+import { saveFindings } from '$lib/daydream/stats/findings';
 
 const NAME = 'daydream-sweep';
 
@@ -47,6 +50,8 @@ export const daydreamSweep: ActivityHandler = {
 
   async run(ctx) {
     const cfg = { ...DEFAULTS, ...(ctx.config as SweepConfig) };
+    const effort = await loadResolvedEffort();
+    const { maxSignals } = applyEffort(ctx.config as Record<string, unknown>, { maxSignals: effort.sweep.maxSignals });
 
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
     if (enabled === false) {
@@ -63,7 +68,7 @@ export const daydreamSweep: ActivityHandler = {
       // rule the calendar reader follows for a multi-calendar read.
       let res;
       try {
-        res = await runSweep({ windowDays: cfg.windowDays, fdr: cfg.fdr, subject });
+        res = await runSweep({ windowDays: cfg.windowDays, fdr: cfg.fdr, subject, maxSignals });
       } catch (err) {
         perSubject[subject] = { error: err instanceof Error ? err.message : String(err) };
         lines.push(`${subject}: failed`);
@@ -72,6 +77,13 @@ export const daydreamSweep: ActivityHandler = {
 
       anyTests += res.testsRun;
       anyFindings += res.findings.length;
+      // Persist the survivors. The pulse keeps its summary; the table is what
+      // ponder reads back — a finding nothing can read is not a discovery.
+      try {
+        await saveFindings(subject, res, new Date(ctx.now));
+      } catch (err) {
+        lines.push(`${subject}: findings not saved (${err instanceof Error ? err.message : String(err)})`);
+      }
       perSubject[subject] = {
         windowDays: res.windowDays,
         from: res.from,

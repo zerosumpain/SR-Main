@@ -12,9 +12,9 @@ import { and, eq, inArray, isNull, or, lt, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamHypotheses } from '$lib/db/schema';
 import { benjaminiHochberg, correlate, DEFAULT_FDR } from '../stats/tests';
-import { loadSeries } from '../stats/sweep';
+import { column, loadSeries, loadSignalColumns } from '../stats/sweep';
 import { DEFAULT_SUBJECT, errMsg } from '../types';
-import { judge, type Direction } from './spec';
+import { isSignalKey, judge, type Direction } from './spec';
 
 /** How stale a verdict may get before the question is asked again. */
 export const RETEST_AFTER_DAYS = 14;
@@ -100,11 +100,18 @@ export async function testDueHypotheses(
     return result;
   }
 
+  // A hypothesis may name a registered SIGNAL as well as a day-feature column.
+  // Signal series come from the observations table and are aligned to the
+  // feature store's days here, so the two kinds pair up day for day.
+  const signalKeys = [...new Set(due.flatMap((h) => [h.metricA, h.metricB]).filter(isSignalKey))];
+  const signalCols = await loadSignalColumns(signalKeys, { windowDays, subject, now });
   const cols = new Map<string, Array<number | null>>();
   const colFor = (key: string) => {
     let c = cols.get(key);
     if (!c) {
-      c = column(rows, key);
+      c = isSignalKey(key)
+        ? rows.map((r) => signalCols.get(key)?.get(String(r.day)) ?? null)
+        : column(rows, key);
       cols.set(key, c);
     }
     return c;

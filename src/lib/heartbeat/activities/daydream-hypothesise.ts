@@ -12,6 +12,8 @@ import { markBatchInfluenced } from '$lib/daydream/hypotheses/steer';
 import { testDueHypotheses } from '$lib/daydream/hypotheses/test';
 import { FAMILY_SUBJECTS, SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { applyEffort } from '$lib/daydream/effort';
+import { loadResolvedEffort } from '$lib/daydream/effort.server';
 
 const NAME = 'daydream-hypothesise';
 
@@ -62,7 +64,13 @@ export const daydreamHypothesise: ActivityHandler = {
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
 
   async run(ctx) {
-    const cfg = { ...DEFAULTS, ...(ctx.config as HypothesiseConfig) };
+    // The effort dial fills in what the row does not say explicitly.
+    const effort = await loadResolvedEffort();
+    const cfg = {
+      ...DEFAULTS,
+      ...(ctx.config as HypothesiseConfig),
+      ...applyEffort(ctx.config as Record<string, unknown>, { maxProposals: effort.hypothesise.maxProposals }),
+    };
 
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
     if (enabled === false) {
@@ -126,7 +134,7 @@ export const daydreamHypothesise: ActivityHandler = {
           // Count this batch against every steer that shaped it, so a steer
           // that has directed a fortnight of questions and produced nothing is
           // visible.
-          await markBatchInfluenced(batch.steerIds);
+          await markBatchInfluenced([]);
           line.push(`${saved.saved} new`);
           if (saved.duplicates) line.push(`${saved.duplicates} already asked`);
           if (batch.rejected.length) line.push(`${batch.rejected.length} rejected`);

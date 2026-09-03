@@ -345,6 +345,24 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      case 'effort': {
+        const { loadEffort } = await import('$lib/daydream/effort.server');
+        const { describeEffort, resolveEffort } = await import('$lib/daydream/effort');
+        const effort = await loadEffort();
+        return json({ effort, resolved: resolveEffort(effort), lines: describeEffort(effort) });
+      }
+
+      case 'set_effort': {
+        // Three shares, 0..100. Spend stays under the Codex caps; the dial
+        // decides what the allowance is spent on.
+        const { setEffort } = await import('$lib/daydream/effort.server');
+        const { describeEffort, resolveEffort } = await import('$lib/daydream/effort');
+        const raw = (body.effort ?? {}) as Record<string, unknown>;
+        const num = (k: string) => (typeof raw[k] === 'number' ? (raw[k] as number) : undefined);
+        const effort = await setEffort({ discover: num('discover'), test: num('test'), propose: num('propose') });
+        return json({ ok: true, effort, resolved: resolveEffort(effort), lines: describeEffort(effort) });
+      }
+
       case 'routes': {
         const { loadRoutes } = await import('$lib/daydream/routes.server');
         return json({ routes: await loadRoutes() });
@@ -539,25 +557,24 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // Steering. Reorders what gets asked; grants no new access whatsoever.
       case 'add_steer': {
+        // A steer is a notebook note tagged `steer` now (2026-09-03).
         const text = str('text');
-        if (!text) return json({ error: 'a steer needs some text' }, { status: 400 });
-        const id = await addSteer(text);
-        return json({ ok: true, id, steers: await listSteers() });
+        if (!text) return json({ error: 'text is required' }, { status: 400 });
+        const { addSteerNote } = await import('$lib/daydream/hypotheses/steer');
+        return json({ ok: true, steers: await addSteerNote(text) });
       }
 
       case 'list_steers': {
-        return json({ ok: true, steers: await listSteers() });
+        const { listSteerNotes } = await import('$lib/daydream/hypotheses/steer');
+        return json({ steers: await listSteerNotes() });
       }
 
       case 'set_steer_status': {
         const id = str('id');
         const status = str('status');
-        if (!id) return json({ error: 'id is required' }, { status: 400 });
-        if (status !== 'active' && status !== 'done' && status !== 'dropped') {
-          return json({ error: `unknown status: ${status || '(none)'}` }, { status: 400 });
-        }
-        await setSteerStatus(id, status);
-        return json({ ok: true, steers: await listSteers() });
+        if (!id || !['active', 'done', 'dropped'].includes(status)) return json({ error: 'id and a status are required' }, { status: 400 });
+        const { setSteerNoteStatus } = await import('$lib/daydream/hypotheses/steer');
+        return json({ ok: true, steers: await setSteerNoteStatus(id, status as 'active' | 'done' | 'dropped') });
       }
 
       case 'ignore_place': {

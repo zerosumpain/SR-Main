@@ -15,7 +15,8 @@
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamHypotheses } from '$lib/db/schema';
-import { column, loadSeries } from '../stats/sweep';
+import { column, loadSeries, loadSignalColumns } from '../stats/sweep';
+import { isSignalKey } from './spec';
 
 export interface PairedDay {
   /** The day the X value came from. Under a lag, Y comes from the next day. */
@@ -64,8 +65,14 @@ export async function loadHypothesisDetail(
   const rows = (await loadSeries({ windowDays, subject: h.subject })) as Array<
     Record<string, unknown>
   >;
-  const xs = column(rows as never, h.metricA);
-  const ys = column(rows as never, h.metricB);
+  const signalKeys = [h.metricA, h.metricB].filter(isSignalKey);
+  const signalCols = signalKeys.length
+    ? await loadSignalColumns(signalKeys, { windowDays, subject: h.subject })
+    : new Map<string, Map<string, number>>();
+  const colOf = (key: string) =>
+    isSignalKey(key) ? rows.map((r) => signalCols.get(key)?.get(String(r.day)) ?? null) : column(rows as never, key);
+  const xs = colOf(h.metricA);
+  const ys = colOf(h.metricB);
 
   // Same alignment the tester uses: with a lag, X on day i is paired with Y on
   // day i+1, so the last day has no partner and drops out.

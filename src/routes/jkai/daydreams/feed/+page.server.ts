@@ -10,7 +10,7 @@ import {
   type FeedRow,
   type LedgerThought,
 } from '$lib/daydream/ledger';
-import { listSteers } from '$lib/daydream/hypotheses/steer';
+import { listSteerNotes } from '$lib/daydream/hypotheses/steer';
 import { FAMILIES, FEED_STATES, type FeedState } from '$lib/daydream/thought-groups';
 
 // The feed: a matrix of families × reader states over the WHOLE ledger, and
@@ -35,7 +35,7 @@ export const load: PageServerLoad = async ({ url, parent }) => {
       loadFeedCell(family, state),
       loadDetectorRows(),
       loadDelivery(),
-      listSteers(),
+      listSteerNotes(),
     ]);
     const threshold = counts.threshold;
     let opened: LedgerThought | null = null;
@@ -51,7 +51,7 @@ export const load: PageServerLoad = async ({ url, parent }) => {
       threshold: { value: 0, feedbackCount: 0 },
       detectors: [] as Awaited<ReturnType<typeof loadDetectorRows>>,
       delivery: null as Awaited<ReturnType<typeof loadDelivery>> | null,
-      steers: [] as Awaited<ReturnType<typeof listSteers>>,
+      steers: [] as Awaited<ReturnType<typeof listSteerNotes>>,
       opened: null as LedgerThought | null,
       loadError: errMsg(err),
     };

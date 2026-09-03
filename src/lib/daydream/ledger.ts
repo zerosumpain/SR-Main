@@ -23,7 +23,6 @@ import {
 import { withinActiveHours as windowOpenAt } from '$lib/heartbeat/schedule';
 import { DETECTORS } from './detectors';
 import { loadProvenance } from './provenance';
-import { listSteers } from './hypotheses/steer';
 import {
   adaptiveThreshold,
   kindWeight,
