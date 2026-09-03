@@ -3,7 +3,10 @@ import {
   clearNewsCache,
   getNewsFeed,
   getNewsStory,
+  MAX_NEWS_STORIES_PER_SOURCE,
+  NEWS_PAGE_SIZE,
   normalizeHackerNews,
+  normalizeNewsLimit,
   normalizeLobsters,
 } from './sources';
 
@@ -54,6 +57,56 @@ describe('news sources', () => {
       url: 'https://lobste.rs/s/abc123/a_story',
       tags: ['web', 'security'],
     });
+  });
+
+  it('bounds the number of stories requested from each source', () => {
+    expect(normalizeNewsLimit(undefined)).toBe(NEWS_PAGE_SIZE);
+    expect(normalizeNewsLimit(10)).toBe(NEWS_PAGE_SIZE);
+    expect(normalizeNewsLimit('50')).toBe(50);
+    expect(normalizeNewsLimit(1_000)).toBe(MAX_NEWS_STORIES_PER_SOURCE);
+  });
+
+  it('loads additional Hacker News ids and Lobsters pages without reusing the smaller cache', async () => {
+    const hnIds = Array.from({ length: 50 }, (_, index) => 100 + index);
+    const lobstersPage = (page: number) =>
+      Array.from({ length: 25 }, (_, index) => ({
+        short_id: `p${page}${String(index).padStart(4, '0')}`,
+        title: `Lobsters page ${page} story ${index}`,
+        url: `https://lobsters-${page}-${index}.example/`,
+        created_at: '2026-09-03T12:00:00Z',
+      }));
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/topstories.json')) return response(hnIds);
+      if (url.includes('/item/')) {
+        const id = Number(url.match(/item\/(\d+)/)?.[1]);
+        return response({
+          id,
+          type: 'story',
+          title: `HN story ${id}`,
+          url: `https://hn-${id}.example/`,
+          time: id,
+        });
+      }
+      if (url.endsWith('/hottest.json')) return response(lobstersPage(1));
+      if (url.endsWith('/page/2.json')) return response(lobstersPage(2));
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const initial = await getNewsFeed('top');
+    const expanded = await getNewsFeed('top', { limit: 50 });
+
+    expect(initial.sources.map((source) => source.count)).toEqual([25, 25]);
+    expect(expanded.sources.map((source) => source.count)).toEqual([50, 50]);
+    expect(expanded.stories).toHaveLength(100);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://lobste.rs/page/2.json',
+      expect.any(Object),
+    );
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/topstories.json')),
+    ).toHaveLength(2);
   });
 
   it('interleaves healthy sources and reports a partial source failure', async () => {
