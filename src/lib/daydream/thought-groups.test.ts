@@ -4,23 +4,8 @@ import {
   familyOf,
   kindLabel,
   likelihoodBand,
-  type GroupableThought,
 } from './thought-groups';
 
-function t(
-  kind: string,
-  score: number,
-  extra: Partial<GroupableThought> = {},
-): GroupableThought {
-  return {
-    kind,
-    score,
-    status: 'new',
-    feedback: null,
-    createdAt: '2026-08-28T10:00:00.000Z',
-    ...extra,
-  };
-}
 
 describe('familyOf', () => {
   it('files both spellings of the place detector together', () => {
