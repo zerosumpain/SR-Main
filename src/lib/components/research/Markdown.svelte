@@ -26,7 +26,11 @@
 {/if}
 
 <style>
-  .md { font-size: 1rem; line-height: 1.65; color: var(--text-primary); }
+  .md {
+    color: var(--text-primary);
+    font-size: var(--fs-body-lg);
+    line-height: 1.72;
+  }
 
   .md :global(h1),
   .md :global(h2),
@@ -34,28 +38,30 @@
   .md :global(h4) {
     font-family: var(--font-display);
     font-weight: 900;
-    line-height: 1.2;
-    margin: 1.4rem 0 0.5rem;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin: 2.2rem 0 0.75rem;
   }
-  .md :global(h1) { font-size: 1.4rem; }
-  .md :global(h2) { font-size: 1.2rem; }
-  .md :global(h3) { font-size: 1.05rem; }
-  .md :global(h4) { font-size: 0.95rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .md :global(h1) { font-size: var(--fs-display-sm); }
+  .md :global(h2) { font-size: var(--fs-display-xs); }
+  .md :global(h3) { font-size: var(--fs-body-lg); }
+  .md :global(h4) { font-size: var(--fs-body-sm); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
   .md :global(> :first-child) { margin-top: 0; }
 
-  .md :global(p) { margin: 0 0 0.85rem; }
+  .md :global(p) { margin: 0 0 1.05rem; }
+  .md :global(> p:first-child) { font-size: clamp(1.2rem, 2vw, 1.5rem); line-height: 1.5; color: var(--text-secondary); }
   .md :global(ul),
-  .md :global(ol) { margin: 0 0 0.85rem; padding-left: 1.35rem; }
-  .md :global(li) { margin-bottom: 0.3rem; }
+  .md :global(ol) { margin: 0 0 1.05rem; padding-left: 1.35rem; }
+  .md :global(li) { margin-bottom: 0.45rem; }
   .md :global(li::marker) { color: var(--accent); }
 
   .md :global(strong) { font-weight: 700; }
   .md :global(a) { color: var(--accent); text-underline-offset: 2px; }
 
   .md :global(blockquote) {
-    margin: 0 0 0.85rem;
-    padding: 0.2rem 0 0.2rem 0.9rem;
-    border-left: 2px solid var(--accent);
+    margin: 1.4rem 0;
+    padding: 0.55rem 0 0.55rem 1rem;
+    border-left: 3px solid var(--accent);
     color: var(--text-secondary);
   }
 
@@ -70,12 +76,12 @@
     border: 1px solid var(--line-strong);
     padding: 0.7rem 0.8rem;
     overflow-x: auto;
-    margin: 0 0 0.85rem;
+    margin: 0 0 1.05rem;
   }
   .md :global(pre code) { background: none; padding: 0; }
 
   /* A wide table scrolls inside its own box; the page never scrolls sideways. */
-  .md :global(table) { width: 100%; border-collapse: collapse; margin: 0 0 0.85rem; font-size: 0.9rem; }
+  .md :global(table) { width: 100%; border-collapse: collapse; margin: 0 0 1.05rem; font-size: var(--fs-body-sm); }
   .md :global(th),
   .md :global(td) { border: 1px solid var(--line-strong); padding: 0.35rem 0.5rem; text-align: left; }
   .md :global(th) { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); background: var(--surface-elevated); }

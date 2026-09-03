@@ -4,12 +4,12 @@
   import { PHASES, phaseStateFor } from './phases';
   import type { DeskStatus } from './deskControls';
 
-  let { status }: { status: DeskStatus } = $props();
+  let { status, dark = false }: { status: DeskStatus; dark?: boolean } = $props();
 
   let states = $derived(phaseStateFor(status));
 </script>
 
-<nav class="stepper" aria-label="Research phases">
+<nav class="stepper" class:dark aria-label="Research phases">
   {#each PHASES as phase, i}
     {@const state = states[phase.key]}
     {#if i > 0}
@@ -46,6 +46,8 @@
   }
   .connector-done { background: var(--success); }
   .connector-dim  { background: var(--card-border); }
+  .dark .connector-done { background: var(--good-on-dark); }
+  .dark .connector-dim { background: rgba(237, 228, 212, 0.2); }
 
   .step {
     display: flex;
@@ -75,18 +77,21 @@
     border: 1.5px solid var(--success);
     font-size: var(--fs-label-xs);
   }
+  .dark .dot-done { background: var(--good-on-dark); color: var(--text-primary); border-color: var(--good-on-dark); }
 
   .dot-current {
     background: var(--accent);
     color: var(--bg);
     border: 1.5px solid var(--accent);
   }
+  .dark .dot-current { background: var(--accent-on-dark); color: var(--text-primary); border-color: var(--accent-on-dark); }
 
   .dot-upcoming {
     background: transparent;
     color: var(--text-ghost, var(--text-muted));
     border: 1.5px solid var(--card-border);
   }
+  .dark .dot-upcoming { color: rgba(237, 228, 212, 0.42); border-color: rgba(237, 228, 212, 0.2); }
 
   .label {
     font-family: var(--font-mono);
@@ -98,4 +103,7 @@
   .step-done    .label { color: var(--text-muted); }
   .step-current .label { color: var(--accent); font-weight: 700; }
   .step-upcoming .label { color: var(--text-ghost, var(--text-muted)); opacity: 0.5; }
+  .dark .step-done .label { color: rgba(237, 228, 212, 0.56); }
+  .dark .step-current .label { color: var(--accent-on-dark); }
+  .dark .step-upcoming .label { color: rgba(237, 228, 212, 0.4); }
 </style>

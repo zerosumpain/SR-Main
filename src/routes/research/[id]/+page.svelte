@@ -13,9 +13,8 @@
   import AskJkaiPanel from '$lib/components/research/AskJkaiPanel.svelte';
   import RunControls from '$lib/components/research/RunControls.svelte';
   import RunSpend from '$lib/components/research/RunSpend.svelte';
+  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
   import { goto, invalidateAll } from '$app/navigation';
-  import { page } from '$app/state';
-  import SiteHeader from '$lib/components/SiteHeader.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -59,6 +58,12 @@
    * belong to a finished one — only the report-shaped panels need a report.
    */
   const settled = $derived(finished || paused);
+  const researchNav = $derived([
+    { href: '/research', label: 'New research' },
+    { href: `/research/${data.session.id}/desk`, label: 'Open desk' },
+    { href: '/jkai/intel', label: 'Intel', muted: true },
+    { href: '/jkai', label: 'Chat', muted: true },
+  ]);
 
   /**
    * Headline numbers. Single magnitudes, so tiles rather than a chart — a bar
@@ -127,6 +132,14 @@
     if (ms == null) return '—';
     const s = Math.round(ms / 1000);
     return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+  }
+
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
   }
 
   /**
@@ -284,267 +297,367 @@
 
 <svelte:head><title>{data.session.topic} — Research</title></svelte:head>
 
-<SiteHeader isOwner={page.data?.isOwner !== false} />
-
-<div class="wrap">
-  <header class="page-hdr">
-    <div>
-      <div class="kicker">
-        JKAI · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
-      </div>
-      <h1>{data.session.topic}</h1>
-      <p class="scope-line">{data.session.scopeLabel}</p>
-    </div>
-  </header>
-
-  <section class="statusbar">
-    <span
-      class="pill"
-      class:done={status === 'complete'}
-      class:failed={status === 'failed'}
-      class:held={paused}
-    >{status}</span>
-    {#if paused && data.session.resumeFrom}
-      <span class="metric">will pick up at <b>{data.session.resumeFrom}</b></span>
-    {/if}
-    <!-- The SSE counters only ever tick DURING a run, so on a finished one they
-         are all zero. Reading "0 facts 0 entities" directly above tiles saying
-         51 and 53 made the header look broken; once the run is over the loader's
-         counts are the true ones. -->
-    <span class="metric"><b>{settled ? data.counts.sources : stats.sourcesFound || liveSourceCount}</b> sources</span>
-    {#if data.tier.extractsFacts}
-      <span class="metric"><b>{settled ? data.counts.facts : stats.factsExtracted}</b> facts</span>
-      <span class="metric"><b>{settled ? data.counts.entities : stats.entitiesIdentified}</b> entities</span>
-      <!-- Shown beside the entity count, not tucked away in the network panel:
-           entities with no links between them is the shape an extraction
-           failure takes, and it was invisible here for months. -->
-      <span class="metric"
-        ><b>{settled ? data.counts.relationships : stats.relationshipsFound}</b> links</span
-      >
-    {/if}
-    <span class="metric spacer">
-      {#if finished}{fmtMs(durationMs)}{:else if paused}{fmtMs(durationMs)} so far{:else}{fmtMs(elapsedMs)} elapsed{/if}
-      {#if data.tier.budgetMs && !settled}<span class="budget"> / {fmtMs(data.tier.budgetMs)} budget</span>{/if}
-    </span>
-    <RunControls
-      sessionId={data.session.id}
-      {status}
-      pausable={data.session.depth === 'investigation'}
-      onChanged={onControlChanged}
-    />
-    <button type="button" class="reason-toggle" class:on={showReasoning} onclick={() => (showReasoning = !showReasoning)}>
-      {showReasoning ? 'Hide' : 'Show'} reasoning
-    </button>
-  </section>
-
-  {#if errorMessage}
-    <div class="err-line">{errorMessage}</div>
-  {/if}
-
-  {#if showReasoning}
-    <section class="reasoning">
-      <div class="sr-label-tight">Model reasoning</div>
-      {#if reasoning}
-        <pre>{reasoning}</pre>
-      {:else}
-        <p class="note">
-          Nothing yet. Reasoning only appears while a model that emits it is thinking —
-          Codex models never stream reasoning, so this stays empty on those.
+<HealthShell
+  path="/research/report"
+  kicker={`${data.tier.label} · evidence report`}
+  back={{ href: '/research', label: '← All research' }}
+  nav={researchNav}
+  live={!settled && status !== 'draft' ? status : null}
+  meta={[formatDate(data.session.createdAt)]}
+  footer={[
+    `research/${data.session.id.slice(0, 8)} · ${data.session.depth}`,
+    `${data.counts.sources} sources · ${data.counts.facts} facts`,
+    `${status} · ${fmtMs(durationMs)}`,
+  ]}
+>
+  <div class="report-page">
+    <section class="report-lede">
+      <div class="lede-inner">
+        <p class="eyebrow">
+          JKAI · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
         </p>
-      {/if}
+        <h1>{data.session.topic}</h1>
+        <p class="standfirst">{data.session.scopeLabel}</p>
+
+        <dl class="report-ledger" aria-label="Research report summary">
+          <div>
+            <dt>State</dt>
+            <dd class:state-done={status === 'complete'} class:state-failed={status === 'failed'}>{status}</dd>
+            <small>{paused && data.session.resumeFrom ? `Resume at ${data.session.resumeFrom}` : 'Current run status'}</small>
+          </div>
+          <div>
+            <dt>Sources</dt>
+            <dd>{settled ? data.counts.sources : stats.sourcesFound || liveSourceCount}</dd>
+            <small>{data.counts.domains} domains represented</small>
+          </div>
+          <div>
+            <dt>Key material</dt>
+            <dd>{data.counts.keySources}</dd>
+            <small>Sources feeding the report</small>
+          </div>
+          <div>
+            <dt>Elapsed</dt>
+            <dd>{finished || paused ? fmtMs(durationMs) : fmtMs(elapsedMs)}</dd>
+            <small>{data.tier.budgetMs && !settled ? `${fmtMs(data.tier.budgetMs)} budget` : formatDate(data.session.createdAt)}</small>
+          </div>
+        </dl>
+      </div>
     </section>
-  {/if}
 
-  {#if settled}
-    <StatTiles stats={tiles} />
-  {/if}
+    <main class="wrap">
+      <section class="run-section" aria-labelledby="run-title">
+        <header class="section-head">
+          <div>
+            <p class="section-no">01 / Run ledger</p>
+            <h2 id="run-title">STATE &amp; SPEND</h2>
+          </div>
+          <p>The live counters, controls and cost trail for this investigation.</p>
+        </header>
 
-  <!-- An instant answer that searched and one that did not are different things
-       to trust, and only one of them has sources below to check it against. -->
-  {#if data.session.depth === 'instant' && finished}
-    <p class="gnd-line" class:unsourced={!data.tier.grounded}>
-      {#if !data.tier.grounded}
-        Answered from training data with no search, so nothing here is sourced — treat any date, figure
-        or URL in it as unverified.
-      {:else if data.counts.sources}
-        Searched the web while answering. The {data.counts.sources}
-        {data.counts.sources === 1 ? 'page' : 'pages'} it actually read are listed below.
-      {:else}
-        Search was allowed, but it cited nothing it read — treat this answer as unsourced.
-      {/if}
-    </p>
-  {/if}
+        <div class="statusbar">
+          <span
+            class="pill"
+            class:done={status === 'complete'}
+            class:failed={status === 'failed'}
+            class:held={paused}
+          >{status}</span>
+          {#if paused && data.session.resumeFrom}
+            <span class="metric">will pick up at <b>{data.session.resumeFrom}</b></span>
+          {/if}
+          <!-- The SSE counters only ever tick DURING a run, so on a finished one they
+               are all zero. Reading "0 facts 0 entities" directly above tiles saying
+               51 and 53 made the header look broken; once the run is over the loader's
+               counts are the true ones. -->
+          <span class="metric"><b>{settled ? data.counts.sources : stats.sourcesFound || liveSourceCount}</b> sources</span>
+          {#if data.tier.extractsFacts}
+            <span class="metric"><b>{settled ? data.counts.facts : stats.factsExtracted}</b> facts</span>
+            <span class="metric"><b>{settled ? data.counts.entities : stats.entitiesIdentified}</b> entities</span>
+            <!-- Shown beside the entity count, not tucked away in the network panel:
+                 entities with no links between them is the shape an extraction
+                 failure takes, and it was invisible here for months. -->
+            <span class="metric"><b>{settled ? data.counts.relationships : stats.relationshipsFound}</b> links</span>
+          {/if}
+          <span class="metric spacer">
+            {#if finished}{fmtMs(durationMs)}{:else if paused}{fmtMs(durationMs)} so far{:else}{fmtMs(elapsedMs)} elapsed{/if}
+            {#if data.tier.budgetMs && !settled}<span class="budget"> / {fmtMs(data.tier.budgetMs)} budget</span>{/if}
+          </span>
+          <RunControls
+            sessionId={data.session.id}
+            {status}
+            pausable={data.session.depth === 'investigation'}
+            onChanged={onControlChanged}
+          />
+          <button type="button" class="reason-toggle" class:on={showReasoning} onclick={() => (showReasoning = !showReasoning)}>
+            {showReasoning ? 'Hide' : 'Show'} reasoning
+          </button>
+        </div>
 
-  {#if paused}
-    <p class="paused-line">
-      Held here on purpose. Nothing has been thrown away — the leads that were in flight are back on
-      the queue, and a deploy will not restart this run behind your back.
-    </p>
-  {/if}
-
-  <!-- The bill, wherever the run is up to. Two budgets are being spent and
-       neither was visible: model tokens through OpenRouter, and Tavily credits
-       against a fixed monthly allowance. -->
-  <RunSpend sessionId={data.session.id} live={!settled} final={finished} />
-
-  <!-- The answer and the two things you do with it, side by side. Asking jkai
-       and exporting are the actions a reader reaches for while still looking at
-       the summary, so they sit next to it rather than at the foot of the page. -->
-  <div class="main-grid">
-    <div class="col-answer">
-      <section class="answer">
-        {#if summary}
-          <Markdown text={summary} />
-        {:else if status === 'failed'}
-          <p class="note">No answer was produced.</p>
-        {:else if finished}
-          <!-- A run can finish with everything else intact and no summary: a
-               tight budget used to skip the synthesis step and keep the
-               enrichment. Saying "Working…" under a COMPLETE pill was the page
-               contradicting itself. -->
-          <p class="note">
-            This run finished without writing a summary — the evidence below is still here.
-          </p>
-        {:else if paused}
-          <p class="note">
-            Paused before the summary was written. Resume it and it will carry on from where it
-            stopped.
-          </p>
-        {:else}
-          <p class="note">Working…</p>
+        {#if errorMessage}
+          <div class="err-line">{errorMessage}</div>
         {/if}
+
+        {#if showReasoning}
+          <section class="reasoning">
+            <div class="sr-label-tight">Model reasoning</div>
+            {#if reasoning}
+              <pre>{reasoning}</pre>
+            {:else}
+              <p class="note">
+                Nothing yet. Reasoning only appears while a model that emits it is thinking —
+                Codex models never stream reasoning, so this stays empty on those.
+              </p>
+            {/if}
+          </section>
+        {/if}
+
+        <!-- An instant answer that searched and one that did not are different things
+             to trust, and only one of them has sources below to check it against. -->
+        {#if data.session.depth === 'instant' && finished}
+          <p class="gnd-line" class:unsourced={!data.tier.grounded}>
+            {#if !data.tier.grounded}
+              Answered from training data with no search, so nothing here is sourced — treat any date, figure
+              or URL in it as unverified.
+            {:else if data.counts.sources}
+              Searched the web while answering. The {data.counts.sources}
+              {data.counts.sources === 1 ? 'page' : 'pages'} it actually read are listed below.
+            {:else}
+              Search was allowed, but it cited nothing it read — treat this answer as unsourced.
+            {/if}
+          </p>
+        {/if}
+
+        {#if paused}
+          <p class="paused-line">
+            Held here on purpose. Nothing has been thrown away — the leads that were in flight are back on
+            the queue, and a deploy will not restart this run behind your back.
+          </p>
+        {/if}
+
+        <!-- The bill, wherever the run is up to. Two budgets are being spent and
+             neither was visible: model tokens through OpenRouter, and Tavily credits
+             against a fixed monthly allowance. -->
+        <RunSpend sessionId={data.session.id} live={!settled} final={finished} />
       </section>
-    </div>
 
-    <!-- Gated on `finished`, not on there being a summary: asking jkai about a
-         run and exporting it are exactly what you want when the summary is the
-         thing that came out empty. -->
-    {#if finished}
-      <aside class="col-rail">
-        <AskJkaiPanel context={askContext} pending={pendingQuestion} />
-        <ActionsRow
-          sessionId={data.session.id}
-          depth={data.session.depth}
-          hasReport={!!summary}
-          shareToken={data.session.shareToken}
-        />
-      </aside>
-    {/if}
+      <section class="answer-group" aria-labelledby="answer-title">
+        <header class="section-head">
+          <div>
+            <p class="section-no">02 / Readout</p>
+            <h2 id="answer-title">WHAT THE EVIDENCE SAYS</h2>
+          </div>
+          <p>The synthesis first; actions and follow-up stay beside the answer.</p>
+        </header>
+
+        <!-- The answer and the two things you do with it, side by side. Asking jkai
+             and exporting are the actions a reader reaches for while still looking at
+             the summary, so they sit next to it rather than at the foot of the page. -->
+        <div class="main-grid">
+          <div class="col-answer">
+            <section class="answer">
+              {#if summary}
+                <Markdown text={summary} />
+              {:else if status === 'failed'}
+                <p class="note">No answer was produced.</p>
+              {:else if finished}
+                <!-- A run can finish with everything else intact and no summary: a
+                     tight budget used to skip the synthesis step and keep the
+                     enrichment. Saying "Working…" under a COMPLETE pill was the page
+                     contradicting itself. -->
+                <p class="note">
+                  This run finished without writing a summary — the evidence below is still here.
+                </p>
+              {:else if paused}
+                <p class="note">
+                  Paused before the summary was written. Resume it and it will carry on from where it
+                  stopped.
+                </p>
+              {:else}
+                <p class="note working-note">Working on the readout…</p>
+              {/if}
+            </section>
+          </div>
+
+          <!-- Gated on `finished`, not on there being a summary: asking jkai about a
+               run and exporting it are exactly what you want when the summary is the
+               thing that came out empty. -->
+          {#if finished}
+            <aside class="col-rail">
+              <AskJkaiPanel context={askContext} pending={pendingQuestion} />
+              <ActionsRow
+                sessionId={data.session.id}
+                depth={data.session.depth}
+                hasReport={!!summary}
+                shareToken={data.session.shareToken}
+              />
+            </aside>
+          {/if}
+        </div>
+      </section>
+
+      {#if settled || leads.length || data.sources.length}
+        <section class="evidence-group" aria-labelledby="evidence-title">
+          <header class="section-head">
+            <div>
+              <p class="section-no">03 / Evidence base</p>
+              <h2 id="evidence-title">TRACE THE CLAIMS</h2>
+            </div>
+            <p>Material, relationships, challenges and sources behind the readout.</p>
+          </header>
+
+          <div class="evidence-stack">
+            {#if settled}
+              <StatTiles stats={tiles} />
+            {/if}
+
+            {#if leads.length}
+              <section class="frontier-panel">
+                <FrontierGraph {leads} />
+              </section>
+            {/if}
+
+            {#if settled}
+              <ResearchTimeline periods={data.timeline} />
+
+              {#if data.counts.entities > 0}
+                <SessionNetwork
+                  sessionId={data.session.id}
+                  onAsk={(q) => {
+                    pendingQuestion = q;
+                    document.getElementById('ask')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                />
+              {/if}
+            {/if}
+
+            {#if finished}
+              <ReportPanels
+                report={data.report as ReportView}
+                goals={data.session.goals}
+                topEntities={data.topEntities}
+                onInvestigate={investigate}
+                onAsk={(q) => {
+                  pendingQuestion = q;
+                  document.getElementById('ask')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              />
+            {/if}
+
+            {#if settled && data.mix.length > 1}
+              <SourceMix
+                mix={data.mix}
+                contributors={data.contributors}
+                selected={sourceFilter}
+                onSelect={(kind) => {
+                  sourceFilter = kind;
+                  document.getElementById('sources')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              />
+            {/if}
+
+            {#if data.sources.length}
+              <SourceTable
+                sources={data.sources}
+                filterKind={sourceFilter}
+                onClearFilter={() => (sourceFilter = null)}
+                sessionId={data.session.id}
+                savedSourceIds={data.savedSourceIds}
+                driveFolder={data.driveFolder}
+              />
+            {/if}
+          </div>
+        </section>
+      {/if}
+
+      {#if logLines.length}
+        <details class="activity">
+          <summary>Activity ({logLines.length})</summary>
+          <ul>
+            {#each logLines as line, i (i)}<li>{line}</li>{/each}
+          </ul>
+        </details>
+      {/if}
+    </main>
   </div>
-
-  {#if leads.length}
-    <section class="frontier-panel">
-      <FrontierGraph {leads} />
-    </section>
-  {/if}
-
-  {#if settled}
-    <ResearchTimeline periods={data.timeline} />
-
-    {#if data.counts.entities > 0}
-      <SessionNetwork
-        sessionId={data.session.id}
-        onAsk={(q) => {
-          pendingQuestion = q;
-          document.getElementById('ask')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }}
-      />
-    {/if}
-  {/if}
-
-  {#if finished}
-    <ReportPanels
-      report={data.report as ReportView}
-      goals={data.session.goals}
-      topEntities={data.topEntities}
-      onInvestigate={investigate}
-      onAsk={(q) => {
-        pendingQuestion = q;
-        document.getElementById('ask')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }}
-    />
-  {/if}
-
-  {#if settled && data.mix.length > 1}
-    <SourceMix
-      mix={data.mix}
-      contributors={data.contributors}
-      selected={sourceFilter}
-      onSelect={(kind) => {
-        sourceFilter = kind;
-        document.getElementById('sources')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }}
-    />
-  {/if}
-
-  {#if data.sources.length}
-    <SourceTable
-      sources={data.sources}
-      filterKind={sourceFilter}
-      onClearFilter={() => (sourceFilter = null)}
-      sessionId={data.session.id}
-      savedSourceIds={data.savedSourceIds}
-      driveFolder={data.driveFolder}
-    />
-  {/if}
-
-  {#if logLines.length}
-    <details class="activity">
-      <summary>Activity ({logLines.length})</summary>
-      <ul>
-        {#each logLines as line, i (i)}<li>{line}</li>{/each}
-      </ul>
-    </details>
-  {/if}
-</div>
+</HealthShell>
 
 <style>
-  /* Wider than the 860px reading column it used to be: this is a dashboard now,
-     and the answer keeps its own measure inside the grid below rather than the
-     whole page being sized to it. */
-  .wrap { max-width: 1180px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+  .report-page { min-height: 100vh; background: var(--bg); color: var(--text-primary); font-family: var(--font-body); }
+  .report-lede { padding: clamp(38px, 5vw, 72px) clamp(20px, 3vw, 44px); background: var(--text-primary); color: var(--bg); border-bottom: 1px solid rgba(237, 228, 212, 0.16); }
+  .lede-inner { width: min(1400px, 100%); margin: 0 auto; }
+  .eyebrow, .section-no { margin: 0 0 18px; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: var(--tracking-label-wide); text-transform: uppercase; color: var(--accent); }
+  .report-lede .eyebrow { color: var(--accent-on-dark); }
+  h1 { max-width: 15ch; margin: 0; overflow-wrap: anywhere; font-family: var(--font-display); font-size: clamp(2.9rem, 6.5vw, 6.8rem); font-weight: 900; line-height: 0.9; letter-spacing: -0.04em; color: var(--bg); text-wrap: balance; }
+  .standfirst { margin: 26px 0 0; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.55; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(237, 228, 212, 0.62); }
+  .report-ledger { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: clamp(42px, 6vw, 78px) 0 0; border-top: 1px solid rgba(237, 228, 212, 0.16); border-left: 1px solid rgba(237, 228, 212, 0.16); }
+  .report-ledger > div { min-width: 0; padding: 18px; border-right: 1px solid rgba(237, 228, 212, 0.16); border-bottom: 1px solid rgba(237, 228, 212, 0.16); background: rgba(237, 228, 212, 0.04); }
+  .report-ledger dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label-wide); text-transform: uppercase; color: rgba(237, 228, 212, 0.52); }
+  .report-ledger dd { margin: 10px 0 8px; overflow: hidden; font-family: var(--font-display); font-size: clamp(1.65rem, 3.2vw, 2.75rem); line-height: 0.95; letter-spacing: -0.025em; text-transform: uppercase; color: var(--bg); text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .report-ledger dd.state-done { color: var(--good-on-dark); }
+  .report-ledger dd.state-failed { color: var(--error); }
+  .report-ledger small { display: block; overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.4; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-on-dark); text-overflow: ellipsis; white-space: nowrap; }
 
-  /* Answer left, actions right. The rail collapses under the answer before the
-     answer gets too narrow to read. */
-  .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.25rem; align-items: start; margin-bottom: 1.25rem; }
-  .col-answer { min-width: 0; }
-  .col-rail { min-width: 0; position: sticky; top: 1rem; }
-  @media (max-width: 900px) {
-    .main-grid { grid-template-columns: minmax(0, 1fr); }
-    .col-rail { position: static; }
-  }
-  .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
-  .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
-  .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 1.8rem; font-weight: 900; line-height: 1.1; }
-  .scope-line { margin: 0.5rem 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  /* Wider than a reading page because the evidence views are dashboards. The
+     synthesis keeps a bounded column through the answer/action grid. */
+  .wrap { width: min(1180px, 100%); margin: 0 auto; padding: 64px clamp(20px, 5vw, 64px) 96px; }
+  .run-section, .answer-group { margin-bottom: 86px; }
+  .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; padding-bottom: 18px; border-bottom: 2px solid var(--text-primary); }
+  .section-head .section-no { margin-bottom: 8px; }
+  .section-head h2 { margin: 0; font-family: var(--font-display); font-size: clamp(2.15rem, 4.6vw, 4.25rem); line-height: 0.9; letter-spacing: -0.03em; }
+  .section-head > p { max-width: 38ch; margin: 0 0 3px; font-size: var(--fs-body-sm); line-height: 1.5; color: var(--text-muted); text-align: right; }
 
-  .statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; font-family: var(--font-mono); font-size: var(--fs-label); }
-  .pill { text-transform: uppercase; letter-spacing: 0.12em; padding: 2px 8px; border: 1px solid var(--accent); color: var(--accent); font-size: var(--fs-label-xs); }
+  .statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 58px; margin-bottom: 20px; padding: 12px 0; border-bottom: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label); }
+  .pill { padding: 4px 9px; border: 1px solid var(--accent); color: var(--accent); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
   .pill.done { border-color: var(--success); color: var(--success); }
   .pill.failed { border-color: var(--error); color: var(--error); }
   .pill.held { border-color: var(--accent-ink); color: var(--accent-ink); }
-
-  .gnd-line { margin: 0 0 1rem; font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--accent); padding: 0.4rem 0 0.4rem 0.7rem; }
-  .gnd-line.unsourced { border-left-color: var(--warn); color: var(--text-secondary); }
-
-  .paused-line { margin: 0 0 1rem; font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--accent-ink); padding: 0.4rem 0 0.4rem 0.7rem; }
   .metric { color: var(--text-secondary); }
   .metric b { color: var(--text-primary); }
   .spacer { margin-left: auto; }
   .budget { color: var(--text-ghost); }
-  .reason-toggle { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; background: none; border: 1px solid rgba(26, 16, 8, 0.18); color: var(--text-muted); cursor: pointer; padding: 3px 8px; }
-  .reason-toggle.on { border-color: var(--accent); color: var(--accent); }
+  .reason-toggle { padding: 5px 9px; border: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+  .reason-toggle:hover, .reason-toggle.on { border-color: var(--accent); color: var(--accent); }
+  .err-line { margin-bottom: 20px; padding: 10px 12px; border-left: 3px solid var(--error); background: var(--error-bg); color: var(--error); font-family: var(--font-mono); font-size: var(--fs-label); }
+  .reasoning { margin-bottom: 20px; padding: 18px; border: 1px dashed var(--line-strong); background: var(--surface-sunken); }
+  .reasoning pre { max-height: 300px; margin: 8px 0 0; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); font-family: var(--font-code); font-size: var(--fs-label); line-height: 1.55; }
+  .gnd-line, .paused-line { margin: 0 0 20px; padding: 9px 12px; border-left: 3px solid var(--accent); background: var(--accent-tint-04); color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
+  .gnd-line.unsourced { border-left-color: var(--warn); color: var(--text-secondary); }
+  .paused-line { border-left-color: var(--accent-ink); background: var(--accent-ink-tint-06); }
 
-  .err-line { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--error); padding: 8px 10px; background: var(--error-bg); border-left: 2px solid var(--error); margin-bottom: 1rem; }
+  /* Answer left, actions right. The rail collapses under the answer before the
+     answer gets too narrow to read. */
+  .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; margin-top: 30px; }
+  .col-answer { min-width: 0; }
+  .col-rail { position: sticky; top: 72px; min-width: 0; }
+  .answer { padding: 0 24px 0 0; border-right: 1px solid var(--line-hair); }
+  .note { color: var(--text-muted); font-size: var(--fs-body); line-height: 1.6; font-style: italic; }
+  .working-note { padding: 28px; border: 1px dashed var(--line-strong); text-align: center; }
 
-  .reasoning { border: 1px dashed rgba(26, 16, 8, 0.25); padding: 0.75rem 0.9rem; margin-bottom: 1.25rem; background: var(--surface-elevated, #faf6ee); }
-  .reasoning pre { margin: 0.4rem 0 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); max-height: 300px; overflow-y: auto; }
+  .evidence-group { margin-bottom: 54px; }
+  .evidence-stack { display: grid; gap: 26px; padding-top: 30px; }
+  .frontier-panel { margin: 0; }
+  .activity { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line-strong); }
+  .activity summary { color: var(--accent); font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+  .activity ul { display: grid; gap: 4px; margin: 10px 0 0; padding-left: 20px; color: var(--text-secondary); font-family: var(--font-code); font-size: var(--fs-label); }
 
-  /* .sr-label-tight comes from $lib/styles/nm-tokens.css. */
-  .frontier-panel { margin-bottom: 1.5rem; }
-  .answer { margin-bottom: 0; }
-  .note { color: var(--text-muted); font-style: italic; }
-
-  .activity summary { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); cursor: pointer; }
-  .activity ul { margin: 0.5rem 0 0; padding-left: 1.2rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary); display: grid; gap: 0.2rem; }
+  @media (max-width: 900px) {
+    .report-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .main-grid { grid-template-columns: minmax(0, 1fr); }
+    .col-rail { position: static; }
+    .answer { padding-right: 0; border-right: 0; }
+  }
+  @media (max-width: 720px) {
+    .report-lede { padding-inline: 20px; }
+    h1 { max-width: none; font-size: clamp(2.6rem, 13vw, 4.3rem); }
+    .wrap { padding-top: 44px; }
+    .run-section, .answer-group { margin-bottom: 64px; }
+    .section-head { align-items: flex-start; flex-direction: column; gap: 14px; }
+    .section-head > p { max-width: none; text-align: left; }
+    .spacer { margin-left: 0; }
+  }
+  @media (max-width: 480px) {
+    .report-ledger { grid-template-columns: 1fr; }
+    .report-ledger > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 6px 18px; }
+    .report-ledger dd { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+    .report-ledger small { grid-column: 1; }
+  }
 </style>
