@@ -78,7 +78,6 @@ export const load: PageServerLoad = async ({ parent }) => {
       registered: 0,
       sweepable: 0,
     };
-    const engine = hub.engine;
     return {
       engine,
       detectors,
