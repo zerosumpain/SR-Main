@@ -87,3 +87,15 @@ describe('familyMark / feed states', () => {
     expect(statusesFor('held')).toEqual(['suppressed']);
   });
 });
+
+describe('subjectKey', () => {
+  it('strips a trailing day or ISO-week segment and nothing else', async () => {
+    const { subjectKey } = await import('./thought-groups');
+    expect(subjectKey('free_window:2026-09-04')).toBe('free_window');
+    expect(subjectKey('pattern_break:p1:2026-09-02')).toBe('pattern_break:p1');
+    expect(subjectKey('mail:burst:security:2026-09-01')).toBe('mail:burst:security');
+    expect(subjectKey('correlation_probe:p1:2026-W36')).toBe('correlation_probe:p1');
+    expect(subjectKey('unknown_place:p1')).toBe('unknown_place:p1');
+    expect(subjectKey('musing:a-clear-window')).toBe('musing:a-clear-window');
+  });
+});

@@ -357,9 +357,8 @@ async function resolveMemories(ids: string[], fill: Fill): Promise<void> {
         r.supersededBy ? 'SUPERSEDED — a newer memory replaced this one' : '',
       ].filter(Boolean),
       at: r.createdAt.toISOString(),
-      // No memories surface exists to link to. A link to a 404 is worse than
-      // no link — the card already carries the memory's full text.
-      href: null,
+      // The Memory room's source archive anchors every raw memory.
+      href: `/jkai/daydreams/memory#memory-${r.id}`,
     });
   }
 }

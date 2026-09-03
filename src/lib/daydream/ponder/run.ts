@@ -60,7 +60,7 @@ export interface PonderResult {
 
 const EMPTY: PonderResult = {
   cards: 0,
-  musings: { created: 0, updated: 0, suppressed: 0, muted: 0, alreadyRefuted: 0, protectedSkipped: 0, createdKeys: [], proposed: 0 },
+  musings: { created: 0, updated: 0, suppressed: 0, muted: 0, alreadyRefuted: 0, protectedSkipped: 0, merged: 0, createdKeys: [], proposed: 0 },
   leadsCreated: 0,
   leadsDuplicate: 0,
   rulesAdmitted: 0,

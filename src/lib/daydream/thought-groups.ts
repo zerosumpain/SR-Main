@@ -164,3 +164,17 @@ export function likelihoodBand(score: number, threshold: number): LikelihoodBand
   }
   return { id: 'marginal', label: 'marginal', meaning: `${score.toFixed(2)}, only just over the ${threshold.toFixed(2)} bar` };
 }
+
+/**
+ * The SUBJECT a date-scoped key is about.
+ *
+ * `free_window:2026-09-04`, `pattern_break:<place>:2026-09-02` and
+ * `mail:burst:security:2026-09-01` are one card a day by design — a filed
+ * card must not swallow next week's event. But a feed that lists three
+ * Thursdays as three rows is the same subject three times, so the feed rolls
+ * rows up by this key and keeps the newest as the face. Keys with no date
+ * segment are their own subject.
+ */
+export function subjectKey(dedupeKey: string): string {
+  return dedupeKey.replace(/:(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2})$/, '');
+}

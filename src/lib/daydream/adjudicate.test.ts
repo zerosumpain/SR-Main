@@ -218,3 +218,14 @@ describe('the reviewer is handed its rows, not sent hunting for them', () => {
     expect(evidenceLine(huge).length).toBeLessThanOrEqual(400);
   });
 });
+
+describe('isRetrievalFailure', () => {
+  it('is an uncertain with no sources, or one that says it could not reach the rows', async () => {
+    const { isRetrievalFailure } = await import('./adjudicate');
+    expect(isRetrievalFailure({ verdict: 'uncertain', sources: [], reasoning: 'cannot tell' })).toBe(true);
+    expect(isRetrievalFailure({ verdict: 'uncertain', sources: ['mail_read'], reasoning: 'The cited messages could not be retrieved.' })).toBe(true);
+    expect(isRetrievalFailure({ verdict: 'uncertain', sources: ['mail_read'], reasoning: 'Unable to find the two spend rows.' })).toBe(true);
+    expect(isRetrievalFailure({ verdict: 'uncertain', sources: ['mail_read', 'spend'], reasoning: 'The rows exist but do not settle whether it was two payments.' })).toBe(false);
+    expect(isRetrievalFailure({ verdict: 'refuted', sources: [], reasoning: 'could not retrieve' })).toBe(false);
+  });
+});

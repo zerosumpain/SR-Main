@@ -492,6 +492,9 @@ export async function confirmPlace(
       content,
       confidence: 'high',
       sourceConversationId: opts.conversationId ?? null,
+      // A named place is a daydream finding: inside the consolidation scope,
+      // so a theme can rest on it and a card can cite it.
+      daydreamOrigin: 'place',
     })
     .returning({ id: jkaiMemories.id });
 

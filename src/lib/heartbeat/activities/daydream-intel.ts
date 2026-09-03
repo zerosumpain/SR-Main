@@ -4,6 +4,7 @@ import { intelInsights } from '$lib/db/schema';
 import { getSetting } from '$lib/server/models/settings';
 import { insightToCandidate, MAX_BRIDGED_PER_RUN, type InsightRow } from '$lib/daydream/intel-bridge';
 import { persistCandidates } from '$lib/daydream/thought-store';
+import { applyPendingGraphLinks, syncInsightStatuses } from '$lib/daydream/graph-apply';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
 
@@ -100,14 +101,28 @@ export const daydreamIntelBridge: ActivityHandler = {
         .filter((c): c is NonNullable<typeof c> => c !== null)
         .slice(0, MAX_BRIDGED_PER_RUN);
 
+      // The return legs, every tick: a verified graph link is applied to the
+      // graph rather than left on the feed, and an insight the owner dealt
+      // with on /jkai/intel takes its bridged thought with it.
+      let applied = 0;
+      let synced = 0;
+      let legError: string | null = null;
+      try {
+        applied = (await applyPendingGraphLinks()).length;
+        synced = await syncInsightStatuses();
+      } catch (err) {
+        legError = errMsg(err);
+      }
+      const legs = `${applied} applied to the graph, ${synced} archived with their insight` + (legError ? ` · return leg failed: ${legError}` : '');
+
       if (candidates.length === 0) {
         return {
           outcome: 'ok',
           summary:
             `${generated} findings computed; nothing to bridge ` +
-            `(${rows.length} fresh, none above the bar)` +
+            `(${rows.length} fresh, none above the bar) · ${legs}` +
             (generateError ? ` · recompute failed: ${generateError}` : ''),
-          details: { considered: rows.length, generated, generateError },
+          details: { considered: rows.length, generated, generateError, applied, synced, legError },
         };
       }
 
@@ -121,9 +136,9 @@ export const daydreamIntelBridge: ActivityHandler = {
         summary:
           `${generated} findings computed · ${candidates.length} bridged of ${rows.length} fresh: ` +
           `${persisted.created} new, ${persisted.updated} refreshed, ` +
-          `${persisted.suppressed} below threshold, ${persisted.muted} muted` +
+          `${persisted.suppressed} below threshold, ${persisted.muted} muted, ${persisted.merged} merged · ${legs}` +
           (generateError ? ` · recompute failed: ${generateError}` : ''),
-        details: { considered: rows.length, generated, generateError, ...persisted },
+        details: { considered: rows.length, generated, generateError, applied, synced, legError, ...persisted },
       };
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };

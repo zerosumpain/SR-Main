@@ -21,6 +21,7 @@
   import ThoughtDrill from '$lib/components/jkai/daydream/rooms/ThoughtDrill.svelte';
   import TriageDeck from '$lib/components/jkai/daydream/rooms/TriageDeck.svelte';
   import type { Facet, MatrixAxis } from '$lib/components/jkai/daydream/hub/types';
+  import type { FeedRow } from '$lib/daydream/ledger';
   import { FAMILIES, FEED_STATES, familyMark, kindLabel, likelihoodBand } from '$lib/daydream/thought-groups';
   import { thoughtDestination } from '$lib/daydream/destination';
   import { bandTone, reviewTone, thoughtRank, thoughtTone } from '$lib/daydream/priority';
@@ -47,6 +48,9 @@
   );
   const active = $derived({ row: data.family, col: data.state ?? (data.family ? null : 'undecided') });
   function cellHref(row: string | null, col: string | null): string {
+    // Place questions are the Places room's — one naming session, not a
+    // list of "what is this place?" rows.
+    if (row === 'places') return col === 'undecided' || col === null ? '/jkai/daydreams/places#dd-unnamed' : '/jkai/daydreams/places';
     const q = new URLSearchParams();
     if (row) q.set('f', row);
     if (col) q.set('s', col);
@@ -60,9 +64,15 @@
     const fam = data.family ? FAMILIES[data.family] : null;
     if (fam && st) return `${st.label} · ${fam.label}`;
     if (fam) return `${fam.label} · every state`;
+    if (st && !data.state) return 'Undecided · plus sent today';
     if (st) return `${st.label} · every family`;
     return 'Everything';
   });
+  const isDefault = $derived(!data.family && !data.state);
+  const placesToName = $derived(data.matrix.cells.places?.undecided ?? 0);
+  function dayList(days: string[]): string {
+    return days.slice(0, 4).map((d) => d.slice(5).replace('-', '/')).join(' · ') + (days.length > 4 ? ' …' : '');
+  }
 
   // ── The rows ──────────────────────────────────────────────────────────────
   const thoughts = $derived(data.rows);
@@ -130,7 +140,7 @@
     if (ok && verdict === 'useful') await postThought({ action: 'weave', id: t.id });
   }
   /** Optimistic: the row leaves at once, and comes back if the server refused. */
-  async function archive(t: Thought) {
+  async function archive(t: { id: string }) {
     archivedNow.add(t.id);
     if (openId === t.id) openId = null;
     const ok = await act({ action: 'archive', id: t.id }, `${t.id}:archive`);
@@ -210,6 +220,14 @@
 
     {#if actionError}<p class="err">{actionError}</p>{/if}
 
+    {#if isDefault && placesToName}
+      <a class="card t-action places-line" href="/jkai/daydreams/places#dd-unnamed">
+        <span class="mark">PLACE</span>
+        <span class="places-line-text">{placesToName} place{placesToName === 1 ? '' : 's'} to name</span>
+        <span class="places-line-go">Name them in one go →</span>
+      </a>
+    {/if}
+
     {#if ordered.length === 0}
       <div class="card t-quiet">
         <p class="card-body">
@@ -241,6 +259,14 @@
               <span class="tag" title={kindLabel(t.kind)}>{kindLabel(t.kind)}</span>
               {#if t.feedback}<span class="tag t-good">you said {t.feedback.replace('_', ' ')}</span>{/if}
               {#if t.relevance != null}<span class="tag" title="relevance">{RELEVANCE_TERSE[t.relevance]}</span>{/if}
+              {#if t.siblings.count > 1}
+                <span class="tag t-steady" title="Raised on {t.siblings.days.length} day{t.siblings.days.length === 1 ? '' : 's'}: {t.siblings.days.join(', ')}">×{t.siblings.count} · {dayList(t.siblings.days)}</span>
+              {:else if t.recurrenceCount > 1}
+                <span class="tag" title="Re-proposed {t.recurrenceCount} times; one standing card">×{t.recurrenceCount}</span>
+              {/if}
+              {#each t.memoryThemes as m (m.id)}
+                <a class="tag t-good" href="/jkai/daydreams/memory#memory-theme-{m.id}" title="Guided by the memory theme “{m.title}”">memory: {m.title.slice(0, 32)}{m.title.length > 32 ? '…' : ''}</a>
+              {/each}
               {#if t.suppressedReason}<span class="tag t-watch">{t.suppressedReason.replace(/_/g, ' ').replace(/\s*\(.*\)$/, '')}</span>{/if}
               <span class="trow-when" title={stamp(t.createdAt)}>{ago(t.createdAt)}</span>
             </div>
@@ -327,6 +353,7 @@
 {#if openRow}
   <ThoughtDrill
     thought={openRow}
+    memoryThemes={(openRow as Partial<FeedRow>).memoryThemes ?? []}
     threshold={data.threshold}
     learned={learningFor(openRow.kind)}
     onclose={() => (openId = null)}
@@ -455,5 +482,27 @@
   }
   .steer {
     margin-bottom: 18px;
+  }
+  .places-line {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+  .places-line-text {
+    font-family: var(--font-display);
+    font-size: var(--fs-body);
+  }
+  .places-line-go {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
   }
 </style>

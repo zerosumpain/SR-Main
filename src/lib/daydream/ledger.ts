@@ -13,6 +13,7 @@ import { and, desc, eq, gte, inArray, isNotNull, sql, type SQL } from 'drizzle-o
 import { db } from '$lib/db';
 import {
   daydreamDigests,
+  daydreamMemoryThemes,
   daydreamPlaces,
   daydreamThoughts,
   daydreamTrail,
@@ -42,6 +43,7 @@ import {
   familyOf,
   feedStateOf,
   statusesFor,
+  subjectKey,
   type FeedState,
 } from './thought-groups';
 
@@ -84,6 +86,11 @@ export interface LedgerThought {
   placeId: string | null;
   /** What John said about this one, in his own words. */
   note: string | null;
+  /** The memory a note on this thought became, if any. */
+  noteMemoryId: string | null;
+  dedupeKey: string;
+  /** How many ticks have re-proposed this exact thing. */
+  recurrenceCount: number;
   /** The jkai_memories row the reviewer's ruling was written to, and when it
    *  ruled. A verdict with no memory behind it is one the engine meets again
    *  tomorrow with no idea it has already been settled. */
@@ -333,6 +340,9 @@ export async function loadThoughts(limit = 60, where?: SQL): Promise<LedgerThoug
       proposedActions: daydreamThoughts.proposedActions,
       placeId: daydreamThoughts.placeId,
       note: daydreamThoughts.note,
+      noteMemoryId: daydreamThoughts.noteMemoryId,
+      dedupeKey: daydreamThoughts.dedupeKey,
+      recurrenceCount: daydreamThoughts.recurrenceCount,
       reviewMemoryId: daydreamThoughts.reviewMemoryId,
       reviewAt: daydreamThoughts.reviewAt,
       intelNoteId: daydreamThoughts.intelNoteId,
@@ -382,6 +392,9 @@ export async function loadThoughts(limit = 60, where?: SQL): Promise<LedgerThoug
     evidence: r.evidence,
     placeId: r.placeId,
     note: r.note,
+    noteMemoryId: r.noteMemoryId,
+    dedupeKey: r.dedupeKey,
+    recurrenceCount: r.recurrenceCount,
     reviewMemoryId: r.reviewMemoryId,
     reviewAt: r.reviewAt?.toISOString() ?? null,
     intelNoteId: r.intelNoteId,
@@ -461,18 +474,84 @@ export async function loadFeedMatrix(): Promise<FeedMatrix> {
 
 export const FEED_CELL_LIMIT = 50;
 
-/** The rows behind one cell of the matrix — or one whole column, or one whole
- *  row, when only one axis is given. Nothing given: the undecided column. */
+/** A feed row: the ledger row plus what the face needs beside it. */
+export interface FeedRow extends LedgerThought {
+  /** Cited memory themes, by name — "memory: <theme>" on the face. */
+  memoryThemes: Array<{ id: string; title: string }>;
+  /** Date-scoped siblings rolled into this row: how many, and which days. */
+  siblings: { count: number; days: string[] };
+}
+
+const PLACE_KINDS = ['unknown_place', 'unknown_frequent_place'];
+export const SENT_TODAY_HOURS = 24;
+
+/**
+ * The rows behind one cell of the matrix — or one whole column, or one whole
+ * row, when only one axis is given.
+ *
+ * Nothing given is the DEFAULT VIEW: undecided across every family except
+ * places, plus anything sent in the last day. Place questions belong to the
+ * Places room (the matrix's places cells link there), and a feed that opened
+ * on eleven "What is this place?" rows was the old page's worst habit.
+ *
+ * Date-scoped keys (`free_window:<day>`, `pattern_break:<place>:<day>`) are
+ * ROLLED UP by `subjectKey`: the newest row is the face and the rest ride as
+ * `siblings`, so three Thursdays are one line with a recurrence strip.
+ */
 export async function loadFeedCell(
   family: string | null,
   state: FeedState | null,
   limit = FEED_CELL_LIMIT,
-): Promise<LedgerThought[]> {
+  now = new Date(),
+): Promise<FeedRow[]> {
   const clauses: SQL[] = [];
+  const isDefault = !family && !state;
   if (family && family in FAMILIES) clauses.push(familyWhere(family));
-  const statuses = statusesFor(state ?? 'undecided');
-  if (state || !family) clauses.push(inArray(daydreamThoughts.status, statuses));
-  return loadThoughts(limit, clauses.length ? and(...clauses) : undefined);
+  if (isDefault) {
+    const since = new Date(now.getTime() - SENT_TODAY_HOURS * 3_600_000);
+    clauses.push(
+      sql`((${daydreamThoughts.status} = 'new' and ${daydreamThoughts.kind} not in ${PLACE_KINDS}) or (${daydreamThoughts.status} in ('delivered', 'seen') and ${daydreamThoughts.deliveredAt} >= ${since}))`,
+    );
+  } else if (state || !family) {
+    clauses.push(inArray(daydreamThoughts.status, statusesFor(state ?? 'undecided')));
+  }
+  // Over-fetch so the roll-up still fills the page.
+  const rows = await loadThoughts(limit * 2, clauses.length ? and(...clauses) : undefined);
+
+  // Roll up by subject. Rows come newest first, so the first of a subject is
+  // its face.
+  const bySubject = new Map<string, { row: LedgerThought; days: Set<string>; count: number }>();
+  for (const r of rows) {
+    const key = subjectKey(r.dedupeKey);
+    const day = r.createdAt.slice(0, 10);
+    const cur = bySubject.get(key);
+    if (cur) {
+      cur.count++;
+      cur.days.add(day);
+    } else {
+      bySubject.set(key, { row: r, days: new Set([day]), count: 1 });
+    }
+  }
+  const faces = [...bySubject.values()].slice(0, limit);
+
+  // Theme names for the memory chips, one query.
+  const themeIds = new Set<string>();
+  for (const f of faces) for (const e of f.row.evidence ?? []) if (e.kind === 'memory-theme' && e.id) themeIds.add(e.id);
+  const themes = themeIds.size
+    ? await db
+        .select({ id: daydreamMemoryThemes.id, title: daydreamMemoryThemes.title })
+        .from(daydreamMemoryThemes)
+        .where(inArray(daydreamMemoryThemes.id, [...themeIds]))
+    : [];
+  const themeBy = new Map(themes.map((t) => [t.id, t.title]));
+
+  return faces.map((f) => ({
+    ...f.row,
+    memoryThemes: (f.row.evidence ?? [])
+      .filter((e) => e.kind === 'memory-theme' && e.id && themeBy.has(e.id))
+      .map((e) => ({ id: e.id, title: themeBy.get(e.id) as string })),
+    siblings: { count: f.count, days: [...f.days].sort().reverse() },
+  }));
 }
 
 /** One thought by id, in the ledger shape — for a deep link that names a row

@@ -14,7 +14,7 @@ import {
   jkaiMemories,
 } from '$lib/db/schema';
 
-export const DAYDREAM_MEMORY_ORIGINS = ['ruling', 'note'] as const;
+export const DAYDREAM_MEMORY_ORIGINS = ['ruling', 'note', 'place'] as const;
 export type DaydreamMemoryOrigin = (typeof DAYDREAM_MEMORY_ORIGINS)[number];
 
 /** Admit a raw row to Daydream only when a Daydream writer labelled it. */
@@ -42,7 +42,7 @@ export function isDaydreamFindingTheme() {
       inner join ${jkaiMemories}
         on ${jkaiMemories.id} = ${daydreamMemoryThemeSources.memoryId}
       where ${daydreamMemoryThemeSources.themeId} = ${daydreamMemoryThemes.id}
-        and ${jkaiMemories.daydreamOrigin} in ('ruling', 'note')
+        and ${jkaiMemories.daydreamOrigin} in ('ruling', 'note', 'place')
     )
     and not exists (
       select 1

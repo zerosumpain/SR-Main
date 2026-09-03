@@ -126,3 +126,66 @@ describe('echoOf — the rename that used to buy a fresh review', () => {
     expect(echoOf({ dedupeKey: 'musing:x', evidence: [INVOICE, BANK] }, [])).toBeNull();
   });
 });
+
+describe('liveEchoOf', () => {
+  const fam = (k: string) => (k.startsWith('musing_') ? 'musings' : k.startsWith('mail_') ? 'mail' : 'patterns');
+  const now = new Date('2026-09-03T10:00:00Z');
+  const live = (over: Partial<import('./refutations').LiveClaim>): import('./refutations').LiveClaim => ({
+    id: 'x',
+    dedupeKey: 'musing:x',
+    kind: 'musing_family',
+    title: 'A clear window before school resumes',
+    score: 0.6,
+    status: 'new',
+    createdAt: new Date('2026-09-02T10:00:00Z'),
+    refs: new Set(['calendar:c1', 'family:katie']),
+    ...over,
+  });
+
+  it('finds the live row on the same evidence whatever the title', async () => {
+    const { liveEchoOf } = await import('./refutations');
+    const hit = liveEchoOf(
+      { dedupeKey: 'musing:y', kind: 'musing_plans', title: 'Nothing on Thursday', evidence: [{ kind: 'calendar', id: 'c1' }, { kind: 'family', id: 'katie' }] },
+      [live({})],
+      fam,
+      now,
+    );
+    expect(hit?.id).toBe('x');
+  });
+
+  it('finds the same claim re-slugged in the same family within a week, by title', async () => {
+    const { liveEchoOf } = await import('./refutations');
+    const hit = liveEchoOf(
+      { dedupeKey: 'musing:z', kind: 'musing_plans', title: 'A clear window before the school term resumes', evidence: [{ kind: 'features', id: 'spend7' }] },
+      [live({})],
+      fam,
+      now,
+    );
+    expect(hit?.id).toBe('x');
+  });
+
+  it('does not match across families, after a week, or on a merely similar title', async () => {
+    const { liveEchoOf } = await import('./refutations');
+    const cand = { dedupeKey: 'musing:z', kind: 'musing_plans', title: 'A clear window before the school term resumes', evidence: [] };
+    expect(liveEchoOf(cand, [live({ kind: 'mail_security' })], fam, now)).toBeNull();
+    expect(liveEchoOf(cand, [live({ createdAt: new Date('2026-08-01T00:00:00Z') })], fam, now)).toBeNull();
+    expect(liveEchoOf({ ...cand, title: 'A clear diary' }, [live({})], fam, now)).toBeNull();
+  });
+
+  it('never matches its own key', async () => {
+    const { liveEchoOf } = await import('./refutations');
+    expect(liveEchoOf({ dedupeKey: 'musing:x', kind: 'musing_family', title: 'A clear window before school resumes', evidence: [] }, [live({})], fam, now)).toBeNull();
+  });
+});
+
+describe('titleSimilarity', () => {
+  it('is 1 for the same words, 0 for none shared, and ordered in between', async () => {
+    const { titleSimilarity } = await import('./refutations');
+    expect(titleSimilarity('Two Canva charges', 'two canva charges!')).toBe(1);
+    expect(titleSimilarity('abc', 'xyz')).toBe(0);
+    const near = titleSimilarity('A clear window before school resumes', 'A clear window before the school term');
+    const far = titleSimilarity('A clear window before school resumes', 'Recovery is the stronger signal');
+    expect(near).toBeGreaterThan(far);
+    expect(near).toBeGreaterThanOrEqual(0.6);
+  });
+});

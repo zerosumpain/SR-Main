@@ -7,6 +7,7 @@ import {
   loadFeedMatrix,
   loadThoughtById,
   type FeedMatrix,
+  type FeedRow,
   type LedgerThought,
 } from '$lib/daydream/ledger';
 import { listSteers } from '$lib/daydream/hypotheses/steer';
@@ -46,7 +47,7 @@ export const load: PageServerLoad = async ({ url, parent }) => {
       matrix: empty,
       family,
       state,
-      rows: [] as LedgerThought[],
+      rows: [] as FeedRow[],
       threshold: { value: 0, feedbackCount: 0 },
       detectors: [] as Awaited<ReturnType<typeof loadDetectorRows>>,
       delivery: null as Awaited<ReturnType<typeof loadDelivery>> | null,

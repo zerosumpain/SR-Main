@@ -78,7 +78,7 @@ export async function listDaydreamMemories(limit = 200): Promise<DaydreamMemory[
   }
 
   return rows.map((r) => {
-    const origin: MemoryOrigin = r.daydreamOrigin === 'ruling' ? 'ruling' : 'note';
+    const origin: MemoryOrigin = r.daydreamOrigin === 'ruling' ? 'ruling' : r.daydreamOrigin === 'place' ? 'place' : 'note';
     return {
       id: r.id,
       category: r.category,
@@ -170,7 +170,7 @@ export async function listDaydreamMemoryThemes(limit = 100): Promise<DaydreamMem
         createdAt: row.createdAt.toISOString(),
         consolidatedAt: row.consolidatedAt?.toISOString() ?? null,
         themeIds: sourceLinks.filter((l) => l.memoryId === row.id).map((l) => l.themeId),
-        origin: row.daydreamOrigin === 'ruling' ? 'ruling' : 'note',
+        origin: row.daydreamOrigin === 'ruling' ? 'ruling' : row.daydreamOrigin === 'place' ? 'place' : 'note',
         thoughtId: null,
         thoughtTitle: null,
         thoughtKind: null,
