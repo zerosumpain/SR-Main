@@ -24,6 +24,7 @@
   // shadows either, except the live dot's glow — which is a glow, not
   // elevation.
   import type { Snippet } from 'svelte';
+  import SiteHeader from '$lib/components/SiteHeader.svelte';
   import { currentIsOwner, currentPath } from '$lib/nav/page-path';
   import { isItemActive, parentHref, parentLabel, subnavFor } from '$lib/nav/site-nav';
 
@@ -39,6 +40,8 @@
   interface Props {
     /** Rendered after `strangeramblings.com` in the wordmark, e.g. `/health`. */
     path: string;
+    /** Use the site's shared 48px cell navigation instead of this family's editorial masthead. */
+    unifiedNav?: boolean;
     /** Small mono label beside the wordmark. */
     kicker?: string | null;
     /**
@@ -86,6 +89,7 @@
 
   let {
     path,
+    unifiedNav = false,
     kicker = null,
     back = undefined,
     nav = undefined,
@@ -122,12 +126,15 @@
   });
 </script>
 
-<div class="hs" style="--hs-max: {maxWidth}px">
+<div class="hs" class:unified-nav={unifiedNav} style="--hs-max: {maxWidth}px">
   <!-- Inert, fixed, and under the header. Nothing in it is interactive. -->
   <div class="hs-grain" aria-hidden="true"></div>
 
-  <header class="hs-head">
-    <div class="hs-head-left">
+  {#if unifiedNav}
+    <SiteHeader {isOwner} />
+  {:else}
+    <header class="hs-head">
+      <div class="hs-head-left">
       <!-- Top-left on every page in the site, this family included. An icon,
            not a word: the one destination that never needs naming. -->
       <a class="hs-home" href="/" aria-label="Home" title="Home">
@@ -152,26 +159,27 @@
       {#if kicker}
         <span class="hs-kicker">{kicker}</span>
       {/if}
-    </div>
+      </div>
 
-    <div class="hs-head-right">
-      {#each navLinks as link (link.href + link.label)}
-        <a
-          class="hs-nav"
-          class:muted={link.muted}
-          href={link.href}
-          aria-current={link.current ? 'page' : undefined}>{link.label}</a
-        >
-      {/each}
-      {#if live}
-        <span class="hs-live"><span class="hs-dot"></span>{live}</span>
-      {/if}
-      {#each meta as item, i (i)}
-        <span class="hs-meta">{item}</span>
-      {/each}
-      {#if actions}{@render actions()}{/if}
-    </div>
-  </header>
+      <div class="hs-head-right">
+        {#each navLinks as link (link.href + link.label)}
+          <a
+            class="hs-nav"
+            class:muted={link.muted}
+            href={link.href}
+            aria-current={link.current ? 'page' : undefined}>{link.label}</a
+          >
+        {/each}
+        {#if live}
+          <span class="hs-live"><span class="hs-dot"></span>{live}</span>
+        {/if}
+        {#each meta as item, i (i)}
+          <span class="hs-meta">{item}</span>
+        {/each}
+        {#if actions}{@render actions()}{/if}
+      </div>
+    </header>
+  {/if}
 
   <main class="hs-main">
     {@render children()}
@@ -214,6 +222,9 @@
     pointer-events: none;
     z-index: 70;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  .hs.unified-nav .hs-grain {
+    z-index: 20;
   }
 
   .hs-head {
