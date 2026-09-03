@@ -62,7 +62,7 @@ export interface HostPosture {
   sshd: SshdPosture | null;
   fail2ban: Fail2banPosture | null;
   exposure: ExposurePosture | null;
-  /** AUTH_BYPASS=1 on a public host is the 2026-07-24 outage. */
+  /** Obsolete AUTH_BYPASS configuration still present on the host. */
   authBypass: boolean;
 }
 

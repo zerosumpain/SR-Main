@@ -36,11 +36,8 @@ export const HOOK_BYPASSES: string[] = [
   '/dav', // Basic-Auth against webdav_credentials
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
   '/api/mcp', // bridge token (tools/list + tools/call)
-  '/api/policy-engine', // POLICY_INGEST_SECRET
   '/api/claude-changelog', // POST only, ingest secret
   '/api/releases', // POST only, RELEASE_LOG_SECRET (summarise also accepts an owner session)
-  '/api/data-standard-designer',
-  '/api/dfe-data-strategy',
   '/api/whatsapp/inbound', // POST only, WHATSAPP_INBOUND_SECRET
   '/api/health/workflow-engine', // watchdog probe
   '/api/deepdive/index-sources',
@@ -89,10 +86,11 @@ export const HOOK_BYPASSES: string[] = [
   // reads the owner's movements and is deliberately NOT here — this is an exact
   // path, not a prefix.
   '/api/daydream/backfill', // POST only · DAYDREAM_MAINTENANCE_SECRET or owner session
+  '/api/live-walk', // POST/DELETE/OPTIONS only · LIVE_WALK_BROADCAST_SECRET; GET owner-only
 ];
 
 /**
- * Page-level bypasses that are EXACT paths, not trees.
+ * Hook bypasses that are EXACT paths, not trees.
  *
  * These are the only two public PAGE routes. `/health` used to be a prefix,
  * which meant every file created under `src/routes/health/` was anonymously
@@ -107,6 +105,12 @@ export const HOOK_BYPASSES: string[] = [
  */
 export const HOOK_EXACT_BYPASSES: string[] = [
   '/health', // the public health landing; every /health/* child is owner-only
+  '/api/policy-engine/ingest', // GET public; POST POLICY_INGEST_SECRET
+  '/api/policy-engine/seed-workflows', // POST POLICY_INGEST_SECRET
+  '/api/data-standard-designer/ingest', // GET public; POST DSD_INGEST_SECRET
+  '/api/data-standard-designer/seed-workflows', // POST DSD_INGEST_SECRET
+  '/api/dfe-data-strategy/intel', // GET public; POST KEYSTONE_INTEL_SECRET or owner
+  '/api/dfe-data-strategy/seed-workflows', // POST KEYSTONE_INTEL_SECRET
 ];
 
 /** Prefix bypasses at the page level. `/tools` is a genuine tree (static/tools/*). */
@@ -138,12 +142,16 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/dav': 'HTTP Basic · webdav_credentials',
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
   '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
-  '/api/policy-engine': 'POLICY_INGEST_SECRET',
-  '/api/data-standard-designer': 'DSD_INGEST_SECRET',
-  '/api/dfe-data-strategy': 'KEYSTONE_INTEL_SECRET',
+  '/api/policy-engine/ingest': 'GET public · POST Bearer POLICY_INGEST_SECRET (fails closed)',
+  '/api/policy-engine/seed-workflows': 'POST only · Bearer POLICY_INGEST_SECRET (fails closed)',
+  '/api/data-standard-designer/ingest': 'GET public · POST Bearer DSD_INGEST_SECRET (fails closed)',
+  '/api/data-standard-designer/seed-workflows': 'POST only · Bearer DSD_INGEST_SECRET (fails closed)',
+  '/api/dfe-data-strategy/intel': 'GET public · POST owner or KEYSTONE_INTEL_SECRET (fails closed)',
+  '/api/dfe-data-strategy/seed-workflows': 'POST only · Bearer KEYSTONE_INTEL_SECRET (fails closed)',
   '/api/claude-changelog': 'POST only · ingest secret',
   '/api/claude-changelog/ingest': 'POST only · Bearer CLAUDE_CHANGELOG_SECRET (fails closed)',
   '/api/daydream/backfill': 'POST only · Bearer DAYDREAM_MAINTENANCE_SECRET or owner session (fails closed)',
+  '/api/live-walk': 'write/preflight only · LIVE_WALK_BROADCAST_SECRET (GET stays owner-only)',
   '/api/releases': 'POST only · RELEASE_LOG_SECRET',
   '/api/whatsapp/inbound': 'POST only · Bearer WHATSAPP_INBOUND_SECRET',
   '/api/health/workflow-engine': 'loopback only · watchdog probe',

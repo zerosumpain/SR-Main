@@ -87,7 +87,7 @@ jobs:
       # commit, whose FIRST PARENT is the base branch tip; on a push it is the
       # new master tip, whose first parent is the previous one. `HEAD^` is the
       # base in both cases, so neither classifier needs origin/master at all.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 5
 
@@ -149,7 +149,7 @@ jobs:
       - name: Find a gate-certified release candidate
         id: candidate
         if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const tree = require('child_process')
@@ -211,14 +211,17 @@ jobs:
       # `ci-gate-placeholder` to production and silently break web push.
       PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+
+      - name: Audit production dependencies
+        run: timeout 300 npm audit --omit=dev --audit-level=high
 
       - name: Type check
         run: ./scripts/gate-check.sh
@@ -296,11 +299,11 @@ jobs:
 
       # Depth 5, not 1: at L2 the selector diffs HEAD^ to decide which files the
       # change can reach.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -357,9 +360,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -392,7 +395,7 @@ jobs:
         run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
 
       - name: Upload release candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: candidate-${{ steps.source.outputs.tree }}
           path: |
@@ -514,7 +517,7 @@ jobs:
     runs-on: [self-hosted, builder]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -554,7 +557,7 @@ jobs:
         id: candidate_download
         if: needs.level.outputs.candidate_certified == 'true'
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ needs.level.outputs.candidate_name }}
           run-id: ${{ needs.level.outputs.candidate_run_id }}
@@ -602,7 +605,7 @@ jobs:
       # of write paths into production at exactly one, the release job, and
       # needs no inbound credential on the VPS for a second machine.
       - name: Upload the release payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}
           path: |
@@ -650,13 +653,13 @@ jobs:
       github.ref == 'refs/heads/master' &&
       (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: [self-hosted, srmain]
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       # Full history: scripts/ci-release.sh records the release log by diffing
       # the previously-deployed sha against HEAD, and the default depth-1
       # checkout has no such commit to diff against. The self-hosted runner
       # reuses its workspace, so this is a one-off cost rather than a full clone.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -664,7 +667,7 @@ jobs:
       # workspace root, restoring build/ and the sidecar bundles exactly where
       # the staging scripts already expect to find them.
       - name: Download the release payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-${{ github.sha }}
 
@@ -698,8 +701,17 @@ jobs:
       - name: Stage the jkai-builder sidecar
         run: ./scripts/ci-stage-builder.sh
 
+      # The browser sidecar is Docker-based rather than a bundled systemd unit.
+      # Prepare its image and shared credential before the web restart, but do
+      # not replace the old container until the matching application is live.
+      - name: Prepare the Webframe sidecar
+        run: ./scripts/ci-webframe.sh prepare
+
       - name: Release
         run: ./scripts/ci-release.sh
+
+      - name: Activate the Webframe sidecar
+        run: ./scripts/ci-webframe.sh activate
 
   risk-tier:
     name: Risk tier
@@ -711,7 +723,7 @@ jobs:
     steps:
       # Full history: the classifier diffs against the MERGE BASE, so it judges
       # what this PR adds rather than everything that landed on master since.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -778,7 +790,7 @@ jobs:
       # `gh pr merge --delete-branch` shells out to git to drop the local
       # branch, so without a checkout it dies on "not a git repository" before
       # merging anything. Cheap to add and keeps --delete-branch working.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Merge if a token is configured
         env:

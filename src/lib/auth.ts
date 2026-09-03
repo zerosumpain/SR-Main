@@ -16,7 +16,6 @@ const PUBLIC_PATHS = [
   '/api/agent',
   '/api/jkai/proxy',
   '/api/jkai/cors',
-  '/api/live-walk',
   // The daydream trail's push ingest — a Home Assistant automation posts GPS
   // changes here with a shared secret (DAYDREAM_INGEST_SECRET), exactly as
   // /api/live-walk works. Listed as the EXACT path, never as '/api/daydream':

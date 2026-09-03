@@ -128,7 +128,12 @@
 
   // minimal, XSS-safe markdown → HTML (escape first, then a tiny subset + [n] citation chips)
   function md(s: string): string {
-    let h = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let h = s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
     h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

@@ -28,6 +28,10 @@ VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
 LIVE="$VPS_DIR/packages/jkai-builder/dist/start.js"
 PENDING_LINK="$VPS_DIR/builder-releases/pending"
 BACKUP="$VPS_DIR/packages/jkai-builder/dist/start.js.previous"
+UNIT_LIVE="/etc/systemd/system/jkai-builder.service"
+UNIT_BACKUP="$VPS_DIR/packages/jkai-builder/jkai-builder.service.previous"
+LAUNCH_LIVE="$VPS_DIR/scripts/jkai-builder-launch.sh"
+LAUNCH_BACKUP="$VPS_DIR/scripts/jkai-builder-launch.sh.previous"
 SOCK="/run/jkai-builder/jkai-builder.sock"
 SERVICE="jkai-builder"
 
@@ -73,8 +77,12 @@ builds_running() {
 
 # ---- 1. Apply a staged bundle if one is waiting and nothing is in flight -----
 
-if [ -L "$PENDING_LINK" ] && [ -f "$PENDING_LINK/start.js" ]; then
-  if cmp -s "$PENDING_LINK/start.js" "$LIVE"; then
+if [ -L "$PENDING_LINK" ] && [ -f "$PENDING_LINK/start.js" ] &&
+   [ -f "$PENDING_LINK/jkai-builder.service" ] &&
+   [ -f "$PENDING_LINK/jkai-builder-launch.sh" ]; then
+  if cmp -s "$PENDING_LINK/start.js" "$LIVE" &&
+     cmp -s "$PENDING_LINK/jkai-builder.service" "$UNIT_LIVE" &&
+     cmp -s "$PENDING_LINK/jkai-builder-launch.sh" "$LAUNCH_LIVE"; then
     : # Already running it. Nothing to do, and nothing worth logging every minute.
   elif [ -f "$PENDING_LINK/.failed" ]; then
     # This bundle has already been tried and rolled back. Without this marker the
@@ -96,7 +104,12 @@ if [ -L "$PENDING_LINK" ] && [ -f "$PENDING_LINK/start.js" ]; then
     else
       log "no builds in flight — applying staged bundle $(readlink -f "$PENDING_LINK")"
       cp -f "$LIVE" "$BACKUP" 2>/dev/null || true
-      if install -m 644 -o johnk -g johnk "$PENDING_LINK/start.js" "$LIVE"; then
+      cp -f "$UNIT_LIVE" "$UNIT_BACKUP" 2>/dev/null || true
+      cp -f "$LAUNCH_LIVE" "$LAUNCH_BACKUP" 2>/dev/null || true
+      if install -m 644 -o johnk -g johnk "$PENDING_LINK/start.js" "$LIVE" &&
+         install -m 755 -o johnk -g johnk "$PENDING_LINK/jkai-builder-launch.sh" "$LAUNCH_LIVE" &&
+         install -m 644 "$PENDING_LINK/jkai-builder.service" "$UNIT_LIVE"; then
+        systemctl daemon-reload
         systemctl restart "$SERVICE"
         if wait_for_health; then
           log "applied and healthy: $(readlink -f "$PENDING_LINK")"
@@ -108,6 +121,9 @@ if [ -L "$PENDING_LINK" ] && [ -f "$PENDING_LINK/start.js" ]; then
           # down until someone notices.
           log "ERROR: staged bundle failed its health probe — rolling back"
           install -m 644 -o johnk -g johnk "$BACKUP" "$LIVE"
+          [ -f "$LAUNCH_BACKUP" ] && install -m 755 -o johnk -g johnk "$LAUNCH_BACKUP" "$LAUNCH_LIVE"
+          [ -f "$UNIT_BACKUP" ] && install -m 644 "$UNIT_BACKUP" "$UNIT_LIVE"
+          systemctl daemon-reload
           systemctl restart "$SERVICE"
           if wait_for_health; then
             log "rolled back and healthy"

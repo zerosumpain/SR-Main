@@ -119,7 +119,7 @@
       <div class="nm-sec-hd">
         <span class="sr-label-tight">Host — {h.host}</span>
         {#if h.authBypass}
-          <span class="pill warn">AUTH_BYPASS ON</span>
+          <span class="pill warn">STALE AUTH_BYPASS CONFIG</span>
         {/if}
       </div>
 
@@ -164,9 +164,9 @@
 
         {#if h.authBypass}
           <p class="muted">
-            AUTH_BYPASS grants admin to any client on a private address. On a host behind
-            cloudflared every request looks local — that combination caused the 2026-07-24
-            public /admin exposure.
+            Current builds ignore AUTH_BYPASS, but the obsolete setting should be removed.
+            Older builds treated tunnelled clients as local, which caused the 2026-07-24
+            public /admin exposure; the release process now removes it automatically.
           </p>
         {/if}
 

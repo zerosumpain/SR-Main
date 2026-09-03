@@ -466,7 +466,7 @@ register({
       trigger: {
         type: 'object',
         description:
-          'How the workflow fires. type ∈ {manual, cron, webhook, event}. For cron, set config.expression to a 5-field cron string (e.g. "*/15 * * * *"). For event, set config.eventType. For webhook, optionally set config.secret to a shared secret — callers must then send it as the X-Webhook-Secret header or the POST is rejected with 401.',
+          'How the workflow fires. type ∈ {manual, cron, webhook, event}. For cron, set config.expression to a 5-field cron string (e.g. "*/15 * * * *"). For event, set config.eventType. For webhook, set config.secret — external callers HMAC-sign timestamp.body with SHA-256.',
         properties: {
           type: { type: 'string' },
           config: { type: 'object' },

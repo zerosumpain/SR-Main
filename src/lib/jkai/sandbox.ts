@@ -43,6 +43,19 @@ const SCRAPER_PROFILES_HOST = join(os.homedir(), '.openclaw', 'scraper-profiles'
  */
 const BUILD_HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 
+/** Environment inherited by untrusted build commands in host mode. */
+export function buildChildEnvironment(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const name of [
+    'PATH', 'HOME', 'LANG', 'LC_ALL', 'TERM', 'TMPDIR', 'NODE_OPTIONS',
+    'NPM_CONFIG_CACHE', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+  ]) {
+    const value = process.env[name];
+    if (value) env[name] = value;
+  }
+  return { ...env, ...extra };
+}
+
 export interface SandboxStatus {
   running: boolean;
   containerId?: string;
@@ -185,7 +198,7 @@ export async function execInSandbox(
       const b64 = Buffer.from(command).toString('base64');
       const { stdout, stderr } = await execAsync(
         `bash -c "echo '${b64}' | base64 -d | bash"`,
-        { timeout, maxBuffer: 5 * 1024 * 1024 },
+        { timeout, maxBuffer: 5 * 1024 * 1024, env: buildChildEnvironment() },
       );
       return { stdout, stderr, exitCode: 0 };
     } catch (err: any) {

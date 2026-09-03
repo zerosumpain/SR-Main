@@ -16,6 +16,11 @@ import { daylightHours } from '$lib/broads-pilot/daylight';
 import { haversine } from '$lib/broads-pilot/geo';
 import { breydonAdvice } from '$lib/broads-pilot/tide';
 import type { WaterGraph, Restrictions, Mooring, Poi, Boat, MooringPois } from '$lib/broads-pilot/types';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
+import { readLimitedJson } from '$lib/server/service-auth';
+
+const MAX_CONCURRENT_GUIDES = 3;
+let guidesInFlight = 0;
 
 // ---- server-side dataset load (read the bundled JSON directly) ----
 // In dev the files live under static/; in the built adapter-node server they're
@@ -72,9 +77,14 @@ async function getWeather(lat: number, lng: number) {
   } catch { return null; }
 }
 
-export const POST: RequestHandler = async ({ request }) => {
-  let body: any;
-  try { body = await request.json(); } catch { return json({ error: 'Bad request' }, { status: 400 }); }
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'broads-guide',
+    perClient: { capacity: 5, refillPerSecond: 5 / 60 },
+    global: { capacity: 30, refillPerSecond: 30 / 60 },
+  });
+  const body = await readLimitedJson<any>(request, 32_768);
   const { boat: boatSlug, originNode, objectives, followUp, previousPlan } = body ?? {};
   const d = datasets();
   const boat = d.fleet.find((b) => b.slug === boatSlug) ?? d.fleet.find((b) => b.class === 'generic') ?? d.fleet[0];
@@ -161,10 +171,16 @@ Return JSON exactly:
 }`;
 
   let llm: any;
+  if (guidesInFlight >= MAX_CONCURRENT_GUIDES) {
+    return json({ error: 'The planner is busy — please try again shortly.' }, { status: 503 });
+  }
+  guidesInFlight += 1;
   try {
     llm = await jsonCompletion<{ summary: string; stops: { mooringId: string; day?: number; why: string; activities: { poiId: string; what: string }[] }[]; tips: string[] }>(system, user, { temperature: 0.6, maxTokens: multiDay ? 4500 : 3500 });
   } catch (e: any) {
     return json({ error: 'The planner is busy — please try again. ' + (e?.message ?? '') }, { status: 503 });
+  } finally {
+    guidesInFlight -= 1;
   }
 
   // ---- validate + enrich with REAL legs + compliance ----

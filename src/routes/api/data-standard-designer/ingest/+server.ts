@@ -6,20 +6,21 @@
 // Auth: if DSD_INGEST_SECRET is set, a matching Bearer token is required
 // (mirrors the policy-engine ingest route). Bypasses Auth.js via hooks.server.ts.
 
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { runDiscovery, getRegistrySnapshot } from '$lib/data-standard-designer/discovery.server';
 import type { RequestHandler } from './$types';
+import { assertBearerSecret, readLimitedJson } from '$lib/server/service-auth';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 
-function authorized(request: Request): boolean {
-  const secret = env.DSD_INGEST_SECRET;
-  if (!secret) return true; // unset → open (dev convenience), same as policy-engine
-  return (request.headers.get('authorization') ?? '') === `Bearer ${secret}`;
-}
-
-export const POST: RequestHandler = async ({ request }) => {
-  if (!authorized(request)) throw error(401, 'unauthorized');
-  const body = (await request.json().catch(() => ({}))) as { classify?: boolean };
+export const POST: RequestHandler = async (event) => {
+  const { request } = event;
+  assertPublicRequestBudget(event, {
+    scope: 'dsd-ingest', perClient: { capacity: 6, refillPerSecond: 6 / 60 },
+    global: { capacity: 20, refillPerSecond: 20 / 60 },
+  });
+  assertBearerSecret(request, env.DSD_INGEST_SECRET, 'DSD_INGEST_SECRET');
+  const body = await readLimitedJson<{ classify?: boolean }>(request, 8_192);
   const summary = await runDiscovery({ classify: body.classify !== false });
   return json(summary);
 };

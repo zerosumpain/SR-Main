@@ -3592,11 +3592,12 @@
   }
 
   function generateWebhookSecret() {
-    void persistWebhookSecret(crypto.randomUUID().replace(/-/g, ''));
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    void persistWebhookSecret(Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(''));
   }
 
   function clearWebhookSecret() {
-    if (!confirm('Remove the webhook secret? Callers will no longer need the X-Webhook-Secret header.'))
+    if (!confirm('Remove the webhook secret? External webhook delivery will be disabled until a new one is generated.'))
       return;
     void persistWebhookSecret('');
   }
@@ -3606,12 +3607,9 @@
     webhookTestState = 'sending';
     webhookTestMsg = null;
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const secret = (configDraft.secret as string) || '';
-      if (secret) headers['X-Webhook-Secret'] = secret;
       const res = await fetch(webhookRelativePath(), {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ test: true, sentAt: new Date().toISOString() }),
       });
       const body = await res.json().catch(() => ({}));
@@ -5536,12 +5534,12 @@
                     {/if}
                   </section>
 
-                  <!-- D4 — optional shared secret. When set, callers must send it
-                       as the X-Webhook-Secret header or the POST is rejected 401. -->
+                  <!-- External webhook requests use a timestamped HMAC signature.
+                       Same-origin owner tests are authenticated by the session. -->
                   <section class="nm-sec">
                     <div class="nm-sec-hd">
                       <span class="sr-label-tight">SECRET</span>
-                      <span class="nm-sec-meta">require an X-Webhook-Secret header</span>
+                      <span class="nm-sec-meta">HMAC-SHA256 · five-minute validity</span>
                     </div>
                     {#if configDraft.secret}
                       <button
@@ -5552,7 +5550,7 @@
                       >
                         <pre>{webhookSecretCopied
                             ? 'Copied ✓'
-                            : `X-Webhook-Secret: ${configDraft.secret}`}</pre>
+                            : `Signing secret: ${configDraft.secret}`}</pre>
                       </button>
                       <div class="wh-actions">
                         <button
@@ -5573,8 +5571,9 @@
                     {:else}
                       <div class="chat-explainer">
                         <p>
-                          No secret — this webhook accepts any POST. Add one to require
-                          callers to send a matching <code>X-Webhook-Secret</code> header.
+                          External delivery is disabled. Generate a secret, then send
+                          <code>X-Webhook-Timestamp</code> and <code>X-Webhook-Signature</code>
+                          where the signature is HMAC-SHA256 of timestamp + "." + raw body.
                         </p>
                       </div>
                       <div class="wh-actions">

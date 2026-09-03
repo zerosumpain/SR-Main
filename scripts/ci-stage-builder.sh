@@ -28,6 +28,10 @@ STAGE_DIR="$STAGE_ROOT/$SHA"
 # has no node_modules, because it no longer shares a workspace with the build.
 BUNDLE="packages/jkai-builder/dist/start.js"
 [ -f "$BUNDLE" ] || { echo "$BUNDLE missing — the release artifact did not carry it (did 'build:release-sidecars' fail?)" >&2; exit 1; }
+UNIT="packages/jkai-builder/jkai-builder.service"
+LAUNCHER="scripts/jkai-builder-launch.sh"
+[ -f "$UNIT" ] || { echo "$UNIT missing" >&2; exit 1; }
+[ -x "$LAUNCHER" ] || { echo "$LAUNCHER missing or not executable" >&2; exit 1; }
 
 # Same discipline as ci-prebuild.sh: a staged directory either exists complete
 # or does not exist, so activation can never point at a half-written bundle.
@@ -36,6 +40,8 @@ mkdir -p "$STAGE_ROOT"
 rm -rf "$STAGE_DIR.partial"
 mkdir -p "$STAGE_DIR.partial"
 cp "$BUNDLE" "$STAGE_DIR.partial/start.js"
+cp "$UNIT" "$STAGE_DIR.partial/jkai-builder.service"
+cp "$LAUNCHER" "$STAGE_DIR.partial/jkai-builder-launch.sh"
 echo "$SHA" > "$STAGE_DIR.partial/sha"
 rm -rf "$STAGE_DIR"
 mv -T "$STAGE_DIR.partial" "$STAGE_DIR"

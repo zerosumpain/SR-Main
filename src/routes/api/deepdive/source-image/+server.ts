@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { isSafeFetchUrl, extractPreviewImage, faviconFor } from '$lib/deepdive/og-image';
+import { extractPreviewImage, faviconFor } from '$lib/deepdive/og-image';
+import { assertPublicUrl } from '$lib/server/ssrf-guard';
+import { guardedPublicFetch } from '$lib/server/safe-fetch';
 
 // ---------------------------------------------------------------------------
 // In-memory cache — module-level, survives across requests in the same process.
@@ -31,7 +33,9 @@ export const GET: RequestHandler = async ({ url }) => {
     return json({ error: 'Missing url parameter' }, { status: 400 });
   }
 
-  if (!isSafeFetchUrl(rawUrl)) {
+  try {
+    await assertPublicUrl(rawUrl);
+  } catch {
     return json({ error: 'Invalid or unsafe URL' }, { status: 400 });
   }
 
@@ -49,12 +53,10 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 async function fetchPreview(pageUrl: string): Promise<{ image: string; type: 'og' | 'favicon' }> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
-
   try {
-    const res = await fetch(pageUrl, {
-      signal: ac.signal,
+    const res = await guardedPublicFetch(pageUrl, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxBytes: MAX_BODY_BYTES,
       headers: {
         'User-Agent': USER_AGENT,
         Accept: 'text/html,application/xhtml+xml',
@@ -65,38 +67,9 @@ async function fetchPreview(pageUrl: string): Promise<{ image: string; type: 'og
       return { image: faviconFor(pageUrl), type: 'favicon' };
     }
 
-    // Stream cap: read at most MAX_BODY_BYTES
-    const reader = res.body?.getReader();
-    if (!reader) {
-      return { image: faviconFor(pageUrl), type: 'favicon' };
-    }
+    const html = new TextDecoder().decode(res.body);
 
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        total += value.length;
-        if (total >= MAX_BODY_BYTES) {
-          reader.cancel().catch(() => {});
-          break;
-        }
-      }
-    }
-
-    const html = new TextDecoder().decode(
-      chunks.reduce((acc, c) => {
-        const merged = new Uint8Array(acc.length + c.length);
-        merged.set(acc);
-        merged.set(c, acc.length);
-        return merged;
-      }, new Uint8Array(0)),
-    );
-
-    const image = extractPreviewImage(html, pageUrl);
+    const image = extractPreviewImage(html, res.finalUrl);
     if (image) {
       return { image, type: 'og' };
     }
@@ -104,7 +77,5 @@ async function fetchPreview(pageUrl: string): Promise<{ image: string; type: 'og
     return { image: faviconFor(pageUrl), type: 'favicon' };
   } catch {
     return { image: faviconFor(pageUrl), type: 'favicon' };
-  } finally {
-    clearTimeout(timer);
   }
 }

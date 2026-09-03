@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import os from 'os';
 import { error } from '@sveltejs/kit';
+import { assertBearerSecret } from '$lib/server/service-auth';
 
 /**
  * Service-to-service auth for scraper/interactive proxy endpoints.
@@ -9,8 +10,8 @@ import { error } from '@sveltejs/kit';
  *  1. The serving host MUST be homeserv (prevents a misconfigured proxy
  *     chain from looping back to the VPS and defeating the residential-IP
  *     architecture).
- *  2. If `SCRAPER_SERVICE_TOKEN` is set, require a matching
- *     `Authorization: Bearer <token>` header.
+ *  2. Require `SCRAPER_SERVICE_TOKEN` to be configured and a matching
+ *     `Authorization: Bearer <token>` header on every request.
  *
  * Throws sveltekit errors (401/503) on failure. Call at the top of every
  * route handler in /api/scraper/run and /api/scraper/interactive*.
@@ -22,12 +23,5 @@ export function assertScraperServiceRequest(request: Request): void {
       `Scraper service endpoints only served from homeserv (host='${os.hostname()}').`,
     );
   }
-  const expected = env.SCRAPER_SERVICE_TOKEN;
-  if (expected) {
-    const auth = request.headers.get('authorization') ?? '';
-    const supplied = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (supplied !== expected) {
-      throw error(401, 'Invalid or missing SCRAPER_SERVICE_TOKEN');
-    }
-  }
+  assertBearerSecret(request, env.SCRAPER_SERVICE_TOKEN, 'SCRAPER_SERVICE_TOKEN');
 }

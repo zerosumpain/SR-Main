@@ -1,5 +1,9 @@
 import type { ServeConfig } from './types';
 import { getContainerIp, clearContainerIpCache, execInSandbox } from './sandbox';
+import {
+  safeGeneratedRequestHeaders,
+  safeGeneratedResponseHeaders,
+} from '$lib/server/generated-content';
 
 export function validateServeConfig(raw: any): ServeConfig | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -126,8 +130,10 @@ export async function proxyToSandbox(
   const url = `http://${ip}:${port}${path}`;
 
   try {
-    const headers = new Headers(request.headers);
-    headers.delete('host');
+    // Generated applications are an untrusted boundary. In particular, never
+    // forward the owner's Auth.js cookie, Authorization header, proxy identity
+    // headers, or Origin into an agent-created process.
+    const headers = safeGeneratedRequestHeaders(request.headers);
 
     const resp = await fetch(url, {
       method: request.method,
@@ -161,7 +167,7 @@ export async function proxyToSandbox(
         html = injection + html;
       }
 
-      const respHeaders = new Headers(resp.headers);
+      const respHeaders = safeGeneratedResponseHeaders(resp.headers);
       respHeaders.delete('content-length');
       respHeaders.delete('content-encoding');
 
@@ -175,7 +181,7 @@ export async function proxyToSandbox(
     return new Response(resp.body, {
       status: resp.status,
       statusText: resp.statusText,
-      headers: resp.headers,
+      headers: safeGeneratedResponseHeaders(resp.headers),
     });
   } catch (err) {
     clearContainerIpCache();

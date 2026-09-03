@@ -6,12 +6,31 @@ import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import {
-  isWebhookAuthorized,
-  WEBHOOK_SECRET_HEADER,
+  isWebhookSignatureAuthorized,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
   type TriggerLike,
 } from '$lib/workflows/webhook-secret';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
+import { readLimitedText } from '$lib/server/service-auth';
+import { isOwnerEmail } from '$lib/server/access';
 
-export const POST: RequestHandler = async ({ params, request }) => {
+const seenSignatures = new Map<string, number>();
+
+function acceptOnce(signature: string, now = Date.now()): boolean {
+  for (const [key, expires] of seenSignatures) if (expires <= now) seenSignatures.delete(key);
+  if (seenSignatures.has(signature)) return false;
+  seenSignatures.set(signature, now + 5 * 60_000);
+  return true;
+}
+
+export const POST: RequestHandler = async (event) => {
+  const { params, request, locals } = event;
+  assertPublicRequestBudget(event, {
+    scope: `workflow-webhook:${params.id}`,
+    perClient: { capacity: 20, refillPerSecond: 20 / 60 },
+    global: { capacity: 120, refillPerSecond: 120 / 60 },
+  });
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
   if (!workflow) {
     return json({ error: 'Workflow not found' }, { status: 404 });
@@ -23,14 +42,35 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return json({ error: 'Workflow does not accept webhook triggers' }, { status: 400 });
   }
 
-  // D4 — per-workflow shared secret. When the trigger config carries a secret,
-  // require a matching X-Webhook-Secret header (timing-safe). No secret
-  // configured ⇒ open, byte-for-byte the historical behaviour.
-  if (!isWebhookAuthorized(trigger, request.headers.get(WEBHOOK_SECRET_HEADER))) {
-    return json({ error: 'Invalid or missing webhook secret' }, { status: 401 });
+  const rawBody = await readLimitedText(request, 64 * 1024);
+  let owner = false;
+  try {
+    owner = isOwnerEmail((await locals.auth())?.user?.email);
+  } catch {
+    owner = false;
+  }
+  const signature = request.headers.get(WEBHOOK_SIGNATURE_HEADER);
+  if (!owner && !isWebhookSignatureAuthorized(
+    trigger,
+    request.headers.get(WEBHOOK_TIMESTAMP_HEADER),
+    signature,
+    rawBody,
+  )) {
+    return json({ error: 'Invalid, missing, or expired webhook signature' }, { status: 401 });
+  }
+  if (!owner && signature && !acceptOnce(signature)) {
+    return json({ error: 'Webhook signature already used' }, { status: 409 });
   }
 
-  const body = await request.json().catch(() => ({}));
+  let body: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = rawBody ? JSON.parse(rawBody) : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return json({ error: 'Webhook body must be a JSON object' }, { status: 400 });
+    }
+    body = parsed as Record<string, unknown>;
+  }
+  catch { return json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, params.id));
   const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, params.id));

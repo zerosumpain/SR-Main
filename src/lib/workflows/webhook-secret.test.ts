@@ -12,6 +12,8 @@ import {
   getWebhookSecret,
   secretsMatch,
   isWebhookAuthorized,
+  isWebhookSignatureAuthorized,
+  webhookSignature,
   WEBHOOK_SECRET_HEADER,
 } from './webhook-secret';
 
@@ -75,10 +77,10 @@ describe('secretsMatch', () => {
 });
 
 describe('isWebhookAuthorized (route gate matrix)', () => {
-  it('no secret configured ⇒ authorised regardless of header (back-compat)', () => {
-    expect(isWebhookAuthorized({ type: 'webhook' }, null)).toBe(true);
-    expect(isWebhookAuthorized({ type: 'webhook' }, 'whatever')).toBe(true);
-    expect(isWebhookAuthorized({ type: 'webhook', secret: '' }, null)).toBe(true);
+  it('no secret configured ⇒ rejected', () => {
+    expect(isWebhookAuthorized({ type: 'webhook' }, null)).toBe(false);
+    expect(isWebhookAuthorized({ type: 'webhook' }, 'whatever')).toBe(false);
+    expect(isWebhookAuthorized({ type: 'webhook', secret: '' }, null)).toBe(false);
   });
 
   it('secret configured + correct header ⇒ authorised', () => {
@@ -93,6 +95,31 @@ describe('isWebhookAuthorized (route gate matrix)', () => {
 
   it('secret configured + wrong header ⇒ rejected', () => {
     expect(isWebhookAuthorized({ type: 'webhook', secret: 'k3y' }, 'nope')).toBe(false);
+  });
+});
+
+describe('timestamped webhook signatures', () => {
+  const body = '{"payload":true}';
+  const timestamp = '1788472800';
+  const now = Number(timestamp) * 1000;
+
+  it('accepts an HMAC over timestamp and exact raw body', () => {
+    const signature = webhookSignature('k3y', timestamp, body);
+    expect(isWebhookSignatureAuthorized(
+      { type: 'webhook', secret: 'k3y' }, timestamp, signature, body, now,
+    )).toBe(true);
+  });
+
+  it('rejects body tampering, stale timestamps, and missing configuration', () => {
+    const signature = webhookSignature('k3y', timestamp, body);
+    expect(isWebhookSignatureAuthorized(
+      { type: 'webhook', secret: 'k3y' }, timestamp, signature, body + ' ', now,
+    )).toBe(false);
+    expect(isWebhookSignatureAuthorized(
+      { type: 'webhook', secret: 'k3y' }, timestamp, signature, body, now + 301_000,
+    )).toBe(false);
+    expect(isWebhookSignatureAuthorized({ type: 'webhook' }, timestamp, signature, body, now))
+      .toBe(false);
   });
 });
 

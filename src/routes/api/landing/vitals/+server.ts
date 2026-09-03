@@ -75,11 +75,12 @@ async function readWalk(): Promise<VitalsPayload['walk']> {
     if (s.status === 'finished') return idle;
     return {
       active: true,
-      distanceKm: typeof s.stats?.distanceKm === 'number' ? s.stats.distanceKm : null,
-      routeName: typeof s.routeName === 'string' ? s.routeName : null,
-      startedAt: typeof s.startedAt === 'number' ? s.startedAt : null,
-      elevationGainM:
-        typeof s.stats?.elevationGainM === 'number' ? Math.round(s.stats.elevationGainM) : null,
+      // Public visitors may see that a walk is active, but not the route,
+      // precise progress, start time, or elevation profile.
+      distanceKm: null,
+      routeName: null,
+      startedAt: null,
+      elevationGainM: null,
     };
   } catch {
     return idle;

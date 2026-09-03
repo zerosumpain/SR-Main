@@ -24,7 +24,7 @@ import { hasStudioServiceToken } from '$lib/server/studio-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
-import { redirect, type Handle } from '@sveltejs/kit';
+import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 
@@ -216,12 +216,6 @@ registerDeliveryListener();
 
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 
-// Cookie domain: in production, share across all *.strangeramblings.com
-// subdomains (main site + vnc.strangeramblings.com) so the VNC proxy can
-// validate the session via forward_auth. In dev we leave domain unset
-// (host-scoped cookie for localhost / homeserv).
-const COOKIE_DOMAIN = import.meta.env.PROD ? '.strangeramblings.com' : undefined;
-
 // Auth.js handler
 const { handle: authHandle } = SvelteKitAuth({
   providers: [
@@ -239,7 +233,6 @@ const { handle: authHandle } = SvelteKitAuth({
         sameSite: 'lax',
         path: '/',
         secure: import.meta.env.PROD,
-        domain: COOKIE_DOMAIN,
       },
     },
     callbackUrl: {
@@ -247,7 +240,6 @@ const { handle: authHandle } = SvelteKitAuth({
         sameSite: 'lax',
         path: '/',
         secure: import.meta.env.PROD,
-        domain: COOKIE_DOMAIN,
       },
     },
     csrfToken: {
@@ -328,6 +320,26 @@ export function trailsRedirectTarget(pathname: string): string | null {
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
 
+  // Browser state-changing requests must be same-origin. Requests made by
+  // service clients generally carry no Origin/Sec-Fetch-Site and authenticate
+  // with their own bearer/HMAC secret. WebDAV is the sole route exception: OS
+  // mount clients use Basic auth and may send non-browser Origin semantics.
+  if (
+    !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
+    pathname !== '/dav' &&
+    !pathname.startsWith('/dav/') &&
+    pathname !== '/api/live-walk'
+  ) {
+    const origin = event.request.headers.get('origin');
+    const fetchSite = event.request.headers.get('sec-fetch-site');
+    if ((origin && origin !== event.url.origin) || fetchSite === 'cross-site') {
+      return new Response(JSON.stringify({ error: 'Cross-origin request blocked' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   if (requestHost(event) === RETIRED_MAPS_HOST) {
     throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
   }
@@ -378,15 +390,10 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  // Local-network bypass for admin access on homeserv. The dev server (and
-  // the homeserv systemd prod build when AUTH_BYPASS=1) are reachable only
-  // on the LAN; Google's OAuth rules refuse private-network redirect URIs
-  // and prod-build cookies are scoped to .strangeramblings.com so standard
-  // sign-in isn't viable from those hosts. Double gate: either it's a dev
-  // build OR the AUTH_BYPASS=1 env var is set, AND the client is on a
-  // private RFC1918 / loopback address. Public clients on prod still go
-  // through Google even if AUTH_BYPASS leaks to that env.
-  if (import.meta.env.DEV || env.AUTH_BYPASS === '1') {
+  // Development-only local-network bypass. Production builds never honour an
+  // environment toggle: a reverse tunnel makes internet clients appear to be
+  // loopback, so address classification cannot safely authorise production.
+  if (import.meta.env.DEV) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
     // `isPrivateAddress` rather than a list of prefixes written out here. The
@@ -443,6 +450,16 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // The live map is owner-only, but its phone/PWA broadcaster has no Auth.js
+  // session. Only write/preflight verbs bypass; the handler requires the
+  // broadcast secret. GET falls through to the owner API gate below.
+  if (
+    pathname === '/api/live-walk' &&
+    ['POST', 'DELETE', 'OPTIONS'].includes(event.request.method)
+  ) {
+    return resolve(event);
+  }
+
   // /api/mcp* are service-to-service: the routing proxy and the local
   // dispatcher both authenticate via `Authorization: Bearer
   // SERVICE_BRIDGE_SECRET` inside the handlers themselves. They must
@@ -493,12 +510,15 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // /api/policy-engine/* (ingest + seed-workflows) are service-to-service: the
+  // Policy-engine ingest + seeding are service-to-service: the
   // scheduled tracking workflows' http-request node has no user session. The
   // handlers self-authenticate via `Authorization: Bearer POLICY_INGEST_SECRET`,
   // so they must bypass the Auth.js gate (mirrors /api/mcp above). GET is the
   // read-only tracked-indicator list, already public via the /monitor page.
-  if (pathname.startsWith('/api/policy-engine/')) {
+  if (
+    (pathname === '/api/policy-engine/ingest' && ['GET', 'POST'].includes(event.request.method)) ||
+    (pathname === '/api/policy-engine/seed-workflows' && event.request.method === 'POST')
+  ) {
     return resolve(event);
   }
 
@@ -547,27 +567,33 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // /api/data-standard-designer/* (ingest + seed-workflows) are service-to-service:
+  // Data-standard ingest + seeding are service-to-service:
   // the daily discovery cron's http-request node has no user session. The handlers
-  // self-authenticate via `Authorization: Bearer DSD_INGEST_SECRET` (open in dev if
-  // unset). GET on ingest is the read-only registry snapshot used by the portal.
-  if (pathname.startsWith('/api/data-standard-designer/')) {
+  // self-authenticate via `Authorization: Bearer DSD_INGEST_SECRET` and fail
+  // closed if it is unset. GET is the public registry snapshot used by the portal.
+  if (
+    (pathname === '/api/data-standard-designer/ingest' && ['GET', 'POST'].includes(event.request.method)) ||
+    (pathname === '/api/data-standard-designer/seed-workflows' && event.request.method === 'POST')
+  ) {
     return resolve(event);
   }
 
-  // /api/dfe-data-strategy/* (intel sweep + seed-workflows) are service-to-service:
+  // DfE strategy intel + seeding are service-to-service:
   // the daily intelligence cron's http-request node has no user session. The handlers
-  // self-authenticate via `Authorization: Bearer KEYSTONE_INTEL_SECRET` (open in dev if
-  // unset). GET on intel is the read-only radar snapshot.
-  if (pathname.startsWith('/api/dfe-data-strategy/')) {
+  // self-authenticate via `Authorization: Bearer KEYSTONE_INTEL_SECRET` and fail
+  // closed if it is unset. GET is the public radar snapshot.
+  if (
+    (pathname === '/api/dfe-data-strategy/intel' && ['GET', 'POST'].includes(event.request.method)) ||
+    (pathname === '/api/dfe-data-strategy/seed-workflows' && event.request.method === 'POST')
+  ) {
     return resolve(event);
   }
 
   // /api/workflows/webhook/[id] is the INBOUND webhook trigger — external
   // services POST here with no user session (that is the entire point of a
-  // webhook). The route itself enforces the optional per-workflow secret
-  // (X-Webhook-Secret, timing-safe) and only fires workflows whose trigger
-  // type is 'webhook'; a rate limit is applied above. Without this bypass the
+  // webhook). The route requires a timestamped per-workflow HMAC signature,
+  // rejects replay, and only fires workflows whose trigger type is 'webhook'.
+  // Public client and global rate limits are applied before database work. Without this bypass the
   // owner-gate below 401s every external caller and webhooks are dead code.
   if (/^\/api\/workflows\/webhook\/[^/]+$/.test(pathname) && event.request.method === 'POST') {
     return resolve(event);
@@ -720,7 +746,19 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 };
 
 const securityHeadersHandle: Handle = async ({ event, resolve }) => {
-  const response = await resolve(event);
+  let response: Response;
+  try {
+    response = await resolve(event);
+  } catch (cause) {
+    // SvelteKit normally materialises redirects after hooks have unwound,
+    // which means early auth redirects miss the header layer. Materialise them
+    // here so the same policy applies to every response.
+    if (!isRedirect(cause)) throw cause;
+    response = new Response(null, {
+      status: cause.status,
+      headers: { Location: cause.location },
+    });
+  }
   response.headers.set('X-Content-Type-Options', 'nosniff');
   // Framing policy: pages default to SAMEORIGIN (cross-origin embedding stays
   // blocked) because sr. decks legitimately frames site pages as slides — the
@@ -731,6 +769,7 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   const framePath = event.url.pathname;
   if (
     framePath.startsWith('/api/jkai/proxy/') ||
+    framePath === '/api/webframe/render' ||
     (framePath.startsWith('/api/files/') && framePath.endsWith('/download'))
   ) {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
@@ -751,10 +790,12 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Robots-Tag', 'noindex');
     response.headers.set('Referrer-Policy', 'no-referrer');
   }
-  response.headers.set(
-    'Permissions-Policy',
-    'geolocation=(self), microphone=(), camera=(), payment=(), usb=()',
-  );
+  if (!response.headers.has('Permissions-Policy')) {
+    response.headers.set(
+      'Permissions-Policy',
+      'geolocation=(self), microphone=(), camera=(), payment=(), usb=()',
+    );
+  }
   // HSTS only for hosts that actually serve HTTPS. The homeserv systemd build
   // is a prod build but serves plain HTTP on the LAN / Tailscale, and a stray
   // HSTS header there poisons the browser cache for the hostname — every
@@ -769,4 +810,6 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   return response;
 };
 
-export const handle = sequence(authHandle, protectionHandle, securityHeadersHandle);
+// Header handling is outermost so auth redirects and early public/service
+// responses cannot bypass it.
+export const handle = sequence(securityHeadersHandle, authHandle, protectionHandle);
