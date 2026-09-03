@@ -175,6 +175,8 @@ const EXPLAINER_FILES = [
   'shell.js',
   'instruments.js',
   'sim.js',
+  'scenario.js',
+  'cohort.js',
   'diagram.js',
   'lowpoly.js',
   'chart.js',
@@ -184,6 +186,8 @@ const EXPLAINER_FILES = [
   'scenes.md',
   'SKILL.md',
   'examples/chapter.html',
+  'examples/network-simulator.html',
+  'examples/cohort-simulator.html',
   // The Field Study System. A studio build is an INFORMATION project, and this
   // is the system it is built against: the nine templates, the machine-readable
   // registry the chapter plan names ids from, the CSS those templates are made

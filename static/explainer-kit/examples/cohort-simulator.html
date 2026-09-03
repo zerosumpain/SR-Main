@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Worked recipe — who automatic registration reaches</title>
+    <link rel="stylesheet" href="explainer-kit/tokens.css" />
+    <link rel="stylesheet" href="explainer-kit/shell.css" />
+    <link rel="stylesheet" href="explainer-kit/field-study/field-study.css" />
+  </head>
+  <body>
+    <!-- Copy this when a policy moves people between mutually exclusive groups.
+     Replace the baseline and assumptions with the current research brief. -->
+    <article data-chapter="5">
+      <div class="fs-qc">
+        <span class="fs-qc-n">05</span>
+        <p class="fs-qc-q">
+          Who is missed when an entitlement still depends on an application?
+        </p>
+      </div>
+      <p>
+        <span class="fs-chip fs-chip--fact">Fact</span> Parliamentary and
+        Education Policy Institute analysis estimates that about 11% of eligible
+        children in England—roughly 215,000—were not registered for free school
+        meals. Registration also affects the pupil-premium count used for school
+        funding.
+      </p>
+      <p class="fs-sowhat">
+        Automatic registration changes the direction of the burden: the system
+        identifies eligibility and families opt out, rather than families
+        proving eligibility before a child is counted. The uncertain part is how
+        many of those currently missed an operational scheme would actually
+        reach.
+      </p>
+      <div id="cohort"></div>
+      <p class="fs-limits">
+        <strong>Model boundary.</strong> One hundred cells represent a synthetic
+        1,000-person teaching cohort, not individual children. The baseline
+        ratio is calibrated to the published under-registration estimate. The
+        policy reach is a user-controlled assumption; this model does not
+        estimate eligibility errors, opt-outs, behavioural response or
+        implementation cost.
+      </p>
+      <p class="sources">
+        <a
+          data-citation
+          href="https://commonslibrary.parliament.uk/research-briefings/cbp-10206/"
+          >House of Commons Library — free school meals automatic
+          registration</a
+        ><br /><a
+          data-citation
+          href="https://epi.org.uk/wp-content/uploads/2025/03/FSM-report-March-2025_PDF.pdf"
+          >Education Policy Institute — free school meals under-registration</a
+        >
+      </p>
+      <aside class="fs-open">
+        <strong>Open question</strong> What proportion of currently unregistered
+        children would a national opt-out process reach after eligibility
+        matching, data errors and opt-outs?
+      </aside>
+      <p class="fs-falsifier">
+        <strong>What would change this view:</strong> implementation evidence
+        showing that automatic registration reaches no more eligible children
+        than the application route, or creates harms large enough to outweigh
+        the gain.
+      </p>
+    </article>
+    <script src="explainer-kit/shell.js"></script>
+    <script src="explainer-kit/instruments.js"></script>
+    <script src="explainer-kit/sim.js"></script>
+    <script src="explainer-kit/cohort.js"></script>
+    <script>
+      Explainer.mountShell({
+        project: "Who policy reaches",
+        chapters: [
+          { n: 1, title: "The entitlement" },
+          { n: 2, title: "The evidence" },
+          { n: 3, title: "Where applications lose people" },
+          { n: 4, title: "The alternatives" },
+          { n: 5, title: "Operate the policy" },
+          { n: 6, title: "What would change the answer" },
+        ],
+        current: 5,
+        form: "open",
+        kicker: "policy as distribution",
+        lede: "Switch the registration route, then test the assumption the evidence cannot yet settle.",
+      });
+      const instrument = Explainer.createInstrument({
+        mount: "#cohort",
+        kicker: "synthetic cohort · 1,000 eligible and comparison pupils",
+        title: "Move children from missed to registered",
+        reading:
+          "Cells show cohort membership; baseline markers remain fixed as the policy changes.",
+        takeaway:
+          "The model does not claim a result. It exposes the assumption that decides <b>how many additional children are counted</b>.",
+      });
+      Explainer.createCohortSimulator({
+        mount: instrument.body,
+        id: "fsm-registration",
+        leverId: "registration-route",
+        outcomeId: "registered",
+        forecast: true,
+        baselineValues: {
+          "registration-route": "Application only",
+          "assumed-reach": 80,
+        },
+        population: {
+          total: 1000,
+          cohorts: [
+            {
+              id: "registered",
+              label: "Eligible and registered",
+              count: 801,
+              tone: "good",
+            },
+            {
+              id: "missed",
+              label: "Eligible but unregistered",
+              count: 99,
+              tone: "bad",
+            },
+            {
+              id: "comparison",
+              label: "Comparison group",
+              count: 100,
+              tone: "neutral",
+            },
+          ],
+        },
+        levers: [
+          {
+            id: "registration-route",
+            label: "Registration route",
+            kind: "choice",
+            options: ["Application only", "Automatic registration"],
+            value: "Application only",
+          },
+          {
+            id: "assumed-reach",
+            label: "Assumed share of missed group reached",
+            kind: "slider",
+            min: 60,
+            max: 100,
+            step: 5,
+            value: 80,
+            unit: "%",
+          },
+        ],
+        outcomes: [
+          {
+            id: "registered",
+            label: "Eligible pupils registered",
+            format: (value) => Number(value).toLocaleString(),
+          },
+          {
+            id: "still-missed",
+            label: "Eligible pupils still missed",
+            format: (value) => Number(value).toLocaleString(),
+          },
+          {
+            id: "additional",
+            label: "Additional registrations",
+            format: (value) => Number(value).toLocaleString(),
+          },
+        ],
+        model: (
+          { "registration-route": route, "assumed-reach": assumedReach },
+          baseline,
+        ) => {
+          const potential = baseline.cohorts.missed;
+          const moved =
+            route === "Automatic registration"
+              ? Math.round((potential * assumedReach) / 100)
+              : 0;
+          const registered = baseline.cohorts.registered + moved;
+          const missed = baseline.cohorts.missed - moved;
+          const lowMoved =
+            route === "Automatic registration" ? Math.round(moved * 0.85) : 0;
+          const highMoved =
+            route === "Automatic registration"
+              ? Math.min(potential, Math.round(moved * 1.1))
+              : 0;
+          const ramp = [0.35, 0.72, 1];
+          return {
+            cohorts: {
+              registered,
+              missed,
+              comparison: baseline.cohorts.comparison,
+            },
+            outcomes: { registered, "still-missed": missed, additional: moved },
+            uncertainty: {
+              low: baseline.cohorts.registered + lowMoved,
+              central: registered,
+              high: baseline.cohorts.registered + highMoved,
+              label:
+                route === "Automatic registration"
+                  ? "Steady state"
+                  : "Current route",
+            },
+            trajectory: [2026, 2027, 2028].map((year, index) => ({
+              x: year,
+              low:
+                baseline.cohorts.registered +
+                Math.round(lowMoved * ramp[index]),
+              central:
+                baseline.cohorts.registered + Math.round(moved * ramp[index]),
+              high:
+                baseline.cohorts.registered +
+                Math.round(highMoved * ramp[index]),
+            })),
+          };
+        },
+        modelCard: {
+          summary:
+            "The baseline and the policy-effect assumption are deliberately kept separate.",
+          observed: [
+            {
+              label: "About 11% of eligible children unregistered",
+              sourceId: "Commons Library CBP-10206",
+            },
+            {
+              label: "National estimate of the missed eligible population",
+              sourceId: "EPI March 2025",
+            },
+          ],
+          assumptions: [
+            "The selected share of the currently missed group is reached",
+            "Registration moves pupils between groups without changing eligibility",
+            "Implementation phases in over three illustrative years",
+          ],
+          derived: [
+            "Additional registrations",
+            "Eligible pupils still missed",
+            "Illustrative low–central–high range",
+          ],
+          scenarios: ["Application only", "Automatic registration"],
+          limitations:
+            "This is not a forecast of a national scheme. It excludes matching errors, opt-outs, behavioural responses, administration costs and changes in the eligible population.",
+        },
+      });
+    </script>
+  </body>
+</html>

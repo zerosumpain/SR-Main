@@ -44,6 +44,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
     renderer.domElement.setAttribute('data-scene', spec.id || 'scene');
+    renderer.domElement.setAttribute('data-visual-version', '0');
     mount.appendChild(renderer.domElement);
 
     // Lights are not brand colours — not tokenised.
@@ -58,6 +59,7 @@
     const geometry = new THREE.BoxGeometry(0.9, 1, 0.9);
     let meshes = [];
     let clickHandler = null;
+    let visualVersion = 0;
 
     function clear() {
       for (const m of meshes) { group.remove(m); m.material.dispose(); }
@@ -141,6 +143,9 @@
       }
       frameContent();
       renderer.render(scene, camera);
+      visualVersion += 1;
+      renderer.domElement.setAttribute('data-visual-version', String(visualVersion));
+      renderer.domElement.setAttribute('data-visual-state', JSON.stringify(placed));
     }
 
     if (spec.onTileClick) {

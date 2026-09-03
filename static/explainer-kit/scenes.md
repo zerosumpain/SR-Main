@@ -8,6 +8,8 @@ Pick per chapter, not per project. A good project usually uses three of the four
 | **Any quantity that varies across a SET of things** — sources, claims, years, categories, cohorts, regions | `createScene` | This is the SimCity register and it is far broader than maps. One tile per item, height for magnitude, colour for a second variable. Ten sources with different credibility? A tile grid. Eight claims with different evidential weight? A tile grid. It does not need to be geography — it needs a set and a number. |
 | A quantity changing over time, or a comparison across categories | `createChart` | Do not build a 3D scene for a time series. |
 | A sequence of stages with gates, queues or dropout between them | `createDiagram` with `kind: 'mechanism'` nodes and weighted edges | Edge weight carries the flow; `setWeight` animates it as a lever moves. |
+| Competing routes through a system | `createNetworkSimulator` | One declared scenario changes the active route, its weights and a named outcome together. |
+| A policy that reaches, misses or redistributes groups | `createCohortSimulator` | It preserves the population, holds the baseline still and makes assumptions and uncertainty visible. |
 
 ## Reach for the scene more often than feels natural
 
@@ -25,6 +27,8 @@ A build of five or more chapters with no scene at all is flagged by the checker.
 - **A diagram that just restates the nav.** Boxes named after your own chapters teach nothing.
 - **Levers with no consequence.** A slider that changes a number nobody explained is decoration. Every lever must move an outcome the chapter has already given meaning to.
 - **Six charts in a row.** One idea per chapter.
+- **A cohort forecast drawn as a precise answer.** Separate observations from
+  assumptions and show low–central–high, or explain specifically why no range is meaningful.
 
 ## Sequencing chapters
 

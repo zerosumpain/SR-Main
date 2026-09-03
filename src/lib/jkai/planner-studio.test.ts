@@ -268,6 +268,17 @@ describe('round-3 revision instruction', () => {
   });
 });
 
+describe('studio visual routing', () => {
+  it('equips both proposer and revision prompts with centrepiece simulators', () => {
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toContain('createNetworkSimulator');
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toContain('createCohortSimulator');
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/outcome AND in the visual/);
+    const revision = buildRevisionInstruction(true);
+    expect(revision).toContain('createNetworkSimulator');
+    expect(revision).toContain('createCohortSimulator');
+  });
+});
+
 describe('studio critic', () => {
   it('adds a pedagogy dimension', () => {
     expect(STUDIO_CRITIC_EXTRA).toContain('PEDAGOGY');

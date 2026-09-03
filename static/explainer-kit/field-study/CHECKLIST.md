@@ -38,6 +38,13 @@ Run every line. Answer with the evidence, not "yes".
 - [ ] Five levers maximum. Each shows its baseline.
 - [ ] Lever positions are in the URL.
 - [ ] No autoplay when embedded in a beat.
+- [ ] Operating a lever changes the visual as well as its numeric readout.
+- [ ] Cohort totals conserve the declared population and baseline mode exactly
+      reproduces the sourced baseline.
+- [ ] A cohort model card visibly separates observed inputs, assumptions,
+      derived outputs and limitations.
+- [ ] Forecasts show low–central–high uncertainty, or a specific visible reason
+      that a range would mislead.
 
 ## Shell
 - [ ] Depth control (Plain / Research / Technical) present and persisted.

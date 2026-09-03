@@ -17,11 +17,15 @@ loaded from a plain `<script>` tag with no bundler and no import map.
 |---|---|
 | `tokens.css` | The palette. Import at the root of every stylesheet. Raw hex is legal in this file and nowhere else in your project. |
 | `sim.js` | `Explainer.createSim` — declare levers plus a step function, get controls and a live outcome readout. |
+| `scenario.js` | `Explainer.createNetworkSimulator` — switch between declared routes and update both network and outcome. |
+| `cohort.js` | `Explainer.createCohortSimulator` — evidence-aware population movement, baseline comparison and uncertainty. |
 | `diagram.js` | `Explainer.createDiagram` — causal/system diagrams in SVG. |
 | `lowpoly.js` | `Explainer.createScene` — isometric low-poly tile scene (needs `three.min.js`). |
 | `chart.js` | `Explainer.createChart` — line and bar. |
 | `scenes.md` | Which module suits which kind of concept. Read this before choosing. |
 | `examples/chapter.html` | A complete chapter. Copy its structure. |
+| `examples/network-simulator.html` | Worked data-spine recipe. Copy only when competing system routes are the lesson. |
+| `examples/cohort-simulator.html` | Worked education-policy recipe. Copy only when policy reaches, misses or redistributes groups. |
 
 ## The chapter contract
 
@@ -31,7 +35,8 @@ Every chapter page you build MUST:
 2. Contain at least one `<canvas>` or `<svg>` produced by this kit. A chapter
    of prose and a table is rejected.
 3. Contain at least one control tagged `data-lever="<id>"` whose change updates
-   an element tagged `data-outcome="<id>"`. `createSim` does both for you.
+   an element tagged `data-outcome="<id>"` **and the visual**. The three
+   simulator factories do both for you.
 4. Contain at least one `<a data-citation href="<url>">` whose URL appears in
    the research brief.
 

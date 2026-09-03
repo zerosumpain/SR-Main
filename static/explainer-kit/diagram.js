@@ -35,6 +35,7 @@
       width: '100%',
       role: spec.onNodeClick ? 'group' : 'img',
       'aria-label': spec.title || 'Causal diagram',
+      'data-visual-version': '0',
     });
 
     const defs = svgEl('defs', {});
@@ -119,6 +120,12 @@
     }
 
     mount.appendChild(svg);
+    let visualVersion = 0;
+    const advance = (state) => {
+      visualVersion += 1;
+      svg.setAttribute('data-visual-version', String(visualVersion));
+      svg.setAttribute('data-visual-state', state);
+    };
 
     return {
       setWeight(from, to, weight) {
@@ -126,6 +133,7 @@
         if (line) {
           const w = weight ?? 1;
           line.setAttribute('stroke-width', String(Math.max(1, Math.min(8, w * 3))));
+          advance(`weight:${from}:${to}:${w}`);
         }
       },
       highlight(id) {
@@ -133,6 +141,7 @@
           const on = id != null && g.getAttribute('data-node') === id;
           g.querySelector('rect').setAttribute('stroke-width', on ? '3' : '1');
         });
+        advance(`highlight:${id == null ? '' : id}`);
       },
       destroy() { svg.remove(); },
     };

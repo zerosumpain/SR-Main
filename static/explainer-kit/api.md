@@ -6,8 +6,8 @@ produced meshes at NaN coordinates — a blank canvas, no console error, and a
 check that counted canvases said it was fine.
 
 All factories hang off the global `Explainer` and take a single spec object
-whose `mount` is an element or a CSS selector. All return the element they
-created.
+whose `mount` is an element or a CSS selector. Simple factories return their
+element; operated simulators return a small controller.
 
 Load order matters: `tokens.css`, then `shell.css`, then the scripts.
 
@@ -17,6 +17,8 @@ Load order matters: `tokens.css`, then `shell.css`, then the scripts.
 <script src="explainer-kit/shell.js"></script>
 <script src="explainer-kit/instruments.js"></script>
 <script src="explainer-kit/sim.js"></script>
+<script src="explainer-kit/scenario.js"></script> <!-- when routed here -->
+<script src="explainer-kit/cohort.js"></script>   <!-- when routed here -->
 ```
 
 Paths are **project-root-relative, no leading slash, no `../`**. Both surfaces
@@ -219,9 +221,41 @@ Explainer.createSim({
 });
 ```
 
-Every chapter needs **one control that visibly moves one outcome**. The control
+Every chapter needs **one control that visibly moves one outcome and the visual**. The control
 carries `data-lever="<leverId>"`, the readout carries `data-outcome="<outcomeId>"`,
 and both ids come from the chapter spine — the checker reads the same file.
+
+### `Explainer.createNetworkSimulator(spec)`
+
+Use when the lesson is which route through a declared system is active. Pass
+`nodes: {id,label,x,y}[]`, `edges: {id,from,to,label?}[]`, one choice `lever`,
+`outcomes`, and `scenarios` keyed by lever value. Each scenario contains
+`edges: {edgeId: 0..1}` and `outcomes`. The runtime advances
+`data-visual-version` whenever the route changes. See
+`examples/network-simulator.html`.
+
+### `Explainer.createCohortSimulator(spec)`
+
+Builds an evidence-aware policy instrument: controls and outcomes, a 100-cell
+population view, baseline/current comparison, uncertainty view and model card.
+
+| field | type | meaning |
+|---|---|---|
+| `population` | `{total, cohorts: {id,label,count,tone?}[]}` | sourced baseline; mutually exclusive cohort counts must sum to total |
+| `levers` | createSim lever[] | policy choices and genuine numeric assumptions |
+| `outcomes` | createSim outcome[] | numeric readouts; `kind: 'percent'` enforces 0..100 |
+| `baselineValues` | object | lever values that must reproduce the baseline exactly |
+| `policies` | object | safe finite lookup keyed by the first lever; every declared state is validated |
+| `model` | `(values, baseline) => result` | synchronous pure function for a genuinely continuous/interacting mechanism |
+| `forecast` | boolean | requires uncertainty/trajectory or a specific exemption |
+| `modelCard` | object | `observed`, `assumptions`, `derived`, `scenarios`, `limitations`, optional `uncertaintyExemption` |
+
+The result is `{cohorts, outcomes, uncertainty?, trajectory?}`. A range is
+`{low, central, high, label?}`; trajectory points add `x`. The runtime rejects
+non-finite/negative counts, non-finite outcomes, unknown cohorts, population
+leakage, a false baseline, nondeterminism, invalid percentages, and ranges that
+do not satisfy `low ≤ central ≤ high`. See
+`examples/cohort-simulator.html` for a complete sourced chapter.
 
 ---
 

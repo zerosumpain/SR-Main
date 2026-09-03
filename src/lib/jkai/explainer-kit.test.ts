@@ -152,6 +152,19 @@ describe('explainer kit', () => {
     expect(js).toContain('data-series');
   });
 
+  it('ships the two operated centrepiece runtimes and their recipes', async () => {
+    const network = await read('scenario.js');
+    const cohort = await read('cohort.js');
+    expect(network).toContain('createNetworkSimulator');
+    expect(network).toContain('data-visual-version');
+    expect(cohort).toContain('createCohortSimulator');
+    for (const marker of ['data-model-valid', 'data-baseline-valid', 'data-deterministic', 'data-population-total', 'data-cohort-total']) {
+      expect(cohort).toContain(marker);
+    }
+    await expect(read('examples/network-simulator.html')).resolves.toContain('createNetworkSimulator');
+    await expect(read('examples/cohort-simulator.html')).resolves.toContain('createCohortSimulator');
+  });
+
   it('README pins the three.js version', async () => {
     const md = await read('README.md');
     expect(md).toMatch(/three@0\.\d+\.\d+/);
@@ -159,7 +172,7 @@ describe('explainer kit', () => {
 
   it('scenes.md maps every kit module to a concept shape', async () => {
     const md = await read('scenes.md');
-    for (const mode of ['createScene', 'createDiagram', 'createSim', 'createChart']) {
+    for (const mode of ['createScene', 'createDiagram', 'createSim', 'createChart', 'createNetworkSimulator', 'createCohortSimulator']) {
       expect(md).toContain(mode);
     }
   });
@@ -171,6 +184,14 @@ describe('explainer kit', () => {
   it('the worked chapter example passes the design linter it teaches', async () => {
     const { findings } = lintDesignSystem({
       'explainer/examples/chapter.html': await read('examples/chapter.html'),
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('the operated recipes pass the same design linter', async () => {
+    const { findings } = lintDesignSystem({
+      'explainer/examples/network-simulator.html': await read('examples/network-simulator.html'),
+      'explainer/examples/cohort-simulator.html': await read('examples/cohort-simulator.html'),
     });
     expect(findings).toEqual([]);
   });
