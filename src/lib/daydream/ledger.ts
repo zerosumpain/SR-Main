@@ -686,12 +686,11 @@ export async function loadFamily() {
   // reference. Matching on names would file "Katie's usual Tuesday" under
   // Katie and also under any other thought that happened to mention her.
   const { loadBoard } = await import('./hypotheses/store');
-  const sweepPulse = await lastPulseFor('daydream-sweep');
-  const sweepBySubject = ((sweepPulse?.details ?? {}) as Record<string, unknown>).perSubject as
-    | Record<string, { testsRun?: number; naiveHits?: number; findings?: unknown[]; errors?: string[] }>
-    | undefined;
-
-  const recentThoughts = await db
+  // Independent of the trail and of each other: one round of latency, not
+  // four in a row.
+  const [sweepPulse, recentThoughts, boards] = await Promise.all([
+    lastPulseFor('daydream-sweep'),
+    db
     .select({
       id: daydreamThoughts.id,
       kind: daydreamThoughts.kind,
@@ -704,7 +703,12 @@ export async function loadFamily() {
     })
     .from(daydreamThoughts)
     .orderBy(desc(daydreamThoughts.createdAt))
-    .limit(200);
+    .limit(200),
+    Promise.all(FAMILY_SUBJECTS.map((f) => loadBoard(20, f.subject))),
+  ]);
+  const sweepBySubject = ((sweepPulse?.details ?? {}) as Record<string, unknown>).perSubject as
+    | Record<string, { testsRun?: number; naiveHits?: number; findings?: unknown[]; errors?: string[] }>
+    | undefined;
 
   const detail: Record<string, {
     hypotheses: Awaited<ReturnType<typeof loadBoard>>;
@@ -712,7 +716,6 @@ export async function loadFamily() {
     thoughts: Array<{ id: string; kind: string; title: string; score: number; status: string; createdAt: string }>;
   }> = {};
 
-  const boards = await Promise.all(FAMILY_SUBJECTS.map((f) => loadBoard(20, f.subject)));
   FAMILY_SUBJECTS.forEach((f, i) => {
     const sw = sweepBySubject?.[f.subject];
     detail[f.subject] = {
@@ -1023,28 +1026,3 @@ export async function loadDelivery() {
   };
 }
 
-/** Everything the page needs, in one round of queries. */
-export async function loadLedger() {
-  const [engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry, provenance] = await Promise.all([
-    loadEngineState(),
-    loadDetectorRows(),
-    loadThreshold(),
-    loadThoughts(),
-    loadPlaces(),
-    loadCounts(),
-    loadBudget(),
-    loadRules(),
-    loadLatestDigest(),
-    listSteers(),
-    loadDelivery(),
-    loadFamily(),
-    loadMoney(),
-    loadDiscoveries(),
-    loadTelemetry(),
-    // Whether each source is actually reaching the reasoning, measured. See
-    // provenance.ts — the page could show 242 registered signals and 13 green
-    // jobs while 185 of those signals reached nothing at all.
-    loadProvenance(),
-  ]);
-  return { engine, detectors, threshold, thoughts, places, counts, budget, rules, digest, steers, delivery, family, money, discoveries, telemetry, provenance };
-}

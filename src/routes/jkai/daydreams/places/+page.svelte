@@ -11,6 +11,8 @@
    * rows, and the four states a place can be in (a question, too quiet to ask
    * about, named, transit) were only inferable by counting cards.
    */
+  import { postThought } from '$lib/daydream/feed-client';
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
@@ -191,25 +193,11 @@
   async function post(body: Record<string, unknown>, key: string) {
     busy = key;
     actionError = null;
-    try {
-      const res = await fetch('/api/daydream/thoughts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const out = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        actionError = out.error ?? 'that did not work';
-        return false;
-      }
-      await invalidateAll();
-      return true;
-    } catch {
-      actionError = 'that did not work';
-      return false;
-    } finally {
-      busy = null;
-    }
+    const r = await postThought(body);
+    if (!r.ok) actionError = r.error ?? 'that did not work';
+    else await invalidateAll();
+    busy = null;
+    return r.ok;
   }
 
   /**
@@ -246,10 +234,7 @@
     />
 
     {#if data.loadError}
-      <div class="card t-urgent">
-        <p class="card-kicker">The place ledger could not be read</p>
-        <p class="card-body">{data.loadError}</p>
-      </div>
+      <LoadErrorCard kicker="The place ledger could not be read" message={data.loadError} />
     {/if}
 
     <RollupGrid cells={rollup} min={172} />

@@ -8,6 +8,8 @@
   // with. So the activity board is first and the provenance measurement is
   // last, and the table the board replaces survives underneath it, folded, for
   // the columns a cell has no room for.
+  import { postThought } from '$lib/daydream/feed-client';
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
@@ -46,25 +48,11 @@
   async function post(body: Record<string, unknown>, key: string) {
     busy = key;
     actionError = null;
-    try {
-      const res = await fetch('/api/daydream/thoughts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const out = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        actionError = out.error ?? 'that did not work';
-        return false;
-      }
-      await invalidateAll();
-      return true;
-    } catch {
-      actionError = 'that did not work';
-      return false;
-    } finally {
-      busy = null;
-    }
+    const r = await postThought(body);
+    if (!r.ok) actionError = r.error ?? 'that did not work';
+    else await invalidateAll();
+    busy = null;
+    return r.ok;
   }
 
   let backfilling = $state(false);
@@ -175,10 +163,7 @@
     />
 
     {#if data.loadError}
-      <div class="card t-urgent">
-        <p class="card-kicker">The ledger could not be read</p>
-        <p class="card-body">{data.loadError}</p>
-      </div>
+      <LoadErrorCard kicker="The ledger could not be read" message={data.loadError} />
     {/if}
     {#if actionError}<p class="err">{actionError}</p>{/if}
 

@@ -9,6 +9,7 @@
   // Colour is priority (`priority.ts`), category is a MARK. The row is a
   // summary: `explanation`, never `narrative` — model prose may not appear
   // without the checked/UNCHECKED tag that rides with it in the drill.
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
@@ -180,14 +181,7 @@
 </script>
 
 {#if data.loadError}
-  <section class="band">
-    <div class="inner">
-      <div class="card t-urgent">
-        <p class="card-kicker">The feed did not load</p>
-        <p class="card-body">{data.loadError}</p>
-      </div>
-    </div>
-  </section>
+  <section class="band"><div class="inner"><LoadErrorCard kicker="The feed did not load" message={data.loadError} /></div></section>
 {/if}
 
 <!-- ── A / THE MATRIX ─────────────────────────────────────────────────────── -->

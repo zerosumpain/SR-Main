@@ -6,7 +6,6 @@ import {
   loadFeedCell,
   loadFeedMatrix,
   loadThoughtById,
-  loadThreshold,
   type FeedMatrix,
   type LedgerThought,
 } from '$lib/daydream/ledger';
@@ -18,7 +17,7 @@ import { FAMILIES, FEED_STATES, type FeedState } from '$lib/daydream/thought-gro
 // state; neither means the undecided column across every family. `?open=`
 // (or a notification's `?rate=`) names a thought to open in the drill, which
 // may sit outside the selected cell — so it is fetched on its own.
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, parent }) => {
   const f = url.searchParams.get('f');
   const s = url.searchParams.get('s');
   const family = f && f in FAMILIES ? f : null;
@@ -27,14 +26,17 @@ export const load: PageServerLoad = async ({ url }) => {
 
   const empty: FeedMatrix = { rows: [], cols: [], cells: {}, total: 0 };
   try {
-    const [matrix, rows, threshold, detectors, delivery, steers] = await Promise.all([
+    // The threshold is already on the layout (`counts.threshold`); reading it
+    // again here would scan every rated row a second time per arrival.
+    const [{ counts }, matrix, rows, detectors, delivery, steers] = await Promise.all([
+      parent(),
       loadFeedMatrix(),
       loadFeedCell(family, state),
-      loadThreshold(),
       loadDetectorRows(),
       loadDelivery(),
       listSteers(),
     ]);
+    const threshold = counts.threshold;
     let opened: LedgerThought | null = null;
     if (openId && !rows.some((r) => r.id === openId)) opened = await loadThoughtById(openId);
     return { matrix, family, state, rows, threshold, detectors, delivery, steers, opened, loadError: null as string | null };

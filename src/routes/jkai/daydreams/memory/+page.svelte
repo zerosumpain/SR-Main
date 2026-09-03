@@ -18,6 +18,7 @@
   // numbers that say whether the loop closes — how many themes reach a pack,
   // how many sentences are still waiting for tonight, how many refutations
   // bind, and how many verdicts were reached and then forgotten.
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import { untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
@@ -281,7 +282,7 @@
       consolidationNote = 'Consolidation is running in the background…';
       const deadline = Date.now() + 5 * 60_000;
       while (Date.now() < deadline) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 2_500));
+        await new Promise<void>((resolve) => setTimeout(resolve, 10_000));
         await invalidateAll();
         const latest = data.lastConsolidation;
         if (!latest || (out.localDay && latest.localDay !== out.localDay) || latest.status === 'running') {
@@ -308,14 +309,7 @@
 <section class="band" id="dd-memory-rollup">
   <div class="inner">
     {#if data.loadError}
-      <div class="card t-urgent load-error">
-        <p class="card-kicker">The memory store could not be read</p>
-        <p class="card-body">{data.loadError}</p>
-        <p class="note">
-          Everything below is therefore empty for a reason that has nothing to do with what the
-          engine has learned. Refresh once the fault is cleared.
-        </p>
-      </div>
+      <LoadErrorCard kicker="The memory store could not be read" message={data.loadError} />
     {/if}
 
     <SectionHead

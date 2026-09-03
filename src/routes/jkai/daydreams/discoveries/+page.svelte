@@ -9,6 +9,7 @@
   //
   // Then: A yesterday's card · B the board · C the lines of enquiry ·
   // D the sweep · E every digest it has written.
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
   import { page } from '$app/state';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
@@ -241,18 +242,7 @@
 </script>
 
 {#if data.loadError}
-  <section class="band">
-    <div class="inner">
-      <div class="card t-urgent">
-        <p class="card-kicker">Discoveries did not load</p>
-        <p class="card-body">{data.loadError}</p>
-        <p class="note">
-          Every figure below is therefore an empty one for a reason that has nothing to do with
-          what the engine has been asking.
-        </p>
-      </div>
-    </div>
-  </section>
+  <section class="band"><div class="inner"><LoadErrorCard kicker="Discoveries did not load" message={data.loadError} /></div></section>
 {/if}
 
 <!-- The rollup. Not a table of rows: how the questions came out, how the lines

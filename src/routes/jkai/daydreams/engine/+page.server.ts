@@ -5,7 +5,6 @@ import {
   loadCounts,
   loadDelivery,
   loadDetectorRows,
-  loadEngineState,
   loadRules,
   loadTelemetry,
   type DetectorRow,
@@ -23,11 +22,13 @@ import { loadJobSchedules, type JobSchedule } from '$lib/daydream/rooms/engine.s
 // and the catch branch returns the SAME KEYS, because a key present on only
 // one branch is a property the page's union type does not have.
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ parent }) => {
   try {
-    const [engine, detectors, budget, rules, counts, telemetry, delivery, provenance, schedules] =
+    // `engine` is already on the layout (`counts.engine`) — read it from there
+    // rather than running the same pulse queries a second time.
+    const [{ counts: hub }, detectors, budget, rules, counts, telemetry, delivery, provenance, schedules] =
       await Promise.all([
-        loadEngineState(),
+        parent(),
         loadDetectorRows(),
         loadBudget(),
         loadRules(),
@@ -37,6 +38,7 @@ export const load: PageServerLoad = async () => {
         loadProvenance(),
         loadJobSchedules(),
       ]);
+    const engine = hub.engine;
     return {
       engine,
       detectors,
@@ -76,6 +78,7 @@ export const load: PageServerLoad = async () => {
       registered: 0,
       sweepable: 0,
     };
+    const engine = hub.engine;
     return {
       engine,
       detectors,

@@ -19,6 +19,8 @@
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import { HUB_BASE, hubTabs, isRoom } from '$lib/daydream/hub';
+  import { ago, pct } from '$lib/daydream/format';
+  import { postThought } from '$lib/daydream/feed-client';
   import type { LayoutData } from './$types';
 
   let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -33,33 +35,12 @@
   let togglingEnabled = $state(false);
   async function toggleEnabled() {
     togglingEnabled = true;
-    try {
-      const res = await fetch('/api/daydream/thoughts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'set_enabled', enabled: !data.enabled }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await invalidateAll();
-    } catch (err) {
-      console.error('[daydream] toggle failed:', err);
-    } finally {
-      togglingEnabled = false;
-    }
+    const r = await postThought({ action: 'set_enabled', enabled: !data.enabled });
+    if (!r.ok) console.error('[daydream] toggle failed:', r.error);
+    else await invalidateAll();
+    togglingEnabled = false;
   }
 
-  function ago(iso: string | null): string {
-    if (!iso) return 'never';
-    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins} min ago`;
-    const h = Math.round(mins / 60);
-    if (h < 48) return `${h} h ago`;
-    return `${Math.round(h / 24)} d ago`;
-  }
-  function pct(n: number | null | undefined): string {
-    return n == null ? '—' : `${Math.round(n * 100)}%`;
-  }
 
   const hasRun = $derived(counts.engine.lastDetectAt != null);
   const readout = $derived([

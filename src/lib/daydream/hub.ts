@@ -40,11 +40,15 @@ export function isRoom(s: string | null | undefined): s is RoomId {
 /** PURE. The rail, with its badges. Tested so a badge can never count the
  *  wrong population without a test saying so. */
 export interface BadgeCounts {
+  /** Reached him and never rated — the starved input. */
   needsRating: number;
+  /** Verdicts with no memory behind them. */
   unrememberedRulings: number;
   activeWatches: number;
+  /** Unnamed active places at or over the ask threshold, by distinct days. */
   needsNaming: number;
   proposedRules: number;
+  /** Daydream heartbeat rows in trouble: failures counted or paused. */
   failingJobs: number;
 }
 

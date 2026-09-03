@@ -58,26 +58,4 @@ export function reviewWord(verdict: string | null): string {
         : '';
 }
 
-const STAMP_FMT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Europe/London',
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-export function stamp(iso: string | null): string {
-  if (!iso) return '';
-  return STAMP_FMT.format(new Date(iso));
-}
-
-export function ago(iso: string | null): string {
-  if (!iso) return 'never';
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const h = Math.round(mins / 60);
-  if (h < 48) return `${h} h ago`;
-  return `${Math.round(h / 24)} d ago`;
-}
+export { ago, stamp, pct, when } from './format';

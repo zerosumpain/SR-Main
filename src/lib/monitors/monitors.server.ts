@@ -180,6 +180,23 @@ export async function createMonitor(
  *  Lazily re-enables any snoozed monitor whose snoozeUntil has passed.
  *  Batched: schedules in one query, per-monitor run/hit lookups in parallel
  *  (was a ~4N sequential round-trip N+1). */
+/**
+ * How many watches are live — for a badge. READ-ONLY and two queries: the
+ * markers and their schedules. `listMonitors()` is the wrong tool for a badge:
+ * it walks every monitor's run history and, as a side effect of a read,
+ * re-enables lapsed snoozes with writes. A layout load must do neither.
+ */
+export async function countActiveMonitors(): Promise<number> {
+  const { records } = await queryRecords(MONITORS_COLLECTION, { limit: 200 }, ACTOR);
+  const ids = records.map((r) => (r.data as unknown as MonitorMarker).workflowId).filter(Boolean);
+  if (!ids.length) return 0;
+  const scheds = await db
+    .select({ enabled: workflowSchedules.enabled })
+    .from(workflowSchedules)
+    .where(inArray(workflowSchedules.workflowId, ids));
+  return scheds.filter((s) => s.enabled).length;
+}
+
 export async function listMonitors(): Promise<MonitorStatus[]> {
   await ensureMonitorsCollection();
   const { records } = await queryRecords(MONITORS_COLLECTION, { sort: { field: 'createdAt', dir: 'desc' }, limit: 200 }, ACTOR);

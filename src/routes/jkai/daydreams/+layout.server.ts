@@ -2,7 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { getSetting } from '$lib/server/models/settings';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import { emptyHubCounts, loadHubCounts } from '$lib/daydream/hub-counts.server';
-import { listMonitors } from '$lib/monitors/monitors.server';
+import { countActiveMonitors } from '$lib/monitors/monitors.server';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only).
 //
@@ -12,14 +12,13 @@ import { listMonitors } from '$lib/monitors/monitors.server';
 // room's `+page.server.ts` and by nothing else, which is the whole reason the
 // rooms are routes.
 export const load: LayoutServerLoad = async () => {
-  const [enabled, monitors] = await Promise.all([
+  const [enabled, activeWatches] = await Promise.all([
     getSetting<boolean>(SETTINGS_ENABLED_KEY).catch(() => null),
-    listMonitors().catch((err) => {
+    countActiveMonitors().catch((err) => {
       console.error('[daydream] monitors count failed:', errMsg(err));
-      return [] as Awaited<ReturnType<typeof listMonitors>>;
+      return 0;
     }),
   ]);
-  const activeWatches = monitors.filter((m) => m.enabled).length;
   try {
     const counts = await loadHubCounts({ activeWatches });
     return { counts, enabled: enabled !== false, hubError: null as string | null };

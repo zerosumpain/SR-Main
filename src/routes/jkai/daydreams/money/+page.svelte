@@ -1,4 +1,6 @@
 <script lang="ts">
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
+  import { ago, stamp } from '$lib/daydream/format';
   // Money: only what left a receipt.
   //
   // The old tab opened on a four-tile deck and then dropped straight into a
@@ -25,15 +27,6 @@
     return `£${(minor / 100).toFixed(2)}`;
   }
 
-  function ago(v: string | Date | null): string {
-    if (!v) return 'never';
-    const mins = Math.round((Date.now() - new Date(v).getTime()) / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.round(hours / 24)}d ago`;
-  }
 
   // Pinned to Europe/London, the same zone the spend day grouping uses,
   // because the server runs UTC and a 00:40 BST run would otherwise be filed
@@ -47,12 +40,6 @@
     minute: '2-digit',
     hour12: false,
   });
-  function stamp(v: string | Date | null): string {
-    if (!v) return '—';
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return '—';
-    return STAMP_FMT.format(d).replace(/^(\w{3}),/, '$1');
-  }
 
   // ── Arming the bank rails ────────────────────────────────────────────────
   // It was a settings key you had to write by hand, which is why it stayed off
@@ -232,14 +219,7 @@
 </script>
 
 {#if data.loadError}
-  <section class="band">
-    <div class="inner">
-      <div class="card t-urgent">
-        <p class="card-kicker">The spend ledger could not be read</p>
-        <p class="card-body">{data.loadError}</p>
-      </div>
-    </div>
-  </section>
+  <section class="band"><div class="inner"><LoadErrorCard kicker="The spend ledger could not be read" message={data.loadError} /></div></section>
 {/if}
 
 <section class="band">

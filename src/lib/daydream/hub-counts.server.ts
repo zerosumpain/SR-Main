@@ -13,26 +13,18 @@ import { loadEngineState, loadThreshold, type EngineState } from './ledger';
 import { MIN_VISITS_TO_ASK } from './types';
 import type { BadgeCounts } from './hub';
 
+/** The badge populations (`BadgeCounts`, in `hub.ts`) plus what the cover
+ *  tiles and readout need. */
 export interface HubCounts extends BadgeCounts {
   /** Live and waiting on nobody but the owner: status `new`. */
   undecided: number;
-  /** Reached him and never rated — the starved input. */
-  needsRating: number;
-  /** Verdicts with no memory behind them. */
-  unrememberedRulings: number;
-  /** Unnamed active places at or over the ask threshold, by distinct days. */
-  needsNaming: number;
   places: number;
   namedPlaces: number;
   unnamedPlaces: number;
   thoughts7d: number;
   thoughtsAll: number;
   held: number;
-  proposedRules: number;
-  /** Daydream heartbeat rows in trouble: failures counted or paused. */
-  failingJobs: number;
   jobs: number;
-  activeWatches: number;
   engine: EngineState;
   threshold: { value: number; feedbackCount: number };
 }

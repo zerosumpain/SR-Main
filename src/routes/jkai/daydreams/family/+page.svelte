@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { postThought } from '$lib/daydream/feed-client';
+  import LoadErrorCard from '$lib/components/jkai/daydream/hub/LoadErrorCard.svelte';
+  import { stamp } from '$lib/daydream/format';
   /**
    * The household room.
    *
@@ -42,25 +45,16 @@
   async function loadFamilyMap() {
     famLoading = true;
     famError = null;
-    try {
-      const res = await fetch('/api/daydream/thoughts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'family_now' }),
-      });
-      const out = (await res.json().catch(() => ({}))) as {
-        positions?: FamilyPosition[];
-        error?: string;
-      };
-      if (out.error) throw new Error(out.error);
-      famPositions = out.positions ?? [];
-    } catch (err) {
-      famError = err instanceof Error ? err.message : String(err);
+    const r = await postThought<{ positions?: FamilyPosition[] }>({ action: 'family_now' });
+    if (!r.ok) {
+      famError = r.error ?? 'could not load the map';
       famPositions = null;
-    } finally {
-      famLoading = false;
+    } else {
+      famPositions = r.out.positions ?? [];
     }
+    famLoading = false;
   }
+
 
   onMount(() => {
     void loadFamilyMap();
@@ -108,12 +102,6 @@
     minute: '2-digit',
     hour12: false,
   });
-  function stamp(value: Date | string | null): string {
-    if (!value) return '—';
-    const d = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(d.getTime())) return '—';
-    return STAMP_FMT.format(d).replace(/^(\w{3}),/, '$1');
-  }
 
   // ── The rollup ───────────────────────────────────────────────────────────
   type Member = PageData['family']['members'][number];
@@ -156,17 +144,7 @@
 </script>
 
 {#if data.loadError}
-  <section class="band">
-    <div class="inner">
-      <div class="card t-urgent">
-        <p class="card-kicker">The household did not load</p>
-        <p class="card-body">{data.loadError}</p>
-        <p class="note">
-          Everything below is empty for a reason that has nothing to do with where anybody is.
-        </p>
-      </div>
-    </div>
-  </section>
+  <section class="band"><div class="inner"><LoadErrorCard kicker="The household did not load" message={data.loadError} /></div></section>
 {/if}
 
 <section class="band">
