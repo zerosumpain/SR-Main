@@ -13,7 +13,7 @@
 import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
-import { daydreamDigests, daydreamLeads, daydreamMemoryThemes, daydreamPlaces, daydreamThoughts } from '$lib/db/schema';
+import { daydreamLeads, daydreamMemoryThemes, daydreamPlaces, daydreamThoughts } from '$lib/db/schema';
 import { localDayStart } from './budget';
 import { errMsg } from './types';
 import { digestDay, gatherStats, type DigestStats } from './digest/build';
@@ -47,7 +47,6 @@ export interface DaydreamBriefing {
 }
 
 const FEED = '/jkai/daydreams/feed';
-const openHref = (id: string) => `${FEED}?open=${id}`;
 const trim = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /**
