@@ -25,7 +25,7 @@
 import { db } from '$lib/db';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { intelNotes, researchSessions } from '$lib/db/schema';
-import { extractFromNote } from './extract';
+import { extractFromNote, type ExtractionResult } from './extract';
 import { persistExtraction } from './graph';
 import { embedNote } from './embed';
 
@@ -104,6 +104,22 @@ export interface AutoExtractInput {
    * left alone rather than re-queued for a decision that has been made.
    */
   hold?: boolean;
+  /**
+   * A structure to persist INSTEAD of running the extractor over `text`.
+   *
+   * The default path is "here is some prose, work out what is in it". Research
+   * is the case where that throws information away: a session has already done
+   * entity recognition over full page content, with the sources in front of it,
+   * and re-deriving the same graph from a summary loses both the recall and the
+   * edges. Supplying the extraction lets a caller reuse everything downstream —
+   * note minting, hash gating, `upsertEntity`'s resolution against the existing
+   * graph, edge corroboration, embedding — while skipping only the model call
+   * that would have guessed at what it already knows.
+   *
+   * `text` is still required and still stored: it is the note body a reader
+   * sees and what recall searches. See $lib/deepdive/graph-commit.
+   */
+  extraction?: ExtractionResult;
 }
 
 export type AutoExtractOutcome =
@@ -305,7 +321,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
     // behaviour marked it 'processed' with nothing in it, which is a lie.
     let extraction;
     try {
-      extraction = await extractFromNote(clipped, 'summary');
+      extraction = input.extraction ?? (await extractFromNote(clipped, 'summary'));
     } catch (err) {
       await db
         .update(intelNotes)
@@ -559,13 +575,32 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
   }
 
   if (kinds.includes('research') && !exhausted()) {
+    /**
+     * Only research the owner has ALREADY committed.
+     *
+     * This used to sweep every session holding a report, which meant a backfill
+     * put every question anyone had ever asked into the durable graph —
+     * including the probes and dead ends. Research is opt-in now (see
+     * $lib/deepdive/graph-commit), and a sweep must not be the back door that
+     * quietly re-opts everything in. Committing is an act; refreshing what was
+     * committed is housekeeping, and only the second belongs here.
+     *
+     * The derived note is the record of that act, so joining on it IS the gate.
+     */
     const sessions = await db
       .select({ id: researchSessions.id })
       .from(researchSessions)
-      .where(isNotNull(researchSessions.report))
+      .innerJoin(
+        intelNotes,
+        and(
+          sql`${intelNotes.metadata}->>'autoKind' = 'research'`,
+          sql`${intelNotes.metadata}->>'refId' = ${researchSessions.id}`,
+        ),
+      )
+      .where(and(isNotNull(researchSessions.report), eq(intelNotes.graphState, 'admitted')))
       .orderBy(researchSessions.id);
 
-    const { extractResearchIntoIntel } = await import('$lib/deepdive/intel-bridge');
+    const { commitSessionGraph } = await import('$lib/deepdive/graph-commit');
     for (const s of sessions) {
       if (exhausted()) {
         progress.truncated = true;
@@ -573,7 +608,17 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
       }
       progress.scanned++;
       try {
-        record(await extractResearchIntoIntel(s.id));
+        const outcome = await commitSessionGraph(s.id);
+        if (outcome.status === 'committed') {
+          progress.extracted++;
+          progress.entities += outcome.entities;
+          worked++;
+        } else if (outcome.status === 'empty') {
+          progress.skipped++;
+        } else {
+          progress.failed++;
+          worked++;
+        }
       } catch {
         progress.failed++;
         worked++;

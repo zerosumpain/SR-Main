@@ -9,7 +9,6 @@ import { runPhase2 } from './phase2';
 import { runPhase3 } from './phase3';
 import { runPostProcessing } from './postprocess';
 import { linkSessionEntitiesToGlobal } from './cross-session';
-import { extractResearchIntoIntel } from './intel-bridge';
 import { disposeArtefacts, flushArtefacts } from './desk-events';
 import { coerceDepth, depthPreset } from './depth';
 import { withActivity } from '$lib/context/activity';
@@ -296,6 +295,26 @@ async function runResearchPhases(sessionId: string): Promise<void> {
     if (!session) throw new Error('Session not found');
 
     const preset = depthPreset(coerceDepth(session.depth));
+
+    /**
+     * The tier's config, with whatever the row actually stores laid over it.
+     *
+     * `research_session.config` defaults to `{}` and `depth` defaults to
+     * `'investigation'`, so any insert that omits config — `research_branch`,
+     * the builder's research stage in $lib/jkai/research-brief — produced a run
+     * that took the FULL phase chain while every phase read tier defaults that
+     * were never written. `analysisDepth` fell through to `'standard'`, which
+     * is how a 453-entity investigation finished with zero relationships on
+     * 2026-09-03, and `maxSources`/`maxFactsBeforePhase3` were wrong the same
+     * way.
+     *
+     * Derived here rather than patched into each insert site: `depth` is the
+     * one thing a caller picks and the column is the authority on it, so this
+     * is the single place that can't be forgotten. A config the caller DID
+     * write still wins, key by key.
+     */
+    session.config = { ...preset.config, ...((session.config ?? {}) as Record<string, unknown>) };
+
     beat(sessionId, true);
 
     /**
@@ -486,16 +505,17 @@ async function runResearchPhases(sessionId: string): Promise<void> {
       emitLog(sessionId, '\u26A0\uFE0F', `Cross-session linking error: ${err.message ?? 'unknown'}`);
     }
 
-    // Feed the finished research into the intel graph. Deep dive keeps its own
-    // cross-session entity index (for dedup within research); this is the
-    // separate step that puts the findings in front of the intel graph the rest
-    // of jkai reasons over. One LLM call per completed session, on the report
-    // digest rather than every fact.
-    try {
-      if (!budget.expired()) await extractResearchIntoIntel(sessionId);
-    } catch (err: any) {
-      console.error('[deepdive] Intel extraction error:', err);
-    }
+    // The findings are NOT pushed into the intel graph here.
+    //
+    // They used to be, on every completed investigation. That made the durable
+    // graph the union of every question anyone had ever asked — including
+    // one-off probes, tests and dead ends — and there was no way to run
+    // research without contributing to it.
+    //
+    // A session's `entity`/`relationship` rows are its own graph, scoped by
+    // `session_id` and deleted with the session. Merging them into intel is now
+    // an explicit act: POST /api/research/<id>/to-intel, which runs
+    // `commitSessionGraph` in $lib/deepdive/graph-commit.
 
     // Complete
     await finish(sessionId, startTime, priorMs);

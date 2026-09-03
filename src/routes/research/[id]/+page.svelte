@@ -28,7 +28,13 @@
    * table below reads `data.sources` after the completion refresh.
    */
   let liveSourceCount = $state(data.sources.length);
-  let stats = $state({ sourcesFound: 0, factsExtracted: 0, entitiesIdentified: 0, counterfactualsRaised: 0 });
+  let stats = $state({
+    sourcesFound: 0,
+    factsExtracted: 0,
+    entitiesIdentified: 0,
+    counterfactualsRaised: 0,
+    relationshipsFound: 0,
+  });
   let logLines = $state<string[]>([]);
   let leads = $state<FrontierLead[]>(data.leads as FrontierLead[]);
 
@@ -306,6 +312,12 @@
     {#if data.tier.extractsFacts}
       <span class="metric"><b>{settled ? data.counts.facts : stats.factsExtracted}</b> facts</span>
       <span class="metric"><b>{settled ? data.counts.entities : stats.entitiesIdentified}</b> entities</span>
+      <!-- Shown beside the entity count, not tucked away in the network panel:
+           entities with no links between them is the shape an extraction
+           failure takes, and it was invisible here for months. -->
+      <span class="metric"
+        ><b>{settled ? data.counts.relationships : stats.relationshipsFound}</b> links</span
+      >
     {/if}
     <span class="metric spacer">
       {#if finished}{fmtMs(durationMs)}{:else if paused}{fmtMs(durationMs)} so far{:else}{fmtMs(elapsedMs)} elapsed{/if}

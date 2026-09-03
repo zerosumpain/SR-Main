@@ -68,6 +68,15 @@ export interface SessionStats {
   factsExtracted: number;
   entitiesIdentified: number;
   counterfactualsRaised: number;
+  /**
+   * Edges recorded between this session's entities.
+   *
+   * Optional so every existing constructor still type-checks, but reported
+   * everywhere the entity count is: a run that finds entities and no
+   * relationships is an extraction failure, and until this counter existed
+   * nothing on the page or in the logs said so. See $lib/deepdive/extract-graph.
+   */
+  relationshipsFound?: number;
 }
 
 export interface IdentityCluster {

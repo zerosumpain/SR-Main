@@ -28,6 +28,13 @@ import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, generateEmbedding } from './ai';
 import { search } from './tavily';
 import { classifyDomain } from './credibility';
+import {
+  GRAPH_EXTRACTION_PROMPT,
+  SessionEntityIndex,
+  storeRelationships,
+  type ExtractedEntity,
+  type ExtractedRelationship,
+} from './extract-graph';
 import { getEmbeddingModel } from '$lib/llm/keys';
 import { emit, emitLog, emitStats, throwIfStopped, beat } from './worker';
 import { emitArtefact } from './desk-events';
@@ -84,11 +91,21 @@ export async function runBrief(
     `You are a research analyst. Topic: "${topic}"` +
     (goals.length ? `\nGoals: ${goals.join('; ')}` : '');
 
+  /**
+   * Names → ids for every entity this run has stored, so a relationship's
+   * endpoints resolve without a database round trip per name. Shared across the
+   * parallel source extractions: a source may legitimately name an entity a
+   * sibling source created a moment ago, and dropping that link would lose
+   * exactly the cross-source connections a graph is for.
+   */
+  const entityIndex = new SessionEntityIndex();
+
   const stats: SessionStats = {
     sourcesFound: 0,
     factsExtracted: 0,
     entitiesIdentified: 0,
     counterfactualsRaised: 0,
+    relationshipsFound: 0,
   };
 
   emitLog(sessionId, '\u{1F50D}', `Brief: ${describeScope(scope)}`);
@@ -262,18 +279,25 @@ export async function runBrief(
         if (content.length < 80) return;
         const extracted = await jsonCompletion<{
           facts: { content: string; confidence: number; tags: string[] }[];
-          entities: { name: string; type: string; description: string }[];
+          entities: ExtractedEntity[];
+          relationships: ExtractedRelationship[];
         }>(
           sys,
-          `Analyse this source and return JSON with two keys.\n\n1. facts: factual claims, each { content (one clear sentence), confidence (0-1), tags (2-4 short topic tags) }\n2. entities: named entities, each { name, type (person|organisation|location|event|concept|product|other), description (one sentence) }\n\nSource: ${src.title}\nContent:\n${content.slice(0, 4000)}\n\nRespond with JSON: { "facts": [...], "entities": [...] }`,
+          `Analyse this source and return JSON with three keys.\n\n1. facts: factual claims, each { content (one clear sentence), confidence (0-1), tags (2-4 short topic tags) }\n\n2. entities: as described below.\n\n3. relationships: as described below.\n\n${GRAPH_EXTRACTION_PROMPT}\n\nSource: ${src.title}\nContent:\n${content.slice(0, 4000)}\n\nRespond with JSON: { "facts": [...], "entities": [...], "relationships": [...] }`,
           {
             model,
-            maxTokens: 4096,
+            // Widened from 4096 with the relationships array: a source naming
+            // twenty entities now has a second list to write, and a truncated
+            // response loses the WHOLE object, not just its tail.
+            maxTokens: 6144,
             signal: budget.signalFor('gather', EXTRACT_CEILING_MS),
           },
         );
         await storeFacts(extracted.facts ?? [], src);
+        // Entities first: relationship endpoints resolve through the index this
+        // fills, so an edge can only be written once both its ends exist.
         await storeEntities(extracted.entities ?? [], src);
+        await storeGraphEdges(extracted.relationships ?? [], src);
         beat(sessionId);
       }),
     ),
@@ -282,7 +306,7 @@ export async function runBrief(
   emitLog(
     sessionId,
     '✅',
-    `${stats.factsExtracted} facts, ${stats.entitiesIdentified} entities extracted.`,
+    `${stats.factsExtracted} facts, ${stats.entitiesIdentified} entities, ${stats.relationshipsFound ?? 0} relationships extracted.`,
   );
 
   // ---- 5. Synthesis (on reserved time) ----------------------------------
@@ -408,10 +432,7 @@ export async function runBrief(
     }
   }
 
-  async function storeEntities(
-    extracted: { name: string; type: string; description: string }[],
-    _src: Source,
-  ): Promise<void> {
+  async function storeEntities(extracted: ExtractedEntity[], _src: Source): Promise<void> {
     for (const e of extracted) {
       if (!e?.name) continue;
       const normalised = e.name.toLowerCase().trim();
@@ -422,7 +443,14 @@ export async function runBrief(
           and(eq(entities.sessionId, sessionId), sql`lower(trim(${entities.name})) = ${normalised}`),
         )
         .limit(1);
-      if (existing.length) continue;
+      if (existing.length) {
+        // Already stored — by an earlier source, or by this one under another
+        // spelling. Still index it: the relationship pass that follows resolves
+        // names through the index, so skipping the registration here is how a
+        // link to a known entity would go missing.
+        entityIndex.add(e.name, existing[0].id);
+        continue;
+      }
 
       const [row] = await db
         .insert(entities)
@@ -433,6 +461,7 @@ export async function runBrief(
           description: e.description,
         })
         .returning();
+      entityIndex.add(row.name, row.id);
       emitArtefact(sessionId, 'entity', 2, {
         id: row.id,
         name: row.name,
@@ -440,6 +469,25 @@ export async function runBrief(
         description: row.description,
       });
       stats.entitiesIdentified++;
+    }
+  }
+
+  /**
+   * Store one source's relationships. Endpoints resolve through `entityIndex`,
+   * which `storeEntities` has just filled from the SAME response — the contract
+   * that stops the two halves of an extraction naming things differently.
+   */
+  async function storeGraphEdges(
+    extracted: ExtractedRelationship[],
+    src: Source,
+  ): Promise<void> {
+    if (!extracted.length) return;
+    const outcome = await storeRelationships(sessionId, src.id, extracted, entityIndex);
+    stats.relationshipsFound = (stats.relationshipsFound ?? 0) + outcome.stored;
+    if (outcome.unresolved > 0) {
+      console.warn(
+        `[deepdive] brief: ${outcome.unresolved} relationship endpoint(s) matched no entity for ${src.url}`,
+      );
     }
   }
 }
