@@ -58,12 +58,6 @@
    * belong to a finished one — only the report-shaped panels need a report.
    */
   const settled = $derived(finished || paused);
-  const researchNav = $derived([
-    { href: '/research', label: 'New research' },
-    { href: `/research/${data.session.id}/desk`, label: 'Open desk' },
-    { href: '/jkai/intel', label: 'Intel', muted: true },
-    { href: '/jkai', label: 'Chat', muted: true },
-  ]);
 
   /**
    * Headline numbers. Single magnitudes, so tiles rather than a chart — a bar
@@ -299,11 +293,7 @@
 
 <HealthShell
   path="/research/report"
-  kicker={`${data.tier.label} · evidence report`}
-  back={{ href: '/research', label: '← All research' }}
-  nav={researchNav}
-  live={!settled && status !== 'draft' ? status : null}
-  meta={[formatDate(data.session.createdAt)]}
+  unifiedNav
   footer={[
     `research/${data.session.id.slice(0, 8)} · ${data.session.depth}`,
     `${data.counts.sources} sources · ${data.counts.facts} facts`,
@@ -313,11 +303,16 @@
   <div class="report-page">
     <section class="report-lede">
       <div class="lede-inner">
-        <p class="eyebrow">
-          JKAI · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
-        </p>
-        <h1>{data.session.topic}</h1>
-        <p class="standfirst">{data.session.scopeLabel}</p>
+        <div class="report-copy">
+          <p class="eyebrow">
+            JKAI · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
+          </p>
+          <h1 title={data.session.topic}>{data.session.topic}</h1>
+          <div class="report-meta-line">
+            <p class="standfirst" title={data.session.scopeLabel}>{data.session.scopeLabel}</p>
+            <a class="desk-link" href="/research/{data.session.id}/desk">Open desk →</a>
+          </div>
+        </div>
 
         <dl class="report-ledger" aria-label="Research report summary">
           <div>
@@ -582,30 +577,34 @@
 
 <style>
   .report-page { min-height: 100vh; background: var(--bg); color: var(--text-primary); font-family: var(--font-body); }
-  .report-lede { padding: clamp(38px, 5vw, 72px) clamp(20px, 3vw, 44px); background: var(--text-primary); color: var(--bg); border-bottom: 1px solid rgba(237, 228, 212, 0.16); }
-  .lede-inner { width: min(1400px, 100%); margin: 0 auto; }
-  .eyebrow, .section-no { margin: 0 0 18px; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: var(--tracking-label-wide); text-transform: uppercase; color: var(--accent); }
+  .report-lede { padding: clamp(28px, 3.5vw, 48px) clamp(20px, 3vw, 44px); background: var(--text-primary); color: var(--bg); border-bottom: 1px solid rgba(237, 228, 212, 0.16); }
+  .lede-inner { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr); align-items: end; gap: clamp(32px, 5vw, 72px); width: min(1400px, 100%); margin: 0 auto; }
+  .report-copy { min-width: 0; }
+  .eyebrow, .section-no { margin: 0 0 12px; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: var(--tracking-label-wide); text-transform: uppercase; color: var(--accent); }
   .report-lede .eyebrow { color: var(--accent-on-dark); }
-  h1 { max-width: 15ch; margin: 0; overflow-wrap: anywhere; font-family: var(--font-display); font-size: clamp(2.9rem, 6.5vw, 6.8rem); font-weight: 900; line-height: 0.9; letter-spacing: -0.04em; color: var(--bg); text-wrap: balance; }
-  .standfirst { margin: 26px 0 0; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.55; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(237, 228, 212, 0.62); }
-  .report-ledger { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: clamp(42px, 6vw, 78px) 0 0; border-top: 1px solid rgba(237, 228, 212, 0.16); border-left: 1px solid rgba(237, 228, 212, 0.16); }
-  .report-ledger > div { min-width: 0; padding: 18px; border-right: 1px solid rgba(237, 228, 212, 0.16); border-bottom: 1px solid rgba(237, 228, 212, 0.16); background: rgba(237, 228, 212, 0.04); }
+  h1 { display: -webkit-box; max-width: 100%; margin: 0; overflow: hidden; overflow-wrap: anywhere; font-family: var(--font-display); font-size: clamp(2.2rem, 4.4vw, 4.6rem); font-weight: 900; line-height: 0.92; letter-spacing: -0.035em; color: var(--bg); text-overflow: ellipsis; text-wrap: balance; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .report-meta-line { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; margin-top: 16px; }
+  .standfirst { min-width: 0; margin: 0; overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.45; letter-spacing: 0.06em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; color: rgba(237, 228, 212, 0.62); }
+  .desk-link { flex: none; color: var(--accent-on-dark); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-decoration: none; text-transform: uppercase; }
+  .desk-link:hover { color: var(--bg); }
+  .report-ledger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; border-top: 1px solid rgba(237, 228, 212, 0.16); border-left: 1px solid rgba(237, 228, 212, 0.16); }
+  .report-ledger > div { min-width: 0; padding: 13px 14px; border-right: 1px solid rgba(237, 228, 212, 0.16); border-bottom: 1px solid rgba(237, 228, 212, 0.16); background: rgba(237, 228, 212, 0.04); }
   .report-ledger dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label-wide); text-transform: uppercase; color: rgba(237, 228, 212, 0.52); }
-  .report-ledger dd { margin: 10px 0 8px; overflow: hidden; font-family: var(--font-display); font-size: clamp(1.65rem, 3.2vw, 2.75rem); line-height: 0.95; letter-spacing: -0.025em; text-transform: uppercase; color: var(--bg); text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .report-ledger dd { margin: 7px 0 4px; overflow: hidden; font-family: var(--font-display); font-size: clamp(1.4rem, 2.1vw, 2rem); line-height: 0.95; letter-spacing: -0.025em; text-transform: uppercase; color: var(--bg); text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .report-ledger dd.state-done { color: var(--good-on-dark); }
   .report-ledger dd.state-failed { color: var(--error); }
-  .report-ledger small { display: block; overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.4; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-on-dark); text-overflow: ellipsis; white-space: nowrap; }
+  .report-ledger small { display: block; overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.3; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-on-dark); text-overflow: ellipsis; white-space: nowrap; }
 
   /* Wider than a reading page because the evidence views are dashboards. The
      synthesis keeps a bounded column through the answer/action grid. */
-  .wrap { width: min(1180px, 100%); margin: 0 auto; padding: 64px clamp(20px, 5vw, 64px) 96px; }
-  .run-section, .answer-group { margin-bottom: 86px; }
-  .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; padding-bottom: 18px; border-bottom: 2px solid var(--text-primary); }
-  .section-head .section-no { margin-bottom: 8px; }
-  .section-head h2 { margin: 0; font-family: var(--font-display); font-size: clamp(2.15rem, 4.6vw, 4.25rem); line-height: 0.9; letter-spacing: -0.03em; }
+  .wrap { width: min(1280px, 100%); margin: 0 auto; padding: 44px clamp(20px, 4vw, 52px) 72px; }
+  .run-section, .answer-group { margin-bottom: 60px; }
+  .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid var(--text-primary); }
+  .section-head .section-no { margin-bottom: 6px; }
+  .section-head h2 { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 3.4vw, 3.25rem); line-height: 0.92; letter-spacing: -0.03em; }
   .section-head > p { max-width: 38ch; margin: 0 0 3px; font-size: var(--fs-body-sm); line-height: 1.5; color: var(--text-muted); text-align: right; }
 
-  .statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 58px; margin-bottom: 20px; padding: 12px 0; border-bottom: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label); }
+  .statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 48px; margin-bottom: 16px; padding: 9px 0; border-bottom: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label); }
   .pill { padding: 4px 9px; border: 1px solid var(--accent); color: var(--accent); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
   .pill.done { border-color: var(--success); color: var(--success); }
   .pill.failed { border-color: var(--error); color: var(--error); }
@@ -617,47 +616,50 @@
   .reason-toggle { padding: 5px 9px; border: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
   .reason-toggle:hover, .reason-toggle.on { border-color: var(--accent); color: var(--accent); }
   .err-line { margin-bottom: 20px; padding: 10px 12px; border-left: 3px solid var(--error); background: var(--error-bg); color: var(--error); font-family: var(--font-mono); font-size: var(--fs-label); }
-  .reasoning { margin-bottom: 20px; padding: 18px; border: 1px dashed var(--line-strong); background: var(--surface-sunken); }
+  .reasoning { margin-bottom: 16px; padding: 14px; border: 1px dashed var(--line-strong); background: var(--surface-sunken); }
   .reasoning pre { max-height: 300px; margin: 8px 0 0; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); font-family: var(--font-code); font-size: var(--fs-label); line-height: 1.55; }
-  .gnd-line, .paused-line { margin: 0 0 20px; padding: 9px 12px; border-left: 3px solid var(--accent); background: var(--accent-tint-04); color: var(--text-muted); font-size: var(--fs-nav); line-height: 1.5; }
+  .gnd-line, .paused-line { margin: 0 0 16px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-tint-04); color: var(--text-muted); font-size: var(--fs-label); line-height: 1.45; }
   .gnd-line.unsourced { border-left-color: var(--warn); color: var(--text-secondary); }
   .paused-line { border-left-color: var(--accent-ink); background: var(--accent-ink-tint-06); }
 
   /* Answer left, actions right. The rail collapses under the answer before the
      answer gets too narrow to read. */
-  .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; margin-top: 30px; }
+  .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 24px; align-items: start; margin-top: 20px; }
   .col-answer { min-width: 0; }
   .col-rail { position: sticky; top: 72px; min-width: 0; }
-  .answer { padding: 0 24px 0 0; border-right: 1px solid var(--line-hair); }
+  .answer { padding: 0 18px 0 0; border-right: 1px solid var(--line-hair); }
   .note { color: var(--text-muted); font-size: var(--fs-body); line-height: 1.6; font-style: italic; }
   .working-note { padding: 28px; border: 1px dashed var(--line-strong); text-align: center; }
 
-  .evidence-group { margin-bottom: 54px; }
-  .evidence-stack { display: grid; gap: 26px; padding-top: 30px; }
+  .evidence-group { margin-bottom: 42px; }
+  .evidence-stack { display: grid; gap: 20px; padding-top: 20px; }
   .frontier-panel { margin: 0; }
   .activity { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line-strong); }
   .activity summary { color: var(--accent); font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
   .activity ul { display: grid; gap: 4px; margin: 10px 0 0; padding-left: 20px; color: var(--text-secondary); font-family: var(--font-code); font-size: var(--fs-label); }
 
+  @media (max-width: 980px) {
+    .lede-inner { grid-template-columns: 1fr; gap: 28px; }
+    .report-ledger { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
   @media (max-width: 900px) {
-    .report-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .main-grid { grid-template-columns: minmax(0, 1fr); }
     .col-rail { position: static; }
     .answer { padding-right: 0; border-right: 0; }
   }
   @media (max-width: 720px) {
     .report-lede { padding-inline: 20px; }
-    h1 { max-width: none; font-size: clamp(2.6rem, 13vw, 4.3rem); }
-    .wrap { padding-top: 44px; }
-    .run-section, .answer-group { margin-bottom: 64px; }
+    h1 { font-size: clamp(2rem, 9.5vw, 3rem); -webkit-line-clamp: 3; }
+    .report-meta-line { margin-top: 12px; }
+    .report-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .wrap { padding-top: 32px; }
+    .run-section, .answer-group { margin-bottom: 48px; }
     .section-head { align-items: flex-start; flex-direction: column; gap: 14px; }
     .section-head > p { max-width: none; text-align: left; }
     .spacer { margin-left: 0; }
   }
   @media (max-width: 480px) {
-    .report-ledger { grid-template-columns: 1fr; }
-    .report-ledger > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 6px 18px; }
-    .report-ledger dd { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
-    .report-ledger small { grid-column: 1; }
+    .report-ledger > div { padding: 10px; }
+    .report-ledger small { display: none; }
   }
 </style>

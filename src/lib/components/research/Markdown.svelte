@@ -28,8 +28,8 @@
 <style>
   .md {
     color: var(--text-primary);
-    font-size: var(--fs-body-lg);
-    line-height: 1.72;
+    font-size: var(--fs-body);
+    line-height: 1.62;
   }
 
   .md :global(h1),
@@ -40,26 +40,26 @@
     font-weight: 900;
     line-height: 1.02;
     letter-spacing: -0.02em;
-    margin: 2.2rem 0 0.75rem;
+    margin: 1.7rem 0 0.55rem;
   }
-  .md :global(h1) { font-size: var(--fs-display-sm); }
-  .md :global(h2) { font-size: var(--fs-display-xs); }
-  .md :global(h3) { font-size: var(--fs-body-lg); }
+  .md :global(h1) { font-size: var(--fs-display-xs); }
+  .md :global(h2) { font-size: var(--fs-body-lg); }
+  .md :global(h3) { font-size: var(--fs-body); }
   .md :global(h4) { font-size: var(--fs-body-sm); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
   .md :global(> :first-child) { margin-top: 0; }
 
-  .md :global(p) { margin: 0 0 1.05rem; }
-  .md :global(> p:first-child) { font-size: clamp(1.2rem, 2vw, 1.5rem); line-height: 1.5; color: var(--text-secondary); }
+  .md :global(p) { margin: 0 0 0.8rem; }
+  .md :global(> p:first-child) { font-size: var(--fs-body-lg); line-height: 1.5; color: var(--text-secondary); }
   .md :global(ul),
-  .md :global(ol) { margin: 0 0 1.05rem; padding-left: 1.35rem; }
-  .md :global(li) { margin-bottom: 0.45rem; }
+  .md :global(ol) { margin: 0 0 0.8rem; padding-left: 1.25rem; }
+  .md :global(li) { margin-bottom: 0.3rem; }
   .md :global(li::marker) { color: var(--accent); }
 
   .md :global(strong) { font-weight: 700; }
   .md :global(a) { color: var(--accent); text-underline-offset: 2px; }
 
   .md :global(blockquote) {
-    margin: 1.4rem 0;
+    margin: 1rem 0;
     padding: 0.55rem 0 0.55rem 1rem;
     border-left: 3px solid var(--accent);
     color: var(--text-secondary);

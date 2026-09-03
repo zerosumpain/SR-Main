@@ -62,11 +62,22 @@
 
 <header class="cmdbar" class:compact>
   <div class="left">
-    <a class="mono-mark" href="/research" title="Back to research launcher"><span class="mark-caret">&gt;</span><span class="mark-text"> sr./research</span></a>
-    <span class="title-lockup">
-      <span class="eyebrow">Evidence desk</span>
-      <h1 class="topic" title={topic}>{topic}</h1>
-    </span>
+    <a class="nav-home" href="/" aria-label="Home" title="Home">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+        <path
+          d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="square"
+          stroke-linejoin="miter"
+        />
+      </svg>
+    </a>
+    <a class="nav-back" href="/research" title="Back to Research">
+      <span aria-hidden="true">←</span><span class="back-word">Research</span>
+    </a>
+    <span class="desk-label">Evidence desk</span>
+    <h1 class="topic" title={topic}>{topic}</h1>
   </div>
 
   <div class="center">
@@ -145,47 +156,68 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 18px;
-    min-height: 72px;
-    padding: 10px 18px;
+    gap: 0;
+    height: 48px;
+    min-height: 48px;
+    padding: 0;
     background: var(--text-primary);
     color: var(--bg);
     border-bottom: 1px solid rgba(237, 228, 212, 0.16);
     z-index: 30;
     flex-shrink: 0;
   }
-  .cmdbar.compact { min-height: 56px; padding-block: 6px; }
-  .left { display: flex; align-items: center; gap: 16px; min-width: 0; }
-  .mono-mark {
-    font-family: var(--font-brand);
-    font-size: var(--fs-label);
+  .cmdbar.compact { height: 48px; min-height: 48px; }
+  .left { display: flex; align-items: stretch; height: 100%; min-width: 0; }
+  .nav-home,
+  .nav-back,
+  .desk-label {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    height: 100%;
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .nav-home {
+    padding: 0 14px;
+    color: rgba(237, 228, 212, 0.72);
+  }
+  .nav-home svg { display: block; }
+  .nav-back {
+    gap: 7px;
+    padding: 0 14px;
     color: rgba(237, 228, 212, 0.62);
     text-decoration: none;
-    flex-shrink: 0;
   }
-  .mark-caret { color: var(--accent-on-dark); }
-  .mono-mark:hover { color: var(--bg); }
-  .title-lockup { display: grid; gap: 3px; min-width: 0; padding-left: 16px; border-left: 1px solid rgba(237, 228, 212, 0.16); }
-  .eyebrow { overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1; letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--accent-on-dark); text-overflow: ellipsis; white-space: nowrap; }
+  .nav-home:hover,
+  .nav-back:hover { color: var(--accent-on-dark); background: rgba(237, 228, 212, 0.07); }
+  .desk-label { padding: 0 14px; color: var(--bg); }
   .topic {
-    font-family: var(--font-display);
-    font-size: var(--fs-body-lg);
-    font-weight: 900;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
-    color: var(--bg);
+    align-self: center;
+    min-width: 0;
     margin: 0;
-    white-space: nowrap;
+    padding: 0 14px;
     overflow: hidden;
+    font-family: var(--font-body);
+    font-size: var(--fs-body-sm);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0;
+    color: var(--bg);
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .compact .title-lockup { gap: 0; }
-  .compact .eyebrow { display: none; }
-  .compact .topic { font-family: var(--font-body); font-size: var(--fs-body-sm); font-weight: 600; text-transform: none; letter-spacing: 0; }
-  .center { display: flex; justify-content: center; }
-  .right { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+  .compact .nav-home,
+  .compact .nav-back,
+  .compact .desk-label { display: none; }
+  .compact .topic { padding-left: 12px; }
+  .center { display: flex; align-items: center; align-self: stretch; justify-content: center; padding: 0 8px; border-left: 1px solid rgba(237, 228, 212, 0.14); border-right: 1px solid rgba(237, 228, 212, 0.14); }
+  .right { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-width: 0; padding: 0 10px; }
 
   .counters { display: flex; align-items: stretch; gap: 0; border-left: 1px solid rgba(237, 228, 212, 0.14); }
   .counter {
@@ -273,11 +305,18 @@
     .center { display: none; }
   }
   @media (max-width: 760px) {
-    .cmdbar { min-height: 64px; padding-inline: 12px; }
-    .mark-text { display: none; }
-    .title-lockup { padding-left: 0; border-left: 0; }
+    .desk-label { display: none; }
+    .back-word { display: none; }
+    .nav-home,
+    .nav-back { padding: 0 11px; }
     .right :global(.stepper) { display: none; }
     .controls { gap: 2px; }
     .ctl { width: 28px; height: 28px; }
+    .right { gap: 6px; padding-inline: 7px; }
+    .pill { padding-inline: 7px; }
+  }
+  @media (max-width: 420px) {
+    .ctl { width: 26px; height: 26px; }
+    .topic { padding-inline: 9px; }
   }
 </style>

@@ -60,7 +60,7 @@
     padding: 3px;
   }
   .mode-toggle.disabled { opacity: 0.55; }
-  .mode-toggle.dark { border-color: rgba(237, 228, 212, 0.18); background: rgba(237, 228, 212, 0.05); }
+  .mode-toggle.dark { padding: 0; border-color: rgba(237, 228, 212, 0.18); border-radius: 0; background: rgba(237, 228, 212, 0.05); }
   .seg {
     display: inline-flex;
     align-items: center;
@@ -80,7 +80,7 @@
     white-space: nowrap;
   }
   .seg:hover:not(:disabled) { color: var(--text-primary, #1a1008); }
-  .dark .seg { color: rgba(237, 228, 212, 0.58); }
+  .dark .seg { padding: 6px 10px; border-radius: 0; color: rgba(237, 228, 212, 0.58); }
   .dark .seg:hover:not(:disabled) { color: var(--bg); }
   .seg:disabled { cursor: default; }
   .seg.active {
