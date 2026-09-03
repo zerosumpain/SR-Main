@@ -8,7 +8,8 @@ import type {
 
 const HN_API = 'https://hacker-news.firebaseio.com/v0';
 const LOBSTERS = 'https://lobste.rs';
-const STORY_LIMIT = 25;
+export const NEWS_PAGE_SIZE = 25;
+export const MAX_NEWS_STORIES_PER_SOURCE = 100;
 const BEST_SCAN_LIMIT = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 3 * 60 * 1000;
@@ -48,7 +49,16 @@ interface CacheEntry {
   pending: Promise<NewsFeed> | null;
 }
 
-const cache = new Map<NewsWireView, CacheEntry>();
+const cache = new Map<string, CacheEntry>();
+
+export function normalizeNewsLimit(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return NEWS_PAGE_SIZE;
+  return Math.max(
+    NEWS_PAGE_SIZE,
+    Math.min(MAX_NEWS_STORIES_PER_SOURCE, Math.trunc(parsed)),
+  );
+}
 
 function decodeHtml(text: string): string {
   const named: Record<string, string> = {
@@ -185,12 +195,15 @@ async function fetchJson<T>(url: string): Promise<T> {
   }
 }
 
-async function fetchHackerNews(view: NewsWireView): Promise<NewsStory[]> {
+async function fetchHackerNews(view: NewsWireView, storyLimit: number): Promise<NewsStory[]> {
   const feed = view === 'new' ? 'newstories' : 'topstories';
   const ids = await fetchJson<unknown>(`${HN_API}/${feed}.json`);
   if (!Array.isArray(ids)) throw new Error('unexpected story index');
-  const limit = view === 'best' ? BEST_SCAN_LIMIT : STORY_LIMIT;
-  const requested = ids.filter((id): id is number => Number.isInteger(id)).slice(0, limit);
+  const scanLimit =
+    view === 'best'
+      ? Math.max(BEST_SCAN_LIMIT, storyLimit * 2)
+      : storyLimit;
+  const requested = ids.filter((id): id is number => Number.isInteger(id)).slice(0, scanLimit);
   const rows: PromiseSettledResult<HackerNewsItem | null>[] = new Array(requested.length);
   let cursor = 0;
   await Promise.all(
@@ -218,19 +231,32 @@ async function fetchHackerNews(view: NewsWireView): Promise<NewsStory[]> {
     ? stories
         .filter((story) => new Date(story.publishedAt).getTime() >= Date.now() - DAY_MS)
         .sort((a, b) => b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-        .slice(0, STORY_LIMIT)
+        .slice(0, storyLimit)
     : stories;
 }
 
-async function fetchLobsters(view: NewsWireView): Promise<NewsStory[]> {
-  const feeds = view === 'best' ? ['hottest', 'newest'] : [view === 'new' ? 'newest' : 'hottest'];
+function lobstersFeedUrl(feed: 'hottest' | 'newest', page: number): string {
+  if (page === 1) return `${LOBSTERS}/${feed}.json`;
+  return feed === 'hottest'
+    ? `${LOBSTERS}/page/${page}.json`
+    : `${LOBSTERS}/newest/page/${page}.json`;
+}
+
+async function fetchLobsters(view: NewsWireView, storyLimit: number): Promise<NewsStory[]> {
+  const feeds: Array<'hottest' | 'newest'> =
+    view === 'best' ? ['hottest', 'newest'] : [view === 'new' ? 'newest' : 'hottest'];
+  const pageCount = Math.ceil(storyLimit / NEWS_PAGE_SIZE);
   const payloads = await Promise.all(
-    feeds.map((feed) => fetchJson<unknown>(`${LOBSTERS}/${feed}.json`)),
+    feeds.flatMap((feed) =>
+      Array.from({ length: pageCount }, (_, index) =>
+        fetchJson<unknown>(lobstersFeedUrl(feed, index + 1)),
+      ),
+    ),
   );
   if (payloads.some((rows) => !Array.isArray(rows))) throw new Error('unexpected story index');
   const seen = new Set<string>();
   const stories = payloads
-    .flatMap((rows) => (rows as unknown[]).slice(0, STORY_LIMIT))
+    .flatMap((rows) => rows as unknown[])
     .map((row, rank) => normalizeLobsters((row ?? {}) as LobstersItem, rank + 1))
     .filter((story): story is NewsStory => {
       if (!story || seen.has(story.key)) return false;
@@ -241,8 +267,8 @@ async function fetchLobsters(view: NewsWireView): Promise<NewsStory[]> {
     ? stories
         .filter((story) => new Date(story.publishedAt).getTime() >= Date.now() - DAY_MS)
         .sort((a, b) => b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-        .slice(0, STORY_LIMIT)
-    : stories.slice(0, STORY_LIMIT);
+        .slice(0, storyLimit)
+    : stories.slice(0, storyLimit);
 }
 
 function interleave(groups: NewsStory[][]): NewsStory[] {
@@ -262,8 +288,15 @@ function message(err: unknown): string {
   return String(err).slice(0, 160);
 }
 
-async function loadFeed(view: NewsWireView, previous: NewsFeed | null): Promise<NewsFeed> {
-  const [hn, lobsters] = await Promise.allSettled([fetchHackerNews(view), fetchLobsters(view)]);
+async function loadFeed(
+  view: NewsWireView,
+  previous: NewsFeed | null,
+  storyLimit: number,
+): Promise<NewsFeed> {
+  const [hn, lobsters] = await Promise.allSettled([
+    fetchHackerNews(view, storyLimit),
+    fetchLobsters(view, storyLimit),
+  ]);
   const hnStories = hn.status === 'fulfilled' ? hn.value : [];
   const lobsterStories = lobsters.status === 'fulfilled' ? lobsters.value : [];
   const states: NewsSourceState[] = [
@@ -303,24 +336,30 @@ async function loadFeed(view: NewsWireView, previous: NewsFeed | null): Promise<
 
 export async function getNewsFeed(
   view: NewsWireView,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; limit?: number } = {},
 ): Promise<NewsFeed> {
+  const storyLimit = normalizeNewsLimit(opts.limit);
+  const cacheKey = `${view}:${storyLimit}`;
   const now = Date.now();
-  const existing = cache.get(view);
+  const existing = cache.get(cacheKey);
   if (!opts.force && existing?.value && existing.expiresAt > now) {
     return { ...existing.value, cached: true };
   }
   if (!opts.force && existing?.pending) return existing.pending;
 
-  const pending = loadFeed(view, existing?.value ?? null).then((value) => {
-    cache.set(view, { value, expiresAt: Date.now() + CACHE_TTL_MS, pending: null });
+  const pending = loadFeed(view, existing?.value ?? null, storyLimit).then((value) => {
+    cache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_TTL_MS, pending: null });
     return value;
   });
-  cache.set(view, { value: existing?.value ?? null, expiresAt: existing?.expiresAt ?? 0, pending });
+  cache.set(cacheKey, {
+    value: existing?.value ?? null,
+    expiresAt: existing?.expiresAt ?? 0,
+    pending,
+  });
   try {
     return await pending;
   } catch (err) {
-    cache.set(view, existing ?? { value: null, expiresAt: 0, pending: null });
+    cache.set(cacheKey, existing ?? { value: null, expiresAt: 0, pending: null });
     throw err;
   }
 }

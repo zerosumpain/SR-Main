@@ -1,5 +1,9 @@
 import type { PageServerLoad } from './$types';
-import { getNewsFeed } from '$lib/news/sources';
+import {
+  getNewsFeed,
+  MAX_NEWS_STORIES_PER_SOURCE,
+  normalizeNewsLimit,
+} from '$lib/news/sources';
 import { getNewsStats } from '$lib/news/stats';
 import { listNewsFavourites, newsOwnerKey } from '$lib/news/favourites';
 import type { NewsFeed, NewsSort, NewsView, NewsWireView } from '$lib/news/types';
@@ -18,6 +22,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
         ? 'points'
         : 'time';
   const force = url.searchParams.has('fresh');
+  const limit = normalizeNewsLimit(url.searchParams.get('limit'));
   const ownerKey = await newsOwnerKey(locals);
   const feedPromise: Promise<NewsFeed> =
     view === 'favourites'
@@ -44,7 +49,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
           newSinceLast: 0,
           cached: true,
         }))
-      : getNewsFeed(view as NewsWireView, { force });
+      : getNewsFeed(view as NewsWireView, { force, limit });
   const [feed, stats] = await Promise.all([feedPromise, getNewsStats(ownerKey)]);
-  return { feed, stats, sort };
+  return { feed, stats, sort, limit, maxLimit: MAX_NEWS_STORIES_PER_SOURCE };
 };

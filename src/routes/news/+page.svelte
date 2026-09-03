@@ -32,11 +32,22 @@
 
   function feedHref(view: 'top' | 'new' | 'best'): string {
     const sort = view === 'best' ? 'points' : view === 'new' ? 'time' : data.sort;
-    return `/news?view=${view}&sort=${sort}`;
+    return `/news?view=${view}&sort=${sort}&limit=${data.limit}`;
   }
 
   function sortHref(sort: 'time' | 'points'): string {
-    return `/news?view=${data.feed.view}&sort=${sort}`;
+    return `/news?view=${data.feed.view}&sort=${sort}&limit=${data.limit}`;
+  }
+
+  const nextLimit = $derived(Math.min(data.limit + 25, data.maxLimit));
+  const canLoadMore = $derived(
+    data.feed.view !== 'favourites' &&
+      data.limit < data.maxLimit &&
+      data.feed.sources.some((item) => item.ok && item.count >= data.limit),
+  );
+
+  function moreHref(): string {
+    return `/news?view=${data.feed.view}&sort=${data.sort}&limit=${nextLimit}`;
   }
 
   function timeAgo(iso: string): string {
@@ -172,7 +183,7 @@
         <span>Find</span>
         <input type="search" bind:value={query} placeholder="title, tag, source…" />
       </label>
-      <a class="refresh" href="/news?view={data.feed.view}&sort={data.sort}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
+      <a class="refresh" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
     </div>
 
     {#if stories.length === 0}
@@ -184,8 +195,12 @@
     {:else}
       <ol class="story-list">
         {#each stories as story, index (story.key)}
-          <li>
-            <a class="story" href="/news/{story.source}/{story.id}">
+          <li class="story">
+            <a
+              class="story-reader"
+              href="/news/{story.source}/{story.id}"
+              aria-label="Read and summarise: {story.title}"
+            >
               <span class="story-index">{String(index + 1).padStart(2, '0')}</span>
               <span class="story-source source-{story.source}">{sourceCode(story.source)}</span>
               <span class="story-main">
@@ -201,11 +216,34 @@
                 <span><b>{story.score}</b> points</span>
                 <span><b>{story.commentCount}</b> replies</span>
               </span>
-              <span class="story-arrow" aria-hidden="true">→</span>
             </a>
+            <span class="story-actions">
+              <a
+                class="story-action"
+                href={story.url}
+                target="_blank"
+                rel="noopener"
+                aria-label="Open original article: {story.title}"
+              >Article <span aria-hidden="true">↗</span></a>
+              <a
+                class="story-action"
+                href={story.discussionUrl}
+                target="_blank"
+                rel="noopener"
+                aria-label="Open comments for: {story.title}"
+              >Comments <span aria-hidden="true">↗</span></a>
+            </span>
           </li>
         {/each}
       </ol>
+      {#if canLoadMore}
+        <div class="more-stories">
+          <span>Showing up to {data.limit} stories from each source</span>
+          <a href={moreHref()}>Show 25 more from each →</a>
+        </div>
+      {:else if data.feed.view !== 'favourites' && data.limit > 25}
+        <p class="more-stories complete">All available stories in this view are loaded.</p>
+      {/if}
     {/if}
   </section>
 </div>
@@ -246,9 +284,10 @@
   .search input { width: 100%; min-width: 0; padding: 11px 0; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-family: var(--font-body); font-size: var(--fs-body); }
   .refresh { display: flex; align-items: center; border-right: 0; }
   .story-list { margin: 0; padding: 0; list-style: none; }
-  .story-list li { border-bottom: 1px solid var(--line-hair); }
-  .story { display: grid; grid-template-columns: 38px 38px minmax(0, 1fr) 132px 22px; align-items: center; gap: 14px; min-height: 72px; padding: 10px 8px; color: var(--text-primary); text-decoration: none; transition: background var(--t-fast) var(--ease-out); }
+  .story { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-hair); transition: background var(--t-fast) var(--ease-out); }
   .story:hover { background: var(--accent-tint-04); }
+  .story-reader { display: grid; grid-template-columns: 38px 38px minmax(0, 1fr) 132px; align-items: center; gap: 14px; min-width: 0; min-height: 72px; padding: 10px 8px; color: var(--text-primary); text-decoration: none; }
+  .story-reader:focus-visible, .story-action:focus-visible, .more-stories a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .story-index { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); font-variant-numeric: tabular-nums; }
   .story-source { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid currentColor; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 700; color: var(--accent); }
   .story-source.source-lobsters { color: var(--accent-ink); }
@@ -259,8 +298,14 @@
   .story-category::before { content: '· '; color: var(--text-ghost); }
   .story-signal { display: grid; grid-template-columns: 1fr; gap: 4px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .story-signal b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .story-arrow { color: var(--accent); opacity: 0; transform: translateX(-5px); transition: opacity var(--t-fast), transform var(--t-fast); }
-  .story:hover .story-arrow { opacity: 1; transform: translateX(0); }
+  .story-actions { display: grid; grid-template-columns: repeat(2, minmax(86px, auto)); align-items: stretch; gap: 7px; padding: 12px 8px 12px 0; }
+  .story-action { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--line-strong); background: var(--surface-card); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
+  .story-action span { color: var(--accent); }
+  .story-action:hover { border-color: var(--accent); background: var(--accent-tint-08); color: var(--accent-ink); }
+  .more-stories { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 8px; border-bottom: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-ghost); }
+  .more-stories a { padding: 11px 14px; border: 1px solid var(--line-strong); color: var(--accent-ink); text-decoration: none; }
+  .more-stories a:hover { border-color: var(--accent); background: var(--accent-tint-08); }
+  .more-stories.complete { display: block; margin: 0; }
   .empty { padding: 54px 12px; border-bottom: 1px solid var(--line-strong); font-size: var(--fs-body); color: var(--text-muted); }
   @media (max-width: 1200px) {
     .desk-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -270,9 +315,11 @@
   }
   @media (max-width: 780px) {
     .search { border-left: 0; }
-    .story { grid-template-columns: 32px 34px minmax(0, 1fr); gap: 10px; padding: 11px 4px; }
+    .story { grid-template-columns: 1fr; }
+    .story-reader { grid-template-columns: 32px 34px minmax(0, 1fr); gap: 10px; padding: 11px 4px 7px; }
     .story-signal { grid-column: 3; display: flex; gap: 14px; }
-    .story-arrow { display: none; }
+    .story-actions { grid-template-columns: repeat(2, max-content); justify-content: end; padding: 0 4px 11px 78px; }
+    .story-action { min-height: 36px; }
   }
   @media (max-width: 560px) {
     .desk-tools { grid-template-columns: minmax(0, 1fr) auto; }
@@ -290,9 +337,13 @@
     .desk-summary dd { margin-top: 6px; }
     .desk { padding-top: 38px; }
     .desk-head { align-items: center; }
-    .story { grid-template-columns: 30px minmax(0, 1fr); }
+    .story-reader { grid-template-columns: 30px minmax(0, 1fr); }
     .story-index { display: none; }
     .story-main { grid-column: 2; }
     .story-signal { grid-column: 2; }
+    .story-actions { justify-content: stretch; padding-left: 44px; }
+    .story-action { padding-inline: 10px; }
+    .more-stories { align-items: stretch; flex-direction: column; }
+    .more-stories a { text-align: center; }
   }
 </style>
