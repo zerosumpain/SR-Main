@@ -6,9 +6,73 @@
   import type { PageData } from './$types';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import LoopScoreboard from '$lib/components/jkai/daydream/LoopScoreboard.svelte';
+  import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
+  import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
 
   let { data }: { data: PageData } = $props();
+
+  // The loop as six even cells, in the order the work flows. A zero is a
+  // fact and stays quiet; the first non-zero stage after a zero is where the
+  // loop is currently stuck.
+  const story = $derived(data.story);
+  const cells = $derived<RollupCell[]>([
+    {
+      key: 'faults',
+      mark: '1',
+      label: 'Faults raised',
+      value: String(story.faults.open),
+      suffix: story.faults.total ? `/${story.faults.total}` : null,
+      sub: Object.entries(story.faults.byWants).map(([w, n]) => `${n} ${w.replace('_', ' ')}`).join(' · ') || 'nothing daydream could not do',
+      tone: story.faults.open ? 'action' : 'quiet',
+      href: '/jkai/daydreams/engine',
+    },
+    {
+      key: 'ideas',
+      mark: '2',
+      label: 'Ideas queued',
+      value: String(story.backlog.open),
+      sub: `${story.backlog.engine} about the engine itself · ${story.backlog.shipped} shipped all time`,
+      tone: story.backlog.open ? 'steady' : 'quiet',
+      href: '#improvement-ledger',
+    },
+    {
+      key: 'tools',
+      mark: '3',
+      label: `Tools built, ${data.loop.tools.windowDays}d`,
+      value: String(data.loop.tools.shippedRecently),
+      sub: `${data.loop.tools.shippedRecentlyCalled} of them called`,
+      tone: data.loop.tools.shippedRecently ? (data.loop.tools.shippedRecentlyCalled ? 'good' : 'watch') : 'quiet',
+    },
+    {
+      key: 'signals',
+      mark: '4',
+      label: 'Tool signals swept',
+      value: String(data.loop.toolSignals?.sweepable ?? 0),
+      suffix: data.loop.toolSignals ? `/${data.loop.toolSignals.registered}` : null,
+      sub: data.loop.toolSignals ? `${data.loop.toolSignals.observing} observing · ${data.loop.toolSignals.minPairs} days to join` : 'not read',
+      tone: (data.loop.toolSignals?.sweepable ?? 0) ? 'good' : 'quiet',
+      href: '/jkai/daydreams/engine',
+    },
+    {
+      key: 'findings',
+      mark: '5',
+      label: 'Findings, 7 days',
+      value: String(story.findings7d),
+      sub: 'survived the false-discovery correction; carded into pondering',
+      tone: story.findings7d ? 'good' : 'quiet',
+      href: '/jkai/daydreams/discoveries',
+    },
+    {
+      key: 'thoughts',
+      mark: '6',
+      label: 'Thoughts, 7 days',
+      value: String(story.thoughts7d),
+      sub: 'raised across every family',
+      tone: story.thoughts7d ? 'steady' : 'quiet',
+      href: '/jkai/daydreams/feed',
+    },
+  ]);
 </script>
 
 <section class="band">
@@ -19,8 +83,20 @@
       strap="Two dashboards showed everything about the self-improvement engine except whether a single thing it built was ever called. On the day this merged: 33 tools shipped, none used."
     />
     <LoopScoreboard health={data.loop} verdict={data.loopVerdict} />
+  </div>
+</section>
+
+<section class="band sunken">
+  <div class="inner">
+    <SectionHead
+      kicker="B / The loop, end to end"
+      title={['What it could not do,', 'and what that built']}
+      strap="Six stages in the order the work flows: a fault daydream raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
+    />
+    {#if story.error}<p class="err">{story.error}</p>{/if}
+    <RollupGrid {cells} min={190} />
     {#if data.improvement}
-      <div class="ledger">
+      <div class="ledger" id="improvement-ledger">
         <ImprovementPanel data={data.improvement} embedded />
       </div>
     {:else}

@@ -33,6 +33,7 @@ import { proposeFeatures } from './propose';
 import { optimiseCalls } from './optimise';
 import { finalizeAndNotify } from './report';
 import type { QuestionInsights } from './types';
+import { faultNeeds } from '$lib/daydream/faults';
 
 // ---------------------------------------------------------------------------
 // Budget
@@ -266,7 +267,7 @@ export async function runImprovementNow(
           return r.actions;
         },
       ],
-      ['discover', async () => discoverApis(state.insights, budget)],
+      ['discover', async () => discoverApis(state.insights, budget, await faultNeeds().catch(() => []))],
       ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
       // Repair runs AFTER build so a night that ships nothing new still has a
       // chance to fix something that already exists.

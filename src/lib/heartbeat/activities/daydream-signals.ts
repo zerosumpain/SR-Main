@@ -231,6 +231,38 @@ export const daydreamSignalsRefresh: ActivityHandler = {
     const refreshed = await refreshSignalStats();
     details.signalsRefreshed = refreshed;
 
+    // ── The fault ledger, and the return edge ────────────────────────────
+    // Sources that went quiet and sources that errored are faults with a
+    // shape (`connector`); a self-built tool signal that has become sweepable
+    // closes the metric faults whose name it carries — the loop's return leg.
+    try {
+      const { raiseFault, closeFaultsForSignals } = await import('$lib/daydream/faults');
+      const { silentSources } = await import('$lib/daydream/starvation');
+      const { listSweepableSignals } = await import('$lib/daydream/signals/registry');
+      const { MIN_PAIRS } = await import('$lib/daydream/stats/tests');
+      const silent = await silentSources(new Date());
+      for (const s of silent) {
+        void raiseFault({ kind: 'silent_source', identifier: s.source, site: 'daydream-signals', detail: `${s.signals} registered signal(s) from ${s.source} have recorded nothing for ten days` });
+      }
+      const errored: Array<[string, string | null | undefined]> = [
+        ['ha', (details.ha as { error?: string } | undefined)?.error],
+        ['research', ((details.research as { errors?: string[] } | undefined)?.errors ?? [])[0]],
+        ['segments', (details.segments as { error?: string | null } | undefined)?.error],
+        ['health', (details.health as { error?: string | null } | undefined)?.error],
+        ['weather', ((details.weather as { errors?: string[] } | undefined)?.errors ?? [])[0]],
+        ['graph', ((details.graph as { errors?: string[] } | undefined)?.errors ?? [])[0]],
+      ];
+      for (const [source, err] of errored) {
+        if (err) void raiseFault({ kind: 'source_error', identifier: source, site: 'daydream-signals', detail: String(err).slice(0, 300) });
+      }
+      const sweepableTools = (await listSweepableSignals(MIN_PAIRS)).filter((s) => s.source === 'tool').map((s) => ({ key: s.key, label: s.label }));
+      const closed = await closeFaultsForSignals(sweepableTools);
+      if (closed) notes.push(`${closed} fault(s) closed by a self-built signal`);
+      details.faults = { silent: silent.length, closed };
+    } catch (err) {
+      details.faults = { error: err instanceof Error ? err.message : String(err) };
+    }
+
     return {
       outcome: 'ok',
       summary: notes.join('; ') || 'nothing to discover',

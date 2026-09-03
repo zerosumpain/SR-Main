@@ -313,8 +313,10 @@ export interface BacklogItemData {
   slug: string;
   title: string;
   detail: string;
-  /** 'tool' = buildable as a runtime custom tool; 'feature' = needs repo code. */
-  kind: 'tool' | 'feature';
+  /** 'tool' = buildable as a runtime custom tool; 'feature' = needs repo code;
+   *  'engine' = a proposal about the daydream engine itself — never picked by
+   *  the toolsmith, never a PR, visible on the ledger for the owner. */
+  kind: 'tool' | 'feature' | 'engine';
   status: BacklogStatus;
   /** 1 (highest) … 5. Drives pick order. */
   priority: number;

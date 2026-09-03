@@ -82,9 +82,12 @@ function coerceCandidate(json: unknown): SeedApiEntry | null {
 export async function discoverApis(
   insights: QuestionInsights | undefined,
   budget: Budget,
+  /** Needs the daydream fault ledger raised — a source that went quiet, a
+   *  metric nothing writes. Searched for ahead of the question-mined ones. */
+  extraNeeds: string[] = [],
 ): Promise<RunAction[]> {
   const actions: RunAction[] = [];
-  const needs = (insights?.topUnmet ?? []).map(needText).filter(Boolean).slice(0, MAX_NEEDS);
+  const needs = [...extraNeeds, ...(insights?.topUnmet ?? []).map(needText)].filter(Boolean).slice(0, MAX_NEEDS);
   if (needs.length === 0) return actions;
 
   const { executeTool } = await import('$lib/workflows/site-tools/registry');

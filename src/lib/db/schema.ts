@@ -4821,6 +4821,43 @@ export const daydreamSweepFindings = pgTable(
 export type DaydreamSweepFinding = typeof daydreamSweepFindings.$inferSelect;
 
 /**
+ * What daydreaming could not do, kept.
+ *
+ * Every failure site used to name its failure on the pulse and forget it.
+ * This is the ledger self-improve reads FIRST: a metric nobody writes, a
+ * source the reviewer could not reach, a tool that returns nothing. One row
+ * per (kind, identifier); a re-raise updates the count. `wants` is the shape
+ * of the fix in a closed vocabulary so the toolsmith builds the right thing
+ * or correctly declines.
+ */
+export const daydreamFaults = pgTable(
+  'daydream_faults',
+  {
+    id: serial('id').primaryKey(),
+    /** metric_unknown | needs_source | audit_drop | lead_barren | lookup_failed | tool_failed | tool_barren | silent_source | source_error */
+    kind: text('kind').notNull(),
+    identifier: text('identifier').notNull(),
+    /** numeric_tool | reader_tool | connector | more_days | repair | decline */
+    wants: text('wants').notNull(),
+    site: text('site').notNull(),
+    detail: text('detail'),
+    subject: text('subject'),
+    count: integer('count').notNull().default(1),
+    status: text('status').notNull().default('open'),
+    closedBy: text('closed_by'),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_faults_key_idx').on(t.kind, t.identifier),
+    index('daydream_faults_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamFault = typeof daydreamFaults.$inferSelect;
+
+/**
  * One row per local day, per subject — the table that makes a cross-domain
  * correlation computable at all.
  *

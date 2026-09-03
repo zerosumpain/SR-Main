@@ -486,7 +486,7 @@ export function isRetrievalFailure(r: Pick<ReviewResult, 'verdict' | 'sources' |
 /** Record a verdict against a thought. */
 export async function recordReview(id: string, r: ReviewResult): Promise<void> {
   const [row] = await db
-    .select({ kind: daydreamThoughts.kind })
+    .select({ kind: daydreamThoughts.kind, evidence: daydreamThoughts.evidence, title: daydreamThoughts.title })
     .from(daydreamThoughts)
     .where(eq(daydreamThoughts.id, id))
     .limit(1);
@@ -524,6 +524,15 @@ export async function recordReview(id: string, r: ReviewResult): Promise<void> {
       updatedAt: new Date(),
     })
     .where(eq(daydreamThoughts.id, id));
+  if (reviewReason === 'needs_source' && row) {
+    // A fault per SOURCE KIND, not per thought: the missing thing is a reader
+    // for that kind of row, and the same reader fixes every thought citing it.
+    const kinds = [...new Set(((row.evidence ?? []) as Array<{ kind?: string }>).map((e) => e?.kind).filter((k): k is string => !!k && k !== 'features'))];
+    const { raiseFault } = await import('./faults');
+    for (const k of kinds.length ? kinds : ['unknown']) {
+      void raiseFault({ kind: 'needs_source', identifier: k, site: 'adjudicate/recordReview', detail: `the reviewer could not retrieve ${k} rows for “${row.title.slice(0, 80)}”: ${(r.reasoning ?? '').slice(0, 200)}` });
+    }
+  }
   if (graph) {
     try {
       await applyVerifiedGraphLink(id);
