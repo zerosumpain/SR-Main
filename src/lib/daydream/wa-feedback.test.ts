@@ -22,6 +22,23 @@ describe('matchFeedbackReply — the closed phrase list', () => {
   });
 });
 
+describe('matchRelevanceReply / isWhyReply', () => {
+  it('reads the relevance vocabulary and rate N, never a bare digit', async () => {
+    const { matchRelevanceReply, isWhyReply } = await import('./wa-feedback');
+    expect(matchRelevanceReply('matters')).toBe(4);
+    expect(matchRelevanceReply('Really matters!')).toBe(5);
+    expect(matchRelevanceReply("doesn't matter")).toBe(1);
+    expect(matchRelevanceReply('not my concern')).toBe(1);
+    expect(matchRelevanceReply('marginal')).toBe(2);
+    expect(matchRelevanceReply('rate 4')).toBe(4);
+    expect(matchRelevanceReply('3/5')).toBe(3);
+    expect(matchRelevanceReply('4')).toBeNull();
+    expect(matchRelevanceReply('that matters to me a lot actually')).toBeNull();
+    expect(isWhyReply('Why?')).toBe(true);
+    expect(isWhyReply('why is the sky blue')).toBe(false);
+  });
+});
+
 describe('chooseChannel — WhatsApp preference (D3)', () => {
   // Verified, because the channel choice now sits behind the review gate — a
   // thought nobody has checked is silent whatever channel is available.

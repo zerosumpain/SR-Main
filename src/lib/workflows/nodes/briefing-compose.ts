@@ -28,6 +28,7 @@ export interface BriefingFact {
   /** Pre-formatted, unit-correct. The LLM may quote this and nothing else. */
   value: string;
   source: string;
+  href?: string | null;
 }
 
 export interface BriefingGap {
@@ -384,49 +385,22 @@ export const briefingComposeExecutor: NodeExecutor = {
 
     // ---- Daydreams (self-sourced) ---------------------------------------
     // The one section no canvas node feeds: the daydream engine lives in this
-    // codebase, so the composer reads its ledger directly rather than asking
-    // the owner to rewire the production canvas. Optional by design — a
-    // briefing without it is a briefing, so its failure records a soft gap,
-    // never a truth violation.
+    // codebase, so the composer reads its ledger directly. ONE daily summary
+    // now — `$lib/daydream/briefing` — deterministic, every fact linked, and
+    // the same block the WhatsApp message carries verbatim. Optional by
+    // design: its failure records a soft gap, never a truth violation.
+    let daydreamsText = '';
+    let daydreamsDay: string | null = null;
     try {
-      const { db } = await import('$lib/db');
-      const { daydreamThoughts, daydreamLeads } = await import('$lib/db/schema');
-      const { and, desc, eq, gte, sql: dsql } = await import('drizzle-orm');
-      const since = new Date(Date.now() - 24 * 3_600_000);
-
-      const said = await db
-        .select({ title: daydreamThoughts.title, kind: daydreamThoughts.kind })
-        .from(daydreamThoughts)
-        .where(and(eq(daydreamThoughts.status, 'delivered'), gte(daydreamThoughts.deliveredAt, since)))
-        .orderBy(desc(daydreamThoughts.score))
-        .limit(2);
-      const [held] = await db
-        .select({ n: dsql<number>`count(*)::int` })
-        .from(daydreamThoughts)
-        .where(and(eq(daydreamThoughts.status, 'suppressed'), gte(daydreamThoughts.updatedAt, since)));
-      const [open] = await db
-        .select({ n: dsql<number>`count(*)::int` })
-        .from(daydreamLeads)
-        .where(eq(daydreamLeads.status, 'open'));
-
-      if (said.length) {
-        facts.push({
-          section: 'Daydreams',
-          label: 'It said',
-          value: said.map((t) => `“${t.title}”`).join(' · ').slice(0, 300),
-          source: 'daydream',
-        });
-      }
-      if ((held?.n ?? 0) > 0) {
-        facts.push({ section: 'Daydreams', label: 'Held back', value: `${held.n} below the bar`, source: 'daydream' });
-      }
-      if ((open?.n ?? 0) > 0) {
-        facts.push({ section: 'Daydreams', label: 'Investigating', value: `${open.n} open line${open.n === 1 ? '' : 's'} of enquiry`, source: 'daydream' });
-      }
-      if (said.length || (held?.n ?? 0) > 0 || (open?.n ?? 0) > 0) {
-        record('daydreams', 'Daydreams', 'ok', `${said.length} said, ${held?.n ?? 0} held`);
+      const { buildDaydreamBriefing } = await import('$lib/daydream/briefing');
+      const dd = await buildDaydreamBriefing(new Date());
+      daydreamsText = dd.text;
+      daydreamsDay = dd.day;
+      for (const f of dd.facts) facts.push({ section: f.section, label: f.label, value: f.value, source: f.source, href: f.href });
+      if (dd.status === 'ok') {
+        record('daydreams', 'Daydreams', 'ok', `${dd.counts.sent} said, ${dd.counts.held} held for you, ${dd.counts.refuted} caught`);
       } else {
-        record('daydreams', 'Daydreams', 'empty', 'a quiet day — nothing raised, nothing held');
+        record('daydreams', 'Daydreams', 'empty', 'a quiet day — nothing said, nothing held, nothing caught');
       }
     } catch (err) {
       record('daydreams', 'Daydreams', 'failed', err instanceof Error ? err.message : String(err));
@@ -642,6 +616,10 @@ export const briefingComposeExecutor: NodeExecutor = {
         requiredGaps,
         availableCount: sources.filter((s) => s.status === 'ok').length,
         gapCount: gaps.length,
+        // The Daydreams block for the WhatsApp message, verbatim — a summary
+        // the vehicle may drop is not a vehicle.
+        daydreamsText,
+        daydreamsDay,
       },
       rowCount: facts.length,
     };
@@ -663,6 +641,8 @@ export const briefingComposeExecutor: NodeExecutor = {
         facts: { type: 'array', description: '[{ section, label, value, source }] — every value the briefing may state' },
         gaps: { type: 'array', description: '[{ section, reason }] — sources that produced nothing' },
         sources: { type: 'array', description: '[{ key, label, status, detail, error }] — the audit ledger' },
+        daydreamsText: { type: 'string', description: 'The Daydreams block for the message, ≤ 8 lines, to include verbatim' },
+        daydreamsDay: { type: 'string', description: 'The local day the Daydreams block describes (YYYY-MM-DD)' },
         factSheet: { type: 'string', description: 'Rendered FACTS block for the LLM prompt' },
         gapSheet: { type: 'string', description: 'Rendered GAPS block for the LLM prompt' },
         headline: { type: 'string', description: 'Deterministic one-line summary, true without any LLM' },

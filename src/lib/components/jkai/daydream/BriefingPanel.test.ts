@@ -73,15 +73,22 @@ function renderPanel(briefings: BriefingData[]) {
 }
 
 describe('BriefingPanel composition', () => {
-  it('renders the briefing, memory handoff, and collapsed evidence as one view', () => {
+  it('opens the briefing on the deck and rollup, keeps the memory handoff, and links every day out', () => {
     const html = renderPanel([latestBriefing]);
 
+    // The headline and the memory handoff survived the rebuild.
     expect(html).toContain('A clear start, with one thing worth watching');
     expect(html).toContain('Short operational summaries are easier to act on.');
-    expect(html).toContain('Sources and evidence');
-    expect(html).toContain('<details class="evidence');
+    // The run deck.
+    expect(html).toContain('Sources reporting');
+    expect(html).toContain('Facts used');
+    // Every rollup cell points at the day page's matching section, and the
+    // strip links the day itself. The evidence drawer moved there wholesale.
+    expect(html).toContain('/jkai/daydreams/briefing/briefing-1#sec-weather');
+    expect(html).toContain('/jkai/daydreams/briefing/briefing-1#sec-run-health');
+    expect(html).toContain('href="/jkai/daydreams/briefing/briefing-1"');
+    expect(html).not.toContain('Sources and evidence');
     expect(html).not.toContain('Decide what earns attention');
-    expect(html).not.toContain('br-sec');
   });
 
   it('renders configuration instead of an empty legacy briefing', () => {
@@ -89,7 +96,7 @@ describe('BriefingPanel composition', () => {
 
     expect(html).toContain('Decide what earns attention');
     expect(html).toContain('Editorial priorities');
-    expect(html).not.toContain('Sources and evidence');
-    expect(html).not.toContain('Earlier briefings');
+    expect(html).not.toContain('Sources reporting');
+    expect(html).not.toContain('Earlier days');
   });
 });

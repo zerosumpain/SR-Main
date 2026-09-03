@@ -1,6 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { briefingComposeExecutor } from '$lib/workflows/nodes/briefing-compose';
 import type { ExecutionContext } from '$lib/workflows/types';
+
+// The Daydreams section reads the LIVE ledger, and this file tests the
+// composer, not the ledger — a dev database with four hypotheses in it made
+// "an empty briefing" carry a Questions fact. Pin the section to empty.
+vi.mock('$lib/daydream/briefing', () => ({
+  buildDaydreamBriefing: async () => ({
+    day: '2026-09-02',
+    facts: [],
+    text: '• A quiet day — nothing said, nothing held, nothing caught.',
+    status: 'empty',
+    counts: { sent: 0, held: 0, refuted: 0, applied: 0, placesNamed: 0, expired: 0, memoriesLearned: 0 },
+    digest: null,
+  }),
+}));
 
 const ctx: ExecutionContext = {
   runId: 'test-run',
