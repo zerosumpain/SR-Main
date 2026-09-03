@@ -4,6 +4,9 @@ import { buildJourneySignals } from '$lib/daydream/signals/journeys';
 import { mirrorFeatures } from '$lib/daydream/signals/mirror';
 import { backfillWeather } from '$lib/daydream/signals/weather';
 import { buildGraphSignals } from '$lib/daydream/signals/graph';
+import { buildResearchSignals } from '$lib/daydream/signals/research';
+import { buildSegmentSignals, segmentsSampledToday } from '$lib/daydream/signals/segments';
+import { buildHealthDerivedSignals, healthSampledToday } from '$lib/daydream/signals/health-derived';
 import {
   alreadySampledToday,
   harvestToolSignals,
@@ -38,6 +41,12 @@ interface SignalsConfig {
    *  archive does not revise itself, so re-pulling a year nightly would be a
    *  free service being leaned on for nothing. Backfill runs separately. */
   weatherDays?: number;
+  /** Trailing days of research / timeline activity to (re)compute each run. */
+  researchDays?: number;
+  /** Sample segment form once a day. */
+  harvestSegments?: boolean;
+  /** Sample the /health derived layer once a day. */
+  harvestHealth?: boolean;
 }
 
 const DEFAULTS: Required<SignalsConfig> = {
@@ -47,6 +56,9 @@ const DEFAULTS: Required<SignalsConfig> = {
   journeyWindowDays: 30,
   weatherDays: 7,
   graphWindowDays: 120,
+  researchDays: 30,
+  harvestSegments: true,
+  harvestHealth: true,
 };
 
 /**
@@ -184,6 +196,36 @@ export const daydreamSignalsRefresh: ActivityHandler = {
       notes.push(`graph: ${graph.signals} signals over ${graph.days} days`);
       details.graph = graph;
       if (graph.errors.length) notes.push(`graph errors: ${graph.errors.length}`);
+    }
+
+    // ── The facets that joined in September ──────────────────────────────
+    // Research and the timeline as daily rates; segment form and the health
+    // hub's derived layer once a day. Each registers itself; nothing here
+    // names a series by hand.
+    if (cfg.researchDays > 0) {
+      const research = await buildResearchSignals({ days: cfg.researchDays });
+      notes.push(`research: ${research.readings} readings over ${research.days} days`);
+      details.research = research;
+      if (research.errors.length) notes.push(`research errors: ${research.errors.length}`);
+    }
+    {
+      const day = localDay(new Date());
+      if (cfg.harvestSegments) {
+        if (await segmentsSampledToday(day)) details.segments = { skipped: 'already sampled today' };
+        else {
+          const seg = await buildSegmentSignals(day);
+          details.segments = seg;
+          notes.push(seg.error ? `segments: ${seg.error}` : `segments: ${seg.readings} readings`);
+        }
+      }
+      if (cfg.harvestHealth) {
+        if (await healthSampledToday(day)) details.health = { skipped: 'already sampled today' };
+        else {
+          const hd = await buildHealthDerivedSignals(day);
+          details.health = hd;
+          notes.push(hd.error ? `health derived: ${hd.error}` : `health derived: ${hd.readings} readings`);
+        }
+      }
     }
 
     const refreshed = await refreshSignalStats();

@@ -16,6 +16,7 @@ import { loadRelevanceRows } from '$lib/daydream/thought-store';
 import { meanRelevance } from '$lib/daydream/scoring';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { loadResolvedEffort } from '$lib/daydream/effort.server';
 
 const NAME = 'daydream-compose';
 
@@ -91,7 +92,15 @@ export const daydreamCompose: ActivityHandler = {
     }
 
     const before = isCodexModel ? await readQuotaMark() : null;
-    const plan = budget.plan;
+    // The propose share adds candidates to the budget's plan and the test
+    // share decides whether the verify pass is worth its call; the caps in
+    // budget.ts still bound the whole thing.
+    const effort = await loadResolvedEffort();
+    const plan = {
+      ...budget.plan,
+      maxCandidates: budget.plan.maxCandidates + effort.compose.extraCandidates,
+      verify: budget.plan.verify && effort.compose.verify,
+    };
 
     const { value: threshold } = await loadThreshold();
     const [rateState, pushable, waOwner, routes, relevanceRows] = await Promise.all([

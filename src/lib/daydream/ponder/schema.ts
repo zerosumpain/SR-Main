@@ -23,6 +23,15 @@ export type MusingTheme = (typeof MUSING_THEMES)[number];
 export const MAX_MUSINGS = 4;
 export const MAX_LEADS = 2;
 export const MAX_ACTION_RULES = 1;
+
+/** Per-run caps. The shipped numbers by default; the effort dial moves the
+ *  first two (`effort.ts`), never the rule cap — a rule buzzes a phone. */
+export interface PonderCaps {
+  maxMusings: number;
+  maxLeads: number;
+  maxActionRules: number;
+}
+export const DEFAULT_PONDER_CAPS: PonderCaps = { maxMusings: MAX_MUSINGS, maxLeads: MAX_LEADS, maxActionRules: MAX_ACTION_RULES };
 export const MAX_MUSING_CHARS = 300;
 
 export interface ValidMusing {
@@ -89,7 +98,7 @@ export function resolveMetric(raw: string): string | null {
   return METRIC_BY_NORMALISED.get(trimmed.toLowerCase().replace(/[^a-z0-9]/g, '')) ?? null;
 }
 
-export function validatePonderOutput(parsed: unknown, pack: FactPack): PonderValidation {
+export function validatePonderOutput(parsed: unknown, pack: FactPack, caps: PonderCaps = DEFAULT_PONDER_CAPS): PonderValidation {
   const out: PonderValidation = { musings: [], leads: [], actionRules: [], rejected: [], coerced: [] };
   if (parsed == null || typeof parsed !== 'object') {
     out.rejected.push('output is not an object');
@@ -100,7 +109,7 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack): PonderVal
   // ── Musings ──
   const musings = Array.isArray(o.musings) ? o.musings : [];
   for (const raw of musings) {
-    if (out.musings.length >= MAX_MUSINGS) {
+    if (out.musings.length >= caps.maxMusings) {
       out.rejected.push('musing over the per-run cap');
       continue;
     }
@@ -162,7 +171,7 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack): PonderVal
   // ── Lines of enquiry ──
   const leads = Array.isArray(o.leads) ? o.leads : [];
   for (const raw of leads) {
-    if (out.leads.length >= MAX_LEADS) { out.rejected.push('lead over the per-run cap'); continue; }
+    if (out.leads.length >= caps.maxLeads) { out.rejected.push('lead over the per-run cap'); continue; }
     const l = raw as Record<string, unknown>;
     const leadKey = typeof l.leadKey === 'string' ? l.leadKey.trim() : '';
     const title = typeof l.title === 'string' ? l.title.trim() : '';
@@ -206,8 +215,8 @@ export function validatePonderOutput(parsed: unknown, pack: FactPack): PonderVal
 
   // ── Standing action rules — validated downstream by the rules machinery ──
   const rules = Array.isArray(o.actionRules) ? o.actionRules : [];
-  for (const raw of rules.slice(0, MAX_ACTION_RULES)) out.actionRules.push(raw);
-  if (rules.length > MAX_ACTION_RULES) out.rejected.push('action rule over the per-run cap');
+  for (const raw of rules.slice(0, caps.maxActionRules)) out.actionRules.push(raw);
+  if (rules.length > caps.maxActionRules) out.rejected.push('action rule over the per-run cap');
 
   return out;
 }

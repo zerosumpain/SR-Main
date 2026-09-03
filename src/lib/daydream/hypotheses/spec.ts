@@ -71,15 +71,21 @@ export function hypothesisKey(s: Pick<HypothesisSpec, 'a' | 'b' | 'lagDays'>): s
  * that learns to game the validator by trial and error is a proposer producing
  * whatever passes rather than whatever is worth asking.
  */
-export function validateHypothesis(raw: unknown): ValidationResult {
+/** Whether a metric name is a registered SIGNAL key rather than a day-feature
+ *  column — `ha:sensor.x#state`, `tool:name#field`, `weather:…`. */
+export function isSignalKey(metric: string): boolean {
+  return metric.includes(':');
+}
+
+export function validateHypothesis(raw: unknown, allowed: ReadonlySet<string> = METRIC_SET): ValidationResult {
   const fail = (reason: string): ValidationResult => ({ ok: false, reason, spec: null });
   if (!raw || typeof raw !== 'object') return fail('not an object');
   const o = raw as Record<string, unknown>;
 
   const a = typeof o.a === 'string' ? o.a : '';
   const b = typeof o.b === 'string' ? o.b : '';
-  if (!METRIC_SET.has(a)) return fail(`unknown metric: ${a || '(missing)'}`);
-  if (!METRIC_SET.has(b)) return fail(`unknown metric: ${b || '(missing)'}`);
+  if (!allowed.has(a)) return fail(`unknown metric: ${a || '(missing)'}`);
+  if (!allowed.has(b)) return fail(`unknown metric: ${b || '(missing)'}`);
   if (a === b) return fail('a metric cannot predict itself');
 
   // The same list the exhaustive sweep uses. A model proposing "does resting

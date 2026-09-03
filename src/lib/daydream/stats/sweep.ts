@@ -226,6 +226,42 @@ export function column(rows: Row[], key: string): Array<number | null> {
   });
 }
 
+/**
+ * Daily values for named SIGNAL keys, for a hypothesis that names a signal
+ * rather than a day-feature column. Keyed day → value; the caller aligns them
+ * to the feature store's days so the two kinds of metric pair up.
+ */
+export async function loadSignalColumns(
+  keys: string[],
+  opts: { windowDays?: number; subject?: string; now?: Date } = {},
+): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
+  if (keys.length === 0) return out;
+  const windowDays = opts.windowDays ?? 120;
+  const subject = opts.subject ?? DEFAULT_SUBJECT;
+  const now = opts.now ?? new Date();
+  const from = new Date(now.getTime() - windowDays * 86_400_000);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const rows = await db
+    .select({ day: daydreamObservations.day, signalKey: daydreamObservations.signalKey, value: daydreamObservations.valueMean })
+    .from(daydreamObservations)
+    .where(
+      and(
+        gte(daydreamObservations.day, iso(from)),
+        lte(daydreamObservations.day, iso(now)),
+        inArray(daydreamObservations.signalKey, keys),
+        or(eq(daydreamObservations.subject, subject), eq(daydreamObservations.subject, 'household')),
+      ),
+    );
+  for (const r of rows) {
+    if (r.value == null) continue;
+    let m = out.get(r.signalKey);
+    if (!m) out.set(r.signalKey, (m = new Map()));
+    m.set(String(r.day), r.value);
+  }
+  return out;
+}
+
 /** Whether a column carries any variation at all. Two distinct values is the
  *  minimum that can produce a correlation of any kind. */
 function isConstant(column: Array<number | null>): boolean {
@@ -249,7 +285,7 @@ function isConstant(column: Array<number | null>): boolean {
  * A day with no reading has no row, and stays null here. Absent is never zero.
  */
 export async function loadSignalMatrix(
-  opts: { windowDays?: number; subject?: string; now?: Date; minDays?: number } = {},
+  opts: { windowDays?: number; subject?: string; now?: Date; minDays?: number; maxSignals?: number } = {},
 ): Promise<{
   days: string[];
   series: Map<string, Array<number | null>>;
@@ -270,7 +306,7 @@ export async function loadSignalMatrix(
   // Best-attested first, then capped — see MAX_SWEEP_SIGNALS.
   const chosen = [...eligible]
     .sort((a, b) => b.observedDays - a.observedDays || a.key.localeCompare(b.key))
-    .slice(0, MAX_SWEEP_SIGNALS);
+    .slice(0, Math.max(1, opts.maxSignals ?? MAX_SWEEP_SIGNALS));
 
   if (chosen.length === 0) {
     return { days: [], series: new Map(), labels, considered: eligible.length, constant: 0 };
@@ -342,17 +378,19 @@ export async function loadSignalMatrix(
  * same guarantee.
  */
 export async function runSweep(
-  opts: { windowDays?: number; subject?: string; fdr?: number; now?: Date } = {},
+  opts: { windowDays?: number; subject?: string; fdr?: number; now?: Date; maxSignals?: number } = {},
 ): Promise<SweepResult> {
   const windowDays = opts.windowDays ?? 120;
   const fdr = opts.fdr ?? DEFAULT_FDR;
   const now = opts.now ?? new Date();
+  const maxSignals = Math.max(1, opts.maxSignals ?? MAX_SWEEP_SIGNALS);
   const errors: string[] = [];
 
   const { days, series, labels, considered, constant } = await loadSignalMatrix({
     windowDays,
     subject: opts.subject ?? DEFAULT_SUBJECT,
     now,
+    maxSignals,
   });
 
   const result: SweepResult = {
@@ -372,7 +410,7 @@ export async function runSweep(
 
   const capped = Math.max(0, considered - series.size - constant);
   if (capped > 0) {
-    errors.push(`capped at ${MAX_SWEEP_SIGNALS} signals; ${capped} eligible were not tested`);
+    errors.push(`capped at ${maxSignals} signals; ${capped} eligible were not tested`);
   }
 
   if (days.length < MIN_PAIRS) {

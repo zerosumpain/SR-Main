@@ -105,3 +105,54 @@ export function renderSteers(steers: Array<{ text: string }>): string {
     'the metrics available, ignore it and propose something that can.',
   ].join('\n');
 }
+
+// ── The notebook is the steer now (2026-09-03, D4) ───────────────────────
+//
+// `daydream_steers` had zero rows in a week of production; the notebook is
+// the owner-written surface that gets used. A steer is a note tagged `steer`
+// (status active). The table stays, unread. The shape returned here matches
+// what the feed and the proposer already consume.
+
+export const STEER_TAG = 'steer';
+
+export interface SteerNote {
+  id: string;
+  text: string;
+  status: 'active' | 'done';
+  batchesInfluenced: number;
+  subject: string;
+}
+
+function noteToSteer(n: { id: string; title: string; body: string; status: string; reviewCount: number }): SteerNote {
+  const text = (n.title?.trim() || n.body?.trim() || '').slice(0, MAX_STEER_LENGTH);
+  return { id: n.id, text, status: n.status === 'archived' ? 'done' : 'active', batchesInfluenced: n.reviewCount ?? 0, subject: 'john' };
+}
+
+/** Every steer note, active first. */
+export async function listSteerNotes(): Promise<SteerNote[]> {
+  const { listNotes } = await import('../notebook/store');
+  const notes = await listNotes({ includeArchived: true });
+  return notes
+    .filter((n) => (n.tags ?? []).includes(STEER_TAG))
+    .map(noteToSteer)
+    .sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1));
+}
+
+/** The active steers, capped like the table's were. */
+export async function activeSteerNotes(): Promise<SteerNote[]> {
+  return (await listSteerNotes()).filter((s) => s.status === 'active').slice(0, MAX_ACTIVE_STEERS);
+}
+
+export async function addSteerNote(text: string): Promise<SteerNote[]> {
+  const clean = text.trim().slice(0, MAX_STEER_LENGTH);
+  if (!clean) throw new Error('a steer needs some words');
+  const { saveNote } = await import('../notebook/store');
+  await saveNote({ title: clean, body: clean, folder: 'steers', tags: [STEER_TAG] });
+  return listSteerNotes();
+}
+
+export async function setSteerNoteStatus(id: string, status: 'active' | 'done' | 'dropped'): Promise<SteerNote[]> {
+  const { saveNote } = await import('../notebook/store');
+  await saveNote({ id, status: status === 'active' ? 'active' : 'archived' });
+  return listSteerNotes();
+}

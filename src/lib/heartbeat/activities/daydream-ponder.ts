@@ -11,6 +11,7 @@ import { resolveDaydreamModel } from '$lib/daydream/compose';
 import { runPonder } from '$lib/daydream/ponder/run';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { loadResolvedEffort } from '$lib/daydream/effort.server';
 
 const NAME = 'daydream-ponder';
 
@@ -65,6 +66,7 @@ export const daydreamPonder: ActivityHandler = {
     const model = await resolveDaydreamModel();
     const isCodexModel = model.provider === 'codex';
     const budget = await budgetStatus({ now, isCodexModel });
+    const effort = await loadResolvedEffort();
     if (budget.blocked) {
       return { outcome: 'skipped', summary: `budget: ${budget.blockedReason}`, details: { budget } };
     }
@@ -72,7 +74,12 @@ export const daydreamPonder: ActivityHandler = {
     const before = isCodexModel ? await readQuotaMark() : null;
     let result;
     try {
-      result = await runPonder({ now, verify: budget.plan.verify });
+      result = await runPonder({
+        now,
+        verify: budget.plan.verify && effort.compose.verify,
+        lookupBudget: effort.ponder.lookupBudget,
+        caps: { maxMusings: effort.ponder.maxMusings, maxLeads: effort.ponder.maxLeads },
+      });
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };
     }

@@ -26,6 +26,9 @@ import { isJudgeable, rankLeads, scoreLead, shouldAbandon, type LeadStats } from
 
 /** How many lines of enquiry advance in one run. */
 export const MAX_LEADS_PER_RUN = 3;
+/** The ceiling the effort dial may raise a round to. Above this a round is
+ *  no longer spare cycles. */
+export const HARD_MAX_LEADS_PER_RUN = 8;
 
 /**
  * A hard ceiling on a lead's whole life.
@@ -127,7 +130,7 @@ export async function runExplorationRound(
 ): Promise<RoundResult> {
   const subject = opts.subject ?? DEFAULT_SUBJECT;
   const now = opts.now ?? new Date();
-  const maxLeads = Math.min(opts.maxLeads ?? MAX_LEADS_PER_RUN, MAX_LEADS_PER_RUN);
+  const maxLeads = Math.max(1, Math.min(opts.maxLeads ?? MAX_LEADS_PER_RUN, HARD_MAX_LEADS_PER_RUN));
   const result: RoundResult = { ...EMPTY_ROUND, errors: [] };
 
   const open = await db

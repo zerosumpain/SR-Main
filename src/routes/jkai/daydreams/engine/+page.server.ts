@@ -10,6 +10,8 @@ import {
   type DetectorRow,
   type EngineState,
 } from '$lib/daydream/ledger';
+import { DEFAULT_EFFORT, type Effort } from '$lib/daydream/effort';
+import { loadEffort } from '$lib/daydream/effort.server';
 import { loadProvenance } from '$lib/daydream/provenance';
 import { loadDeliveryStats, loadJobSchedules, type DeliveryStats, type JobSchedule } from '$lib/daydream/rooms/engine.server';
 import { loadRoutes } from '$lib/daydream/routes.server';
@@ -40,6 +42,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       schedules,
       routes,
       deliveryStats,
+      effort,
     ] = await Promise.all([
       parent(),
       loadDetectorRows(),
@@ -52,6 +55,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       loadJobSchedules(),
       loadRoutes(),
       loadDeliveryStats(),
+      loadEffort(),
     ]);
     const engine = hub.engine;
     return {
@@ -66,6 +70,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       schedules,
       routes,
       deliveryStats,
+      effort,
       loadError: null,
     };
   } catch (err) {
@@ -87,6 +92,9 @@ export const load: PageServerLoad = async ({ parent }) => {
     // it means "every route is still the default" — so it is `{}`, not null.
     const routes: RouteOverrides = {};
     const deliveryStats: DeliveryStats | null = null;
+    // The dial is a SETTING, not a measurement: if the ledger read failed the
+    // shipped shares are still the honest answer, so the sliders render at 50.
+    const effort: Effort = DEFAULT_EFFORT;
     const counts: Awaited<ReturnType<typeof loadCounts>> = {
       byStatus: {},
       places: 0,
@@ -112,6 +120,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       schedules,
       routes,
       deliveryStats,
+      effort,
       loadError: errMsg(err),
     };
   }

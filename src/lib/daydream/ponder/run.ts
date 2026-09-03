@@ -33,9 +33,8 @@ import { buildProfileLines } from './profile';
 import { SWEEP_METRICS, ENTANGLED_PAIRS } from '../stats/sweep';
 import { MIN_PAIRS } from '../stats/tests';
 import {
-  MAX_ACTION_RULES,
-  MAX_LEADS,
-  MAX_MUSINGS,
+  DEFAULT_PONDER_CAPS,
+  type PonderCaps,
   MUSING_THEMES,
   validatePonderOutput,
 } from './schema';
@@ -272,6 +271,28 @@ async function notebookCards(): Promise<PackInputs['aggregates']> {
   }
 }
 
+/**
+ * What the sweep found, carded — the return leg discovery never had. Only
+ * findings that cleared the correction, only the last week, and phrased as
+ * a measurement over N days rather than a claim, so a musing that leans on
+ * one cites a card the audit can check.
+ */
+async function sweepCards(): Promise<PackInputs['aggregates']> {
+  try {
+    const { recentFindings } = await import('../stats/findings');
+    const rows = await recentFindings({ days: 7, limit: 6 });
+    return rows.map((f) => ({
+      key: `sweep:${f.a}|${f.b}|${f.lagDays}`,
+      text:
+        `Correlation (${f.subject}${f.lagDays ? ', one day later' : ', same day'}): ` +
+        `${f.aLabel ?? f.a} and ${f.bLabel ?? f.b} move ${f.r < 0 ? 'opposite ways' : 'together'} ` +
+        `(r ${f.r.toFixed(2)} over ${f.n} days, q ${f.qValue.toFixed(2)}, found ${f.day})`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function recentVerdicts(): Promise<PackInputs['verdicts']> {
   try {
     return await db
@@ -374,6 +395,7 @@ function systemPrompt(
   profileLines: string[],
   ctx: { open: string[]; menu: string[] },
   refuted: string[],
+  caps: PonderCaps = DEFAULT_PONDER_CAPS,
 ): string {
   return [
     "You are the pondering half of John's second brain. On spare cycles you look across everything it knows — family, diary, money, health, email facts, its own past discoveries — and notice crossings worth surfacing: something happening now that connects to a pattern, something coming up that the past says needs acting on early, a question worth investigating.",
@@ -409,7 +431,7 @@ function systemPrompt(
     // Position matters as much as presence here, the same way `serves` had to
     // move ahead of the JSON shape before it was ever populated: the keys sit
     // WITH the rule that requires them, not in a footnote.
-    `6. A lead = {"leadKey","title","rationale","metrics"} — a line of statistical enquiry worth pursuing over weeks. At most ${MAX_LEADS}.`,
+    `6. A lead = {"leadKey","title","rationale","metrics"} — a line of statistical enquiry worth pursuing over weeks. At most ${caps.maxLeads}.`,
     `   "metrics" MUST be 2 to 6 of these EXACT keys, copied character for character. Nothing else is a metric, and a label you read off a card above is not one.`,
     `   The number beside each is how many days it has recorded — the MOST any pair using it could overlap. A pair needs ${MIN_PAIRS} shared days to be testable at all, so prefer metrics with plenty and never pair two thin ones.`,
     // The menu carries each metric's day count, so a pair that cannot be
@@ -427,21 +449,22 @@ function systemPrompt(
         ]
       : []),
     `   Example: {"leadKey":"sleep-and-time-out","title":"Does time out of the house drive sleep?","rationale":"Sleep has swung 40 minutes across the week while time out of the house doubled on three of those days.","metrics":["sleepMinutes","minutesOut"]}`,
-    `7. An actionRule is a STANDING behaviour (fires on its own once approved): the full rule-spec shape with an added "action". Propose at most ${MAX_ACTION_RULES}, and only when a pattern clearly repeats.`,
-    `8. At most ${MAX_MUSINGS} musings. Fewer, sharper.`,
+    `7. An actionRule is a STANDING behaviour (fires on its own once approved): the full rule-spec shape with an added "action". Propose at most ${caps.maxActionRules}, and only when a pattern clearly repeats.`,
+    `8. At most ${caps.maxMusings} musings. Fewer, sharper.`,
   ].join('\n');
 }
 
 export async function runPonder(
-  opts: { now?: Date; verify?: boolean; subject?: string; lookupBudget?: number } = {},
+  opts: { now?: Date; verify?: boolean; subject?: string; lookupBudget?: number; caps?: Partial<PonderCaps> } = {},
 ): Promise<PonderResult> {
   const now = opts.now ?? new Date();
   const subject = opts.subject ?? DEFAULT_SUBJECT;
+  const caps: PonderCaps = { ...DEFAULT_PONDER_CAPS, ...(opts.caps ?? {}) };
   const result: PonderResult = { ...EMPTY, musings: { ...EMPTY.musings, createdKeys: [] }, rejected: [], coerced: [], lookups: { asked: 0, cards: 0, failed: 0 }, tokens: { prompt: 0, completion: 0 } };
 
   try {
     const snapshot = await buildSnapshot({ now, subject });
-    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook] = await Promise.all([
+    const [verdicts, aggregates, signals, week, profileLines, diaryNotes, rulings, notebook, sweep] = await Promise.all([
       recentVerdicts(),
       featureAggregates(now),
       signalAggregates(now),
@@ -450,6 +473,7 @@ export async function runPonder(
       diaryNoteCards(),
       rulingCardsFor(),
       notebookCards(),
+      sweepCards(),
     ]);
     const leadCtx = await leadContext(subject);
     // The lookup stage. Code names a gap in what it has just assembled, calls a
@@ -472,7 +496,7 @@ export async function runPonder(
       // reviewer has already SETTLED. Those two go nearest the instruction
       // because they are the two that override: a correction he typed, and a
       // claim that has been checked against the sources and found wanting.
-      aggregates: [...aggregates, ...signals, ...notebook, ...diaryNotes, ...rulings.cards],
+      aggregates: [...aggregates, ...signals, ...sweep, ...notebook, ...diaryNotes, ...rulings.cards],
       weekAhead: week,
       feedbackLines: [],
       profileLines,
@@ -490,7 +514,7 @@ export async function runPonder(
       temperature: 0.7,
       max_tokens: 1800,
       messages: [
-        { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines) },
+        { role: 'system', content: systemPrompt(profileLines, leadCtx, rulings.refutedLines, caps) },
         { role: 'user', content: renderPack(pack) },
       ],
     });
@@ -510,7 +534,7 @@ export async function runPonder(
       return result;
     }
 
-    const audit = validatePonderOutput(parsed, pack);
+    const audit = validatePonderOutput(parsed, pack, caps);
     result.rejected = audit.rejected;
     result.coerced = audit.coerced;
 

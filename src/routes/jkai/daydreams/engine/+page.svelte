@@ -17,6 +17,7 @@
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
   import EngineActivityPanel from '$lib/components/jkai/daydream/rooms/EngineActivityPanel.svelte';
+  import EngineEffort from '$lib/components/jkai/daydream/rooms/EngineEffort.svelte';
   import EngineRules from '$lib/components/jkai/daydream/rooms/EngineRules.svelte';
   import EngineDetectors from '$lib/components/jkai/daydream/rooms/EngineDetectors.svelte';
   import EngineProvenance from '$lib/components/jkai/daydream/rooms/EngineProvenance.svelte';
@@ -240,7 +241,19 @@
 <section class="band">
   <div class="inner">
     <SectionHead
-      kicker="C / Budget"
+      kicker="C / How hard to think"
+      title={['Where the thinking', 'goes, not how much']}
+      strap="Three shares. Discovery is mostly free statistics plus one proposer call, testing is the expensive reviewer, proposing is the composer — one knob could not favour one over another. At 50 every number is what the engine shipped with, so a dial nobody has touched changes nothing."
+    />
+
+    <EngineEffort effort={data.effort} onchanged={invalidateAll} />
+  </div>
+</section>
+
+<section class="band sunken">
+  <div class="inner">
+    <SectionHead
+      kicker="D / Budget"
       title={['What thinking', 'is allowed to cost']}
       strap={budget ? `Running ${budget.modelId}.` : 'Could not read the model or the usage meter.'}
     />
@@ -278,10 +291,10 @@
   </div>
 </section>
 
-<section class="band sunken" id="dd-rules">
+<section class="band" id="dd-rules">
   <div class="inner">
     <SectionHead
-      kicker="D / Rules jkai wrote"
+      kicker="E / Rules jkai wrote"
       title={['Proposed as data,', 'never as code']}
       strap="A condition over a fixed list of facts. Each is validated and replayed against your history before it reaches you, and nothing fires until you approve it."
     />
@@ -292,7 +305,7 @@
 <section class="band">
   <div class="inner">
     <SectionHead
-      kicker="E / Detectors"
+      kicker="F / Detectors"
       title={['What each one', 'is waiting for']}
       strap="Each declares the history it needs before it may speak and returns nothing below that. A weight of ×1.00 means the ledger has no opinion about it yet."
     />
@@ -303,7 +316,7 @@
 <section class="band sunken">
   <div class="inner">
     <SectionHead
-      kicker="F / Coverage"
+      kicker="G / Coverage"
       title={['How much of', 'each day it saw']}
       strap="Thirty days. A low figure is a phone that stopped reporting, not a day nobody moved — the two are the same shape in the data and only this line separates them. A gap is a day with no row at all."
     />
@@ -325,7 +338,7 @@
 <section class="band">
   <div class="inner">
     <SectionHead
-      kicker="G / Ponder telemetry"
+      kicker="H / Ponder telemetry"
       title={['The fabrication', 'meter']}
       strap="“Audit dropped” counts musings deleted for citing evidence that does not exist. A rising number means the model is reaching; zero means the wide view is holding."
     />
@@ -364,10 +377,10 @@
   </div>
 </section>
 
-<section class="band sunken" id="dd-provenance">
+<section class="band" id="dd-provenance">
   <div class="inner">
     <SectionHead
-      kicker="H / What reaches the reasoning"
+      kicker="I / What reaches the reasoning"
       title={['Registered is not', 'the same as used']}
       strap="A series joins the sweep only once it has {provenance.minPairs} observed days, and the proposer may only ask about a fixed vocabulary — so a sensor can be recording, correlating and still never be the subject of a question."
     />
@@ -380,10 +393,10 @@
   </div>
 </section>
 
-<section class="band" id="dd-routes">
+<section class="band sunken" id="dd-routes">
   <div class="inner">
     <SectionHead
-      kicker="I / Where each kind may go"
+      kicker="J / Where each kind may go"
       title={['A ceiling,', 'never a promise']}
       strap="Set the highest channel a family — or one kind inside it — is allowed to reach. Kind beats family; clearing an override puts the row back on the default, so a later change to the defaults still moves it."
     />
@@ -391,10 +404,10 @@
   </div>
 </section>
 
-<section class="band sunken" id="dd-delivery">
+<section class="band" id="dd-delivery">
   <div class="inner">
     <SectionHead
-      kicker="J / What reached you"
+      kicker="K / What reached you"
       title={['Sent, held,', 'and the next slot']}
       strap="The interruption budget, and every reason a thought was held today. A hold is the routes and the policy doing their job — it is only a fault when the same reason is the whole column."
     />

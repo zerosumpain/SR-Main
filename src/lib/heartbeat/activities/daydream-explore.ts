@@ -7,6 +7,8 @@ import {
 } from '$lib/daydream/leads/run';
 import { SETTINGS_ENABLED_KEY } from '$lib/daydream/types';
 import type { ActivityHandler } from '../types';
+import { applyEffort } from '$lib/daydream/effort';
+import { loadResolvedEffort } from '$lib/daydream/effort.server';
 
 const NAME = 'daydream-explore';
 
@@ -43,7 +45,8 @@ export const daydreamExplore: ActivityHandler = {
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
 
   async run(ctx) {
-    const cfg = { ...DEFAULTS, ...(ctx.config as ExploreConfig) };
+    const effort = await loadResolvedEffort();
+    const cfg = { ...DEFAULTS, ...(ctx.config as ExploreConfig), ...applyEffort(ctx.config as Record<string, unknown>, { maxLeads: effort.explore.maxLeads }) };
 
     const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
     if (enabled === false) {
