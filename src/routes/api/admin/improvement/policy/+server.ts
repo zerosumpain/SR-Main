@@ -42,8 +42,9 @@ export const POST: RequestHandler = async ({ request }) => {
  * The engine could always publish; the owner could only revert. That left the
  * overlay's biggest lever unreachable: `promoteToEssential` lifts a tool out of
  * the `jkai_extended` dispatcher into direct visibility, which removes a whole
- * round trip per first use — and `optimise.ts` never emits one, because its
- * prompt asks for a rewritten DESCRIPTION, not a visibility change.
+ * round trip per first use. The optimiser now emits that change only after a
+ * deployed acceptance test and repeated use; this endpoint remains the owner's
+ * explicit route to start the same measured trial sooner.
  *
  * Published exactly like an engine version: same collection, same immutable
  * `v:<n>` record, same trial, same automatic rollback if calls-per-turn does

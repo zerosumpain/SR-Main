@@ -10,7 +10,7 @@
 import { errMsg, type QuestionInsights, type RunAction, type SeedApiEntry } from './types';
 import type { Budget } from './run';
 
-const MAX_NEEDS = 3;
+const MAX_NEEDS = 4;
 
 function needText(need: unknown): string {
   return typeof need === 'string' ? need : String((need as { intent?: string })?.intent ?? need ?? '');
@@ -31,12 +31,15 @@ function buildProposeMessages(
   webResults: unknown,
 ): Array<{ role: 'system' | 'user'; content: string }> {
   const system =
-    'You are an integrations engineer. Given an unmet data need and some web-search results, propose ONE concrete, ' +
-    'PUBLIC, no-auth (or clearly documented) HTTP API that could satisfy it. Respond with ONLY a JSON object: ' +
+    'You are an integrations engineer improving the intelligence available to JKAI, Daydream and the site. Given ' +
+    'an unmet data/service need and web-search results, propose ONE concrete, durable HTTP API, open dataset, feed, ' +
+    'or documented online service that could satisfy it. Prefer authoritative current sources with stable docs and ' +
+    'a useful machine-readable response over novelty APIs. Public/no-auth is best; authenticated services are valid ' +
+    'only when their credential requirement and environment-variable handle are explicit. Respond with ONLY JSON: ' +
     '{"name": string, "baseUrl": string, "docsUrl": string, "description": string, "capabilities": string[], ' +
     '"tags": string[], "auth": {"kind":"none"} | {"kind":"bearer-env","envVar":string} | {"kind":"header-env","envVar":string,"header":string}, ' +
     '"exampleRequests": [{"label": string, "method": "GET", "url": string}]}. ' +
-    'The exampleRequests urls MUST start with baseUrl and be safe GET requests. Prefer no-auth APIs. ' +
+    'The exampleRequests urls MUST start with baseUrl and be safe GET requests. ' +
     'If no suitable real public API exists, respond with {"none": true}. No prose outside the JSON.';
   const user = `Unmet need: ${need}\n\nWeb search results:\n${JSON.stringify(webResults, null, 2).slice(0, 6000)}`;
   return [
@@ -87,7 +90,8 @@ export async function discoverApis(
   extraNeeds: string[] = [],
 ): Promise<RunAction[]> {
   const actions: RunAction[] = [];
-  const needs = [...extraNeeds, ...(insights?.topUnmet ?? []).map(needText)].filter(Boolean).slice(0, MAX_NEEDS);
+  const needs = [...new Set([...extraNeeds, ...(insights?.topUnmet ?? []).map(needText)].filter(Boolean))]
+    .slice(0, MAX_NEEDS);
   if (needs.length === 0) return actions;
 
   const { executeTool } = await import('$lib/workflows/site-tools/registry');
@@ -105,7 +109,7 @@ export async function discoverApis(
       let webResults: unknown = null;
       try {
         const web = await executeTool('research_web_search', {
-          query: `public JSON HTTP API for ${need}`,
+          query: `authoritative API open dataset feed or online service for ${need}`,
         });
         webResults = web.success ? web.data : null;
       } catch (err) {

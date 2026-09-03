@@ -40,6 +40,11 @@ import {
   snapshotOf,
 } from './efficiency';
 import { TRIAL, errMsg, parseJsonLoose, type RunAction } from './types';
+import {
+  loadDeployedCapabilitiesForPromotion,
+  pickPromotionCandidate,
+  PROMOTION_MIN_JKAI_RUNS,
+} from './deployment';
 
 /** Trim to `max` chars on a word boundary — ledger details and the WhatsApp
  *  summary both render these, and a mid-word cut ("drastical") reads as a bug. */
@@ -404,7 +409,61 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
     return actions;
   }
 
-  // ── 3. Author one overlay for the biggest remaining pattern ───────────────
+  // ── 3. Promote a proved self-built capability before tuning descriptions ──
+  //
+  // A custom tool lives behind jkai_extended when first shipped. Previously no
+  // autonomous path ever changed that: optimise only rewrote descriptions, so
+  // even a tested, repeatedly-used capability could never become directly
+  // visible. Promotion is itself a normal measured policy trial and therefore
+  // retains the same automatic keep/revert safety net.
+  const current = await getActivePolicy();
+  const deployed = await loadDeployedCapabilitiesForPromotion(
+    current.promoteToEssential,
+    current.trial?.status === 'running' ? current.targetTool : undefined,
+  );
+  const promotion = pickPromotionCandidate(deployed);
+  if (promotion) {
+    try {
+      const published = await publishPolicy({
+        rationale:
+          `${promotion.name} passed a deployed acceptance test and was then used outside the test harness ` +
+          `${promotion.jkaiRuns} times; trial direct visibility to remove its discovery round-trip.`,
+        targetTool: promotion.name,
+        overrides: current.overrides,
+        globalGuidance: current.globalGuidance,
+        promoteToEssential: [...new Set([...current.promoteToEssential, promotion.name])],
+        createdBy: 'engine',
+        baseline: snapshotOf(eff),
+      });
+      actions.push({
+        kind: 'policy_published',
+        detail:
+          `v${published.version} promotes ${promotion.name} after a live acceptance test and ` +
+          `${promotion.jkaiRuns} JKAI/ambient runs — direct access on measured trial.`,
+        story: {
+          subject: promotion.name,
+          driver:
+            `The deployed capability passed owner acceptance and was used at least ` +
+            `${PROMOTION_MIN_JKAI_RUNS} times outside the Self Improvement test harness.`,
+          driverEvidence:
+            `${promotion.jkaiRuns} JKAI/ambient runs; ${promotion.errorCount} errors across ` +
+            `${promotion.runCount} total invocations`,
+          solution: 'Expose the capability directly to JKAI instead of requiring a discovery round-trip.',
+          outcome:
+            `Direct visibility is on trial from ${eff.chat.meanCalls} calls per chat turn and will be kept ` +
+            'only if the measured conversation cost improves.',
+        },
+      });
+      return actions;
+    } catch (err) {
+      actions.push({
+        kind: 'tool_rejected',
+        detail: `promotion trial for ${promotion.name} failed: ${errMsg(err).slice(0, 200)}`,
+      });
+    }
+  }
+
+  // ── 4. Author one overlay for the biggest remaining pattern ───────────────
   const registry = getTools();
   const byName = new Map(registry.map((t) => [t.name, t]));
 
@@ -544,7 +603,6 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
 
   // Carry the current overlay forward — a version is the FULL policy, not a
   // patch, so dropping the existing entries would silently revert kept work.
-  const current = await getActivePolicy();
   const overrides = sanitiseOverrides({
     ...current.overrides,
     [chosen.tool.name]: override,
