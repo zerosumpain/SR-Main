@@ -58,9 +58,19 @@ describe('buildSnapshot', () => {
     expect(s.coverage.last7d).toBeGreaterThanOrEqual(0);
     expect(s.coverage.last7d).toBeLessThanOrEqual(1);
 
-    // The offer index does not exist until merge 5, and says so rather than
-    // looking like an empty result.
-    expect(s.offers.available).toBe(false);
+    // `available` is about whether the INDEX EXISTS, not whether it currently
+    // holds anything — a read failure reports unavailable, an empty result
+    // reports available-and-empty. This used to assert `false` outright with
+    // the note "the offer index does not exist until merge 5". Merge 5 landed,
+    // the index exists, and the assertion has been failing every nightly since.
+    //
+    // Asserting the CONTRACT instead of one moment in the build order: whatever
+    // `available` says, the source row has to agree with it. That claim stays
+    // true whether or not the index is built, which is the point.
+    const offerSource = s.sources.find((x) => x.key === 'offers');
+    expect(offerSource).toBeTruthy();
+    expect(s.offers.available).toBe(offerSource!.status !== 'failed');
+    if (!s.offers.available) expect(s.offers.items).toHaveLength(0);
   });
 
   it('lets every detector judge its own readiness against real data without throwing', async () => {
