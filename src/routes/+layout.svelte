@@ -12,7 +12,15 @@
     store.initTier();
     store.startPolling();
 
+    let raf: number;
+    function loop() {
+      store.tick();
+      raf = requestAnimationFrame(loop);
+    }
+    loop();
+
     return () => {
+      cancelAnimationFrame(raf);
       store.stopPolling();
     };
   });

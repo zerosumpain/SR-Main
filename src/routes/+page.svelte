@@ -52,13 +52,7 @@
     if (BiomeBackground || biomeBackgroundLoading || biomeBackgroundFailed) return;
     biomeBackgroundLoading = true;
     try {
-      const [component] = await Promise.all([
-        import('$lib/components/BiomeBackground.svelte'),
-        // Settings belong to this optional renderer, not to every route that
-        // happens to inherit the root biome state for its header reading.
-        store.fetchSettings(),
-      ]);
-      BiomeBackground = component.default;
+      BiomeBackground = (await import('$lib/components/BiomeBackground.svelte')).default;
     } catch {
       biomeBackgroundFailed = true;
     } finally {

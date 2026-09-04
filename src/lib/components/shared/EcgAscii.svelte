@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { getContext, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { prefersReducedMotion } from '$lib/components/health/v2/utils';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
   import {
     SWEEP_SEC,
     LIFETIME,
@@ -33,20 +32,6 @@
   let town = $state<string | null>(null);
   let temp = $state<number | null>(null);
   let condition = $state<string | null>(null);
-  const biome = getContext<BiomeStore>('biome');
-
-  // Subscribe to the root reading rather than running an independent minute
-  // poll. All homepage renderers now share one state request and interpolation.
-  $effect(() => {
-    const state = biome?.state;
-    const nextPulse = state?.sources?.heartRate && state.pulse > 0 ? state.pulse : rhr;
-    bpm = Math.max(40, Math.min(220, Math.round(nextPulse)));
-    recovery = typeof state?.recovery === 'number' ? Math.round(state.recovery) : null;
-    strain = typeof state?.strain === 'number' ? state.strain : null;
-    town = typeof state?.town === 'string' ? state.town : null;
-    temp = typeof state?.weather?.temp === 'number' ? Math.round(state.weather.temp) : null;
-    condition = typeof state?.weather?.condition === 'string' ? state.weather.condition : null;
-  });
 
   // The narrative whose letters draw the trace: a looping ticker of the current
   // vital signs. commitColumn() consumes it character-by-character in sweep
@@ -68,6 +53,33 @@
     return segs.join(' · ') + ' · ';
   }
   let narrative = $derived(narrativeText());
+
+  // Same live-HR source as the line trace; also pulls the other vitals so the
+  // text stays current. Falls back to the prop / last value on failure.
+  async function refreshLiveHr() {
+    try {
+      const res = await fetch('/api/biome/state');
+      if (!res.ok) return;
+      const state = (await res.json()) as {
+        pulse?: number;
+        recovery?: number;
+        strain?: number;
+        town?: string;
+        weather?: { temp?: number; condition?: string };
+        sources?: { heartRate?: boolean };
+      };
+      if (state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0) {
+        bpm = Math.max(40, Math.min(220, Math.round(state.pulse)));
+      }
+      if (typeof state.recovery === 'number') recovery = Math.round(state.recovery);
+      if (typeof state.strain === 'number') strain = state.strain;
+      if (typeof state.town === 'string') town = state.town;
+      if (typeof state.weather?.temp === 'number') temp = Math.round(state.weather.temp);
+      if (typeof state.weather?.condition === 'string') condition = state.weather.condition;
+    } catch {
+      // ignore — keep last values
+    }
+  }
 
   function readAccent(): string {
     if (typeof window === 'undefined') return '#c4570a';
@@ -91,6 +103,8 @@
   let cursorEl: HTMLDivElement;
 
   onMount(() => {
+    refreshLiveHr();
+
     const accentRgb = toRgb(readAccent());
     const accent = rgba(accentRgb, 1);
     const glow = rgba(accentRgb, 0.55);
@@ -435,6 +449,8 @@
     layout();
 
     let ro: ResizeObserver | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
     if (reduced) {
       if (cursorEl) cursorEl.style.display = 'none'; // no live sweep ⇒ no cursor
       drawStatic();
@@ -443,8 +459,10 @@
         drawStatic();
       });
       ro.observe(canvasEl);
+      interval = setInterval(refreshLiveHr, 60_000);
       return () => {
         ro?.disconnect();
+        if (interval) clearInterval(interval);
       };
     }
 
@@ -587,12 +605,14 @@
     document.addEventListener('visibilitychange', onVisibility);
 
     start();
+    interval = setInterval(refreshLiveHr, 60_000);
 
     return () => {
       stop();
       io.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
       ro?.disconnect();
+      if (interval) clearInterval(interval);
       glr?.destroy();
     };
   });

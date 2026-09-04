@@ -35,9 +35,6 @@
     onShare,
     onNew,
     onClose,
-    hasMore = false,
-    loadingMore = false,
-    onLoadMore,
     liveConversationIds = [],
     openTabIds = [],
   }: {
@@ -52,9 +49,6 @@
     onShare: (c: ConversationItem) => void;
     onNew: () => void;
     onClose: () => void;
-    hasMore?: boolean;
-    loadingMore?: boolean;
-    onLoadMore?: () => void;
     liveConversationIds?: string[];
     openTabIds?: string[];
   } = $props();
@@ -214,11 +208,6 @@
             </article>
           {/each}
         </div>
-        {#if hasMore}
-          <button type="button" class="load-more" disabled={loadingMore} onclick={onLoadMore}>
-            {loadingMore ? 'Loading…' : 'Load older threads'}
-          </button>
-        {/if}
       {/if}
     </div>
 
@@ -257,9 +246,6 @@
   .channel-open { margin-left:auto; color:var(--accent); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; }
   .live-dot, .pulse { width:7px; height:7px; border-radius:50%; background:var(--wa-green); }
   .thread-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); border-top:1px solid var(--line-strong); border-left:1px solid var(--line-strong); }
-  .load-more { display:block; margin:18px auto 0; padding:9px 14px; border:1px solid var(--line-strong); background:var(--surface-sunken); color:var(--text-primary); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.08em; cursor:pointer; }
-  .load-more:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
-  .load-more:disabled { opacity:.55; cursor:wait; }
   .thread-card { min-width:0; display:flex; flex-direction:column; min-height:225px; border-right:1px solid var(--line-strong); border-bottom:1px solid var(--line-strong); background:var(--bg); }
   .thread-card.current { box-shadow:inset 4px 0 var(--accent); background:var(--accent-tint-04); }
   .thread-card.running { box-shadow:inset 0 3px var(--accent); }

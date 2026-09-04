@@ -1,13 +1,12 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { getContext, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import HubTokenStrip from './HubTokenStrip.svelte';
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
   import { SECTIONS, activeSection, parentHref, parentLabel } from '$lib/nav/site-nav';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
 
   let {
     tokensToday,
@@ -179,21 +178,37 @@
     };
   });
 
-  // Live heart rate — the root layout already owns this public state request.
-  // Subscribing to it prevents the JKAI header from creating another minute
-  // poll for data that is already in memory.
-  const biome = getContext<BiomeStore>('biome');
-  $effect(() => {
-    // The compact number does not need the five-second visual interpolation;
-    // observing the target avoids propagating a global hub update every frame.
-    const state = biome?.targetState;
-    setBpm(
-      state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0
-        ? Math.round(state.pulse)
-        : null,
-    );
+  // Live heart rate — the same public biome state the landing hero reads. Only
+  // shown when the health source is actually reporting, so the strip never
+  // carries a stale number.
+  onMount(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const res = await fetch('/api/biome/state');
+        if (!res.ok || cancelled) return;
+        const state = (await res.json()) as {
+          pulse?: number;
+          sources?: { heartRate?: boolean };
+        };
+        if (cancelled) return;
+        setBpm(
+          state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0
+            ? Math.round(state.pulse)
+            : null,
+        );
+      } catch {
+        // ignore — next poll retries
+      }
+    };
+    void pull();
+    const timer = setInterval(pull, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      setBpm(null);
+    };
   });
-  onMount(() => () => setBpm(null));
 </script>
 
 <header class="hub-hdr">

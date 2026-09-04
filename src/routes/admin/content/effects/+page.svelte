@@ -10,9 +10,7 @@
 
   let { data }: { data: PageData } = $props();
   const adminToken = getContext<string>('adminToken');
-  // Reuse the root store. The old admin-only store duplicated both biome
-  // network polls while this page was open.
-  const biomeStore = getContext<BiomeStore>('biome');
+  const biomeStore = getContext<BiomeStore>('biomeStore');
 
   let settings = $state<BiomeSettings>({ ...BIOME_SETTINGS_DEFAULTS, ...data.settings });
   let saving = $state(false);

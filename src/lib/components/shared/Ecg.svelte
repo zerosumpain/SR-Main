@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { getContext, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { prefersReducedMotion } from '$lib/components/health/v2/utils';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
   import {
     SWEEP_SEC,
     LIFETIME,
@@ -34,15 +33,6 @@
 
   // svelte-ignore state_referenced_locally
   let bpm = $state(rhr);
-  const biome = getContext<BiomeStore>('biome');
-
-  // The root store owns the network read. Keeping the trace subscribed to it
-  // avoids a second /api/biome/state poll for the same number.
-  $effect(() => {
-    const live = biome?.state;
-    const next = live?.sources?.heartRate && live.pulse > 0 ? live.pulse : rhr;
-    bpm = Math.max(40, Math.min(220, Math.round(next)));
-  });
 
   // Static grid (drawn as its own SVG layer so the phosphor fade can't erase
   // it). Only rendered when showGrid is set.
@@ -51,6 +41,21 @@
     grid.push({ key: 'gx' + x, x1: x, y1: 0, x2: x, y2: H, major: x % 120 === 0 });
   for (let y = 0; y <= H; y += 24)
     grid.push({ key: 'gy' + y, x1: 0, y1: y, x2: W, y2: y, major: y % 120 === 0 });
+
+  // Pull the same live-HR source the homepage biome uses; fall back to the
+  // prop value if the call fails or returns no pulse.
+  async function refreshLiveHr() {
+    try {
+      const res = await fetch('/api/biome/state');
+      if (!res.ok) return;
+      const state = (await res.json()) as { pulse?: number; sources?: { heartRate?: boolean } };
+      if (state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0) {
+        bpm = Math.max(40, Math.min(220, Math.round(state.pulse)));
+      }
+    } catch {
+      // ignore — keep last bpm
+    }
+  }
 
   function readAccent(): string {
     if (typeof window === 'undefined') return '#c4570a';
@@ -71,6 +76,8 @@
   let cursorEl: HTMLDivElement | undefined;
 
   onMount(() => {
+    refreshLiveHr();
+
     const ctx0 = canvasEl.getContext('2d');
     if (!ctx0) return;
     // Non-null alias: TS doesn't carry the `!ctx0` narrowing into the rAF
@@ -92,6 +99,8 @@
     // out across 40–160 bpm). Returns pixels of full-scale deflection.
     const ampPx = () => H * 0.34 * ampGain(bpm);
 
+    let interval: ReturnType<typeof setInterval> | undefined;
+
     if (prefersReducedMotion()) {
       // Static strip: one screen of beats at full opacity, deterministic.
       if (cursorEl) cursorEl.style.display = 'none';
@@ -111,7 +120,8 @@
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
-      return;
+      interval = setInterval(refreshLiveHr, 60_000);
+      return () => interval && clearInterval(interval);
     }
 
     // Animated phosphor sweep -------------------------------------------------
@@ -131,17 +141,7 @@
     // Age → opacity band, via the shared quadratic fade.
     const bandOf = (t: number) => fadeBand((clock - t) / LIFETIME);
 
-    let running = false;
-    let inView = true;
-    let pageVisible = !document.hidden;
-    const canRun = () => inView && pageVisible;
-
     function tick(now: number) {
-      if (!canRun()) {
-        running = false;
-        raf = 0;
-        return;
-      }
       let dt = (now - last) / 1000;
       last = now;
       if (dt > 0.1) dt = 0.1; // guard against huge jumps after a tab refocus
@@ -228,42 +228,12 @@
       raf = requestAnimationFrame(tick);
     }
 
-    function start() {
-      if (running || !canRun()) return;
-      running = true;
-      last = performance.now();
-      raf = requestAnimationFrame(tick);
-    }
-
-    function stop() {
-      running = false;
-      if (raf) cancelAnimationFrame(raf);
-      raf = 0;
-    }
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        inView = entries[0]?.isIntersecting ?? true;
-        if (inView) start();
-        else stop();
-      },
-      { threshold: 0 },
-    );
-    io.observe(canvasEl);
-
-    const onVisibility = () => {
-      pageVisible = !document.hidden;
-      if (pageVisible) start();
-      else stop();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    start();
+    raf = requestAnimationFrame(tick);
+    interval = setInterval(refreshLiveHr, 60_000);
 
     return () => {
-      stop();
-      io.disconnect();
-      document.removeEventListener('visibilitychange', onVisibility);
+      cancelAnimationFrame(raf);
+      if (interval) clearInterval(interval);
     };
   });
 </script>
