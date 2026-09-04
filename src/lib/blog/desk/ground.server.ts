@@ -17,7 +17,7 @@
 
 import { getLLMClient } from '$lib/llm/client';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
-import { hostnameOf, rateSource } from '$lib/blog/reputable-domains';
+import { hostnameOf, rankSources } from '$lib/blog/reputable-domains';
 import { anchorHash } from './anchor';
 import type { Evidence, Finding } from './types';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
@@ -208,22 +208,17 @@ export async function extractClaims(plainText: string, max: number = MAX_CLAIMS)
     .slice(0, cap);
 }
 
-/** Tavily relevance plus the source bonus — reputation, then UK provenance as
- *  the tie-break. Enough to lift an ONS page above an SEO farm that matched the
- *  query better, and above an equally reputable US source for a British fact.
- *  Same formula as the review-claims endpoint, because it is literally the same
- *  function; see $lib/blog/reputable-domains. */
-function rank(results: { url: string; title: string; content: string; score: number }[]) {
-  return results
-    .filter((r) => r && typeof r.url === 'string' && r.url)
-    .map((r) => ({
-      url: r.url,
-      title: r.title || hostnameOf(r.url),
-      snippet: trim(r.content ?? '', 400),
-      score: (r.score ?? 0) + rateSource(r.url).bonus,
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, CANDIDATES_PER_CLAIM);
+/** Tavily relevance plus the shared source bonus — reputation, UK provenance,
+ *  academic status, less a penalty for a source with an interest in the claim.
+ *  Literally the same function the sources panel uses; see
+ *  $lib/blog/reputable-domains for the arithmetic and why it is worth ~1 point. */
+function rank(results: { url: string; title: string; content: string; score: number }[], subject: string) {
+  return rankSources(results, { subject, limit: CANDIDATES_PER_CLAIM }).map((r) => ({
+    url: r.url,
+    title: r.title,
+    snippet: trim(r.snippet, 400),
+    score: r.score,
+  }));
 }
 
 /**
@@ -239,7 +234,7 @@ export async function groundClaim(claim: GroundedClaim): Promise<ClaimVerdict> {
     maxResults: TAVILY_RESULTS_PER_CLAIM,
     searchDepth: 'advanced',
   });
-  const candidates = rank(found.results ?? []);
+  const candidates = rank(found.results ?? [], claim.claim);
 
   // No sources, no verdict call. "Nothing came back" is already the honest
   // answer and paying a model to phrase it would only invite it to answer from

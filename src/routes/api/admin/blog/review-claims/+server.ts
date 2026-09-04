@@ -3,7 +3,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
-import { hostnameOf, rateSource } from '$lib/blog/reputable-domains';
+import { rankSources, type RankedSource } from '$lib/blog/reputable-domains';
 import { plainTextFromHtml } from '$lib/blog/readability';
 
 const MAX_CLAIMS = 12;
@@ -26,6 +26,11 @@ interface RankedCandidate {
    *  it — an author choosing between two sources deserves to see why one is
    *  above the other. */
   uk: boolean;
+  /** University, research institute or open repository. */
+  academic: boolean;
+  /** Has an interest in the claim being true. Shown as a warning, not hidden:
+   *  sometimes the subject's own page IS the right citation. */
+  affiliated: boolean;
   why: string;
   score: number;
 }
@@ -90,27 +95,27 @@ function trimWhy(content: string, max = 220): string {
   return stripped.length > max ? `${stripped.slice(0, max - 1)}…` : stripped;
 }
 
-function pickCandidates(results: { url: string; title: string; content: string; score: number }[]): RankedCandidate[] {
-  // Score = Tavily relevance + the shared source bonus (reputation, then UK
-  // provenance as a tie-break). The arithmetic lives in
-  // $lib/blog/reputable-domains so this panel and the writing desk cannot rank
-  // the same claim differently.
-  const scored = results
-    .filter((r) => r && r.url)
-    .map((r) => {
-      const rating = rateSource(r.url);
-      return {
-        url: r.url,
-        title: r.title || hostnameOf(r.url),
-        domain: hostnameOf(r.url),
-        reputable: rating.reputable,
-        uk: rating.uk,
-        why: trimWhy(r.content),
-        score: (r.score ?? 0) + rating.bonus,
-      } satisfies RankedCandidate;
-    });
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, MAX_CANDIDATES_RETURNED);
+function toCandidate(r: RankedSource): RankedCandidate {
+  return {
+    url: r.url,
+    title: r.title,
+    domain: r.domain,
+    reputable: r.rating.reputable,
+    uk: r.rating.uk,
+    academic: r.rating.academic,
+    affiliated: r.rating.affiliated,
+    why: trimWhy(r.snippet),
+    score: r.score,
+  };
+}
+
+/**
+ * Rank one claim's results. The CLAIM is the subject, not the post: a source is
+ * affiliated when it is the thing the claim is about, and matching against the
+ * whole post would flag every source for a post that mentions one company once.
+ */
+function pickCandidates(results: { url: string; title: string; content: string; score: number }[], claim: string): RankedCandidate[] {
+  return rankSources(results, { subject: claim, limit: MAX_CANDIDATES_RETURNED }).map(toCandidate);
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -180,7 +185,7 @@ export const POST: RequestHandler = async ({ request }) => {
                 maxResults: TAVILY_RESULTS_PER_CLAIM,
                 searchDepth: 'advanced',
               });
-              const candidates = pickCandidates(search.results);
+              const candidates = pickCandidates(search.results, seed.claim);
               send({
                 type: 'claim-done',
                 index: idx,

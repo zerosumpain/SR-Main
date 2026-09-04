@@ -24,6 +24,18 @@ export interface RichEditorApi {
   listReferences: () => { n: number; url: string; title: string }[];
   /** Drop one citation and its marker. Returns true if it was there. */
   removeReference: (n: number) => boolean;
+  /**
+   * Edit what a citation SAYS in the footer — its title, its URL, or both.
+   *
+   * The footer text comes from a search result's own `<title>`, which is
+   * frequently a slug, a truncated headline or a site name repeated twice.
+   * The author has to be able to fix it, and cannot type into the block
+   * directly: the references node is an atom precisely because the `fn-` ids
+   * are what the prose markers link to. This is the way in.
+   *
+   * The number is not editable — it is the link target.
+   */
+  updateReference: (n: number, patch: { title?: string; url?: string }) => boolean;
   applyProposal: (p: ProseProposal) => boolean;
   acceptProposal: (id: string, modifiedText?: string) => boolean;
   rejectProposal: (id: string) => boolean;
