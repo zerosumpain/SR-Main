@@ -46,6 +46,8 @@ function scale(share: number, lo: number, mid: number, hi: number): number {
 
 export interface ResolvedEffort {
   hypothesise: { maxProposals: number };
+  /** How many capabilities one appetite scan may admit. */
+  appetite: { maxLeads: number };
   ponder: { maxMusings: number; maxLeads: number; lookupBudget: number };
   sweep: { maxSignals: number };
   explore: { maxLeads: number };
@@ -67,6 +69,12 @@ export function resolveEffort(raw: Partial<Effort> | null | undefined): Resolved
   const e = clampEffort(raw);
   return {
     hypothesise: { maxProposals: scale(e.discover, 1, 4, 8) },
+    // Under `discover`, because proposing a capability is the same activity as
+    // proposing a correlate — finding something the engine did not have. The
+    // ceiling is low on purpose: the lanes downstream build at most a couple
+    // of things a night, and a ledger that fills faster than it drains is the
+    // failure `improvement_backlog` already lived through (410 open items).
+    appetite: { maxLeads: scale(e.discover, 1, 3, 5) },
     ponder: {
       maxMusings: scale(e.discover, 2, 4, 6),
       maxLeads: scale(e.discover, 1, 2, 4),

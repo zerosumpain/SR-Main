@@ -33,6 +33,11 @@ export const DEFAULT_ROUTES: Readonly<Record<string, Route>> = {
   graph: 'briefing',
   patterns: 'briefing',
   rules: 'briefing',
+  // What the engine would like to build never interrupts. It is not urgent by
+  // construction — nothing about a missing data source becomes wrong if it
+  // waits until morning — and a proposal that buzzes a phone is how a helpful
+  // engine becomes a muted one.
+  build: 'briefing',
   // kinds
   mail_security: 'whatsapp',
 };

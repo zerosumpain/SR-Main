@@ -25,7 +25,7 @@ import {
   type FixKind,
 } from './types';
 
-const DOCTOR_LINK = 'https://strangeramblings.com/jkai/doctor';
+const DOCTOR_LINK = 'https://strangeramblings.com/jkai/daydreams/doctor';
 
 /** Named canvases per line, and fix-kind groups on the PROPOSED line. */
 const MAX_NAMED = 3;

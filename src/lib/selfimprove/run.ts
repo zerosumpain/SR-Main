@@ -16,10 +16,12 @@ import {
   BUDGET_CAPS,
   COLLECTIONS,
   IDLE_WINDOW_MS,
+  SETTINGS_AUTOBUILD_KEY,
   SYSTEM_ACTOR,
   asData,
   emptyPhases,
   errMsg,
+  type BuildLanes,
   type ImprovementRunData,
   type PhaseName,
   type RunAction,
@@ -34,6 +36,9 @@ import { optimiseCalls } from './optimise';
 import { finalizeAndNotify } from './report';
 import type { QuestionInsights } from './types';
 import { faultNeeds } from '$lib/daydream/faults';
+import { capabilityNeeds } from '$lib/daydream/appetite/intake';
+import { hasOpenNewDataWork, listBacklog } from './backlog';
+import { getSetting } from '$lib/server/models/settings';
 
 // ---------------------------------------------------------------------------
 // Budget
@@ -208,7 +213,15 @@ async function safePersist(runId: string, data: ImprovementRunData): Promise<voi
  * progress (overlap guard). Everything else is captured on the run record.
  */
 export async function runImprovementNow(
-  opts?: { trigger?: 'manual' | 'cron' },
+  opts?: {
+    trigger?: 'manual' | 'cron';
+    /**
+     * The two builders this module may not import (see `BuildLanes`). Absent
+     * means the propose phase falls back to the blind draft PR it has always
+     * had, which is what a dev host or a test should get.
+     */
+    lanes?: BuildLanes;
+  },
 ): Promise<{ runId: string; data: ImprovementRunData }> {
   const trigger = opts?.trigger ?? 'manual';
   if (!acquireRunLock()) {
@@ -257,6 +270,30 @@ export async function runImprovementNow(
     let stop: 'budget' | 'time' | 'user' | null = null;
     const state: { signals?: GatheredSignals; insights?: QuestionInsights } = {};
 
+    // Is the engine allowed to spend on a lane without a tap? Explicit `true`
+    // only — an unattended path that opens a £2 build must never enable
+    // itself. Read once, before any phase, so a mid-run setting change cannot
+    // make one phase behave differently from the next.
+    const autobuild = (await getSetting<boolean>(SETTINGS_AUTOBUILD_KEY).catch(() => false)) === true;
+
+    /**
+     * Is there open work in a lane that brings new data in?
+     *
+     * Read here rather than inside `optimise` so the demotion is visible at
+     * the level that decides the night's priorities. Call-efficiency stopped
+     * being this engine's prime outcome on 2026-09-04: it still MEASURES every
+     * night and still judges any experiment already running — abandoning a
+     * live trial unjudged would leave an unproven overlay in the prompt
+     * forever, which is the one thing `TRIAL` exists to prevent — but it may
+     * not START a new one while a source or a watch is waiting to be built.
+     */
+    let newDataWaiting = false;
+    try {
+      newDataWaiting = hasOpenNewDataWork(await listBacklog());
+    } catch (err) {
+      console.error('[selfimprove] new-data check failed:', errMsg(err));
+    }
+
     const phases: Array<[Exclude<PhaseName, 'report'>, () => Promise<RunAction[]>]> = [
       [
         'gather',
@@ -292,24 +329,31 @@ export async function runImprovementNow(
                 `${o.title}: ${o.need} Consumer: ${o.consumer}. Value: ${o.value}` +
                 (o.integrationHint ? ` Suggested integration: ${o.integrationHint}` : ''),
             );
-          return discoverApis(
-            state.insights,
-            budget,
-            [...(await faultNeeds().catch(() => [])), ...portfolioNeeds],
-          );
+          // The appetite ledger FIRST: a fault's connector is a source that
+          // broke, a lead's is one that never existed, and the owner's
+          // instruction is that the second outranks the first.
+          return discoverApis(state.insights, budget, [
+            ...(await capabilityNeeds().catch(() => [])),
+            ...(await faultNeeds().catch(() => [])),
+            ...portfolioNeeds,
+          ]);
         },
       ],
       ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
       // Repair runs AFTER build so a night that ships nothing new still has a
-      // chance to fix something that already exists.
+      // chance to fix something that already exists. A source that has broken
+      // is still a source that stopped bringing data in, so repair keeps its
+      // slot under the 2026-09-04 reordering.
       ['repair', async () => repairTools(budget, runId)],
-      // Optimise runs before propose: reducing the calls an answer costs is the
-      // prime outcome, and it is far cheaper (1 LLM call) than authoring a
-      // feature proposal — it must never be the phase the budget squeezes out.
-      ['optimise', async () => optimiseCalls(budget, runId)],
-      // Propose runs last: it is the most expensive phase and the least urgent,
-      // so it yields its budget to build and repair.
-      ['propose', async () => proposeFeatures(budget, runId)],
+      // Propose now runs BEFORE optimise, which is the reordering that demotes
+      // efficiency. It is also no longer the expensive phase it was: it hands
+      // an ask to the autonomous builder instead of authoring whole files
+      // blind, so it usually costs no LLM call here at all.
+      ['propose', async () => proposeFeatures(budget, runId, { lanes: opts?.lanes, autobuild })],
+      // Optimise last. It measures every night and judges any live trial
+      // whatever else happened; `mayStartNewTrial` is what stops a fresh
+      // experiment being started while new-data work waits.
+      ['optimise', async () => optimiseCalls(budget, runId, { mayStartNewTrial: !newDataWaiting })],
     ];
 
     for (const [name, fn] of phases) {

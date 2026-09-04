@@ -64,7 +64,7 @@
     {
       section: 'Ops',
       items: [
-        { code: 'DOC', label: 'Doctor', href: '/jkai/doctor', desc: 'Why your workflows are failing', keywords: 'doctor failed workflow fix repair triage' },
+        { code: 'DOC', label: 'Doctor', href: '/jkai/daydreams/doctor', desc: 'Why your workflows are failing', keywords: 'doctor failed workflow fix repair triage' },
       ],
     },
   ];

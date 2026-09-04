@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { runImprovementNow, getImprovementStatus } from '$lib/selfimprove/run';
+import { liveBuildLanes } from '$lib/heartbeat/build-lanes';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/*). "Run now" kicks off
 // a manual improvement run that DELIBERATELY bypasses the nightly idle gate but
@@ -21,7 +22,11 @@ export const POST: RequestHandler = async () => {
   // Not awaited — the run continues in-process on the long-lived Node server.
   // The .catch keeps the (already fully self-contained) engine from surfacing an
   // unhandled rejection here.
-  const promise = runImprovementNow({ trigger: 'manual' });
+  // Same lanes the nightly run gets. A "Run now" that behaved differently from
+  // the scheduled run would make the dashboard a poor place to test anything —
+  // and the tap gate still stands inside the propose phase, so this cannot
+  // dispatch a build the owner has not accepted unless `autobuild` is on.
+  const promise = runImprovementNow({ trigger: 'manual', lanes: liveBuildLanes() });
   promise.catch((err) => console.error('[improvement] manual run error:', err));
 
   // The sync prelude (lock + runId) has already landed by the time control

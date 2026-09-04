@@ -54,6 +54,7 @@ vi.mock('./backlog', () => ({
     h.markedAttempts.push({ slug: item.slug, status: o.status, error: o.error });
   }),
   pickWork: vi.fn(() => []),
+  pickToolWork: vi.fn(() => []),
   // Re-read after this run's ideas are queued, so a tool built tonight can be
   // linked to an idea queued tonight — see the driver-attribution fix.
   listBacklog: vi.fn(async () => h.backlog),

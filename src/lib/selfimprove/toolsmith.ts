@@ -41,7 +41,7 @@ import type { Budget } from './run';
 import type { GatheredSignals } from './analyze';
 import { buildContextPack, renderContext, type ContextPack } from './context';
 import { staticScan, smokeTest, type SmokeCase, type SmokeResult } from './verify';
-import { addIdeas, listBacklog, markAttempt, pickWork } from './backlog';
+import { addIdeas, listBacklog, markAttempt, pickToolWork } from './backlog';
 import { findRelatedIdea } from './narrative';
 import { jkaiTestPromptFor } from './deployment';
 
@@ -455,7 +455,12 @@ export async function buildTool(
   const actions: RunAction[] = [];
 
   const pack = await buildContextPack();
-  const work = pickWork(pack.backlog, 'tool', WORK_CAPS.maxToolCandidates);
+  // Half the night's slots are held for `source` items whenever any is open —
+  // the arithmetic half of the owner's bias toward new data (2026-09-04). A
+  // source item still authors a TOOL here; what its lane changes is which idea
+  // gets a slot, and the shape sentence in its detail tells the author to write
+  // the no-argument numeric reader a signal needs.
+  const work = pickToolWork(pack.backlog, WORK_CAPS.maxToolCandidates);
 
   const { json } = await budget.call(
     buildAuthorMessages(insights, pack, work, WORK_CAPS.maxToolCandidates),

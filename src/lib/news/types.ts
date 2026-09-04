@@ -1,4 +1,10 @@
-export type NewsSource = 'hacker-news' | 'lobsters';
+// The source list lives in the foundation layer so anything that merely needs
+// to KNOW what feeds exist can read it without importing $lib/news — which
+// imports $lib/daydream, and would close a cycle. Re-exported here because
+// every consumer of this module already expects `NewsSource` from it.
+import type { NewsSource } from '$lib/constants/news-sources';
+export { NEWS_SOURCES } from '$lib/constants/news-sources';
+export type { NewsSource };
 export type NewsView = 'top' | 'new' | 'best' | 'favourites';
 export type NewsWireView = Exclude<NewsView, 'favourites'>;
 export type NewsSort = 'time' | 'points';

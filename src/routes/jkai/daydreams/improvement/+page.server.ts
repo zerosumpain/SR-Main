@@ -3,6 +3,9 @@ import { errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/daydream/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
+import { EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
+import { doctorRollup, EMPTY_DOCTOR_ROLLUP, type DoctorRollup } from '$lib/workflowdoctor/rollup';
+import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 
 /** The loop, end to end: faults raised → ideas → tools built → signals → findings → thoughts. */
 export interface LoopStory {
@@ -50,6 +53,32 @@ async function loadLoopStory(loop: Awaited<ReturnType<typeof loadLoopHealth>>): 
   }
 }
 
+/**
+ * The appetite ledger, for the room.
+ *
+ * Loaded here rather than in a `$lib` view module because the row shape comes
+ * from the database and the card shape may not: a `.svelte` file importing
+ * anything that reaches `$lib/db` fails the build. `toLead` is the pure half
+ * and lives next to the vocabulary it uses.
+ */
+async function loadAppetite(): Promise<AppetiteView> {
+  try {
+    const [{ listCapabilities, capabilityCounts }] = await Promise.all([import('$lib/daydream/appetite/store')]);
+    const [rows, counts] = await Promise.all([listCapabilities({ limit: 40 }), capabilityCounts()]);
+    return {
+      leads: rows.map(toLead),
+      counts: { total: counts.total, byStatus: counts.byStatus, byKind: counts.byKind },
+      newDataOpen: rows.filter(
+        (r) => (r.status === 'proposed' || r.status === 'queued') && (r.kind === 'data_source' || r.kind === 'news_source' || r.kind === 'watch'),
+      ).length,
+      error: null,
+    };
+  } catch (err) {
+    console.error('[daydream] appetite load failed:', errMsg(err));
+    return { ...EMPTY_APPETITE, error: errMsg(err) };
+  }
+}
+
 export const load: PageServerLoad = async () => {
   const [loop, improvement] = await Promise.all([
     loadLoopHealth(MIN_PAIRS),
@@ -58,6 +87,17 @@ export const load: PageServerLoad = async () => {
       return null;
     }),
   ]);
-  const story = await loadLoopStory(loop);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story };
+  // The doctor, folded in. A route-level load may import both engines, which
+  // is what makes this the honest place to join them — `$lib/workflowdoctor`
+  // already imports `$lib/selfimprove`, so neither library could do it.
+  const [story, appetite, doctor, doctorWindow] = await Promise.all([
+    loadLoopStory(loop),
+    loadAppetite(),
+    doctorRollup().catch((err): DoctorRollup => {
+      console.error('[daydream] doctor rollup failed:', errMsg(err));
+      return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
+    }),
+    doctorSchedule(),
+  ]);
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, doctor, doctorWindow };
 };

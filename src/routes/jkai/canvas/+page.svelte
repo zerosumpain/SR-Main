@@ -357,7 +357,7 @@
             <span class="bucket-count">{group.items.length}</span>
             {#if group.name === FAILING_BUCKET}
               <!-- The bucket names the casualties; the doctor says why. -->
-              <a class="row-link bucket-doctor" href="/jkai/doctor">Doctor →</a>
+              <a class="row-link bucket-doctor" href="/jkai/daydreams/doctor">Doctor →</a>
             {/if}
           </div>
           <div class="grid">

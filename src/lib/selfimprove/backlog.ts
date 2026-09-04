@@ -27,9 +27,16 @@ import {
 export interface IdeaInput {
   title: string;
   detail: string;
-  kind: 'tool' | 'feature' | 'engine';
+  kind: BacklogItemData['kind'];
   priority?: number;
+  /** The appetite-ledger row this came from, when it came from one. */
+  capabilitySlug?: string;
 }
+
+/** The lanes that bring new data into the building. Kept here because
+ *  `pickWork` reserves slots for them and the reservation must not depend on
+ *  importing the daydream vocabulary into the self-improvement engine. */
+const NEW_DATA_KINDS: ReadonlyArray<BacklogItemData['kind']> = ['source', 'watch'];
 
 /**
  * Read every backlog item.
@@ -91,6 +98,15 @@ async function put(item: BacklogItemData): Promise<void> {
  */
 export const MAX_NEW_IDEAS_PER_NIGHT = 12;
 
+const KINDS: ReadonlyArray<BacklogItemData['kind']> = ['tool', 'feature', 'engine', 'source', 'watch'];
+
+/** An unknown kind becomes `tool`, the cheapest lane. Records written before
+ *  `source` and `watch` existed carry `tool` or `feature` and read back
+ *  unchanged. */
+function coerceKind(kind: unknown): BacklogItemData['kind'] {
+  return KINDS.includes(kind as BacklogItemData['kind']) ? (kind as BacklogItemData['kind']) : 'tool';
+}
+
 /**
  * Merge ideas into the backlog. Existing slugs are left alone (their attempt
  * history is worth more than a re-description); genuinely new ones are added,
@@ -140,13 +156,14 @@ export async function addIdeas(ideas: IdeaInput[]): Promise<string[]> {
       slug,
       title: title.slice(0, 200),
       detail: (idea.detail ?? '').slice(0, 2000),
-      kind: idea.kind === 'feature' ? 'feature' : idea.kind === 'engine' ? 'engine' : 'tool',
+      kind: coerceKind(idea.kind),
       status: 'open',
       priority: Math.min(5, Math.max(1, Math.round(idea.priority ?? 3))),
       attempts: 0,
       createdAt: now,
       updatedAt: now,
     };
+    if (idea.capabilitySlug) item.capabilitySlug = idea.capabilitySlug.slice(0, 200);
     try {
       await put(item);
       added.push(slug);
@@ -205,7 +222,7 @@ const RETRY_SHARE = 1 / 3;
 
 export function pickWork(
   items: BacklogItemData[],
-  kind: 'tool' | 'feature' | 'engine',
+  kind: BacklogItemData['kind'],
   limit: number,
 ): BacklogItemData[] {
   if (limit <= 0) return [];
@@ -248,6 +265,64 @@ export function pickWork(
     }
   }
   return picked.slice(0, limit);
+}
+
+/**
+ * How many of the toolsmith's slots are held for work that brings new data in.
+ *
+ * The owner's instruction (2026-09-04) is a bias toward new data over
+ * efficiency, and a bias that lives only in a prompt is a bias the first busy
+ * night discards. This is the half of it that is arithmetic: when any `source`
+ * or `watch` item is open, half the night's tool slots are reserved for the
+ * tools those lanes need, and the general queue takes what is left.
+ *
+ * Half rather than all, for the reason `RETRY_SHARE` is a third rather than a
+ * half: a rule that starves one class entirely is the bug that rule replaced.
+ */
+export const NEW_DATA_SHARE = 1 / 2;
+
+/**
+ * Pick the toolsmith's work, with `source` items given first refusal.
+ *
+ * `pickWork` ranks within one kind; this ranks across the two kinds the
+ * toolsmith can actually build. `watch` is deliberately NOT here — a monitor
+ * is a generated workflow, not a runtime tool, and it has its own lane in the
+ * propose phase. Mixing it in would hand the author an idea it cannot make.
+ *
+ * A `source` item authors a tool too: the source is found and registered by
+ * the discover phase, and what remains is the no-argument numeric reader that
+ * turns it into a daily signal. Reserving slots for those is the arithmetic
+ * half of the owner's bias toward new data — an ordering alone is discarded by
+ * the first night with more work than slots.
+ */
+export function pickToolWork(items: BacklogItemData[], limit: number): BacklogItemData[] {
+  if (limit <= 0) return [];
+  const sources = pickWork(items, 'source', limit);
+  const tools = pickWork(items, 'tool', limit);
+  if (sources.length === 0) return tools;
+  const reserved = Math.max(1, Math.min(sources.length, Math.floor(limit * NEW_DATA_SHARE)));
+  const picked = [...sources.slice(0, reserved), ...tools.slice(0, limit - reserved)];
+  // Backfill, same as `pickWork`: if one side was short the other takes the
+  // spare slots rather than the run doing less work than its cap allows.
+  if (picked.length < limit) {
+    const seen = new Set(picked.map((i) => i.slug));
+    for (const i of [...sources, ...tools]) {
+      if (picked.length >= limit) break;
+      if (!seen.has(i.slug)) {
+        picked.push(i);
+        seen.add(i.slug);
+      }
+    }
+  }
+  return picked.slice(0, limit);
+}
+
+/** Is there open work in a lane that brings new data in? Read by the run to
+ *  decide whether call-efficiency may start a fresh experiment tonight. */
+export function hasOpenNewDataWork(items: BacklogItemData[]): boolean {
+  return items.some(
+    (i) => i.status === 'open' && i.attempts < MAX_ATTEMPTS && NEW_DATA_KINDS.includes(i.kind),
+  );
 }
 
 /** Record the outcome of an attempt against an item. Best-effort. */

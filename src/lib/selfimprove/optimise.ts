@@ -382,8 +382,28 @@ function buildOverlayMessages(
  * as a stop signal) — every other failure degrades to "measured, changed
  * nothing", because a broken optimiser must not cost the run its other phases.
  */
-export async function optimiseCalls(budget: Budget, runId: string): Promise<RunAction[]> {
+export interface OptimiseOpts {
+  /**
+   * May a FRESH experiment be published tonight?
+   *
+   * False while the backlog holds open `source` or `watch` work. Call
+   * efficiency was this engine's stated prime outcome from 2026-07-29 until
+   * 2026-09-04, when the owner's instruction made new capability outrank it.
+   * The demotion is deliberately partial: measuring is free and judging a
+   * RUNNING trial is obligatory — abandoning one unjudged would leave an
+   * unproven overlay in every prompt indefinitely, which is precisely what the
+   * `TRIAL` rule exists to prevent. What stops is starting another.
+   */
+  mayStartNewTrial?: boolean;
+}
+
+export async function optimiseCalls(
+  budget: Budget,
+  runId: string,
+  opts: OptimiseOpts = {},
+): Promise<RunAction[]> {
   const actions: RunAction[] = [];
+  const mayStartNewTrial = opts.mayStartNewTrial !== false;
 
   // ── 1. Measure ────────────────────────────────────────────────────────────
   const eff = await measureEfficiency(TRIAL.windowDays);
@@ -406,6 +426,16 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
       detail: `trial in progress — ${decision.turnsObserved}/${decision.needed} turns observed (day ${decision.ageDays} of ${TRIAL.maxDays})`,
     });
     // One experiment at a time: publishing now would make neither attributable.
+    return actions;
+  }
+
+  // Measured, and any live trial judged. A new experiment waits for a night
+  // with no new-data work open.
+  if (!mayStartNewTrial) {
+    actions.push({
+      kind: 'efficiency_measured',
+      detail: 'measured and any live trial judged; no new experiment started — new-data work is open and takes the slot',
+    });
     return actions;
   }
 
