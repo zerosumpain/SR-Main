@@ -334,6 +334,27 @@
 
       listReferences: () => (editor ? parseReferences(editor.getHTML()) : []),
 
+      updateReference: (n, patch) => {
+        if (!editor) return false;
+        const refs = parseReferences(editor.getHTML());
+        const target = refs.find((r) => r.n === n);
+        if (!target) return false;
+
+        const title = patch.title !== undefined ? patch.title.trim() : target.title;
+        const url = patch.url !== undefined ? patch.url.trim() : target.url;
+        // An empty URL would render a link to nowhere and, worse, make the
+        // entry unparseable on the next read — `parseReferences` needs an href
+        // to recognise a row at all, so the citation would silently vanish.
+        if (!url) return false;
+        if (title === target.title && url === target.url) return true;
+
+        editor
+          .chain()
+          .setReferences(refs.map((r) => (r.n === n ? { ...r, title, url } : r)))
+          .run();
+        return true;
+      },
+
       removeReference: (n) => {
         if (!editor) return false;
         const refs = parseReferences(editor.getHTML());

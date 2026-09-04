@@ -947,8 +947,32 @@
             <li class="source-row">
               <span class="source-n">{r.n}</span>
               <span class="source-body">
-                {#if r.title}<span class="source-title">{r.title}</span>{/if}
-                <a href={r.url} target="_blank" rel="noopener noreferrer" class="source-url">{r.url}</a>
+                <!-- Edited on blur, not per keystroke: every save rewrites the
+                     references node, and doing that on each character would put
+                     one undo step in the editor's history per letter typed. -->
+                <input
+                  class="nm-text-input source-input"
+                  value={r.title}
+                  placeholder="Source title — shown in the footer"
+                  onblur={(e) => {
+                    richApi?.updateReference(r.n, { title: e.currentTarget.value });
+                    refreshReferences();
+                  }}
+                />
+                <input
+                  class="nm-text-input source-input source-url-input"
+                  value={r.url}
+                  placeholder="https://…"
+                  onblur={(e) => {
+                    if (!richApi?.updateReference(r.n, { url: e.currentTarget.value })) {
+                      // Refused — an empty URL would make the row unparseable
+                      // and the citation would silently disappear. Put the old
+                      // value back so the author sees what happened.
+                      e.currentTarget.value = r.url;
+                    }
+                    refreshReferences();
+                  }}
+                />
               </span>
               <button
                 class="nm-link-btn danger source-del"
@@ -962,8 +986,9 @@
           {/each}
         </ol>
         <p class="muted small">
-          Numbers are not re-flowed when one is removed — a citation whose number changed under
-          an already-published post is worse than a gap in the sequence.
+          Edit the title or the link and it changes in the article footer. Numbers are not
+          re-flowed when one is removed — a citation whose number changed under an
+          already-published post is worse than a gap in the sequence.
         </p>
       {/if}
     </section>
@@ -1029,17 +1054,18 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 0.25rem;
   }
 
-  .source-title {
+  .source-input {
+    width: 100%;
     font-size: var(--fs-label);
-    color: var(--text-primary);
   }
 
-  .source-url {
+  .source-url-input {
+    font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
-    word-break: break-all;
   }
 
   .source-del {

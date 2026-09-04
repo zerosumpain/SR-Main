@@ -7,6 +7,11 @@
     /** Published in the UK. Shown, not just ranked on — an author choosing
      *  between two sources deserves to see why one is above the other. */
     uk: boolean;
+    /** University, research institute or open repository. */
+    academic: boolean;
+    /** Has an interest in the claim being true. Shown as a warning rather than
+     *  hidden: sometimes the subject's own page IS the right citation. */
+    affiliated: boolean;
     why: string;
     score: number;
   }
@@ -19,6 +24,16 @@
     status: 'pending' | 'searching' | 'done' | 'error';
     error?: string;
     resultsCount?: number;
+    /** The query as it stands, which the author may have edited. Separate from
+     *  `searchQuery` so "search again" can be re-run with different words
+     *  without losing what the model originally asked. */
+    query?: string;
+    /** Every URL already shown for this claim. A second search that returned
+     *  the same page one would read as a broken button. */
+    seen?: string[];
+    researching?: boolean;
+    /** The query returned results but none of them were new. */
+    exhausted?: boolean;
     inserted?: { url: string; mode: 'inline' | 'reference'; n?: number };
   }
 
@@ -158,6 +173,11 @@
             candidates: ev.candidates ?? [],
             resultsCount: ev.resultsCount,
             error: ev.error,
+            // Seed the editable query from what the model asked, and start the
+            // seen-set from this first page — a later "search again" subtracts
+            // both, so it cannot hand back what is already on screen.
+            query: claims[i].searchQuery,
+            seen: (ev.candidates ?? []).map((c: RankedCandidate) => c.url),
           };
         }
         break;
@@ -172,6 +192,51 @@
         error = ev.error ?? 'Unknown error';
         phase = 'error';
         break;
+    }
+  }
+
+  /**
+   * Search again for ONE claim, on the author's terms.
+   *
+   * Hits `/search-sources`, not `/review-claims`: re-running the streamed pass
+   * would spend a model call re-extracting every claim in the post and hand
+   * back the same four sources for this one. This sends the (possibly edited)
+   * query and everything already shown, so what comes back is genuinely new.
+   */
+  async function searchAgain(claimIdx: number) {
+    const c = claims[claimIdx];
+    if (!c || c.researching) return;
+    const query = (c.query ?? c.searchQuery).trim();
+    if (!query) return;
+
+    claims[claimIdx] = { ...c, researching: true, exhausted: false };
+    error = null;
+    try {
+      const res = await fetch(`/api/admin/blog/search-sources?token=${adminToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, claim: c.claim, exclude: c.seen ?? c.candidates.map((x) => x.url) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? `Search failed (${res.status})`);
+
+      const fresh: RankedCandidate[] = data.candidates ?? [];
+      const cur = claims[claimIdx];
+      claims[claimIdx] = {
+        ...cur,
+        researching: false,
+        query,
+        // Replace rather than append: the author said none of these were right.
+        candidates: fresh,
+        resultsCount: data.resultsCount ?? 0,
+        exhausted: !!data.exhausted,
+        // Accumulated across every search for this claim, so a third look does
+        // not return what the second one already rejected.
+        seen: [...(cur.seen ?? cur.candidates.map((x) => x.url)), ...fresh.map((f) => f.url)],
+      };
+    } catch (e) {
+      claims[claimIdx] = { ...claims[claimIdx], researching: false };
+      error = e instanceof Error ? e.message : 'Source search failed';
     }
   }
 
@@ -238,9 +303,11 @@
 
   {#if !isRunning && claims.length === 0 && !error}
     <p class="muted">
-      Click <strong>Review claims</strong> to extract factual statements and find reputable sources.
-      UK sources are preferred where they are equally relevant. Citing one adds a small marker in
-      the prose and the source itself to the post&rsquo;s footer, not to the body.
+      Click <strong>Review claims</strong> to extract factual statements and find sources.
+      UK academics rank first, then other academics, then UK institutions and press; a source
+      with an interest in the claim is pushed down and labelled. If none of them is right, edit
+      the search terms and look again. Citing one adds a small marker in the prose and the
+      source itself to the post&rsquo;s footer, not to the body.
     </p>
   {/if}
 
@@ -271,17 +338,43 @@
             </div>
           </div>
 
-          {#if c.status === 'done' && c.candidates.length === 0}
-            <div class="claim-error">No sources found. Try rewording the claim or check the search query above.</div>
+          {#if c.status === 'done' || c.researching}
+            <!-- The query is editable because "none of these are right" is
+                 usually a wording problem, not a search problem. -->
+            <div class="requery">
+              <input
+                class="nm-text-input requery-input"
+                value={c.query ?? c.searchQuery}
+                placeholder="Search terms"
+                disabled={c.researching}
+                onchange={(e) => { claims[i] = { ...claims[i], query: e.currentTarget.value }; }}
+                onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); searchAgain(i); } }}
+              />
+              <button class="nm-btn-ghost" onclick={() => searchAgain(i)} disabled={c.researching}>
+                {c.researching ? 'Searching…' : 'Search again'}
+              </button>
+            </div>
+            {#if c.exhausted}
+              <div class="claim-note">
+                Nothing new for those terms — everything it found has already been shown.
+                Change the wording and search again.
+              </div>
+            {/if}
+          {/if}
+
+          {#if c.status === 'done' && c.candidates.length === 0 && !c.researching && !c.exhausted}
+            <div class="claim-error">No sources found. Try rewording the search terms above.</div>
           {:else if c.candidates.length > 0}
             <ul class="candidates">
               {#each c.candidates as cand}
-                <li class="cand" class:reputable={cand.reputable} class:uk={cand.uk}>
+                <li class="cand" class:reputable={cand.reputable} class:uk={cand.uk} class:affiliated={cand.affiliated}>
                   <a href={cand.url} target="_blank" rel="noopener noreferrer" class="cand-url">
                     <span class="cand-title">{cand.title}</span>
                     <span class="cand-domain">
                       {cand.domain}{cand.reputable ? ' · reputable' : ''}
-                      {#if cand.uk}<span class="cand-uk">UK</span>{/if}
+                      {#if cand.academic}<span class="cand-tag cand-academic">ACADEMIC</span>{/if}
+                      {#if cand.uk}<span class="cand-tag cand-uk">UK</span>{/if}
+                      {#if cand.affiliated}<span class="cand-tag cand-affiliated">AFFILIATED</span>{/if}
                     </span>
                   </a>
                   {#if cand.why}<div class="cand-why">{cand.why}</div>{/if}
@@ -304,15 +397,41 @@
 
 <style>
   .claim-panel { display: flex; flex-direction: column; gap: 0.6rem; }
-  .cand-uk {
+  .cand-tag {
     display: inline-block;
     margin-left: 0.4rem;
     padding: 0 0.3rem;
-    border: 1px solid var(--accent-ink);
-    color: var(--accent-ink);
+    border: 1px solid currentcolor;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
+  }
+
+  .cand-uk { color: var(--accent-ink); }
+  .cand-academic { color: var(--accent); }
+  /* A warning, not a rejection — the subject's own page is sometimes the right
+     citation, so it stays selectable and just says what it is. */
+  .cand-affiliated { color: var(--warn); }
+  .cand.affiliated { opacity: 0.85; }
+
+  .requery {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    margin: 0.5rem 0 0.4rem;
+  }
+
+  .requery-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+
+  .claim-note {
+    margin: 0.3rem 0 0.5rem;
+    font-size: var(--fs-label);
+    color: var(--text-muted);
   }
   .mode-pick {
     display: inline-flex; align-items: center; gap: 0.4rem;
