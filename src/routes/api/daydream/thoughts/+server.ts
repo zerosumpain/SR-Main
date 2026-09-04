@@ -1000,6 +1000,43 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, ...res });
       }
 
+      /**
+       * Find the themes in the queue.
+       *
+       * On demand as well as nightly: it is pure CPU over rows already in
+       * memory — 66ms for production's 455 — so making the owner wait until
+       * tomorrow to see the duplicates would be a choice, not a constraint.
+       */
+      case 'backlog_cluster': {
+        const { findThemes } = await import('$lib/selfimprove/epics');
+        const res = await findThemes();
+        return json({ ok: true, ...res, proposed: res.proposed.length });
+      }
+
+      /**
+       * Rule on a theme.
+       *
+       * Accepting GROUPS its members; it never folds them. "About the same
+       * subject" and "says the same thing" are two judgements, and only the
+       * first is one a matcher may make — the second abandons rows, and the
+       * owner makes it per item inside the lane.
+       */
+      case 'epic_decide': {
+        const slug = str('slug');
+        const decision = str('decision');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        const { decideEpic, ungroupEpic } = await import('$lib/selfimprove/epics');
+        if (decision === 'ungroup') {
+          const res = await ungroupEpic(slug);
+          return json(res.failed.length ? { ok: false, ...res, error: res.failed[0].error } : { ok: true, ...res });
+        }
+        if (decision !== 'accept' && decision !== 'decline') {
+          return json({ error: 'decision must be accept, decline or ungroup' }, { status: 400 });
+        }
+        const res = await decideEpic(slug, decision);
+        return json(res.failed.length ? { ok: false, ...res, error: res.failed[0].error } : { ok: true, ...res });
+      }
+
       default:
         return json({ error: `unknown action: ${action || '(none)'}` }, { status: 400 });
     }

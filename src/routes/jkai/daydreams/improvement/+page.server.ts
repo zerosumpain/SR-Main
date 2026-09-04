@@ -5,6 +5,7 @@ import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 import { describeCite, EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
 import { EMPTY_BOARD, type BoardView } from '$lib/selfimprove/board';
+import type { EpicData } from '$lib/selfimprove/types';
 import { doctorRollup, EMPTY_DOCTOR_ROLLUP, type DoctorRollup } from '$lib/workflowdoctor/rollup';
 import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 
@@ -95,17 +96,19 @@ async function loadAppetite(): Promise<AppetiteView> {
  */
 async function loadQueueBoard(): Promise<BoardView> {
   try {
-    const [{ buildBoard }, { listBacklog, MAX_ATTEMPTS }, { loadCustomToolHealth }, { listCapabilities }] =
+    const [{ buildBoard }, { listBacklog, MAX_ATTEMPTS }, { loadCustomToolHealth }, { listCapabilities }, { listEpics }] =
       await Promise.all([
         import('$lib/selfimprove/board'),
         import('$lib/selfimprove/backlog'),
         import('$lib/selfimprove/context'),
         import('$lib/daydream/appetite/store'),
+        import('$lib/selfimprove/epics'),
       ]);
-    const [backlog, tools, caps] = await Promise.all([
+    const [backlog, tools, caps, epics] = await Promise.all([
       listBacklog(),
       loadCustomToolHealth(),
       listCapabilities({ limit: 60 }),
+      listEpics(),
     ]);
     return buildBoard({
       backlog,
@@ -125,6 +128,8 @@ async function loadQueueBoard(): Promise<BoardView> {
         lastSeenAt: c.lastSeenAt,
       })),
       attemptCeiling: MAX_ATTEMPTS,
+      // So a swimlane reads the theme's own label rather than its slug digest.
+      epicLabels: Object.fromEntries(epics.map((e) => [e.slug, e.label])),
       // The open pile is the point of the board; everything ever shipped is
       // history and belongs in the ledger below it. 120 keeps a few months of
       // settled work reachable without sending 455 rows to the browser.
@@ -133,6 +138,23 @@ async function loadQueueBoard(): Promise<BoardView> {
   } catch (err) {
     console.error('[daydream] queue board failed:', errMsg(err));
     return { ...EMPTY_BOARD, error: errMsg(err) };
+  }
+}
+
+/**
+ * The themes found in the queue, and what has been decided about them.
+ *
+ * Read only — finding them is an action, not a page load. `clusterBacklog` is
+ * 66ms over 455 rows, but it also WRITES proposals, and a page render must
+ * never be a write.
+ */
+async function loadEpics(): Promise<{ epics: EpicData[]; error: string | null }> {
+  try {
+    const { listEpics } = await import('$lib/selfimprove/epics');
+    return { epics: await listEpics(), error: null };
+  } catch (err) {
+    console.error('[daydream] epics load failed:', errMsg(err));
+    return { epics: [], error: errMsg(err) };
   }
 }
 
@@ -147,15 +169,16 @@ export const load: PageServerLoad = async () => {
   // The doctor, folded in. A route-level load may import both engines, which
   // is what makes this the honest place to join them — `$lib/workflowdoctor`
   // already imports `$lib/selfimprove`, so neither library could do it.
-  const [story, appetite, board, doctor, doctorWindow] = await Promise.all([
+  const [story, appetite, board, epics, doctor, doctorWindow] = await Promise.all([
     loadLoopStory(loop),
     loadAppetite(),
     loadQueueBoard(),
+    loadEpics(),
     doctorRollup().catch((err): DoctorRollup => {
       console.error('[daydream] doctor rollup failed:', errMsg(err));
       return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
     }),
     doctorSchedule(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, doctor, doctorWindow };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, epics, doctor, doctorWindow };
 };

@@ -352,6 +352,29 @@ describe('epic grouping keys', () => {
     expect(board.items[0].epicSlug).toBe('cap:data_source:met-office');
   });
 
+  it('uses the theme label the owner accepted, not the slug digest', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', epicSlug: 'epic:3-1d9swp2' })],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+      epicLabels: { 'epic:3-1d9swp2': 'Live OpenRouter balance' },
+    });
+    expect(board.items[0].epicLabel).toBe('Live OpenRouter balance');
+  });
+
+  // An `epic:` slug carries only a member count and a digest, so with no
+  // recorded label the honest thing is to read as an id — never to invent a name.
+  it('falls back to the slug when no label was recorded', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', epicSlug: 'epic:3-1d9swp2' })],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    expect(board.items[0].epicLabel).toBe('3 1d9swp2');
+  });
+
   it('leaves an unlinked item unfiled rather than inventing a group', () => {
     const board = buildBoard({
       backlog: [item({ slug: 'a', title: 'A' })],

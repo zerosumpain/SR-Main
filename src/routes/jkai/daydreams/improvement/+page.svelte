@@ -11,6 +11,7 @@
   import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
   import AppetiteBoard from '$lib/components/jkai/daydream/rooms/AppetiteBoard.svelte';
   import QueueBoard from '$lib/components/jkai/daydream/rooms/QueueBoard.svelte';
+  import ThemeProposals from '$lib/components/jkai/daydream/rooms/ThemeProposals.svelte';
   import { postThought } from '$lib/daydream/feed-client';
   import { invalidateAll } from '$app/navigation';
 
@@ -186,6 +187,15 @@
     />
     {#if actionError}<p class="err">{actionError}</p>{/if}
     <QueueBoard view={data.board} {busy} {act} />
+
+    <div class="themes" id="themes">
+      <SectionHead
+        kicker="C2 / Themes"
+        title={['The same idea,', 'asked ten ways']}
+        strap="The queue restates itself. Ideas arrive one a night from different questions, and the same want turns up under half a dozen phrasings — each one a slot the engine would spend rebuilding something it has already been asked for. Nothing here asks a model anything: two titles are the same subject when they share three content words, the one definition of “related” this engine has. Grouping a theme puts its members in one swimlane above; it never abandons them, because “about the same subject” and “says the same thing” are different judgements and only the first is one a matcher may make."
+      />
+      <ThemeProposals epics={data.epics.epics} error={data.epics.error} items={data.board.items} {busy} {act} />
+    </div>
   </div>
 </section>
 
@@ -229,6 +239,11 @@
 </section>
 
 <style>
+  .themes {
+    margin-top: clamp(30px, 4vw, 56px);
+    padding-top: clamp(24px, 3vw, 40px);
+    border-top: 1px solid var(--line-hair);
+  }
   .ledger {
     margin-top: clamp(28px, 4vw, 56px);
     padding-top: clamp(24px, 3vw, 40px);

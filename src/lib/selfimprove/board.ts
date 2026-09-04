@@ -25,11 +25,11 @@
 // "out of attempts" means.
 //
 // `narrative.ts` is genuinely pure (its only imports are type-only), which is
-// why `findRelatedIdea` and `looksAlreadyServed` can be reused here. They are
+// why `findRelatedIdea` and `looksSameSubject` can be reused here. They are
 // reused rather than reimplemented on purpose: a second definition of "related"
 // is the exact bug that left every driver unrecorded for a fortnight.
 
-import { findRelatedIdea, looksAlreadyServed, type ToolHealth } from './narrative';
+import { findRelatedIdea, looksSameSubject, type ToolHealth } from './narrative';
 import type { BacklogItemData } from './types';
 
 // ---------------------------------------------------------------------------
@@ -203,6 +203,13 @@ export interface BoardInput {
   /** `MAX_ATTEMPTS` from `backlog.ts`. Injected, never copied. */
   attemptCeiling: number;
   /**
+   * Theme slug → the label the owner accepted, so a swimlane reads
+   * "Live OpenRouter balance" rather than the slug's digest. Absent for an
+   * item grouped by `capabilitySlug` alone, which falls back to prettifying
+   * the slug — honest, because that IS all that is recorded for one.
+   */
+  epicLabels?: Readonly<Record<string, string>>;
+  /**
    * How many settled items to carry. The open pile is the point of the board;
    * every item ever shipped is history and belongs in the ledger. `null` keeps
    * everything, which is what the tests do.
@@ -324,8 +331,13 @@ function isSettled(stage: WorkStage): boolean {
   return stage === 'live' || stage === 'parked';
 }
 
-function epicLabelFor(slug: string | null): string {
+function epicLabelFor(slug: string | null, labels: Readonly<Record<string, string>>): string {
   if (!slug) return 'Unfiled';
+  const named = labels[slug];
+  if (named) return named;
+  // No recorded label — prettify the slug rather than invent a name for it.
+  // An `epic:` slug carries only a member count and a digest, so this reads as
+  // an id, which is what it is.
   return slug
     .replace(/^(cap|epic):/, '')
     .replace(/[-_]+/g, ' ')
@@ -343,6 +355,7 @@ export function buildBoard(input: BoardInput): BoardView {
   const ceiling = input.attemptCeiling;
   const backlog = input.backlog ?? [];
   const tools = input.tools ?? [];
+  const epicLabels = input.epicLabels ?? {};
 
   // Tools by the idea they serve. `findRelatedIdea` is the ONE definition of
   // "related" in this engine; matching a tool to an idea any other way is how
@@ -371,7 +384,7 @@ export function buildBoard(input: BoardInput): BoardView {
   const servedBy = new Map<string, string>();
   for (const item of backlog) {
     if (item.status !== 'open') continue;
-    const match = shipped.find((s) => looksAlreadyServed(item.title, s.title));
+    const match = shipped.find((s) => looksSameSubject(item.title, s.title));
     if (match) servedBy.set(item.slug, match.title);
   }
 
@@ -408,7 +421,7 @@ export function buildBoard(input: BoardInput): BoardView {
       foldedInto: b.foldedInto ?? null,
       parkedReason: b.parkedReason ?? null,
       epicSlug,
-      epicLabel: epicLabelFor(epicSlug),
+      epicLabel: epicLabelFor(epicSlug, epicLabels),
       capabilitySlug: b.capabilitySlug ?? null,
       score: null,
       evidence: [],
@@ -452,7 +465,7 @@ export function buildBoard(input: BoardInput): BoardView {
       foldedInto: null,
       parkedReason: null,
       epicSlug: `cap:${c.slug}`,
-      epicLabel: epicLabelFor(`cap:${c.slug}`),
+      epicLabel: epicLabelFor(`cap:${c.slug}`, epicLabels),
       capabilitySlug: c.slug,
       score: c.score,
       evidence: c.evidence ?? [],

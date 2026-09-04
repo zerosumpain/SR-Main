@@ -26,6 +26,12 @@ export const COLLECTIONS = {
   // from a previous night's failure. Ideas now persist with attempt counts and
   // last-error, so the engine resumes work instead of restarting it.
   backlog: 'improvement_backlog',
+  // Themes found in the backlog: which queued ideas are restatements of one
+  // another. Written by the clusterer, ruled on by the owner. A DECLINED
+  // grouping is kept, never deleted — the same rule `daydream_capabilities`
+  // follows, and for the same reason: a proposal that can re-propose its own
+  // refusals is a proposal with no memory.
+  epics: 'improvement_epics',
   // Versioned overlay controlling how tools are DESCRIBED and which are
   // directly visible — the engine's lever on call efficiency. Owned by
   // $lib/toolpolicy/policy.ts, which is also read by the MCP server, so the
@@ -167,6 +173,17 @@ export const WORK_CAPS = {
   reserveWallMs: 60 * 1000,
 } as const;
 
+/**
+ * New theme groupings proposed in one night.
+ *
+ * Six, not all of them. The first scan of production's queue found 113
+ * groupings at once, and a room asking the owner to rule on 113 things is a
+ * room he closes. Six a night drains that in under three weeks while leaving
+ * the on-demand button in the room for anyone who wants the lot; the scan is
+ * free either way, so this caps the ASKING, not the finding.
+ */
+export const MAX_THEME_PROPOSALS = 6;
+
 export type PhaseName =
   | 'gather'
   | 'learn'
@@ -220,6 +237,15 @@ export type ActionKind =
   | 'change_requested'
   /** A recurring monitor was generated and scheduled. */
   | 'watch_created'
+  /**
+   * The queue was scanned for themes and new groupings were proposed.
+   *
+   * Its OWN kind, not `proposal`. A proposal is an idea for new work; this is
+   * an observation about work already queued, and folding it into the same
+   * counter would inflate a number two dashboards print. The doctor's
+   * escalation kind exists for exactly this reason and a test caught it.
+   */
+  | 'themes_found'
   /** Calls-per-turn was measured and snapshotted. */
   | 'efficiency_measured'
   /** A new tool-call policy version went live on trial. */
@@ -450,6 +476,41 @@ export interface BacklogItemData {
 }
 
 /**
+ * `proposed` — the clusterer found it, nobody has ruled.
+ * `accepted` — the owner said yes; every member now carries its `epicSlug`.
+ * `declined` — the owner said no. Kept, never deleted, and never re-proposed
+ *              while the membership is unchanged.
+ */
+export type EpicStatus = 'proposed' | 'accepted' | 'declined';
+
+/**
+ * Shape of an `improvement_epics` record's `data`.
+ *
+ * **No sentence in here is written by anything.** `label` is the shortest
+ * member title, verbatim; `keywords` are words the members actually share.
+ * The rule `narrative.ts` set for this engine — a stored line always renders
+ * as recorded, so filler prose would stamp full confidence on a guess.
+ */
+export interface EpicData {
+  /** Derived from the sorted member slugs — see `clusterSlug`. */
+  slug: string;
+  label: string;
+  keywords: string[];
+  memberSlugs: string[];
+  /** How much it is worth ruling on, 0..1, with every input named. */
+  score: number;
+  components: Record<string, number>;
+  /** Members an already-shipped sibling appears to cover, at proposal time. */
+  servedCount: number;
+  status: EpicStatus;
+  /** owner | engine — who ruled, so the room can say. */
+  decidedBy?: string;
+  decidedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * The two builders self-improvement cannot reach for itself.
  *
  * Declared here and IMPLEMENTED in `$lib/heartbeat/build-lanes.ts`, which is
@@ -524,6 +585,12 @@ export const SYSTEM_PERMISSIONS: Record<string, PermissionSet> = {
   // Idea queue: jkai can read it (so chat can answer "what are you working on"),
   // the engine and owner write it.
   improvement_backlog: {
+    read: ['owner', 'jkai', 'system'],
+    write: ['system', 'owner'],
+    delete: ['owner', 'system'],
+  },
+  // Backlog themes. Same shape as the queue it groups.
+  improvement_epics: {
     read: ['owner', 'jkai', 'system'],
     write: ['system', 'owner'],
     delete: ['owner', 'system'],
