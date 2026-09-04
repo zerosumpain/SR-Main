@@ -53,4 +53,5 @@ tests/scripts/ci-release-shape.test.ts
 tests/scripts/ci-sidecars.test.ts
 tests/scripts/gate-level.test.ts
 tests/scripts/select-tests.test.ts
+tests/scripts/source-footprint.test.ts
 tests/skills/tool-names-exist.test.ts
