@@ -205,13 +205,19 @@
           {:else}
             <p class="card-body sm dim">no address found for this spot</p>
           {/if}
+          <!-- The guess is the QUESTION, so it is read as one. It is never what
+               gets written: a place is only ever named from the answer, never
+               from the geocoder's suggestion sitting in a field nobody edited. -->
+          {#if !draft && q.suggestedLabel}
+            <p class="row-guess">
+              {q.suggestedLabel}{q.suggestedKind ? ` · ${q.suggestedKind}` : ''}?
+            </p>
+          {/if}
         </div>
         <div class="row-controls">
           {#if !draft && q.suggestedLabel}
-            <button type="button" class="cta" onclick={() => acceptSuggestion(q)}>
-              {q.suggestedLabel}{q.suggestedKind ? ` · ${q.suggestedKind}` : ''}
-            </button>
-            <button type="button" class="btn" onclick={() => editDraft(q, 'label', '')}>Something else</button>
+            <button type="button" class="cta" onclick={() => acceptSuggestion(q)}>Yes, that’s it</button>
+            <button type="button" class="btn" onclick={() => editDraft(q, 'label', '')}>No</button>
           {:else}
             <input
               class="text-input"
@@ -235,7 +241,7 @@
             class="btn danger"
             disabled={busy === `ignore:${q.id}`}
             onclick={() => void ignorePlace(q.id)}
-          >Never ask</button>
+          >Not worth naming</button>
         </div>
       </div>
     {/each}
@@ -243,6 +249,15 @@
 {/if}
 
 <style>
+  /* The guess, sized to be read rather than clicked. */
+  .row-guess {
+    margin: 6px 0 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-body-sm);
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
   .session-bar {
     display: flex;
     align-items: baseline;

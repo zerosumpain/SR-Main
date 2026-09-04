@@ -565,8 +565,11 @@
                 class:excluded={e.excluded}
                 class:on={openEvent === eventKey(e)}
                 onclick={() => openPanel(e)}
-                title={e.excluded ? 'Ignored — tap to restore' : 'Tap to explain, detail or ignore'}
+                title={e.excluded
+                  ? 'Held out — the engine cannot reason over this. Tap to restore.'
+                  : 'The engine may reason over this. Tap to explain, detail or hold it out.'}
               >
+                <span class="cal-ev-flag" aria-hidden="true">{e.excluded ? '○' : '◉'}</span>
                 <span class="cal-ev-time">{timeOf(e)}</span>
                 <span class="cal-ev-title">{e.title}</span>
               </button>
@@ -590,10 +593,11 @@
 
       {#if e.excluded}
         {@const rule = ruleFor(e)}
-        <p class="sec-lede">
-          Ignored{#if rule} — {scopeWords(rule.scope)}{#if rule.reason}, because “{rule.reason}”{/if}{/if}.
-          The engine cannot see it.
+        <p class="cal-reasoning">
+          <span class="cal-reasoning-off">○ held out</span>
+          {#if rule}<span class="dim">{scopeWords(rule.scope)}{#if rule.reason}, because “{rule.reason}”{/if}</span>{/if}
         </p>
+        <p class="sec-lede">The engine cannot reason over it. It stays on the calendar.</p>
         {#if rule}
           <div class="cal-actions">
             <button type="button" class="cta" disabled={busy === `restore:${rule.id}`} onclick={() => restore(rule.id)}>
@@ -602,6 +606,21 @@
           </div>
         {/if}
       {:else}
+        <!-- The whole control the room turns on, said as one line. A glyph set
+             as type rather than an icon: the engine either may reason over this
+             entry or it may not, and a real commitment and a standing reminder
+             are not the same kind of thing. -->
+        <p class="cal-reasoning">
+          <span class="cal-reasoning-on">◉ may reason</span>
+          <button
+            type="button"
+            class="btn sm"
+            disabled={!!busy}
+            title="Hold this one date out. The engine stops reasoning over it; it stays on the calendar."
+            onclick={() => exclude(e, 'occurrence')}
+          >○ hold it out</button>
+        </p>
+
         {#if e.note}
           <p class="cal-note">You said: “{e.note}”{#if e.noteScope === 'title'} — about anything called this{:else if e.noteScope === 'series'} — about every occurrence{/if}.</p>
         {/if}
@@ -831,6 +850,35 @@
   .cal-ev { display: flex; gap: 0.35rem; align-items: baseline; width: 100%; text-align: left; background: none; border: none; border-left: 2px solid var(--accent); padding: 0.1rem 0.25rem; cursor: pointer; font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .cal-ev:hover { background: var(--accent-tint-08); }
   .cal-ev.on { background: var(--accent-tint-14); color: var(--text-primary); }
+  /* Unicode as typography, not an icon: filled means the engine may reason
+     over this entry, hollow means it is held out. The chip carries the glyph
+     so a month can be read without opening anything; the panel says it in
+     words, because that is where it changes. */
+  .cal-ev-flag {
+    color: var(--accent);
+    flex: 0 0 auto;
+  }
+  .cal-ev.excluded .cal-ev-flag {
+    color: var(--text-ghost);
+  }
+
+  .cal-reasoning {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+  }
+  .cal-reasoning-on {
+    color: var(--accent);
+  }
+  .cal-reasoning-off {
+    color: var(--text-ghost);
+  }
+
   .cal-ev-time { font-family: var(--font-mono); color: var(--text-ghost); flex: none; }
   .cal-ev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-ev.excluded { border-left-color: var(--line-strong); opacity: 0.55; }

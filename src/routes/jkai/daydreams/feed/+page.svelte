@@ -19,6 +19,7 @@
   import FacetBar from '$lib/components/jkai/daydream/hub/FacetBar.svelte';
   import CategoryMatrix from '$lib/components/jkai/daydream/hub/CategoryMatrix.svelte';
   import ThoughtDrill from '$lib/components/jkai/daydream/rooms/ThoughtDrill.svelte';
+  import ThoughtPlot, { type PlotPoint } from '$lib/components/jkai/daydream/rooms/ThoughtPlot.svelte';
   import TriageDeck from '$lib/components/jkai/daydream/rooms/TriageDeck.svelte';
   import type { Facet, MatrixAxis } from '$lib/components/jkai/daydream/hub/types';
   import type { FeedRow } from '$lib/daydream/ledger';
@@ -148,6 +149,26 @@
   }
 
   // ── The drill ─────────────────────────────────────────────────────────────
+  /** Rows or plot. The rows are what opens — they are the triage surface and
+   *  the one that works with no scores at all. The plot answers a different
+   *  question (how far clear of the bar did this get), so it is a view of the
+   *  same cell rather than a different cell. Local: it changes nothing a link
+   *  should carry, and the `?f=`/`?s=` selection above it still does. */
+  let view = $state<'rows' | 'plot'>('rows');
+  const viewFacets = [
+    { id: 'rows', label: 'Rows' },
+    { id: 'plot', label: 'Plot' },
+  ];
+
+  /** Only what has a score can be plotted against the bar. A thought without
+   *  one is not a zero — it is a row the plot cannot speak about, so it is
+   *  counted out loud underneath rather than drawn at the bottom. */
+  const plotPoints = $derived<PlotPoint[]>(
+    ordered
+      .filter((t) => typeof t.score === 'number' && Number.isFinite(t.score))
+      .map((t) => ({ id: t.id, mark: familyMark(t.kind), score: t.score, at: t.createdAt, title: headline(t) })),
+  );
+
   let openId = $state<string | null>(null);
   const openRow = $derived(
     openId ? (thoughts.find((t) => t.id === openId) ?? (data.opened?.id === openId ? data.opened : null)) : null,
@@ -214,7 +235,10 @@
   <div class="inner">
     <SectionHead kicker="B / {cellTitle}" title={[`${live.length} row${live.length === 1 ? '' : 's'}`]} strap={null}>
       {#snippet aside()}
-        <FacetBar label="Order" active={order} facets={orderFacets} onpick={(id) => (order = id as FeedOrder)} />
+        <FacetBar label="View" active={view} facets={viewFacets} onpick={(id) => (view = id as 'rows' | 'plot')} />
+        {#if view === 'rows'}
+          <FacetBar label="Order" active={order} facets={orderFacets} onpick={(id) => (order = id as FeedOrder)} />
+        {/if}
       {/snippet}
     </SectionHead>
 
@@ -238,6 +262,33 @@
           {/if}
         </p>
       </div>
+    {:else if view === 'plot'}
+      {#if plotPoints.length}
+        <ThoughtPlot
+          points={plotPoints}
+          threshold={data.threshold.value}
+          {openId}
+          onpick={(id) => (openId = id)}
+        />
+        <p class="note">
+          Height is how far a musing sits above or below the bar it had to clear. A held musing is
+          not a rejected one: it stays on the ledger with its cards attached, and the bar comes down
+          as you answer — {data.threshold.feedbackCount} response{data.threshold.feedbackCount === 1
+            ? ''
+            : 's'} have set it at {data.threshold.value}.
+          {#if plotPoints.length < ordered.length}
+            {ordered.length - plotPoints.length} of these {ordered.length} carry no score and cannot be
+            placed against it; the rows show them.
+          {/if}
+        </p>
+      {:else}
+        <div class="card t-quiet">
+          <p class="card-body">
+            Nothing in this cell carries a score, so there is nothing to place against the bar. The
+            rows show them.
+          </p>
+        </div>
+      {/if}
     {:else}
       <ol class="rows">
         {#each ordered as t (t.id)}

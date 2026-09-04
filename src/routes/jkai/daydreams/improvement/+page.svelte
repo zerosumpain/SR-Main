@@ -5,6 +5,8 @@
   // merge started: 33 tools shipped in a fortnight, none ever called.
   import type { PageData } from './$types';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
+  import NightTimeline from '$lib/components/jkai/daydream/rooms/NightTimeline.svelte';
+  import DoctorBand from '$lib/components/jkai/daydream/rooms/DoctorBand.svelte';
   import LoopScoreboard from '$lib/components/jkai/daydream/LoopScoreboard.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
@@ -111,52 +113,31 @@
   // ── The doctor, folded in ────────────────────────────────────────────────
   //
   // The full report is 800 lines of symptom, cause and fix and stays at its
-  // own route; what belongs in the unified room is the answer. The last cell
-  // is the fold itself: a finding the doctor could not fix becomes an ordinary
-  // fault, which is the queue cell 2 counts.
+  // own route; what belongs in the unified room is the answer. `DoctorBand`
+  // draws it as three strips — two the loop repairing itself inside its
+  // whitelist, one it could not and handed back — which is the distinction the
+  // four rollup cells that used to sit here flattened into four totals.
   const doctor = $derived(data.doctor);
-  const doctorCells = $derived<RollupCell[]>([
-    {
-      key: 'open',
-      mark: 'A',
-      label: 'Findings open',
-      value: String(doctor.openFindings),
-      sub: doctor.openFindings ? 'proposed or refused, waiting on somebody' : 'nothing outstanding',
-      tone: doctor.openFindings ? 'watch' : 'good',
-      href: '/jkai/daydreams/doctor',
-    },
-    {
-      key: 'fixed',
-      mark: 'B',
-      label: 'Fixed last night',
-      value: String(doctor.fixedLastNight),
-      sub: 'node config, inside the whitelist',
-      tone: doctor.fixedLastNight ? 'good' : 'quiet',
-    },
-    {
-      key: 'stopped',
-      mark: 'C',
-      label: 'Schedules stopped',
-      value: String(doctor.quarantinedLastNight),
-      sub: 'the circuit breaker, on a runaway cron',
-      tone: doctor.quarantinedLastNight ? 'action' : 'quiet',
-    },
-    {
-      key: 'escalated',
-      mark: 'D',
-      label: 'Handed to the queue',
-      value: String(doctor.escalatedLastNight),
-      sub: 'needed repo code, so it became a fault',
-      tone: doctor.escalatedLastNight ? 'steady' : 'quiet',
-      href: '/jkai/daydreams/backlog',
-    },
-  ]);
 </script>
+
+<!-- The night, before anything it produced. One window, one budget: a night
+     that overruns is a night that stops rather than a night that spends, so
+     what ran and what it cost is the frame for every count below. -->
+<section class="band" id="overnight">
+  <div class="inner">
+    <SectionHead
+      kicker="A / The overnight"
+      title={['What it did while', 'you were asleep']}
+      strap="One window, every activity that fired in it, one budget. The engine is scheduled by the heartbeat, so a pass that was scheduled and did not fire shows as a gap here rather than as a silence."
+    />
+    <NightTimeline night={data.night} />
+  </div>
+</section>
 
 <section class="band">
   <div class="inner">
     <SectionHead
-      kicker="A / Is the loop closing?"
+      kicker="B / Is the loop closing?"
       title={['What it built,', 'and what it used']}
       strap="Two dashboards showed everything about the self-improvement engine except whether a single thing it built was ever called. On the day this merged: 33 tools shipped, none used."
     />
@@ -167,7 +148,7 @@
 <section class="band" id="appetite">
   <div class="inner">
     <SectionHead
-      kicker="B / Appetite"
+      kicker="C / Appetite"
       title={['What it would like', 'to be able to do']}
       strap="Each evening the engine reads the types of question you have been asking, an inventory of every source, API, toolset, watch, feed and schedule the site can already reach, and the faults where it came up short — then names capabilities the site does not have. Every proposal cites the evidence that produced it or it is dropped unread. Accepting one queues it; it does not spend anything until a build slot opens."
     />
@@ -179,7 +160,7 @@
 <section class="band">
   <div class="inner">
     <SectionHead
-      kicker="C / The loop, end to end"
+      kicker="D / The loop, end to end"
       title={['What it could not do,', 'and what that built']}
       strap="Seven stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
     />
@@ -195,23 +176,12 @@
   </div>
 </section>
 
-<section class="band" id="doctor">
+<!-- Ink, because this is the system reporting on itself rather than another
+     exhibit on the page. The four rollup cells stay underneath: the band draws
+     the distinction (fixed itself / handed back), the grid keeps the totals. -->
+<section class="band ink" id="doctor">
   <div class="inner">
-    <SectionHead
-      kicker="D / The doctor"
-      title={['What broke,', 'and who fixed it']}
-      strap="Failed canvas runs, triaged nightly over a rolling week. It stops a runaway schedule itself and repairs node config inside a narrow whitelist; anything needing repo code becomes a fault, which is the same queue everything above is drawn from. That is the fold — not a shared page, a shared ledger."
-    />
-    {#if doctor.error}
-      <div class="card t-urgent"><p class="card-body">The doctor's ledger could not be read: {doctor.error}</p></div>
-    {:else}
-      <RollupGrid cells={doctorCells} min={190} />
-      <p class="note">
-        Runs at {data.doctorWindow.window}{data.doctorWindow.active ? '' : ' — the activity is paused'}.
-        {#if doctor.lastRunAt}Last run {doctor.lastRunStatus}.{:else}No run recorded yet.{/if}
-        <a href="/jkai/daydreams/doctor">Open the full report →</a>
-      </p>
-    {/if}
+    <DoctorBand {doctor} kicker="E / The doctor" window={data.doctorWindow.window} active={data.doctorWindow.active} />
   </div>
 </section>
 

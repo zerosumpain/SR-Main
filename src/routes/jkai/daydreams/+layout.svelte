@@ -171,6 +171,17 @@
     padding-top: 0;
     border-top: 0;
   }
+  /* A band the page turns over to. Ink is how this hub says "this is the
+     system talking about itself" — the cover and the foot already use it, and
+     a room that needs the same weight inside its own flow had been reaching
+     for a card on cream, which reads as one more exhibit rather than a change
+     of voice. Cream text is `--bg`, the accent moves to its on-dark partner
+     and `--line-hair` is invisible here, so hairlines are cream at 14%. */
+  .ds-vocab :global(.band.ink) {
+    background: var(--text-primary);
+    color: var(--bg);
+    border-top: 0;
+  }
   .ds-vocab :global(.inner) {
     max-width: 1500px;
     margin: 0 auto;
