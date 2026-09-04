@@ -17,12 +17,48 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamDayFeatures } from '$lib/db/schema';
+import {
+  activities,
+  appleHealthMetrics,
+  daydreamDayFeatures,
+  daydreamSpend,
+  daydreamTrail,
+  whoopCycles,
+  whoopRecovery,
+  whoopSleep,
+} from '$lib/db/schema';
 import { buildDayFeatures } from './build';
 import { PLAUSIBLE } from './normalise';
 
 let dbReady = false;
+/**
+ * Whether any of the tables `buildDayFeatures` reads has a row in it.
+ *
+ * `dbReady` alone was the guard, and it only ever asked "can I reach the
+ * features table". On homeserv that is the same question as "is there data",
+ * because the dev database has years of it. On the nightly's freshly-created
+ * container the table exists and is empty, so `dbReady` was true, the build
+ * wrote nothing, and `expect(built).toBeGreaterThan(0)` failed every night
+ * from 2026-08-19.
+ *
+ * An empty database is a REAL state — it is what production looked like
+ * before the first sync — so the zero is asserted rather than skipped.
+ */
+let hasSources = false;
 let built = 0;
+
+/** The tables `build.ts` actually reads. Listed rather than inferred: if the
+ *  builder gains a source, this guard has to gain it too, and a missing entry
+ *  shows up as a test that quietly stops asserting anything. */
+const SOURCE_TABLES = [
+  activities,
+  appleHealthMetrics,
+  daydreamSpend,
+  daydreamTrail,
+  whoopCycles,
+  whoopRecovery,
+  whoopSleep,
+];
 
 beforeAll(async () => {
   try {
@@ -32,6 +68,13 @@ beforeAll(async () => {
     dbReady = false;
   }
   if (!dbReady) return;
+  for (const t of SOURCE_TABLES) {
+    const [row] = await db.select({ one: sql<number>`1` }).from(t).limit(1);
+    if (row) {
+      hasSources = true;
+      break;
+    }
+  }
   const res = await buildDayFeatures({ windowDays: 365 });
   built = res.written;
 }, 120_000);
@@ -39,6 +82,9 @@ beforeAll(async () => {
 describe('buildDayFeatures', () => {
   it('produces rows from the real source tables', async () => {
     if (!dbReady) return expect(dbReady).toBe(false);
+    // No sources is a coherent zero, not an exception: the builder must write
+    // nothing rather than throw or invent a row.
+    if (!hasSources) return expect(built).toBe(0);
     expect(built).toBeGreaterThan(0);
   });
 
@@ -117,6 +163,13 @@ describe('owner-only domains', () => {
     if (!dbReady) return expect(dbReady).toBe(false);
 
     const res = await buildDayFeatures({ windowDays: 30, subject: 'katie' });
+    // With no sources there is no row to inspect, and the leak this test
+    // guards cannot happen — but the builder still has to come back with a
+    // coherent zero rather than throwing, which is worth asserting on its own.
+    if (!hasSources) {
+      expect(res.days).toBe(0);
+      return;
+    }
     // The trail is hers, so there should be something to build from at all.
     // If there is not, the assertion below is vacuous and worth knowing about.
     expect(res.days).toBeGreaterThan(0);

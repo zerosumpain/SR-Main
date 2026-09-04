@@ -24,24 +24,68 @@ import {
   recordFeedback,
 } from './thought-store';
 import { SETTINGS_MUTED_KINDS_KEY } from './types';
+import { TITLE_ECHO_SIMILARITY, titleSimilarity } from './refutations';
 import type { Candidate } from './snapshot-types';
 
 const PREFIX = 'itest_dd';
 let dbReady = false;
 let savedMuted: unknown = undefined;
 
+/**
+ * A fixture candidate whose CLAIM is unique per dedupe key.
+ *
+ * The title and explanation used to be fixed strings, so every row this file
+ * wrote made the same claim as every other. That was harmless until
+ * `persistCandidates` learned to FOLD a candidate into a live row saying the
+ * same thing: from then on the second fixture row in the file was merged into
+ * the first instead of inserted, `created` was 0, and the row the test then
+ * looked up did not exist — `Cannot read properties of undefined (reading
+ * 'id')`, every nightly.
+ *
+ * Deriving the claim from the key keeps the fixtures distinct claims, which is
+ * what they were always meant to be. A caller that wants to exercise folding
+ * passes an explicit title, and a caller that wants an UPDATE passes the same
+ * `dedupeKey` — which is what identity means here.
+ */
+/**
+ * An unrelated noun phrase per dedupe key.
+ *
+ * NOT decoration. `persistCandidates` folds a candidate into a live row that
+ * makes the same claim, and "same claim" is a trigram similarity on the TITLE
+ * at `TITLE_ECHO_SIMILARITY` (0.6). Every fixture in this file used to be
+ * titled "A test thought", so the second row written was folded into the
+ * first: `created` came back 0, the row the test then looked up did not exist,
+ * and `row.id` threw. That is one of the five failures that had the nightly
+ * red from 2026-08-19.
+ *
+ * A shared stem is not enough to separate them — `A test thought about
+ * <key>` still scores **0.944** against its sibling, because trigrams over a
+ * long common prefix swamp the difference. So the title has to share no stem
+ * at all. `fixtureTitles` below asserts that this actually holds rather than
+ * trusting it.
+ */
+function claimPhrase(dedupeKey: string): string {
+  let h = 0;
+  for (const c of dedupeKey) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const subject = ['otter', 'kettle', 'harbour', 'lantern', 'quarry', 'bramble', 'satchel', 'meridian'];
+  const verb = ['drifts', 'hums', 'folds', 'settles', 'rusts', 'waits', 'tilts', 'burns'];
+  return `${subject[h % subject.length]} ${verb[Math.floor(h / 8) % verb.length]} ${h % 9973}`;
+}
+
 function candidate(over: Partial<Candidate> = {}): Candidate {
+  const dedupeKey = over.dedupeKey ?? `${PREFIX}:one`;
+  const phrase = claimPhrase(dedupeKey);
   return {
     kind: `${PREFIX}_kind`,
-    title: 'A test thought',
-    explanation: 'Because the fixture said so.',
+    title: `The ${phrase}`,
+    explanation: `Because the fixture said so about the ${phrase}.`,
     rawScore: 0.9,
     components: { fixture: 1 },
     evidence: [{ kind: 'place', id: 'p1' }],
     placeId: null,
-    dedupeKey: `${PREFIX}:one`,
     proposedActions: [],
     ...over,
+    dedupeKey,
   };
 }
 
@@ -74,6 +118,33 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (dbReady) await cleanup();
+});
+
+// The guard on the fixture itself. Without it, a later edit that gives two
+// keys similar titles reintroduces exactly the fold that made this file fail
+// every night for a fortnight — and it would fail in a way that points at
+// `recordFeedback` rather than at the fixture.
+describe('the fixtures are distinct claims', () => {
+  it('no two keys in this file are within the title-echo threshold', () => {
+    const keys = [
+      `${PREFIX}:one`,
+      `${PREFIX}:weak`,
+      `${PREFIX}:mute-me`,
+      `${PREFIX}:mute-me-2`,
+      ...PROTECTED_STATUSES.map((s) => `${PREFIX}:protected:${s}`),
+    ];
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        const score = titleSimilarity(candidate({ dedupeKey: keys[i] }).title, candidate({ dedupeKey: keys[j] }).title);
+        // The pair is named in the message so a failure says WHICH two keys
+        // collided rather than only that one pair did.
+        expect({ pair: `${keys[i]} vs ${keys[j]}`, under: score < TITLE_ECHO_SIMILARITY }).toEqual({
+          pair: `${keys[i]} vs ${keys[j]}`,
+          under: true,
+        });
+      }
+    }
+  });
 });
 
 describe('persistCandidates', () => {

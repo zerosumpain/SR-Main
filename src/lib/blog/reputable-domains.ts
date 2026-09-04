@@ -223,30 +223,43 @@ export function reputationScore(url: string): number {
 /**
  * The bonus added to a search engine's own relevance score before ranking.
  *
- * The order these produce, for an equally relevant result, is the order John
- * asked for: UK academics, then other academics, then UK institutions and
- * press, then everyone else — with anything self-interested pushed below its
- * own tier rather than removed.
+ * BRITISHNESS IS THE STRONGEST SIGNAL, ahead of reputation (John, 2026-09-04:
+ * "make uk win over reputability"). It was the other way round in the first
+ * cut, on the reasoning that a parish newsletter must not outrank the ONS —
+ * true, but not what was asked for, and the ONS is itself British so the case
+ * it protected barely arises. What the old weighting actually produced was a US
+ * government statistics page outranking a UK trade body on a UK inflation
+ * query, which is the fault worth fixing.
  *
- *   UK university      0.5 + 0.25 + 0.3  = 1.05
- *   US university      0.5 + 0.3         = 0.8
- *   ONS / BBC          0.5 + 0.25        = 0.75
- *   Reuters / NYT      0.5               = 0.5
- *   UK personal blog         0.25        = 0.25
- *   the subject's own UK university page: 1.05 − 0.5 = 0.55
+ * So `UK > ACADEMIC > REPUTABLE`, and the tiers come out:
  *
- * THE WHOLE STACK IS DELIBERATELY WORTH ABOUT ONE POINT, because Tavily's
+ *   UK university      0.15 + 0.45 + 0.2 = 0.80
+ *   ONS / BBC          0.15 + 0.45       = 0.60
+ *   UK personal blog          0.45       = 0.45
+ *   MIT / Harvard      0.15 + 0.2        = 0.35
+ *   Reuters / NYT      0.15              = 0.15
+ *   the subject's own UK university page: 0.80 − 0.4 = 0.40
+ *
+ * Every UK source now outranks every non-UK one of the same relevance,
+ * including an unvetted UK blog over MIT. That is the literal ask and the
+ * consequence is deliberate; relevance is what keeps it sane, because a blog
+ * that is not about the claim will not be returned near the top in the first
+ * place.
+ *
+ * THE WHOLE STACK IS DELIBERATELY WORTH LESS THAN ONE POINT, because Tavily's
  * relevance is 0..1 and these must not swamp it. An earlier cut used 1/0.4/0.5
  * with a −0.8 penalty, and a test caught what that does: a barely-relevant
  * university page (0.20) outranked a near-perfect Reuters match (0.99), because
  * the gap between their tiers was 0.9 and the gap in relevance was only 0.79.
  * Ranking a page that is not about the claim above one that is, on the strength
- * of its domain, is worse than any ordering it was meant to fix.
+ * of its domain, is worse than any ordering it was meant to fix. **Any retune
+ * must keep the top-to-bottom spread below 1.0**, and there is a test asserting
+ * it.
  *
  * With these numbers the property holds: a MUCH better match wins across tiers
- * (Reuters 0.99 + 0.5 = 1.49 beats Oxford 0.20 + 1.05 = 1.25), and an equally
- * good one loses to the preferred tier (both at 0.70: Oxford 1.75, Reuters
- * 1.20). These are tie-breaks between sources that could all be cited, not a
+ * (Reuters 0.99 + 0.15 = 1.14 beats Oxford 0.20 + 0.80 = 1.00), and an equally
+ * good one loses to the preferred tier (both at 0.70: Oxford 1.50, Reuters
+ * 0.85). These are tie-breaks between sources that could all be cited, not a
  * ranking of truth — which is also why nothing here filters. A filter starves
  * the search whenever the only page carrying a fact is one this arithmetic
  * dislikes.
@@ -257,12 +270,12 @@ export function reputationScore(url: string): number {
  * would give the writing desk and the sources panel a different top source off
  * one claim, which reads as a bug in whichever one you opened second.
  */
-export const REPUTABLE_BONUS = 0.5;
-export const UK_BONUS = 0.25;
-export const ACADEMIC_BONUS = 0.3;
+export const REPUTABLE_BONUS = 0.15;
+export const UK_BONUS = 0.45;
+export const ACADEMIC_BONUS = 0.2;
 /** Negative. Large enough to drop a source a full tier, small enough that a
  *  clearly-best match survives it. */
-export const AFFILIATION_PENALTY = -0.5;
+export const AFFILIATION_PENALTY = -0.4;
 
 export type SourceRating = {
   reputable: boolean;

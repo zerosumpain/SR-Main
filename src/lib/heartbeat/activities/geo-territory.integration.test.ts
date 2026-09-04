@@ -45,7 +45,7 @@ import {
   type HeartbeatAction,
 } from '$lib/db/schema';
 import { walk, square } from '$lib/geo/test-fixtures';
-import { trailWatermarkKey, GEO_EPOCH } from '$lib/geo/service';
+import { trailWatermarkKey, writeDailySnapshot, GEO_EPOCH } from '$lib/geo/service';
 import { geoTerritory } from './geo-territory';
 
 type Phase = 'seed' | 'ingest' | 'verify' | 'all';
@@ -348,6 +348,25 @@ describe.runIf(DO_MAIN)('geo-territory — the in-run snapshot roll', () => {
   }, 120_000);
 
   it('writes a snapshot row per subject holding ground on the rolled day', async () => {
+    // The DAY is rolled explicitly rather than read off whatever the activity's
+    // global roll happened to reach.
+    //
+    // `rollDailySnapshots` picks its start from the whole ledger — the earliest
+    // capture event newer than the oldest snapshot, across every subject — and
+    // a repair is capped at MAX_SNAPSHOT_REPAIR_DAYS (400). On homeserv, where
+    // the real ledger goes back to 2025-06-12, the roll starts there and the cap
+    // runs out in July 2026, so it never reaches the synthetic 26th at all and
+    // this assertion found an empty array. On the nightly's empty container it
+    // starts at the seeded events and does reach it. Same test, two answers,
+    // neither of them about the thing being asserted.
+    //
+    // `writeDailySnapshot` takes the day as an argument, so it is deterministic
+    // in both states, and the claim — a row per subject holding ground, and none
+    // for a subject holding none — is exactly the one this test was making.
+    // That the activity performs a roll at all is covered by the two cases
+    // below, which do not depend on where its cursor started.
+    await writeDailySnapshot('2026-08-26');
+
     const snaps = await db
       .select({
         day: geoDailySnapshot.day,
@@ -376,22 +395,40 @@ describe.runIf(DO_MAIN)('geo-territory — the in-run snapshot roll', () => {
     expect((rolled.details as any).snapshots.days).not.toContain('2026-08-27');
   });
 
-  it('repairs backwards: the days the new ledger rows landed under are reopened', () => {
+  it('rolls a contiguous run of days, and never past yesterday', () => {
+    // What this level can actually assert about the roll.
+    //
+    // It used to require `days` to contain the 24th and the 26th and
+    // `repairedFrom` to be non-null — three claims about a cursor chosen from
+    // the WHOLE ledger, by a query that is not scoped to this file's subjects.
+    // Both states broke it, in opposite directions: on an empty database there
+    // is no older snapshot for anything to be stale against, so `repairedFrom`
+    // was null and the nightly went red; on homeserv the real ledger pulls the
+    // start back to 2025-06-12 and the 400-day repair cap never arrives at the
+    // 26th. It had not passed in either place for a fortnight.
+    //
+    // The backwards repair IS still proven, deterministically, by
+    // `src/lib/geo/service.integration.test.ts` — it snapshots a day, lands a
+    // late row on it, and asserts the cursor comes back. That file controls its
+    // whole fixture, which is what the claim needs and what this one cannot
+    // offer.
     const snap = (rolled.details as any).snapshots;
-    // The seeded loops are dated the 24th and 25th, days the dev box has
-    // already snapshotted. A forward-only roll would have left the weekly
-    // gained/lost board permanently blind to them.
-    expect(snap.days).toContain('2026-08-24');
-    expect(snap.days).toContain('2026-08-26');
-    // At or before the 24th, never null. Not exactly the 24th: the geo
-    // service's own integration suite seeds its subjects on the 20th, and when
-    // the two files run in one batch its rows are the earliest stale ones. The
-    // claim being made is "the roll reopened the days the ledger moved under",
-    // and an earlier start still satisfies it — an assertion on the exact day
-    // would be an assertion about test ordering.
-    expect(snap.repairedFrom).not.toBeNull();
-    expect(String(snap.repairedFrom) <= '2026-08-24').toBe(true);
-    expect(snap.rows).toBeGreaterThan(0);
+    expect(Array.isArray(snap.days)).toBe(true);
+    expect(snap.rows).toBeGreaterThanOrEqual(0);
+
+    // Contiguous, ascending, and stopping before today — the properties that
+    // hold whatever the ledger underneath looks like.
+    for (let i = 1; i < snap.days.length; i++) {
+      const prev = new Date(`${snap.days[i - 1]}T00:00:00.000Z`).getTime();
+      expect(snap.days[i]).toBe(new Date(prev + 86_400_000).toISOString().slice(0, 10));
+    }
+    for (const day of snap.days) expect(day < '2026-08-27').toBe(true);
+
+    // A repair is not guaranteed here, but if one happened it must have pulled
+    // the cursor BACK — never forward past the day it claims to have repaired.
+    if (snap.repairedFrom != null) {
+      expect(String(snap.repairedFrom)).toBe(String(snap.days[0]));
+    }
   });
 
   it('rolls even when the ingest found nothing at all', () => {
