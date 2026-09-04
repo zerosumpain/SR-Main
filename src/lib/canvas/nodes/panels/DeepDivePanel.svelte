@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   // Panel for `deep-dive` (legacy multi-mode research node — distinct from
   // the single-shot `deep-research` node). Marked `hidden: true` in the def
   // since it's been split into deep-dive-{start,status,list,report,control},
@@ -98,8 +99,6 @@
   });
 
   let showPreview = $state(false);
-  let showRawJson = $state(false);
-
   const OP_OPTIONS: Array<{ value: Op; label: string; sub: string }> = [
     { value: 'start', label: 'Start', sub: 'new session' },
     { value: 'status', label: 'Status', sub: 'check progress' },
@@ -257,21 +256,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="dd-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="dd-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -381,11 +366,4 @@
     word-break: break-word;
     color: var(--text-primary);
   }
-
-  .dd-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .dd-raw summary { cursor: pointer; }
 </style>

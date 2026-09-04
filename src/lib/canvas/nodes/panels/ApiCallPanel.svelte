@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import ResourcePicker from './shared/ResourcePicker.svelte';
@@ -99,8 +100,6 @@
     if (ex.body !== undefined) next.body = typeof ex.body === 'string' ? ex.body : JSON.stringify(ex.body, null, 2);
     onChange(next);
   }
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="ac">
@@ -260,21 +259,7 @@
     onChange={(v) => set('_onError', v)}
   />
 
-  <details class="ac-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="ac-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -350,6 +335,6 @@
   .ac-preview { margin: 0; font-size: var(--fs-label); line-height: 1.4; word-break: break-all; }
   .ac-preview-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink, var(--text-muted)); margin-right: 4px; }
 
-  .ac-adv, .ac-raw { border-top: 1px dashed var(--card-border); padding-top: 8px; display: flex; flex-direction: column; gap: 12px; }
-  .ac-adv summary, .ac-raw summary { cursor: pointer; }
+  .ac-adv { border-top: 1px dashed var(--card-border); padding-top: 8px; display: flex; flex-direction: column; gap: 12px; }
+  .ac-adv summary { cursor: pointer; }
 </style>

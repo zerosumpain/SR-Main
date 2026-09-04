@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import { onMount } from 'svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
@@ -113,8 +114,6 @@
   }
 
   // ---------- Raw JSON disclosure -----------------------------------------
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="la">
@@ -333,21 +332,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="la-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="la-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -464,11 +449,4 @@
   input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus {
     border-color: var(--text-muted);
   }
-
-  .la-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .la-raw summary { cursor: pointer; }
 </style>

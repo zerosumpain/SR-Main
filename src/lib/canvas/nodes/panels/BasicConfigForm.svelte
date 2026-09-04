@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { BasicConfigField, NodeDefinition } from '$lib/workflows/types';
   import SchemaFieldTable from './widgets/SchemaFieldTable.svelte';
   import KeyValueTableField from './widgets/KeyValueTableField.svelte';
@@ -28,7 +29,6 @@
   } = $props();
 
   let showAdvanced = $state(false);
-  let showRawJson = $state(false);
   const fields = $derived(definition.basicConfig ?? []);
   // Keys the node's JSON-Schema marks as required — rendered with a red * so
   // the user can see what must be filled before the node will work.
@@ -178,21 +178,7 @@
     {showAdvanced ? 'Hide advanced fields' : 'Show advanced fields'}
   </button>
 
-  <details class="bcf-raw" bind:open={showRawJson}>
-    <summary>Advanced — raw JSON config</summary>
-    <textarea
-      class="bcf-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next);
-        } catch { /* invalid JSON — ignore until valid */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -296,21 +282,6 @@
     cursor: pointer;
   }
   .bcf-advanced-toggle:hover { color: var(--text-primary); }
-  .bcf-raw {
-    margin-top: 8px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .bcf-raw summary {
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-  }
-  .bcf-raw summary:hover { color: var(--text-primary); }
-  .bcf-raw textarea { margin-top: 8px; }
   input[type='text'], input[type='number'], select, textarea {
     width: 100%;
     padding: 6px 8px;

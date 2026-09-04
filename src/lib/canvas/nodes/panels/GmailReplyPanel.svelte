@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import GmailAccountPicker from './widgets/GmailAccountPicker.svelte';
@@ -35,9 +36,6 @@
   const references = $derived(String(config.references ?? ''));
 
   // ---------- Raw JSON --------------------------------------------------
-
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; the canvas-level preview
   // header (in /jkai/canvas/[slug]/+page.svelte) handles the "What this does"
   // line so we don't duplicate it inside the panel.
@@ -167,21 +165,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="gr-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="gr-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -272,11 +256,4 @@
   }
   .gr-adv summary { cursor: pointer; padding: 2px 0; }
   .gr-adv > .gr-field { margin-top: 8px; }
-
-  .gr-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .gr-raw summary { cursor: pointer; }
 </style>

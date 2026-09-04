@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import FilePicker from './shared/FilePicker.svelte';
@@ -59,9 +60,6 @@
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
   }
-
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; the canvas-level page
   // already renders the "What this does" preview header.
   void definition;
@@ -163,21 +161,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="fb-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="fb-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -252,11 +236,4 @@
     outline: none;
   }
   input[type='text']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .fb-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .fb-raw summary { cursor: pointer; }
 </style>

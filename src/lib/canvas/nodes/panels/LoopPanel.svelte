@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
@@ -111,8 +112,6 @@
   }
 
   // Raw JSON disclosure
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; canvas-level preview
   // header handles the "What this does" line.
   void definition;
@@ -286,21 +285,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="lp-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="lp-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -349,11 +334,4 @@
     outline: none;
   }
   input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .lp-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .lp-raw summary { cursor: pointer; }
 </style>

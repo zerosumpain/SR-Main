@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   // FileTextExtractPanel — structured editor for the `file-text-extract` node.
   // The executor in src/lib/workflows/nodes/file-text-extract.ts reads:
   //   fileName    (required, supports {{input.x}} templates)
@@ -144,8 +145,6 @@
     if (typeof v === 'string') return v === 'true' || v === '1';
     return false;
   }
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="ft">
@@ -336,21 +335,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="ft-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced - raw JSON config</span></summary>
-    <textarea
-      class="ft-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid - keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -450,11 +435,4 @@
     outline: none;
   }
   input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .ft-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .ft-raw summary { cursor: pointer; }
 </style>
