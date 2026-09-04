@@ -61,8 +61,12 @@ describe('rateSource ranking', () => {
     expect(score('https://www.ons.gov.uk/a', 0.8)).toBeGreaterThan(score('https://www.cdc.gov/a', 0.8));
   });
 
-  it('still ranks a reputable non-UK source above an unvetted UK blog', () => {
-    expect(score('https://www.reuters.com/a', 0.5)).toBeGreaterThan(score('https://someones-blog.uk/a', 0.5));
+  // Reversed 2026-09-04 on John's instruction ("make uk win over
+  // reputability"). Britishness is now the strongest signal, so an unvetted UK
+  // source outranks a reputable non-UK one at equal relevance. The consequence
+  // is deliberate — see the tier table in reputable-domains.ts.
+  it('ranks an unvetted UK source above a reputable non-UK one', () => {
+    expect(score('https://someones-blog.uk/a', 0.5)).toBeGreaterThan(score('https://www.reuters.com/a', 0.5));
   });
 
   it('lets a clearly more relevant source win anyway', () => {
@@ -72,8 +76,8 @@ describe('rateSource ranking', () => {
     expect(score('https://www.washingtonpost.com/a', 0.95)).toBeGreaterThan(score('https://www.bbc.co.uk/a', 0.4));
   });
 
-  it('keeps the UK bonus smaller than the reputable one', () => {
-    expect(UK_BONUS).toBeLessThan(REPUTABLE_BONUS);
+  it('keeps the UK bonus larger than the reputable one', () => {
+    expect(UK_BONUS).toBeGreaterThan(REPUTABLE_BONUS);
   });
 
   it('reports every flag so the panel can explain the order', () => {
@@ -191,8 +195,32 @@ describe('the preference order', () => {
     expect(uni).toBeGreaterThan(score('https://www.reuters.com/a', r));
   });
 
-  it('ranks a non-UK academic above UK press', () => {
-    expect(score('https://www.mit.edu/a', 0.7)).toBeGreaterThan(score('https://www.bbc.co.uk/a', 0.7));
+  it('ranks UK press above a non-UK academic', () => {
+    expect(score('https://www.bbc.co.uk/a', 0.7)).toBeGreaterThan(score('https://www.mit.edu/a', 0.7));
+  });
+
+  it('keeps UK academics at the very top', () => {
+    const r = 0.7;
+    const uni = score('https://www.ox.ac.uk/a', r);
+    for (const other of ['https://www.bbc.co.uk/a', 'https://www.ons.gov.uk/a', 'https://someones-blog.uk/a', 'https://www.mit.edu/a']) {
+      expect(uni, other).toBeGreaterThan(score(other, r));
+    }
+  });
+
+  /**
+   * The guard rail on every future retune.
+   *
+   * If the best-tier bonus exceeds Tavily's whole relevance range, a page that
+   * is not about the claim outranks one that is on the strength of its domain.
+   * That is the exact failure an earlier weighting shipped with and a test
+   * caught; this asserts the property directly rather than leaving it implied
+   * by the constants.
+   */
+  it('keeps the whole preference spread below one point of relevance', () => {
+    const best = REPUTABLE_BONUS + UK_BONUS + ACADEMIC_BONUS;
+    const worst = AFFILIATION_PENALTY;
+    expect(best).toBeLessThan(1);
+    expect(best - worst).toBeLessThan(1.5);
   });
 
   it('drops an affiliated source below its own tier', () => {
