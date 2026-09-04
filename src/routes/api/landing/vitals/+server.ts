@@ -8,6 +8,7 @@ import { desc, eq, like, isNotNull, sql } from 'drizzle-orm';
 import { isProjectSlug, defaultsPublic } from '$lib/projects/visibility';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 import { publishedLink } from '$lib/builds/published-link';
+import { publicWalkState } from '$lib/landing/public-walk';
 
 /**
  * Public, read-only aggregator for the landing-page "Vital Signs" tiles.
@@ -24,7 +25,6 @@ import { publishedLink } from '$lib/builds/published-link';
  */
 
 const LIVE_STATE_PATH = '/tmp/live-walk-state.json';
-const WALK_EXPIRE_MS = 4 * 60 * 60 * 1000; // mirror /api/live-walk EXPIRE_MS
 const CACHE_MS = 5_000; // shield the DB from many concurrent visitor polls
 
 // A build counts as "in flight" while in one of these statuses (and not yet
@@ -48,40 +48,17 @@ interface VitalsPayload {
     lastShippedHref: string | null;
   };
   canvas: { count: number; lastRunAt: string | null };
-  walk: {
-    active: boolean;
-    distanceKm: number | null;
-    routeName: string | null;
-    startedAt: number | null;
-    elevationGainM: number | null;
-  };
+  walk: { active: boolean };
   generatedAt: string;
 }
 
 let cache: { at: number; data: VitalsPayload } | null = null;
 
 async function readWalk(): Promise<VitalsPayload['walk']> {
-  const idle: VitalsPayload['walk'] = {
-    active: false,
-    distanceKm: null,
-    routeName: null,
-    startedAt: null,
-    elevationGainM: null,
-  };
+  const idle: VitalsPayload['walk'] = { active: false };
   try {
     if (!existsSync(LIVE_STATE_PATH)) return idle;
-    const s = JSON.parse(await readFile(LIVE_STATE_PATH, 'utf-8'));
-    if (!s?.receivedAt || Date.now() - s.receivedAt > WALK_EXPIRE_MS) return idle;
-    if (s.status === 'finished') return idle;
-    return {
-      active: true,
-      // Public visitors may see that a walk is active, but not the route,
-      // precise progress, start time, or elevation profile.
-      distanceKm: null,
-      routeName: null,
-      startedAt: null,
-      elevationGainM: null,
-    };
+    return publicWalkState(JSON.parse(await readFile(LIVE_STATE_PATH, 'utf-8')));
   } catch {
     return idle;
   }
@@ -197,7 +174,7 @@ export const GET: RequestHandler = async () => {
       jkai: { activeJobs: 0 },
       builder: { stage: 'idle', active: false, shippedCount: 0, lastShippedTitle: null, lastShippedHref: null },
       canvas: { count: 0, lastRunAt: null },
-      walk: { active: false, distanceKm: null, routeName: null, startedAt: null, elevationGainM: null },
+      walk: { active: false },
       generatedAt: new Date().toISOString(),
     };
   }
