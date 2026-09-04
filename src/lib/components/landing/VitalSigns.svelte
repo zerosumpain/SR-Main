@@ -20,13 +20,7 @@
       lastShippedHref: string | null;
     };
     canvas: { count: number; lastRunAt: string | null };
-    walk: {
-      active: boolean;
-      distanceKm: number | null;
-      routeName: string | null;
-      startedAt: number | null;
-      elevationGainM: number | null;
-    };
+    walk: { active: boolean };
     generatedAt: string;
   }
 
@@ -84,14 +78,6 @@
     const hrs = Math.round(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.round(hrs / 24)}d ago`;
-  }
-
-  function elapsed(startedAt: number, ref: number): string {
-    const ms = ref - startedAt;
-    if (!Number.isFinite(ms) || ms < 0) return '';
-    const h = Math.floor(ms / 3_600_000);
-    const m = Math.floor((ms % 3_600_000) / 60_000);
-    return h === 0 ? `${m}m` : `${h}h ${m}m`;
   }
 
   // Health is "live" only once the store is seeded AND a real HR source exists —
@@ -163,15 +149,11 @@
       },
       {
         label: 'LIVE WALK',
-        num: w && w.active && w.distanceKm != null ? w.distanceKm : null,
-        fallback: w && w.active ? '0' : '—',
-        unit: w && w.active ? 'KM' : 'GPS',
-        dp: 1,
-        sub: w
-          ? w.active
-            ? `${w.routeName ?? 'activity'}${w.startedAt ? ' · ' + elapsed(w.startedAt, now) : ''}`
-            : 'idle — no activity'
-          : 'connecting…',
+        num: null,
+        fallback: w && w.active ? 'LIVE' : '—',
+        unit: 'GPS',
+        dp: null,
+        sub: w ? (w.active ? 'activity in progress' : 'idle — no activity') : 'connecting…',
         state: w ? (w.active ? 'live' : 'idle') : 'loading',
         href: '/live',
       },
