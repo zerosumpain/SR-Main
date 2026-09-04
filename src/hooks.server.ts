@@ -1,5 +1,4 @@
 import { startScheduler } from '$lib/health/scheduler';
-import { startScheduler as startWorkflowScheduler } from '$lib/workflows/scheduler';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startHeroTitlesScheduler,
@@ -62,10 +61,15 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
 // Start the health data sync scheduler
 startScheduler();
 
-// Start the workflow cron scheduler
-startWorkflowScheduler().catch((err) => {
-  console.error('[hooks.server] Workflow scheduler failed to start:', err);
-});
+// The workflow cron scheduler boots in $lib/workflows/index.ts, inside the
+// runsService('scheduler') gate, alongside every other platform service. It used
+// to be started here as well, ungated — this call predated service roles, so a
+// process running these hooks under JKAI_SERVICE_ROLE=whatsapp would have started
+// a second scheduler, which is the exact "every cron fires twice" failure
+// service-role.ts exists to prevent. Both sites in fact registered every schedule
+// at boot, harmlessly (registerCronJob replaces by id), and it stayed invisible
+// only because the gated one threw on a temporal-dead-zone error until 2026-09-04.
+// Do not re-add a boot call here. stopScheduler() is still wired to shutdown below.
 
 // Start the Forge trigger scheduler (scheduled + autonomous brass-and-rails
 // builds). Leader-elected on its own advisory-lock lane.
