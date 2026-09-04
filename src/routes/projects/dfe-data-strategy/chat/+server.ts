@@ -3,13 +3,8 @@
 // project's own corpus, prompted to refuse off-topic. Streams SSE. Imports only the low-level
 // LLM transport (no orchestrator).
 
-import type { RequestHandler } from './$types';
-import { error } from '@sveltejs/kit';
-import { requireProjectPublic } from '$lib/projects/guard';
-import { getLLMClient } from '$lib/llm/client';
-import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
-import { withActivity } from '$lib/context/activity';
-import { retrieve, type Retrieved } from '../lib/retrieval.server';
+import { retrieve } from '../lib/retrieval.server';
+import { createProjectChatHandler } from '$lib/projects/chat.server';
 
 const HITS = new Map<string, number[]>();
 const WINDOW_MS = 60_000;
@@ -34,93 +29,17 @@ RULES:
 5. When the user asks about "my"/"the current" strategy, use the CURRENT STRATEGY block — those are this user's live workbench settings.
 Never fabricate statistics, sources or quotes.`;
 
-function buildContext(chunks: Retrieved[]): string {
-  return chunks.map((c, i) => `[${i + 1}] (${c.title}${c.url ? `, ${c.url}` : ''})\n${c.text.slice(0, 1400)}`).join('\n\n');
-}
-
-/**
- * Tagged as the `project-chat` workload, so this page's spend lands on the row
- * that also carries its model switch.
- *
- * Wrapped at the HANDLER rather than at the LLM call: the answer is streamed
- * from inside a `ReadableStream` `start()`, which the constructor runs
- * synchronously in this async context, so one wrapper covers every call the
- * request makes without touching the streaming code.
- */
-export const POST: RequestHandler = (event) =>
-  // `async` so the callback returns a Promise: a RequestHandler may return a
-  // bare Response, and `withActivity` takes an async function.
-  withActivity('project-chat', async () => handlePost(event));
-
-const handlePost: RequestHandler = async (event) => {
-  await requireProjectPublic('dfe-data-strategy', event);
-
-  const ip = event.getClientAddress?.() ?? 'unknown';
-  if (rateLimited(ip)) throw error(429, 'Too many requests — please wait a moment.');
-
-  const body = await event.request.json().catch(() => ({}));
-  const question = String(body?.question ?? '').slice(0, 2000).trim();
-  if (!question) throw error(400, 'Empty question.');
-  const scenario = String(body?.scenario ?? '').slice(0, 4000);
-  const history: { role: string; content: string }[] = Array.isArray(body?.history)
-    ? body.history.slice(-6).map((m: any) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content ?? '').slice(0, 2000) }))
-    : [];
-
-  const chunks = await retrieve(question, 10);
-  const sources = chunks.map((c, i) => ({ n: i + 1, title: c.title, url: c.url }));
-
-  const historyBlock = history.length
-    ? `\n\nRECENT CONVERSATION:\n${history.map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join('\n')}`
-    : '';
-  const scenarioBlock = scenario.trim()
-    ? `\n\nCURRENT STRATEGY (the user's live workbench settings):\n${scenario.trim()}`
-    : '\n\nCURRENT STRATEGY: (none provided — the user is on a public page)';
-
-  const userPrompt = `CONTEXT PASSAGES (retrieved from the project's corpus — cite with [n]):\n\n${buildContext(chunks)}${scenarioBlock}${historyBlock}\n\nQUESTION: ${question}\n\nAnswer using only the context and strategy above, citing [n] markers. If it's outside the project's scope, decline briefly.`;
-
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (obj: unknown) => {
-        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch { /* closed */ }
-      };
-      send({ type: 'sources', sources });
-      try {
-        const { client, model } = await getLLMClient(await resolveProjectChatModel());
-        const completion = await client.chat.completions.create(
-          {
-            model,
-            messages: [
-              { role: 'system', content: SYSTEM },
-              { role: 'user', content: userPrompt },
-            ],
-            temperature: 0.3,
-            max_tokens: 1000,
-            stream: true,
-          },
-          { signal: AbortSignal.timeout(60_000) as any },
-        );
-        let any = false;
-        for await (const chunk of completion as any) {
-          const delta = chunk?.choices?.[0]?.delta?.content;
-          if (delta) { any = true; send({ type: 'token', token: delta }); }
-        }
-        if (!any) send({ type: 'token', token: 'Sorry — I could not generate an answer for that. Try rephrasing.' });
-        send({ type: 'done' });
-      } catch (e: any) {
-        send({ type: 'error', message: (e?.message ?? 'generation failed').slice(0, 120) });
-      } finally {
-        try { controller.close(); } catch { /* already closed */ }
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-store',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  });
-};
+export const POST = createProjectChatHandler({
+  slug: 'dfe-data-strategy',
+  systemPrompt: SYSTEM,
+  retrieve,
+  answerScope: 'context and strategy above',
+  historyHeading: 'RECENT CONVERSATION',
+  timeoutMs: 60_000,
+  supplement: ({ body }) => {
+    const scenario = String(body.scenario ?? '').slice(0, 4000).trim();
+    return scenario
+      ? `\n\nCURRENT STRATEGY (the user's live workbench settings):\n${scenario}`
+      : '\n\nCURRENT STRATEGY: (none provided — the user is on a public page)';
+  },
+});
