@@ -111,6 +111,14 @@ describe('the prebuild/release split across two machines', () => {
     expect(webframe).not.toContain('touch "$VPS_DIR/.env"');
     expect(release).not.toMatch(/sed .*AUTH_BYPASS.*\.env/);
   });
+
+  it('ships the npm configuration that produced the production lockfile', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+
+    expect(release).toContain('package.json package-lock.json .npmrc');
+    expect(release).toContain('npm ci --omit=dev --no-audit --no-fund');
+    expect(release).not.toContain('npm ci --omit=dev --silent');
+  });
 });
 
 describe('the local fast path', () => {
