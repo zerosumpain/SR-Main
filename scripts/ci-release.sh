@@ -86,7 +86,10 @@ PREV_SHA="$(sed -n 's/^sha=//p' "$VPS_DIR/build/.deploy-sha" 2>/dev/null | head 
 echo "==> Previously deployed sha: ${PREV_SHA:-<none>}"
 
 echo "==> Placing package manifests..."
-rsync -a package.json package-lock.json "$VPS_DIR/"
+# npm ci must receive the configuration used to generate the lockfile. In
+# particular, Auth.js's optional peer range currently stops at Nodemailer 8
+# while the adapter is API-compatible with the patched Nodemailer 9 release.
+rsync -a package.json package-lock.json .npmrc "$VPS_DIR/"
 
 # The production .env is intentionally immutable in the deployment runner's
 # mount namespace after a historical overwrite incident. ci-webframe.sh installs
@@ -146,7 +149,9 @@ LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
 if [ "$(cat "$STATE_DIR/lockfile.sha256" 2>/dev/null || true)" = "$LOCK_HASH" ]; then
   echo "    lockfile unchanged — skipping install"
 else
-  ( cd "$VPS_DIR" && npm ci --omit=dev --silent )
+  # Keep resolver diagnostics visible. A production-only peer conflict used to
+  # collapse into a bare exit code here, after every earlier gate was green.
+  ( cd "$VPS_DIR" && npm ci --omit=dev --no-audit --no-fund )
   echo "$LOCK_HASH" > "$STATE_DIR/lockfile.sha256"
   echo "    installed"
 fi
