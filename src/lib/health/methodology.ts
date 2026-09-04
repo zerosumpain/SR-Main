@@ -84,11 +84,11 @@ export const METHODOLOGY: MethodologyEntry[] = [
   },
   {
     id: 'recovery-debt',
-    metric: 'Recovery Debt',
+    metric: 'Sleep Balance',
     cite: 'Van Dongen 2003',
-    formula: 'sleep_debt_minutes = sum_{14d}(sleep_need − sleep_actual), floored at 0. strain_recovery_balance = mean(strain_7d) − mean(recovery_score_7d). Debt > 240 min OR balance > 8 = overdrawn.',
-    sourceData: 'Whoop sleep need/actual from `whoop_sleep`; strain from `whoop_cycles`; recovery from `whoop_recovery` (last 14 days).',
-    caveats: 'Sleep debt is reset by genuine recovery sleep, not by single long nights. The strain/recovery balance is a heuristic — use alongside subjective state.',
+    formula: 'fresh_need = baseline_need + strain_need + nap_adjustment; nightly_balance = actual_sleep − fresh_need. The headline is mean(nightly_balance) over the latest 7 complete sleeps. WHOOP\'s carried debt component is shown separately and never summed. Below −30 min/night is short. strain_recovery_balance = mean(strain_7d) − mean(recovery_score_7d)/10 and remains a separate tripwire.',
+    sourceData: 'WHOOP scored sleep stages and need components from `whoop_sleep` (up to 28 complete sleeps for recent-versus-prior context); strain from `whoop_cycles`; recovery from `whoop_recovery`.',
+    caveats: 'This is a transparent recent-balance indicator, not a claim that missed sleep creates a minute-for-minute bill. Positive nights offset negative ones; naps are represented by WHOOP\'s signed nap adjustment. The 30-minute action line is an operating heuristic, not a clinical threshold.',
     reference: 'Van Dongen HPA et al., Sleep 26:117–126 (2003). The cumulative cost of additional wakefulness.',
   },
   {

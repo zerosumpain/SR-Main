@@ -35,7 +35,7 @@ import { SRI_TARGET } from './analytics/sri';
 import type { CircadianResult } from './analytics/circadian';
 import type { AutonomicResult } from './analytics/autonomic-balance';
 import {
-  SLEEP_DEBT_FLAG_MIN,
+  SLEEP_BALANCE_SHORTFALL_MIN,
   STRAIN_BALANCE_FLAG,
   type RecoveryDebtResult,
 } from './analytics/recovery-debt';
@@ -157,10 +157,14 @@ function sleepWindow(i: MovesInput): Draft | null {
     clauses.push(`circadian drift ${signed(i.circadian.value.driftHours, 1)}h`);
     buys.push(`Pulls the sleep midpoint back inside the ${CIRCADIAN_FLAG_HOURS}-hour flag.`);
   }
-  if (usable(i.recoveryDebt) && i.recoveryDebt.value.sleepDebtMin > SLEEP_DEBT_FLAG_MIN) {
-    instruments.push('RECOVERY DEBT');
-    clauses.push(`${Math.round(i.recoveryDebt.value.sleepDebtMin)} minutes of debt`);
-    buys.push('The debt curve turns rather than steepening.');
+  if (
+    usable(i.recoveryDebt) &&
+    i.recoveryDebt.value.averageBalanceMin < -SLEEP_BALANCE_SHORTFALL_MIN
+  ) {
+    const shortfall = Math.round(Math.abs(i.recoveryDebt.value.averageBalanceMin));
+    instruments.push('SLEEP BALANCE');
+    clauses.push(`a seven-night balance ${shortfall} minutes short per night`);
+    buys.push('Brings the seven-night sleep balance back toward even.');
   }
   if (!instruments.length) return null;
 
@@ -231,8 +235,11 @@ function longEasyDay(i: MovesInput): Draft | null {
   }
 
   const costs = ['Two to three hours of calendar a week.'];
-  if (usable(i.recoveryDebt) && i.recoveryDebt.value.sleepDebtMin > SLEEP_DEBT_FLAG_MIN) {
-    costs.push('Adding volume on a standing sleep debt is how the debt curve steepens again.');
+  if (
+    usable(i.recoveryDebt) &&
+    i.recoveryDebt.value.averageBalanceMin < -SLEEP_BALANCE_SHORTFALL_MIN
+  ) {
+    costs.push('Adding volume while the seven-night sleep balance is short can widen the nightly gap.');
   }
 
   return {

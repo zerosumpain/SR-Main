@@ -31,14 +31,34 @@ function weeks(distancesKm: number[]): TripwireInput['weeks'] {
 }
 
 const ACWR_ZERO = { acuteEWMA: 0, chronicEWMA: 0, ratio: 0, zone: 'detraining' as const };
-const DEBT_ZERO = { sleepDebtMin: 0, strainRecoveryBalance: 0, overdrawn: false, series: [] };
+const BALANCE_ZERO = {
+  averageBalanceMin: 0,
+  averageActualMin: 0,
+  averageNeedMin: 0,
+  trendActualMin: null,
+  nightsBelowNeed: 0,
+  latestWhoopDebtAdjustmentMin: null,
+  strainRecoveryBalance: 0,
+  short: false,
+  series: [],
+};
 const VO2_ZERO = { current: 0, trendSlopePerMonth: 0, percentile: 0, band: 'poor' as const };
 
 /** The prototype's illustrative reading — two TRIPPED, two CLOSE, five ARMED. */
 function prototypeInput(): TripwireInput {
   return {
     today: TODAY,
-    recoveryDebt: ok({ sleepDebtMin: 612, strainRecoveryBalance: 2.6, overdrawn: true, series: [] }),
+    recoveryDebt: ok({
+      averageBalanceMin: -60,
+      averageActualMin: 420,
+      averageNeedMin: 480,
+      trendActualMin: -15,
+      nightsBelowNeed: 7,
+      latestWhoopDebtAdjustmentMin: 90,
+      strainRecoveryBalance: 2.6,
+      short: true,
+      series: [],
+    }),
     acwr: ok({ acuteEWMA: 6.2, chronicEWMA: 10, ratio: 0.62, zone: 'undertraining' }),
     vo2: ok({ current: 41.2, trendSlopePerMonth: -0.14, percentile: 63, band: 'excellent' }),
     hrv: { daily: days(28, () => 42), rolling7: days(28, () => 42), latest7: 42, baseline28: 44 },
@@ -69,16 +89,16 @@ describe('computeTripwires — the table', () => {
   it('refuses to read an insufficient metric, zero struct and all', () => {
     const rows = computeTripwires({
       today: TODAY,
-      recoveryDebt: thin(DEBT_ZERO),
+      recoveryDebt: thin(BALANCE_ZERO),
       acwr: thin(ACWR_ZERO),
       vo2: thin(VO2_ZERO),
     });
-    const debt = rows.find((r) => r.id === 'sleep-debt')!;
-    expect(debt.readable).toBe(false);
-    expect(debt.state).toBe('ARMED');
-    expect(debt.now).toBe('—');
-    // 0 minutes of debt is what the zero struct says; it must not print as good news.
-    expect(debt.now).not.toContain('0 min');
+    const balance = rows.find((r) => r.id === 'sleep-balance')!;
+    expect(balance.readable).toBe(false);
+    expect(balance.state).toBe('ARMED');
+    expect(balance.now).toBe('—');
+    // A zero balance is what the zero struct says; it must not print as good news.
+    expect(balance.now).not.toContain('0 min');
   });
 });
 
@@ -86,12 +106,11 @@ describe('computeTripwires — states against the prototype reading', () => {
   const rows = computeTripwires(prototypeInput());
   const at = (id: string) => rows.find((r) => r.id === id)!;
 
-  it('trips sleep debt at two and a half times the 240-minute flag', () => {
-    expect(at('sleep-debt').state).toBe('TRIPPED');
-    expect(at('sleep-debt').trigger).toBe('> 240 min');
-    expect(at('sleep-debt').now).toBe('612 min');
-    // 612 / 240 = 2.55 — "two and a half times over", as the prototype puts it.
-    expect(at('sleep-debt').meaning).toContain('2.5 times over');
+  it('trips sleep balance when the seven-night mean is over 30 minutes short', () => {
+    expect(at('sleep-balance').state).toBe('TRIPPED');
+    expect(at('sleep-balance').trigger).toBe('< −30 min/night');
+    expect(at('sleep-balance').now).toBe('−60 min/night');
+    expect(at('sleep-balance').meaning).toContain('7 of 7 nights');
   });
 
   it('trips weekly volume on a seven-point-seven kilometre week', () => {
@@ -156,12 +175,19 @@ describe('computeTripwires — the edges', () => {
     expect(rows.find((r) => r.id === 'acwr')!.state).toBe('TRIPPED');
   });
 
-  it('goes CLOSE on sleep debt at four fifths of the flag', () => {
+  it('goes CLOSE on sleep balance at four fifths of the action line', () => {
     const rows = computeTripwires({
       ...prototypeInput(),
-      recoveryDebt: ok({ sleepDebtMin: 200, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      recoveryDebt: ok({
+        ...BALANCE_ZERO,
+        averageBalanceMin: -25,
+        averageActualMin: 455,
+        averageNeedMin: 480,
+        nightsBelowNeed: 5,
+        strainRecoveryBalance: 1,
+      }),
     });
-    expect(rows.find((r) => r.id === 'sleep-debt')!.state).toBe('CLOSE');
+    expect(rows.find((r) => r.id === 'sleep-balance')!.state).toBe('CLOSE');
   });
 
   it('trips resting heart rate only on the third consecutive day over baseline', () => {
@@ -209,7 +235,7 @@ describe('computeTripwires — the edges', () => {
   it('trips the strain-recovery balance over 8', () => {
     const rows = computeTripwires({
       ...prototypeInput(),
-      recoveryDebt: ok({ sleepDebtMin: 10, strainRecoveryBalance: 9.4, overdrawn: true, series: [] }),
+      recoveryDebt: ok({ ...BALANCE_ZERO, strainRecoveryBalance: 9.4 }),
     });
     expect(rows.find((r) => r.id === 'strain-balance')!.state).toBe('TRIPPED');
   });

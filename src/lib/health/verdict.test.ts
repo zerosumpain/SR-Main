@@ -13,6 +13,37 @@ function thin<T>(zero: T): MetricResult<T> {
   return { value: zero, sufficiency: 'insufficient', sampleSize: 0, asOf: TODAY };
 }
 
+const BALANCE_ZERO = {
+  averageBalanceMin: 0,
+  averageActualMin: 0,
+  averageNeedMin: 0,
+  trendActualMin: null,
+  nightsBelowNeed: 0,
+  latestWhoopDebtAdjustmentMin: null,
+  strainRecoveryBalance: 0,
+  short: false,
+  series: [],
+};
+const BALANCE_OK = {
+  ...BALANCE_ZERO,
+  averageBalanceMin: -10,
+  averageActualMin: 470,
+  averageNeedMin: 480,
+  nightsBelowNeed: 3,
+  strainRecoveryBalance: 1,
+};
+const BALANCE_SHORT = {
+  ...BALANCE_ZERO,
+  averageBalanceMin: -60,
+  averageActualMin: 420,
+  averageNeedMin: 480,
+  trendActualMin: -15,
+  nightsBelowNeed: 7,
+  latestWhoopDebtAdjustmentMin: 90,
+  strainRecoveryBalance: 2.6,
+  short: true,
+};
+
 const INSTRUMENTS = {
   acwr: ok({ acuteEWMA: 6.2, chronicEWMA: 10, ratio: 0.62, zone: 'undertraining' as const }),
   monotony: ok({ monotony: 1.4, strain: 90, mean: 9, sd: 6.4, band: 'moderate' as const }),
@@ -20,7 +51,7 @@ const INSTRUMENTS = {
   sri: ok(71),
   circadian: ok({ driftHours: 1.3, baselineMidpointMin: 190, recentMidpointMin: 268, flag: 'drift-late' as const }),
   autonomic: ok({ score: 44, hrvZ: -0.36, rhrZ: 0.12, hrv7dMean: 42, rhr7dMean: 50, hrvBaselineMean: 44, rhrBaselineMean: 49 }),
-  recoveryDebt: ok({ sleepDebtMin: 612, strainRecoveryBalance: 2.6, overdrawn: true, series: [] }),
+  recoveryDebt: ok(BALANCE_SHORT),
   vo2: ok({ current: 41.2, trendSlopePerMonth: -0.14, percentile: 63, band: 'excellent' as const }),
 };
 
@@ -58,7 +89,7 @@ describe('computeVerdict — the headline', () => {
       ...prototypeInput(),
       sri: ok(92),
       circadian: ok({ driftHours: 0.1, baselineMidpointMin: 190, recentMidpointMin: 196, flag: 'aligned' as const }),
-      recoveryDebt: ok({ sleepDebtMin: 20, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      recoveryDebt: ok(BALANCE_OK),
       acwr: ok({ acuteEWMA: 3, chronicEWMA: 10, ratio: 0.3, zone: 'detraining' as const }),
     })!;
     expect(detraining.headline[1]).toBe('DETRAINING.');
@@ -69,7 +100,7 @@ describe('computeVerdict — the headline', () => {
       ...prototypeInput(),
       sri: ok(92),
       circadian: ok({ driftHours: 0.1, baselineMidpointMin: 190, recentMidpointMin: 196, flag: 'aligned' as const }),
-      recoveryDebt: ok({ sleepDebtMin: 20, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      recoveryDebt: ok(BALANCE_OK),
       acwr: ok({ acuteEWMA: 10, chronicEWMA: 10, ratio: 1.05, zone: 'optimal' as const }),
       volume: { weekKm: 21, medianKm: 20 },
       monotony: ok({ monotony: 1.4, strain: 90, mean: 9, sd: 6.4, band: 'moderate' as const }),
@@ -85,7 +116,7 @@ describe('computeVerdict — the body', () => {
     const all = v.body.join(' ');
     expect(all).toContain('50 bpm');       // resting heart rate baseline
     expect(all).toContain('63rd');         // VO₂max percentile
-    expect(all).toContain('612');          // sleep debt
+    expect(all).toContain('60');           // average sleep shortfall per night
     expect(all).toContain('71');           // SRI
     expect(all).toContain('40.8 km');      // the capability on record
     expect(all).toContain('1,723 m');
@@ -155,7 +186,7 @@ describe('computeVerdict — sufficiency', () => {
         sri: thin(0),
         circadian: thin({ driftHours: 0, baselineMidpointMin: 0, recentMidpointMin: 0, flag: 'aligned' as const }),
         autonomic: null,
-        recoveryDebt: thin({ sleepDebtMin: 0, strainRecoveryBalance: 0, overdrawn: false, series: [] }),
+        recoveryDebt: thin(BALANCE_ZERO),
         vo2: thin({ current: 0, trendSlopePerMonth: 0, percentile: 0, band: 'poor' as const }),
         efficiency: null,
         volume: null,

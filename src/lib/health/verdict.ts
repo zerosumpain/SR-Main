@@ -19,7 +19,7 @@ import { SRI_TARGET } from './analytics/sri';
 import type { CircadianResult } from './analytics/circadian';
 import type { AutonomicResult } from './analytics/autonomic-balance';
 import {
-  SLEEP_DEBT_FLAG_MIN,
+  SLEEP_BALANCE_SHORTFALL_MIN,
   STRAIN_BALANCE_FLAG,
   type RecoveryDebtResult,
 } from './analytics/recovery-debt';
@@ -120,7 +120,8 @@ function openingWord(i: VerdictInput): string {
 
 function problemWord(i: VerdictInput): string {
   const sleepShort =
-    (usable(i.recoveryDebt) && i.recoveryDebt.value.sleepDebtMin > SLEEP_DEBT_FLAG_MIN) ||
+    (usable(i.recoveryDebt) &&
+      i.recoveryDebt.value.averageBalanceMin < -SLEEP_BALANCE_SHORTFALL_MIN) ||
     (usable(i.sri) && i.sri.value < SRI_TARGET) ||
     (usable(i.circadian) && Math.abs(i.circadian.value.driftHours) >= CIRCADIAN_FLAG_HOURS);
   if (sleepShort) return 'UNDER-SLEPT.';
@@ -154,9 +155,12 @@ function goodClauses(i: VerdictInput): string[] {
 
 function badClauses(i: VerdictInput): string[] {
   const out: string[] = [];
-  if (usable(i.recoveryDebt) && i.recoveryDebt.value.sleepDebtMin > SLEEP_DEBT_FLAG_MIN) {
+  if (
+    usable(i.recoveryDebt) &&
+    i.recoveryDebt.value.averageBalanceMin < -SLEEP_BALANCE_SHORTFALL_MIN
+  ) {
     out.push(
-      `sleep is ${Math.round(i.recoveryDebt.value.sleepDebtMin)} minutes down on its own need over the fortnight`,
+      `sleep is ${Math.round(Math.abs(i.recoveryDebt.value.averageBalanceMin))} minutes short of fresh need per night over the latest seven`,
     );
   }
   if (usable(i.sri) && i.sri.value < SRI_TARGET) {

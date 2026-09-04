@@ -258,7 +258,7 @@ export const load: PageServerLoad = async (event) => {
   // ——— the instrument deck ————————————————————————————————————————
   //
   // Six of the eight panels were already on this payload (monotony, polarised,
-  // circadian, autonomic, recovery debt, and sleep regularity in `shared`).
+  // circadian, autonomic, sleep balance, and sleep regularity in `shared`).
   // ACWR and efficiency were not, and neither needs a query of its own: the
   // dashboard has already computed both. The TRIMP-based ratio is the honest
   // one — the Whoop-strain ratio is an interim while the load history fills —

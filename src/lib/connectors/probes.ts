@@ -247,7 +247,7 @@ async function probeOAuthHealth(service: 'strava' | 'whoop'): Promise<ConnectorR
   const impact =
     service === 'strava'
       ? 'No new activities on /health, and training-load figures drift out of date'
-      : 'No new sleep, recovery or strain — readiness and recovery-debt go stale';
+      : 'No new sleep, recovery or strain — readiness and sleep balance go stale';
 
   const parked = DORMANT[service];
   if (parked) {

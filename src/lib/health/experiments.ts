@@ -21,7 +21,11 @@ import { ACWR_BANDS, type ACWRResult } from './analytics/acwr';
 import { POLARISED_HARD_PCT, type PolarisedResult } from './analytics/polarised';
 import { SRI_TARGET } from './analytics/sri';
 import type { CircadianResult } from './analytics/circadian';
-import { SLEEP_DEBT_FLAG_MIN, STRAIN_BALANCE_FLAG, type RecoveryDebtResult } from './analytics/recovery-debt';
+import {
+  SLEEP_BALANCE_SHORTFALL_MIN,
+  STRAIN_BALANCE_FLAG,
+  type RecoveryDebtResult,
+} from './analytics/recovery-debt';
 
 export type ExperimentId = 'fixed-window' | 'dull-long-day' | 'one-hard-effort';
 export type ExperimentState = 'LIVE' | 'QUEUED';
@@ -129,15 +133,16 @@ function fixedWindow(i: ExperimentsInput): Draft | null {
     usable(i.circadian) && Math.abs(i.circadian.value.driftHours) >= CIRCADIAN_FLAG_HOURS
       ? i.circadian.value.driftHours
       : null;
-  const debt =
-    usable(i.recoveryDebt) && i.recoveryDebt.value.sleepDebtMin > SLEEP_DEBT_FLAG_MIN
+  const sleepBalance =
+    usable(i.recoveryDebt) &&
+    i.recoveryDebt.value.averageBalanceMin < -SLEEP_BALANCE_SHORTFALL_MIN
       ? i.recoveryDebt.value
       : null;
-  if (sri == null && drift == null && debt == null) return null;
+  if (sri == null && drift == null && sleepBalance == null) return null;
 
-  // The debt curve is the one trigger with a dated series behind it, so it is
-  // the one that can date the experiment.
-  const onset = debt ? debtCrossingDays(debt.series, i.today) : 0;
+  // The rolling balance curve is the one trigger with a dated series behind
+  // it, so it is the one that can date the experiment.
+  const onset = sleepBalance ? balanceCrossingDays(sleepBalance.series, i.today) : 0;
   const { dayCount, daysSinceOnset } = count(onset, FIXED_WINDOW_DAYS);
 
   const measures: string[] = [];
@@ -145,7 +150,11 @@ function fixedWindow(i: ExperimentsInput): Draft | null {
   if (drift != null) {
     measures.push(`circadian drift ${signed(drift, 1)}h → under ${CIRCADIAN_FLAG_HOURS}h`);
   }
-  if (debt) measures.push(`the ${Math.round(debt.sleepDebtMin)}-minute debt curve turning`);
+  if (sleepBalance) {
+    measures.push(
+      `seven-night sleep balance ${signed(sleepBalance.averageBalanceMin, 0)} min/night → within ${SLEEP_BALANCE_SHORTFALL_MIN}`,
+    );
+  }
   measures.push('HRV 7d mean');
 
   const judgeOn = addDays(i.today, FIXED_WINDOW_DAYS - dayCount);
@@ -215,7 +224,9 @@ function oneHardEffort(i: ExperimentsInput): Draft | null {
 
   // Hard work on short sleep is how this list restarts at the top, so the entry
   // condition is both gates being clear — not merely the mix being wrong.
-  const debtClear = !usable(i.recoveryDebt) || i.recoveryDebt.value.sleepDebtMin <= SLEEP_DEBT_FLAG_MIN;
+  const balanceClear =
+    !usable(i.recoveryDebt) ||
+    i.recoveryDebt.value.averageBalanceMin >= -SLEEP_BALANCE_SHORTFALL_MIN;
   const loadClear = !usable(i.acwr) || i.acwr.value.ratio >= ACWR_BANDS.undertraining;
 
   const gates: ExperimentId[] = [];
@@ -227,7 +238,7 @@ function oneHardEffort(i: ExperimentsInput): Draft | null {
 
   const notBefore = addDays(i.today, longestGateRemaining(i, gates));
   const entry = gates.length
-    ? `Do not start before ${longDate(notBefore)}, and not at all unless sleep debt is under ${SLEEP_DEBT_FLAG_MIN} minutes.`
+    ? `Do not start before ${longDate(notBefore)}, and not at all unless the seven-night sleep balance is within ${SLEEP_BALANCE_SHORTFALL_MIN} minutes per night of fresh need.`
     : `Stop if the polarisation verdict has not moved by ${longDate(addDays(i.today, durationDays))}, or if three recovery reds land in a row.`;
 
   return {
@@ -241,7 +252,7 @@ function oneHardEffort(i: ExperimentsInput): Draft | null {
     holdConstant: 'The fixed sleep window and the long day, both proven by then.',
     measure: `The verdict flips from ${p.verdict} to polarised: hard share ${Math.round(p.hardPct)}% → ${POLARISED_HARD_PCT}%. VO₂max slope. Segment gap closing.`,
     stopRule: entry,
-    entryHolds: gates.length === 0 && debtClear && loadClear,
+    entryHolds: gates.length === 0 && balanceClear && loadClear,
     gates,
   };
 }
@@ -257,16 +268,18 @@ function count(daysSinceOnset: number, durationDays: number) {
 }
 
 /**
- * Days since the cumulative debt curve last crossed the flag, read off the
- * series rather than assumed. A trailing run, so an old crossing that has since
- * been paid back does not count.
+ * Days since the rolling seven-night balance last crossed the action line. The
+ * curve is signed and can recover, so only the trailing run counts.
  */
-function debtCrossingDays(series: Array<{ date: string; debt: number }>, today: string): number {
+function balanceCrossingDays(
+  series: Array<{ date: string; balanceMin: number }>,
+  today: string,
+): number {
   if (!series.length) return 0;
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   let onset: string | null = null;
   for (let k = sorted.length - 1; k >= 0; k--) {
-    if (sorted[k].debt <= SLEEP_DEBT_FLAG_MIN) break;
+    if (sorted[k].balanceMin >= -SLEEP_BALANCE_SHORTFALL_MIN) break;
     onset = sorted[k].date;
   }
   return onset ? Math.max(0, dayNumber(today) - dayNumber(onset)) : 0;

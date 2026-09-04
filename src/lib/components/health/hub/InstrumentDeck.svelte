@@ -29,7 +29,7 @@
   import type { CircadianResult } from '$lib/health/analytics/circadian';
   import type { AutonomicResult } from '$lib/health/analytics/autonomic-balance';
   import {
-    SLEEP_DEBT_FLAG_MIN,
+    SLEEP_BALANCE_SHORTFALL_MIN,
     type RecoveryDebtResult,
   } from '$lib/health/analytics/recovery-debt';
   import type { TrendSeries } from '$lib/trails/physio-service';
@@ -321,9 +321,9 @@
     ];
   });
 
-  // ——— 7 · recovery debt ————————————————————————————————————————
+  // ——— 7 · sleep balance —————————————————————————————————————————
   const debtPanel = $derived.by((): Panel => {
-    const base = { id: 'debt', name: 'Recovery debt', window: '14d', unit: 'min' };
+    const base = { id: 'balance', name: 'Sleep balance', window: '7 nights', unit: 'min/night' };
     if (!usable(recoveryDebt)) {
       return {
         ...base,
@@ -333,36 +333,47 @@
         verdict: 'no read',
         valueTone: 'plain',
         verdictTone: 'plain',
-        body: NEEDS('a week', 'nights with a sleep-need figure'),
+        body: NEEDS('seven complete nights', 'scored sleep and a fresh sleep-need figure'),
       };
     }
-    const { sleepDebtMin, overdrawn } = recoveryDebt.value;
-    const over = sleepDebtMin / SLEEP_DEBT_FLAG_MIN;
+    const {
+      averageBalanceMin,
+      averageActualMin,
+      averageNeedMin,
+      trendActualMin,
+      nightsBelowNeed,
+      latestWhoopDebtAdjustmentMin,
+      short,
+    } = recoveryDebt.value;
+    const trend =
+      trendActualMin == null
+        ? ''
+        : ` Actual sleep is ${signed(trendActualMin)} min/night versus the preceding nights.`;
+    const whoopContext =
+      latestWhoopDebtAdjustmentMin == null
+        ? ''
+        : ` WHOOP's latest separate debt adjustment is ${whole(latestWhoopDebtAdjustmentMin)} minutes; it is not summed here.`;
     return {
       ...base,
       readable: true,
-      value: whole(sleepDebtMin),
-      verdict: overdrawn ? 'overdrawn' : 'in credit',
-      valueTone: overdrawn ? 'accent' : 'good',
-      verdictTone: overdrawn ? 'accent' : 'good',
-      body: `Sum of nightly shortfall against Whoop's own sleep need. ${
-        overdrawn
-          ? `Past the ${SLEEP_DEBT_FLAG_MIN}-minute flag by ${over.toFixed(1)} times.`
-          : `Inside the ${SLEEP_DEBT_FLAG_MIN}-minute flag, so the fortnight has broken even.`
-      }`,
-      caption: `cumulative 14d · dashed = ${SLEEP_DEBT_FLAG_MIN}min flag`,
+      value: signed(averageBalanceMin),
+      verdict: short ? 'short' : averageBalanceMin >= 0 ? 'covered' : 'near target',
+      valueTone: short ? 'accent' : 'good',
+      verdictTone: short ? 'accent' : 'good',
+      body: `Average actual sleep ${hoursAndMinutes(averageActualMin / 60)} against ${hoursAndMinutes(averageNeedMin / 60)} fresh need; ${nightsBelowNeed} of 7 nights below it. Carried debt is excluded and WHOOP's nap adjustment is included, so each minute is counted once.${trend}${whoopContext}`,
+      caption: `trailing 7-night mean · dashed = −${SLEEP_BALANCE_SHORTFALL_MIN}min/night action line`,
     };
   });
 
-  /** The debt curve, and where the flag line falls on the same scale. */
+  /** The rolling balance curve, and where the action line falls on the same scale. */
   const debtChart = $derived.by(() => {
     if (!usable(recoveryDebt)) return null;
-    const values = recoveryDebt.value.series.map((p) => p.debt);
+    const values = recoveryDebt.value.series.map((p) => p.balanceMin);
     if (values.length < 2) return null;
-    const e = extent([...values, 0, SLEEP_DEBT_FLAG_MIN]);
+    const e = extent([...values, 0, -SLEEP_BALANCE_SHORTFALL_MIN]);
     return {
       points: sparkPoints(values, 100, 34, e),
-      flagY: yOf(SLEEP_DEBT_FLAG_MIN, e, 34),
+      flagY: yOf(-SLEEP_BALANCE_SHORTFALL_MIN, e, 34),
     };
   });
 
@@ -511,7 +522,7 @@
                 </div>
               {/each}
             </div>
-          {:else if p.id === 'debt' && p.readable && debtChart}
+          {:else if p.id === 'balance' && p.readable && debtChart}
             <svg viewBox="0 0 100 34" preserveAspectRatio="none" class="b-curve" aria-hidden="true">
               <polyline points={debtChart.points} fill="none" stroke="var(--accent-on-dark)" stroke-width="1.8" />
               <line x1="0" y1={debtChart.flagY} x2="100" y2={debtChart.flagY} stroke="rgba(237,228,212,0.4)" stroke-width="0.8" stroke-dasharray="3 3" />
@@ -534,8 +545,9 @@
     <p class="b-sources">
       Formula sources · ACWR: Williams 2017 EWMA, 7d/28d half-lives. Monotony/strain: Foster.
       Intensity: HR zones off hrMax, Tanaka-or-observed. SRI: Phillips 2017. Autonomic: z-scores
-      vs trailing 28d. Recovery debt: nightly shortfall vs Whoop sleep need, {SLEEP_DEBT_FLAG_MIN}min
-      flag. VO₂max: ACSM norms, fixed age-32 profile — the percentile is anchored, the slope is not.
+      vs trailing 28d. Sleep balance: actual minus fresh WHOOP need over seven complete nights,
+      carried debt excluded, −{SLEEP_BALANCE_SHORTFALL_MIN}min/night action line. VO₂max: ACSM norms,
+      fixed age-32 profile — the percentile is anchored, the slope is not.
       The window on each badge is the sample that metric requires before its band means anything.
     </p>
   </div>
