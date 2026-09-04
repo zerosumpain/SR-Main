@@ -1,7 +1,7 @@
 <script lang="ts">
   // The daydream hub's chrome, worn by every room.
   //
-  // Eleven rooms, eleven routes. This layout is the cover, the rail and the
+  // Twelve rooms, twelve routes. This layout is the cover, the rail and the
   // foot; a room is whatever renders between them. The rail is a row of real
   // links, so a tab is a navigation and never a `?tab=` state change — the
   // same-route trap that killed five shipped links lives in git history now.

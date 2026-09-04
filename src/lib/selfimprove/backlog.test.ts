@@ -45,6 +45,7 @@ vi.mock('$lib/datastore', () => {
 
 import {
   addIdeas,
+  createBacklogItem,
   foldItems,
   hasOpenNewDataWork,
   listBacklog,
@@ -52,11 +53,13 @@ import {
   pickFoldSurvivor,
   pickToolWork,
   pickWork,
+  removeBacklogItem,
   setEpic,
   setParked,
   setParkedMany,
   setPriority,
   setPriorityMany,
+  updateBacklogItem,
   MAX_NEW_IDEAS_PER_NIGHT,
 } from './backlog';
 import type { BacklogItemData } from './types';
@@ -381,6 +384,81 @@ describe('owner edits', () => {
     h.records = items.map((i) => ({ key: i.slug, data: i }));
   }
   const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  describe('feature management', () => {
+    it('adds owner-authored work without consuming the nightly proposal cap', async () => {
+      seed(...Array.from({ length: MAX_NEW_IDEAS_PER_NIGHT }, (_, n) =>
+        item({ slug: `night-${n}`, title: `Night ${n}`, createdAt: new Date().toISOString() }),
+      ));
+      const created = await createBacklogItem({
+        title: 'A hand written feature',
+        detail: 'Keep the exact outcome the owner asked for.',
+        kind: 'feature',
+        priority: 1,
+      });
+      expect(created.slug).toBe('a-hand-written-feature');
+      expect(created.source).toBe('owner');
+      expect(created.priority).toBe(1);
+      expect(stored(created.slug).detail).toContain('exact outcome');
+    });
+
+    it('refuses a duplicate instead of erasing its history', async () => {
+      seed(item({ slug: 'same-feature', title: 'Same feature', attempts: 3, lastError: 'failed before' }));
+      await expect(createBacklogItem({ title: 'Same feature', detail: 'new', kind: 'tool', priority: 3 }))
+        .rejects.toThrow(/already exists/);
+      expect(stored('same-feature').attempts).toBe(3);
+      expect(stored('same-feature').lastError).toBe('failed before');
+    });
+
+    it('edits owner-controlled fields and keeps the stable receipt fields', async () => {
+      seed(item({
+        slug: 'stable-key',
+        title: 'Old title',
+        detail: 'old brief',
+        kind: 'tool',
+        priority: 4,
+        attempts: 2,
+        lastError: 'HTTP 405',
+        source: 'fault',
+      }));
+      await updateBacklogItem('stable-key', {
+        title: 'Clearer title',
+        detail: 'A much clearer definition of done.',
+        kind: 'feature',
+        priority: 1,
+      });
+      expect(stored('stable-key')).toMatchObject({
+        slug: 'stable-key',
+        title: 'Clearer title',
+        detail: 'A much clearer definition of done.',
+        kind: 'feature',
+        priority: 1,
+        attempts: 2,
+        lastError: 'HTTP 405',
+        source: 'fault',
+      });
+    });
+
+    it('locks a shipped item to the kind that produced its artifact', async () => {
+      seed(item({ slug: 'built', status: 'shipped', kind: 'tool' }));
+      await expect(updateBacklogItem('built', {
+        title: 'Built', detail: 'still built', kind: 'feature', priority: 2,
+      })).rejects.toThrow(/cannot change kind/);
+      expect(stored('built').kind).toBe('tool');
+      expect(stored('built').status).toBe('shipped');
+    });
+
+    it('removes an item as a tombstone so the engine cannot recreate it', async () => {
+      seed(item({ slug: 'do-not-return', title: 'Do not return', attempts: 2 }));
+      await removeBacklogItem('do-not-return');
+      expect(stored('do-not-return')).toMatchObject({
+        status: 'abandoned',
+        removedBy: 'owner',
+      });
+      expect(stored('do-not-return').removedAt).toBeTruthy();
+      expect(await addIdeas([{ title: 'Do not return', detail: 'again', kind: 'tool' }])).toEqual([]);
+    });
+  });
 
   describe('setPriority', () => {
     it('writes the new priority, which is what pickWork ranks on', async () => {

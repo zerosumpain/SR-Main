@@ -10,8 +10,6 @@
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
   import AppetiteBoard from '$lib/components/jkai/daydream/rooms/AppetiteBoard.svelte';
-  import QueueBoard from '$lib/components/jkai/daydream/rooms/QueueBoard.svelte';
-  import ThemeProposals from '$lib/components/jkai/daydream/rooms/ThemeProposals.svelte';
   import { postThought } from '$lib/daydream/feed-client';
   import { invalidateAll } from '$app/navigation';
 
@@ -68,9 +66,9 @@
       value: String(story.backlog.open),
       sub: `${story.backlog.engine} about the engine itself · ${story.backlog.shipped} shipped all time`,
       tone: story.backlog.open ? 'steady' : 'quiet',
-      // The queue now has a surface of its own. This cell used to point at the
-      // ledger, which explains what CHANGED — not what is waiting.
-      href: '#queue',
+      // The queue is its own room. The ledger below explains what changed;
+      // Backlog is where waiting work is managed.
+      href: '/jkai/daydreams/backlog',
     },
     {
       key: 'tools',
@@ -150,7 +148,7 @@
       value: String(doctor.escalatedLastNight),
       sub: 'needed repo code, so it became a fault',
       tone: doctor.escalatedLastNight ? 'steady' : 'quiet',
-      href: '#appetite',
+      href: '/jkai/daydreams/backlog',
     },
   ]);
 </script>
@@ -178,31 +176,10 @@
   </div>
 </section>
 
-<section class="band sunken" id="queue">
-  <div class="inner">
-    <SectionHead
-      kicker="C / The queue"
-      title={['Everything it wants', 'to do next']}
-      strap="Every idea the engine is holding, in the order it will reach for them. Six stages left to right: proposed, accepted, in build, verifying, live, parked. A card can be dragged to Accepted or Parked and nowhere else — a tool becomes live when jkai calls it, and a drag must never be what starts a build that can spend £2. The priority on a card is the field the picker actually ranks on."
-    />
-    {#if actionError}<p class="err">{actionError}</p>{/if}
-    <QueueBoard view={data.board} caps={data.caps} {busy} {act} />
-
-    <div class="themes" id="themes">
-      <SectionHead
-        kicker="C2 / Themes"
-        title={['The same idea,', 'asked ten ways']}
-        strap="The queue restates itself. Ideas arrive one a night from different questions, and the same want turns up under half a dozen phrasings — each one a slot the engine would spend rebuilding something it has already been asked for. Nothing here asks a model anything: two titles are the same subject when they share three content words, the one definition of “related” this engine has. Grouping a theme puts its members in one swimlane above; it never abandons them, because “about the same subject” and “says the same thing” are different judgements and only the first is one a matcher may make."
-      />
-      <ThemeProposals epics={data.epics.epics} error={data.epics.error} items={data.board.items} {busy} {act} />
-    </div>
-  </div>
-</section>
-
 <section class="band">
   <div class="inner">
     <SectionHead
-      kicker="D / The loop, end to end"
+      kicker="C / The loop, end to end"
       title={['What it could not do,', 'and what that built']}
       strap="Seven stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
     />
@@ -221,7 +198,7 @@
 <section class="band" id="doctor">
   <div class="inner">
     <SectionHead
-      kicker="E / The doctor"
+      kicker="D / The doctor"
       title={['What broke,', 'and who fixed it']}
       strap="Failed canvas runs, triaged nightly over a rolling week. It stops a runaway schedule itself and repairs node config inside a narrow whitelist; anything needing repo code becomes a fault, which is the same queue everything above is drawn from. That is the fold — not a shared page, a shared ledger."
     />
@@ -239,11 +216,6 @@
 </section>
 
 <style>
-  .themes {
-    margin-top: clamp(30px, 4vw, 56px);
-    padding-top: clamp(24px, 3vw, 40px);
-    border-top: 1px solid var(--line-hair);
-  }
   .ledger {
     margin-top: clamp(28px, 4vw, 56px);
     padding-top: clamp(24px, 3vw, 40px);

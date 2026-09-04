@@ -931,7 +931,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // ── The queue board (2026-09-04) ───────────────────────────────────
       //
-      // Four edits on `improvement_backlog`, all keyed by slug. They exist
+      // Owner edits on `improvement_backlog`, all keyed by slug. They exist
       // because the queue reached 455 rows with 280 of the 352 open ones tied
       // on priority 2: the engine could add to the pile and nothing could
       // sort, merge or close it.
@@ -940,6 +940,57 @@ export const POST: RequestHandler = async ({ request }) => {
       // lane still gates — a repo build can cost £2 and
       // `daydream.appetite.autobuild` is deliberately inverted, so a drag on a
       // board must never be what starts one.
+
+      /** Add an owner-authored feature directly to the accepted queue. */
+      case 'backlog_create': {
+        const title = str('title');
+        if (!title) return json({ error: 'title is required' }, { status: 400 });
+        const priority = Number(body.priority);
+        if (!Number.isFinite(priority)) {
+          return json({ error: 'priority must be a number 1-5' }, { status: 400 });
+        }
+        const { createBacklogItem } = await import('$lib/selfimprove/backlog');
+        const item = await createBacklogItem({
+          title,
+          detail: str('detail'),
+          kind: str('kind'),
+          priority,
+        });
+        return json({ ok: true, slug: item.slug });
+      }
+
+      /** Edit the owner-controlled fields while retaining build history. */
+      case 'backlog_update': {
+        const slug = str('slug');
+        const title = str('title');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        if (!title) return json({ error: 'title is required' }, { status: 400 });
+        const priority = Number(body.priority);
+        if (!Number.isFinite(priority)) {
+          return json({ error: 'priority must be a number 1-5' }, { status: 400 });
+        }
+        const { updateBacklogItem } = await import('$lib/selfimprove/backlog');
+        const item = await updateBacklogItem(slug, {
+          title,
+          detail: str('detail'),
+          kind: str('kind'),
+          priority,
+        });
+        return json({ ok: true, slug: item.slug });
+      }
+
+      /**
+       * Remove a feature from the board. The datastore row becomes a hidden
+       * tombstone instead of being hard-deleted, so the proposal engine cannot
+       * recreate it tomorrow with its attempt history erased.
+       */
+      case 'backlog_remove': {
+        const slug = str('slug');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        const { removeBacklogItem } = await import('$lib/selfimprove/backlog');
+        await removeBacklogItem(slug);
+        return json({ ok: true, slug });
+      }
 
       /**
        * Reprioritise. `pickWork` ranks on this, so it changes tonight's work.

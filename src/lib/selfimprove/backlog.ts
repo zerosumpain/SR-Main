@@ -24,7 +24,7 @@ import {
 } from './types';
 // The channel vocabulary lives in the pure module — see `IDEA_SOURCES` there
 // for why it cannot live in `./types`.
-import { IDEA_SOURCES, type IdeaSource } from './board';
+import { BACKLOG_KINDS, IDEA_SOURCES, type BacklogKind, type IdeaSource } from './board';
 
 /** An idea as proposed by a phase, before it becomes a record. */
 export interface IdeaInput {
@@ -104,13 +104,19 @@ async function put(item: BacklogItemData): Promise<void> {
  */
 export const MAX_NEW_IDEAS_PER_NIGHT = 12;
 
-const KINDS: ReadonlyArray<BacklogItemData['kind']> = ['tool', 'feature', 'engine', 'source', 'watch'];
-
 /** An unknown kind becomes `tool`, the cheapest lane. Records written before
  *  `source` and `watch` existed carry `tool` or `feature` and read back
  *  unchanged. */
 function coerceKind(kind: unknown): BacklogItemData['kind'] {
-  return KINDS.includes(kind as BacklogItemData['kind']) ? (kind as BacklogItemData['kind']) : 'tool';
+  return BACKLOG_KINDS.includes(kind as BacklogKind) ? (kind as BacklogItemData['kind']) : 'tool';
+}
+
+/** Owner edits report an invalid kind instead of silently changing it. */
+function requireKind(kind: unknown): BacklogItemData['kind'] {
+  if (!BACKLOG_KINDS.includes(kind as BacklogKind)) {
+    throw new Error(`kind must be one of ${BACKLOG_KINDS.join(', ')}`);
+  }
+  return kind as BacklogItemData['kind'];
 }
 
 /**
@@ -350,6 +356,112 @@ export function hasOpenNewDataWork(items: BacklogItemData[]): boolean {
 // run that tried. These are the opposite: a person clicked something and is
 // watching for it to happen, so they THROW and the route reports the failure.
 
+export interface OwnerBacklogInput {
+  title: string;
+  detail: string;
+  /** Validated against BACKLOG_KINDS at the write boundary. */
+  kind: string;
+  priority: number;
+}
+
+export type OwnerBacklogUpdate = OwnerBacklogInput;
+
+/**
+ * Add a feature directly from the backlog room.
+ *
+ * This deliberately bypasses `MAX_NEW_IDEAS_PER_NIGHT`: that cap prevents the
+ * unattended proposal phases from flooding the queue, not the owner from
+ * writing down work. It still uses the same slug key and refuses duplicates,
+ * preserving the engine's one-record-per-idea invariant.
+ */
+export async function createBacklogItem(input: OwnerBacklogInput): Promise<BacklogItemData> {
+  const title = (input.title ?? '').trim();
+  if (!title) throw new Error('a backlog feature needs a title');
+  const slug = slugifyIdea(title);
+  if (!slug) throw new Error('the title could not produce a backlog identifier');
+
+  try {
+    await mustGet(slug);
+    throw new Error(`a backlog feature named “${title.slice(0, 80)}” already exists`);
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code !== 'not_found' && !errMsg(err).startsWith('no backlog item')) {
+      throw err;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const item: BacklogItemData = {
+    slug,
+    title: title.slice(0, 200),
+    detail: (input.detail ?? '').trim().slice(0, 2000),
+    kind: requireKind(input.kind),
+    status: 'open',
+    priority: clampPriority(input.priority),
+    attempts: 0,
+    source: 'owner',
+    createdAt: now,
+    updatedAt: now,
+  };
+  await put(item);
+  return item;
+}
+
+/**
+ * Edit the fields a person owns without rewriting engine history.
+ *
+ * The slug stays stable when the title changes. Attempt counts, failures,
+ * source attribution and artifact references are receipts, not form fields.
+ * A shipped item's kind and status are similarly facts and cannot be revised
+ * into a fresh piece of work from this surface.
+ */
+export async function updateBacklogItem(
+  slug: string,
+  input: OwnerBacklogUpdate,
+): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const title = (input.title ?? '').trim();
+  if (!title) throw new Error('a backlog feature needs a title');
+  const kind = requireKind(input.kind);
+  if (item.status === 'shipped' && kind !== item.kind) {
+    throw new Error('a shipped feature cannot change kind');
+  }
+
+  const next: BacklogItemData = {
+    ...item,
+    title: title.slice(0, 200),
+    detail: (input.detail ?? '').trim().slice(0, 2000),
+    kind,
+    priority: clampPriority(input.priority),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await put(next);
+  return next;
+}
+
+/**
+ * Remove an item from the backlog while retaining a tombstone.
+ *
+ * Hard deletion would let the nightly proposer recreate the same slug at zero
+ * attempts. `removedAt` makes it disappear from the board; `abandoned` keeps
+ * open work out of every picker. A shipped row keeps that status because the
+ * artifact having shipped is immutable history.
+ */
+export async function removeBacklogItem(slug: string): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const now = new Date().toISOString();
+  const next: BacklogItemData = {
+    ...item,
+    status: item.status === 'shipped' ? 'shipped' : 'abandoned',
+    removedAt: now,
+    removedBy: 'owner',
+    parkedReason: item.status === 'shipped' ? item.parkedReason : 'Removed from the backlog by the owner',
+    updatedAt: now,
+  };
+  await put(next);
+  return next;
+}
+
 /** One item, or null. The read half of `mustGet`, for callers that want to
  *  check a row before writing it rather than fail on it. */
 export async function getBacklogItem(slug: string): Promise<BacklogItemData | null> {
@@ -381,7 +493,9 @@ async function mustGet(slug: string): Promise<BacklogItemData> {
     return rec.data as unknown as BacklogItemData;
   } catch (err) {
     if ((err as { code?: string } | null)?.code === 'not_found') {
-      throw new Error(`no backlog item “${slug}”`);
+      const missing = new Error(`no backlog item “${slug}”`) as Error & { code?: string };
+      missing.code = 'not_found';
+      throw missing;
     }
     throw err;
   }

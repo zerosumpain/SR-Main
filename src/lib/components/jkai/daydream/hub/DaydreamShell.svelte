@@ -111,9 +111,9 @@
   <!-- ——— the rail ————————————————————————————————————————————————
        Real links: every room is its own route, so a tab is a navigation and
        the browser's back button means what it says. Preload on tap, not
-       hover — eleven rooms hovered across is eleven server loads.
+       hover — twelve rooms hovered across is twelve server loads.
        Sticky at the top of the jkai scroll container. Horizontally scrollable
-       on a phone rather than wrapping to three rows: ten tabs wrapped is a
+       on a phone rather than wrapping to three rows: twelve tabs wrapped is a
        block of chrome taller than the first card under it. -->
   <nav class="ds-rail" aria-label="Daydream sections">
     <div class="ds-inner ds-rail-inner">

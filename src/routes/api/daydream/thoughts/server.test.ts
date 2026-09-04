@@ -33,11 +33,19 @@ const mocks = vi.hoisted(() => ({
   budgetStatus: vi.fn(async () => ({ blocked: false, blockedReason: null })),
   resolveDaydreamModel: vi.fn(async () => ({ provider: 'openrouter', modelId: 'test-model' })),
   runMemoryConsolidation: vi.fn(),
+  createBacklogItem: vi.fn(),
+  updateBacklogItem: vi.fn(),
+  removeBacklogItem: vi.fn(),
 }));
 
 vi.mock('$lib/daydream/budget', () => ({ budgetStatus: mocks.budgetStatus }));
 vi.mock('$lib/daydream/compose', () => ({ resolveDaydreamModel: mocks.resolveDaydreamModel }));
 vi.mock('$lib/daydream/memory-consolidation.server', () => ({ runMemoryConsolidation: mocks.runMemoryConsolidation }));
+vi.mock('$lib/selfimprove/backlog', () => ({
+  createBacklogItem: mocks.createBacklogItem,
+  updateBacklogItem: mocks.updateBacklogItem,
+  removeBacklogItem: mocks.removeBacklogItem,
+}));
 
 import { POST } from './+server';
 
@@ -63,6 +71,69 @@ function event() {
     }),
   } as never;
 }
+
+function actionEvent(body: Record<string, unknown>) {
+  return {
+    request: new Request('http://local/api/daydream/thoughts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  } as never;
+}
+
+describe('backlog feature management', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.createBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
+    mocks.updateBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
+    mocks.removeBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
+  });
+
+  it('creates an owner-authored feature with the editable fields', async () => {
+    const response = await POST(actionEvent({
+      action: 'backlog_create',
+      title: 'Owner feature',
+      detail: 'A detailed definition of done',
+      kind: 'feature',
+      priority: 1,
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.createBacklogItem).toHaveBeenCalledWith({
+      title: 'Owner feature',
+      detail: 'A detailed definition of done',
+      kind: 'feature',
+      priority: 1,
+    });
+    await expect(response.json()).resolves.toEqual({ ok: true, slug: 'owner-feature' });
+  });
+
+  it('updates by stable slug and rejects an incomplete edit', async () => {
+    const response = await POST(actionEvent({
+      action: 'backlog_update',
+      slug: 'owner-feature',
+      title: 'Clearer title',
+      detail: 'Clearer brief',
+      kind: 'tool',
+      priority: 2,
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateBacklogItem).toHaveBeenCalledWith('owner-feature', {
+      title: 'Clearer title', detail: 'Clearer brief', kind: 'tool', priority: 2,
+    });
+
+    const invalid = await POST(actionEvent({ action: 'backlog_update', slug: 'owner-feature' }));
+    expect(invalid.status).toBe(400);
+    expect(mocks.updateBacklogItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes a feature through the tombstone write', async () => {
+    const response = await POST(actionEvent({ action: 'backlog_remove', slug: 'owner-feature' }));
+    expect(response.status).toBe(200);
+    expect(mocks.removeBacklogItem).toHaveBeenCalledWith('owner-feature');
+    await expect(response.json()).resolves.toEqual({ ok: true, slug: 'owner-feature' });
+  });
+});
 
 describe('interactive memory consolidation', () => {
   beforeEach(() => {

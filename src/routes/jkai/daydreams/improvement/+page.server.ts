@@ -3,11 +3,9 @@ import { errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/daydream/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
-import { describeCite, EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
-import { EMPTY_BOARD, type BoardView } from '$lib/selfimprove/board';
-import { BUDGET_CAPS, WORK_CAPS, type EpicData } from '$lib/selfimprove/types';
+import { EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
 import { doctorRollup, EMPTY_DOCTOR_ROLLUP, type DoctorRollup } from '$lib/workflowdoctor/rollup';
-import { doctorSchedule, improvementSchedule } from '$lib/heartbeat/activity-schedule';
+import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 
 /** The loop, end to end: faults raised → ideas → tools built → signals → findings → thoughts. */
 export interface LoopStory {
@@ -81,85 +79,6 @@ async function loadAppetite(): Promise<AppetiteView> {
   }
 }
 
-/**
- * The queue, as a board.
- *
- * Joined HERE rather than in a `$lib` module for the same reason the doctor
- * rollup is: a route load may import both engines, and neither library may
- * import the other. `buildBoard` itself is pure and lives in
- * `$lib/selfimprove/board.ts`, so the derivation is unit-tested without a
- * database and the component imports it for its labels and its filter.
- *
- * `MAX_ATTEMPTS` is passed IN rather than read inside the pure module — one
- * definition of the attempt ceiling, in `backlog.ts`, where the engine reads
- * it too.
- */
-async function loadQueueBoard(epics: EpicData[]): Promise<BoardView> {
-  try {
-    const [{ buildBoard }, { listBacklog, MAX_ATTEMPTS }, { loadCustomToolHealth }, { listCapabilities }] =
-      await Promise.all([
-        import('$lib/selfimprove/board'),
-        import('$lib/selfimprove/backlog'),
-        import('$lib/selfimprove/context'),
-        import('$lib/daydream/appetite/store'),
-      ]);
-    const [backlog, tools, caps] = await Promise.all([
-      listBacklog(),
-      loadCustomToolHealth(),
-      listCapabilities({ limit: 60 }),
-    ]);
-    return buildBoard({
-      backlog,
-      tools,
-      capabilities: caps.map((c) => ({
-        slug: c.slug,
-        kind: c.kind,
-        title: c.title,
-        need: c.need,
-        status: c.status,
-        score: c.score,
-        lane: c.lane,
-        outcome: c.outcome,
-        outcomeRef: c.outcomeRef,
-        backlogSlug: c.backlogSlug,
-        evidence: [...new Set(c.cites.map(describeCite))].slice(0, 4),
-        lastSeenAt: c.lastSeenAt,
-      })),
-      attemptCeiling: MAX_ATTEMPTS,
-      // So a swimlane reads the theme's own label rather than its slug digest.
-      epicLabels: Object.fromEntries(epics.map((e) => [e.slug, e.label])),
-      // The open pile is the point of the board; everything ever shipped is
-      // history and belongs in the ledger below it. 120 keeps a few months of
-      // settled work reachable without sending 455 rows to the browser.
-      settledLimit: 120,
-    });
-  } catch (err) {
-    console.error('[daydream] queue board failed:', errMsg(err));
-    return { ...EMPTY_BOARD, error: errMsg(err) };
-  }
-}
-
-/**
- * The themes found in the queue, and what has been decided about them.
- *
- * Read only — finding them is an action, not a page load. `clusterBacklog` is
- * 66ms over 455 rows, but it also WRITES proposals, and a page render must
- * never be a write.
- *
- * Loaded ONCE and passed to the board as well, which needs the same rows only
- * for its swimlane labels. `listEpics` pages the whole collection, and doing
- * that twice per render is a scan nobody asked for.
- */
-async function loadEpics(): Promise<{ epics: EpicData[]; error: string | null }> {
-  try {
-    const { listEpics } = await import('$lib/selfimprove/epics');
-    return { epics: await listEpics(), error: null };
-  } catch (err) {
-    console.error('[daydream] epics load failed:', errMsg(err));
-    return { epics: [], error: errMsg(err) };
-  }
-}
-
 export const load: PageServerLoad = async () => {
   const [loop, improvement] = await Promise.all([
     loadLoopHealth(MIN_PAIRS),
@@ -171,31 +90,14 @@ export const load: PageServerLoad = async () => {
   // The doctor, folded in. A route-level load may import both engines, which
   // is what makes this the honest place to join them — `$lib/workflowdoctor`
   // already imports `$lib/selfimprove`, so neither library could do it.
-  const epics = await loadEpics();
-  // What actually fits in a night. Read off the constants rather than restated
-  // in the component, so a change to a cap reaches the page that reports it —
-  // two dashboards once printed a cron expression as the live schedule long
-  // after the schedule had moved.
-
-  const [story, appetite, board, improveWindow, doctor, doctorWindow] = await Promise.all([
+  const [story, appetite, doctor, doctorWindow] = await Promise.all([
     loadLoopStory(loop),
     loadAppetite(),
-    loadQueueBoard(epics.epics),
-    improvementSchedule(),
     doctorRollup().catch((err): DoctorRollup => {
       console.error('[daydream] doctor rollup failed:', errMsg(err));
       return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
     }),
     doctorSchedule(),
   ]);
-  const caps = {
-    tools: WORK_CAPS.maxToolCandidates,
-    builds: WORK_CAPS.maxChangeRequests,
-    watches: WORK_CAPS.maxWatches,
-    repairs: WORK_CAPS.maxToolsRepaired,
-    calls: BUDGET_CAPS.maxLlmCalls,
-    minutes: Math.round(BUDGET_CAPS.maxWallMs / 60000),
-    window: improveWindow.window,
-  };
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, caps, epics, doctor, doctorWindow };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, doctor, doctorWindow };
 };
