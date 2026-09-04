@@ -51,46 +51,20 @@
 
   onMount(() => {
     mounted = true;
-    let stopped = false;
-    let pollTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const hasLiveWork = () => !!(v?.jkai.activeJobs || v?.builder.active || v?.walk.active);
-    const schedule = () => {
-      if (stopped || document.hidden) return;
-      if (pollTimer) clearTimeout(pollTimer);
-      // Active work merits the old live cadence. An idle dashboard does not:
-      // its expensive aggregates change rarely and are also cached server-side.
-      pollTimer = setTimeout(poll, hasLiveWork() ? 15_000 : 60_000);
-    };
-
     async function poll() {
       try {
         const r = await fetch('/api/landing/vitals');
         if (r.ok) v = await r.json();
       } catch {
         /* keep last-known; the landing page never errors on a tile */
-      } finally {
-        schedule();
       }
     }
-    void poll();
-
-    const onVisibility = () => {
-      if (document.hidden) {
-        if (pollTimer) clearTimeout(pollTimer);
-        pollTimer = null;
-      } else {
-        void poll();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
+    poll();
+    const iv = setInterval(poll, 15_000);
     // Re-tick relative-time strings ("synced 2m ago") without re-fetching.
     const tick = setInterval(() => (now = Date.now()), 30_000);
     return () => {
-      stopped = true;
-      if (pollTimer) clearTimeout(pollTimer);
-      document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(iv);
       clearInterval(tick);
     };
   });

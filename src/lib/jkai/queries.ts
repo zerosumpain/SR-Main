@@ -1,39 +1,13 @@
 import { db } from '$lib/db';
-import { conversations, jkaiAttachments, jkaiBuilds, orchestratorChats } from '$lib/db/schema';
-import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { conversations, jkaiBuilds, orchestratorChats } from '$lib/db/schema';
+import { desc, sql } from 'drizzle-orm';
 
 /** How much of a thread's last message the rail carries. See the note on the
  *  `lastMessage` subquery below — the rail renders 44 characters of it. */
 const LAST_MESSAGE_PREVIEW_CHARS = 200;
 
-export const CONVERSATION_PAGE_SIZE = 80;
-
-export async function getConversationList({
-  limit = CONVERSATION_PAGE_SIZE,
-  cursor,
-}: {
-  limit?: number;
-  cursor?: { pinned: boolean; before: Date; beforeId: string };
-} = {}) {
-  const boundedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
-  const samePinBucket = cursor
-    ? and(
-        eq(conversations.pinned, cursor.pinned),
-        or(
-          lt(conversations.updatedAt, cursor.before),
-          and(
-            eq(conversations.updatedAt, cursor.before),
-            lt(conversations.id, cursor.beforeId),
-          ),
-        ),
-      )
-    : undefined;
-  // With descending booleans, unpinned rows follow every pinned row. Once the
-  // cursor is already unpinned only older rows in that same bucket can follow.
-  const cursorFilter = cursor?.pinned
-    ? or(eq(conversations.pinned, false), samePinBucket)
-    : samePinBucket;
-  const rows = await db
+export async function getConversationList() {
+  return db
     .select({
       id: conversations.id,
       title: conversations.title,
@@ -48,7 +22,7 @@ export async function getConversationList({
       modelProvider: conversations.modelProvider,
       modelId: conversations.modelId,
       messageCount: sql<number>`(
-        select count(*)::int from orchestrator_chats
+        select count(*) from orchestrator_chats
         where orchestrator_chats.conversation_id = "jkai_conversations"."id"
       )`.as('message_count'),
       // Truncated in SQL, not in the component. Nothing renders more than the
@@ -64,97 +38,7 @@ export async function getConversationList({
       )`.as('last_message'),
     })
     .from(conversations)
-    .where(cursorFilter)
-    .orderBy(desc(conversations.pinned), desc(conversations.updatedAt), desc(conversations.id))
-    .limit(boundedLimit + 1);
-
-  const page = rows.slice(0, boundedLimit);
-  const oldest = page[page.length - 1];
-
-  return {
-    items: page,
-    hasMore: rows.length > boundedLimit,
-    cursor: oldest
-      ? {
-          pinned: oldest.pinned,
-          before: oldest.updatedAt.toISOString(),
-          beforeId: oldest.id,
-        }
-      : null,
-  };
-}
-
-export const CHAT_HISTORY_PAGE_SIZE = 100;
-
-interface MessageCursor {
-  before: Date;
-  beforeId: string;
-}
-
-/**
- * Read one newest-first page and return it in transcript order. The cursor is
- * the oldest row delivered, so fetching the next page never retransmits the
- * complete lifetime of a long-running thread.
- */
-export async function getConversationMessages(
-  conversationId: string,
-  {
-    limit = CHAT_HISTORY_PAGE_SIZE,
-    cursor,
-  }: { limit?: number; cursor?: MessageCursor } = {},
-) {
-  const boundedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
-  const cursorFilter = cursor
-    ? or(
-        lt(orchestratorChats.createdAt, cursor.before),
-        and(
-          eq(orchestratorChats.createdAt, cursor.before),
-          lt(orchestratorChats.id, cursor.beforeId),
-        ),
-      )
-    : undefined;
-
-  const rows = await db
-    .select({
-      id: orchestratorChats.id,
-      role: orchestratorChats.role,
-      content: orchestratorChats.content,
-      metadata: orchestratorChats.metadata,
-      createdAt: orchestratorChats.createdAt,
-    })
-    .from(orchestratorChats)
-    .where(
-      cursorFilter
-        ? and(eq(orchestratorChats.conversationId, conversationId), cursorFilter)
-        : eq(orchestratorChats.conversationId, conversationId),
-    )
-    .orderBy(desc(orchestratorChats.createdAt), desc(orchestratorChats.id))
-    .limit(boundedLimit + 1);
-
-  const page = rows.slice(0, boundedLimit);
-  const messageIds = page.map((message) => message.id);
-  const attachments = messageIds.length > 0
-    ? await db.select().from(jkaiAttachments).where(inArray(jkaiAttachments.messageId, messageIds))
-    : [];
-  const attachmentsByMessage = new Map<string, typeof attachments>();
-  for (const attachment of attachments) {
-    if (!attachment.messageId) continue;
-    const current = attachmentsByMessage.get(attachment.messageId) ?? [];
-    current.push(attachment);
-    attachmentsByMessage.set(attachment.messageId, current);
-  }
-
-  const oldest = page[page.length - 1];
-  return {
-    messages: page.reverse().map((message) => ({
-      ...message,
-      attachments: attachmentsByMessage.get(message.id) ?? [],
-    })),
-    hasOlder: rows.length > boundedLimit,
-    cursor: oldest
-      ? { before: oldest.createdAt.toISOString(), beforeId: oldest.id }
-      : null,
-  };
+    .orderBy(desc(conversations.pinned), desc(conversations.updatedAt));
 }
 
 /** How much of a build's prompt the list carries. The cards render

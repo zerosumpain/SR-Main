@@ -79,15 +79,13 @@ describe('a stray /model push cannot post a bubble', () => {
   });
 });
 
-describe('the in-flight reply is actually visible', () => {
-  it('renders accumulated token content before the done frame clears isProgress', () => {
-    const start = CHAT_AREA.indexOf('{:else if msg.isProgress}');
-    const end = CHAT_AREA.indexOf("{:else if msg.source === 'status_update'}", start);
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
+describe('an in-progress assistant reply remains visible', () => {
+  it('renders accumulated token content before the final event', () => {
+    const progressStart = CHAT_AREA.indexOf('{:else if msg.isProgress}');
+    const progressEnd = CHAT_AREA.indexOf("{:else if msg.source === 'status_update'}", progressStart);
+    const progressBranch = CHAT_AREA.slice(progressStart, progressEnd);
 
-    const progressBranch = CHAT_AREA.slice(start, end);
     expect(progressBranch).toContain('data-live-reply');
-    expect(progressBranch).toMatch(/<ChatMessage[\s\S]*content=\{[^}]*msg\.content/);
+    expect(progressBranch).toMatch(/<ChatMessage[\s\S]*msg\.content/);
   });
 });

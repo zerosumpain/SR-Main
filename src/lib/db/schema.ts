@@ -2023,12 +2023,7 @@ export const conversations = pgTable('jkai_conversations', {
   // Set true by the PATCH that changes the model, and by a create whose body
   // named one. Never set by the default path.
   modelPinnedByUser: boolean('model_pinned_by_user').notNull().default(false),
-}, (t) => [
-  // The thread library is now paged in this order. Without the matching index,
-  // every page still sorts the complete conversation table before applying its
-  // LIMIT, which defeats bounding the response as the archive grows.
-  index('jkai_conversations_library_idx').on(t.pinned, t.updatedAt, t.id),
-]);
+});
 
 export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
@@ -2124,11 +2119,7 @@ export const jkaiAttachments = pgTable('jkai_attachments', {
   duration: doublePrecision('duration'),
   metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  // History pagination hydrates attachments by message id for each bounded
-  // page. Keep that lookup proportional to the page rather than the table.
-  index('jkai_attachments_message_idx').on(t.messageId),
-]);
+});
 
 export type JkaiAttachment = typeof jkaiAttachments.$inferSelect;
 export type NewJkaiAttachment = typeof jkaiAttachments.$inferInsert;

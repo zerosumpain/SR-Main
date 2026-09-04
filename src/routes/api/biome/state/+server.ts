@@ -35,18 +35,8 @@ function getDayPhase(isDay?: boolean): BiomeState['dayPhase'] {
   return isDay ? 'day' : 'night';
 }
 
-const CACHE_MS = 60_000;
-let cached: { at: number; state: BiomeState } | null = null;
-let pending: Promise<BiomeState> | null = null;
-
-async function computeBiomeState(): Promise<BiomeState> {
-  // The nested objects are mutated below; clone them as well so a successful
-  // request cannot rewrite the module-level fallback used by later failures.
-  const state: BiomeState = {
-    ...BIOME_DEFAULTS,
-    weather: { ...BIOME_DEFAULTS.weather },
-    sources: { ...BIOME_DEFAULTS.sources },
-  };
+export const GET: RequestHandler = async () => {
+  const state: BiomeState = { ...BIOME_DEFAULTS };
   let latestDataTime: number | null = null;
 
   try {
@@ -124,29 +114,7 @@ async function computeBiomeState(): Promise<BiomeState> {
   state.stale = isStale(state.dataAge) || !state.sources.heartRate;
   state.lastUpdated = new Date().toISOString();
 
-  return state;
-}
-
-export const GET: RequestHandler = async () => {
-  const now = Date.now();
-  if (!cached || now - cached.at >= CACHE_MS) {
-    // The homepage server load and the browser store commonly arrive together.
-    // Coalesce them so one navigation cannot duplicate three DB reads plus the
-    // Open-Meteo request.
-    pending ??= computeBiomeState()
-      .then((state) => {
-        cached = { at: Date.now(), state };
-        return state;
-      })
-      .finally(() => {
-        pending = null;
-      });
-    await pending;
-  }
-
-  return json(cached?.state ?? BIOME_DEFAULTS, {
-    headers: {
-      'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
-    },
+  return json(state, {
+    headers: { 'Cache-Control': 'public, max-age=60' },
   });
 };
