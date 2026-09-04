@@ -5,7 +5,9 @@
 import type {
   BacklogEffort,
   BacklogGroomingData,
+  BacklogGroomingTurn,
   BacklogItemData,
+  BacklogNote,
   BacklogReadinessStatus,
   BacklogRelation,
   BacklogRelationKind,
@@ -15,6 +17,20 @@ import type {
 export const BACKLOG_EFFORTS = ['small', 'medium', 'large'] as const;
 export const BACKLOG_RISKS = ['low', 'medium', 'high'] as const;
 export const BACKLOG_RELATIONS = ['duplicate', 'related', 'blocks', 'blocked_by'] as const;
+
+/**
+ * Turns kept on a record, and notes kept on one.
+ *
+ * These live HERE and not in `./types` for the reason `IDEA_SOURCES` lives in
+ * `./board`: the editor needs them as VALUES, and `types.ts` value-imports
+ * `$lib/toolpolicy/policy`, which reaches `$lib/db` and `$env/dynamic/private`.
+ * A `.svelte` that imports it for real fails the BUILD while `svelte-check`
+ * passes clean.
+ */
+export const MAX_GROOMING_CONVERSATION = 24;
+export const MAX_BACKLOG_NOTES = 100;
+/** One note. Long enough for a paragraph of reasoning, not an essay. */
+export const MAX_NOTE_LENGTH = 2_000;
 
 const MAX_TEXT = 2_000;
 const MAX_LIST_ITEM = 500;
@@ -152,6 +168,10 @@ export function normaliseGrooming(
     modelId: text(options.modelId || obj.modelId, 200),
     groomedAt: options.groomedAt ?? (text(obj.groomedAt, 100) || new Date().toISOString()),
     revision: Math.max(1, Math.round(options.revision ?? (Number(obj.revision) || 1))),
+    // Kept, but never fed to a build lane — `renderBacklogBrief` below reads
+    // the structured fields and nothing else. A lane must not reconstruct a
+    // decision out of chat; a person resuming the grooming needs to see it.
+    conversation: normaliseConversation(obj.conversation),
   };
 }
 
@@ -165,6 +185,52 @@ export function acceptGrooming(raw: unknown, now = new Date().toISOString()): Ba
       revision: Number(obj.revision) || 1,
     }),
     acceptedAt: now,
+  };
+}
+
+/**
+ * The stored shape of a grooming thread.
+ *
+ * Trimmed from the END, keeping the most recent turns: an argument that has run
+ * long is resumed from where it got to, not from where it started. A turn whose
+ * role is neither `user` nor `assistant` is dropped rather than coerced — a
+ * mislabelled turn read back as the other party is worse than a missing one.
+ */
+export function normaliseConversation(raw: unknown): BacklogGroomingTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const turns: BacklogGroomingTurn[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const turn = value as Record<string, unknown>;
+    if (turn.role !== 'user' && turn.role !== 'assistant') continue;
+    const content = text(turn.content, MAX_NOTE_LENGTH);
+    if (!content) continue;
+    turns.push({ role: turn.role, content });
+  }
+  return turns.slice(-MAX_GROOMING_CONVERSATION);
+}
+
+/**
+ * One note, sanitised.
+ *
+ * `author` is NOT read from the input: the caller states it, and the route
+ * states `owner` for anything a person typed. The same rule `coerceSource`
+ * follows — a request must not be able to sign its content as something it is
+ * not.
+ */
+export function normaliseNote(
+  raw: unknown,
+  author: BacklogNote['author'],
+  now = new Date().toISOString(),
+): BacklogNote | null {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const body = text(typeof raw === 'string' ? raw : obj.text, MAX_NOTE_LENGTH);
+  if (!body) return null;
+  return {
+    id: text(obj.id, 60) || `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    at: text(obj.at, 100) || now,
+    author,
+    text: body,
   };
 }
 

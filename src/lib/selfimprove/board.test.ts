@@ -16,6 +16,10 @@ import {
   summarise,
   artifactHref,
   EMPTY_FILTER,
+  kindLabel,
+  settleDate,
+  sortItems,
+  summariseBurndown,
   type BoardCapability,
   type WorkItem,
 } from './board';
@@ -850,5 +854,371 @@ describe('coerceIntake', () => {
     expect(board.items[0].intake).toBe('unattributed');
     const total = board.inflow.channels.reduce((n, c) => n + c.total, 0);
     expect(total).toBe(board.items.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Grooming, categories and the burndown (2026-09-04, second pass)
+// ---------------------------------------------------------------------------
+
+/** A WorkItem with every field present, so a new field on the type shows up
+ *  here as a compile error rather than as `undefined` inside an assertion. */
+function wi(over: Partial<WorkItem> = {}): WorkItem {
+  return {
+    id: `backlog:${over.slug ?? 'x'}`,
+    source: 'backlog',
+    slug: 'x',
+    title: 'x',
+    detail: '',
+    grooming: null,
+    kind: 'tool',
+    lane: 'toolsmith',
+    stage: 'accepted',
+    backlogStatus: 'open',
+    priority: 2,
+    attempts: 0,
+    attemptCeiling: 4,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+    lastError: null,
+    artifact: null,
+    artifactHref: null,
+    calls: null,
+    errorRate: null,
+    newData: false,
+    alreadyServed: false,
+    servedBy: null,
+    foldedCount: 0,
+    foldedInto: null,
+    parkedReason: null,
+    epicSlug: null,
+    epicLabel: 'Unfiled',
+    capabilitySlug: null,
+    intake: 'question',
+    score: null,
+    evidence: [],
+    noteCount: 0,
+    lastNoteAt: null,
+    settledAt: null,
+    actionable: true,
+    ...over,
+  };
+}
+
+function groomed(score: number): WorkItem['grooming'] {
+  return {
+    problem: '',
+    outcome: '',
+    acceptanceCriteria: [],
+    constraints: [],
+    nonGoals: [],
+    dependencies: [],
+    implementationNotes: [],
+    validation: [],
+    assumptions: [],
+    openQuestions: [],
+    decisions: [],
+    relatedItems: [],
+    effort: 'medium',
+    risk: 'medium',
+    readiness: { score, status: score >= 80 ? 'ready' : 'draft', reason: '' },
+    assistantSummary: '',
+    modelId: 'test',
+    groomedAt: '2026-09-01T00:00:00.000Z',
+    revision: 1,
+  };
+}
+
+describe('filtering by category and priority', () => {
+  const base = [
+    wi({ slug: 'a', kind: 'tool', priority: 1 }),
+    wi({ slug: 'b', kind: 'feature', lane: 'build', priority: 2 }),
+    wi({ slug: 'c', kind: 'source', lane: 'catalogue', priority: 2 }),
+    wi({ slug: 'd', kind: 'watch', lane: 'monitor', priority: 5 }),
+  ];
+
+  it('narrows to one kind, which the lane filter cannot always do', () => {
+    expect(applyFilter(base, { kinds: ['feature'] }).map((i) => i.slug)).toEqual(['b']);
+    expect(applyFilter(base, { kinds: ['source', 'watch'] }).map((i) => i.slug)).toEqual(['c', 'd']);
+  });
+
+  it('narrows to a priority — the tie 293 of 413 open items sat on', () => {
+    expect(applyFilter(base, { priorities: [2] }).map((i) => i.slug)).toEqual(['b', 'c']);
+    expect(applyFilter(base, { priorities: [1, 5] }).map((i) => i.slug)).toEqual(['a', 'd']);
+  });
+
+  it('ANDs category with priority rather than widening', () => {
+    expect(applyFilter(base, { kinds: ['feature', 'source'], priorities: [2] })).toHaveLength(2);
+    expect(applyFilter(base, { kinds: ['feature'], priorities: [5] })).toHaveLength(0);
+  });
+
+  it('treats a missing dimension as "not filtering on it"', () => {
+    // `applyFilter` is reached with a partial object from tests and from any
+    // future surface holding only the controls it renders. A missing array
+    // must never read as "match nothing".
+    expect(applyFilter(base, {})).toHaveLength(4);
+    expect(applyFilter(base, { kinds: ['tool'] })).toHaveLength(1);
+  });
+});
+
+describe('the grooming flags', () => {
+  const base = [
+    wi({ slug: 'ready', grooming: groomed(90) }),
+    wi({ slug: 'raw' }),
+    wi({ slug: 'shipped-raw', stage: 'live', backlogStatus: 'shipped' }),
+    wi({ slug: 'talked', noteCount: 3, lastNoteAt: '2026-09-02T00:00:00.000Z' }),
+  ];
+
+  it('finds what has a brief and what has none', () => {
+    expect(applyFilter(base, { flags: ['groomed'] }).map((i) => i.slug)).toEqual(['ready']);
+  });
+
+  it('counts only OPEN work as ungroomed', () => {
+    // A shipped row with no brief is not work waiting to be groomed. Counting
+    // it would make the chip disagree with the pile the step draws from.
+    expect(applyFilter(base, { flags: ['ungroomed'] }).map((i) => i.slug)).toEqual(['raw', 'talked']);
+  });
+
+  it('finds the items somebody has said something about', () => {
+    expect(applyFilter(base, { flags: ['noted'] }).map((i) => i.slug)).toEqual(['talked']);
+  });
+});
+
+describe('sortItems', () => {
+  const items = [
+    wi({ slug: 'old', createdAt: '2026-07-01T00:00:00.000Z', priority: 3, attempts: 1 }),
+    wi({ slug: 'new', createdAt: '2026-09-01T00:00:00.000Z', priority: 3, attempts: 0, grooming: groomed(70) }),
+    wi({ slug: 'stuck', createdAt: '2026-08-01T00:00:00.000Z', priority: 4, attempts: 3, noteCount: 2 }),
+  ];
+
+  it('leaves the queue order to sortForBoard', () => {
+    expect(sortItems(items, 'queue').map((i) => i.slug)).toEqual(
+      sortForBoard(items).map((i) => i.slug),
+    );
+  });
+
+  it('orders by age in both directions', () => {
+    expect(sortItems(items, 'newest')[0].slug).toBe('new');
+    expect(sortItems(items, 'oldest')[0].slug).toBe('old');
+  });
+
+  it('surfaces what keeps failing and what is nearly ready', () => {
+    expect(sortItems(items, 'attempts')[0].slug).toBe('stuck');
+    expect(sortItems(items, 'readiness')[0].slug).toBe('new');
+    expect(sortItems(items, 'notes')[0].slug).toBe('stuck');
+  });
+
+  it('never reorders the array it was given', () => {
+    // The board and the list render the same array; a sort in place would
+    // silently reorder the other one.
+    const before = items.map((i) => i.slug);
+    sortItems(items, 'newest');
+    expect(items.map((i) => i.slug)).toEqual(before);
+  });
+});
+
+describe('settleDate', () => {
+  it('is null while an item is open', () => {
+    expect(settleDate(wi({ backlogStatus: 'open', settledAt: null }))).toBeNull();
+  });
+
+  it('prefers the recorded date', () => {
+    const d = settleDate(
+      wi({ backlogStatus: 'abandoned', settledAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-09-04T00:00:00.000Z' }),
+    );
+    expect(d).toEqual({ at: '2026-08-10T00:00:00.000Z', recorded: true });
+  });
+
+  it('falls back to updatedAt for a row that settled before the field existed', () => {
+    // Kept rather than dropped: dropping them draws a queue that never held
+    // 455 items. It is COUNTED as an inference instead.
+    const d = settleDate(wi({ backlogStatus: 'shipped', settledAt: null, updatedAt: '2026-09-01T00:00:00.000Z' }));
+    expect(d).toEqual({ at: '2026-09-01T00:00:00.000Z', recorded: false });
+  });
+});
+
+describe('summariseBurndown', () => {
+  const NOW = Date.parse('2026-09-04T12:00:00.000Z');
+
+  it('reconstructs the standing queue one day at a time', () => {
+    const view = summariseBurndown(
+      [
+        wi({ slug: 'always', createdAt: '2026-08-01T00:00:00.000Z' }),
+        wi({
+          slug: 'closed',
+          createdAt: '2026-08-28T09:00:00.000Z',
+          backlogStatus: 'abandoned',
+          settledAt: '2026-09-01T09:00:00.000Z',
+        }),
+        wi({ slug: 'fresh', createdAt: '2026-09-03T09:00:00.000Z' }),
+      ],
+      10,
+      NOW,
+    );
+
+    expect(view.days).toHaveLength(10);
+    expect(view.days[0].day).toBe('2026-08-26');
+    expect(view.days[9].day).toBe('2026-09-04');
+
+    const on = (day: string) => view.days.find((d) => d.day === day)!;
+    expect(on('2026-08-26').open).toBe(1);
+    expect(on('2026-08-28').open).toBe(2);
+    expect(on('2026-08-28').added).toBe(1);
+    // Settled ON the 1st, so it is already out of the queue at end of day.
+    expect(on('2026-09-01').open).toBe(1);
+    expect(on('2026-09-01').settled).toBe(1);
+    expect(on('2026-09-04').open).toBe(2);
+    expect(view.openNow).toBe(2);
+  });
+
+  it('buckets on UTC days, not the drawing box’s local time', () => {
+    // porkserv runs Europe/London while homeserv and CI run UTC. A local-time
+    // bucket puts this row on 2026-09-04 there and 2026-09-03 here.
+    const view = summariseBurndown([wi({ createdAt: '2026-09-03T23:30:00.000Z' })], 3, NOW);
+    expect(view.days.find((d) => d.day === '2026-09-03')!.added).toBe(1);
+    expect(view.days.find((d) => d.day === '2026-09-04')!.added).toBe(0);
+  });
+
+  it('calls a queue that takes in more than it lets out growing', () => {
+    const items = [
+      ...Array.from({ length: 14 }, (_, n) => wi({ slug: `in${n}`, createdAt: '2026-09-02T00:00:00.000Z' })),
+      ...Array.from({ length: 7 }, (_, n) =>
+        wi({
+          slug: `out${n}`,
+          createdAt: '2026-08-01T00:00:00.000Z',
+          backlogStatus: 'shipped',
+          settledAt: '2026-09-02T00:00:00.000Z',
+        }),
+      ),
+    ];
+    const view = summariseBurndown(items, 7, NOW);
+    expect(view.addedPerWeek).toBe(14);
+    expect(view.settledPerWeek).toBe(7);
+    expect(view.netPerWeek).toBe(7);
+    expect(view.outlook).toBe('growing');
+    // Nothing may claim a clear date for a pile that is getting bigger.
+    expect(view.daysToClear).toBeNull();
+  });
+
+  it('projects a clear date only when it is actually draining', () => {
+    const items = [
+      ...Array.from({ length: 10 }, (_, n) => wi({ slug: `open${n}`, createdAt: '2026-08-01T00:00:00.000Z' })),
+      ...Array.from({ length: 5 }, (_, n) =>
+        wi({
+          slug: `done${n}`,
+          createdAt: '2026-08-01T00:00:00.000Z',
+          backlogStatus: 'shipped',
+          settledAt: '2026-09-02T00:00:00.000Z',
+        }),
+      ),
+    ];
+    const view = summariseBurndown(items, 7, NOW);
+    expect(view.outlook).toBe('draining');
+    expect(view.netPerWeek).toBe(-5);
+    expect(view.daysToClear).toBe(14); // 10 open ÷ 5 a week
+  });
+
+  it('treats a swing of one a week as level, not a trend', () => {
+    const items = [
+      wi({ slug: 'in', createdAt: '2026-09-02T00:00:00.000Z' }),
+      ...Array.from({ length: 400 }, (_, n) => wi({ slug: `held${n}`, createdAt: '2026-06-01T00:00:00.000Z' })),
+    ];
+    const view = summariseBurndown(items, 7, NOW);
+    expect(view.netPerWeek).toBe(1);
+    expect(view.outlook).toBe('level');
+    expect(view.daysToClear).toBeNull();
+  });
+
+  it('splits recorded from inferred on the day itself, not only over the window', () => {
+    // A chart showing the last 30 of 90 days states the honesty of the 30 it
+    // is drawing, which it can only do from a per-day split.
+    const view = summariseBurndown(
+      [
+        wi({ slug: 'r', backlogStatus: 'shipped', settledAt: '2026-09-02T09:00:00.000Z' }),
+        wi({ slug: 'i', backlogStatus: 'abandoned', settledAt: null, updatedAt: '2026-09-02T09:00:00.000Z' }),
+      ],
+      10,
+      NOW,
+    );
+    const day = view.days.find((d) => d.day === '2026-09-02')!;
+    expect(day).toMatchObject({ settled: 2, recorded: 1, inferred: 1 });
+    expect(view.days.find((d) => d.day === '2026-09-03')).toMatchObject({ recorded: 0, inferred: 0 });
+  });
+
+  it('says how much of the curve is recorded and how much is inferred', () => {
+    const view = summariseBurndown(
+      [
+        wi({ slug: 'r', backlogStatus: 'shipped', settledAt: '2026-09-02T00:00:00.000Z' }),
+        wi({ slug: 'i', backlogStatus: 'abandoned', settledAt: null, updatedAt: '2026-09-02T00:00:00.000Z' }),
+        wi({ slug: 'open' }),
+      ],
+      10,
+      NOW,
+    );
+    expect(view.dated).toEqual({ recorded: 1, inferred: 1 });
+  });
+
+  it('leaves capability leads out — they were never in this queue', () => {
+    const view = summariseBurndown(
+      [
+        wi({ slug: 'q' }),
+        wi({ slug: 'lead', source: 'capability', backlogStatus: null, intake: null, actionable: false }),
+      ],
+      5,
+      NOW,
+    );
+    expect(view.openNow).toBe(1);
+  });
+
+  it('drops a row whose creation date cannot be read rather than placing it', () => {
+    const view = summariseBurndown([wi({ slug: 'bad', createdAt: 'not a date' }), wi({ slug: 'ok' })], 5, NOW);
+    expect(view.openNow).toBe(1);
+  });
+});
+
+describe('buildBoard burndown', () => {
+  it('counts the settled rows the board itself trims away', () => {
+    // The trap `summarise` and `summariseInflow` already document: anything
+    // counted AFTER `trimSettled` describes a smaller population than it names.
+    // A curve missing its settled rows slopes the wrong way.
+    const settled = Array.from({ length: 30 }, (_, n) =>
+      item({
+        slug: `done-${n}`,
+        title: `Done ${n}`,
+        status: 'shipped',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-09-02T00:00:00.000Z',
+        settledAt: '2026-09-02T00:00:00.000Z',
+      }),
+    );
+    const open = Array.from({ length: 3 }, (_, n) =>
+      item({ slug: `open-${n}`, title: `Open ${n}`, createdAt: '2026-08-01T00:00:00.000Z' }),
+    );
+
+    const board = buildBoard({
+      backlog: [...settled, ...open],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+      settledLimit: 2,
+      burndownDays: 10,
+      now: Date.parse('2026-09-04T12:00:00.000Z'),
+    });
+
+    expect(board.items.filter((i) => i.stage === 'live' || i.stage === 'verifying')).toHaveLength(2);
+    const day = board.burndown.days.find((d) => d.day === '2026-09-02')!;
+    expect(day.settled).toBe(30);
+    expect(board.burndown.openNow).toBe(3);
+  });
+});
+
+describe('kindLabel', () => {
+  it('names the five categories', () => {
+    expect(kindLabel('feature')).toBe('Feature');
+    expect(kindLabel('source')).toBe('Source');
+  });
+
+  it('shows an unknown kind as itself rather than relabelling it', () => {
+    expect(kindLabel('news_source')).toBe('news_source');
   });
 });

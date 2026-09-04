@@ -426,13 +426,28 @@ export interface BacklogRelation {
   reason: string;
 }
 
+/** One turn of the grooming conversation, as stored. */
+export interface BacklogGroomingTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 /**
  * The structured contract between backlog grooming and every build lane.
  *
- * Raw chat is deliberately not persisted. The accepted brief, its remaining
- * uncertainty and its model provenance are: that is the useful audit trail,
- * and it keeps tomorrow's builder from having to reconstruct decisions from a
- * conversational transcript.
+ * The accepted brief, its remaining uncertainty and its model provenance are
+ * the audit trail a build lane reads; `conversation` is kept alongside it but
+ * is never fed to a builder, for the reason this comment used to give for
+ * dropping it entirely — a lane must not reconstruct decisions out of chat.
+ *
+ * It is persisted because the alternative was worse: the editor held the
+ * thread in component state, so closing the panel threw away every question
+ * the model had asked and every answer given to it, and grooming one item
+ * across two sittings was impossible. Bounded at
+ * `MAX_GROOMING_CONVERSATION` (in `./grooming`, which is the PURE module a
+ * `.svelte` may value-import — see `IDEA_SOURCES` in `./board` for why a
+ * constant may not live in this file) so a long argument cannot grow a
+ * datastore record without limit.
  */
 export interface BacklogGroomingData {
   problem: string;
@@ -461,7 +476,31 @@ export interface BacklogGroomingData {
   /** Set when a person saves the model draft into the backlog record. */
   acceptedAt?: string;
   revision: number;
+  /** The thread that produced this brief. Display and continuation only. */
+  conversation?: BacklogGroomingTurn[];
 }
+
+/**
+ * A note the owner (or the model, at the owner's request) left on one item.
+ *
+ * The engine writes receipts — attempts, errors, PR links — and a person
+ * could add nothing to a queue row at all. This is the one field on a backlog
+ * record that is neither a measurement nor a model output: it is what somebody
+ * said about the work.
+ *
+ * `author` is stamped by the route, never read out of the request body, for
+ * the same reason `source` is: a caller must not be able to sign a note as
+ * something it is not.
+ */
+export interface BacklogNote {
+  /** Unique within the item. Used to delete one without matching on text. */
+  id: string;
+  at: string;
+  author: 'owner' | 'model';
+  text: string;
+}
+
+
 
 /**
  * Which channel an idea arrived through — the closed set lives in `./board`,
@@ -556,6 +595,31 @@ export interface BacklogItemData {
    * threshold that stopped "live" and "api" matching everything.
    */
   epicSlug?: string;
+
+  // ── Grooming and burndown (2026-09-04, second pass) ──────────────────────
+
+  /** What a person said about this item. Additive JSON; no migration. */
+  notes?: BacklogNote[];
+
+  /**
+   * When this row actually settled — shipped, parked, folded or removed.
+   *
+   * `updatedAt` was the only date a settled row carried, and a priority edit
+   * moves it, so an item parked in July and re-prioritised from the board
+   * yesterday reads as "settled yesterday". `drained` on the inflow strip
+   * already says out loud that this over-states the drain; a burndown drawn
+   * off it does not over-state one number, it draws a wrong shape.
+   *
+   * Written on the transition by `setParked`, `foldItems`, `removeBacklogItem`
+   * and `markAttempt`, and DELETED when an item comes back to `open` — a row
+   * carrying both `status: 'open'` and a settled date is a contradiction the
+   * reconstruction would have to guess its way out of.
+   *
+   * Absent on every row that settled before this field existed. Those fall
+   * back to `updatedAt`, and the chart says how many it is drawing that way
+   * rather than presenting the fallback as a record.
+   */
+  settledAt?: string;
 }
 
 /**

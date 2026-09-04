@@ -13,19 +13,27 @@
   // the surface only — if a rule here needs a test, it is in the wrong file.
   import BacklogEditor from './BacklogEditor.svelte';
   import InflowStrip from './InflowStrip.svelte';
+  import QueueList from './QueueList.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import {
     applyFilter,
     canMove,
-    sortForBoard,
+    kindLabel,
+    sortItems,
+    BACKLOG_KINDS,
+    KIND_META,
+    SORT_META,
+    SORT_MODES,
     STAGE_META,
     WORK_LANES,
     WORK_STAGES,
+    type BacklogKind,
     type BoardFlag,
     type BoardTone,
     type BoardView,
     type IdeaSource,
+    type SortMode,
     type WorkItem,
     type WorkLane,
     type WorkStage,
@@ -57,11 +65,26 @@
   // that displays it: pressing a channel narrows the SAME board, and two
   // places holding filter state is two places to forget to reset.
   let sources = $state<IdeaSource[]>([]);
+  /** The CATEGORY. Not the same question as the lane — `feature` and
+   *  `news_source` share the `build` lane, so lane cannot ask for features. */
+  let kinds = $state<BacklogKind[]>([]);
+  /** The field `pickWork` ranks on, and the one 293 of 413 open items were
+   *  tied on. Being able to filter TO a priority is what makes breaking that
+   *  tie something a person can sit down and finish. */
+  let priorities = $state<number[]>([]);
   let query = $state('');
+  let sort = $state<SortMode>('queue');
+  /** Board is the shape of the pipeline; list is the surface you groom from. */
+  let view_ = $state<'board' | 'list'>('board');
   let grouped = $state(false);
   let dense = $state(false);
+  /** Three of six stage columns are empty on a normal day, and an empty column
+   *  still costs a sixth of the width. Folded away unless asked for. */
+  let showEmptyStages = $state(false);
   let selected = $state<string[]>([]);
   let collapsed = $state<string[]>([]);
+  /** Columns that have been expanded past `COLUMN_CAP`, by stage and lane. */
+  let expandedCells = $state<string[]>([]);
   /** The drill holds an ID, never the object. `act()` awaits `invalidateAll()`,
    *  which replaces every item in `view.items` — a captured object would keep
    *  rendering the pre-action values, so "Raise to P1" would still read P2 and
@@ -104,30 +127,58 @@
     { id: 'failed', label: 'has failed' },
     { id: 'untried', label: 'never tried' },
     { id: 'folded', label: 'has folds' },
+    { id: 'groomed', label: 'has a brief' },
+    { id: 'ungroomed', label: 'needs grooming' },
+    { id: 'noted', label: 'discussed' },
   ];
 
-  const filter = $derived({ lanes, flags, sources, query: query.trim() });
-  const visible = $derived(sortForBoard(applyFilter(view.items, filter)));
+  const filter = $derived({ lanes, flags, sources, kinds, priorities, query: query.trim() });
+  const visible = $derived(sortItems(applyFilter(view.items, filter), sort));
   const totals = $derived(view.totals);
 
   function laneCount(l: WorkLane): number {
     return view.items.filter((i) => i.lane === l).length;
   }
+  function kindCount(k: string): number {
+    return view.items.filter((i) => i.kind === k).length;
+  }
+  function priorityCount(p: number): number {
+    return view.items.filter((i) => i.priority === p).length;
+  }
+  /** Every count on a chip is over the WHOLE board, never the filtered set —
+   *  a chip whose number shrank as you pressed its neighbour would be
+   *  describing a population it does not name. */
   function flagCount(f: BoardFlag): number {
-    return applyFilter(view.items, { lanes: [], flags: [f], sources: [], query: '' }).length;
+    return applyFilter(view.items, { flags: [f] }).length;
   }
 
   function toggle<T>(list: T[], v: T): T[] {
     return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
   }
 
+  const activeCount = $derived(
+    lanes.length + flags.length + sources.length + kinds.length + priorities.length + (query.trim() ? 1 : 0),
+  );
+
   function reset() {
     lanes = [];
     flags = [];
     sources = [];
+    kinds = [];
+    priorities = [];
     query = '';
     selected = [];
   }
+
+  const PRIORITIES = [1, 2, 3, 4, 5];
+
+  /** Stages with nothing in them anywhere. Counted over the whole population
+   *  rather than the filtered rows, so narrowing a filter never removes the
+   *  column you were about to drag into. */
+  const stages = $derived(
+    showEmptyStages ? [...WORK_STAGES] : WORK_STAGES.filter((s) => view.counts[s] > 0),
+  );
+  const hiddenStages = $derived(WORK_STAGES.length - stages.length);
 
   // ── Grouping ────────────────────────────────────────────────────────────
   // Only where a link already exists: an owner-set `epicSlug`, or the
@@ -334,60 +385,154 @@
 {:else}
   <!-- Inside the guard, never above it: a failed load returns EMPTY_BOARD, and
        a strip rendered over that would show a drain meter of measured zeros
-       directly above "the queue could not be read". -->
-  <p class="field-label if-head">Where the work came from</p>
-  <InflowStrip flow={view.inflow} active={sources} {caps} ontoggle={(s) => (sources = toggle(sources, s))} />
+       directly above "the queue could not be read".
+
+       Folded shut by default. It is context, and it was pushing the surface a
+       person actually works on two thousand pixels down the page. -->
+  <details class="qb-fold">
+    <summary>
+      <span class="fold-lab">Where the work came from</span>
+      <span class="fold-sub">
+        {view.inflow.channels.length} channel{view.inflow.channels.length === 1 ? '' : 's'} ·
+        {view.inflow.intake} in and {view.inflow.drained} out over {view.inflow.windowDays} days ·
+        tonight's ceilings
+      </span>
+    </summary>
+    <div class="fold-body">
+      <InflowStrip flow={view.inflow} active={sources} {caps} ontoggle={(s) => (sources = toggle(sources, s))} />
+    </div>
+  </details>
 
   <!-- ── Controls ──────────────────────────────────────────────────────── -->
   <div class="qb-bar">
-    <span class="qb-lab">Lane</span>
-    {#each WORK_LANES as l (l)}
-      <button
-        type="button"
-        class="chip"
-        class:on={lanes.includes(l)}
-        aria-pressed={lanes.includes(l)}
-        onclick={() => (lanes = toggle(lanes, l))}
-      >
-        {l}<span class="n">{laneCount(l)}</span>
-      </button>
-    {/each}
+    <div class="seg" role="group" aria-label="How to show the queue">
+      <button type="button" class="chip" class:on={view_ === 'board'} aria-pressed={view_ === 'board'} onclick={() => (view_ = 'board')}>Board</button>
+      <button type="button" class="chip" class:on={view_ === 'list'} aria-pressed={view_ === 'list'} onclick={() => (view_ = 'list')}>List</button>
+    </div>
 
-    <span class="qb-lab">Flag</span>
-    {#each FLAGS as f (f.id)}
-      <button
-        type="button"
-        class="chip"
-        class:on={flags.includes(f.id)}
-        aria-pressed={flags.includes(f.id)}
-        onclick={() => (flags = toggle(flags, f.id))}
-      >
-        {f.label}<span class="n">{flagCount(f.id)}</span>
-      </button>
-    {/each}
+    <input class="text-input qb-search" type="search" bind:value={query} placeholder="search titles and briefs…" aria-label="Search the queue" />
+
+    <label class="qb-sort">
+      <span class="qb-lab">Order</span>
+      <select class="text-input select" bind:value={sort} aria-label="Order the queue">
+        {#each SORT_MODES as m (m)}<option value={m}>{SORT_META[m]}</option>{/each}
+      </select>
+    </label>
 
     <span class="qb-spacer"></span>
 
-    <input class="text-input qb-search" type="search" bind:value={query} placeholder="filter titles…" aria-label="Filter the queue by title" />
-    <button type="button" class="chip" class:on={grouped} aria-pressed={grouped} onclick={() => (grouped = !grouped)}>epics</button>
-    <button type="button" class="chip" class:on={dense} aria-pressed={dense} onclick={() => (dense = !dense)}>compact</button>
-    <button type="button" class="btn sm" onclick={reset}>Reset</button>
+    {#if view_ === 'board'}
+      <button type="button" class="chip" class:on={grouped} aria-pressed={grouped} onclick={() => (grouped = !grouped)}>epics</button>
+      <button type="button" class="chip" class:on={dense} aria-pressed={dense} onclick={() => (dense = !dense)}>compact</button>
+      {#if hiddenStages > 0 || showEmptyStages}
+        <button
+          type="button"
+          class="chip"
+          class:on={showEmptyStages}
+          aria-pressed={showEmptyStages}
+          onclick={() => (showEmptyStages = !showEmptyStages)}
+        >empty stages<span class="n">{hiddenStages}</span></button>
+      {/if}
+    {/if}
+    <button type="button" class="btn sm" disabled={activeCount === 0} onclick={reset}>
+      Reset{#if activeCount}&nbsp;({activeCount}){/if}
+    </button>
+  </div>
+
+  <div class="facets">
+    <div class="facet">
+      <span class="qb-lab">Lane</span>
+      <div class="chips">
+        {#each WORK_LANES as l (l)}
+          <button
+            type="button"
+            class="chip"
+            class:on={lanes.includes(l)}
+            aria-pressed={lanes.includes(l)}
+            onclick={() => (lanes = toggle(lanes, l))}
+          >{l}<span class="n">{laneCount(l)}</span></button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="facet">
+      <span class="qb-lab">Category</span>
+      <div class="chips">
+        {#each BACKLOG_KINDS as k (k)}
+          <button
+            type="button"
+            class="chip"
+            class:on={kinds.includes(k)}
+            aria-pressed={kinds.includes(k)}
+            title={KIND_META[k].cost}
+            onclick={() => (kinds = toggle(kinds, k))}
+          >{kindLabel(k)}<span class="n">{kindCount(k)}</span></button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="facet">
+      <span class="qb-lab">Priority</span>
+      <div class="chips">
+        {#each PRIORITIES as p (p)}
+          <button
+            type="button"
+            class="chip"
+            class:on={priorities.includes(p)}
+            aria-pressed={priorities.includes(p)}
+            onclick={() => (priorities = toggle(priorities, p))}
+          >P{p}<span class="n">{priorityCount(p)}</span></button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="facet">
+      <span class="qb-lab">Flag</span>
+      <div class="chips">
+        {#each FLAGS as f (f.id)}
+          <button
+            type="button"
+            class="chip"
+            class:on={flags.includes(f.id)}
+            aria-pressed={flags.includes(f.id)}
+            onclick={() => (flags = toggle(flags, f.id))}
+          >{f.label}<span class="n">{flagCount(f.id)}</span></button>
+        {/each}
+      </div>
+    </div>
   </div>
 
   <p class="note">
-    Showing <b>{visible.length}</b> of {view.items.length}. Drag a card to <b>Accepted</b> or
-    <b>Parked</b>. Nothing may be dragged into Live — a tool becomes live when jkai calls it —
-    and nothing may be dragged <em>out</em> of Live or Verifying, because parking a shipped
-    row would erase the fact that it shipped. Click a priority to raise it one step; that
-    writes the field <code>pickWork</code> ranks on. Select two or more with the square, then
-    fold the restatements into one.
+    Showing <b>{visible.length}</b> of {view.items.length}.
+    {#if view_ === 'board'}
+      Drag a card to <b>Accepted</b> or <b>Parked</b>; nothing may be dragged into Live — a
+      tool becomes live when jkai calls it — nor <em>out</em> of Live or Verifying, because
+      parking a shipped row would erase the fact that it shipped.
+    {:else}
+      Every item is reachable here, page by page. The board caps a column at {COLUMN_CAP}
+      cards, which is why a 347-item column could only ever be sampled.
+    {/if}
+    Change a priority to change what gets built tonight — it is the field
+    <code>pickWork</code> ranks on. Select two or more with the square, then fold the
+    restatements into one. Open any item to groom it, discuss it, or take it out.
   </p>
 
-  <!-- ── The board ─────────────────────────────────────────────────────── -->
+  <!-- ── The queue ─────────────────────────────────────────────────────── -->
+  {#if view_ === 'list'}
+    <QueueList
+      items={visible}
+      {selected}
+      {busy}
+      ontoggle={(id) => (selected = toggle(selected, id))}
+      onopen={openItem}
+      onpriority={setPriority}
+      onpark={(i, parked) => setParked(i, parked, parked ? 'Parked from the backlog list' : undefined)}
+    />
+  {:else}
   <div class="qb-scroll">
-    <div class="qb" class:dense>
+    <div class="qb" class:dense style="--cols:{stages.length}">
       <div class="qb-head">
-        {#each WORK_STAGES as s (s)}
+        {#each stages as s (s)}
           {@const shown = visible.filter((i) => i.stage === s).length}
           <div class="qb-col-hd t-{stageTone(s)}">
             <span class="hd-name">{STAGE_META[s].label}</span>
@@ -422,8 +567,10 @@
 
           {#if !shut}
             <div class="qb-body">
-              {#each WORK_STAGES as s (s)}
+              {#each stages as s (s)}
                 {@const cell = inStage(lane.items, s)}
+                {@const cellKey = `${lane.slug}:${s}`}
+                {@const cap = expandedCells.includes(cellKey) ? cell.length : COLUMN_CAP}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="qb-cell"
@@ -432,7 +579,7 @@
                   ondragleave={() => (hoverCell = null)}
                   ondrop={(ev) => onDrop(s, ev)}
                 >
-                  {#each cell.slice(0, COLUMN_CAP) as i (i.id)}
+                  {#each cell.slice(0, cap) as i (i.id)}
                     <article
                       class="wc t-{i.priority === 1 ? 'urgent' : i.newData ? 'action' : 'steady'}"
                       class:newdata={i.newData}
@@ -472,6 +619,7 @@
                         {#if i.grooming}
                           <span class="wc-ready {i.grooming.readiness.status}">{i.grooming.readiness.score}% groomed</span>
                         {/if}
+                        {#if i.noteCount}<span class="wc-notes">{i.noteCount} note{i.noteCount === 1 ? '' : 's'}</span>{/if}
                         {#if i.attempts}<span>{i.attempts}/{i.attemptCeiling} tries</span>{/if}
                         {#if i.calls != null}<span>{i.calls} calls</span>{/if}
                         {#if errRate(i)}<span class="warn">{errRate(i)}</span>{/if}
@@ -493,8 +641,17 @@
                       {/if}
                     </article>
                   {/each}
-                  {#if cell.length > COLUMN_CAP}
-                    <p class="qb-more">+{cell.length - COLUMN_CAP} more — narrow with a filter</p>
+                  {#if cell.length > cap}
+                    <!-- It used to say "+307 more — narrow with a filter" and
+                         stop there, for a pile no filter reached the bottom of.
+                         Now it opens, and the list view exists for the rest. -->
+                    <button type="button" class="qb-more" onclick={() => (expandedCells = toggle(expandedCells, cellKey))}>
+                      Show {cell.length - cap} more
+                    </button>
+                  {:else if cell.length > COLUMN_CAP}
+                    <button type="button" class="qb-more" onclick={() => (expandedCells = toggle(expandedCells, cellKey))}>
+                      Show fewer
+                    </button>
                   {:else if cell.length === 0}
                     <p class="qb-empty">—</p>
                   {/if}
@@ -506,6 +663,7 @@
       {/each}
     </div>
   </div>
+  {/if}
 
   {#if picked.length}
     <div class="qb-sel">
@@ -620,8 +778,101 @@
     margin-left: 6px;
   }
   .qb-search {
-    flex: 0 1 190px;
+    flex: 1 1 240px;
+    max-width: 380px;
     font-family: var(--font-mono);
+  }
+  .seg {
+    display: inline-flex;
+  }
+  .seg .chip + .chip {
+    margin-left: -1px;
+  }
+  .qb-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .qb-sort .text-input {
+    padding: 5px 8px;
+    font-size: var(--fs-label-xs);
+  }
+
+  /* ── the facet grid ───────────────────────────────────────────────────
+     Twenty-three chips in one wrapping row is a wall. Four labelled rows on a
+     two-column grid is the same information, scannable. */
+  .facets {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 8px 14px;
+    align-items: baseline;
+    padding: 0 0 14px;
+    border-bottom: 1px solid var(--line-hair);
+    margin-bottom: 14px;
+  }
+  .facet {
+    display: contents;
+  }
+  .chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  @media (max-width: 720px) {
+    .facets {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+    .facet {
+      display: block;
+      margin-bottom: 8px;
+    }
+  }
+
+  /* ── the folded context strip ─────────────────────────────────────────── */
+  .qb-fold {
+    border-bottom: 1px solid var(--line-hair);
+    margin-top: 14px;
+  }
+  .qb-fold > summary {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 11px 0;
+    cursor: pointer;
+    list-style: none;
+  }
+  .qb-fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  .qb-fold > summary::before {
+    content: '▸';
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+  .qb-fold[open] > summary::before {
+    content: '▾';
+  }
+  .qb-fold > summary:hover .fold-lab {
+    color: var(--accent);
+  }
+  .fold-lab {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .fold-sub {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.04em;
+    color: var(--text-ghost);
+  }
+  .fold-body {
+    padding-bottom: 18px;
   }
 
   /* ── the grid ─────────────────────────────────────────────────────────── */
@@ -632,12 +883,14 @@
     padding-bottom: 4px;
   }
   .qb {
-    min-width: 1120px;
+    min-width: calc(var(--cols, 6) * 186px);
   }
   .qb-head,
   .qb-body {
     display: grid;
-    grid-template-columns: repeat(6, minmax(180px, 1fr));
+    /* Follows how many stages are actually shown. Three of the six are empty
+       on a normal day and an empty column still costs a sixth of the width. */
+    grid-template-columns: repeat(var(--cols, 6), minmax(180px, 1fr));
   }
   .qb-head {
     border-top: 1px solid var(--line-strong);
@@ -752,6 +1005,23 @@
     color: var(--text-ghost);
     margin: 2px;
   }
+  .qb-more {
+    background: none;
+    border: 1px dashed var(--card-border);
+    padding: 6px 8px;
+    text-align: left;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .qb-more:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .qb-more:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
 
   /* ── the card ─────────────────────────────────────────────────────────── */
   .wc {
@@ -855,6 +1125,9 @@
   }
   .wc-ready.needs_input {
     color: var(--warn);
+  }
+  .wc-notes {
+    color: var(--accent-ink);
   }
   .wc-pri {
     font-family: var(--font-mono);
