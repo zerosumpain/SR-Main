@@ -293,6 +293,78 @@
     return value === 'blocked_by' ? 'blocked by' : value;
   }
 
+  /**
+   * The four fields a build lane actually reads, as rows.
+   *
+   * `read`/`write` rather than a `keyof` and a `list` flag: two of these are
+   * strings and two are string arrays, and a single generic setter over that
+   * union needs an `as never` at the call site to type-check — which is the
+   * point at which a wrong key stops being caught at all.
+   */
+  const CONTRACT_ROWS: Array<{
+    label: string;
+    help: string;
+    /** Minimum height only — `autogrow` takes it past this. */
+    rows: number;
+    read: (g: BacklogGroomingData) => string;
+    write: (v: string) => void;
+  }> = [
+    {
+      label: 'The problem',
+      help: 'Who is affected, and what fails today?',
+      rows: 3,
+      read: (g) => g.problem,
+      write: (v) => updateDraft('problem', v),
+    },
+    {
+      label: 'Desired outcome',
+      help: 'What observable result should change once this is built?',
+      rows: 3,
+      read: (g) => g.outcome,
+      write: (v) => updateDraft('outcome', v),
+    },
+    {
+      label: 'Acceptance criteria',
+      help: 'One per line. Independent, testable conditions the implementation must satisfy.',
+      rows: 3,
+      read: (g) => listValue(g.acceptanceCriteria),
+      write: (v) => updateDraft('acceptanceCriteria', lines(v)),
+    },
+    {
+      label: 'Validation',
+      help: 'One per line. The automated and manual checks that prove the outcome.',
+      rows: 3,
+      read: (g) => listValue(g.validation),
+      write: (v) => updateDraft('validation', lines(v)),
+    },
+  ];
+
+  /**
+   * Grow a textarea to its content.
+   *
+   * A plain `rows="4"` clipped a paragraph of problem statement mid-word and
+   * hid the rest behind an inner scrollbar — the single worst thing about the
+   * old review step. An ACTION rather than an effect: it reads and writes the
+   * node's own style, and an `$effect` doing that would be reading what it just
+   * wrote. The `rows` attribute stays as the minimum height.
+   */
+  function autogrow(node: HTMLTextAreaElement) {
+    const fit = () => {
+      node.style.height = 'auto';
+      node.style.height = `${node.scrollHeight}px`;
+    };
+    node.addEventListener('input', fit);
+    // After layout, so `scrollHeight` is measured against the real width
+    // rather than the zero-width box a just-mounted panel starts as.
+    const raf = requestAnimationFrame(fit);
+    return {
+      destroy() {
+        cancelAnimationFrame(raf);
+        node.removeEventListener('input', fit);
+      },
+    };
+  }
+
   const builderPreview = $derived(
     draft ? renderBacklogBrief({ title, detail, grooming: draft }) : `${title}\n\n${detail}`.trim(),
   );
@@ -354,47 +426,78 @@
 
     {#if step === 'brief'}
       <section class="step-pane brief-pane" aria-labelledby="brief-heading">
-        <div class="section-heading">
-          <p class="eyebrow">Step 1 · your intent</p>
-          <h2 id="brief-heading">What should be better?</h2>
-          <p>Give the model enough to understand the outcome. It will propose structure; you stay in control of what is saved.</p>
+        <div class="hd">
+          <div class="hd-left">
+            <p class="hd-kicker">Step 1 · your intent</p>
+            <h2 class="hd-title" id="brief-heading">What should<br />be better?</h2>
+          </div>
+          <p class="hd-strap">
+            Give the model enough to understand the outcome. It will propose the structure; you
+            stay in control of what is saved.
+          </p>
         </div>
 
-        <label class="field wide">
-          <span>Feature title</span>
-          <input class="control title-input" bind:value={title} maxlength="200" placeholder="A short, outcome-led name" />
-          {#if item}<small>The durable identifier stays <code>{item.slug}</code> if the title changes.</small>{/if}
-        </label>
-
-        <label class="field wide">
-          <span>Rough brief</span>
-          <textarea
-            class="control"
-            bind:value={detail}
-            maxlength="2000"
-            rows="7"
-            placeholder="Describe who needs this, what is difficult today, and what a good outcome looks like. Rough notes are fine."
-          ></textarea>
-          <small>{detail.length}/2000 · the model will turn this into acceptance criteria and validation</small>
-        </label>
-
-        <div class="property-row">
-          <label class="field">
-            <span>Delivery lane</span>
-            <select class="control" bind:value={kind} disabled={item?.backlogStatus === 'shipped'}>
-              {#each BACKLOG_KINDS as option (option)}<option value={option}>{option}</option>{/each}
-            </select>
-            <small>{item?.backlogStatus === 'shipped' ? 'Locked because this has shipped.' : KIND_HELP[kind]}</small>
+        <!-- Same numbered rows as the contract on step 4, so the journey is one
+             object rather than four differently-shaped forms. -->
+        <div class="contract">
+          <label class="c-row">
+            <p class="c-num">01</p>
+            <div class="c-say">
+              <span class="c-label">Feature title</span>
+              <span class="c-help">
+                A short, outcome-led name.
+                {#if item}The durable identifier stays <code>{item.slug}</code> if this changes.{/if}
+              </span>
+            </div>
+            <input class="control title-input" bind:value={title} maxlength="200" placeholder="A short, outcome-led name" />
           </label>
-          <label class="field">
-            <span>Priority</span>
-            <select class="control" bind:value={priority}>
-              {#each [1, 2, 3, 4, 5] as value (value)}
-                <option value={value}>P{value}{value === 1 ? ' — highest' : value === 5 ? ' — lowest' : ''}</option>
-              {/each}
-            </select>
-            <small>The nightly picker ranks this before age and attempt count.</small>
+
+          <label class="c-row">
+            <p class="c-num">02</p>
+            <div class="c-say">
+              <span class="c-label">Rough brief</span>
+              <span class="c-help">
+                Who needs this, what is difficult today, and what a good outcome looks like.
+                Rough notes are fine — the model turns this into acceptance criteria and
+                validation. {detail.length}/2000.
+              </span>
+            </div>
+            <textarea
+              class="control"
+              bind:value={detail}
+              maxlength="2000"
+              rows="5"
+              use:autogrow
+              placeholder="Describe who needs this, what is difficult today, and what a good outcome looks like."
+            ></textarea>
           </label>
+
+          <div class="c-row">
+            <p class="c-num">03</p>
+            <div class="c-say">
+              <span class="c-label">Where it goes</span>
+              <span class="c-help">
+                {item?.backlogStatus === 'shipped' ? 'The lane is locked because this has shipped.' : KIND_HELP[kind]}
+                The nightly picker ranks priority before age and attempt count.
+              </span>
+            </div>
+            <div class="c-pair">
+              <label class="field">
+                <span>Delivery lane</span>
+                <select class="control" bind:value={kind} disabled={item?.backlogStatus === 'shipped'}>
+                  {#each BACKLOG_KINDS as option (option)}<option value={option}>{option}</option>{/each}
+                </select>
+              </label>
+              <label class="field">
+                <span>Priority</span>
+                <select class="control" bind:value={priority}>
+                  {#each [1, 2, 3, 4, 5] as value (value)}
+                    <option value={value}>P{value}{value === 1 ? ' — highest' : value === 5 ? ' — lowest' : ''}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+          </div>
         </div>
 
         <aside class="model-callout">
@@ -405,10 +508,15 @@
     {:else if step === 'groom'}
       <section class="step-pane groom-pane" aria-labelledby="groom-heading">
         <div class="groom-main">
-          <div class="section-heading">
-            <p class="eyebrow">Step 2 · collaborative grooming</p>
-            <h2 id="groom-heading">Shape the implementation brief</h2>
-            <p>Ask about scope, trade-offs or feasibility, or answer a question the model has raised.</p>
+          <div class="hd stack">
+            <div class="hd-left">
+              <p class="hd-kicker">Step 2 · collaborative grooming</p>
+              <h2 class="hd-title" id="groom-heading">Shape the<br />implementation brief</h2>
+            </div>
+            <p class="hd-strap">
+              Ask about scope, trade-offs or feasibility, or answer a question the model has
+              raised.
+            </p>
           </div>
 
           {#if conversation.length === 0 && !groomingBusy}
@@ -502,13 +610,15 @@
       </section>
     {:else if step === 'discuss'}
       <section class="step-pane discuss-pane" aria-labelledby="discuss-heading">
-        <div class="section-heading">
-          <p class="eyebrow">Step 3 · your own words</p>
-          <h2 id="discuss-heading">What do you want to say about this?</h2>
-          <p>
-            Everything else on this record is a measurement or a model output — attempts,
-            failures, a generated brief. This is the one part that is yours: a question to
-            come back to, a constraint the model cannot know, the reason it is still here.
+        <div class="hd">
+          <div class="hd-left">
+            <p class="hd-kicker">Step 3 · your own words</p>
+            <h2 class="hd-title" id="discuss-heading">What do you want<br />to say about this?</h2>
+          </div>
+          <p class="hd-strap">
+            Everything else on this record is a measurement or a model output. This is the one
+            part that is yours: a question to come back to, a constraint the model cannot know,
+            the reason it is still here.
           </p>
         </div>
 
@@ -567,31 +677,67 @@
     {:else}
       {@const g = ensureDraft()}
       <section class="step-pane review-pane" aria-labelledby="review-heading">
-        <div class="review-head">
-          <div class="section-heading">
-            <p class="eyebrow">Step 3 · human approval</p>
-            <h2 id="review-heading">Make this the builder’s contract</h2>
-            <p>Edit anything the model got wrong. These fields—not the chat transcript—are saved and passed to the automated build engine.</p>
+        <div class="hd">
+          <div class="hd-left">
+            <p class="hd-kicker">Step {creating ? 3 : 4} · human approval</p>
+            <h2 class="hd-title" id="review-heading">Make this the<br />builder’s contract</h2>
           </div>
-          <div class="readiness-inline status-{g.readiness.status}">
-            <strong>{g.readiness.score}%</strong><span>{g.readiness.status === 'needs_input' ? 'needs input' : g.readiness.status}</span>
+          <p class="hd-strap">
+            Edit anything the model got wrong. These fields — not the chat transcript — are what
+            the automated build engine is handed.
+          </p>
+        </div>
+
+        <!-- The readiness instrument, in the register /health gives a measured
+             number: the figure, what it is out of, and a meter with a unit on
+             it. `25% DRAFT` in a 110px box was a chip, and a chip does not say
+             what would move it. -->
+        <div class="gauge status-{g.readiness.status}">
+          <p class="gauge-fig">{g.readiness.score}<span class="gauge-of">/100</span></p>
+          <div class="gauge-right">
+            <div class="gauge-meter" role="img" aria-label="Build readiness {g.readiness.score} of 100">
+              {#each [0, 1, 2, 3, 4] as i (i)}
+                <div class="gauge-bar" class:on={g.readiness.score >= (i + 1) * 20}></div>
+              {/each}
+            </div>
+            <p class="gauge-label">
+              {g.readiness.status === 'needs_input' ? 'Needs input' : g.readiness.status === 'ready' ? 'Ready to hand over' : 'Draft'}
+            </p>
+            <p class="gauge-reason">{g.readiness.reason}</p>
           </div>
         </div>
 
-        <div class="review-properties">
+        <div class="identity">
           <label class="field item-title"><span>Feature title</span><input class="control" bind:value={title} maxlength="200" /></label>
           <label class="field"><span>Delivery lane</span><select class="control" bind:value={kind} disabled={item?.backlogStatus === 'shipped'}>{#each BACKLOG_KINDS as option (option)}<option value={option}>{option}</option>{/each}</select></label>
           <label class="field"><span>Priority</span><select class="control" bind:value={priority}>{#each [1, 2, 3, 4, 5] as value (value)}<option value={value}>P{value}</option>{/each}</select></label>
         </div>
 
-        <div class="review-grid">
-          <div class="review-fields">
-            <label class="field"><span>Problem</span><textarea class="control" rows="4" value={g.problem} oninput={(event) => updateDraft('problem', event.currentTarget.value)}></textarea><small>Who is affected and what fails today?</small></label>
-            <label class="field"><span>Desired outcome</span><textarea class="control" rows="4" value={g.outcome} oninput={(event) => updateDraft('outcome', event.currentTarget.value)}></textarea><small>What observable result should change?</small></label>
-            <label class="field full"><span>Acceptance criteria · one per line</span><textarea class="control" rows="7" value={listValue(g.acceptanceCriteria)} oninput={(event) => updateDraft('acceptanceCriteria', lines(event.currentTarget.value))}></textarea><small>Independent, testable conditions the implementation must satisfy.</small></label>
-            <label class="field full"><span>Validation · one per line</span><textarea class="control" rows="5" value={listValue(g.validation)} oninput={(event) => updateDraft('validation', lines(event.currentTarget.value))}></textarea><small>Specific automated and manual checks that prove the outcome.</small></label>
+        <!-- Four numbered rows, borrowed from /health's ranked moves: a numeral,
+             a labelled column saying what the field is FOR, and the field itself
+             at full measure. The old shape put two of these side by side inside a
+             1120px panel, so a paragraph of problem statement landed in a
+             four-row box roughly 40 characters wide and clipped mid-word. -->
+        <div class="contract">
+          {#each CONTRACT_ROWS as row, i (row.label)}
+            <label class="c-row">
+              <p class="c-num">{String(i + 1).padStart(2, '0')}</p>
+              <div class="c-say">
+                <span class="c-label">{row.label}</span>
+                <span class="c-help">{row.help}</span>
+              </div>
+              <textarea
+                class="control"
+                rows={row.rows}
+                use:autogrow
+                value={row.read(g)}
+                oninput={(event) => row.write(event.currentTarget.value)}
+              ></textarea>
+            </label>
+          {/each}
+        </div>
 
-            <details class="advanced" open={g.openQuestions.length > 0}>
+        <details class="advanced" open={g.openQuestions.length > 0}>
               <summary>Scope, delivery and uncertainty</summary>
               <div class="advanced-grid">
                 <label class="field"><span>Constraints</span><textarea class="control" rows="4" value={listValue(g.constraints)} oninput={(event) => updateDraft('constraints', lines(event.currentTarget.value))}></textarea></label>
@@ -615,15 +761,20 @@
                   </div>
                 {/if}
               </div>
-            </details>
-          </div>
+        </details>
 
-          <aside class="builder-preview">
-            <p class="eyebrow">Exactly what the builder receives</p>
-            <pre>{builderPreview}</pre>
-            <div class="provenance"><span>Groomed by</span><strong>{model ?? g.modelId ?? 'Manual edit'}</strong><span>Revision {g.revision}</span></div>
-          </aside>
-        </div>
+        <!-- The payoff of the step, at full width. It used to be a 350px gutter
+             of wrapped monospace beside the fields; the thing a build lane is
+             actually handed deserves to be read, not squinted at. -->
+        <section class="handover">
+          <p class="c-label">Exactly what the builder receives</p>
+          <pre>{builderPreview}</pre>
+          <div class="provenance">
+            <span>Groomed by</span><strong>{model ?? g.modelId ?? 'Manual edit'}</strong>
+            <span>Revision {g.revision}</span>
+            {#if g.acceptedAt}<span>Accepted {ago(g.acceptedAt)}</span>{/if}
+          </div>
+        </section>
 
         {#if item}
           <details class="record">
@@ -781,12 +932,17 @@
   .journey small { font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .step-pane { min-height: 420px; }
-  .section-heading { max-width: 720px; margin-bottom: 20px; }
   .eyebrow { margin: 0 0 5px; color: var(--accent-ink); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .14em; text-transform: uppercase; }
-  .section-heading h2, .readonly h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.55rem, 2.7vw, 2.35rem); line-height: 1.05; color: var(--text-primary); }
-  .section-heading > p:last-child { margin: 8px 0 0; color: var(--text-secondary); line-height: 1.55; }
-  .brief-pane { display: grid; grid-template-columns: 1fr; gap: 18px; max-width: 860px; margin: 0 auto; }
-  .property-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .readonly h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.55rem, 2.7vw, 2.35rem); line-height: 1.05; color: var(--text-primary); }
+  /* No 860px column any more. The panel is set to the /health measure and the
+     brief uses it, the same way the contract on step 4 does. */
+  .brief-pane { display: flex; flex-direction: column; gap: clamp(18px, 2.2vw, 26px); }
+  .c-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
+  /* The groom step keeps its two-column body, so its head stacks rather than
+     pushing the standfirst to an edge that is only half the panel wide. */
+  .hd.stack { display: block; }
+  .hd.stack .hd-strap { max-width: 46ch; margin-top: 12px; }
+  .handover { margin-top: 18px; }
   .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
   .field > span, .composer > label { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; letter-spacing: .11em; text-transform: uppercase; }
   .field small { color: var(--text-ghost); font-family: var(--font-body); font-size: var(--fs-label-xs); line-height: 1.45; }
@@ -848,17 +1004,52 @@
   .relations article strong, .relations article code { display: block; margin-top: 3px; }
   .relations article code { color: var(--text-ghost); font-size: var(--fs-label-xs); overflow-wrap: anywhere; }
 
-  .review-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
-  .readiness-inline { min-width: 110px; padding: 10px 12px; border: 1px solid var(--line-hair); border-top: 3px solid var(--accent-ink); text-align: right; }
-  .readiness-inline.status-ready { border-top-color: var(--good); }
-  .readiness-inline.status-needs_input { border-top-color: var(--warn); }
-  .readiness-inline strong, .readiness-inline span { display: block; }
-  .readiness-inline strong { font-family: var(--font-display); font-size: 1.5rem; }
-  .readiness-inline span { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
-  .review-properties { display: grid; grid-template-columns: minmax(0, 1fr) 180px 110px; gap: 12px; margin-bottom: 18px; padding: 12px; border: 1px solid var(--line-hair); background: var(--bg-section); }
-  .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 22px; align-items: start; }
-  .review-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
-  .review-fields .full, .advanced { grid-column: 1 / -1; }
+  /* ── the /health masthead, borrowed verbatim ───────────────────────────
+     Kicker, a display headline broken where the copy wants it broken, and one
+     standfirst pushed to the right edge. Same shape as `hub/SectionHead`; it
+     is not that component because a step head is not a page section and does
+     not want its section padding. */
+  .hd { display: flex; align-items: end; justify-content: space-between; gap: 28px; flex-wrap: wrap; margin-bottom: clamp(20px, 2.4vw, 30px); }
+  .hd-left { min-width: 0; }
+  .hd-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 12px; }
+  .hd-title { font-family: var(--font-display); font-size: clamp(26px, 3vw, 40px); line-height: .94; letter-spacing: -.02em; text-transform: uppercase; color: var(--text-primary); margin: 0; }
+  .hd-strap { font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-secondary); text-wrap: pretty; max-width: 42ch; margin: 0; }
+
+  /* ── the readiness instrument ─────────────────────────────────────────── */
+  .gauge { --g: var(--accent-ink); display: flex; align-items: center; gap: clamp(16px, 2vw, 28px); padding: 16px 20px; border: 1px solid var(--card-border); border-left: 3px solid var(--g); background: var(--bg-section); margin-bottom: clamp(18px, 2.2vw, 26px); }
+  .gauge.status-ready { --g: var(--good); }
+  .gauge.status-needs_input { --g: var(--warn); }
+  .gauge-fig { font-family: var(--font-display); font-size: 44px; line-height: .8; letter-spacing: -.03em; color: var(--g); margin: 0; flex: none; }
+  .gauge-of { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .06em; color: var(--text-ghost); margin-left: 3px; }
+  .gauge-right { min-width: 0; flex: 1 1 auto; }
+  .gauge-meter { display: flex; gap: 2px; max-width: 220px; margin-bottom: 8px; }
+  .gauge-bar { height: 12px; flex: 1; background: rgba(26, 16, 8, .14); }
+  .gauge-bar.on { background: var(--g); }
+  .gauge-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--g); margin: 0 0 4px; }
+  .gauge-reason { font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; margin: 0; }
+
+  /* ── identity row ─────────────────────────────────────────────────────── */
+  .identity { display: grid; grid-template-columns: minmax(0, 1fr) 200px 130px; gap: 16px; margin-bottom: clamp(20px, 2.4vw, 30px); padding-bottom: clamp(20px, 2.4vw, 30px); border-bottom: 2px solid var(--line-strong); }
+
+  /* ── the contract, as numbered rows ───────────────────────────────────
+     /health's ranked-moves grid: a numeral, a column that says what the field
+     is FOR, and the field itself with the rest of the width. One hairline
+     between rows, drawn as the container's ground through a 1px gap — safe in
+     a fixed single column, the trap only bites an `auto-fit` grid. */
+  .contract { display: flex; flex-direction: column; gap: 1px; background: var(--card-border); border: 1px solid var(--card-border); margin-bottom: clamp(20px, 2.4vw, 30px); }
+  .c-row { display: grid; grid-template-columns: 44px minmax(0, 260px) minmax(0, 2.2fr); gap: clamp(14px, 1.8vw, 26px); align-items: start; padding: 20px; background: var(--surface-elevated); }
+  .c-num { font-family: var(--font-display); font-size: 30px; line-height: .8; letter-spacing: -.03em; color: var(--accent); margin: 2px 0 0; }
+  .c-say { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+  .c-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--text-primary); }
+  .c-help { font-size: var(--fs-label); line-height: 1.5; color: var(--text-muted); text-wrap: pretty; }
+  .c-row textarea.control { resize: vertical; overflow: hidden; }
+
+  /* ── what the builder receives ────────────────────────────────────────── */
+  .handover { border: 1px solid var(--card-border); border-top: 3px solid var(--accent); background: var(--bg-section); padding: 18px 20px; margin-bottom: 18px; }
+  .handover .c-label { display: block; margin-bottom: 12px; color: var(--accent); }
+  .handover pre { margin: 0; max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-code); font-size: var(--fs-label-xs); line-height: 1.65; color: var(--text-secondary); }
+
+  .advanced { grid-column: 1 / -1; }
   .advanced, .record, .danger-zone { border: 1px solid var(--line-hair); }
   .advanced summary, .record summary, .danger-zone summary { padding: 11px 12px; cursor: pointer; color: var(--text-secondary); font-weight: 650; background: var(--bg-section); }
   .advanced-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; padding: 14px; }
@@ -867,8 +1058,7 @@
   .relation-review article:first-of-type { margin-top: 2px; }
   .relation-review article p { margin: 3px 0; color: var(--text-secondary); font-size: var(--fs-label); }
   .relation-review article code { color: var(--text-ghost); font-size: var(--fs-label-xs); }
-  .builder-preview { position: sticky; top: 0; border: 1px solid var(--line-strong); border-top: 3px solid var(--accent); background: var(--bg-section); padding: 13px; min-width: 0; }
-  .builder-preview pre { max-height: 510px; overflow: auto; margin: 8px 0 12px; padding: 11px; background: var(--surface-overlay); border: 1px solid var(--line-hair); color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .provenance { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--card-border); }
   .provenance { display: flex; flex-wrap: wrap; gap: 4px 9px; color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .provenance strong { color: var(--text-secondary); overflow-wrap: anywhere; }
   .record, .danger-zone { margin-top: 18px; }
@@ -898,20 +1088,28 @@
   .context-card p { margin: 5px 0 0; color: var(--text-secondary); }
   .helper { padding-top: 14px; border-top: 1px solid var(--line-hair); }
 
+  /* The contract row folds the same way /health's ranked-moves row does: the
+     numeral takes the full column height and the label sits over its field
+     rather than beside it. */
+  @media (max-width: 1080px) {
+    .c-row { grid-template-columns: 44px minmax(0, 1fr); row-gap: 14px; }
+    .c-num { grid-row: span 2; }
+    .identity { grid-template-columns: minmax(0, 1fr) 200px; }
+  }
   @media (max-width: 850px) {
-    .groom-pane, .review-grid { grid-template-columns: 1fr; }
+    .groom-pane { grid-template-columns: 1fr; }
     .groom-side { border-left: 0; border-top: 1px solid var(--line-hair); padding: 16px 0 0; }
-    .builder-preview { position: static; }
     .record dl { grid-template-columns: repeat(2, 1fr); }
   }
   @media (max-width: 640px) {
     .journey button { grid-template-columns: 24px 1fr; padding: 9px 7px; gap: 2px 6px; }
     .journey button > span { width: 22px; height: 22px; }
     .journey small { display: none; }
-    .property-row, .review-properties, .review-fields, .advanced-grid { grid-template-columns: 1fr; }
-    .review-fields .full, .advanced, .advanced-grid .full { grid-column: auto; }
-    .review-head { align-items: stretch; }
-    .readiness-inline { min-width: 82px; }
+    .identity, .advanced-grid, .c-pair { grid-template-columns: 1fr; }
+    .advanced, .advanced-grid .full { grid-column: auto; }
+    .c-row { grid-template-columns: 1fr; padding: 16px; }
+    .c-num { grid-row: auto; font-size: 22px; }
+    .gauge { flex-wrap: wrap; gap: 14px; }
     .record dl { grid-template-columns: 1fr; }
     .footer-spacer { display: none; }
     .footer-actions .clean-button { flex: 1 1 auto; }

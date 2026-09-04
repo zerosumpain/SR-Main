@@ -68,23 +68,23 @@
   <table class="ql">
     <colgroup>
       <col style="width:34px" />
-      <col />
-      <col style="width:104px" />
       <col style="width:120px" />
+      <col />
       <col style="width:96px" />
       <col style="width:82px" />
-      <col style="width:74px" />
-      <col style="width:150px" />
+      <col style="width:70px" />
+      <col style="width:34%" />
+      <col style="width:132px" />
     </colgroup>
     <thead>
       <tr>
         <th><span class="sr-only">Select</span></th>
-        <th>Feature</th>
-        <th>Category</th>
         <th>Stage</th>
+        <th>Feature</th>
         <th class="c">Priority</th>
         <th class="c">Groomed</th>
         <th class="c">Notes</th>
+        <th>Why it is still here</th>
         <th class="r">Touched</th>
       </tr>
     </thead>
@@ -104,12 +104,14 @@
               onclick={() => ontoggle(i.id)}
             ></button>
           </td>
+          <td><span class="pill t-{STAGE_META[i.stage].tone}">{STAGE_META[i.stage].label}</span></td>
           <td class="lead">
             <button type="button" class="ql-title" onclick={() => onopen(i)}>{i.title}</button>
-            {#if f}<span class="ql-flag t-{f.tone}">{f.text}</span>{/if}
+            <span class="ql-sub">
+              {kindLabel(i.kind).toUpperCase()}
+              {#if i.attempts}· {i.attempts}/{i.attemptCeiling} tries{/if}
+            </span>
           </td>
-          <td><span class="mark">{kindLabel(i.kind).toUpperCase()}</span></td>
-          <td><span class="pill t-{STAGE_META[i.stage].tone}">{STAGE_META[i.stage].label}</span></td>
           <td class="c">
             <div class="pri">
               <button
@@ -137,6 +139,11 @@
               {i.noteCount || '—'}
             </button>
           </td>
+          <!-- The reason a row is still in the queue, in BODY font and given a
+               column of its own. /health's tripwire ledger sets the same
+               sentence the same way; squeezed under the title in 12px mono it
+               was competing with the title rather than explaining it. -->
+          <td class="why t-{f?.tone ?? 'none'}">{f ? f.text : '—'}</td>
           <td class="r">
             <span class="when">{ago(i.updatedAt)}</span>
             {#if canPark(i)}
@@ -180,7 +187,7 @@
   }
   .ql {
     width: 100%;
-    min-width: 940px;
+    min-width: 1120px;
     border-collapse: collapse;
     table-layout: fixed;
     font-family: var(--font-mono);
@@ -190,13 +197,21 @@
     border-bottom: 2px solid var(--line-strong);
   }
   .ql th {
-    padding: 9px 10px;
+    padding: 0 12px 12px 0;
     text-align: left;
     font-weight: 500;
-    letter-spacing: 0.13em;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-muted);
     white-space: nowrap;
+  }
+  .ql th:first-child,
+  .ql td:first-child {
+    padding-left: 0;
+  }
+  .ql th:last-child,
+  .ql td:last-child {
+    padding-right: 0;
   }
   .ql th.c,
   .ql td.c {
@@ -219,8 +234,10 @@
   .ql tbody tr.busy {
     opacity: 0.55;
   }
+  /* 14px rows, top-aligned — the tripwire ledger's rhythm. A two-line title
+     beside a one-line badge centres badly and reads as two unrelated things. */
   .ql td {
-    padding: 9px 10px;
+    padding: 14px 12px 14px 0;
     vertical-align: top;
     color: var(--text-secondary);
   }
@@ -248,19 +265,30 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .ql-flag {
+  .ql-sub {
     display: block;
-    margin-top: 4px;
+    margin-top: 5px;
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.03em;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+  .why {
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
+    line-height: 1.5;
     color: var(--text-muted);
+    min-width: 30ch;
+    text-wrap: pretty;
     overflow-wrap: anywhere;
   }
-  .ql-flag.t-urgent {
+  .why.t-urgent {
     color: var(--error);
   }
-  .ql-flag.t-watch {
+  .why.t-watch {
     color: var(--warn);
+  }
+  .why.t-none {
+    color: var(--text-ghost);
   }
 
   .pick {
