@@ -5,13 +5,13 @@ import { dirname, resolve } from 'node:path';
 import { nodeDefinitions } from '$lib/workflows/registry-client';
 
 /**
- * Drift guard for the hand-written client node list.
+ * Drift guard for the client-safe node list.
  *
  * `src/lib/workflows/registry-client.ts` maintains a client-safe list of node
  * definitions (`nodeDefinitions`) that MUST mirror the executors registered in
- * `src/lib/workflows/index.ts`. Because the client list is hand-maintained
- * (some defs are inlined / imported from `.def.ts` to keep the bundle free of
- * server-only code), it can silently drift from the registered executors.
+ * `src/lib/workflows/index.ts`. Definitions for server-backed executors live in
+ * client-safe `.def.ts` modules, so the canvas and runtime consume the same
+ * metadata object without pulling server-only dependencies into the browser.
  *
  * This test recovers the authoritative *registered* set by statically parsing
  * the `registry.register(<Def>, ...)` calls in `index.ts` and resolving each
