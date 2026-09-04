@@ -24,6 +24,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
 import { daydreamImprove } from './activities/daydream-improve';
+import { daydreamDoctor } from './activities/daydream-doctor';
+import type { ActivityHandler } from './types';
 
 export interface ImprovementSchedule {
   /** 'HH:MM Zone' — the moment the window opens. */
@@ -38,23 +40,19 @@ export interface ImprovementSchedule {
   source: 'row' | 'default';
 }
 
-function fromDefaults(): ImprovementSchedule {
-  const w = daydreamImprove.defaultActiveHours;
+function fromDefaults(handler: ActivityHandler): ImprovementSchedule {
+  const w = handler.defaultActiveHours;
   return {
     display: w ? `${w.start} ${w.tz}` : 'any time',
     window: w ? `${w.start}–${w.end} ${w.tz}` : 'any time',
-    active: daydreamImprove.defaultEnabled,
+    active: handler.defaultEnabled,
     nextRunAt: null,
     source: 'default',
   };
 }
 
-/**
- * The live schedule of the `daydream-improve` heartbeat activity. Never throws
- * — a dashboard must still render when the database is unhappy, and the
- * declared defaults are a truthful description of what a fresh install does.
- */
-export async function improvementSchedule(): Promise<ImprovementSchedule> {
+/** The live schedule of any heartbeat activity. Never throws. */
+async function scheduleOf(handler: ActivityHandler): Promise<ImprovementSchedule> {
   try {
     const [row] = await db
       .select({
@@ -65,10 +63,10 @@ export async function improvementSchedule(): Promise<ImprovementSchedule> {
         nextRunAt: heartbeatActions.nextRunAt,
       })
       .from(heartbeatActions)
-      .where(eq(heartbeatActions.name, daydreamImprove.name))
+      .where(eq(heartbeatActions.name, handler.name))
       .limit(1);
 
-    if (!row) return fromDefaults();
+    if (!row) return fromDefaults(handler);
 
     const tz = row.tz ?? 'UTC';
     const start = row.start;
@@ -81,6 +79,27 @@ export async function improvementSchedule(): Promise<ImprovementSchedule> {
       source: 'row',
     };
   } catch {
-    return fromDefaults();
+    return fromDefaults(handler);
   }
+}
+
+/**
+ * The live schedule of the `daydream-improve` heartbeat activity. Never throws
+ * — a dashboard must still render when the database is unhappy, and the
+ * declared defaults are a truthful description of what a fresh install does.
+ */
+export async function improvementSchedule(): Promise<ImprovementSchedule> {
+  return scheduleOf(daydreamImprove);
+}
+
+/**
+ * The live schedule of the `daydream-doctor` activity.
+ *
+ * `/jkai/daydreams/doctor` and `/admin/ai/doctor` printed `CRON_EXPR` and a
+ * hardcoded '05:00 Europe/London' until 2026-09-04. The moment the croner
+ * retired, both became a confident statement of a schedule nothing keeps —
+ * which is exactly the failure this module was written for the first time.
+ */
+export async function doctorSchedule(): Promise<ImprovementSchedule> {
+  return scheduleOf(daydreamDoctor);
 }

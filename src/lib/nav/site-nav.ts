@@ -206,6 +206,11 @@ export const SECTIONS: NavSection[] = [
       { label: 'Money', href: '/jkai/daydreams/money' },
       { label: 'Family', href: '/jkai/daydreams/family' },
       { label: 'Improvement', href: '/jkai/daydreams/improvement' },
+      // The doctor moved under daydreams on 2026-09-04 and belongs to this
+      // list, not to the jkai row above it. Left there it lit two cells on
+      // its own page — `under('/jkai/daydreams', …)` is true for every child —
+      // which `nav-parents`' one-cell invariant catches.
+      { label: 'Doctor', href: '/jkai/daydreams/doctor' },
     ],
   },
   {
@@ -223,7 +228,6 @@ export const SECTIONS: NavSection[] = [
       { label: 'Daydreams', href: '/jkai/daydreams' },
       { label: 'Notes', href: '/jkai/notes' },
       { label: 'Agent team', href: '/jkai/agents' },
-      { label: 'Doctor', href: '/jkai/doctor' },
     ],
   },
   {

@@ -9,12 +9,10 @@ import {
   type NarrativeRun,
 } from '$lib/workflowdoctor/narrative';
 import { getDoctorStatus } from '$lib/workflowdoctor/run';
+import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 import { triageNow, type TriageResult } from '$lib/workflowdoctor/triage';
 import {
   COLLECTIONS,
-  CRON_DISPLAY,
-  CRON_EXPR,
-  CRON_TZ,
   SETTINGS_ENABLED_KEY,
   WORK_CAPS,
   errMsg,
@@ -109,7 +107,7 @@ function nightsSinceClean(runs: NarrativeRun[]): number | null {
 }
 
 export const load: PageServerLoad = async () => {
-  const [runs, findings, live, switches] = await Promise.all([
+  const [runs, findings, live, switches, schedule] = await Promise.all([
     loadRuns().catch((err) => {
       console.error('[workflowdoctor] page: runs read failed:', errMsg(err));
       return [] as NarrativeRun[];
@@ -130,6 +128,7 @@ export const load: PageServerLoad = async () => {
       // rendered as an armed one.
       return { enabled: true, autoApply: false, breaker: false };
     }),
+    doctorSchedule(),
   ]);
 
   const latest = runs[0] ?? null;
@@ -226,7 +225,10 @@ export const load: PageServerLoad = async () => {
 
     switches,
     lookbackDays: WORK_CAPS.lookbackDays,
-    schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: CRON_DISPLAY },
+    // The LIVE heartbeat row, never a constant. The croner retired on
+    // 2026-09-04 and the window is editable from the heartbeat admin UI, so a
+    // hardcoded '05:00 Europe/London' here would be wrong within one click.
+    schedule: { expr: schedule.window, tz: schedule.window.split(' ').slice(-1)[0], display: schedule.display },
     running: getDoctorStatus().running,
   };
 };

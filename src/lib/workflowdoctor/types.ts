@@ -59,15 +59,13 @@ export const SETTINGS_AUTOAPPLY_KEY = 'workflowdoctor.autoapply';
  */
 export const SETTINGS_BREAKER_KEY = 'workflowdoctor.breaker';
 
-/** Nightly cron: 05:00 Europe/London — the free slot. */
-export const CRON_EXPR = '0 5 * * *';
-export const CRON_TZ = 'Europe/London';
-/**
- * 03:30 selfimprove, 04:00 model-routing, 04:15 intel, 06:30 briefing,
- * 06:45 connector alert. 05:00 leaves 90 minutes of headroom before the
- * briefing engine; if `maxWallMs` is ever raised, re-check the slot.
- */
-export const CRON_DISPLAY = '05:00 Europe/London';
+// The nightly cron used to live here (`0 5 * * *`, Europe/London). The
+// schedule is now the `daydream-doctor` heartbeat activity — see that handler
+// for the window, and `$lib/heartbeat/activity-schedule.ts` for the accessor
+// the two dashboards read. The constants are DELETED rather than kept as
+// documentation, for the reason self-improve deleted its own on 2026-08-30:
+// both pages were printing them as the live schedule, which is how a dashboard
+// starts lying.
 
 /** Advisory-lock lane so two app instances cannot both mutate the same canvas. */
 export const DOCTOR_LOCK_LANE = 'jkai:workflow-doctor';
@@ -160,6 +158,15 @@ export type DoctorActionKind =
   | 'fix_refused_sensitive'
   | 'schedule_quarantined'
   | 'proposal'
+  /**
+   * A finding handed to the daydream fault ledger because it needs repo code.
+   *
+   * Its own kind, not a `proposal`: `proposalsOpened` counts what the doctor
+   * has written down for a human to read, and an escalation is what it handed
+   * to another engine to act on. One number covering both would make a night
+   * that escalated nothing look identical to one that escalated three.
+   */
+  | 'escalated'
   | 'finding_resolved'
   | 'lint_only';
 

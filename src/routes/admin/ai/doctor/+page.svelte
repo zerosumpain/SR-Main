@@ -256,7 +256,7 @@
   >
     {#snippet actions()}
       {#if running}<span class="nm-pill" data-state="running">running</span>{/if}
-      <a class="nm-btn-ghost" href="/jkai/doctor">Read the report →</a>
+      <a class="nm-btn-ghost" href="/jkai/daydreams/doctor">Read the report →</a>
     {/snippet}
   </PageHeader>
 

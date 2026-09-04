@@ -24,14 +24,35 @@ export const FAULT_KINDS = [
   'tool_barren',
   'silent_source',
   'source_error',
+  // From the workflow doctor, 2026-09-04. A canvas whose node type was renamed
+  // out of the registry can never run again, and no runtime tool can fix it —
+  // it needs a migration in the repo. Folding the doctor in here rather than
+  // giving it a second wire into self-improve is what makes the two engines
+  // one: its findings arrive by the same door as every other gap.
+  'workflow_dead_node',
+  'workflow_failing',
 ] as const;
 export type FaultKind = (typeof FAULT_KINDS)[number];
 
-export const WANTS = ['numeric_tool', 'reader_tool', 'connector', 'more_days', 'repair', 'decline'] as const;
+export const WANTS = [
+  'numeric_tool',
+  'reader_tool',
+  'connector',
+  'more_days',
+  'repair',
+  'decline',
+  /**
+   * Needs REPO CODE — a route, a schema, a migration. Nothing a runtime custom
+   * tool can be, and nothing the doctor's own narrow config whitelist can
+   * reach. It becomes a `feature` backlog item and, once the owner accepts it,
+   * a change request to the autonomous builder.
+   */
+  'code_change',
+] as const;
 export type Wants = (typeof WANTS)[number];
 
 /** The wants that are BUILDABLE — what self-improve reads first. */
-export const BUILDABLE_WANTS: ReadonlyArray<Wants> = ['numeric_tool', 'reader_tool', 'connector'];
+export const BUILDABLE_WANTS: ReadonlyArray<Wants> = ['numeric_tool', 'reader_tool', 'connector', 'code_change'];
 
 /** What a fault of this kind naturally asks for. */
 export function wantsFor(kind: FaultKind): Wants {
@@ -48,6 +69,9 @@ export function wantsFor(kind: FaultKind): Wants {
       return 'repair';
     case 'tool_barren':
       return 'decline';
+    case 'workflow_dead_node':
+    case 'workflow_failing':
+      return 'code_change';
     case 'lead_barren':
     case 'audit_drop':
     default:
@@ -184,7 +208,8 @@ export async function faultCounts(): Promise<{ open: number; closed: number; dec
 export interface FaultIdea {
   title: string;
   detail: string;
-  kind: 'tool';
+  /** `feature` only for `code_change` — everything else is a runtime tool. */
+  kind: 'tool' | 'feature';
   priority: number;
   evidence: string;
   faultKind: FaultKind;
@@ -199,6 +224,8 @@ function shapeSentence(wants: Wants): string {
       return 'Build a runtime tool that takes one id and returns the row behind it as text — the reviewer already holds the ids and only lacks a reader.';
     case 'connector':
       return 'Find or register an API in the catalogue that serves this source, then build a no-argument runtime tool that reads one number a day from it.';
+    case 'code_change':
+      return 'This needs repo code — a node type migrated, a route, a schema change. It cannot be a runtime tool: open it as a change request so the autonomous builder implements it on a branch, runs the gate, and opens a PR.';
     default:
       return '';
   }
@@ -215,11 +242,13 @@ export async function collectFaultIdeas(limit = 5): Promise<FaultIdea[]> {
         ? `Source for the metric "${f.identifier}"`
         : f.wants === 'reader_tool'
           ? `Reader for ${f.identifier}`
-          : `Connector for ${f.identifier}`;
+          : f.wants === 'code_change'
+            ? `Fix ${f.identifier}`
+            : `Connector for ${f.identifier}`;
     ideas.push({
       title: title.slice(0, 200),
       detail: `${f.detail ?? f.kind} (raised ${f.count} time${f.count === 1 ? '' : 's'} by ${f.site}). ${shape}`.slice(0, 2000),
-      kind: 'tool',
+      kind: f.wants === 'code_change' ? 'feature' : 'tool',
       priority: f.count >= 3 ? 1 : 2,
       evidence: `daydream fault ${f.kind}:${f.identifier}, ${f.count}×, last ${f.lastSeenAt.slice(0, 10)}`,
       faultKind: f.kind,

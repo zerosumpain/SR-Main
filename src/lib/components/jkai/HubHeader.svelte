@@ -137,8 +137,7 @@
   ];
   const system = $derived<MenuRow[]>([
     { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },
-    { label: 'Doctor', href: '/jkai/doctor', meta: 'TRIAGE' },
-    { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },
+      { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },
     {
       label: 'Spend & limits',
       href: '/admin/ops/costs',

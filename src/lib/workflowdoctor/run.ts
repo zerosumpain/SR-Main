@@ -42,6 +42,7 @@ import {
   type PhaseName,
 } from './types';
 import { ensureDoctorCollections, getFinding, resolveStaleFindings, upsertFinding } from './findings';
+import { escalateFindings } from './escalate';
 import { lintWorkflows, type WorkflowLint } from './lint';
 import { signatureOf, triageNow, type TriageResult, type TriageSignature } from './triage';
 import { classifySignature, diagnoseWithLlm, type ClassifyInput, type Diagnosis } from './classify';
@@ -440,7 +441,17 @@ async function readSwitches(): Promise<{ autoApply: boolean; breaker: boolean }>
  * Execute one doctor run end-to-end. Rejects only if a run is already in
  * progress (overlap guard). Everything else is captured on the run record.
  */
-export async function runDoctorNow(opts?: { trigger?: 'manual' | 'cron' }): Promise<{ runId: string }> {
+/**
+ * Execute one doctor run end to end.
+ *
+ * Returns the run record as well as its id (it used to return only the id):
+ * the `daydream-doctor` heartbeat activity summarises the night onto its pulse
+ * and cannot do that from an id alone, and re-reading the datastore record it
+ * has just written would be a second query racing the first.
+ */
+export async function runDoctorNow(
+  opts?: { trigger?: 'manual' | 'cron' },
+): Promise<{ runId: string; data: DoctorRunData }> {
   const trigger = opts?.trigger ?? 'manual';
   if (!acquireRunLock()) {
     throw new Error('a workflow doctor run is already in progress');
@@ -471,7 +482,7 @@ export async function runDoctorNow(opts?: { trigger?: 'manual' | 'cron' }): Prom
       data.finishedAt = new Date().toISOString();
       data.report = 'Skipped: user was active when the nightly run was due.';
       await safePersist(runId, data);
-      return { runId };
+      return { runId, data };
     }
 
     // Cross-process rail. Losing it DEGRADES the run to propose-only rather than
@@ -734,6 +745,36 @@ export async function runDoctorNow(opts?: { trigger?: 'manual' | 'cron' }): Prom
             });
           }
 
+          // ── Into the fault ledger ────────────────────────────────────
+          //
+          // The fold. A finding a human has to write code for becomes an
+          // ordinary daydream fault, which is the door self-improvement
+          // already reads first — so the doctor stops being a second engine
+          // with its own private conclusions and starts feeding the same
+          // queue as everything else. `shouldEscalate` keeps the doctor's own
+          // lanes out of it: a config edit it can make itself and a runaway
+          // the breaker already stopped are not work for anyone.
+          const escalated = await escalateFindings(
+            state.diagnosed.map(({ candidate: c, diagnosis: d }) => ({
+              workflowId: c.workflowId,
+              workflowName: c.workflowName,
+              nodeId: c.nodeId,
+              nodeType: c.nodeType,
+              nodeLabel: c.nodeLabel,
+              fixKind: d.fixKind,
+              occurrences: c.occurrences,
+              symptom: d.symptom,
+              cause: d.cause,
+              fix: d.fix,
+            })),
+          );
+          if (escalated.length) {
+            actions.push({
+              kind: 'escalated',
+              detail: `${escalated.length} finding(s) escalated to the fault ledger for a code change: ${escalated.slice(0, 3).join('; ')}`,
+            });
+          }
+
           // The only way a fixed problem stops being reported: its signature
           // stopped arriving. Human verdicts are left alone by the sweep.
           const resolved = await resolveStaleFindings(seen, runId);
@@ -811,7 +852,7 @@ export async function runDoctorNow(opts?: { trigger?: 'manual' | 'cron' }): Prom
       await safePersist(runId, data);
     }
 
-    return { runId };
+    return { runId, data };
   } catch (err) {
     // Top-level surprise — capture as `failed`, never rethrow into the scheduler.
     console.error('[workflowdoctor] run failed:', errMsg(err));
@@ -821,7 +862,7 @@ export async function runDoctorNow(opts?: { trigger?: 'manual' | 'cron' }): Prom
     syncBudget(data, budget);
     syncCounters(data);
     await safePersist(runId, data);
-    return { runId };
+    return { runId, data };
   } finally {
     if (locked) await releaseAdvisoryLock(DOCTOR_LOCK_LANE);
     releaseRunLock();

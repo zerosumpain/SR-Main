@@ -3,11 +3,9 @@ import { getCollectionBySlug, queryRecords } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { listFindings } from '$lib/workflowdoctor/findings';
 import { getDoctorStatus } from '$lib/workflowdoctor/run';
+import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 import {
   COLLECTIONS,
-  CRON_DISPLAY,
-  CRON_EXPR,
-  CRON_TZ,
   FIX_KIND_LABELS,
   SETTINGS_AUTOAPPLY_KEY,
   SETTINGS_BREAKER_KEY,
@@ -18,7 +16,7 @@ import {
 } from '$lib/workflowdoctor/types';
 
 // The doctor's CONTROL surface — switches, "Run now", and the undo list. The
-// narrative report lives at /jkai/doctor; this page is deliberately the boring
+// narrative report lives at /jkai/daydreams/doctor; this page is deliberately the boring
 // one. Owner-gated in hooks.server.ts (page + /api/admin/*), so there is no auth
 // code here. Reads go through $lib/datastore as the `owner` actor; every
 // mutation goes out through /api/admin/doctor/*, matching the improvement admin
@@ -111,12 +109,13 @@ function toView(row: { key: string; data: DoctorFindingData }): FindingView {
 }
 
 export const load: PageServerLoad = async () => {
-  const [runs, findingRows, enabledSetting, autoApplySetting, breakerSetting] = await Promise.all([
+  const [runs, findingRows, enabledSetting, autoApplySetting, breakerSetting, schedule] = await Promise.all([
     loadRuns(),
     listFindings({ limit: 200 }),
     getSetting(SETTINGS_ENABLED_KEY),
     getSetting(SETTINGS_AUTOAPPLY_KEY),
     getSetting(SETTINGS_BREAKER_KEY),
+    doctorSchedule(),
   ]);
 
   const status = getDoctorStatus();
@@ -128,7 +127,11 @@ export const load: PageServerLoad = async () => {
     enabled: enabledSetting !== false,
     breaker: breakerSetting !== false,
     autoApply: autoApplySetting === true,
-    schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: CRON_DISPLAY },
+    // The live heartbeat row. The croner retired 2026-09-04 and the window is
+    // editable from the heartbeat admin UI, so a constant would be wrong within
+    // one click — the same reason self-improve's two dashboards stopped
+    // printing theirs.
+    schedule: { expr: schedule.window, tz: schedule.window.split(' ').slice(-1)[0], display: schedule.display },
     // The switch copy quotes these numbers. Passed rather than typed into the
     // page so a cap change cannot leave the warning describing the old engine.
     caps: {

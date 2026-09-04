@@ -115,7 +115,8 @@ import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
 // runaway schedules, proposes fixes. Structural sibling of selfimprove: same
 // prod-only cron gate, same leader-elected lane, so it boots the same way.
-// (selfimprove itself has moved onto the heartbeat; this one has not.)
+// Both engines now run on the heartbeat: this import only seeds the doctor's
+// two datastore collections at boot, and `daydream-doctor` is the schedule.
 import { startWorkflowDoctor, stopWorkflowDoctor } from '$lib/workflowdoctor/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 import { startConnectorMonitor, stopConnectorMonitor } from '$lib/connectors/monitor';
@@ -354,6 +355,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ['/jkai/briefing', '/jkai/daydreams/briefing'],
     ['/jkai/monitors', '/jkai/daydreams/watches'],
     ['/jkai/improvement', '/jkai/daydreams/improvement'],
+    ['/jkai/doctor', '/jkai/daydreams/doctor'],
     ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],
   ]).get(pathname);

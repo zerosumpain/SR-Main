@@ -266,6 +266,16 @@ export const MECHANICS: Readonly<Record<string, Mechanics>> = {
     effort: ['discover → how many capabilities one scan may admit'],
     config: { idleWindowMinutes: 'how recently the owner must have been quiet', maxLeads: 'proposals per scan; 0 means take it from the effort dial' },
   },
+  doctor: {
+    stage: 'improve',
+    how: 'Triages FAILED canvas runs over a rolling 7-day window, lints the persisted graph, and explains each failure in plain English — deterministically where a signature is known, and only falling back to a pinned model for the misses, so a normal night makes zero LLM calls. Two write paths, separately switched: the circuit breaker (`workflowdoctor.breaker`, default ON) disables a schedule after ten consecutive identical failures with no successes, and node-config repair (`workflowdoctor.autoapply`, default OFF, explicit true required) edits config inside a narrow whitelist. Anything a human has to write code for is escalated into daydream_faults as `workflow_dead_node` or `workflow_failing` — which is the door self-improvement reads first, and the reason there is one engine here rather than two. Dead node types are scanned across ALL nodes, not the windowed triage set: a dead type is a static defect and goes invisible to the window the moment its schedule is disabled.',
+    reads: ['workflow_runs + node_executions (7d failures)', 'workflow_nodes (all, for dead types)', 'workflow_schedules', 'doctor_findings'],
+    writes: ['doctor_runs', 'doctor_findings', 'workflow_schedules.enabled (breaker)', 'workflow_nodes.config (auto-apply only)', 'daydream_faults (escalations)', 'WhatsApp report'],
+    gates: ['`workflowdoctor.enabled`', 'production host only', 'window 05:00–05:55 Europe/London', 'owner idle for an hour', 'the `jkai:workflow-doctor` advisory lock', '20 LLM calls'],
+    model: 'The `jkai.workflowdoctor.model` setting (falls back to DOCTOR_MODEL) — pinned apart from the chat default, and only reached for a signature the deterministic classifier does not know.',
+    effort: [],
+    config: { allowDevHost: 'let it run on homeserv' },
+  },
   improve: {
     stage: 'improve',
     how: 'The self-improvement engine, one activity with eight phases in a 25-minute nightly slot: gather (a week of chats, tool audit), learn (the appetite ledger FIRST, then the daydream fault ledger, then starvation and health faults, the engine’s own proposals, and question-mined needs), discover (search the catalogue then the web for a source each need names, register it with a live probe), build (author runtime tools — half the slots held for `source` items whenever any is open), repair, propose (hand a repo change to the autonomous builder as a change request, and a watch to the monitor generator; a draft PR only where there is no build lane), optimise, report. A tool it ships that takes no arguments is sampled the next day as a signal — the return edge. Reordered 2026-09-04: propose now runs before optimise, and optimise measures and judges but may not start a NEW call-efficiency experiment while new-data work is open.',

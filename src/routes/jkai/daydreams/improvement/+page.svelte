@@ -32,10 +32,23 @@
   // fact and stays quiet; the first non-zero stage after a zero is where the
   // loop is currently stuck.
   const story = $derived(data.story);
+  // Seven stages in the order the work flows. Appetite leads it because that
+  // is the reordering: until 2026-09-04 every driver here was a repair of
+  // something that already existed, and the first cell was a fault.
   const cells = $derived<RollupCell[]>([
     {
-      key: 'faults',
+      key: 'appetite',
       mark: '1',
+      label: 'Capabilities wanted',
+      value: String(data.appetite.counts.byStatus.proposed ?? 0),
+      suffix: data.appetite.counts.total ? `/${data.appetite.counts.total}` : null,
+      sub: `${data.appetite.newDataOpen} of them bring new data in`,
+      tone: (data.appetite.counts.byStatus.proposed ?? 0) ? 'action' : 'quiet',
+      href: '#appetite',
+    },
+    {
+      key: 'faults',
+      mark: '2',
       label: 'Faults raised',
       value: String(story.faults.open),
       suffix: story.faults.total ? `/${story.faults.total}` : null,
@@ -45,7 +58,7 @@
     },
     {
       key: 'ideas',
-      mark: '2',
+      mark: '3',
       label: 'Ideas queued',
       value: String(story.backlog.open),
       sub: `${story.backlog.engine} about the engine itself · ${story.backlog.shipped} shipped all time`,
@@ -54,7 +67,7 @@
     },
     {
       key: 'tools',
-      mark: '3',
+      mark: '4',
       label: `Tools built, ${data.loop.tools.windowDays}d`,
       value: String(data.loop.tools.shippedRecently),
       sub: `${data.loop.tools.shippedRecentlyCalled} of them called`,
@@ -62,7 +75,7 @@
     },
     {
       key: 'signals',
-      mark: '4',
+      mark: '5',
       label: 'Tool signals swept',
       value: String(data.loop.toolSignals?.sweepable ?? 0),
       suffix: data.loop.toolSignals ? `/${data.loop.toolSignals.registered}` : null,
@@ -72,7 +85,7 @@
     },
     {
       key: 'findings',
-      mark: '5',
+      mark: '6',
       label: 'Findings, 7 days',
       value: String(story.findings7d),
       sub: 'survived the false-discovery correction; carded into pondering',
@@ -81,12 +94,56 @@
     },
     {
       key: 'thoughts',
-      mark: '6',
+      mark: '7',
       label: 'Thoughts, 7 days',
       value: String(story.thoughts7d),
       sub: 'raised across every family',
       tone: story.thoughts7d ? 'steady' : 'quiet',
       href: '/jkai/daydreams/feed',
+    },
+  ]);
+
+  // ── The doctor, folded in ────────────────────────────────────────────────
+  //
+  // The full report is 800 lines of symptom, cause and fix and stays at its
+  // own route; what belongs in the unified room is the answer. The last cell
+  // is the fold itself: a finding the doctor could not fix becomes an ordinary
+  // fault, which is the queue cell 2 counts.
+  const doctor = $derived(data.doctor);
+  const doctorCells = $derived<RollupCell[]>([
+    {
+      key: 'open',
+      mark: 'A',
+      label: 'Findings open',
+      value: String(doctor.openFindings),
+      sub: doctor.openFindings ? 'proposed or refused, waiting on somebody' : 'nothing outstanding',
+      tone: doctor.openFindings ? 'watch' : 'good',
+      href: '/jkai/daydreams/doctor',
+    },
+    {
+      key: 'fixed',
+      mark: 'B',
+      label: 'Fixed last night',
+      value: String(doctor.fixedLastNight),
+      sub: 'node config, inside the whitelist',
+      tone: doctor.fixedLastNight ? 'good' : 'quiet',
+    },
+    {
+      key: 'stopped',
+      mark: 'C',
+      label: 'Schedules stopped',
+      value: String(doctor.quarantinedLastNight),
+      sub: 'the circuit breaker, on a runaway cron',
+      tone: doctor.quarantinedLastNight ? 'action' : 'quiet',
+    },
+    {
+      key: 'escalated',
+      mark: 'D',
+      label: 'Handed to the queue',
+      value: String(doctor.escalatedLastNight),
+      sub: 'needed repo code, so it became a fault',
+      tone: doctor.escalatedLastNight ? 'steady' : 'quiet',
+      href: '#appetite',
     },
   ]);
 </script>
@@ -129,6 +186,26 @@
       </div>
     {:else}
       <div class="card t-urgent"><p class="card-body">The improvement ledger could not be read.</p></div>
+    {/if}
+  </div>
+</section>
+
+<section class="band" id="doctor">
+  <div class="inner">
+    <SectionHead
+      kicker="D / The doctor"
+      title={['What broke,', 'and who fixed it']}
+      strap="Failed canvas runs, triaged nightly over a rolling week. It stops a runaway schedule itself and repairs node config inside a narrow whitelist; anything needing repo code becomes a fault, which is the same queue everything above is drawn from. That is the fold — not a shared page, a shared ledger."
+    />
+    {#if doctor.error}
+      <div class="card t-urgent"><p class="card-body">The doctor's ledger could not be read: {doctor.error}</p></div>
+    {:else}
+      <RollupGrid cells={doctorCells} min={190} />
+      <p class="note">
+        Runs at {data.doctorWindow.window}{data.doctorWindow.active ? '' : ' — the activity is paused'}.
+        {#if doctor.lastRunAt}Last run {doctor.lastRunStatus}.{:else}No run recorded yet.{/if}
+        <a href="/jkai/daydreams/doctor">Open the full report →</a>
+      </p>
     {/if}
   </div>
 </section>
