@@ -227,7 +227,23 @@ function looksLinked(a: string, b: string, minHits = MATCH_MIN_HITS): boolean {
 }
 
 /** Distinct content words that must coincide before calling an idea "done". */
-const ALREADY_SERVED_MIN_HITS = 3;
+export const ALREADY_SERVED_MIN_HITS = 3;
+
+/**
+ * Does something that already shipped look like it covers this idea?
+ *
+ * Exported so the ledger and the queue board ask the question the SAME way.
+ * There is one definition of "related" in this file on purpose — the builder
+ * once had its own one-line matcher that never fired in production — and
+ * "already done" is a second, stricter reading of it, not a second matcher.
+ *
+ * Compare titles and shipped subjects, never generated prose: "You asked N
+ * questions…" and "Unmet need identified from N questions…" match on the
+ * template rather than the subject.
+ */
+export function looksAlreadyServed(ideaText: string, shippedText: string): boolean {
+  return looksLinked(ideaText, shippedText, ALREADY_SERVED_MIN_HITS);
+}
 
 /** Best of several candidates, or null when none clear the bar. */
 function bestMatch<T>(needle: string, items: T[], text: (t: T) => string): T | null {
@@ -748,14 +764,13 @@ function annotateAlreadyServedIdeas(
     // up-to-date knowledge on UK government projects"), whereas the tool's own
     // description is written in API terms and shares far less vocabulary.
     const match = shipped.find((t) =>
-      looksLinked(
+      looksAlreadyServed(
         ideaText,
         // The need in its ORIGINAL wording, never the generated sentence. And a
         // driver GUESSED from the backlog quotes the idea's own words back at
         // it, so including that would make every such guess self-confirming.
         `${t.subject.replace(/_/g, ' ')} ${t.subtitle ?? ''} ` +
           (t.driverSource === 'backlog' ? '' : (t.driverNeed ?? '')),
-        ALREADY_SERVED_MIN_HITS,
       ),
     );
     if (!match) continue;

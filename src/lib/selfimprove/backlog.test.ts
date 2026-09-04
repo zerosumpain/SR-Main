@@ -45,11 +45,18 @@ vi.mock('$lib/datastore', () => {
 
 import {
   addIdeas,
+  foldItems,
   hasOpenNewDataWork,
   listBacklog,
   markAttempt,
+  pickFoldSurvivor,
   pickToolWork,
   pickWork,
+  setEpic,
+  setParked,
+  setParkedMany,
+  setPriority,
+  setPriorityMany,
   MAX_NEW_IDEAS_PER_NIGHT,
 } from './backlog';
 import type { BacklogItemData } from './types';
@@ -359,5 +366,267 @@ describe('the new-data lanes', () => {
     expect(back.find((i) => i.slug === 'a-rail-feed')?.capabilitySlug).toBe('data_source:rail');
     expect(back.find((i) => i.slug === 'a-watch-on-something')?.kind).toBe('watch');
     expect(back.find((i) => i.slug === 'something-odd')?.kind).toBe('tool');
+  });
+});
+
+// ── Owner edits from the queue board ──────────────────────────────────────
+
+describe('owner edits', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+
+  function seed(...items: BacklogItemData[]) {
+    h.records = items.map((i) => ({ key: i.slug, data: i }));
+  }
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  describe('setPriority', () => {
+    it('writes the new priority, which is what pickWork ranks on', async () => {
+      seed(item({ slug: 'a', priority: 2 }));
+      await setPriority('a', 1);
+      expect(stored('a').priority).toBe(1);
+    });
+
+    it('clamps outside 1..5 rather than storing a value the engine cannot rank', async () => {
+      seed(item({ slug: 'a', priority: 3 }));
+      await setPriority('a', 0);
+      expect(stored('a').priority).toBe(1);
+      await setPriority('a', 99);
+      expect(stored('a').priority).toBe(5);
+    });
+
+    it('reports a missing item instead of writing a new one', async () => {
+      await expect(setPriority('nope', 1)).rejects.toThrow(/no backlog item/);
+      expect(h.records).toHaveLength(0);
+    });
+  });
+
+  describe('setParked', () => {
+    it('parks as abandoned, the status pickWork already skips', async () => {
+      seed(item({ slug: 'a' }));
+      await setParked('a', true, 'not worth it');
+      expect(stored('a').status).toBe('abandoned');
+      expect(stored('a').parkedReason).toBe('not worth it');
+      expect(pickWork([stored('a')], 'tool', 3)).toHaveLength(0);
+    });
+
+    // The retry budget is the memory of what has been tried. Un-parking is not
+    // evidence that the last four failures did not happen.
+    it('does not reset attempts when an item is put back', async () => {
+      seed(item({ slug: 'a', status: 'abandoned', attempts: 3, parkedReason: 'gave up' }));
+      await setParked('a', false);
+      expect(stored('a').status).toBe('open');
+      expect(stored('a').attempts).toBe(3);
+      expect(stored('a').parkedReason).toBeUndefined();
+    });
+  });
+
+  describe('setEpic', () => {
+    it('sets and clears the grouping key', async () => {
+      seed(item({ slug: 'a' }));
+      await setEpic('a', 'epic:money');
+      expect(stored('a').epicSlug).toBe('epic:money');
+      await setEpic('a', null);
+      expect(stored('a').epicSlug).toBeUndefined();
+    });
+  });
+
+  describe('pickFoldSurvivor', () => {
+    it('keeps the highest priority, then the one with the most history', () => {
+      const survivor = pickFoldSurvivor([
+        item({ slug: 'low', priority: 4, attempts: 3 }),
+        item({ slug: 'best', priority: 1, attempts: 0 }),
+        item({ slug: 'mid', priority: 2, attempts: 2 }),
+      ]);
+      expect(survivor?.slug).toBe('best');
+    });
+
+    it('breaks a priority tie toward the item carrying attempts', () => {
+      const survivor = pickFoldSurvivor([
+        item({ slug: 'fresh', priority: 2, attempts: 0 }),
+        item({ slug: 'tried', priority: 2, attempts: 2, lastError: 'HTTP 405' }),
+      ]);
+      expect(survivor?.slug).toBe('tried');
+    });
+
+    it('returns null for an empty set', () => {
+      expect(pickFoldSurvivor([])).toBeNull();
+    });
+  });
+
+  describe('foldItems', () => {
+    it('keeps one and abandons the rest with a pointer back', async () => {
+      seed(
+        item({ slug: 'keep', title: 'Duplicate-charge reconciler', priority: 2, attempts: 1 }),
+        item({ slug: 'dupe-a', title: 'Finance duplicate-charge reconciler', priority: 5 }),
+        item({ slug: 'dupe-b', title: 'Subscription duplicate-charge monitor', priority: 5 }),
+      );
+      const res = await foldItems(['keep', 'dupe-a', 'dupe-b']);
+      expect(res.survivor).toBe('keep');
+      expect(res.folded.sort()).toEqual(['dupe-a', 'dupe-b']);
+      expect(stored('keep').foldedCount).toBe(2);
+      expect(stored('keep').status).toBe('open');
+      for (const s of ['dupe-a', 'dupe-b']) {
+        expect(stored(s).status).toBe('abandoned');
+        expect(stored(s).foldedInto).toBe('keep');
+        expect(stored(s).parkedReason).toContain('Duplicate-charge reconciler');
+      }
+    });
+
+    // Nothing here deletes. addIdeas checks existence BY KEY, so a surviving
+    // row is what stops the same idea being written fresh at attempts: 0
+    // tomorrow — deleting the loser would resurrect it.
+    it('leaves the folded rows in place so they cannot be re-added', async () => {
+      // Seeded under the slugs `addIdeas` would derive from these titles —
+      // that is the whole mechanism: existence is checked BY KEY, so the
+      // surviving abandoned row is what makes tonight's re-proposal a no-op.
+      seed(
+        item({ slug: 'local-events-search', title: 'Local events search', priority: 2 }),
+        item({ slug: 'local-events-api-tool', title: 'Local events API tool', priority: 5 }),
+      );
+      await foldItems(['local-events-search', 'local-events-api-tool']);
+      expect(h.records).toHaveLength(2);
+      const added = await addIdeas([{ title: 'Local events API tool', detail: '', kind: 'tool' }]);
+      expect(added).toEqual([]);
+      expect(stored('local-events-api-tool').status).toBe('abandoned');
+      expect(stored('local-events-api-tool').foldedInto).toBe('local-events-search');
+    });
+
+    it('accumulates when the same survivor absorbs a second fold', async () => {
+      seed(
+        item({ slug: 'keep', priority: 1, title: 'Keep me' }),
+        item({ slug: 'a', priority: 5, title: 'A' }),
+        item({ slug: 'b', priority: 5, title: 'B' }),
+      );
+      await foldItems(['keep', 'a']);
+      await foldItems(['keep', 'b']);
+      expect(stored('keep').foldedCount).toBe(2);
+    });
+
+    it('honours an explicit survivor the owner chose', async () => {
+      seed(item({ slug: 'a', priority: 1, title: 'A' }), item({ slug: 'b', priority: 5, title: 'B' }));
+      const res = await foldItems(['a', 'b'], 'b');
+      expect(res.survivor).toBe('b');
+      expect(stored('a').foldedInto).toBe('b');
+    });
+
+    it('refuses a survivor that is not one of the folded items', async () => {
+      seed(item({ slug: 'a', title: 'A' }), item({ slug: 'b', title: 'B' }));
+      await expect(foldItems(['a', 'b'], 'c')).rejects.toThrow(/not one of/);
+    });
+
+    it('refuses a fold of fewer than two items', async () => {
+      seed(item({ slug: 'a', title: 'A' }));
+      await expect(foldItems(['a'])).rejects.toThrow(/at least two/);
+      await expect(foldItems(['a', 'a'])).rejects.toThrow(/at least two/);
+    });
+  });
+});
+
+// ── Review fixes, 2026-09-04 ──────────────────────────────────────────────
+
+describe('a shipped item is protected from the board', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+  function seed(...items: BacklogItemData[]) {
+    h.records = items.map((i) => ({ key: i.slug, data: i }));
+  }
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  // Parking writes `abandoned`, erasing the only field saying it shipped —
+  // and putting it back would write `open`, handing an already-built tool to
+  // `pickWork` to be built a second time.
+  it('refuses to park it, and leaves the record untouched', async () => {
+    seed(item({ slug: 'built', title: 'PayPal transaction history tool', status: 'shipped', attempts: 1 }));
+    await expect(setParked('built', true)).rejects.toThrow(/already shipped/);
+    expect(stored('built').status).toBe('shipped');
+  });
+
+  it('refuses to fold it, and leaves every member untouched', async () => {
+    seed(
+      item({ slug: 'built', title: 'Subscription renewal calendar', status: 'shipped' }),
+      item({ slug: 'open-dupe', title: 'Subscription renewal reminders' }),
+    );
+    await expect(foldItems(['built', 'open-dupe'])).rejects.toThrow(/already shipped/);
+    expect(stored('built').status).toBe('shipped');
+    expect(stored('open-dupe').status).toBe('open');
+    expect(stored('open-dupe').foldedInto).toBeUndefined();
+  });
+
+  it('still folds two open restatements of the same shipped thing', async () => {
+    seed(
+      item({ slug: 'a', title: 'Subscription renewal reminders', priority: 2 }),
+      item({ slug: 'b', title: 'Subscription renewal alerts', priority: 5 }),
+    );
+    const res = await foldItems(['a', 'b']);
+    expect(res.survivor).toBe('a');
+    expect(stored('b').status).toBe('abandoned');
+  });
+});
+
+describe('putting an attempt-exhausted item back', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  // Without this, "put it back" is a silent no-op: the item is already `open`
+  // and still over the ceiling, so it snaps straight back to Parked.
+  it('resets the attempt count so pickWork can reach it again', async () => {
+    h.records = [{ key: 'spent', data: item({ slug: 'spent', attempts: 4, lastError: 'HTTP 405' }) }];
+    await setParked('spent', false);
+    expect(stored('spent').status).toBe('open');
+    expect(stored('spent').attempts).toBe(0);
+    // The failure text survives — it is what the next author call reads.
+    expect(stored('spent').lastError).toBe('HTTP 405');
+    expect(pickWork([stored('spent')], 'tool', 3)).toHaveLength(1);
+  });
+
+  it('leaves the count alone for an item that had attempts left', async () => {
+    h.records = [{ key: 'some', data: item({ slug: 'some', status: 'abandoned', attempts: 2 }) }];
+    await setParked('some', false);
+    expect(stored('some').attempts).toBe(2);
+  });
+});
+
+describe('bulk edits', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  it('applies a priority to every slug in one call', async () => {
+    h.records = ['a', 'b', 'c'].map((slug) => ({ key: slug, data: item({ slug, priority: 4 }) }));
+    const res = await setPriorityMany(['a', 'b', 'c'], 1);
+    expect(res.changed.sort()).toEqual(['a', 'b', 'c']);
+    expect(res.failed).toEqual([]);
+    expect(['a', 'b', 'c'].map((s) => stored(s).priority)).toEqual([1, 1, 1]);
+  });
+
+  // Twenty selected duplicates containing one shipped row must not look like
+  // a clean success, nor like a total failure.
+  it('reports partial failure by slug rather than swallowing it', async () => {
+    h.records = [
+      { key: 'ok', data: item({ slug: 'ok' }) },
+      { key: 'built', data: item({ slug: 'built', title: 'Already built', status: 'shipped' }) },
+    ];
+    const res = await setParkedMany(['ok', 'built'], true, 'bulk park');
+    expect(res.changed).toEqual(['ok']);
+    expect(res.failed).toHaveLength(1);
+    expect(res.failed[0].slug).toBe('built');
+    expect(res.failed[0].error).toMatch(/already shipped/);
+    expect(stored('built').status).toBe('shipped');
+  });
+
+  it('de-duplicates a slug sent twice', async () => {
+    h.records = [{ key: 'a', data: item({ slug: 'a', priority: 3 }) }];
+    const res = await setPriorityMany(['a', 'a'], 2);
+    expect(res.changed).toEqual(['a']);
   });
 });

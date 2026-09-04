@@ -22,6 +22,30 @@ import { addSteer, listSteers, setSteerStatus } from '$lib/daydream/hypotheses/s
 
 
 /**
+ * Shape a bulk result the way `postThought` reads failure.
+ *
+ * That client treats a response as successful unless the HTTP status is bad OR
+ * the body carries a top-level `error`. A per-slug `failed[]` alone is
+ * therefore INVISIBLE to the caller: a park refused because the item had
+ * already shipped would have looked, on screen, exactly like a park that
+ * worked. So a partial result reports the count and the first reason, and the
+ * detail rides alongside for anyone reading the response.
+ */
+function bulkBody(res: { changed: string[]; failed: Array<{ slug: string; error: string }> }) {
+  if (res.failed.length === 0) return { ok: true, ...res };
+  const [first] = res.failed;
+  const more = res.failed.length - 1;
+  return {
+    ok: false,
+    ...res,
+    error:
+      res.failed.length === 1
+        ? first.error
+        : `${first.error} (and ${more} other${more === 1 ? '' : 's'})`,
+  };
+}
+
+/**
  * One endpoint, an `action` discriminator, because every one of these is the
  * same shape: the owner ruling on something the engine produced. Splitting them
  * across five routes would multiply the surface without adding a distinction.
@@ -36,6 +60,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const action = typeof body.action === 'string' ? body.action : '';
   const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
+  /** One key that may be an array, falling back to a single-value key. */
+  const strList = (many: string, one: string): string[] => {
+    const raw = Array.isArray(body[many]) ? (body[many] as unknown[]) : [];
+    const list = raw.filter((v): v is string => typeof v === 'string').map((v) => v.trim());
+    const single = str(one);
+    return [...new Set([...list, ...(single ? [single] : [])].filter(Boolean))];
+  };
 
   try {
     switch (action) {
@@ -896,6 +927,77 @@ export const POST: RequestHandler = async ({ request }) => {
         });
         if (!moved) return json({ error: 'no such capability' }, { status: 404 });
         return json({ ok: true, slug, status: decision === 'accept' ? 'queued' : 'declined' });
+      }
+
+      // ── The queue board (2026-09-04) ───────────────────────────────────
+      //
+      // Four edits on `improvement_backlog`, all keyed by slug. They exist
+      // because the queue reached 455 rows with 280 of the 352 open ones tied
+      // on priority 2: the engine could add to the pile and nothing could
+      // sort, merge or close it.
+      //
+      // None of them spends anything. Accepting work queues it for a slot the
+      // lane still gates — a repo build can cost £2 and
+      // `daydream.appetite.autobuild` is deliberately inverted, so a drag on a
+      // board must never be what starts one.
+
+      /**
+       * Reprioritise. `pickWork` ranks on this, so it changes tonight's work.
+       *
+       * Takes `slug` OR `slugs` — the board's bulk button acts on a selection,
+       * and N requests meant N full page reloads, each re-paging the datastore
+       * and re-running the already-served sweep.
+       */
+      case 'backlog_priority': {
+        const slugs = strList('slugs', 'slug');
+        const priority = Number(body.priority);
+        if (slugs.length === 0) return json({ error: 'slug or slugs is required' }, { status: 400 });
+        if (!Number.isFinite(priority)) {
+          return json({ error: 'priority must be a number 1-5' }, { status: 400 });
+        }
+        const { setPriorityMany } = await import('$lib/selfimprove/backlog');
+        return json(bulkBody(await setPriorityMany(slugs, priority)));
+      }
+
+      /** Park items, or put parked ones back in the running. */
+      case 'backlog_park': {
+        const slugs = strList('slugs', 'slug');
+        if (slugs.length === 0) return json({ error: 'slug or slugs is required' }, { status: 400 });
+        // Explicit, not inferred from presence: `{parked: false}` is a
+        // re-open and `{}` must not silently mean one.
+        if (typeof body.parked !== 'boolean') {
+          return json({ error: 'parked must be true or false' }, { status: 400 });
+        }
+        const { setParkedMany } = await import('$lib/selfimprove/backlog');
+        return json(bulkBody(await setParkedMany(slugs, body.parked, str('reason') || undefined)));
+      }
+
+      /** Group an item into a board swimlane, or clear it. */
+      case 'backlog_epic': {
+        const slug = str('slug');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        const { setEpic } = await import('$lib/selfimprove/backlog');
+        const next = await setEpic(slug, str('epicSlug') || null);
+        return json({ ok: true, slug, epicSlug: next.epicSlug ?? null });
+      }
+
+      /**
+       * Fold restatements of one idea into a single item.
+       *
+       * The losers are abandoned with a pointer, never deleted: `addIdeas`
+       * checks existence BY KEY, so the surviving row is what stops the same
+       * idea being written fresh tomorrow at `attempts: 0`.
+       */
+      case 'backlog_fold': {
+        const slugs = Array.isArray(body.slugs)
+          ? body.slugs.filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+          : [];
+        if (slugs.length < 2) {
+          return json({ error: 'folding needs at least two items' }, { status: 400 });
+        }
+        const { foldItems } = await import('$lib/selfimprove/backlog');
+        const res = await foldItems(slugs, str('into') || undefined);
+        return json({ ok: true, ...res });
       }
 
       default:

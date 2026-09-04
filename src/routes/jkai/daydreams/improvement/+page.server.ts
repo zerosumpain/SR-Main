@@ -3,7 +3,8 @@ import { errMsg } from '$lib/daydream/types';
 import { loadLoopHealth, loopVerdict } from '$lib/daydream/loop-health';
 import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
-import { EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
+import { describeCite, EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
+import { EMPTY_BOARD, type BoardView } from '$lib/selfimprove/board';
 import { doctorRollup, EMPTY_DOCTOR_ROLLUP, type DoctorRollup } from '$lib/workflowdoctor/rollup';
 import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
 
@@ -79,6 +80,62 @@ async function loadAppetite(): Promise<AppetiteView> {
   }
 }
 
+/**
+ * The queue, as a board.
+ *
+ * Joined HERE rather than in a `$lib` module for the same reason the doctor
+ * rollup is: a route load may import both engines, and neither library may
+ * import the other. `buildBoard` itself is pure and lives in
+ * `$lib/selfimprove/board.ts`, so the derivation is unit-tested without a
+ * database and the component imports it for its labels and its filter.
+ *
+ * `MAX_ATTEMPTS` is passed IN rather than read inside the pure module — one
+ * definition of the attempt ceiling, in `backlog.ts`, where the engine reads
+ * it too.
+ */
+async function loadQueueBoard(): Promise<BoardView> {
+  try {
+    const [{ buildBoard }, { listBacklog, MAX_ATTEMPTS }, { loadCustomToolHealth }, { listCapabilities }] =
+      await Promise.all([
+        import('$lib/selfimprove/board'),
+        import('$lib/selfimprove/backlog'),
+        import('$lib/selfimprove/context'),
+        import('$lib/daydream/appetite/store'),
+      ]);
+    const [backlog, tools, caps] = await Promise.all([
+      listBacklog(),
+      loadCustomToolHealth(),
+      listCapabilities({ limit: 60 }),
+    ]);
+    return buildBoard({
+      backlog,
+      tools,
+      capabilities: caps.map((c) => ({
+        slug: c.slug,
+        kind: c.kind,
+        title: c.title,
+        need: c.need,
+        status: c.status,
+        score: c.score,
+        lane: c.lane,
+        outcome: c.outcome,
+        outcomeRef: c.outcomeRef,
+        backlogSlug: c.backlogSlug,
+        evidence: [...new Set(c.cites.map(describeCite))].slice(0, 4),
+        lastSeenAt: c.lastSeenAt,
+      })),
+      attemptCeiling: MAX_ATTEMPTS,
+      // The open pile is the point of the board; everything ever shipped is
+      // history and belongs in the ledger below it. 120 keeps a few months of
+      // settled work reachable without sending 455 rows to the browser.
+      settledLimit: 120,
+    });
+  } catch (err) {
+    console.error('[daydream] queue board failed:', errMsg(err));
+    return { ...EMPTY_BOARD, error: errMsg(err) };
+  }
+}
+
 export const load: PageServerLoad = async () => {
   const [loop, improvement] = await Promise.all([
     loadLoopHealth(MIN_PAIRS),
@@ -90,14 +147,15 @@ export const load: PageServerLoad = async () => {
   // The doctor, folded in. A route-level load may import both engines, which
   // is what makes this the honest place to join them — `$lib/workflowdoctor`
   // already imports `$lib/selfimprove`, so neither library could do it.
-  const [story, appetite, doctor, doctorWindow] = await Promise.all([
+  const [story, appetite, board, doctor, doctorWindow] = await Promise.all([
     loadLoopStory(loop),
     loadAppetite(),
+    loadQueueBoard(),
     doctorRollup().catch((err): DoctorRollup => {
       console.error('[daydream] doctor rollup failed:', errMsg(err));
       return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
     }),
     doctorSchedule(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, doctor, doctorWindow };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, doctor, doctorWindow };
 };
