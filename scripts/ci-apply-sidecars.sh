@@ -20,6 +20,17 @@ STAGE_ROOT="$VPS_DIR/sidecar-releases"
 
 warn() { echo "::warning::$*"; echo "!!  $*" >&2; }
 
+diagnose_service() {
+  local service="$1"
+  sudo systemctl show "$service" \
+    --property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus --no-pager || true
+  # Keep diagnostics useful without publishing normal worker output (which may
+  # include a WhatsApp pairing QR). Only startup/error-shaped lines are shown.
+  sudo journalctl -u "$service" --since '-2 minutes' --no-pager 2>/dev/null \
+    | grep -Ei 'failed to start|error|ERR_|cannot find|not found|EADDRINUSE|status=|code=|exception|permission|denied' \
+    | tail -20 || true
+}
+
 if [ ! -d "$STAGE_ROOT" ]; then
   echo "==> No staged sidecars ($STAGE_ROOT absent) — nothing to apply"
   exit 0
@@ -60,6 +71,7 @@ for NAMEDIR in "$STAGE_ROOT"/*; do
   fi
   sudo systemctl daemon-reload
 
+  sudo systemctl reset-failed "$SERVICE" || true
   if ! sudo systemctl restart "$SERVICE"; then
     warn "$NAME: systemctl restart $SERVICE failed"
   fi
@@ -69,9 +81,11 @@ for NAMEDIR in "$STAGE_ROOT"/*; do
     APPLIED=$((APPLIED+1))
   else
     warn "$NAME: $SERVICE is NOT active after restart — rolling back"
+    diagnose_service "$SERVICE"
     if [ -d "$DEST/dist.prev" ]; then
       rm -rf "$DEST/dist"
       cp -a "$DEST/dist.prev" "$DEST/dist"
+      sudo systemctl reset-failed "$SERVICE" || true
       sudo systemctl restart "$SERVICE" || true
       sleep 2
       systemctl is-active --quiet "$SERVICE" \

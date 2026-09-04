@@ -10,6 +10,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
+import { builtinModules } from 'node:module';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../..');
@@ -34,7 +35,7 @@ if (!existsSync(svelteKitTsconfig)) {
   process.exit(1);
 }
 
-await build({
+const result = await build({
   entryPoints: [resolve(here, 'bin/start.ts')],
   bundle: true,
   platform: 'node',
@@ -47,8 +48,39 @@ await build({
     '$env/dynamic/private': resolve(here, 'src/env-shim.ts'),
     '$env/static/private': resolve(here, 'src/env-shim.ts'),
   },
+  metafile: true,
   logLevel: 'info',
 });
+
+// `packages: external` keeps this bundle small, but it also means every bare
+// import must survive `npm ci --omit=dev` on the VPS. A package that happens to
+// be hoisted from a dev or transitive dependency works on the build runner and
+// then crash-loops only in production. Pin every external import as a direct
+// runtime dependency and fail while the candidate is still at the gate.
+const rootPackage = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+const runtimeDependencies = rootPackage.dependencies ?? {};
+const builtins = new Set([
+  ...builtinModules,
+  ...builtinModules.map((name) => `node:${name}`),
+]);
+const packageName = (specifier) =>
+  specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
+const externalImports = Object.values(result.metafile.outputs)
+  .flatMap((output) => output.imports)
+  .filter((entry) => entry.external)
+  .map((entry) => entry.path)
+  .filter((specifier) => !builtins.has(specifier));
+const missingRuntimeDependencies = [...new Set(externalImports.map(packageName))]
+  .filter((name) => !runtimeDependencies[name])
+  .sort();
+if (missingRuntimeDependencies.length > 0) {
+  console.error(
+    `[build:wa-worker] external runtime imports are not direct production dependencies: ` +
+      `${missingRuntimeDependencies.join(', ')}.\n` +
+      '                  Add them to dependencies; the VPS installs with --omit=dev.',
+  );
+  process.exit(1);
+}
 
 // Belt as well as braces: assert the shape of what we just produced. The
 // pre-flight above covers the cause we have actually seen; this covers any

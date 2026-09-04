@@ -161,6 +161,8 @@ describe('ci-deploy-sidecars manifest', () => {
     const apply = readFileSync(join(ROOT, 'scripts/ci-apply-sidecars.sh'), 'utf8');
     expect(apply).toMatch(/exit 0\s*$/);
     expect(apply).toContain('rolling back');
+    expect(apply).toContain('systemctl reset-failed "$SERVICE"');
+    expect(apply).toContain('diagnose_service "$SERVICE"');
   });
 });
 
