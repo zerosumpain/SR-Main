@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import NodeMemoryBlock from './shared/NodeMemoryBlock.svelte';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
@@ -37,8 +38,6 @@
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
   }
-
-  let showRawJson = $state(false);
   void definition;
 </script>
 
@@ -138,21 +137,7 @@
     onChange={(v) => set('_onError', v)}
   />
 
-  <details class="dd-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="dd-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -196,11 +181,4 @@
     resize: vertical;
   }
   .dd-code:focus { border-color: var(--text-muted); }
-
-  .dd-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .dd-raw summary { cursor: pointer; }
 </style>

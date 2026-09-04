@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
@@ -65,8 +66,6 @@
   }
 
   // ---------- Raw JSON ----------------------------------------------------
-
-  let showRawJson = $state(false);
   let showAdvanced = $state(
     sourceTag.trim().length > 0 || sourceUrl.trim().length > 0 || extraMetadata.trim().length > 0,
   );
@@ -203,21 +202,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="iw-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="iw-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -282,11 +267,4 @@
     outline: none;
   }
   select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .iw-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .iw-raw summary { cursor: pointer; }
 </style>

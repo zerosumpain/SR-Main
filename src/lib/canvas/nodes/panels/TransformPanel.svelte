@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
 
@@ -189,8 +190,6 @@
   }
 
   // ---------- Raw JSON ---------------------------------------------------
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; the canvas-level header
   // renders the "What this does" preview, so we don't duplicate it here.
   void definition;
@@ -343,23 +342,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="tr-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="tr-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch {
-          /* invalid — keep typing */
-        }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -602,14 +585,5 @@
   select:focus,
   textarea:focus {
     border-color: var(--text-muted);
-  }
-
-  .tr-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .tr-raw summary {
-    cursor: pointer;
   }
 </style>

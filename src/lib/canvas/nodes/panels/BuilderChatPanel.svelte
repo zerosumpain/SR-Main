@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
 
   let {
@@ -36,8 +37,6 @@
   const maxTotalMinutes = $derived(num('maxTotalMinutes', 120));
   const maxTokensPerHour = $derived(num('maxTokensPerHour', 1_000_000));
   const activeMinutesPerHour = $derived(num('activeMinutesPerHour', 15));
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="bcp">
@@ -220,21 +219,7 @@
   </section>
 
   <!-- Advanced raw JSON -->
-  <details class="bcp-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="bcp-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -311,11 +296,4 @@
   input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus {
     border-color: var(--text-muted);
   }
-
-  .bcp-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .bcp-raw summary { cursor: pointer; }
 </style>

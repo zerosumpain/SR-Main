@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   // Panel for `deep-research` (single-shot DAG-driven research).
   // The executor lives at src/lib/workflows/nodes/deep-research.ts.
   // Config shape:
@@ -63,7 +64,6 @@
   });
 
   let showPreview = $state(false);
-  let showRawJson = $state(false);
 </script>
 
 <div class="dr">
@@ -176,21 +176,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="dr-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="dr-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -305,12 +291,5 @@
     word-break: break-word;
     color: var(--text-primary);
   }
-
-  .dr-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .dr-raw summary { cursor: pointer; }
 </style>
 

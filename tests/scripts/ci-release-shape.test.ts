@@ -33,7 +33,12 @@ function job(name: string): string {
 describe('the prebuild/release split across two machines', () => {
   it('uses the same structural gate entrypoint locally and in GitHub', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    const structural = readFileSync(join(ROOT, 'scripts/gate-structural.sh'), 'utf8');
+    const validate = readFileSync(join(ROOT, 'scripts/validate-change.sh'), 'utf8');
     expect(pkg.scripts.gate).toContain('./scripts/gate-structural.sh');
+    expect(pkg.scripts['gate:source-footprint']).toBe('node scripts/check-source-footprint.mjs');
+    expect(structural).toContain('npm run gate:source-footprint');
+    expect(validate).toContain('npm run gate:source-footprint');
     expect(job('level')).toContain('./scripts/gate-structural.sh');
   });
 

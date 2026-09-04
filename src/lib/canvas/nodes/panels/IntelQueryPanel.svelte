@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
@@ -85,9 +86,6 @@
       removeChip(entityTypes.length - 1);
     }
   }
-
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; the canvas-level preview
   // header handles the "What this does" line so we don't duplicate it here.
   void definition;
@@ -216,21 +214,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="iq-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="iq-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -294,12 +278,12 @@
     font-family: var(--font-mono); font-size: var(--fs-label);
   }
 
-  .iq-adv, .iq-raw {
+  .iq-adv {
     margin-top: 0;
     border-top: 1px dashed var(--card-border);
     padding-top: 8px;
   }
-  .iq-adv summary, .iq-raw summary { cursor: pointer; }
+  .iq-adv summary { cursor: pointer; }
   .iq-adv-body { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
 
   .iq-code {

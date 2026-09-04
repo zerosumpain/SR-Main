@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
@@ -80,8 +81,6 @@
   let showSchema = $state(!!(config.outputSchema && config.outputSchema !== ''));
 
   // ---------- Raw JSON --------------------------------------------------
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="lc">
@@ -163,21 +162,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="lc-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="lc-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -254,11 +239,4 @@
     display: flex; flex-direction: column; gap: 6px;
   }
   .lc-schema summary { cursor: pointer; margin-bottom: 4px; }
-
-  .lc-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .lc-raw summary { cursor: pointer; }
 </style>

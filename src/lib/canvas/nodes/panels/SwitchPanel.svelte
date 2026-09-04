@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   // No-code editor for the `switch` node. Replaces the previous fallback where
   // `cases` was a raw JSON `code` textarea ([{ "match": "...", "handle": "..." }])
   // — a hand-authored-JSON wall for a non-developer. Here each case is a row:
@@ -45,8 +46,6 @@
     const c = cases[i];
     if (c && !c.handle.trim() && c.match.trim()) updateCase(i, { handle: c.match.trim() });
   }
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="sw">
@@ -130,21 +129,7 @@
     onChange={(v) => set('_onError', v)}
   />
 
-  <details class="sw-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="sw-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -208,9 +193,6 @@
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-
-  .sw-raw { margin-top: 4px; border-top: 1px dashed var(--card-border); padding-top: 8px; }
-  .sw-raw summary { cursor: pointer; }
   .sw-code {
     width: 100%; margin-top: 8px; padding: 8px;
     background: var(--bg);

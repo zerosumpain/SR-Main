@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
 
   let {
@@ -23,8 +24,6 @@
   const sendUpstream = $derived(config.sendUpstream === true);
   const exposeOutputs = $derived(config.exposeOutputs !== false);
   const emitSchema = $derived(String(config.emitSchema ?? ''));
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="bvp">
@@ -134,21 +133,7 @@
   </section>
 
   <!-- Advanced raw JSON -->
-  <details class="bvp-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="bvp-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -221,11 +206,4 @@
     outline: none;
   }
   input[type='text']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .bvp-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .bvp-raw summary { cursor: pointer; }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
 
   let {
@@ -15,8 +16,6 @@
   // the report preview + regenerate + export buttons live in the renderer (M8).
   const title = $derived(typeof config.title === 'string' ? config.title : '');
   const expanded = $derived(config.expanded === true);
-
-  let showRawJson = $state(false);
   void definition;
 </script>
 
@@ -42,21 +41,7 @@
     <p class="rr-readout">Previews this session's report; regenerate &amp; export wired in the node body.</p>
   </section>
 
-  <details class="rr-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="rr-code"
-      rows="8"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -81,6 +66,4 @@
     border: 1px solid var(--card-border); font: inherit; box-sizing: border-box; outline: none;
   }
   input[type='text']:focus, textarea:focus { border-color: var(--text-muted); }
-  .rr-raw { margin-top: 4px; border-top: 1px dashed var(--card-border); padding-top: 8px; }
-  .rr-raw summary { cursor: pointer; }
 </style>

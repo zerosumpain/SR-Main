@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
 
   let {
@@ -14,8 +15,6 @@
   // Client-only desk node. The only editable field in v1 is a display title;
   // the chat thread + retrieval live in the in-graph renderer (M7).
   const title = $derived(typeof config.title === 'string' ? config.title : '');
-
-  let showRawJson = $state(false);
   void definition;
 </script>
 
@@ -33,21 +32,7 @@
     <p class="rc-readout">Answers are grounded in this session's facts &amp; sources, with <code>[n]</code> citations.</p>
   </section>
 
-  <details class="rc-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="rc-code"
-      rows="8"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -71,6 +56,4 @@
     border: 1px solid var(--card-border); font: inherit; box-sizing: border-box; outline: none;
   }
   input[type='text']:focus, textarea:focus { border-color: var(--text-muted); }
-  .rc-raw { margin-top: 4px; border-top: 1px dashed var(--card-border); padding-top: 8px; }
-  .rc-raw summary { cursor: pointer; }
 </style>

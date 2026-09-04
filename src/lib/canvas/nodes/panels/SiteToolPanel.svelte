@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import { onMount } from 'svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
@@ -111,8 +112,6 @@
     argsValid = true;
     set('args', skeleton);
   }
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="st">
@@ -240,21 +239,7 @@
     onChange={(v) => set('_onError', v)}
   />
 
-  <details class="st-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="st-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -347,7 +332,4 @@
   .st-dest { border: 1px solid var(--status-error, #c0392b); padding: 8px; }
   .st-check { display: flex; align-items: center; gap: 8px; font-size: var(--fs-label); color: var(--text-primary); cursor: pointer; }
   .st-check input { width: auto; }
-
-  .st-raw { margin-top: 4px; border-top: 1px dashed var(--card-border); padding-top: 8px; }
-  .st-raw summary { cursor: pointer; }
 </style>

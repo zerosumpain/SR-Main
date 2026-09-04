@@ -9,5 +9,6 @@ set -euo pipefail
 npm run gate:public-routes
 npm run gate:font-sizes
 npm run gate:measure
+npm run gate:source-footprint
 npm run gate:schema-imports
 npm run gate:boundaries

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import ResourcePicker from './shared/ResourcePicker.svelte';
@@ -101,8 +102,6 @@
   const waitForCompletion = $derived(config.waitForCompletion !== false);
 
   // ---------- Raw JSON --------------------------------------------------
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="sw">
@@ -187,21 +186,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="sw-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="sw-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -314,11 +299,4 @@
     outline: none;
   }
   input[type='text']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .sw-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .sw-raw summary { cursor: pointer; }
 </style>

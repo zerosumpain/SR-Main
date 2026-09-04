@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import NodeMemoryBlock from './shared/NodeMemoryBlock.svelte';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
@@ -79,9 +80,6 @@
   let showMedia = $state(!!(config.mediaPath || config.mediaUrl));
 
   // ---------- Raw JSON -------------------------------------------------
-
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; the canvas-level preview
   // header (in /jkai/canvas/[slug]/+page.svelte) handles the "What this does"
   // line so we don't duplicate it inside the panel.
@@ -253,21 +251,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="wa-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="wa-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -354,11 +338,4 @@
   }
   .wa-media summary { cursor: pointer; margin-bottom: 4px; }
   .wa-media[open] summary { margin-bottom: 6px; }
-
-  .wa-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .wa-raw summary { cursor: pointer; }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition, SchemaFieldRow } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import SchemaFieldTable from './widgets/SchemaFieldTable.svelte';
@@ -154,8 +155,6 @@
   }
 
   // ---------- Raw JSON disclosure ----------------------------------------
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="va">
@@ -250,21 +249,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="va-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="va-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -397,11 +382,4 @@
     outline: none;
   }
   input[type='text']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .va-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .va-raw summary { cursor: pointer; }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
 
@@ -131,8 +132,6 @@
   }
 
   // ---------- Raw JSON --------------------------------------------------
-
-  let showRawJson = $state(false);
 </script>
 
 <div class="hq">
@@ -291,24 +290,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="hq-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="hq-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') {
-            // Spread preserves any unknown keys callers may have added.
-            setMany(next as Record<string, unknown>);
-          }
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -402,13 +384,6 @@
   input[type='text']:focus, input[type='date']:focus, select:focus, textarea:focus {
     border-color: var(--text-muted);
   }
-
-  .hq-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .hq-raw summary { cursor: pointer; }
 
   kbd {
     font-family: var(--font-code); font-size: var(--fs-label-xs);

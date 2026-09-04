@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import { onMount, onDestroy } from 'svelte';
 
@@ -23,9 +24,6 @@
   const showTools = $derived(config.showTools !== false);
   const showLint = $derived(config.showLint !== false);
   const autoScroll = $derived(config.autoScroll !== false);
-
-  let showRawJson = $state(false);
-
   // ─── Live builds list ────────────────────────────────────────────────
   // Polls /api/jkai/builds every 5s, filters to non-terminal builds, and
   // renders a control panel inline so the user can pause/resume/stop/cancel
@@ -218,21 +216,7 @@
   </section>
 
   <!-- Advanced raw JSON -->
-  <details class="bpp-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="bpp-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -288,13 +272,6 @@
     outline: none;
   }
   input[type='text']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
-
-  .bpp-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .bpp-raw summary { cursor: pointer; }
 
   /* Active-builds list */
   .bpp-err { color: var(--status-error, #c0392b); }

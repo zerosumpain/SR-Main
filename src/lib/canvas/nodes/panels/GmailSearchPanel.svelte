@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import ResourcePicker from './shared/ResourcePicker.svelte';
@@ -67,9 +68,6 @@
   const fetchFullMessages = $derived(Boolean(config.fetchFullMessages));
 
   // ---------- Raw JSON --------------------------------------------------
-
-  let showRawJson = $state(false);
-
   // `definition` is referenced only for typings; the canvas-level preview
   // header (in /jkai/canvas/[slug]/+page.svelte) handles the "What this does"
   // line so we don't duplicate it inside the panel.
@@ -174,21 +172,7 @@
   />
 
   <!-- Advanced raw JSON -->
-  <details class="gx-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="gx-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -281,11 +265,4 @@
   .gx-toggle-label {
     font-size: var(--fs-label); color: var(--text-primary);
   }
-
-  .gx-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .gx-raw summary { cursor: pointer; }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RawConfigEditor from './shared/RawConfigEditor.svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import NodeMemoryBlock from './shared/NodeMemoryBlock.svelte';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
@@ -73,8 +74,6 @@
   const keyMissing = $derived(!key.trim());
   const valuePath = $derived(String(config.valuePath ?? ''));
   const passthrough = $derived(Boolean(config.passthrough));
-
-  let showRawJson = $state(false);
   void definition;
 </script>
 
@@ -219,21 +218,7 @@
     onChange={(v) => set('_onError', v)}
   />
 
-  <details class="ds-raw" bind:open={showRawJson}>
-    <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
-    <textarea
-      class="ds-code"
-      rows="10"
-      spellcheck="false"
-      value={JSON.stringify(config, null, 2)}
-      oninput={(e) => {
-        try {
-          const next = JSON.parse((e.currentTarget as HTMLTextAreaElement).value);
-          if (next && typeof next === 'object') onChange(next as Record<string, unknown>);
-        } catch { /* invalid — keep typing */ }
-      }}
-    ></textarea>
-  </details>
+  <RawConfigEditor {config} {onChange} />
 </div>
 
 <style>
@@ -329,13 +314,6 @@
     resize: vertical;
   }
   .ds-code:focus { border-color: var(--text-muted); }
-
-  .ds-raw {
-    margin-top: 4px;
-    border-top: 1px dashed var(--card-border);
-    padding-top: 8px;
-  }
-  .ds-raw summary { cursor: pointer; }
 
   input[type='text'], input[type='number'], textarea {
     width: 100%;
