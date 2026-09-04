@@ -898,6 +898,73 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, slug, status: decision === 'accept' ? 'queued' : 'declined' });
       }
 
+      // ── The queue board (2026-09-04) ───────────────────────────────────
+      //
+      // Four edits on `improvement_backlog`, all keyed by slug. They exist
+      // because the queue reached 455 rows with 280 of the 352 open ones tied
+      // on priority 2: the engine could add to the pile and nothing could
+      // sort, merge or close it.
+      //
+      // None of them spends anything. Accepting work queues it for a slot the
+      // lane still gates — a repo build can cost £2 and
+      // `daydream.appetite.autobuild` is deliberately inverted, so a drag on a
+      // board must never be what starts one.
+
+      /** Reprioritise. `pickWork` ranks on this, so it changes tonight's work. */
+      case 'backlog_priority': {
+        const slug = str('slug');
+        const priority = Number(body.priority);
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        if (!Number.isFinite(priority)) {
+          return json({ error: 'priority must be a number 1-5' }, { status: 400 });
+        }
+        const { setPriority } = await import('$lib/selfimprove/backlog');
+        const next = await setPriority(slug, priority);
+        return json({ ok: true, slug, priority: next.priority });
+      }
+
+      /** Park an item, or put a parked one back in the running. */
+      case 'backlog_park': {
+        const slug = str('slug');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        // Explicit, not inferred from presence: `{parked: false}` is a
+        // re-open and `{}` must not silently mean one.
+        if (typeof body.parked !== 'boolean') {
+          return json({ error: 'parked must be true or false' }, { status: 400 });
+        }
+        const { setParked } = await import('$lib/selfimprove/backlog');
+        const next = await setParked(slug, body.parked, str('reason') || undefined);
+        return json({ ok: true, slug, status: next.status });
+      }
+
+      /** Group an item into a board swimlane, or clear it. */
+      case 'backlog_epic': {
+        const slug = str('slug');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        const { setEpic } = await import('$lib/selfimprove/backlog');
+        const next = await setEpic(slug, str('epicSlug') || null);
+        return json({ ok: true, slug, epicSlug: next.epicSlug ?? null });
+      }
+
+      /**
+       * Fold restatements of one idea into a single item.
+       *
+       * The losers are abandoned with a pointer, never deleted: `addIdeas`
+       * checks existence BY KEY, so the surviving row is what stops the same
+       * idea being written fresh tomorrow at `attempts: 0`.
+       */
+      case 'backlog_fold': {
+        const slugs = Array.isArray(body.slugs)
+          ? body.slugs.filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+          : [];
+        if (slugs.length < 2) {
+          return json({ error: 'folding needs at least two items' }, { status: 400 });
+        }
+        const { foldItems } = await import('$lib/selfimprove/backlog');
+        const res = await foldItems(slugs, str('into') || undefined);
+        return json({ ok: true, ...res });
+      }
+
       default:
         return json({ error: `unknown action: ${action || '(none)'}` }, { status: 400 });
     }

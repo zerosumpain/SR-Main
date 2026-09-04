@@ -413,6 +413,40 @@ export interface BacklogItemData {
   /** The `daydream_capabilities` row this came from, so the lane can report
    *  back what the idea became. Absent on fault- and question-mined ideas. */
   capabilitySlug?: string;
+
+  // ── Owner edits from the queue board (2026-09-04) ────────────────────────
+  //
+  // All three are additive fields on a datastore record, so nothing here needs
+  // a migration. They exist because the queue reached 455 rows with 280 of the
+  // 352 open ones tied on priority 2, and the room had no lever at all: the
+  // engine could add to the pile and nothing could sort, merge or close it.
+
+  /**
+   * The slug this item was FOLDED INTO, when the owner judged it a restatement
+   * of a sibling.
+   *
+   * Set together with `status: 'abandoned'`, never instead of it — `pickWork`
+   * filters on status and must not learn a second way for an item to be out of
+   * the running. Kept rather than deleted for the reason every other ledger
+   * here keeps its refusals: `addIdeas` checks existence by key, so a surviving
+   * row is what stops the same idea being written fresh at `attempts: 0`
+   * tomorrow. Deleting the loser would resurrect it.
+   */
+  foldedInto?: string;
+  /** How many siblings were folded INTO this one. Display only. */
+  foldedCount?: number;
+  /** Why it was parked, in the owner's words or the board's. Shown on the card
+   *  so a parked item never reads as an unexplained disappearance. */
+  parkedReason?: string;
+  /**
+   * Grouping key for the board's swimlanes.
+   *
+   * Owner-set in P2. The automatic clusterer is P3 and MUST reuse
+   * `findRelatedIdea` in `narrative.ts` — that function is the one definition
+   * of "related" here, and it already carries the three-shared-content-words
+   * threshold that stopped "live" and "api" matching everything.
+   */
+  epicSlug?: string;
 }
 
 /**

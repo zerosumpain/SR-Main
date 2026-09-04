@@ -325,6 +325,160 @@ export function hasOpenNewDataWork(items: BacklogItemData[]): boolean {
   );
 }
 
+// ── Owner edits from the queue board ───────────────────────────────────────
+//
+// Everything above this line is written by the engine, at night, and forgives
+// a failure by logging it — a ledger that cannot be written must not cost the
+// run that tried. These are the opposite: a person clicked something and is
+// watching for it to happen, so they THROW and the route reports the failure.
+
+/** Clamp to the 1..5 the rest of the engine assumes. */
+function clampPriority(n: unknown): number {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return 3;
+  return Math.min(5, Math.max(1, v));
+}
+
+/**
+ * Read one item or fail loudly.
+ *
+ * `getRecordByKey` THROWS a `not_found` DatastoreError rather than returning
+ * null — `backlogItemExists` above relies on exactly that — so this turns it
+ * into a message a person clicking a button can read.
+ */
+async function mustGet(slug: string): Promise<BacklogItemData> {
+  try {
+    const rec = await getRecordByKey(COLLECTIONS.backlog, slug, SYSTEM_ACTOR);
+    if (!rec) throw new Error(`no backlog item “${slug}”`);
+    return rec.data as unknown as BacklogItemData;
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === 'not_found') {
+      throw new Error(`no backlog item “${slug}”`);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Reprioritise. The single highest-leverage owner lever in the room: `pickWork`
+ * ranks on `priority` within each class, and on 2026-09-04 **280 of 352 open
+ * items sat at priority 2**, so the ordering that decides tonight's work was
+ * effectively arbitrary.
+ */
+export async function setPriority(slug: string, priority: number): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const next: BacklogItemData = {
+    ...item,
+    priority: clampPriority(priority),
+    updatedAt: new Date().toISOString(),
+  };
+  await put(next);
+  return next;
+}
+
+/** Group an item into a board swimlane, or clear it with `null`. */
+export async function setEpic(slug: string, epicSlug: string | null): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const next: BacklogItemData = { ...item, updatedAt: new Date().toISOString() };
+  if (epicSlug) next.epicSlug = epicSlug.slice(0, 120);
+  else delete next.epicSlug;
+  await put(next);
+  return next;
+}
+
+/**
+ * Park an item, or put a parked one back.
+ *
+ * Park writes `abandoned`, which `pickWork` already skips and `addIdeas`
+ * already refuses to overwrite (existence is checked by key). Re-opening
+ * deliberately does NOT reset `attempts` — the retry budget is the memory of
+ * what has already been tried, and an owner un-parking something is not
+ * evidence that the last four failures did not happen.
+ */
+export async function setParked(
+  slug: string,
+  parked: boolean,
+  reason?: string,
+): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const next: BacklogItemData = {
+    ...item,
+    status: parked ? 'abandoned' : 'open',
+    updatedAt: new Date().toISOString(),
+  };
+  if (parked) {
+    if (reason) next.parkedReason = reason.slice(0, 300);
+  } else {
+    delete next.parkedReason;
+    delete next.foldedInto;
+  }
+  await put(next);
+  return next;
+}
+
+/** Which of a fold's members survives.
+ *
+ *  Highest priority first, then most attempts: the item carrying attempt
+ *  history and a `lastError` is the record worth keeping, for the same reason
+ *  `addIdeas` refuses to rewrite an existing slug rather than re-describing it.
+ *  Exported so the rule is testable without a datastore. */
+export function pickFoldSurvivor(items: BacklogItemData[]): BacklogItemData | null {
+  if (items.length === 0) return null;
+  return [...items].sort(
+    (a, b) => a.priority - b.priority || b.attempts - a.attempts || a.slug.localeCompare(b.slug),
+  )[0];
+}
+
+export interface FoldResult {
+  survivor: string;
+  folded: string[];
+}
+
+/**
+ * Fold restatements of one idea into a single item.
+ *
+ * The measured problem this exists for: a random 70-row sample of the queue on
+ * 2026-09-04 collapsed to about twelve subjects, and four items on the
+ * "bank/PayPal duplicate charges" theme had already SHIPPED while five more
+ * asking for the same thing were still open. The engine cannot see that; a
+ * person can, in one glance, and until now had no way to act on it.
+ *
+ * Losers are marked `abandoned` with a pointer, never deleted — see
+ * `foldedInto` in `types.ts` for why deletion would resurrect them.
+ */
+export async function foldItems(slugs: string[], into?: string): Promise<FoldResult> {
+  const unique = [...new Set(slugs.filter(Boolean))];
+  if (unique.length < 2) throw new Error('folding needs at least two items');
+  const items = await Promise.all(unique.map((s) => mustGet(s)));
+
+  const explicit = into ? items.find((i) => i.slug === into) : undefined;
+  if (into && !explicit) throw new Error(`survivor ${into} is not one of the folded items`);
+  const survivor = explicit ?? pickFoldSurvivor(items);
+  if (!survivor) throw new Error('no survivor could be chosen');
+
+  const losers = items.filter((i) => i.slug !== survivor.slug);
+  const now = new Date().toISOString();
+
+  for (const l of losers) {
+    await put({
+      ...l,
+      status: 'abandoned',
+      foldedInto: survivor.slug,
+      parkedReason: `Folded into “${survivor.title.slice(0, 120)}”`,
+      updatedAt: now,
+    });
+  }
+  await put({
+    ...survivor,
+    // Cumulative: folding twice into the same survivor adds up rather than
+    // overwriting, so the count keeps meaning "restatements absorbed".
+    foldedCount: (survivor.foldedCount ?? 0) + losers.length,
+    updatedAt: now,
+  });
+
+  return { survivor: survivor.slug, folded: losers.map((l) => l.slug) };
+}
+
 /** Record the outcome of an attempt against an item. Best-effort. */
 export async function markAttempt(
   item: BacklogItemData,

@@ -10,6 +10,7 @@
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import ImprovementPanel from '$lib/components/jkai/daydream/ImprovementPanel.svelte';
   import AppetiteBoard from '$lib/components/jkai/daydream/rooms/AppetiteBoard.svelte';
+  import QueueBoard from '$lib/components/jkai/daydream/rooms/QueueBoard.svelte';
   import { postThought } from '$lib/daydream/feed-client';
   import { invalidateAll } from '$app/navigation';
 
@@ -63,7 +64,9 @@
       value: String(story.backlog.open),
       sub: `${story.backlog.engine} about the engine itself · ${story.backlog.shipped} shipped all time`,
       tone: story.backlog.open ? 'steady' : 'quiet',
-      href: '#improvement-ledger',
+      // The queue now has a surface of its own. This cell used to point at the
+      // ledger, which explains what CHANGED — not what is waiting.
+      href: '#queue',
     },
     {
       key: 'tools',
@@ -171,10 +174,22 @@
   </div>
 </section>
 
-<section class="band sunken">
+<section class="band sunken" id="queue">
   <div class="inner">
     <SectionHead
-      kicker="C / The loop, end to end"
+      kicker="C / The queue"
+      title={['Everything it wants', 'to do next']}
+      strap="Every idea the engine is holding, in the order it will reach for them. Six stages left to right: proposed, accepted, in build, verifying, live, parked. A card can be dragged to Accepted or Parked and nowhere else — a tool becomes live when jkai calls it, and a drag must never be what starts a build that can spend £2. The priority on a card is the field the picker actually ranks on."
+    />
+    {#if actionError}<p class="err">{actionError}</p>{/if}
+    <QueueBoard view={data.board} {busy} {act} />
+  </div>
+</section>
+
+<section class="band">
+  <div class="inner">
+    <SectionHead
+      kicker="D / The loop, end to end"
       title={['What it could not do,', 'and what that built']}
       strap="Seven stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
     />
@@ -193,7 +208,7 @@
 <section class="band" id="doctor">
   <div class="inner">
     <SectionHead
-      kicker="D / The doctor"
+      kicker="E / The doctor"
       title={['What broke,', 'and who fixed it']}
       strap="Failed canvas runs, triaged nightly over a rolling week. It stops a runaway schedule itself and repairs node config inside a narrow whitelist; anything needing repo code becomes a fault, which is the same queue everything above is drawn from. That is the fold — not a shared page, a shared ledger."
     />
