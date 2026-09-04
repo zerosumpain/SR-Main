@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { nextReferenceNumber, parseReferences, referenceMarker, splitReferences } from './references';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style';
-import { Figure, ProjectEmbed, PullQuote, Callout, Disclosure, Sidenote } from './tiptap-extras';
+import { Figure, ProjectEmbed, PullQuote, Callout, Disclosure, Sidenote, Standfirst, Highlight, References, RefMark } from './tiptap-extras';
 import { renderContent } from './renderer';
 
 /**
@@ -66,6 +67,10 @@ const EXTENSIONS = [
   Callout,
   Disclosure,
   Sidenote,
+  Standfirst,
+  Highlight,
+  References,
+  RefMark,
 ];
 
 let editor: Editor | null = null;
@@ -135,6 +140,43 @@ describe('the blog rich editor mounts and runs its toolbar', () => {
     expect(e.schema.nodes.callout, 'Callout missing from schema').toBeTruthy();
     expect(e.schema.nodes.disclosure, 'Disclosure missing from schema').toBeTruthy();
     expect(e.schema.nodes.sidenote, 'Sidenote missing from schema').toBeTruthy();
+    expect(e.schema.nodes.standfirst, 'Standfirst missing from schema').toBeTruthy();
+    expect(e.schema.marks.highlight, 'Highlight missing from schema').toBeTruthy();
+    expect(e.schema.nodes.references, 'References missing from schema').toBeTruthy();
+    expect(e.schema.nodes.refMark, 'RefMark missing from schema').toBeTruthy();
+  });
+
+  // The editorial capabilities added 2026-09-04. Each assertion is the EDITOR
+  // half; `renderer.test.ts` holds the sanitiser half. Either alone is a green
+  // test over a feature that does not work — a node that round-trips here and
+  // is stripped on publish looks identical to one that works, right up until
+  // the post is read.
+  it('produces a highlight with its tone as a class', () => {
+    const e = mount('<p>emphasise this</p>');
+    e.chain().focus().selectAll().toggleHighlight('warm').run();
+    expect(e.getHTML()).toContain('<mark class="hl-warm">');
+    // and never as a bare attribute the sanitiser would strip
+    expect(e.getHTML()).not.toContain('tone=');
+  });
+
+  it('round-trips every highlight tone', () => {
+    for (const [tone, cls] of [['plain', 'hl'], ['warm', 'hl-warm'], ['cool', 'hl-cool']] as const) {
+      const e = mount(`<p><mark class="${cls}">x</mark></p>`);
+      expect(e.getHTML(), tone).toContain(`class="${cls}"`);
+      e.destroy();
+    }
+  });
+
+  it('produces a key-point callout', () => {
+    const e = mount('<p>the point</p>');
+    e.chain().focus().setCallout('key').run();
+    expect(e.getHTML()).toContain('callout-key');
+  });
+
+  it('round-trips a standfirst', () => {
+    const e = mount('<aside class="standfirst">The intro.</aside>');
+    expect(e.getHTML()).toContain('<aside class="standfirst">');
+    expect(e.getText()).toContain('The intro.');
   });
 
   it('runs the StarterKit marks and blocks the toolbar exposes', () => {
@@ -218,5 +260,102 @@ describe('the blog rich editor mounts and runs its toolbar', () => {
     const e = mount('<p></p>');
     e.chain().focus().setImage({ src: '/i.png' }).run();
     expect(e.getHTML()).toContain('<img');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// The references block.
+//
+// This suite exists because the first implementation of footer references was
+// WRONG in a way that every other check passed: it wrote the block as raw HTML
+// and called setContent, TipTap dropped the unrecognised <section> and reduced
+// the list to a bare <ol>, and the result was a numbered list of URLs at the
+// end of the prose — the exact thing the feature removes. Unit tests over the
+// string helpers were green throughout, because the string helpers were fine.
+// Only mounting an editor catches it.
+// ---------------------------------------------------------------------------
+describe('references round-trip through the editor', () => {
+  const REFS = [
+    { n: 1, url: 'https://www.ons.gov.uk/a', title: 'ONS' },
+    { n: 2, url: 'https://www.bbc.co.uk/b', title: 'BBC News' },
+  ];
+
+  it('keeps the section wrapper, the list class and every fn- id', () => {
+    const e = mount('<p>Prose.</p>');
+    e.chain().setReferences(REFS).run();
+    const html = e.getHTML();
+    expect(html, 'the <section> wrapper was dropped').toContain('<section class="references">');
+    expect(html, 'the ol class was dropped').toContain('<ol class="footnotes">');
+    expect(html).toContain('id="fn-1"');
+    expect(html).toContain('id="fn-2"');
+    expect(html).toContain('https://www.ons.gov.uk/a');
+  });
+
+  it('survives being parsed back in — the reopen-the-post case', () => {
+    const first = mount('<p>Prose.</p>');
+    first.chain().setReferences(REFS).run();
+    const saved = first.getHTML();
+    first.destroy();
+
+    const reopened = mount(saved);
+    expect(reopened.getHTML()).toContain('<section class="references">');
+    expect(parseReferences(reopened.getHTML()).map((r) => r.n)).toEqual([1, 2]);
+  });
+
+  // The bug this prevents: parseReferences returning [] means the next citation
+  // is numbered 1 again, colliding with the id an existing marker points at.
+  it('lets the next citation number continue from the document', () => {
+    const e = mount('<p>Prose.</p>');
+    e.chain().setReferences(REFS).run();
+    expect(nextReferenceNumber(e.getHTML())).toBe(3);
+  });
+
+  it('replaces rather than appends a second block', () => {
+    const e = mount('<p>Prose.</p>');
+    e.chain().setReferences(REFS).run();
+    e.chain().setReferences([{ n: 1, url: 'https://gov.uk/x', title: 'X' }]).run();
+    const html = e.getHTML();
+    expect((html.match(/<section class="references">/g) ?? []).length).toBe(1);
+    expect(html).toContain('gov.uk/x');
+    expect(html).not.toContain('bbc.co.uk');
+  });
+
+  it('removes the block entirely when the last citation goes', () => {
+    const e = mount('<p>Prose.</p>');
+    e.chain().setReferences(REFS).run();
+    e.chain().setReferences([]).run();
+    expect(e.getHTML()).not.toContain('references');
+    expect(e.getHTML()).toContain('Prose.');
+  });
+
+  it('keeps an inline citation marker in the prose', () => {
+    const e = mount(`<p>A claim${referenceMarker(1)}.</p>`);
+    const html = e.getHTML();
+    expect(html).toContain('class="ref-mark"');
+    expect(html).toContain('id="fnref-1"');
+    expect(html).toContain('href="#fn-1"');
+    // The Link mark's config would otherwise send an in-page citation jump to
+    // a new tab.
+    expect(html).not.toMatch(/<sup class="ref-mark"[^>]*>\s*<a[^>]*target=/);
+  });
+
+  it('inserts a marker through the command', () => {
+    const e = mount('<p>A claim.</p>');
+    e.chain().focus().setTextSelection(9).setRefMark(3).run();
+    expect(e.getHTML()).toContain('id="fnref-3"');
+    expect(e.getHTML()).toContain('href="#fn-3"');
+  });
+
+  // The whole point: what the editor holds is what the reading surface can
+  // split. A block the editor produces that splitReferences cannot find would
+  // publish into the body.
+  it('produces a block the reading surface can lift into the footer', () => {
+    const e = mount('<p>Prose.</p>');
+    e.chain().setReferences(REFS).run();
+    const { body, references } = splitReferences(e.getHTML());
+    expect(references).toContain('ons.gov.uk');
+    expect(body).not.toContain('ons.gov.uk');
+    expect(body).toContain('Prose.');
   });
 });

@@ -4,6 +4,9 @@
     title: string;
     domain: string;
     reputable: boolean;
+    /** Published in the UK. Shown, not just ranked on — an author choosing
+     *  between two sources deserves to see why one is above the other. */
+    uk: boolean;
     why: string;
     score: number;
   }
@@ -16,17 +19,19 @@
     status: 'pending' | 'searching' | 'done' | 'error';
     error?: string;
     resultsCount?: number;
-    inserted?: { url: string; mode: 'inline' | 'footnote'; n?: number };
+    inserted?: { url: string; mode: 'inline' | 'reference'; n?: number };
   }
 
   interface Props {
     getHTML: () => string;
     insertInlineLink: (snippet: string, url: string, title?: string) => boolean;
-    insertFootnote: (snippet: string, url: string, title?: string) => number;
+    /** Adds a marker in the prose and an entry in the post's references block,
+     *  which the reading surface renders in the article footer. */
+    insertReference: (snippet: string, url: string, title?: string) => number;
     adminToken: string;
   }
 
-  let { getHTML, insertInlineLink, insertFootnote, adminToken }: Props = $props();
+  let { getHTML, insertInlineLink, insertReference, adminToken }: Props = $props();
 
   type Phase = 'idle' | 'extracting' | 'searching' | 'done' | 'error';
 
@@ -35,7 +40,7 @@
   let error = $state<string | null>(null);
   let claims = $state<ReviewedClaim[]>([]);
   let lastRunAt = $state<Date | null>(null);
-  let mode = $state<'inline' | 'footnote'>('footnote');
+  let mode = $state<'inline' | 'reference'>('reference');
   let abortCtl: AbortController | null = null;
 
   let progressDone = $derived(claims.filter((c) => c.status === 'done' || c.status === 'error').length);
@@ -181,8 +186,8 @@
       }
       claims[claimIdx] = { ...c, inserted: { url: candidate.url, mode: 'inline' } };
     } else {
-      const n = insertFootnote(c.snippet, candidate.url, candidate.title);
-      claims[claimIdx] = { ...c, inserted: { url: candidate.url, mode: 'footnote', n } };
+      const n = insertReference(c.snippet, candidate.url, candidate.title);
+      claims[claimIdx] = { ...c, inserted: { url: candidate.url, mode: 'reference', n } };
     }
   }
 
@@ -196,7 +201,7 @@
       <label class="mode-pick">
         Insert as
         <select bind:value={mode} class="nm-text-input mode-select" disabled={isRunning}>
-          <option value="footnote">Footnote</option>
+          <option value="reference">Source in footer</option>
           <option value="inline">Inline link</option>
         </select>
       </label>
@@ -232,7 +237,11 @@
   {/if}
 
   {#if !isRunning && claims.length === 0 && !error}
-    <p class="muted">Click <strong>Review claims</strong> to extract factual statements and find reputable sources via Tavily + the default model.</p>
+    <p class="muted">
+      Click <strong>Review claims</strong> to extract factual statements and find reputable sources.
+      UK sources are preferred where they are equally relevant. Citing one adds a small marker in
+      the prose and the source itself to the post&rsquo;s footer, not to the body.
+    </p>
   {/if}
 
   {#if claims.length > 0}
@@ -267,10 +276,13 @@
           {:else if c.candidates.length > 0}
             <ul class="candidates">
               {#each c.candidates as cand}
-                <li class="cand" class:reputable={cand.reputable}>
+                <li class="cand" class:reputable={cand.reputable} class:uk={cand.uk}>
                   <a href={cand.url} target="_blank" rel="noopener noreferrer" class="cand-url">
                     <span class="cand-title">{cand.title}</span>
-                    <span class="cand-domain">{cand.domain}{cand.reputable ? ' · reputable' : ''}</span>
+                    <span class="cand-domain">
+                      {cand.domain}{cand.reputable ? ' · reputable' : ''}
+                      {#if cand.uk}<span class="cand-uk">UK</span>{/if}
+                    </span>
                   </a>
                   {#if cand.why}<div class="cand-why">{cand.why}</div>{/if}
                   <button
@@ -278,7 +290,7 @@
                     onclick={() => insert(i, cand)}
                     disabled={!!c.inserted}
                   >
-                    {c.inserted?.url === cand.url ? 'Inserted' : `Insert as ${mode === 'footnote' ? 'footnote' : 'inline link'}`}
+                    {c.inserted?.url === cand.url ? 'Cited' : mode === 'reference' ? 'Cite in footer' : 'Link inline'}
                   </button>
                 </li>
               {/each}
@@ -292,6 +304,16 @@
 
 <style>
   .claim-panel { display: flex; flex-direction: column; gap: 0.6rem; }
+  .cand-uk {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0 0.3rem;
+    border: 1px solid var(--accent-ink);
+    color: var(--accent-ink);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+  }
   .mode-pick {
     display: inline-flex; align-items: center; gap: 0.4rem;
     font-family: var(--font-mono); font-size: var(--fs-label-xs);

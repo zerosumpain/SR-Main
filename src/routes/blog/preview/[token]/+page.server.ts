@@ -19,6 +19,11 @@ export const load: PageServerLoad = async ({ params }) => {
     post,
     articleHtml: article.html,
     toc: article.toc,
+    // The sources block, for the footer. Preview renders it because publish
+    // does: an author reviewing a post whose citations are simply absent is
+    // reviewing a document that is not the one that ships, which is the exact
+    // divergence the note above records.
+    references: article.references,
     bodyFontVar: bodyFontVar(post.bodyFont),
   };
 };

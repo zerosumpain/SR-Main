@@ -6,6 +6,8 @@
  * to the exact sentence string at apply time.
  */
 
+import { stripReferences } from '$lib/blog/references';
+
 export type Paragraph = { text: string; sentences: string[] };
 export type Segmented = { paragraphs: Paragraph[] };
 
@@ -33,9 +35,13 @@ const TAG_RE = /<\/?[^>]+>/g;
 const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+(?=[A-Z"'(\[“‘])/g;
 
 export function segmentBody(html: string): Segmented {
+  // The sources block is furniture, not prose. Left in, it segments into
+  // "paragraphs" of raw URLs that autopilot offers to rewrite and the
+  // readability score counts as closing sentences. See $lib/blog/references.
+  const prose = stripReferences(html);
   // Replace block ends with a sentinel newline so paragraphs split cleanly,
   // then strip remaining inline tags.
-  const withBoundaries = html.replace(BLOCK_END_RE, '\n');
+  const withBoundaries = prose.replace(BLOCK_END_RE, '\n');
   const stripped = withBoundaries.replace(TAG_RE, '');
   const paragraphs: Paragraph[] = [];
   for (const raw of stripped.split('\n')) {
@@ -66,4 +72,32 @@ export function getSentence(seg: Segmented, paragraphIdx: number, sentenceIdx: n
   const p = seg.paragraphs[paragraphIdx];
   if (!p) return null;
   return p.sentences[sentenceIdx] ?? null;
+}
+
+/**
+ * Look up a WHOLE paragraph by index. Returns null if out of range.
+ *
+ * The counterpart to `getSentence`, and the resolution step for a
+ * paragraph-scoped rewrite: the model names an index, the server resolves it
+ * to the exact text. `text` is already whitespace-collapsed by `segmentBody`,
+ * which is the same normalisation the anchor search uses, so a paragraph
+ * resolved here is findable in the document without further cleaning.
+ */
+export function getParagraph(seg: Segmented, paragraphIdx: number): string | null {
+  return seg.paragraphs[paragraphIdx]?.text ?? null;
+}
+
+/**
+ * Render the body one PARAGRAPH per line, indexed `[p]`.
+ *
+ * The sentence view exists so a model can point at a clause without choosing
+ * character offsets. This view exists for the opposite reason: when the
+ * question is "does this argument arrive in the right order", a numbered list
+ * of 200 sentences buries the shape of the piece in its own detail. Same
+ * indices, same resolution path — only the unit changes.
+ */
+export function renderParagraphsForPrompt(seg: Segmented): string {
+  return seg.paragraphs
+    .map((p, i) => `[${i}] ${p.text}`)
+    .join('\n\n');
 }

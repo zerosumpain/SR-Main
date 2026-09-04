@@ -284,7 +284,8 @@
   .prose.editorial > :global(aside.callout),
   .prose.editorial > :global(aside.callout-note),
   .prose.editorial > :global(aside.callout-warn),
-  .prose.editorial > :global(aside.callout-aside) {
+  .prose.editorial > :global(aside.callout-aside),
+  .prose.editorial > :global(aside.callout-key) {
     grid-column: main;
     margin: 2rem 0;
     padding: 1.1rem 1.3rem;
@@ -297,6 +298,17 @@
 
   .prose.editorial > :global(aside.callout-warn) {
     border-left-color: var(--warn);
+  }
+
+  /* Key point — the one thing to take away. Reads as EMPHASIS rather than as
+     an interruption, which is what separates it from a note: the accent rule is
+     the full height and the type is the reading face at body size, so the eye
+     lands on it without being stopped by it. */
+  .prose.editorial > :global(aside.callout-key) {
+    border-left-width: 4px;
+    border-left-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, var(--card-bg));
+    font-size: calc(var(--fs-body) * 1.05 * var(--reader-scale, 1));
   }
 
   .prose.editorial > :global(aside.callout-aside) {
@@ -350,6 +362,59 @@
   .prose.editorial :global(.sidenote-body::before) {
     content: counter(sidenote) '  ';
     font-family: var(--font-mono);
+    color: var(--accent);
+  }
+
+  /* Standfirst — the intro that sets the piece up, before the piece starts.
+     Larger than the body and set in the reading face, not the display one: it
+     is still prose being read, not a headline being scanned. */
+  .prose.editorial > :global(aside.standfirst) {
+    grid-column: main;
+    margin: 0 0 2rem;
+    padding-left: 1rem;
+    border-left: 3px solid var(--accent);
+    font-size: calc(1.15rem * var(--reader-scale, 1));
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+
+  /* Highlight — a marker pen for a phrase. Transparent-tinted rather than a
+     flat block colour so it works over the cream ground and the two reading
+     themes without a per-theme override, and so overlapping it with a link
+     leaves the link readable. */
+  .prose :global(mark),
+  .prose :global(mark.hl) {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: inherit;
+    padding: 0.05em 0.15em;
+    border-radius: 2px;
+  }
+
+  .prose :global(mark.hl-warm) {
+    background: color-mix(in srgb, var(--warn, #b4632e) 22%, transparent);
+  }
+
+  .prose :global(mark.hl-cool) {
+    background: color-mix(in srgb, var(--accent-ink) 18%, transparent);
+  }
+
+  /* The inline citation marker. One superscript numeral, muted — the whole
+     point of moving sources to the footer is that the prose stops carrying a
+     bibliography, so this must not become a second one. */
+  .prose :global(sup.ref-mark) {
+    font-family: var(--font-mono);
+    font-size: max(0.7em, var(--fs-label-xs));
+    line-height: 1;
+    margin-left: 0.1em;
+  }
+
+  .prose :global(sup.ref-mark a) {
+    color: var(--text-muted);
+    text-decoration: none;
+    border: none;
+  }
+
+  .prose :global(sup.ref-mark a:hover) {
     color: var(--accent);
   }
 

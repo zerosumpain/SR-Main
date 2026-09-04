@@ -10,8 +10,20 @@ export interface RichEditorApi {
   getText: () => string;
   /** Wrap the first occurrence of `snippet` in an inline link. Returns true if found. */
   linkSnippet: (snippet: string, url: string, title?: string) => boolean;
-  /** Append a numbered footnote referencing `snippet`. Returns the footnote number. */
-  addFootnote: (snippet: string, url: string, title?: string) => number;
+  /**
+   * Cite `snippet` against `url`: a subtle superscript marker where the claim
+   * is, and an entry in the post's references block.
+   *
+   * Replaces `addFootnote`, which appended `<hr><h3>Sources</h3>` and a list of
+   * raw URLs to the BODY — the loudest thing on the finished page. The
+   * references block is lifted into the article footer at render time; see
+   * $lib/blog/references. Returns the citation number.
+   */
+  addReference: (snippet: string, url: string, title?: string) => number;
+  /** The post's current citations, for the editor's Sources panel. */
+  listReferences: () => { n: number; url: string; title: string }[];
+  /** Drop one citation and its marker. Returns true if it was there. */
+  removeReference: (n: number) => boolean;
   applyProposal: (p: ProseProposal) => boolean;
   acceptProposal: (id: string, modifiedText?: string) => boolean;
   rejectProposal: (id: string) => boolean;

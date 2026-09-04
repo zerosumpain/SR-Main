@@ -1,5 +1,5 @@
 import type { PostSnapshot } from './tools';
-import { segmentBody, renderForPrompt } from './segment';
+import { segmentBody, renderForPrompt, renderParagraphsForPrompt } from './segment';
 import type { ChatMessage } from './messages';
 import { voiceBlock } from '$lib/voice/block';
 import { parseResolution, preferencePairs } from './resolution';
@@ -14,8 +14,21 @@ export type PromptContext = {
 
 export function buildSystemPrompt(post: PostSnapshot, history: ChatMessage[] = [], ctx: PromptContext = {}): string {
   const segmented = segmentBody(post.content);
-  let body = renderForPrompt(segmented);
+  // BOTH views, paragraphs first. The sentence view alone is what kept every
+  // suggestion small: a model shown 200 numbered sentences edits sentences,
+  // because that is the only unit it has been handed. The paragraph view is the
+  // one the editorial tools now prefer, and it goes first for the same reason.
+  let body = renderParagraphsForPrompt(segmented);
+  let sentenceView = renderForPrompt(segmented);
   if (body.length > MAX_BODY_CHARS) body = body.slice(0, MAX_BODY_CHARS) + '\n…[truncated]';
+  // The sentence view is the fallback unit, so it is the one that gets cut when
+  // a long post will not fit — losing it costs precision on a tool that should
+  // be the exception anyway, where losing the paragraph view costs the pass its
+  // whole subject.
+  const sentenceBudget = Math.max(0, MAX_BODY_CHARS - body.length);
+  if (sentenceView.length > sentenceBudget) {
+    sentenceView = sentenceView.slice(0, sentenceBudget) + '\n…[truncated]';
+  }
 
   const styleCues = buildStyleCues(history);
 
@@ -31,19 +44,32 @@ export function buildSystemPrompt(post: PostSnapshot, history: ChatMessage[] = [
 ${voice}
 
 How prose changes work — READ CAREFULLY:
-- The post body is presented to you as one indexed sentence per line:
+- The post body is presented to you TWICE. First as one indexed paragraph per
+  block:
+    [paragraphIdx] the whole paragraph
+  and then as one indexed sentence per line:
     [paragraphIdx.sentenceIdx] sentence text
-  Indices are stable for the duration of this turn. To rewrite a sentence, call
-  \`suggest_sentence_rewrite(paragraphIdx, sentenceIdx, newText, reason)\`.
-- The server resolves the indices to the exact sentence boundaries — you NEVER pick character offsets, NEVER pick a "find string". You just pick which sentence to change, and provide the full replacement.
-- Always rewrite a complete sentence, not a fragment. If a single sentence is too long and needs splitting, propose a multi-sentence \`newText\` (the server treats it as one rewrite). The replacement may contain multiple sentences if the original had run-on prose.
+  Indices are stable for the duration of this turn and refer to the same
+  paragraphs in both views.
+- THE PARAGRAPH IS THE DEFAULT UNIT. Call
+  \`suggest_paragraph_rewrite(paragraphIdx, newText, reason)\` for anything that
+  is about how the piece reads: a paragraph whose point arrives in the last
+  line, one that repeats the paragraph above it, one carrying two ideas that
+  want separating, an opening that buries what actually happened.
+- Call \`suggest_sentence_rewrite(paragraphIdx, sentenceIdx, newText, reason)\`
+  only when ONE sentence is the whole problem and the rest of the paragraph is
+  right. Replacing six good sentences to fix one is a worse edit, not a bigger
+  one — but so is polishing a clause when the paragraph around it is the fault.
+- The server resolves the indices to the exact text boundaries — you NEVER pick character offsets, NEVER pick a "find string". You just pick what to change, and provide the full replacement.
+- Always replace a complete unit, never a fragment. A paragraph replacement is one paragraph of prose; a sentence replacement may contain several sentences if the original was a run-on.
 - \`newText\` is plain prose. NO HTML tags, no markdown, no <s>, <em>, <p>, etc. Just the visible text a reader would see.
+- Never rewrite a paragraph that contains a link, an image, a code span or an embed. Your replacement is plain text and would delete the markup along with it.
 - Match the author's voice exactly, as described above. Do not tidy his grammar, shorten his sentences, or sand off the looseness — those are the voice, not defects in it.
-- Always include a one-sentence \`reason\` so the user understands why.
+- Always include a one-sentence \`reason\` so the user understands why. For a paragraph rewrite, say what was wrong with the paragraph as a unit, not which words you changed.
 
 ${autoMode
-  ? `AUTO-REVIEW MODE: This call is an automatic background scan. Do not respond in chat. Produce AT MOST TWO suggest_sentence_rewrite calls — choose only the highest-impact ones (broken grammar, accessibility, an embellishment opportunity). If the post reads well right now, return zero suggestions and stay silent.`
-  : `When the user asks for a review or edits, emit MULTIPLE suggest_sentence_rewrite calls (up to 6). Pick the highest-impact sentences for clarity, accessibility, humour, embellishment.`}
+  ? `AUTO-REVIEW MODE: This call is an automatic background scan. Do not respond in chat. Produce AT MOST TWO rewrite calls — choose only the highest-impact ones. If the post reads well right now, return zero suggestions and stay silent.`
+  : `When the user asks for a review or edits, emit MULTIPLE rewrite calls (up to 6), mostly \`suggest_paragraph_rewrite\`. Pick the highest-impact paragraphs — the ones where the piece loses its thread, repeats itself, or makes the reader work for a point it already had. Fewer and larger beats more and smaller.`}
 
 Metadata changes (title, excerpt, slug, tags, status, cover alt) use the dedicated update_/set_ tools. Each one is also a proposal the user must accept.
 
@@ -64,8 +90,11 @@ Current draft:
 - cover image url: ${post.coverImageUrl ?? '(none)'}
 - cover image alt: ${post.coverImageAlt ?? '(none)'}
 
-Body (indexed by paragraph.sentence):
+Body, by paragraph — THIS IS THE UNIT TO WORK IN:
 ${body}
+
+Body, by sentence — for the exceptional case where one sentence is the whole problem:
+${sentenceView}
 `;
 }
 
