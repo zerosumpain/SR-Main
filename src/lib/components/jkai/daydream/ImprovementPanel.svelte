@@ -335,7 +335,9 @@
             {#each eff.patterns.slice(0, 6) as pat (pat.tool)}
               <div class="pat-row">
                 <span class="pat-tool mono">{pat.tool}</span>
-                <span class="pat-bar" style="--w:{Math.min(100, (pat.repeatCalls / (eff.patterns[0].repeatCalls || 1)) * 100)}%"></span>
+                <span class="pat-track">
+                  <span class="pat-bar" style="--w:{Math.min(100, (pat.repeatCalls / (eff.patterns[0].repeatCalls || 1)) * 100)}%"></span>
+                </span>
                 <span class="pat-num mono">
                   {pat.repeatCalls} wasted · {pat.turns} turn{pat.turns === 1 ? '' : 's'} · worst {pat.worstInOneTurn}×
                 </span>
@@ -975,9 +977,26 @@
 
   .patterns { margin-top: 1rem; }
   .rows.tight { margin-top: 0.4rem; }
-  .pat-row { display: grid; grid-template-columns: minmax(140px, 1fr) 90px minmax(180px, auto); align-items: center; gap: 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid var(--line-hair); }
+  /* The BAR takes the spare width, not the label.
+     It was `minmax(140px, 1fr) 90px`, so in a 1461px row the tool name — which
+     needs about 120px — was given 1172 and the bar, the only thing on the row
+     carrying a quantity, was left with 90. The mark should get the room; the
+     label only needs to fit. */
+  .pat-row { display: grid; grid-template-columns: minmax(140px, 260px) minmax(0, 1fr) minmax(180px, auto); align-items: center; gap: 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid var(--line-hair); }
+  /* A track behind the bar, so six lengths are read against one baseline
+     rather than floating in the gap between two columns. */
+  .pat-track { height: 6px; background: var(--card-border); min-width: 0; }
+  /* On a phone the three fixed minimums add up to more than the row, and the
+     middle column is the one that loses — the track measured 0px at 430px, so
+     the chart simply was not there. Same fold as /health's ranked-moves row:
+     the label and the figures share a line, the mark gets its own beneath. */
+  @media (max-width: 620px) {
+    .pat-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0.35rem; }
+    .pat-track { grid-column: 1 / -1; }
+    .pat-num { text-align: right; }
+  }
   .pat-tool { font-size: var(--fs-label); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pat-bar { height: 6px; background: var(--accent); width: var(--w); min-width: 2px; }
+  .pat-bar { display: block; height: 6px; background: var(--accent); width: var(--w); min-width: 2px; }
   .pat-num { font-size: var(--fs-label-xs); color: var(--text-ghost); text-align: right; }
 
   /* Policy history */
