@@ -1,6 +1,7 @@
 import {
   pgTable,
   serial,
+  bigserial,
   text,
   timestamp,
   integer,
@@ -3604,6 +3605,435 @@ export const integrationOauthConfigs = pgTable('integration_oauth_configs', {
 
 export type IntegrationCredentialRow = typeof integrationCredentials.$inferSelect;
 export type IntegrationOauthConfigRow = typeof integrationOauthConfigs.$inferSelect;
+
+// ── Personal activity fabric ─────────────────────────────────────────────
+//
+// Provider adapters write immutable evidence here. JKAI, Daydream and every
+// other consumer read policy-filtered projections rather than provider tables
+// or decrypted credentials. Every row carries a principal even while the first
+// release is owner-only: route authentication is not the data boundary.
+
+export const activityPrincipals = pgTable(
+  'activity_principals',
+  {
+    id: text('id').primaryKey(),
+    /** 'owner' today; 'user' is reserved for invited-user rollout. */
+    kind: text('kind').notNull(),
+    /** Stable auth reference. Never a provider account id or access token. */
+    externalRef: text('external_ref').notNull(),
+    label: text('label').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_principals_kind_ref_idx').on(t.kind, t.externalRef),
+    check('activity_principals_kind_check', sql`${t.kind} in ('owner', 'user')`),
+  ],
+);
+
+export const activityConnections = pgTable(
+  'activity_connections',
+  {
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    /** 'oauth' | 'openid' | 'api_key' | 'import' | 'device' */
+    mode: text('mode').notNull(),
+    label: text('label').notNull(),
+    providerAccountId: text('provider_account_id'),
+    credentialId: text('credential_id').references(() => integrationCredentials.id, {
+      onDelete: 'set null',
+    }),
+    /** pending | active | action_required | paused | disconnected | erasing | error */
+    status: text('status').notNull().default('pending'),
+    scopes: jsonb('scopes').$type<string[]>().notNull().default([]),
+    dataClasses: jsonb('data_classes').$type<string[]>().notNull().default([]),
+    syncPolicy: jsonb('sync_policy').$type<Record<string, unknown>>().notNull().default({}),
+    capabilities: jsonb('capabilities').$type<Record<string, unknown>>().notNull().default({}),
+    healthStatus: text('health_status'),
+    healthMessage: text('health_message'),
+    lastSyncStartedAt: timestamp('last_sync_started_at', { withTimezone: true }),
+    lastSyncSucceededAt: timestamp('last_sync_succeeded_at', { withTimezone: true }),
+    lastSyncFailedAt: timestamp('last_sync_failed_at', { withTimezone: true }),
+    nextSyncAt: timestamp('next_sync_at', { withTimezone: true }),
+    disconnectedAt: timestamp('disconnected_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_connections_principal_provider_idx').on(t.principalId, t.provider),
+    index('activity_connections_principal_status_idx').on(t.principalId, t.status),
+    index('activity_connections_next_sync_idx').on(t.status, t.nextSyncAt),
+    index('activity_connections_credential_idx').on(t.credentialId),
+    check(
+      'activity_connections_mode_check',
+      sql`${t.mode} in ('oauth', 'openid', 'api_key', 'import', 'device')`,
+    ),
+    check(
+      'activity_connections_status_check',
+      sql`${t.status} in ('pending', 'active', 'action_required', 'paused', 'disconnected', 'erasing', 'error')`,
+    ),
+  ],
+);
+
+export const activityOauthTransactions = pgTable(
+  'activity_oauth_transactions',
+  {
+    id: text('id').primaryKey(),
+    /** SHA-256 of the browser-visible state. Raw state is never persisted. */
+    stateHash: text('state_hash').notNull(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    redirectPath: text('redirect_path').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull().default([]),
+    /** PKCE verifier encrypted with the integration credential vault key. */
+    codeVerifierEnc: text('code_verifier_enc').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_oauth_transactions_state_idx').on(t.stateHash),
+    index('activity_oauth_transactions_connection_idx').on(t.connectionId, t.createdAt),
+    index('activity_oauth_transactions_expiry_idx').on(t.expiresAt),
+  ],
+);
+
+export const activitySyncJobs = pgTable(
+  'activity_sync_jobs',
+  {
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id').references(() => activityConnections.id, {
+      onDelete: 'set null',
+    }),
+    provider: text('provider').notNull(),
+    /** initial_sync | incremental_sync | inspect_import | import | erase | reproject */
+    kind: text('kind').notNull(),
+    /** queued | leased | running | succeeded | retry_wait | failed | cancelled */
+    status: text('status').notNull().default('queued'),
+    priority: integer('priority').notNull().default(100),
+    runAfter: timestamp('run_after', { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+    attempt: integer('attempt').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(5),
+    idempotencyKey: text('idempotency_key'),
+    checkpoint: jsonb('checkpoint').$type<Record<string, unknown>>().notNull().default({}),
+    progress: jsonb('progress').$type<Record<string, unknown>>().notNull().default({}),
+    errorCode: text('error_code'),
+    errorText: text('error_text'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_sync_jobs_ready_idx').on(t.status, t.runAfter, t.priority),
+    index('activity_sync_jobs_lease_idx').on(t.status, t.leaseExpiresAt),
+    index('activity_sync_jobs_connection_idx').on(t.connectionId, t.createdAt),
+    index('activity_sync_jobs_principal_idx').on(t.principalId, t.createdAt),
+    index('activity_sync_jobs_idempotency_idx').on(t.principalId, t.idempotencyKey),
+    check(
+      'activity_sync_jobs_kind_check',
+      sql`${t.kind} in ('initial_sync', 'incremental_sync', 'inspect_import', 'import', 'erase', 'reproject')`,
+    ),
+    check(
+      'activity_sync_jobs_status_check',
+      sql`${t.status} in ('queued', 'leased', 'running', 'succeeded', 'retry_wait', 'failed', 'cancelled')`,
+    ),
+    check('activity_sync_jobs_attempt_check', sql`${t.attempt} >= 0 and ${t.maxAttempts} > 0`),
+  ],
+);
+
+export const activitySyncCursors = pgTable(
+  'activity_sync_cursors',
+  {
+    /** Deterministic `${connectionId}:${stream}` hash, so replay cannot duplicate it. */
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    stream: text('stream').notNull(),
+    cursor: jsonb('cursor').$type<Record<string, unknown>>().notNull().default({}),
+    version: integer('version').notNull().default(1),
+    observedAt: timestamp('observed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_sync_cursors_connection_stream_idx').on(t.connectionId, t.stream),
+    index('activity_sync_cursors_principal_idx').on(t.principalId),
+  ],
+);
+
+export const activityImports = pgTable(
+  'activity_imports',
+  {
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    filename: text('filename').notNull(),
+    archiveChecksum: text('archive_checksum').notNull(),
+    storageRef: text('storage_ref'),
+    format: text('format'),
+    formatVersion: text('format_version'),
+    /** uploaded | inspecting | ready | importing | succeeded | failed | erased */
+    status: text('status').notNull().default('uploaded'),
+    compressedBytes: bigint('compressed_bytes', { mode: 'number' }).notNull().default(0),
+    expandedBytes: bigint('expanded_bytes', { mode: 'number' }),
+    manifest: jsonb('manifest').$type<Record<string, unknown>>().notNull().default({}),
+    report: jsonb('report').$type<Record<string, unknown>>().notNull().default({}),
+    retainedUntil: timestamp('retained_until', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_imports_connection_idx').on(t.connectionId, t.createdAt),
+    index('activity_imports_principal_checksum_idx').on(t.principalId, t.archiveChecksum),
+    index('activity_imports_retention_idx').on(t.status, t.retainedUntil),
+    check(
+      'activity_imports_status_check',
+      sql`${t.status} in ('uploaded', 'inspecting', 'ready', 'importing', 'succeeded', 'failed', 'erased')`,
+    ),
+  ],
+);
+
+export const activitySourceObjects = pgTable(
+  'activity_source_objects',
+  {
+    /** Deterministic from connection + provider object id + revision. */
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    importId: text('import_id').references(() => activityImports.id, { onDelete: 'set null' }),
+    provider: text('provider').notNull(),
+    providerObjectId: text('provider_object_id').notNull(),
+    providerRevision: text('provider_revision'),
+    dataClass: text('data_class').notNull(),
+    checksum: text('checksum').notNull(),
+    /** Encrypted provider/archive payload. Never selected by list surfaces. */
+    payloadEnc: text('payload_enc'),
+    /** Small, deliberately non-sensitive fields usable in import reports. */
+    redactedPayload: jsonb('redacted_payload').$type<Record<string, unknown>>().notNull().default({}),
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
+    retainedUntil: timestamp('retained_until', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_source_objects_connection_object_idx').on(t.connectionId, t.providerObjectId),
+    index('activity_source_objects_principal_idx').on(t.principalId, t.observedAt),
+    index('activity_source_objects_import_idx').on(t.importId),
+    index('activity_source_objects_retention_idx').on(t.retainedUntil),
+    check(
+      'activity_source_objects_data_class_check',
+      sql`${t.dataClass} in ('metadata', 'activity', 'raw_content', 'location')`,
+    ),
+  ],
+);
+
+export const activityEvents = pgTable(
+  'activity_events',
+  {
+    /** Deterministic logical-event id plus revision; the primary idempotency rail. */
+    id: text('id').primaryKey(),
+    eventKey: text('event_key').notNull(),
+    revision: integer('revision').notNull().default(1),
+    supersedesEventId: text('supersedes_event_id').references(
+      (): AnyPgColumn => activityEvents.id,
+      { onDelete: 'set null' },
+    ),
+    sourceObjectId: text('source_object_id').references(() => activitySourceObjects.id, {
+      onDelete: 'set null',
+    }),
+    importId: text('import_id').references(() => activityImports.id, { onDelete: 'cascade' }),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    source: text('source').notNull(),
+    type: text('type').notNull(),
+    category: text('category').notNull(),
+    subjectKey: text('subject_key').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
+    /** provider_event | provider_snapshot | inferred_delta | archive_import | device_observation */
+    evidenceMode: text('evidence_mode').notNull(),
+    actor: jsonb('actor').$type<Record<string, unknown>>().notNull().default({}),
+    object: jsonb('object').$type<Record<string, unknown>>().notNull(),
+    measures: jsonb('measures').$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+    provenance: jsonb('provenance').$type<Record<string, unknown>>().notNull(),
+    isCurrent: boolean('is_current').notNull().default(true),
+    tombstonedAt: timestamp('tombstoned_at', { withTimezone: true }),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_events_principal_observed_idx').on(t.principalId, t.observedAt, t.id),
+    index('activity_events_connection_observed_idx').on(t.connectionId, t.observedAt, t.id),
+    index('activity_events_category_occurred_idx').on(t.principalId, t.category, t.occurredAt),
+    index('activity_events_event_key_idx').on(t.connectionId, t.eventKey, t.revision),
+    index('activity_events_source_object_idx').on(t.sourceObjectId),
+    index('activity_events_import_idx').on(t.importId),
+    index('activity_events_current_idx').on(t.principalId, t.isCurrent, t.observedAt),
+    check('activity_events_revision_check', sql`${t.revision} > 0`),
+    check(
+      'activity_events_evidence_check',
+      sql`${t.evidenceMode} in ('provider_event', 'provider_snapshot', 'inferred_delta', 'archive_import', 'device_observation')`,
+    ),
+    check(
+      'activity_events_snapshot_time_check',
+      sql`${t.evidenceMode} <> 'provider_snapshot' or ${t.occurredAt} is null`,
+    ),
+  ],
+);
+
+export const activityOutbox = pgTable(
+  'activity_outbox',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    eventId: text('event_id').references(() => activityEvents.id, { onDelete: 'cascade' }),
+    topic: text('topic').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    /** pending | leased | delivered | failed | cancelled */
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+    errorText: text('error_text'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_outbox_ready_idx').on(t.status, t.availableAt, t.id),
+    index('activity_outbox_event_idx').on(t.eventId),
+    index('activity_outbox_principal_idx').on(t.principalId, t.createdAt),
+    check(
+      'activity_outbox_status_check',
+      sql`${t.status} in ('pending', 'leased', 'delivered', 'failed', 'cancelled')`,
+    ),
+  ],
+);
+
+export const activityConsumerGrants = pgTable(
+  'activity_consumer_grants',
+  {
+    /** Deterministic from connection + consumer + data class + category. */
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    consumer: text('consumer').notNull(),
+    dataClass: text('data_class').notNull(),
+    category: text('category'),
+    allowed: boolean('allowed').notNull().default(false),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_consumer_grants_connection_idx').on(t.connectionId, t.consumer),
+    index('activity_consumer_grants_principal_idx').on(t.principalId, t.consumer),
+    check(
+      'activity_consumer_grants_consumer_check',
+      sql`${t.consumer} in ('jkai', 'daydream', 'briefing', 'workflow', 'intel', 'mcp')`,
+    ),
+    check(
+      'activity_consumer_grants_data_class_check',
+      sql`${t.dataClass} in ('metadata', 'activity', 'raw_content', 'location')`,
+    ),
+    check('activity_consumer_grants_version_check', sql`${t.version} > 0`),
+  ],
+);
+
+export const activityDailyProjections = pgTable(
+  'activity_daily_projections',
+  {
+    /** Deterministic from principal + day + signal + definition version. */
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => activityConnections.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+    signalKey: text('signal_key').notNull(),
+    value: doublePrecision('value').notNull(),
+    unit: text('unit'),
+    coverage: text('coverage').notNull(),
+    evidence: jsonb('evidence').$type<Record<string, number>>().notNull().default({}),
+    sourceEventIds: jsonb('source_event_ids').$type<string[]>().notNull().default([]),
+    definitionVersion: integer('definition_version').notNull().default(1),
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_daily_projections_principal_day_idx').on(t.principalId, t.day),
+    index('activity_daily_projections_connection_day_idx').on(t.connectionId, t.day),
+    index('activity_daily_projections_signal_day_idx').on(t.signalKey, t.day),
+    check(
+      'activity_daily_projections_coverage_check',
+      sql`${t.coverage} in ('complete', 'partial', 'snapshot_only', 'stale', 'unavailable')`,
+    ),
+    check('activity_daily_projections_version_check', sql`${t.definitionVersion} > 0`),
+  ],
+);
+
+export type ActivityPrincipal = typeof activityPrincipals.$inferSelect;
+export type NewActivityPrincipal = typeof activityPrincipals.$inferInsert;
+export type ActivityConnection = typeof activityConnections.$inferSelect;
+export type NewActivityConnection = typeof activityConnections.$inferInsert;
+export type ActivityOauthTransaction = typeof activityOauthTransactions.$inferSelect;
+export type NewActivityOauthTransaction = typeof activityOauthTransactions.$inferInsert;
+export type ActivitySyncJob = typeof activitySyncJobs.$inferSelect;
+export type NewActivitySyncJob = typeof activitySyncJobs.$inferInsert;
+export type ActivitySyncCursor = typeof activitySyncCursors.$inferSelect;
+export type NewActivitySyncCursor = typeof activitySyncCursors.$inferInsert;
+export type ActivityImport = typeof activityImports.$inferSelect;
+export type NewActivityImport = typeof activityImports.$inferInsert;
+export type ActivitySourceObject = typeof activitySourceObjects.$inferSelect;
+export type NewActivitySourceObject = typeof activitySourceObjects.$inferInsert;
+export type ActivityEvent = typeof activityEvents.$inferSelect;
+export type NewActivityEvent = typeof activityEvents.$inferInsert;
+export type ActivityOutboxRow = typeof activityOutbox.$inferSelect;
+export type NewActivityOutboxRow = typeof activityOutbox.$inferInsert;
+export type ActivityConsumerGrantRow = typeof activityConsumerGrants.$inferSelect;
+export type NewActivityConsumerGrantRow = typeof activityConsumerGrants.$inferInsert;
+export type ActivityDailyProjection = typeof activityDailyProjections.$inferSelect;
+export type NewActivityDailyProjection = typeof activityDailyProjections.$inferInsert;
 
 // ── API secret registry ──────────────────────────────────────────────────
 //

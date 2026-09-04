@@ -52,6 +52,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Health', href: '/admin/connections/health' },
       { label: 'Gmail', href: '/admin/connections/gmail' },
       { label: 'Scraper', href: '/admin/connections/scraper' },
+      { label: 'Activity', href: '/admin/connections/catalog' },
       { label: 'Credentials', href: '/admin/connections/credentials' },
     ],
   },

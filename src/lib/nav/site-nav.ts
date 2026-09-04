@@ -340,6 +340,9 @@ const GROUPING_SEGMENTS: (string | RegExp)[] = [
   '/blog/tag',
   '/jkai/shared',
   '/jkai/trace',
+  '/jkai/settings',
+  // Provider ids and the `connections` namespace have no page of their own.
+  /^\/jkai\/sources\/[^/]+$/,
   // /news/<source> is a namespace for article ids, never a page of its own.
   /^\/news\/[^/]+$/,
 ];
