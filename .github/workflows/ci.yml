@@ -405,7 +405,7 @@ jobs:
           } > .env
 
       - name: Build the real release candidate
-        run: npm run build
+        run: npm run gate:build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
@@ -602,7 +602,7 @@ jobs:
       # still produces the complete runnable server bundle.
       - name: Build
         if: steps.promote.outputs.promoted != 'true'
-        run: npm run build
+        run: npm run gate:build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 

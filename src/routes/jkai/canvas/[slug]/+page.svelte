@@ -18,8 +18,6 @@
   import ErrorExplorerNode from '$lib/canvas/stats/ErrorExplorerNode.svelte';
   import CostNode from '$lib/canvas/stats/CostNode.svelte';
   import { useCanvasStream } from '$lib/canvas/stats/useCanvasStream.svelte';
-  import IntelligenceNode from '$lib/canvas/intelligence/IntelligenceNode.svelte';
-  import ResearchResultNode from '$lib/canvas/intelligence/ResearchResultNode.svelte';
   import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
   import BuilderChatNode from '$lib/canvas/nodes/BuilderChatNode.svelte';
   import BuilderPiNode from '$lib/canvas/nodes/BuilderPiNode.svelte';
@@ -49,7 +47,7 @@
   import { createUndoHistory, type UndoAction } from '$lib/canvas/undo';
   import { byType as byNodeType, allTypes as allNodeTypes, mapTypeToKind, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
-  import { getPanel } from '$lib/canvas/nodes/panels/registry';
+  import LazyPanel from '$lib/canvas/nodes/panels/LazyPanel.svelte';
   import { getDefinition } from '$lib/workflows/registry-client';
   import { summarizeNode } from '$lib/workflows/node-summary';
   import { memoryBadgeFor } from '$lib/canvas/memory-badge';
@@ -116,7 +114,7 @@
 
   // The 'llm' inline editor in this file has been superseded by the new
   // LlmCallPanel / LlmAgentPanel. Keep it out of INLINE_CONFIG_KINDS so the
-  // canvas falls through to getPanel() for these node types.
+  // canvas falls through to the lazy panel resolver for these node types.
 
   // Kinds that have a hand-crafted inline config UI further down in this file
   // (search for `{:else if menuNode.kind === '<kind>'}` blocks). For these,
@@ -163,6 +161,45 @@
 
   const canvas = $derived(data.canvas);
   const NEW_PALETTE = publicEnv.PUBLIC_CANVAS_NEW_PALETTE !== 'false';
+  type IntelligenceNodeComponent = (typeof import('$lib/canvas/intelligence/IntelligenceNode.svelte'))['default'];
+  type ResearchResultNodeComponent = (typeof import('$lib/canvas/intelligence/ResearchResultNode.svelte'))['default'];
+  let IntelligenceNode = $state<IntelligenceNodeComponent | null>(null);
+  let ResearchResultNode = $state<ResearchResultNodeComponent | null>(null);
+  let intelligenceNodeLoading = false;
+  let researchResultNodeLoading = false;
+  let intelligenceNodeFailed = $state(false);
+  let researchResultNodeFailed = $state(false);
+
+  // The research desk and D3 graph are among the canvas route's heaviest
+  // dependencies, but most canvases have neither intelligence node type. Fetch
+  // each renderer only if the loaded workflow actually contains one.
+  $effect(() => {
+    const nodes = canvas?.nodes ?? [];
+    if (
+      nodes.some((node) => node.kind === 'intelligence' && node.type !== 'research-result')
+      && !IntelligenceNode
+      && !intelligenceNodeLoading
+      && !intelligenceNodeFailed
+    ) {
+      intelligenceNodeLoading = true;
+      void import('$lib/canvas/intelligence/IntelligenceNode.svelte')
+        .then(({ default: Node }) => { IntelligenceNode = Node; })
+        .catch(() => { intelligenceNodeFailed = true; })
+        .finally(() => { intelligenceNodeLoading = false; });
+    }
+    if (
+      nodes.some((node) => node.type === 'research-result')
+      && !ResearchResultNode
+      && !researchResultNodeLoading
+      && !researchResultNodeFailed
+    ) {
+      researchResultNodeLoading = true;
+      void import('$lib/canvas/intelligence/ResearchResultNode.svelte')
+        .then(({ default: Node }) => { ResearchResultNode = Node; })
+        .catch(() => { researchResultNodeFailed = true; })
+        .finally(() => { researchResultNodeLoading = false; });
+    }
+  });
 
   // Live mutation feed: when an external builder (workflow_build_from_spec
   // or per-tool workflow_add_node / workflow_add_edge / etc) mutates this
@@ -4676,13 +4713,17 @@
               <span class="chat-node-label">{n.name}</span>
             </div>
             <div class="intelligence-node-body" onpointerdown={(e) => e.stopPropagation()}>
-              <IntelligenceNode
-                slug={data.canvas.slug}
-                nodeId={n.id}
-                config={n.config as { query?: string; facets?: Record<string, unknown>; size?: { w: number; h: number } }}
-                onsave={(patch) => saveNodeConfig(n.id, patch)}
-                onexplore={(engine) => startExplore(n.id, engine)}
-              />
+              {#if IntelligenceNode}
+                <IntelligenceNode
+                  slug={data.canvas.slug}
+                  nodeId={n.id}
+                  config={n.config as { query?: string; facets?: Record<string, unknown>; size?: { w: number; h: number } }}
+                  onsave={(patch) => saveNodeConfig(n.id, patch)}
+                  onexplore={(engine) => startExplore(n.id, engine)}
+                />
+              {:else}
+                <p class="ghost">{intelligenceNodeFailed ? 'Intelligence view unavailable.' : 'Loading intelligence view…'}</p>
+              {/if}
             </div>
             <div
               class="chat-node-resize"
@@ -4735,20 +4776,24 @@
               <span class="sr-sep">/</span>
               <span class="chat-node-label">{n.name}</span>
             </div>
-            <ResearchResultNode
-              engine={(n.config.engine as 'deep' | 'quick') ?? 'deep'}
-              topic={(n.config.topic as string) ?? ''}
-              status={researchStatus[n.id] ?? ((n.config as Record<string, unknown>)?.completedReport ? 'complete' : ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete')}
-              report={researchReport[n.id] ?? (n.config.completedReport as string) ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
-              sources={researchSources[n.id] ?? (n.config.completedSources as Array<{ url: string; title: string; domain: string }>) ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
-              durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
-              streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
-              sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
-              nodeId={n.id}
-              oncancel={() => cancelExplore(n.id)}
-              ondone={(result) => finaliseResearch(n.id, result)}
-              onopenaswebpage={(e) => openAsWebpageNode(e.url, e.fromNodeId)}
-            />
+            {#if ResearchResultNode}
+              <ResearchResultNode
+                engine={(n.config.engine as 'deep' | 'quick') ?? 'deep'}
+                topic={(n.config.topic as string) ?? ''}
+                status={researchStatus[n.id] ?? ((n.config as Record<string, unknown>)?.completedReport ? 'complete' : ((n.outputData as Record<string, unknown>)?.researchStatus as 'pending' | 'running' | 'complete' | 'failed') ?? 'complete')}
+                report={researchReport[n.id] ?? (n.config.completedReport as string) ?? ((n.outputData as Record<string, unknown>)?.researchReport as string) ?? ''}
+                sources={researchSources[n.id] ?? (n.config.completedSources as Array<{ url: string; title: string; domain: string }>) ?? ((n.outputData as Record<string, unknown>)?.researchSources as Array<{ url: string; title: string; domain: string }>) ?? []}
+                durationMs={(n.config.completedDurationMs as number | null) ?? (n.outputData as Record<string, unknown>)?.researchDurationMs as number | undefined}
+                streamUrl={pendingExplorations[n.id]?.streamUrl ?? null}
+                sessionId={(n.config.sessionId as string) ?? (pendingExplorations[n.id]?.sessionId ?? null)}
+                nodeId={n.id}
+                oncancel={() => cancelExplore(n.id)}
+                ondone={(result) => finaliseResearch(n.id, result)}
+                onopenaswebpage={(e) => openAsWebpageNode(e.url, e.fromNodeId)}
+              />
+            {:else}
+              <p class="ghost">{researchResultNodeFailed ? 'Research view unavailable.' : 'Loading research view…'}</p>
+            {/if}
             <div
               class="chat-node-resize"
               title="Drag to resize"
@@ -6423,7 +6468,6 @@
                    Skipped for kinds that already have a hand-crafted inline editor above. -->
               {#if menuShowsConfigPanel(menuNode.type, menuNode.kind)}
                 {@const menuDefinition = getDefinition(menuNode.type)}
-                {@const Panel = getPanel(menuNode.type, menuDefinition)}
                 {@const _upstreamFields = Array.from(new Set([
                   ...computeUpstreamFields(
                     menuNode.id,
@@ -6451,7 +6495,8 @@
                        type must remount the panel, or its internal editor state
                        (JSON drafts, pickers) leaks from one node to the other. -->
                   {#key menuNode.id}
-                    <Panel
+                    <LazyPanel
+                      type={menuNode.type}
                       config={configDraft}
                       onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
                       definition={menuDefinition}

@@ -1,4 +1,5 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
+import { secretsMatch } from '$lib/server/secrets';
 
 export const VNC_ACCESS_COOKIE = '__Secure-sr-vnc-access';
 export const VNC_ACCESS_TTL_SECONDS = 15 * 60;
@@ -29,8 +30,5 @@ export function verifyVncAccessTicket(
     return false;
   }
   const payload = `${match[1]}.${match[2]}`;
-  return timingSafeEqual(
-    Buffer.from(signature(secret, payload), 'hex'),
-    Buffer.from(match[3], 'hex'),
-  );
+  return secretsMatch(signature(secret, payload), match[3]);
 }

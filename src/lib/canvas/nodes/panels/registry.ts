@@ -1,72 +1,4 @@
 import type { Component } from 'svelte';
-import StealthScrapePanel from './StealthScrapePanel.svelte';
-import StealthScrapeLlmPanel from './StealthScrapeLlmPanel.svelte';
-import InteractiveStepPanel from './InteractiveStepPanel.svelte';
-import SiteMapperPanel from './SiteMapperPanel.svelte';
-import CodeExecutePanel from './CodeExecutePanel.svelte';
-import HttpRequestPanel from './HttpRequestPanel.svelte';
-import WhatsAppPanel from './WhatsAppPanel.svelte';
-import LlmCallPanel from './LlmCallPanel.svelte';
-import LlmAgentPanel from './LlmAgentPanel.svelte';
-import GmailSendPanel from './GmailSendPanel.svelte';
-import GmailFetchPanel from './GmailFetchPanel.svelte';
-import GmailReplyPanel from './GmailReplyPanel.svelte';
-import GmailSearchPanel from './GmailSearchPanel.svelte';
-import GmailTriggerPanel from './GmailTriggerPanel.svelte';
-import ConditionalPanel from './ConditionalPanel.svelte';
-import SwitchPanel from './SwitchPanel.svelte';
-import TransformPanel from './TransformPanel.svelte';
-import DataStorePanel from './DataStorePanel.svelte';
-import DedupePanel from './DedupePanel.svelte';
-import DelayPanel from './DelayPanel.svelte';
-import TavilySearchPanel from './TavilySearchPanel.svelte';
-import WebScrapePanel from './WebScrapePanel.svelte';
-import EmailPanel from './EmailPanel.svelte';
-import TextParserPanel from './TextParserPanel.svelte';
-import AccumulatorPanel from './AccumulatorPanel.svelte';
-import MergePanel from './MergePanel.svelte';
-import FileStorePanel from './FileStorePanel.svelte';
-import IntelWritePanel from './IntelWritePanel.svelte';
-import IntelQueryPanel from './IntelQueryPanel.svelte';
-import HomeAssistantPanel from './HomeAssistantPanel.svelte';
-import GmailLabelPanel from './GmailLabelPanel.svelte';
-import ThinkPanel from './ThinkPanel.svelte';
-import ErrorHandlerPanel from './ErrorHandlerPanel.svelte';
-import ValidatorPanel from './ValidatorPanel.svelte';
-import LlmRouterPanel from './LlmRouterPanel.svelte';
-import FileWritePanel from './FileWritePanel.svelte';
-import FileExtractPanel from './FileExtractPanel.svelte';
-import FileTextExtractPanel from './FileTextExtractPanel.svelte';
-import BlogListPanel from './BlogListPanel.svelte';
-import BlogGetPanel from './BlogGetPanel.svelte';
-import BlogCreatePanel from './BlogCreatePanel.svelte';
-import BlogUpdatePanel from './BlogUpdatePanel.svelte';
-import DeepResearchPanel from './DeepResearchPanel.svelte';
-import DeepDivePanel from './DeepDivePanel.svelte';
-import WhoopPanel from './WhoopPanel.svelte';
-import StravaPanel from './StravaPanel.svelte';
-import HealthQueryPanel from './HealthQueryPanel.svelte';
-import QuickAnswerPanel from './QuickAnswerPanel.svelte';
-import ResearchResultPanel from './ResearchResultPanel.svelte';
-import FileBuildPanel from './FileBuildPanel.svelte';
-import FileReadPanel from './FileReadPanel.svelte';
-import FileListPanel from './FileListPanel.svelte';
-import FileDeletePanel from './FileDeletePanel.svelte';
-import LoopPanel from './LoopPanel.svelte';
-import SubWorkflowPanel from './SubWorkflowPanel.svelte';
-import OpenRouterPanel from './OpenRouterPanel.svelte';
-import JkaiPanel from './JkaiPanel.svelte';
-import SiteToolPanel from './SiteToolPanel.svelte';
-import ApiCallPanel from './ApiCallPanel.svelte';
-import ApiIntegrationPanel from './ApiIntegrationPanel.svelte';
-import BuilderChatPanel from './BuilderChatPanel.svelte';
-import BuilderPiPanel from './BuilderPiPanel.svelte';
-import BuildViewPanel from './BuildViewPanel.svelte';
-import BasicConfigForm from './BasicConfigForm.svelte';
-import GenericJsonPanel from './GenericJsonPanel.svelte';
-import AppleCalendarPanel from './AppleCalendarPanel.svelte';
-import ResearchChatPanel from './ResearchChatPanel.svelte';
-import ResearchReportPanel from './ResearchReportPanel.svelte';
 import type { NodeDefinition } from '$lib/workflows/types';
 
 export type PanelProps = {
@@ -92,89 +24,95 @@ export type PanelProps = {
   upstreamFields?: string[];
 };
 
-const specialized: Record<string, Component<PanelProps>> = {
-  'stealth-scrape': StealthScrapePanel,
-  'stealth-scrape-llm': StealthScrapeLlmPanel,
-  'interactive-step': InteractiveStepPanel,
-  'site-mapper': SiteMapperPanel,
-  'code-execute': CodeExecutePanel,
-  'http-request': HttpRequestPanel as unknown as Component<PanelProps>,
-  'whatsapp': WhatsAppPanel as unknown as Component<PanelProps>,
-  'llm-call': LlmCallPanel as unknown as Component<PanelProps>,
-  'llm-agent': LlmAgentPanel as unknown as Component<PanelProps>,
-  'gmail-send': GmailSendPanel as unknown as Component<PanelProps>,
-  'gmail-fetch': GmailFetchPanel as unknown as Component<PanelProps>,
-  'gmail-reply': GmailReplyPanel as unknown as Component<PanelProps>,
-  'gmail-search': GmailSearchPanel as unknown as Component<PanelProps>,
-  'gmail-trigger': GmailTriggerPanel as unknown as Component<PanelProps>,
-  'conditional': ConditionalPanel as unknown as Component<PanelProps>,
-  'switch': SwitchPanel as unknown as Component<PanelProps>,
-  'transform': TransformPanel as unknown as Component<PanelProps>,
-  'data-store': DataStorePanel as unknown as Component<PanelProps>,
-  'dedupe': DedupePanel as unknown as Component<PanelProps>,
-  'delay': DelayPanel as unknown as Component<PanelProps>,
-  'tavily-search': TavilySearchPanel as unknown as Component<PanelProps>,
-  'web-scrape': WebScrapePanel as unknown as Component<PanelProps>,
-  'email': EmailPanel as unknown as Component<PanelProps>,
-  'text-parser': TextParserPanel as unknown as Component<PanelProps>,
-  'accumulator': AccumulatorPanel as unknown as Component<PanelProps>,
-  'merge': MergePanel as unknown as Component<PanelProps>,
-  'file-store': FileStorePanel as unknown as Component<PanelProps>,
-  'intel-write': IntelWritePanel as unknown as Component<PanelProps>,
-  'intel-query': IntelQueryPanel as unknown as Component<PanelProps>,
-  'home-assistant': HomeAssistantPanel as unknown as Component<PanelProps>,
-  'gmail-label': GmailLabelPanel as unknown as Component<PanelProps>,
-  'think': ThinkPanel as unknown as Component<PanelProps>,
-  'error-handler': ErrorHandlerPanel as unknown as Component<PanelProps>,
-  'validator': ValidatorPanel as unknown as Component<PanelProps>,
-  'llm-router': LlmRouterPanel as unknown as Component<PanelProps>,
-  'file-write': FileWritePanel as unknown as Component<PanelProps>,
-  'file-extract': FileExtractPanel as unknown as Component<PanelProps>,
-  'file-text-extract': FileTextExtractPanel as unknown as Component<PanelProps>,
-  'blog-list': BlogListPanel as unknown as Component<PanelProps>,
-  'blog-get': BlogGetPanel as unknown as Component<PanelProps>,
-  'blog-create': BlogCreatePanel as unknown as Component<PanelProps>,
-  'blog-update': BlogUpdatePanel as unknown as Component<PanelProps>,
-  'deep-research': DeepResearchPanel as unknown as Component<PanelProps>,
-  'deep-dive': DeepDivePanel as unknown as Component<PanelProps>,
-  'whoop': WhoopPanel as unknown as Component<PanelProps>,
-  'strava': StravaPanel as unknown as Component<PanelProps>,
-  'health-query': HealthQueryPanel as unknown as Component<PanelProps>,
-  'quick-answer': QuickAnswerPanel as unknown as Component<PanelProps>,
-  'research-result': ResearchResultPanel as unknown as Component<PanelProps>,
-  'file-build': FileBuildPanel as unknown as Component<PanelProps>,
-  'file-read': FileReadPanel as unknown as Component<PanelProps>,
-  'file-list': FileListPanel as unknown as Component<PanelProps>,
-  'file-delete': FileDeletePanel as unknown as Component<PanelProps>,
-  'loop': LoopPanel as unknown as Component<PanelProps>,
-  'sub-workflow': SubWorkflowPanel as unknown as Component<PanelProps>,
-  'openrouter': OpenRouterPanel as unknown as Component<PanelProps>,
-  'jkai': JkaiPanel as unknown as Component<PanelProps>,
-  'site-tool': SiteToolPanel as unknown as Component<PanelProps>,
-  'api-call': ApiCallPanel as unknown as Component<PanelProps>,
-  'api-integration': ApiIntegrationPanel as unknown as Component<PanelProps>,
-  'builder-chat': BuilderChatPanel as unknown as Component<PanelProps>,
-  'builder-pi': BuilderPiPanel as unknown as Component<PanelProps>,
-  'build-view': BuildViewPanel as unknown as Component<PanelProps>,
-  'apple-calendar': AppleCalendarPanel as unknown as Component<PanelProps>,
-  'research-chat': ResearchChatPanel as unknown as Component<PanelProps>,
-  'research-report': ResearchReportPanel as unknown as Component<PanelProps>,
+type PanelModule = { default: Component<PanelProps> };
+
+// Vite turns this into one loader per panel. The former static imports pulled
+// every specialised editor (and its SDKs, widgets and styles) into the canvas
+// route before the inspector was even opened.
+const panelModules = import.meta.glob<PanelModule>([
+  './*.svelte',
+  '!./LazyPanel.svelte',
+]);
+
+const specialized: Record<string, string> = {
+  'stealth-scrape': './StealthScrapePanel.svelte',
+  'stealth-scrape-llm': './StealthScrapeLlmPanel.svelte',
+  'interactive-step': './InteractiveStepPanel.svelte',
+  'site-mapper': './SiteMapperPanel.svelte',
+  'code-execute': './CodeExecutePanel.svelte',
+  'http-request': './HttpRequestPanel.svelte',
+  'whatsapp': './WhatsAppPanel.svelte',
+  'llm-call': './LlmCallPanel.svelte',
+  'llm-agent': './LlmAgentPanel.svelte',
+  'gmail-send': './GmailSendPanel.svelte',
+  'gmail-fetch': './GmailFetchPanel.svelte',
+  'gmail-reply': './GmailReplyPanel.svelte',
+  'gmail-search': './GmailSearchPanel.svelte',
+  'gmail-trigger': './GmailTriggerPanel.svelte',
+  'conditional': './ConditionalPanel.svelte',
+  'switch': './SwitchPanel.svelte',
+  'transform': './TransformPanel.svelte',
+  'data-store': './DataStorePanel.svelte',
+  'dedupe': './DedupePanel.svelte',
+  'delay': './DelayPanel.svelte',
+  'tavily-search': './TavilySearchPanel.svelte',
+  'web-scrape': './WebScrapePanel.svelte',
+  'email': './EmailPanel.svelte',
+  'text-parser': './TextParserPanel.svelte',
+  'accumulator': './AccumulatorPanel.svelte',
+  'merge': './MergePanel.svelte',
+  'file-store': './FileStorePanel.svelte',
+  'intel-write': './IntelWritePanel.svelte',
+  'intel-query': './IntelQueryPanel.svelte',
+  'home-assistant': './HomeAssistantPanel.svelte',
+  'gmail-label': './GmailLabelPanel.svelte',
+  'think': './ThinkPanel.svelte',
+  'error-handler': './ErrorHandlerPanel.svelte',
+  'validator': './ValidatorPanel.svelte',
+  'llm-router': './LlmRouterPanel.svelte',
+  'file-write': './FileWritePanel.svelte',
+  'file-extract': './FileExtractPanel.svelte',
+  'file-text-extract': './FileTextExtractPanel.svelte',
+  'blog-list': './BlogListPanel.svelte',
+  'blog-get': './BlogGetPanel.svelte',
+  'blog-create': './BlogCreatePanel.svelte',
+  'blog-update': './BlogUpdatePanel.svelte',
+  'deep-research': './DeepResearchPanel.svelte',
+  'deep-dive': './DeepDivePanel.svelte',
+  'whoop': './WhoopPanel.svelte',
+  'strava': './StravaPanel.svelte',
+  'health-query': './HealthQueryPanel.svelte',
+  'quick-answer': './QuickAnswerPanel.svelte',
+  'research-result': './ResearchResultPanel.svelte',
+  'file-build': './FileBuildPanel.svelte',
+  'file-read': './FileReadPanel.svelte',
+  'file-list': './FileListPanel.svelte',
+  'file-delete': './FileDeletePanel.svelte',
+  'loop': './LoopPanel.svelte',
+  'sub-workflow': './SubWorkflowPanel.svelte',
+  'openrouter': './OpenRouterPanel.svelte',
+  'jkai': './JkaiPanel.svelte',
+  'site-tool': './SiteToolPanel.svelte',
+  'api-call': './ApiCallPanel.svelte',
+  'api-integration': './ApiIntegrationPanel.svelte',
+  'builder-chat': './BuilderChatPanel.svelte',
+  'builder-pi': './BuilderPiPanel.svelte',
+  'build-view': './BuildViewPanel.svelte',
+  'apple-calendar': './AppleCalendarPanel.svelte',
+  'research-chat': './ResearchChatPanel.svelte',
+  'research-report': './ResearchReportPanel.svelte',
 };
 
 /**
  * Resolution order:
- *   1. specialized panel for this type (if registered)
+ *   1. specialised panel for this type (if registered)
  *   2. BasicConfigForm if the definition declares basicConfig
- *   3. GenericJsonPanel as last-resort
+ *   3. GenericJsonPanel as last resort
  */
-export function getPanel(type: string, definition?: NodeDefinition): Component<PanelProps> {
-  if (specialized[type]) return specialized[type];
-  if (definition?.basicConfig && definition.basicConfig.length > 0) {
-    // BasicConfigForm requires `definition` (non-optional in its props), so its
-    // own typed Component<...> is narrower than Component<PanelProps>. The
-    // resolver only returns it when the caller has a definition to pass, so
-    // this cast is sound at the call site.
-    return BasicConfigForm as unknown as Component<PanelProps>;
-  }
-  return GenericJsonPanel;
+export async function loadPanel(type: string, definition?: NodeDefinition): Promise<Component<PanelProps>> {
+  const path = specialized[type]
+    ?? (definition?.basicConfig?.length ? './BasicConfigForm.svelte' : './GenericJsonPanel.svelte');
+  const load = panelModules[path];
+  if (!load) throw new Error(`Missing canvas panel module: ${path}`);
+  return (await load()).default;
 }
