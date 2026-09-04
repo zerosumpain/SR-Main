@@ -9,7 +9,10 @@
  * the route wires `isWebhookSignatureAuthorized` into its 401 branch.
  */
 
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { secretsMatch } from '$lib/server/secrets';
+
+export { secretsMatch } from '$lib/server/secrets';
 
 /** Legacy raw-secret header, retained only for callers importing the constant.
  *  The route no longer accepts it as authentication. */
@@ -43,19 +46,6 @@ export function getWebhookSecret(trigger: TriggerLike | null | undefined): strin
     if (typeof nested === 'string' && nested) return nested;
   }
   return '';
-}
-
-/**
- * Timing-safe, length-independent comparison of two secrets. Both sides are
- * hashed to a fixed 32-byte digest before comparison so `timingSafeEqual` never
- * throws on a length mismatch and the comparison leaks neither value nor length.
- */
-export function secretsMatch(configured: string, provided: string | null | undefined): boolean {
-  if (!configured) return false;
-  if (typeof provided !== 'string' || provided.length === 0) return false;
-  const a = createHash('sha256').update(configured, 'utf8').digest();
-  const b = createHash('sha256').update(provided, 'utf8').digest();
-  return timingSafeEqual(a, b);
 }
 
 /**

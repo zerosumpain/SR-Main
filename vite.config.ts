@@ -50,7 +50,31 @@ export default defineConfig({
 			buildBase: '/',
 			strategies: 'generateSW',
 			workbox: {
-				globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+				// Precache only the install metadata. Previously this glob captured the
+				// whole site (including canvas/editor chunks) even though this worker can
+				// only control /jkai, producing an 8+ MiB compressed first-install cache.
+				// Immutable JKAI assets are cached as they are actually used instead.
+				// Paths are relative to .svelte-kit/output, not its client child. The
+				// explicit prefix map also prevents the SvelteKit wrapper from appending
+				// its broad client/** and prerendered/** defaults.
+				globPatterns: ['client/jkai-pwa/*.png'],
+				modifyURLPrefix: { 'client/': '/' },
+				cleanupOutdatedCaches: true,
+				runtimeCaching: [
+					{
+						urlPattern: ({ url }) =>
+							url.origin === self.location.origin && url.pathname.startsWith('/_app/immutable/'),
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'jkai-immutable-assets',
+							cacheableResponse: { statuses: [0, 200] },
+							expiration: {
+								maxEntries: 200,
+								maxAgeSeconds: 30 * 24 * 60 * 60,
+							},
+						},
+					},
+				],
 				// JKAI is an authenticated live view. Never answer one of its
 				// navigations with the precached public-site fallback.
 				navigateFallback: null,

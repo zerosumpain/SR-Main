@@ -1803,7 +1803,11 @@ export const workflowNodes = pgTable('workflow_nodes', {
   // version it loaded as `expectedVersion`; a mismatch (e.g. the AI orchestrator
   // edited the node meanwhile) returns 409 so the human edit isn't silently lost.
   version: integer('version').notNull().default(0),
-});
+}, (t) => [
+  // Canvas loads, list aggregates and cascade cleanup are all scoped by the
+  // parent workflow. PostgreSQL does not add an index for a foreign key.
+  index('workflow_nodes_workflow_idx').on(t.workflowId),
+]);
 
 export type WorkflowNode = typeof workflowNodes.$inferSelect;
 export type NewWorkflowNode = typeof workflowNodes.$inferInsert;
@@ -1815,7 +1819,13 @@ export const workflowEdges = pgTable('workflow_edges', {
   targetNodeId: text('target_node_id').notNull().references(() => workflowNodes.id, { onDelete: 'cascade' }),
   sourceHandle: text('source_handle'),
   targetHandle: text('target_handle'),
-});
+}, (t) => [
+  index('workflow_edges_workflow_idx').on(t.workflowId),
+  // These also prevent full edge-table scans when a node cascade checks both
+  // foreign-key directions.
+  index('workflow_edges_source_idx').on(t.sourceNodeId),
+  index('workflow_edges_target_idx').on(t.targetNodeId),
+]);
 
 export type WorkflowEdge = typeof workflowEdges.$inferSelect;
 export type NewWorkflowEdge = typeof workflowEdges.$inferInsert;

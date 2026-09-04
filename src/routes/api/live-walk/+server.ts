@@ -4,7 +4,7 @@ import { writeFile, readFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 
 import { env } from '$env/dynamic/private';
-import { secretsMatch } from '$lib/workflows/webhook-secret';
+import { secretsMatch } from '$lib/server/secrets';
 import { readLimitedJson } from '$lib/server/service-auth';
 import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 

@@ -8,8 +8,6 @@
   import ImageStudio from '$lib/components/blog/ImageStudio.svelte';
   import PostStatsCard from '$lib/components/blog/PostStatsCard.svelte';
   import { goto } from '$app/navigation';
-  import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-  import RichEditor from '$lib/components/RichEditor.svelte';
   import ClaimReviewPanel from '$lib/components/ClaimReviewPanel.svelte';
   import BlogAssistantWidget from '$lib/components/BlogAssistantWidget.svelte';
   import BlogAssistantMarginCallouts from '$lib/components/BlogAssistantMarginCallouts.svelte';
@@ -49,6 +47,31 @@
   let isMarkdown = $derived(contentFormat === 'markdown');
   let converting = $state(false);
   let richApi = $state<RichEditorApi | undefined>();
+  type MarkdownEditorComponent = (typeof import('$lib/components/MarkdownEditor.svelte'))['default'];
+  type RichEditorComponent = (typeof import('$lib/components/RichEditor.svelte'))['default'];
+  let MarkdownEditor = $state<MarkdownEditorComponent | null>(null);
+  let RichEditor = $state<RichEditorComponent | null>(null);
+  let editorLoadError = $state(false);
+
+  // The markdown and rich-text editors have separate, sizeable dependency
+  // graphs. Load only the one required by this post; conversion loads the other
+  // editor on demand without a navigation.
+  $effect(() => {
+    const requestedMarkdown = isMarkdown;
+    const load = requestedMarkdown && !MarkdownEditor
+      ? import('$lib/components/MarkdownEditor.svelte')
+      : !requestedMarkdown && !RichEditor
+        ? import('$lib/components/RichEditor.svelte')
+        : null;
+    if (!load) return;
+    editorLoadError = false;
+    void load
+      .then(({ default: Editor }) => {
+        if (requestedMarkdown) MarkdownEditor = Editor as MarkdownEditorComponent;
+        else RichEditor = Editor as RichEditorComponent;
+      })
+      .catch(() => { editorLoadError = true; });
+  });
 
   // ---------------------------------------------------------------------
   // Blog assistant. Restored 2026-08-19 — commit 708ab5a9 deleted the mount
@@ -792,9 +815,11 @@
         </span>
       {/if}
     </div>
-    {#if isMarkdown}
+    {#if editorLoadError}
+      <p class="muted" role="alert">The editor could not be loaded. Refresh to try again.</p>
+    {:else if isMarkdown && MarkdownEditor}
       <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} voiceCard={data.voiceCard} />
-    {:else}
+    {:else if !isMarkdown && RichEditor}
       <div bind:this={editorContainer} class="editor-host">
         <RichEditor
           {content}
@@ -851,6 +876,8 @@
           onRegenerate={(p, note) => regenerate(p, note)}
         />
       </div>
+    {:else}
+      <p class="muted" aria-live="polite">Loading editor…</p>
     {/if}
   </section>
 

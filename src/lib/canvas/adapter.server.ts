@@ -408,43 +408,72 @@ export async function listCanvasStats(): Promise<CanvasStats> {
 
 /** All canvases (workflows whose name starts with "canvas:"). */
 export async function listCanvases(): Promise<CanvasSummary[]> {
-  const { like } = await import('drizzle-orm');
+  const { like, sql: sqlTag } = await import('drizzle-orm');
   const rows = await db
-    .select()
+    .select({
+      id: workflows.id,
+      name: workflows.name,
+      description: workflows.description,
+      trigger: workflows.trigger,
+      updatedAt: workflows.updatedAt,
+    })
     .from(workflows)
     .where(like(workflows.name, `${SLUG_PREFIX}%`))
     .orderBy(desc(workflows.updatedAt));
 
-  const summaries: CanvasSummary[] = [];
-  for (const w of rows) {
-    const nodeCountRes = await db
-      .select({ n: workflowNodes.id })
+  if (rows.length === 0) return [];
+  const workflowIds = rows.map((row) => row.id);
+
+  // Fetch all summary data in three grouped queries. The previous loop issued
+  // three sequential queries per canvas (1 + 3N total), so the page slowed
+  // linearly with every canvas added.
+  const [nodeCounts, edgeCounts, latestRuns] = await Promise.all([
+    db
+      .select({
+        workflowId: workflowNodes.workflowId,
+        n: sqlTag<number>`count(*)::int`,
+      })
       .from(workflowNodes)
-      .where(eq(workflowNodes.workflowId, w.id));
-    const edgeCountRes = await db
-      .select({ n: workflowEdges.id })
+      .where(inArray(workflowNodes.workflowId, workflowIds))
+      .groupBy(workflowNodes.workflowId),
+    db
+      .select({
+        workflowId: workflowEdges.workflowId,
+        n: sqlTag<number>`count(*)::int`,
+      })
       .from(workflowEdges)
-      .where(eq(workflowEdges.workflowId, w.id));
-    const [latestRun] = await db
-      .select()
+      .where(inArray(workflowEdges.workflowId, workflowIds))
+      .groupBy(workflowEdges.workflowId),
+    db
+      .selectDistinctOn([workflowRuns.workflowId], {
+        workflowId: workflowRuns.workflowId,
+        status: workflowRuns.status,
+        startedAt: workflowRuns.startedAt,
+      })
       .from(workflowRuns)
-      .where(eq(workflowRuns.workflowId, w.id))
-      .orderBy(desc(workflowRuns.startedAt))
-      .limit(1);
+      .where(inArray(workflowRuns.workflowId, workflowIds))
+      .orderBy(workflowRuns.workflowId, desc(workflowRuns.startedAt)),
+  ]);
+
+  const nodeCountByWorkflow = new Map(nodeCounts.map((row) => [row.workflowId, row.n]));
+  const edgeCountByWorkflow = new Map(edgeCounts.map((row) => [row.workflowId, row.n]));
+  const latestRunByWorkflow = new Map(latestRuns.map((row) => [row.workflowId, row]));
+
+  return rows.map((w) => {
+    const latestRun = latestRunByWorkflow.get(w.id);
     const trigger = (w.trigger as { type?: string } | null) ?? {};
-    summaries.push({
+    return {
       slug: w.name.startsWith(SLUG_PREFIX) ? w.name.slice(SLUG_PREFIX.length) : w.name,
       title: w.description || w.name,
       workflowId: w.id,
-      nodeCount: nodeCountRes.length,
-      edgeCount: edgeCountRes.length,
+      nodeCount: nodeCountByWorkflow.get(w.id) ?? 0,
+      edgeCount: edgeCountByWorkflow.get(w.id) ?? 0,
       triggerType: trigger.type ?? 'manual',
       latestRunAt: latestRun?.startedAt ? new Date(latestRun.startedAt).toISOString() : null,
       latestRunStatus: latestRun?.status ?? null,
       updatedAt: new Date(w.updatedAt).toISOString(),
-    });
-  }
-  return summaries;
+    };
+  });
 }
 
 /**

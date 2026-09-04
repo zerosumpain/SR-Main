@@ -1,5 +1,5 @@
 import { Marked } from 'marked';
-import hljs from 'highlight.js';
+import hljs from '$lib/highlight';
 import sanitize from 'sanitize-html';
 import { FONT_FAMILY_STYLE_PATTERN } from './fonts';
 

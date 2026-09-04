@@ -10,7 +10,7 @@
 // Shiki stays the right tool for the canvas/deck components, which render
 // through a component and never meet this sanitiser.
 
-import hljs from 'highlight.js';
+import hljs from '$lib/highlight';
 
 /** Where a code block can be executed, if anywhere. */
 export type RunLane = 'browser' | 'container';

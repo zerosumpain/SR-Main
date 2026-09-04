@@ -11,9 +11,8 @@
 </svelte:head>
 
 <script lang="ts">
-  import { getContext, onMount } from 'svelte';
+  import { getContext, onMount, type Component } from 'svelte';
   import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
-  import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
   import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
@@ -32,6 +31,13 @@
 
   let mounted = $state(false);
   let bgMode = $state<'ecg' | 'biome'>('ecg');
+  let BiomeBackground = $state<Component<{
+    store: BiomeStore;
+    position?: 'fixed' | 'absolute';
+    transparent?: boolean;
+  }> | null>(null);
+  let biomeBackgroundLoading = false;
+  let biomeBackgroundFailed = false;
   // Render the live heartbeat as the glowing line ('line') or as a sweeping
   // ASCII trace ('ascii'). Toggled from the footer, persisted in localStorage.
   let ecgStyle = $state<'line' | 'ascii'>('line');
@@ -41,6 +47,24 @@
     localStorage.setItem('landing-bg', mode);
     window.dispatchEvent(new CustomEvent('landing-bg-change', { detail: { mode } }));
   }
+
+  async function loadBiomeBackground() {
+    if (BiomeBackground || biomeBackgroundLoading || biomeBackgroundFailed) return;
+    biomeBackgroundLoading = true;
+    try {
+      BiomeBackground = (await import('$lib/components/BiomeBackground.svelte')).default;
+    } catch {
+      biomeBackgroundFailed = true;
+    } finally {
+      biomeBackgroundLoading = false;
+    }
+  }
+
+  // Three.js and Threlte are only needed for the optional biome view. Keep the
+  // default ECG landing page free of that dependency graph.
+  $effect(() => {
+    if (mounted && bgMode === 'biome') void loadBiomeBackground();
+  });
 
   function toggleEcgStyle() {
     ecgStyle = ecgStyle === 'ascii' ? 'line' : 'ascii';
@@ -143,7 +167,7 @@
   class="hero-sec relative flex flex-col justify-between overflow-hidden"
   style="min-height: calc(100vh - var(--site-nav-height));"
 >
-  {#if bgMode === 'biome'}
+  {#if bgMode === 'biome' && BiomeBackground}
     <BiomeBackground {store} position="absolute" transparent />
   {:else}
     <div class="absolute inset-0 pointer-events-none">
