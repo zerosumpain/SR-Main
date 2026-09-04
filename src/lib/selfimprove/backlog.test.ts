@@ -44,6 +44,7 @@ vi.mock('$lib/datastore', () => {
 });
 
 import {
+  addBacklogNote,
   addIdeas,
   createBacklogItem,
   foldItems,
@@ -54,6 +55,7 @@ import {
   pickToolWork,
   pickWork,
   removeBacklogItem,
+  removeBacklogNote,
   setEpic,
   setParked,
   setParkedMany,
@@ -62,6 +64,7 @@ import {
   updateBacklogItem,
   MAX_NEW_IDEAS_PER_NIGHT,
 } from './backlog';
+import { MAX_BACKLOG_NOTES } from './grooming';
 import type { BacklogItemData } from './types';
 
 function item(over: Partial<BacklogItemData>): BacklogItemData {
@@ -743,5 +746,115 @@ describe('bulk edits', () => {
     h.records = [{ key: 'a', data: item({ slug: 'a', priority: 3 }) }];
     const res = await setPriorityMany(['a', 'a'], 2);
     expect(res.changed).toEqual(['a']);
+  });
+});
+
+// ── The settled stamp and the note thread (2026-09-04, second pass) ────────
+
+describe('settledAt', () => {
+  function seed(...items: BacklogItemData[]) {
+    h.records = items.map((i) => ({ key: i.slug, data: i }));
+  }
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  it('is stamped when parking takes an item out of the queue', async () => {
+    seed(item({ slug: 'p', title: 'P' }));
+    await setParked('p', true, 'not now');
+    expect(stored('p').settledAt).toBeTruthy();
+    expect(stored('p').status).toBe('abandoned');
+  });
+
+  it('is cleared when the item comes back to open', async () => {
+    // A row carrying both an open status and a settled date is a contradiction
+    // the reconstruction would have to guess its way out of.
+    seed(item({ slug: 'p', title: 'P' }));
+    await setParked('p', true);
+    await setParked('p', false);
+    expect(stored('p').status).toBe('open');
+    expect(stored('p').settledAt).toBeUndefined();
+  });
+
+  it('keeps the FIRST stamp when an already-settled row is touched again', async () => {
+    // Letting a later write move it would walk every settled item forward to
+    // today — the exact `updatedAt` behaviour this field replaces.
+    seed(item({ slug: 'p', title: 'P', status: 'abandoned', settledAt: '2026-07-01T00:00:00.000Z' }));
+    await setParked('p', true, 'again');
+    expect(stored('p').settledAt).toBe('2026-07-01T00:00:00.000Z');
+  });
+
+  it('is stamped on the losers of a fold and not on the survivor', async () => {
+    seed(
+      item({ slug: 'keep', title: 'Bank balance', createdAt: '2026-08-01T00:00:00.000Z' }),
+      item({ slug: 'drop', title: 'Bank balance via TrueLayer', createdAt: '2026-08-02T00:00:00.000Z' }),
+    );
+    const res = await foldItems(['keep', 'drop']);
+    expect(stored(res.survivor).settledAt).toBeUndefined();
+    for (const slug of res.folded) expect(stored(slug).settledAt).toBeTruthy();
+  });
+
+  it('is stamped when an attempt ships or abandons, and not while it is still open', async () => {
+    seed(item({ slug: 'a', title: 'A' }));
+    await markAttempt(item({ slug: 'a', title: 'A' }), { status: 'open', error: 'try again' });
+    expect(stored('a').settledAt).toBeUndefined();
+    await markAttempt(stored('a'), { status: 'shipped' });
+    expect(stored('a').settledAt).toBeTruthy();
+  });
+
+  it('is stamped when the owner removes an item', async () => {
+    seed(item({ slug: 'r', title: 'R' }));
+    await removeBacklogItem('r');
+    expect(stored('r').settledAt).toBeTruthy();
+  });
+});
+
+describe('notes', () => {
+  function seed(...items: BacklogItemData[]) {
+    h.records = items.map((i) => ({ key: i.slug, data: i }));
+  }
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  it('appends a note without touching anything else on the item', async () => {
+    seed(item({ slug: 'n', title: 'N', priority: 2, attempts: 3, lastError: 'boom' }));
+    await addBacklogNote('n', '  Ask whether TrueLayer covers joint accounts.  ');
+    const after = stored('n');
+    expect(after.notes).toHaveLength(1);
+    expect(after.notes?.[0].text).toBe('Ask whether TrueLayer covers joint accounts.');
+    expect(after.notes?.[0].author).toBe('owner');
+    expect(after.priority).toBe(2);
+    expect(after.attempts).toBe(3);
+    expect(after.lastError).toBe('boom');
+  });
+
+  it('refuses an empty note rather than storing a blank row', async () => {
+    seed(item({ slug: 'n', title: 'N' }));
+    await expect(addBacklogNote('n', '   ')).rejects.toThrow(/needs some text/);
+  });
+
+  it('removes one note by id and leaves the rest', async () => {
+    seed(item({ slug: 'n', title: 'N' }));
+    await addBacklogNote('n', 'first');
+    await addBacklogNote('n', 'second');
+    const id = stored('n').notes![0].id;
+    await removeBacklogNote('n', id);
+    expect(stored('n').notes?.map((x) => x.text)).toEqual(['second']);
+  });
+
+  it('reports a note it cannot find instead of silently doing nothing', async () => {
+    seed(item({ slug: 'n', title: 'N' }));
+    await expect(removeBacklogNote('n', 'nope')).rejects.toThrow(/no note/);
+  });
+
+  it('keeps the recent end of a long thread', async () => {
+    seed(item({ slug: 'n', title: 'N', notes: Array.from({ length: MAX_BACKLOG_NOTES }, (_, i) => ({
+      id: `old-${i}`,
+      at: '2026-08-01T00:00:00.000Z',
+      author: 'owner' as const,
+      text: `old ${i}`,
+    })) }));
+    await addBacklogNote('n', 'the newest thing');
+    const notes = stored('n').notes!;
+    expect(notes).toHaveLength(MAX_BACKLOG_NOTES);
+    expect(notes[notes.length - 1].text).toBe('the newest thing');
+    expect(notes[0].text).toBe('old 1');
   });
 });

@@ -1011,6 +1011,52 @@ export const POST: RequestHandler = async ({ request }) => {
       }
 
       /**
+       * Leave a note on one item.
+       *
+       * The author is stamped HERE as `owner` and never read out of the body,
+       * the same rule `coerceSource` follows for intake: a request must not be
+       * able to sign its content as the model when a person typed it.
+       */
+      case 'backlog_note': {
+        const slug = str('slug');
+        const text = str('text');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        if (!text) return json({ error: 'a note needs some text' }, { status: 400 });
+        const { addBacklogNote } = await import('$lib/selfimprove/backlog');
+        const item = await addBacklogNote(slug, text, 'owner');
+        return json({ ok: true, slug, notes: item.notes ?? [] });
+      }
+
+      /**
+       * Read the thread on one item.
+       *
+       * Notes are NOT on the board payload. The board already ships 414 KB for
+       * 455 items, and note bodies have no per-item bound the way every other
+       * field does — one item with a long argument on it would be carried by
+       * every page load of the room. They are fetched when the panel that
+       * shows them opens.
+       */
+      case 'backlog_notes': {
+        const slug = str('slug');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        const { getBacklogItem } = await import('$lib/selfimprove/backlog');
+        const item = await getBacklogItem(slug);
+        if (!item) return json({ error: `no backlog item “${slug}”` }, { status: 404 });
+        return json({ ok: true, slug, notes: item.notes ?? [] });
+      }
+
+      /** Delete one note. Nothing else on the item moves. */
+      case 'backlog_note_remove': {
+        const slug = str('slug');
+        const id = str('id');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        if (!id) return json({ error: 'id is required' }, { status: 400 });
+        const { removeBacklogNote } = await import('$lib/selfimprove/backlog');
+        const item = await removeBacklogNote(slug, id);
+        return json({ ok: true, slug, notes: item.notes ?? [] });
+      }
+
+      /**
        * Remove a feature from the board. The datastore row becomes a hidden
        * tombstone instead of being hard-deleted, so the proposal engine cannot
        * recreate it tomorrow with its attempt history erased.

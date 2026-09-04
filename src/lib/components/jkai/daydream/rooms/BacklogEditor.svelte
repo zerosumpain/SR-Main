@@ -19,7 +19,7 @@
     renderBacklogBrief,
     type GroomingModelResult,
   } from '$lib/selfimprove/grooming';
-  import type { BacklogGroomingData } from '$lib/selfimprove/types';
+  import type { BacklogGroomingData, BacklogNote } from '$lib/selfimprove/types';
 
   interface Props {
     item: WorkItem | null;
@@ -31,7 +31,7 @@
   const actionable = $derived(item == null || item.actionable);
   const tone = $derived<BoardTone>(item ? STAGE_META[item.stage].tone : 'action');
 
-  type Step = 'brief' | 'groom' | 'review';
+  type Step = 'brief' | 'groom' | 'discuss' | 'review';
   type Turn = { role: 'user' | 'assistant'; content: string };
 
   let seeded = $state(false);
@@ -51,6 +51,75 @@
   let error = $state<string | null>(null);
   let confirmRemove = $state(false);
 
+  // ── The thread ──────────────────────────────────────────────────────────
+  // Notes are fetched rather than read off the board item: the board payload
+  // is already 414 KB for 455 rows, and a note body is the one field with no
+  // per-item bound, so carrying them on every page load of the room would be
+  // paid by every visit for the benefit of one panel.
+  let notes = $state<BacklogNote[] | null>(null);
+  let notesBusy = $state(false);
+  let noteDraft = $state('');
+
+  async function loadNotes() {
+    if (!item || notesBusy) return;
+    notesBusy = true;
+    const result = await postThought<{ notes: BacklogNote[] }>({ action: 'backlog_notes', slug: item.slug });
+    notesBusy = false;
+    if (result.ok) notes = result.out.notes;
+    else {
+      // An empty list and a list that could not be read are different things,
+      // and a panel showing "no notes yet" over a failed read is the same
+      // class of lie as a strip of measured zeros over a broken load.
+      notes = null;
+      error = result.error ?? 'the notes could not be read';
+    }
+  }
+
+  async function addNote() {
+    const text = noteDraft.trim();
+    if (!item || !text) return;
+    notesBusy = true;
+    error = null;
+    const result = await postThought<{ notes: BacklogNote[] }>({
+      action: 'backlog_note',
+      slug: item.slug,
+      text,
+    });
+    notesBusy = false;
+    if (!result.ok) {
+      error = result.error ?? 'the note was not saved';
+      return;
+    }
+    notes = result.out.notes;
+    noteDraft = '';
+    // The card and the list show a note count, so the room behind this panel
+    // is now stale by one.
+    await invalidateAll();
+  }
+
+  async function deleteNote(id: string) {
+    if (!item) return;
+    notesBusy = true;
+    error = null;
+    const result = await postThought<{ notes: BacklogNote[] }>({
+      action: 'backlog_note_remove',
+      slug: item.slug,
+      id,
+    });
+    notesBusy = false;
+    if (!result.ok) {
+      error = result.error ?? 'the note was not removed';
+      return;
+    }
+    notes = result.out.notes;
+    await invalidateAll();
+  }
+
+  function when(iso: string): string {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : `${ago(iso)} · ${d.toLocaleString('en-GB')}`;
+  }
+
   const KIND_HELP: Readonly<Record<BacklogKind, string>> = {
     tool: 'A small runtime capability the toolsmith can author and smoke-test.',
     feature: 'A repository change handed to the gated autonomous build engine.',
@@ -69,6 +138,10 @@
     priority = item?.priority ?? 3;
     draft = item?.grooming ?? null;
     model = item?.grooming?.modelId ?? null;
+    // Resumed, not restarted. Before this was persisted, closing the panel
+    // threw away every question the model had asked and every answer given to
+    // it, so grooming one item across two sittings was impossible.
+    conversation = item?.grooming?.conversation ?? [];
     seeded = true;
   });
 
@@ -105,6 +178,7 @@
   function go(stepTo: Step) {
     error = null;
     if (stepTo === 'review') ensureDraft();
+    if (stepTo === 'discuss' && notes == null && !notesBusy) void loadNotes();
     step = stepTo;
   }
 
@@ -173,7 +247,11 @@
       detail: detail.trim(),
       kind,
       priority,
-      ...(includeGrooming && draft ? { grooming: draft } : {}),
+      // The thread rides with the brief rather than in a field of its own:
+      // `updateBacklogItem` only writes `grooming` when it is given one, so a
+      // "save brief only" cannot silently drop a conversation, and the
+      // normaliser bounds the length in exactly one place.
+      ...(includeGrooming && draft ? { grooming: { ...draft, conversation } } : {}),
     });
     if (result.ok) {
       await invalidateAll();
@@ -252,15 +330,23 @@
       </p>
     </div>
   {:else}
-    <nav class="journey" aria-label="Feature editor steps">
+    <nav class="journey" class:with-discuss={!creating} aria-label="Feature editor steps">
       <button type="button" class:active={step === 'brief'} onclick={() => go('brief')}>
         <span>1</span><b>Brief</b><small>Frame the need</small>
       </button>
       <button type="button" class:active={step === 'groom'} onclick={() => go('groom')}>
         <span>2</span><b>AI groom</b><small>Question and refine</small>
       </button>
+      {#if !creating}
+        <!-- Only on a saved item: a note is written against a slug, and a
+             feature that has not been added yet does not have one. -->
+        <button type="button" class:active={step === 'discuss'} onclick={() => go('discuss')}>
+          <span>3</span><b>Discuss</b>
+          <small>{item?.noteCount ? `${item.noteCount} note${item.noteCount === 1 ? '' : 's'}` : 'Leave a note'}</small>
+        </button>
+      {/if}
       <button type="button" class:active={step === 'review'} onclick={() => go('review')}>
-        <span>3</span><b>Review</b><small>Approve the build contract</small>
+        <span>{creating ? 3 : 4}</span><b>Review</b><small>Approve the build contract</small>
       </button>
     </nav>
 
@@ -414,6 +500,70 @@
           {/if}
         </aside>
       </section>
+    {:else if step === 'discuss'}
+      <section class="step-pane discuss-pane" aria-labelledby="discuss-heading">
+        <div class="section-heading">
+          <p class="eyebrow">Step 3 · your own words</p>
+          <h2 id="discuss-heading">What do you want to say about this?</h2>
+          <p>
+            Everything else on this record is a measurement or a model output — attempts,
+            failures, a generated brief. This is the one part that is yours: a question to
+            come back to, a constraint the model cannot know, the reason it is still here.
+          </p>
+        </div>
+
+        <div class="thread" aria-live="polite">
+          {#if notes == null}
+            <p class="thread-empty">{notesBusy ? 'Reading the thread…' : 'The thread could not be read.'}</p>
+          {:else if notes.length === 0}
+            <p class="thread-empty">Nothing said about this yet.</p>
+          {:else}
+            {#each notes as note (note.id)}
+              <article class="note-row">
+                <header>
+                  <strong>{note.author === 'owner' ? 'You' : 'Model'}</strong>
+                  <span>{when(note.at)}</span>
+                  <button
+                    class="clean-button quiet"
+                    type="button"
+                    disabled={notesBusy}
+                    aria-label="Delete this note"
+                    onclick={() => deleteNote(note.id)}
+                  >Delete</button>
+                </header>
+                <p>{note.text}</p>
+              </article>
+            {/each}
+          {/if}
+        </div>
+
+        <div class="composer">
+          <label for="note-draft">Add a note</label>
+          <textarea
+            id="note-draft"
+            class="control"
+            bind:value={noteDraft}
+            rows="4"
+            maxlength="2000"
+            placeholder="Why this matters, what it must not do, what you decided and why…"
+          ></textarea>
+          <div class="composer-foot">
+            <span>{noteDraft.length}/2000</span>
+            <button
+              class="clean-button primary"
+              type="button"
+              disabled={notesBusy || !noteDraft.trim()}
+              onclick={addNote}
+            >{notesBusy ? 'Saving…' : 'Save note'}</button>
+          </div>
+        </div>
+
+        <p class="thread-note">
+          A note is saved the moment you press the button — it does not wait for the
+          contract below, and it never changes the queue position, the attempt history or
+          what a build lane is handed.
+        </p>
+      </section>
     {:else}
       {@const g = ensureDraft()}
       <section class="step-pane review-pane" aria-labelledby="review-heading">
@@ -522,6 +672,9 @@
         {:else if step === 'groom'}
           <button class="clean-button" type="button" disabled={groomingBusy} onclick={() => go('brief')}>← Back to brief</button>
           {#if draft}<button class="clean-button primary" type="button" disabled={groomingBusy} onclick={applyModelDraft}>Apply draft and review →</button>{/if}
+        {:else if step === 'discuss'}
+          <button class="clean-button" type="button" disabled={notesBusy} onclick={() => go('groom')}>← Back to grooming</button>
+          <button class="clean-button primary" type="button" disabled={notesBusy} onclick={() => go('review')}>Review the contract →</button>
         {:else}
           <button class="clean-button" type="button" disabled={saving} onclick={() => go(draft?.modelId === 'manual' ? 'brief' : 'groom')}>← Back</button>
           <button class="clean-button primary" type="button" disabled={saving} onclick={() => save(true)}>{saving ? 'Saving contract…' : creating ? 'Approve and add to backlog' : 'Approve and save contract'}</button>
@@ -540,6 +693,70 @@
     grid-template-columns: repeat(3, 1fr);
     border: 1px solid var(--line-hair);
     margin-bottom: 22px;
+  }
+  .journey.with-discuss {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* ── the thread ───────────────────────────────────────────────────────── */
+  .discuss-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .thread {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .thread-empty {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.05em;
+    color: var(--text-ghost);
+    margin: 0;
+    padding: 18px 0;
+    border-top: 1px solid var(--line-hair);
+  }
+  .note-row {
+    border: 1px solid var(--line-hair);
+    border-left: 3px solid var(--accent-ink);
+    padding: 12px 14px;
+    background: var(--card-bg);
+  }
+  .note-row header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.05em;
+    color: var(--text-ghost);
+  }
+  .note-row header strong {
+    color: var(--accent-ink);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .note-row header button {
+    margin-left: auto;
+  }
+  .note-row p {
+    margin: 8px 0 0;
+    font-size: var(--fs-body-sm);
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    text-wrap: pretty;
+  }
+  .thread-note {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.65;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0;
   }
   .journey button {
     display: grid;

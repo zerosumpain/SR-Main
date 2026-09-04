@@ -20,12 +20,13 @@ import {
   errMsg,
   slugifyIdea,
   type BacklogItemData,
+  type BacklogNote,
   type BacklogStatus,
 } from './types';
 // The channel vocabulary lives in the pure module — see `IDEA_SOURCES` there
 // for why it cannot live in `./types`.
 import { BACKLOG_KINDS, IDEA_SOURCES, type BacklogKind, type IdeaSource } from './board';
-import { acceptGrooming } from './grooming';
+import { MAX_BACKLOG_NOTES, acceptGrooming, normaliseNote } from './grooming';
 
 /** An idea as proposed by a phase, before it becomes a record. */
 export interface IdeaInput {
@@ -87,6 +88,30 @@ export async function listBacklog(status?: BacklogStatus): Promise<BacklogItemDa
 
 async function put(item: BacklogItemData): Promise<void> {
   await upsertRecord(COLLECTIONS.backlog, { key: item.slug, data: asData(item) }, SYSTEM_ACTOR);
+}
+
+/**
+ * Stamp — or clear — the date a row actually settled.
+ *
+ * Called on EVERY status transition rather than at each call site, because the
+ * one thing that must not happen is a settle path that forgets: a row with no
+ * `settledAt` silently falls back to `updatedAt` in the burndown, which is the
+ * inaccuracy this field exists to remove.
+ *
+ * The first stamp wins. Re-parking an already-parked item, or a second failed
+ * attempt on a shipped row, is not a new settlement, and letting it rewrite the
+ * date would walk every settled item forward to today — the exact behaviour of
+ * `updatedAt` that this replaces.
+ */
+function stampSettled(next: BacklogItemData, at: string): BacklogItemData {
+  if (next.status === 'open') {
+    // Coming back to open. A row carrying both an open status and a settled
+    // date is a contradiction, and the reconstruction would have to guess.
+    delete next.settledAt;
+    return next;
+  }
+  if (!next.settledAt) next.settledAt = at;
+  return next;
 }
 
 /**
@@ -463,6 +488,50 @@ export async function removeBacklogItem(slug: string): Promise<BacklogItemData> 
     parkedReason: item.status === 'shipped' ? item.parkedReason : 'Removed from the backlog by the owner',
     updatedAt: now,
   };
+  await put(stampSettled(next, now));
+  return next;
+}
+
+/**
+ * Leave a note on one item.
+ *
+ * The one field on a backlog record that is neither a measurement nor a model
+ * output. Everything else a person can change here is a property of the work —
+ * its priority, its kind, its brief; this is what somebody said ABOUT it, and
+ * it is what makes an item something that can be discussed across two sittings
+ * rather than re-derived each time the editor opens.
+ *
+ * Notes are additive JSON on the record, so no migration. Oldest are dropped
+ * first at the cap: a thread that has run long is worth its recent end.
+ *
+ * `updatedAt` moves, following the datastore convention rather than writing
+ * around it. That is safe only because the burndown reads `settledAt` for a
+ * settled row — an open row's `updatedAt` dates nothing the chart draws.
+ */
+export async function addBacklogNote(
+  slug: string,
+  text: string,
+  author: BacklogNote['author'] = 'owner',
+): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const now = new Date().toISOString();
+  const note = normaliseNote({ text }, author, now);
+  if (!note) throw new Error('a note needs some text');
+  const next: BacklogItemData = {
+    ...item,
+    notes: [...(item.notes ?? []), note].slice(-MAX_BACKLOG_NOTES),
+    updatedAt: now,
+  };
+  await put(next);
+  return next;
+}
+
+/** Remove one note by id. Nothing else on the item moves. */
+export async function removeBacklogNote(slug: string, id: string): Promise<BacklogItemData> {
+  const item = await mustGet(slug);
+  const notes = (item.notes ?? []).filter((n) => n.id !== id);
+  if (notes.length === (item.notes ?? []).length) throw new Error(`no note ${id} on “${slug}”`);
+  const next: BacklogItemData = { ...item, notes, updatedAt: new Date().toISOString() };
   await put(next);
   return next;
 }
@@ -560,10 +629,11 @@ export async function setParked(
   if (item.status === 'shipped') {
     throw new Error(`“${item.title.slice(0, 80)}” has already shipped — it cannot be parked`);
   }
+  const now = new Date().toISOString();
   const next: BacklogItemData = {
     ...item,
     status: parked ? 'abandoned' : 'open',
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   };
   if (parked) {
     if (reason) next.parkedReason = reason.slice(0, 300);
@@ -572,7 +642,7 @@ export async function setParked(
     delete next.parkedReason;
     delete next.foldedInto;
   }
-  await put(next);
+  await put(stampSettled(next, now));
   return next;
 }
 
@@ -669,13 +739,18 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
   const now = new Date().toISOString();
 
   for (const l of losers) {
-    await put({
-      ...l,
-      status: 'abandoned',
-      foldedInto: survivor.slug,
-      parkedReason: `Folded into “${survivor.title.slice(0, 120)}”`,
-      updatedAt: now,
-    });
+    await put(
+      stampSettled(
+        {
+          ...l,
+          status: 'abandoned',
+          foldedInto: survivor.slug,
+          parkedReason: `Folded into “${survivor.title.slice(0, 120)}”`,
+          updatedAt: now,
+        },
+        now,
+      ),
+    );
   }
   await put({
     ...survivor,
@@ -693,6 +768,7 @@ export async function markAttempt(
   item: BacklogItemData,
   outcome: { status: BacklogStatus; error?: string; runId?: string; prUrl?: string },
 ): Promise<void> {
+  const now = new Date().toISOString();
   const next: BacklogItemData = {
     ...item,
     status: outcome.status,
@@ -700,10 +776,10 @@ export async function markAttempt(
     lastError: outcome.error ? outcome.error.slice(0, 500) : undefined,
     lastAttemptRunId: outcome.runId,
     prUrl: outcome.prUrl ?? item.prUrl,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   };
   try {
-    await put(next);
+    await put(stampSettled(next, now));
   } catch (err) {
     console.error('[selfimprove] markAttempt failed:', errMsg(err));
   }

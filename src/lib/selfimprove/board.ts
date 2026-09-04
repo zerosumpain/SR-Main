@@ -220,6 +220,28 @@ export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: st
 export const BACKLOG_KINDS = ['tool', 'feature', 'source', 'watch', 'engine'] as const;
 export type BacklogKind = (typeof BACKLOG_KINDS)[number];
 
+/**
+ * What each kind is called on screen, and the one line saying what it costs.
+ *
+ * The KIND is the category a person thinks in ("show me the data sources"),
+ * and it is not the same set as the LANE: `feature` and `news_source` both
+ * run in the `build` lane, so filtering by lane cannot ask for features
+ * alone. Both filters exist because both questions get asked.
+ */
+export const KIND_META: Readonly<Record<BacklogKind, { label: string; cost: string }>> = {
+  tool: { label: 'Tool', cost: 'authored and smoke-tested in one night' },
+  feature: { label: 'Feature', cost: 'a repo build — the expensive lane' },
+  source: { label: 'Source', cost: 'catalogued and probed; brings new data' },
+  watch: { label: 'Watch', cost: 'one workflow on a schedule' },
+  engine: { label: 'Engine', cost: 'about Daydream itself; never auto-built' },
+};
+
+/** A kind this build does not know about is shown as itself rather than
+ *  relabelled — the same rule the intake channel follows. */
+export function kindLabel(kind: string): string {
+  return KIND_META[kind as BacklogKind]?.label ?? kind;
+}
+
 export interface WorkItem {
   /** Unique across both sources — `backlog:<slug>` or `capability:<slug>`. */
   id: string;
@@ -281,6 +303,16 @@ export interface WorkItem {
   /** Capability leads only. */
   score: number | null;
   evidence: string[];
+  /** How many notes a person has left on it, and when the last one landed.
+   *  The count rather than the notes: a card renders a number, and shipping
+   *  every note body to the browser would add the one field on the record
+   *  with no length bound per item. The editor loads them from `grooming`'s
+   *  sibling field on the record it already has. */
+  noteCount: number;
+  lastNoteAt: string | null;
+  /** When it actually settled, or null while it is open. `undefined` on the
+   *  record means it settled before the field existed — see `settleDate`. */
+  settledAt: string | null;
   /** Whether the owner may reprioritise / move / park it from the board.
    *  Capability leads are ruled on the appetite board, which carries their
    *  evidence and score decomposition, so the board does not duplicate that. */
@@ -323,7 +355,24 @@ export interface BoardInput {
    * everything, which is what the tests do.
    */
   settledLimit?: number | null;
+  /** Days of burndown to reconstruct. Defaults to `DEFAULT_BURNDOWN_DAYS`. */
+  burndownDays?: number;
+  /** Injected so a test can fix the clock. */
+  now?: number;
 }
+
+/**
+ * Three months of daily points.
+ *
+ * Long enough for a trend to be a trend, and the chart narrows it further
+ * from the client — 90 numbers is nothing on a payload already measured in
+ * hundreds of kilobytes, and slicing an array the browser already has beats a
+ * round trip for a control somebody will press three times.
+ */
+export const DEFAULT_BURNDOWN_DAYS = 90;
+
+/** The ranges the chart offers. Descending, longest first. */
+export const BURNDOWN_RANGES = [90, 60, 30] as const;
 
 export interface BoardTotals {
   all: number;
@@ -357,8 +406,28 @@ export interface BoardView {
    *  it is hiding. The component counts the visible rows itself. */
   counts: Record<WorkStage, number>;
   totals: BoardTotals;
+  /** The standing queue over time. On the view for the same reason `inflow` and
+   *  `totals` are: it is computed before `trimSettled`, and a curve drawn after
+   *  the trim is missing exactly the settled rows that make it slope. */
+  burndown: BurndownView;
   error: string | null;
 }
+
+/** An empty burndown, for the failed-read path. Same reason `EMPTY_BOARD`
+ *  exists: a strip drawn over a failure must not print measured zeros. */
+export const EMPTY_BURNDOWN: BurndownView = {
+  windowDays: 0,
+  days: [],
+  openNow: 0,
+  openThen: 0,
+  addedPerWeek: 0,
+  settledPerWeek: 0,
+  netPerWeek: 0,
+  outlook: 'level',
+  daysToClear: null,
+  dated: { recorded: 0, inferred: 0 },
+  truncated: false,
+};
 
 export const EMPTY_BOARD: BoardView = {
   items: [],
@@ -372,6 +441,7 @@ export const EMPTY_BOARD: BoardView = {
     unattributed: 0,
   },
   counts: { proposed: 0, accepted: 0, building: 0, verifying: 0, live: 0, parked: 0 },
+  burndown: EMPTY_BURNDOWN,
   totals: {
     all: 0,
     open: 0,
@@ -566,6 +636,9 @@ export function buildBoard(input: BoardInput): BoardView {
       intake: coerceIntake(b.source),
       score: null,
       evidence: [],
+      noteCount: b.notes?.length ?? 0,
+      lastNoteAt: b.notes?.length ? (b.notes[b.notes.length - 1].at ?? null) : null,
+      settledAt: b.status === 'open' ? null : (b.settledAt ?? null),
       actionable: true,
     });
   }
@@ -613,6 +686,9 @@ export function buildBoard(input: BoardInput): BoardView {
       intake: null,
       score: c.score,
       evidence: c.evidence ?? [],
+      noteCount: 0,
+      lastNoteAt: null,
+      settledAt: null,
       actionable: false,
     });
   }
@@ -622,11 +698,13 @@ export function buildBoard(input: BoardInput): BoardView {
   // Every one of these runs over the FULL population, before the trim below.
   const totals = summarise(items);
   const counts = countByStage(items);
-  const inflow = summariseInflow(items);
+  const now = input.now ?? Date.now();
+  const inflow = summariseInflow(items, 30, now);
+  const burndown = summariseBurndown(items, input.burndownDays ?? DEFAULT_BURNDOWN_DAYS, now);
 
   const trimmed = trimSettled(items, input.settledLimit ?? null);
 
-  return { items: trimmed, counts, totals, inflow, error: null };
+  return { items: trimmed, counts, totals, inflow, burndown, error: null };
 }
 
 /** Newest settled work first, capped. Open work is never trimmed. */
@@ -655,6 +733,59 @@ export function sortForBoard(items: WorkItem[]): WorkItem[] {
       b.attempts - a.attempts ||
       (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''),
   );
+}
+
+/**
+ * The orders a person grooming the queue actually wants.
+ *
+ * `queue` is `sortForBoard` — what the engine will reach for next, and the
+ * default everywhere. The rest exist because the board's own order answers one
+ * question and a grooming session asks others: what arrived last, what has been
+ * sitting longest, what keeps failing, what is nearly ready to hand over.
+ */
+export const SORT_MODES = ['queue', 'newest', 'oldest', 'attempts', 'readiness', 'notes'] as const;
+export type SortMode = (typeof SORT_MODES)[number];
+
+export const SORT_META: Readonly<Record<SortMode, string>> = {
+  queue: 'pick order',
+  newest: 'newest first',
+  oldest: 'longest waiting',
+  attempts: 'most attempts',
+  readiness: 'best groomed',
+  notes: 'most discussed',
+};
+
+/** 0 when an item has no brief, so `readiness` sorts the ungroomed last
+ *  rather than mixing them through the middle on a missing field. */
+export function readinessScore(i: WorkItem): number {
+  return i.grooming?.readiness.score ?? 0;
+}
+
+function byDate(a: string | null | undefined, b: string | null | undefined): number {
+  return (b ?? '').localeCompare(a ?? '');
+}
+
+/**
+ * One of the orders above. Never mutates its input — the board and the list
+ * render the same array and a sort in place would reorder the other one.
+ */
+export function sortItems(items: WorkItem[], mode: SortMode): WorkItem[] {
+  if (mode === 'queue') return sortForBoard(items);
+  const copy = [...items];
+  switch (mode) {
+    case 'newest':
+      return copy.sort((a, b) => byDate(a.createdAt, b.createdAt));
+    case 'oldest':
+      return copy.sort((a, b) => byDate(b.createdAt, a.createdAt));
+    case 'attempts':
+      return copy.sort((a, b) => b.attempts - a.attempts || a.priority - b.priority);
+    case 'readiness':
+      return copy.sort((a, b) => readinessScore(b) - readinessScore(a) || a.priority - b.priority);
+    case 'notes':
+      return copy.sort((a, b) => b.noteCount - a.noteCount || byDate(a.lastNoteAt, b.lastNoteAt));
+    default:
+      return copy;
+  }
 }
 
 export function countByStage(items: WorkItem[]): Record<WorkStage, number> {
@@ -692,20 +823,60 @@ export function summarise(items: WorkItem[]): BoardTotals {
 // Client-side filtering — exported so it is tested, not asserted by screenshot
 // ---------------------------------------------------------------------------
 
-export type BoardFlag = 'newdata' | 'served' | 'failed' | 'untried' | 'folded';
+export type BoardFlag =
+  | 'newdata'
+  | 'served'
+  | 'failed'
+  | 'untried'
+  | 'folded'
+  /** Has an accepted structured brief — the ones a lane can be handed. */
+  | 'groomed'
+  /** Open and has no brief at all. The pile grooming exists to work through. */
+  | 'ungroomed'
+  /** Somebody has said something about it. */
+  | 'noted';
 
 export interface BoardFilter {
   lanes: ReadonlyArray<WorkLane>;
   flags: ReadonlyArray<BoardFlag>;
   /** Intake channels. A capability lead has none, so it never matches one. */
   sources: ReadonlyArray<IdeaSource>;
+  /** The CATEGORY — tool, feature, source, watch, engine. Not the lane: two
+   *  kinds share the `build` lane, so lane cannot answer "only features". */
+  kinds: ReadonlyArray<string>;
+  /** 1..5. The field `pickWork` ranks on, and the one 293 of 413 open items
+   *  were tied on — being able to filter TO a priority is what makes breaking
+   *  that tie a job somebody can sit down and do. */
+  priorities: ReadonlyArray<number>;
   query: string;
 }
 
-export const EMPTY_FILTER: BoardFilter = { lanes: [], flags: [], sources: [], query: '' };
+export const EMPTY_FILTER: BoardFilter = {
+  lanes: [],
+  flags: [],
+  sources: [],
+  kinds: [],
+  priorities: [],
+  query: '',
+};
 
-export function matchesFilter(item: WorkItem, f: BoardFilter): boolean {
+/**
+ * Tolerate a partial filter.
+ *
+ * Every caller here passes a whole one, but `applyFilter` is also the function
+ * a test or a future surface reaches for with two fields set. A missing array
+ * must mean "not filtering on that", never a crash on `.length` — the shape of
+ * this object has now grown twice.
+ */
+export function fullFilter(f: Partial<BoardFilter>): BoardFilter {
+  return { ...EMPTY_FILTER, ...f };
+}
+
+export function matchesFilter(item: WorkItem, filter: Partial<BoardFilter>): boolean {
+  const f = fullFilter(filter);
   if (f.lanes.length && !f.lanes.includes(item.lane)) return false;
+  if (f.kinds.length && !f.kinds.includes(item.kind)) return false;
+  if (f.priorities.length && !f.priorities.includes(item.priority)) return false;
   if (f.sources.length && (item.intake == null || !f.sources.includes(item.intake))) return false;
   if (f.query) {
     const q = f.query.toLowerCase();
@@ -725,12 +896,19 @@ export function matchesFilter(item: WorkItem, f: BoardFilter): boolean {
     // would then disagree with the "never once attempted" tile inches above it.
     if (flag === 'untried' && (item.attempts !== 0 || isSettled(item.stage))) return false;
     if (flag === 'folded' && !item.foldedCount) return false;
+    if (flag === 'groomed' && !item.grooming) return false;
+    // Open AND unbriefed. A shipped row without a brief is not work waiting to
+    // be groomed, and counting it would make the chip disagree with the pile
+    // the grooming step actually draws from.
+    if (flag === 'ungroomed' && (item.grooming != null || isSettled(item.stage))) return false;
+    if (flag === 'noted' && item.noteCount === 0) return false;
   }
   return true;
 }
 
-export function applyFilter(items: WorkItem[], f: BoardFilter): WorkItem[] {
-  return items.filter((i) => matchesFilter(i, f));
+export function applyFilter(items: WorkItem[], f: Partial<BoardFilter>): WorkItem[] {
+  const full = fullFilter(f);
+  return items.filter((i) => matchesFilter(i, full));
 }
 
 // ---------------------------------------------------------------------------
@@ -833,5 +1011,202 @@ export function summariseInflow(items: WorkItem[], windowDays = 30, now = Date.n
     standing,
     ratio: drained > 0 ? Math.round((intake / drained) * 10) / 10 : null,
     unattributed: items.filter((i) => i.intake === 'unattributed').length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Burndown — the shape of the queue over time, reconstructed
+// ---------------------------------------------------------------------------
+
+/**
+ * When a row actually left the queue, or null while it is still in it.
+ *
+ * Two dates, and the difference matters. `settledAt` is stamped on the
+ * transition by `setParked`, `foldItems`, `removeBacklogItem` and
+ * `markAttempt`, and is the truth. `updatedAt` is what every row settled
+ * before that field existed has to fall back on — and a priority edit moves
+ * it, so a row parked in July and re-prioritised from this board yesterday
+ * reads as settled yesterday.
+ *
+ * The fallback is kept rather than dropping those rows, because dropping them
+ * would draw a queue that never had 455 items in it. It is COUNTED instead:
+ * `BurndownView.dated` says how much of the curve is a record and how much is
+ * an inference, and the room prints it.
+ */
+export function settleDate(i: WorkItem): { at: string; recorded: boolean } | null {
+  if (i.backlogStatus == null || i.backlogStatus === 'open') return null;
+  if (i.settledAt) return { at: i.settledAt, recorded: true };
+  return { at: i.updatedAt, recorded: false };
+}
+
+export interface BurndownDay {
+  /** UTC `YYYY-MM-DD`. UTC on purpose: porkserv runs Europe/London while
+   *  homeserv and CI run UTC, and a local-time bucket puts the same row on
+   *  two different days depending on which box drew the chart. */
+  day: string;
+  /** Still in the queue at the end of that day. */
+  open: number;
+  added: number;
+  settled: number;
+  /** How that day's `settled` splits between a recorded `settledAt` and a
+   *  fallback to `updatedAt`. Per day rather than only per window so a chart
+   *  showing the last 30 of 90 days can state the honesty of the 30 it is
+   *  actually drawing rather than of a window nobody is looking at. */
+  recorded: number;
+  inferred: number;
+}
+
+export type BurndownOutlook = 'draining' | 'growing' | 'level';
+
+export interface BurndownView {
+  windowDays: number;
+  days: BurndownDay[];
+  openNow: number;
+  openThen: number;
+  /** Trailing rates over the last `RATE_WINDOW_DAYS`, stated per week because
+   *  a per-day rate on a queue this size rounds to noise. */
+  addedPerWeek: number;
+  settledPerWeek: number;
+  /** added − settled. Positive means the pile grows. */
+  netPerWeek: number;
+  outlook: BurndownOutlook;
+  /** Only when draining, and only when the rate is non-zero. */
+  daysToClear: number | null;
+  /** How much of the settled half of the curve is recorded rather than
+   *  inferred from `updatedAt`. Printed, never hidden. */
+  dated: { recorded: number; inferred: number };
+  /** True when no backlog row is old enough to reach the left edge, so the
+   *  first points describe a shorter history than the axis suggests. */
+  truncated: boolean;
+}
+
+/** The window the trailing rate is measured over. A week: shorter is one
+ *  night's luck, longer stops responding to a change in the engine. */
+export const RATE_WINDOW_DAYS = 7;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function utcDay(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** End of the UTC day containing `ms`, exclusive. */
+function endOfUtcDay(ms: number): number {
+  return Date.parse(`${utcDay(ms)}T23:59:59.999Z`);
+}
+
+function parse(iso: string | null | undefined): number | null {
+  const t = Date.parse(iso ?? '');
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * The standing queue, one point per day.
+ *
+ * An item was open at the end of day *D* if it was created on or before *D*
+ * and had not settled by then. Reconstructed rather than recorded: nothing has
+ * ever snapshotted the queue size, and the 455 rows that already exist cannot
+ * be made to have been.
+ *
+ * MUST be called over the whole population, before `trimSettled` — the same
+ * rule `summarise` and `summariseInflow` follow. Counted after the trim, every
+ * point left of the cap would be missing its settled rows and the curve would
+ * slope the wrong way.
+ *
+ * Capability leads are excluded: they live in the appetite ledger, are ruled on
+ * elsewhere, and were never in this queue to burn down.
+ */
+export function summariseBurndown(
+  items: WorkItem[],
+  windowDays = 60,
+  now = Date.now(),
+): BurndownView {
+  const rows = items
+    .filter((i) => i.source === 'backlog')
+    .map((i) => {
+      const settled = settleDate(i);
+      return {
+        created: parse(i.createdAt),
+        settled: settled ? parse(settled.at) : null,
+        recorded: settled?.recorded ?? false,
+      };
+    })
+    // A row with no readable creation date cannot be placed on a timeline at
+    // all. Dropping it is the only honest move; it is counted nowhere here.
+    .filter((r): r is { created: number; settled: number | null; recorded: boolean } => r.created != null);
+
+  const days: BurndownDay[] = [];
+  const span = Math.max(1, Math.round(windowDays));
+  let earliest = Infinity;
+  for (const r of rows) earliest = Math.min(earliest, r.created);
+
+  for (let back = span - 1; back >= 0; back--) {
+    const cursor = now - back * DAY_MS;
+    const end = endOfUtcDay(cursor);
+    const start = end - DAY_MS + 1;
+    let open = 0;
+    let added = 0;
+    let settledCount = 0;
+    let recordedCount = 0;
+    let inferredCount = 0;
+    for (const r of rows) {
+      if (r.created <= end && (r.settled == null || r.settled > end)) open += 1;
+      if (r.created >= start && r.created <= end) added += 1;
+      if (r.settled != null && r.settled >= start && r.settled <= end) {
+        settledCount += 1;
+        if (r.recorded) recordedCount += 1;
+        else inferredCount += 1;
+      }
+    }
+    days.push({
+      day: utcDay(cursor),
+      open,
+      added,
+      settled: settledCount,
+      recorded: recordedCount,
+      inferred: inferredCount,
+    });
+  }
+
+  const rate = Math.min(RATE_WINDOW_DAYS, days.length);
+  const tail = days.slice(-rate);
+  const perWeek = (total: number) => Math.round((total / rate) * 7 * 10) / 10;
+  const addedPerWeek = perWeek(tail.reduce((n, d) => n + d.added, 0));
+  const settledPerWeek = perWeek(tail.reduce((n, d) => n + d.settled, 0));
+  const netPerWeek = Math.round((addedPerWeek - settledPerWeek) * 10) / 10;
+
+  const openNow = days.length ? days[days.length - 1].open : 0;
+  const openThen = days.length ? days[0].open : 0;
+
+  // "Level" is a band, not an exact zero: one item a week either way on a pile
+  // of four hundred is not a trend anybody should read off a chart.
+  const outlook: BurndownOutlook =
+    netPerWeek > 1 ? 'growing' : netPerWeek < -1 ? 'draining' : 'level';
+  const daysToClear =
+    outlook === 'draining' && netPerWeek < 0
+      ? Math.ceil(openNow / (Math.abs(netPerWeek) / 7))
+      : null;
+
+  const windowStart = now - (span - 1) * DAY_MS;
+  let recorded = 0;
+  let inferred = 0;
+  for (const r of rows) {
+    if (r.settled == null || r.settled < windowStart) continue;
+    if (r.recorded) recorded += 1;
+    else inferred += 1;
+  }
+
+  return {
+    windowDays: span,
+    days,
+    openNow,
+    openThen,
+    addedPerWeek,
+    settledPerWeek,
+    netPerWeek,
+    outlook,
+    daysToClear,
+    dated: { recorded, inferred },
+    truncated: Number.isFinite(earliest) && earliest > windowStart,
   };
 }
