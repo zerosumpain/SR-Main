@@ -480,6 +480,14 @@ export interface BacklogItemData {
    *  so a parked item never reads as an unexplained disappearance. */
   parkedReason?: string;
   /**
+   * Removed from the owner-facing backlog. The record remains as a tombstone
+   * so the nightly proposer cannot silently recreate the same slug tomorrow.
+   * A shipped row keeps its shipped status; an open row is abandoned as part
+   * of removal, so no build lane can pick it while the board hides it.
+   */
+  removedAt?: string;
+  removedBy?: 'owner';
+  /**
    * Grouping key for the board's swimlanes.
    *
    * Owner-set in P2. The automatic clusterer is P3 and MUST reuse

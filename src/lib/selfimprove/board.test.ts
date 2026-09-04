@@ -274,6 +274,21 @@ describe('buildBoard', () => {
     expect(board.totals.all).toBe(10);
     expect(board.totals.settled).toBe(5);
   });
+
+  it('hides removed tombstones from cards and every board total', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'visible', title: 'Visible' }),
+        item({ slug: 'removed', title: 'Removed', status: 'abandoned', removedAt: '2026-09-04T12:00:00.000Z' }),
+      ],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    expect(board.items.map((entry) => entry.slug)).toEqual(['visible']);
+    expect(board.totals.all).toBe(1);
+    expect(board.counts.parked).toBe(0);
+  });
 });
 
 describe('summarise', () => {
@@ -605,7 +620,7 @@ describe('intake channels', () => {
   });
 
   it('names every channel in the closed set', () => {
-    for (const s of ['question', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'unattributed'] as const) {
+    for (const s of ['owner', 'question', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'unattributed'] as const) {
       expect(SOURCE_LABEL[s].label.length).toBeGreaterThan(0);
       expect(SOURCE_LABEL[s].from.length).toBeGreaterThan(0);
     }

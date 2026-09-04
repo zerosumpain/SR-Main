@@ -17,7 +17,7 @@ export interface HubTab {
   tone?: 'action' | 'watch' | 'quiet';
 }
 
-/** The eleven rooms, in rail order, each a real route. */
+/** The twelve rooms, in rail order, each a real route. */
 export const ROOMS = [
   'feed',
   'memory',
@@ -30,6 +30,7 @@ export const ROOMS = [
   'money',
   'engine',
   'improvement',
+  'backlog',
 ] as const;
 export type RoomId = (typeof ROOMS)[number];
 
@@ -74,6 +75,7 @@ export function hubTabs(c: BadgeCounts): HubTab[] {
       tone: c.failingJobs ? 'watch' : 'action',
     }),
     room('improvement', 'Improvement'),
+    room('backlog', 'Backlog'),
   ];
 }
 

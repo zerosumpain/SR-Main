@@ -58,6 +58,8 @@ import type { BacklogItemData } from './types';
  * than inventing a plausible one.
  */
 export const IDEA_SOURCES = [
+  /** Added directly by the owner from the backlog room. */
+  'owner',
   /** Mined from the questions the owner actually asked. */
   'question',
   /** A `daydream_faults` row: daydreaming tried something and could not. */
@@ -200,6 +202,7 @@ export function bringsNewData(kind: string): boolean {
  * the closed set they key off is data.
  */
 export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: string }>> = {
+  owner: { label: 'Added by you', from: 'entered directly in the backlog room' },
   question: { label: 'Questions you asked', from: 'unmet needs and under-served intents' },
   fault: { label: 'Faults raised', from: 'daydreaming tried and could not' },
   doctor: { label: 'Doctor escalations', from: 'a broken canvas needing repo code' },
@@ -211,6 +214,11 @@ export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: st
   trace: { label: 'A turn you sent', from: 'a chat trace analysed by hand' },
   unattributed: { label: 'Before this was recorded', from: 'queued before the channel was stamped' },
 };
+
+/** The editable backlog kinds. Kept in the pure board module because the
+ * browser form needs the values without importing the datastore-backed types. */
+export const BACKLOG_KINDS = ['tool', 'feature', 'source', 'watch', 'engine'] as const;
+export type BacklogKind = (typeof BACKLOG_KINDS)[number];
 
 export interface WorkItem {
   /** Unique across both sources — `backlog:<slug>` or `capability:<slug>`. */
@@ -472,6 +480,11 @@ function epicLabelFor(slug: string | null, labels: Readonly<Record<string, strin
 export function buildBoard(input: BoardInput): BoardView {
   const ceiling = input.attemptCeiling;
   const backlog = input.backlog ?? [];
+  // Removal keeps a tombstone in the datastore so a nightly proposal cannot
+  // resurrect the same slug. It is intentionally absent from every board
+  // count and card, while still participating in the claimed-capability check
+  // below so its appetite lead does not reappear under a second identity.
+  const visibleBacklog = backlog.filter((b) => !b.removedAt);
   const tools = input.tools ?? [];
   const epicLabels = input.epicLabels ?? {};
 
@@ -486,7 +499,7 @@ export function buildBoard(input: BoardInput): BoardView {
   // the genuinely shipped sibling fell through to `live` instead of
   // `verifying`. That is the "shipped, never called" figure this whole board
   // exists to expose, rounding itself toward the optimistic answer.
-  const shipped = backlog.filter((b) => b.status === 'shipped');
+  const shipped = visibleBacklog.filter((b) => b.status === 'shipped');
   const toolForSlug = new Map<string, ToolHealth>();
   for (const t of tools) {
     const idea = findRelatedIdea(`${t.name.replace(/_/g, ' ')} ${t.description ?? ''}`, shipped);
@@ -500,7 +513,7 @@ export function buildBoard(input: BoardInput): BoardView {
   // TITLE — the details are the model's long prose and inflate the overlap
   // past anything the three-word threshold was calibrated against.
   const servedBy = new Map<string, string>();
-  for (const item of backlog) {
+  for (const item of visibleBacklog) {
     if (item.status !== 'open') continue;
     const match = shipped.find((s) => looksSameSubject(item.title, s.title));
     if (match) servedBy.set(item.slug, match.title);
@@ -508,7 +521,7 @@ export function buildBoard(input: BoardInput): BoardView {
 
   const items: WorkItem[] = [];
 
-  for (const b of backlog) {
+  for (const b of visibleBacklog) {
     const tool = toolForSlug.get(b.slug) ?? null;
     const stage = stageFor(b, { attemptCeiling: ceiling, tool });
     const served = servedBy.get(b.slug) ?? null;
