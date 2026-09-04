@@ -9,9 +9,26 @@ import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { modelSupportsThinking } from '$lib/server/models/capabilities';
 import type { ModelContext } from '$lib/server/models/types';
 
-export const GET: RequestHandler = async () => {
-	const rows = await getConversationList();
-	return json(rows);
+export const GET: RequestHandler = async ({ url }) => {
+	const limit = Number(url.searchParams.get('limit') ?? undefined);
+	const beforeRaw = url.searchParams.get('before');
+	const beforeId = url.searchParams.get('beforeId');
+	const pinnedRaw = url.searchParams.get('beforePinned');
+	const before = beforeRaw ? new Date(beforeRaw) : null;
+	const cursorRequested = beforeRaw !== null || beforeId !== null || pinnedRaw !== null;
+	if (
+		cursorRequested &&
+		(!before || Number.isNaN(before.getTime()) || !beforeId || (pinnedRaw !== '0' && pinnedRaw !== '1'))
+	) {
+		return json({ error: 'Invalid conversation cursor' }, { status: 400 });
+	}
+	const page = await getConversationList({
+		limit: Number.isFinite(limit) ? limit : undefined,
+		cursor: before && beforeId && pinnedRaw
+			? { before, beforeId, pinned: pinnedRaw === '1' }
+			: undefined,
+	});
+	return json(page);
 };
 
 export const POST: RequestHandler = async ({ request }) => {
