@@ -94,21 +94,19 @@ async function loadAppetite(): Promise<AppetiteView> {
  * definition of the attempt ceiling, in `backlog.ts`, where the engine reads
  * it too.
  */
-async function loadQueueBoard(): Promise<BoardView> {
+async function loadQueueBoard(epics: EpicData[]): Promise<BoardView> {
   try {
-    const [{ buildBoard }, { listBacklog, MAX_ATTEMPTS }, { loadCustomToolHealth }, { listCapabilities }, { listEpics }] =
+    const [{ buildBoard }, { listBacklog, MAX_ATTEMPTS }, { loadCustomToolHealth }, { listCapabilities }] =
       await Promise.all([
         import('$lib/selfimprove/board'),
         import('$lib/selfimprove/backlog'),
         import('$lib/selfimprove/context'),
         import('$lib/daydream/appetite/store'),
-        import('$lib/selfimprove/epics'),
       ]);
-    const [backlog, tools, caps, epics] = await Promise.all([
+    const [backlog, tools, caps] = await Promise.all([
       listBacklog(),
       loadCustomToolHealth(),
       listCapabilities({ limit: 60 }),
-      listEpics(),
     ]);
     return buildBoard({
       backlog,
@@ -147,6 +145,10 @@ async function loadQueueBoard(): Promise<BoardView> {
  * Read only — finding them is an action, not a page load. `clusterBacklog` is
  * 66ms over 455 rows, but it also WRITES proposals, and a page render must
  * never be a write.
+ *
+ * Loaded ONCE and passed to the board as well, which needs the same rows only
+ * for its swimlane labels. `listEpics` pages the whole collection, and doing
+ * that twice per render is a scan nobody asked for.
  */
 async function loadEpics(): Promise<{ epics: EpicData[]; error: string | null }> {
   try {
@@ -169,11 +171,11 @@ export const load: PageServerLoad = async () => {
   // The doctor, folded in. A route-level load may import both engines, which
   // is what makes this the honest place to join them — `$lib/workflowdoctor`
   // already imports `$lib/selfimprove`, so neither library could do it.
-  const [story, appetite, board, epics, doctor, doctorWindow] = await Promise.all([
+  const epics = await loadEpics();
+  const [story, appetite, board, doctor, doctorWindow] = await Promise.all([
     loadLoopStory(loop),
     loadAppetite(),
-    loadQueueBoard(),
-    loadEpics(),
+    loadQueueBoard(epics.epics),
     doctorRollup().catch((err): DoctorRollup => {
       console.error('[daydream] doctor rollup failed:', errMsg(err));
       return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };

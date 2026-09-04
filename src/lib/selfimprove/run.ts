@@ -14,6 +14,7 @@ import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
+  MAX_THEME_PROPOSALS,
   COLLECTIONS,
   IDLE_WINDOW_MS,
   SETTINGS_AUTOBUILD_KEY,
@@ -25,7 +26,7 @@ import {
   type ImprovementRunData,
   type PhaseName,
   type RunAction,
-  MAX_THEME_PROPOSALS,} from './types';
+} from './types';
 import { ensureSystemCollections } from './seed-apis';
 import { gatherSignals, learnInsights, type GatheredSignals } from './analyze';
 import { discoverApis } from './discover';

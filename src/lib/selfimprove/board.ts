@@ -148,6 +148,18 @@ export interface WorkItem {
   kind: string;
   lane: WorkLane;
   stage: WorkStage;
+  /**
+   * The row's own `status`, carried through rather than inferred back out of
+   * `stage`.
+   *
+   * `stageFor` maps a `shipped` row to `verifying` whenever its tool has never
+   * been called — which is the NORMAL case here, 32 of 79 tools — so
+   * `stage === 'live'` is not "this shipped". A caller that used it as one
+   * counted four shipped-but-uncalled tools as open work and dropped the
+   * "already shipped on this theme" line, suppressing the exact finding the
+   * room exists to show. `null` on a capability lead, which has no backlog row.
+   */
+  backlogStatus: 'open' | 'shipped' | 'abandoned' | null;
   priority: number;
   attempts: number;
   attemptCeiling: number;
@@ -404,6 +416,7 @@ export function buildBoard(input: BoardInput): BoardView {
       kind: b.kind,
       lane: laneForKind(b.kind),
       stage,
+      backlogStatus: b.status,
       priority: b.priority,
       attempts: b.attempts,
       attemptCeiling: ceiling,
@@ -448,6 +461,7 @@ export function buildBoard(input: BoardInput): BoardView {
       kind: c.kind,
       lane: laneForKind(c.kind),
       stage: stageForCapability(c.status),
+      backlogStatus: null,
       priority: 3,
       attempts: 0,
       attemptCeiling: ceiling,

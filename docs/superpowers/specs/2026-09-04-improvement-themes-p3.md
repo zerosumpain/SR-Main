@@ -109,3 +109,19 @@ there has one.
 - `src/lib/selfimprove/{run,seed-apis}.ts` — nightly scan, collection seed.
 - `/api/daydream/thoughts` — `backlog_cluster`, `epic_decide`.
 - `ThemeProposals.svelte` in the Improvement room, section **C2 / Themes**.
+
+## Code review, applied 2026-09-04
+
+Eight findings. Seven were real and are fixed with a test each; one had a wrong
+premise and is recorded here rather than quietly dropped.
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | **Shipped members counted as open, and the "already shipped" line never rendered.** `stageFor` maps a `shipped` row to `verifying` whenever its tool has never been called — the normal case, 32 tools of 79 — so `stage === 'live'` is not "this shipped". A theme with 4 shipped and 5 open rendered "9 open ideas say this" and dropped the clause that makes it worth ruling on. | **Fixed.** `EpicData` records `openSlugs`/`shippedSlugs` at proposal time and the card counts from those; `WorkItem` also carries `backlogStatus` so nothing has to infer status back out of stage. |
+| 2 | "Find themes now" writes nothing until the first nightly run, because `improvement_epics` is only created by `ensureSystemCollections`, whose only caller is `runImprovementNow`. | **Premise wrong** — `hooks.server.ts:136` calls `startSelfImprovementSeeds()` → `runSeeds()` → `ensureSystemCollections()` on *every* boot, which is why the collection appeared during local QA. But the seed is fire-and-forget (`void runSeeds()`), so a press in the first seconds after a deploy could still race it. The action now awaits `ensureSystemCollections()` itself — idempotent, one lookup. |
+| 3 | `listEpics` swallowed its errors, so a failed read rendered as "Nothing grouped yet" over a possibly full ledger, and the component's error card was unreachable. | **Fixed.** It throws. Writes are soft in this engine; reads are not — the rule `appetite/store.ts` states. |
+| 4 | `ungroupEpic` cleared `epicSlug` on every recorded member without checking it still pointed at *this* theme, so ungrouping a stale theme could strip a newer accepted one off the rows they share. | **Fixed.** Guarded on `item.epicSlug === epic.slug`; `getBacklogItem` exported for it. |
+| 5 | The proposal cap `break`s, which stopped the `known`/`declined` counters too, so the nightly line reported off partial figures. | **Fixed.** `continue`, plus an `uncapped` count. |
+| 6 | An oversized component incremented `singletons` — documented as "items that matched nothing". A 300-row runaway therefore reported as 300 unmatched items: over-clustering hiding behind the metric meant to detect under-clustering. | **Fixed.** Its own `oversizedItems`. |
+| 7 | `listEpics()` ran twice per page load, each a full paged scan. | **Fixed.** Loaded once in `load` and passed to the board. |
+| 8 | Members trimmed out of the board's settled window rendered as `gone`. | **Fixed.** Counts come from the recorded split, and an absent row reads "not shown" — the board trims settled rows, so "gone" was a claim the page could not support. |

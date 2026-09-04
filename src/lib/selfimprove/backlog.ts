@@ -332,6 +332,16 @@ export function hasOpenNewDataWork(items: BacklogItemData[]): boolean {
 // run that tried. These are the opposite: a person clicked something and is
 // watching for it to happen, so they THROW and the route reports the failure.
 
+/** One item, or null. The read half of `mustGet`, for callers that want to
+ *  check a row before writing it rather than fail on it. */
+export async function getBacklogItem(slug: string): Promise<BacklogItemData | null> {
+  try {
+    return await mustGet(slug);
+  } catch {
+    return null;
+  }
+}
+
 /** Clamp to the 1..5 the rest of the engine assumes. */
 function clampPriority(n: unknown): number {
   const v = Math.round(Number(n));

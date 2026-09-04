@@ -497,6 +497,12 @@ export interface EpicData {
   label: string;
   keywords: string[];
   memberSlugs: string[];
+  /** The open/shipped split AS RECORDED when the theme was found. The board
+   *  trims its settled rows, so a card that counted only what the board is
+   *  currently showing would under-report a theme's shipped members — which is
+   *  the half that makes it worth ruling on. */
+  openSlugs: string[];
+  shippedSlugs: string[];
   /** How much it is worth ruling on, 0..1, with every input named. */
   score: number;
   components: Record<string, number>;

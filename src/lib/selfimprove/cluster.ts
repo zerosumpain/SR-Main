@@ -59,6 +59,11 @@ export interface ClusterResult {
   /** Items that matched nothing. A queue where everything clusters is a
    *  matcher that has stopped discriminating. */
   singletons: number;
+  /** Items inside a component too large to be a theme. Counted SEPARATELY:
+   *  they are the opposite failure to a singleton — over-clustering, not
+   *  under — and folding them into `singletons` would hide a runaway behind
+   *  the very number that is supposed to detect one. */
+  oversizedItems: number;
   /** Pairs the pre-filter admitted, how many the predicate accepted, and how
    *  many survived the strongest-links rule — reported so a change in any of
    *  the three can be seen rather than guessed at. */
@@ -303,6 +308,7 @@ export function clusterBacklog(
   const clusters: Cluster[] = [];
   const oversized: Array<{ label: string; size: number }> = [];
   let singletons = 0;
+  let oversizedItems = 0;
 
   for (const [, memberSlugs] of members) {
     if (memberSlugs.length < minClusterSize) {
@@ -312,7 +318,7 @@ export function clusterBacklog(
     const memberTitles = memberSlugs.map((s) => titles.get(s) ?? '');
     if (memberSlugs.length > maxClusterSize) {
       oversized.push({ label: labelFor(memberTitles), size: memberSlugs.length });
-      singletons += memberSlugs.length;
+      oversizedItems += memberSlugs.length;
       continue;
     }
     // Queue order, so a cluster reads oldest-first like the queue does.
@@ -342,6 +348,7 @@ export function clusterBacklog(
   return {
     clusters,
     singletons,
+    oversizedItems,
     pairsConsidered: candidates.size,
     pairsPassed,
     pairsLinked,

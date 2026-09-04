@@ -122,8 +122,11 @@ describe('clusterBacklog', () => {
     const res = clusterBacklog(OPENROUTER, new Set(), { maxClusterSize: 3, linksPerItem: 99 });
     expect(res.clusters).toHaveLength(0);
     expect(res.oversized).toEqual([{ label: 'Live OpenRouter balance', size: 5 }]);
-    // Its members are counted as ungrouped, not silently lost.
-    expect(res.singletons).toBe(5);
+    // Counted separately from singletons. A runaway is OVER-clustering, the
+    // opposite failure, and folding it into the number that means "nothing
+    // matched" would hide it behind the metric meant to detect it.
+    expect(res.oversizedItems).toBe(5);
+    expect(res.singletons).toBe(0);
   });
 
   it('separates open from shipped members and counts the served ones', () => {

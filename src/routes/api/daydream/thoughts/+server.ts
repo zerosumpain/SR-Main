@@ -1008,7 +1008,17 @@ export const POST: RequestHandler = async ({ request }) => {
        * tomorrow to see the duplicates would be a choice, not a constraint.
        */
       case 'backlog_cluster': {
-        const { findThemes } = await import('$lib/selfimprove/epics');
+        // The boot seeder creates `improvement_epics` on every start, but it is
+        // fire-and-forget (`void runSeeds()` in engine.ts), so a press landing
+        // in the first seconds after a deploy could write into a collection
+        // that is not there yet — and `findThemes` logs that per-epic rather
+        // than failing, which would look exactly like a button that worked and
+        // found nothing. Idempotent, so this costs one lookup.
+        const [{ findThemes }, { ensureSystemCollections }] = await Promise.all([
+          import('$lib/selfimprove/epics'),
+          import('$lib/selfimprove/seed-apis'),
+        ]);
+        await ensureSystemCollections();
         const res = await findThemes();
         return json({ ok: true, ...res, proposed: res.proposed.length });
       }

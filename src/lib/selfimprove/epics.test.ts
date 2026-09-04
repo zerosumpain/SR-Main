@@ -212,6 +212,71 @@ describe('ungroupEpic', () => {
   });
 });
 
+describe('review fixes, 2026-09-04', () => {
+  // `stageFor` maps a shipped row to `verifying` when its tool has never been
+  // called — 32 tools of 79 here — so the card cannot ask the board whether a
+  // member shipped. The split is recorded at proposal time instead.
+  it('records the open/shipped split, so a card need not re-derive it', async () => {
+    seedBacklog([
+      item('a', 'Live OpenRouter balance'),
+      item('b', 'Live OpenRouter balance query'),
+      item('c', 'Live OpenRouter account balance API', { status: 'shipped' }),
+    ]);
+    const [theme] = (await findThemes()).proposed;
+    expect(theme.shippedSlugs).toEqual(['c']);
+    expect(theme.openSlugs.sort()).toEqual(['a', 'b']);
+  });
+
+  // The cap limits how many rulings the room ASKS for. Breaking out of the
+  // loop also stopped the counters, so the nightly line reported off partials.
+  it('keeps counting past the proposal cap', async () => {
+    seedBacklog([
+      item('a', 'Live OpenRouter balance'),
+      item('b', 'Live OpenRouter balance query'),
+      item('p', 'Delivery-status monitoring and alerts'),
+      item('q', 'Delivery-status monitoring'),
+      item('r', 'Delivery status monitoring with alerts'),
+    ]);
+    const res = await findThemes({ maxProposals: 1 });
+    expect(res.proposed).toHaveLength(1);
+    expect(res.uncapped).toBeGreaterThan(0);
+  });
+
+  // Memberships shift run to run, and a stale theme must not strip a newer
+  // one's grouping off the rows they share.
+  it('ungrouping a stale theme leaves a newer theme’s grouping alone', async () => {
+    seedBacklog([item('a', 'Live OpenRouter balance'), item('b', 'Live OpenRouter balance query')]);
+    const [stale] = (await findThemes()).proposed;
+    await decideEpic(stale.slug, 'accept');
+    // A newer theme takes the same rows.
+    for (const m of stale.memberSlugs) {
+      const row = backlogRow(m);
+      (h.records.get('improvement_backlog') ?? []).find((r) => r.key === m)!.data = {
+        ...row,
+        epicSlug: 'epic:9-newer',
+      };
+    }
+    await ungroupEpic(stale.slug);
+    for (const m of stale.memberSlugs) expect(backlogRow(m).epicSlug).toBe('epic:9-newer');
+  });
+
+  it('ungrouping still clears the rows the theme actually owns', async () => {
+    seedBacklog([item('a', 'Live OpenRouter balance'), item('b', 'Live OpenRouter balance query')]);
+    const [theme] = (await findThemes()).proposed;
+    await decideEpic(theme.slug, 'accept');
+    await ungroupEpic(theme.slug);
+    for (const m of theme.memberSlugs) expect(backlogRow(m).epicSlug).toBeUndefined();
+  });
+
+  // Writes are soft in this engine; reads are not. A room that cannot load its
+  // ledger must say so rather than assert there is nothing in it.
+  it('a failed read throws rather than reporting an empty ledger', async () => {
+    const ds = await import('$lib/datastore');
+    vi.mocked(ds.queryRecords).mockRejectedValueOnce(new Error('database is on fire'));
+    await expect(listEpics()).rejects.toThrow(/on fire/);
+  });
+});
+
 describe('toEpic', () => {
   it('carries the cluster verbatim and names every score input', () => {
     const epic = toEpic(

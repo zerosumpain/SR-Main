@@ -38,18 +38,25 @@
   const accepted = $derived(epics.filter((e) => e.status === 'accepted'));
   const declined = $derived(epics.filter((e) => e.status === 'declined'));
 
-  /** Open members that a shipped sibling already appears to cover — the reason
-   *  a theme is worth ruling on rather than merely tidy. */
+  // Counts come from the RECORDED split, never from the board's stage. Two
+  // reasons, both of which produced a wrong number in review: `stageFor` maps a
+  // shipped row to `verifying` whenever its tool has never been called — the
+  // normal case here, 32 tools of 79 — so `stage === 'live'` is not "this
+  // shipped"; and the board trims its settled rows, so a shipped member can be
+  // absent from `items` altogether. Either mistake drops the "already shipped
+  // on the same theme" line, which is the half that makes a theme worth ruling
+  // on at all.
+  function openCount(e: EpicData): number {
+    return (e.openSlugs ?? e.memberSlugs).length;
+  }
+  function shippedCount(e: EpicData): number {
+    return (e.shippedSlugs ?? []).length;
+  }
+  /** Open members a shipped sibling already appears to cover. Live where the
+   *  board has the row, and the count recorded at proposal time otherwise. */
   function served(e: EpicData): number {
-    return e.memberSlugs.filter((s) => bySlug.get(s)?.alreadyServed).length;
-  }
-  function openMembers(e: EpicData): WorkItem[] {
-    return e.memberSlugs
-      .map((s) => bySlug.get(s))
-      .filter((i): i is WorkItem => !!i && i.stage !== 'live' && i.stage !== 'parked');
-  }
-  function shippedMembers(e: EpicData): WorkItem[] {
-    return e.memberSlugs.map((s) => bySlug.get(s)).filter((i): i is WorkItem => !!i && i.stage === 'live');
+    const live = e.memberSlugs.filter((s) => bySlug.get(s)?.alreadyServed).length;
+    return bySlug.size ? Math.max(live, e.servedCount ?? 0) : (e.servedCount ?? 0);
   }
 
   /** The score, spelled out. A number nobody can decompose is a number nobody
@@ -57,7 +64,7 @@
   function why(e: EpicData): string {
     const c = e.components ?? {};
     const bits: string[] = [];
-    const open = openMembers(e).length;
+    const open = openCount(e);
     if (c.size) bits.push(`${open} open restatement${open === 1 ? '' : 's'}`);
     if (c.served) bits.push(`${served(e)} already served`);
     if (c.shipped) bits.push('something on this theme has shipped');
@@ -76,7 +83,7 @@
     {
       key: 'covered',
       label: 'Queued ideas in a theme',
-      value: String(proposed.reduce((n, e) => n + openMembers(e).length, 0)),
+      value: String(proposed.reduce((n, e) => n + openCount(e), 0)),
       tone: 'steady',
       sub: 'open items these proposals would group',
     },
@@ -130,8 +137,8 @@
 {/if}
 
 {#snippet themeCard(e: EpicData, actionable: boolean)}
-  {@const open = openMembers(e)}
-  {@const ship = shippedMembers(e)}
+  {@const open = openCount(e)}
+  {@const ship = shippedCount(e)}
   {@const isOpen = expanded.includes(e.slug)}
   <article class="card t-{e.status === 'proposed' ? 'action' : e.status === 'accepted' ? 'good' : 'quiet'}">
     <div class="card-hd">
@@ -141,8 +148,8 @@
       </span>
     </div>
     <p class="card-body">
-      <strong>{open.length}</strong> open {open.length === 1 ? 'idea' : 'ideas'} say this
-      {#if ship.length}· <strong>{ship.length}</strong> already shipped on the same theme{/if}
+      <strong>{open}</strong> open {open === 1 ? 'idea' : 'ideas'} say this
+      {#if ship}· <strong>{ship}</strong> already shipped on the same theme{/if}
     </p>
     <div class="card-meta">
       {#each e.keywords as k (k)}<span class="tag">{k}</span>{/each}
@@ -165,7 +172,10 @@
               <span class="m-title">{m.title}</span>
               {#if m.alreadyServed}<span class="m-flag">already served</span>{/if}
             {:else}
-              <span class="m-stage">gone</span>
+              <!-- The board trims settled rows, so an absent member usually
+                   means "shipped a while ago", not "deleted". Saying `gone`
+                   would be a claim the page cannot support. -->
+              <span class="m-stage">not shown</span>
               <span class="m-title mono">{slug}</span>
             {/if}
           </li>

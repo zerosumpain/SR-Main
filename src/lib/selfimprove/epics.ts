@@ -14,33 +14,39 @@
 import { getCollectionBySlug, getRecordByKey, queryRecords, upsertRecord } from '$lib/datastore';
 import { COLLECTIONS, SYSTEM_ACTOR, asData, errMsg, type EpicData, type EpicStatus } from './types';
 import { clusterBacklog, clusterWeight, type Cluster } from './cluster';
-import { setEpic, listBacklog } from './backlog';
+import { getBacklogItem, setEpic, listBacklog } from './backlog';
 import { looksSameSubject } from './narrative';
 import type { BacklogItemData } from './types';
 
 const PAGE = 500;
 const MAX_PAGES = 10;
 
-/** Read every epic. Pages for the same reason `listBacklog` does — a capped
- *  read that silently truncates is how 210 of 410 backlog rows went missing. */
+/**
+ * Read every epic.
+ *
+ * **Throws.** Writes in this engine are soft — a ledger that cannot be written
+ * must not cost the tick that tried — but reads are not, and for the reason
+ * `appetite/store.ts` states: a room that cannot load its ledger should SAY so,
+ * rather than render the empty state and assert there is nothing there. A
+ * swallowed read here would show "Nothing grouped yet" over a hundred accepted
+ * themes.
+ *
+ * Pages for the same reason `listBacklog` does — a capped read that silently
+ * truncates is how 210 of 410 backlog rows went missing.
+ */
 export async function listEpics(): Promise<EpicData[]> {
-  try {
-    if (!(await getCollectionBySlug(COLLECTIONS.epics))) return [];
-    const out: EpicData[] = [];
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const { records } = await queryRecords(
-        COLLECTIONS.epics,
-        { sort: { field: 'updatedAt', dir: 'desc' }, limit: PAGE, offset: page * PAGE },
-        SYSTEM_ACTOR,
-      );
-      out.push(...records.map((r) => r.data as unknown as EpicData));
-      if (records.length < PAGE) break;
-    }
-    return out;
-  } catch (err) {
-    console.error('[selfimprove] listEpics failed:', errMsg(err));
-    return [];
+  if (!(await getCollectionBySlug(COLLECTIONS.epics))) return [];
+  const out: EpicData[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { records } = await queryRecords(
+      COLLECTIONS.epics,
+      { sort: { field: 'updatedAt', dir: 'desc' }, limit: PAGE, offset: page * PAGE },
+      SYSTEM_ACTOR,
+    );
+    out.push(...records.map((r) => r.data as unknown as EpicData));
+    if (records.length < PAGE) break;
   }
+  return out;
 }
 
 async function put(epic: EpicData): Promise<void> {
@@ -64,6 +70,8 @@ export interface FindThemesResult {
   known: number;
   /** Groupings skipped because the owner had already said no. */
   declined: number;
+  /** New groupings found but not proposed tonight, because of the cap. */
+  uncapped: number;
   /** Everything the clusterer reported, for the pulse. */
   clusters: number;
   singletons: number;
@@ -98,6 +106,7 @@ export async function findThemes(
     proposed: [],
     known: 0,
     declined: 0,
+    uncapped: 0,
     clusters: res.clusters.length,
     singletons: res.singletons,
     oversized: res.oversized,
@@ -115,7 +124,13 @@ export async function findThemes(
       else out.known += 1;
       continue;
     }
-    if (out.proposed.length >= cap) break;
+    // `continue`, never `break`: the cap limits how many rulings the room asks
+    // for, and breaking out would also stop counting the clusters below it —
+    // the nightly summary would then report off partial figures.
+    if (out.proposed.length >= cap) {
+      out.uncapped += 1;
+      continue;
+    }
     const epic = toEpic(c, now);
     try {
       await put(epic);
@@ -137,6 +152,8 @@ export function toEpic(c: Cluster, now: string): EpicData {
     memberSlugs: c.memberSlugs,
     score,
     components,
+    openSlugs: c.openSlugs,
+    shippedSlugs: c.shippedSlugs,
     servedCount: c.servedCount,
     status: 'proposed',
     createdAt: now,
@@ -209,6 +226,13 @@ export async function ungroupEpic(slug: string): Promise<DecideResult> {
   const failed: Array<{ slug: string; error: string }> = [];
   for (const member of epic.memberSlugs) {
     try {
+      // Only clear what THIS theme grouped. Memberships shift between runs: a
+      // fourth similar idea arrives, the next scan proposes a new theme over
+      // the same rows (a new slug, by design), the owner accepts it — and
+      // ungrouping the stale one would strip the live theme off its members
+      // while it still showed as accepted.
+      const item = await getBacklogItem(member);
+      if (item?.epicSlug !== epic.slug) continue;
       await setEpic(member, null);
       grouped.push(member);
     } catch (err) {
