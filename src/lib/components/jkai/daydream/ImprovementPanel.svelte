@@ -255,16 +255,24 @@
     </div>
   </header>{/if}
 
-  <!-- ── PRIME OUTCOME ──────────────────────────────────────────────────
-       Leads the page: every other number here is a means to this end. -->
+  <!-- ── CALL EFFICIENCY ────────────────────────────────────────────────
+       This used to lead the page as the PRIME OUTCOME, and said so: "the
+       metric the engine is graded on". It was demoted on 2026-09-04 — new
+       capability outranks efficiency now, `propose` runs before `optimise`,
+       and optimise may not start a fresh experiment while new-data work is
+       open. The heading had to move with it, or the page keeps teaching the
+       priority the engine no longer holds. -->
   <section class="prime">
     <div class="prime-hd">
       <div>
-        <div class="sr-label-tight">Prime outcome · tool calls per answered question</div>
+        <div class="sr-label-tight">Call efficiency · tool calls per answered question</div>
         <p class="prime-sub">
-          Fewer calls per answer is the metric the engine is graded on. The headline is
-          <strong>ordinary chat turns</strong>; agentic work (browser, terminal, delegation) is tracked
-          beside it but never optimised against — its step count belongs to the task.
+          What an answer costs in tool calls. It led this page as the prime outcome until
+          <strong>new capability took that place</strong> — the engine still measures every night and
+          still judges any live experiment, but it will not start a fresh one while a source or a
+          watch is waiting to be built. The headline is <strong>ordinary chat turns</strong>; agentic
+          work (browser, terminal, delegation) is tracked beside it but never optimised against —
+          its step count belongs to the task.
         </p>
       </div>
       <button class="measure-btn" onclick={measureNow} disabled={measuring}>
