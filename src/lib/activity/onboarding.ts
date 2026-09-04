@@ -1,12 +1,100 @@
 import type { ConnectionMode } from './contracts';
 
+export const ACTIVITY_ONBOARDING_OUTCOMES = [
+  {
+    id: 'play',
+    title: 'Remember what I play',
+    prompt: 'Help JKAI understand my games and the things I return to.',
+    description: 'Game libraries, achievements and honest playtime changes.',
+    providerIds: ['steam'],
+    daydreamPrompt: 'Notice the games I return to and reflect on what is holding my attention.',
+  },
+  {
+    id: 'listen',
+    title: 'Understand my listening',
+    prompt: 'Give JKAI a picture of the music and podcasts shaping my days.',
+    description: 'Recent music plus listening evidence from archives and future device bridges.',
+    providerIds: ['apple_music', 'youtube_takeout', 'apple_podcasts'],
+    daydreamPrompt: 'Reflect on the themes and shifts in what I have been listening to lately.',
+  },
+  {
+    id: 'interests',
+    title: 'Follow my interests',
+    prompt: 'Help JKAI see the subjects, communities and media I keep exploring.',
+    description: 'Interest signals without silently treating every click as intent.',
+    providerIds: ['reddit_archive', 'youtube_takeout', 'apple_podcasts'],
+    daydreamPrompt: 'Find the interests that keep recurring across my recent activity.',
+  },
+  {
+    id: 'making',
+    title: 'See what I am making',
+    prompt: 'Let JKAI connect my coding activity to the work already in view.',
+    description: 'Contribution evidence and repository activity within explicit scopes.',
+    providerIds: ['github'],
+    daydreamPrompt: 'Reflect on the projects receiving my energy and where momentum is changing.',
+  },
+  {
+    id: 'whole_story',
+    title: 'Build a balanced picture',
+    prompt: 'Start a careful, cross-source picture of how I spend my time.',
+    description: 'A broader view assembled source by source, with separate permission choices.',
+    providerIds: ['steam', 'apple_music', 'youtube_takeout', 'apple_podcasts', 'reddit_archive', 'github'],
+    daydreamPrompt: 'Look across my recent activity and surface one grounded pattern worth noticing.',
+  },
+] as const;
+
+export type ActivityOnboardingOutcomeId = (typeof ACTIVITY_ONBOARDING_OUTCOMES)[number]['id'];
+
+export interface ActivityOnboardingRecommendationProvider {
+  id: string;
+  category: string;
+  canStart: boolean;
+}
+
+export interface ActivityOnboardingRecommendation<T extends ActivityOnboardingRecommendationProvider> {
+  provider: T;
+  score: number;
+  reasons: string[];
+}
+
+export function isActivityOnboardingOutcomeId(value: string): value is ActivityOnboardingOutcomeId {
+  return ACTIVITY_ONBOARDING_OUTCOMES.some((outcome) => outcome.id === value);
+}
+
+export function getActivityOnboardingOutcome(id: ActivityOnboardingOutcomeId) {
+  return ACTIVITY_ONBOARDING_OUTCOMES.find((outcome) => outcome.id === id)!;
+}
+
+/** Rank only sources that serve a selected outcome, preferring ones that can begin now. */
+export function recommendActivityProviders<T extends ActivityOnboardingRecommendationProvider>(
+  outcomeIds: ActivityOnboardingOutcomeId[],
+  providers: T[],
+): ActivityOnboardingRecommendation<T>[] {
+  const selected = ACTIVITY_ONBOARDING_OUTCOMES.filter((outcome) => outcomeIds.includes(outcome.id));
+  return providers
+    .map((provider) => {
+      const reasons = selected
+        .filter((outcome) => (outcome.providerIds as readonly string[]).includes(provider.id))
+        .map((outcome) => outcome.title);
+      return {
+        provider,
+        reasons,
+        score: reasons.length * 10 + (provider.canStart ? 3 : 0),
+      };
+    })
+    .filter((item) => item.reasons.length > 0)
+    .sort((a, b) => b.score - a.score || a.provider.id.localeCompare(b.provider.id));
+}
+
 export const ACTIVITY_ONBOARDING_STEPS = [
-  'Understand',
-  'Authorize',
-  'Verify',
-  'Choose uses',
+  'Purpose',
+  'Source',
+  'Connect',
+  'Select data',
+  'Preview',
+  'Permissions',
   'Initial sync',
-  'Review',
+  'Payoff',
 ] as const;
 
 export interface ActivityOnboardingGuide {

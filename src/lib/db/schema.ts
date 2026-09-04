@@ -3679,6 +3679,41 @@ export const activityConnections = pgTable(
   ],
 );
 
+export const activityOnboardingSessions = pgTable(
+  'activity_onboarding_sessions',
+  {
+    id: text('id').primaryKey(),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => activityPrincipals.id, { onDelete: 'cascade' }),
+    /** Closed ids from ACTIVITY_ONBOARDING_OUTCOMES. */
+    outcomes: jsonb('outcomes').$type<string[]>().notNull().default([]),
+    selectedProvider: text('selected_provider'),
+    /** Data classes the user has chosen to make eligible for downstream grants. */
+    dataClasses: jsonb('data_classes').$type<string[]>().notNull().default([]),
+    connectionId: text('connection_id').references(() => activityConnections.id, {
+      onDelete: 'set null',
+    }),
+    /** choosing_source | preparing | waiting_export | connecting | verifying | choosing_uses | syncing | complete | paused */
+    status: text('status').notNull().default('choosing_source'),
+    exportRequestedAt: timestamp('export_requested_at', { withTimezone: true }),
+    remindAt: timestamp('remind_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('activity_onboarding_principal_updated_idx').on(t.principalId, t.updatedAt),
+    index('activity_onboarding_connection_idx').on(t.connectionId),
+    index('activity_onboarding_reminder_idx').on(t.status, t.remindAt),
+    check(
+      'activity_onboarding_status_check',
+      sql`${t.status} in ('choosing_source', 'preparing', 'waiting_export', 'connecting', 'verifying', 'choosing_uses', 'syncing', 'complete', 'paused')`,
+    ),
+  ],
+);
+
 export const activityOauthTransactions = pgTable(
   'activity_oauth_transactions',
   {
@@ -4016,6 +4051,8 @@ export type ActivityPrincipal = typeof activityPrincipals.$inferSelect;
 export type NewActivityPrincipal = typeof activityPrincipals.$inferInsert;
 export type ActivityConnection = typeof activityConnections.$inferSelect;
 export type NewActivityConnection = typeof activityConnections.$inferInsert;
+export type ActivityOnboardingSession = typeof activityOnboardingSessions.$inferSelect;
+export type NewActivityOnboardingSession = typeof activityOnboardingSessions.$inferInsert;
 export type ActivityOauthTransaction = typeof activityOauthTransactions.$inferSelect;
 export type NewActivityOauthTransaction = typeof activityOauthTransactions.$inferInsert;
 export type ActivitySyncJob = typeof activitySyncJobs.$inferSelect;

@@ -2,7 +2,11 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { onMount, untrack } from 'svelte';
   import ActivityOnboardingStepper from '$lib/components/jkai/ActivityOnboardingStepper.svelte';
-  import { getActivityOnboardingGuide } from '$lib/activity/onboarding';
+  import {
+    getActivityOnboardingGuide,
+    getActivityOnboardingOutcome,
+    isActivityOnboardingOutcomeId,
+  } from '$lib/activity/onboarding';
   import type { ConnectionMode } from '$lib/activity/contracts';
   import type { PageData } from './$types';
 
@@ -17,6 +21,7 @@
   ));
   let grants = $state(untrack(() => data.grants.map((grant) => ({ ...grant }))));
   let importFile = $state<File | null>(null);
+  let lastReportedStep = $state<number | null>(null);
   const guide = untrack(() =>
     getActivityOnboardingGuide(data.provider.id, data.connection.mode as ConnectionMode),
   );
@@ -31,12 +36,13 @@
   ];
 
   onMount(() => {
+    void reportJourneyProgress();
     const timer = window.setInterval(() => {
       const jobRunning = data.jobs.some((job) => ['queued', 'leased', 'running', 'retry_wait'].includes(job.status));
       const importRunning = data.imports.some((activityImport) =>
         ['uploaded', 'inspecting', 'importing'].includes(activityImport.status),
       );
-      if (jobRunning || importRunning) void invalidateAll();
+      if (jobRunning || importRunning) void invalidateAll().then(reportJourneyProgress);
     }, 3_000);
     return () => window.clearInterval(timer);
   });
@@ -79,15 +85,47 @@
   function currentOnboardingStep(): number {
     if (data.connection.mode === 'import') {
       const latest = data.imports[0];
-      if (!latest || latest.status === 'failed') return 2;
-      if (!['succeeded', 'erased'].includes(latest.status)) return 3;
+      if (!latest || latest.status === 'failed') return 3;
+      if (['uploaded', 'inspecting', 'ready'].includes(latest.status)) return 5;
+      if (latest.status === 'importing') return 7;
+      if (!hasAllowedPermission()) return 6;
+      return 8;
     } else if (needsAuthorization()) {
-      return 2;
+      return 3;
     }
-    if (!data.connection.lastSyncSucceededAt && !hasAllowedPermission()) return 3;
-    if (!hasAllowedPermission()) return 4;
-    if (!data.connection.lastSyncSucceededAt) return 5;
-    return 6;
+    if (!data.connection.lastSyncSucceededAt && !hasAllowedPermission()) return 5;
+    if (!hasAllowedPermission()) return 6;
+    if (!data.connection.lastSyncSucceededAt) return 7;
+    return 8;
+  }
+
+  async function reportJourneyProgress() {
+    if (!data.onboardingSession) return;
+    const current = currentOnboardingStep();
+    if (lastReportedStep === current) return;
+    lastReportedStep = current;
+    try {
+      const response = await fetch('/api/activity/v1/onboarding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'progress',
+          sessionId: data.onboardingSession.id,
+          connectionId: data.connection.id,
+          step: current,
+        }),
+      });
+      if (!response.ok) lastReportedStep = null;
+    } catch {
+      lastReportedStep = null;
+    }
+  }
+
+  function payoffPrompt(): string {
+    const outcomeId = data.onboardingSession?.outcomes.find(isActivityOnboardingOutcomeId);
+    return outcomeId
+      ? getActivityOnboardingOutcome(outcomeId).daydreamPrompt
+      : 'Look across my recent activity and surface one grounded pattern worth noticing.';
   }
 
   function previewLabel(activityEvent: PageData['previewEvents'][number]): string {
@@ -122,6 +160,7 @@
         : 'Archive encrypted and queued for inspection.';
       importFile = null;
       await invalidateAll();
+      await reportJourneyProgress();
     } catch (error) {
       message = error instanceof Error ? error.message : 'Could not upload archive';
     } finally {
@@ -138,6 +177,7 @@
       if (!response.ok) throw new Error(body.detail ?? 'Could not confirm import');
       message = 'Import queued. Replays are idempotent, so the same record will not be duplicated.';
       await invalidateAll();
+      await reportJourneyProgress();
     } catch (error) {
       message = error instanceof Error ? error.message : 'Could not confirm import';
     } finally {
@@ -161,6 +201,7 @@
       if (!response.ok) throw new Error(body.detail ?? 'Could not save permissions');
       message = 'Permissions saved';
       await invalidateAll();
+      await reportJourneyProgress();
     } catch (error) {
       message = error instanceof Error ? error.message : 'Could not save permissions';
     } finally {
@@ -180,6 +221,7 @@
       if (!response.ok) throw new Error(body.detail ?? 'Could not queue sync');
       message = `Sync queued · ${body.jobId}`;
       await invalidateAll();
+      await reportJourneyProgress();
     } catch (error) {
       message = error instanceof Error ? error.message : 'Could not queue sync';
     } finally {
@@ -196,10 +238,14 @@
         const result = await authorizeAppleMusicConnection(data.connection.id);
         message = `Apple Music connected · ${result.jobId}`;
         await invalidateAll();
+        await reportJourneyProgress();
         busy = null;
         return;
       }
-      const response = await fetch(`/api/activity/v1/connections/${data.connection.id}/authorize`, {
+      const journeyQuery = data.onboardingSession
+        ? `?journey=${encodeURIComponent(data.onboardingSession.id)}`
+        : '';
+      const response = await fetch(`/api/activity/v1/connections/${data.connection.id}/authorize${journeyQuery}`, {
         method: 'POST',
       });
       const body = await response.json();
@@ -233,7 +279,7 @@
 <svelte:head><title>{data.connection.label} — Sources</title></svelte:head>
 
 <main class="detail-shell">
-  <a class="back" href="/jkai/sources">← Sources</a>
+  <a class="back" href={data.onboardingSession ? `/jkai/sources/onboard?session=${data.onboardingSession.id}` : '/jkai/sources'}>← {data.onboardingSession ? 'Guided setup' : 'Sources'}</a>
   <header>
     <div>
       <p class="eyebrow">{data.provider.name} · {data.connection.mode.replaceAll('_', ' ')}</p>
@@ -249,7 +295,7 @@
 
   {#if needsAuthorization() && data.connection.mode !== 'import'}
     <section class="authorize">
-      <div><p class="section-code">Step 2 / Authorization</p><h2>{guide.actionLabel}</h2><p>{guide.actionDescription} No downstream consumer is enabled yet, and JKAI never sees your provider password.</p></div>
+      <div><p class="section-code">Step 3 / Connect</p><h2>{guide.actionLabel}</h2><p>{guide.actionDescription} No downstream consumer is enabled yet, and JKAI never sees your provider password.</p></div>
       <button onclick={authorize} disabled={busy !== null || !data.provider.canStart}>{busy === 'authorize' ? 'Opening…' : `${guide.actionLabel} →`}</button>
     </section>
   {/if}
@@ -316,10 +362,10 @@
     </section>
   {/if}
 
-  {#if data.connection.mode !== 'import' && currentOnboardingStep() === 3}
+  {#if data.connection.mode !== 'import' && currentOnboardingStep() === 5}
     <section class="onboarding-callout">
       <div>
-        <p class="section-code">Step 3 / Verify</p>
+        <p class="section-code">Step 5 / Preview</p>
         <h2>{data.connection.healthStatus === 'private_source' ? 'Make activity visible at the provider' : data.connection.status === 'active' ? 'Checking the first records' : 'The first check needs another try'}</h2>
         <p>{data.connection.healthStatus === 'private_source' ? (data.connection.healthMessage ?? 'This account is connected, but its activity is private.') : data.connection.status === 'active' ? 'The authorization succeeded. The initial sync is durable and can finish after you leave this page.' : (data.connection.healthMessage ?? 'The provider check did not complete. Existing consumer permissions remain off.')}</p>
       </div>
@@ -332,7 +378,7 @@
   {#if data.previewEvents.length > 0}
     <section class="preview" aria-labelledby="preview-title">
       <div class="section-head">
-        <div><p class="section-code">Step 3 / Verify</p><h2 id="preview-title">A sample before sharing</h2></div>
+        <div><p class="section-code">Step 5 / Preview</p><h2 id="preview-title">A sample before sharing</h2></div>
         <a href="/jkai/activity?connection={data.connection.id}">Open full audit →</a>
       </div>
       <p class="section-copy">These normalized records came from the source. They remain unavailable to JKAI and Daydream until you enable their permissions below.</p>
@@ -367,19 +413,19 @@
 
   <section>
     <div class="section-head">
-      <div><p class="section-code">Step 4 / Choose uses</p><h2>Who may read it?</h2></div>
+      <div><p class="section-code">Step 6 / Permissions</p><h2>Who may read it?</h2></div>
       <div class="permission-actions">
         <button class="secondary" onclick={useRecommendedPermissions} disabled={busy !== null}>Use recommended</button>
         <button onclick={saveGrants} disabled={busy !== null}>{busy === 'grants' ? 'Saving…' : 'Save permissions'}</button>
       </div>
     </div>
     <p class="section-copy"><strong>Recommended</strong> enables activity and metadata for JKAI answers and Daydream summaries only. Briefing, workflows, Intel, external tools and all raw content stay off.</p>
-    <div class="grant-table" style={`--grant-cols: ${data.provider.dataClasses.length}`}>
-      <div class="grant-head"><span>Consumer</span>{#each data.provider.dataClasses as dataClass}<span>{dataClass.replaceAll('_', ' ')}</span>{/each}</div>
+    <div class="grant-table" style={`--grant-cols: ${data.connection.dataClasses.length}`}>
+      <div class="grant-head"><span>Consumer</span>{#each data.connection.dataClasses as dataClass}<span>{dataClass.replaceAll('_', ' ')}</span>{/each}</div>
       {#each consumers as consumer (consumer.id)}
         <div class="grant-row">
           <span><strong>{consumer.label}</strong><small>{consumer.note}</small></span>
-          {#each data.provider.dataClasses as dataClass (dataClass)}
+          {#each data.connection.dataClasses as dataClass (dataClass)}
             <button
               class:allowed={checked(consumer.id, dataClass)}
               aria-pressed={checked(consumer.id, dataClass)}
@@ -392,10 +438,10 @@
     </div>
   </section>
 
-  {#if currentOnboardingStep() === 6}
+  {#if currentOnboardingStep() === 8}
     <section class="complete-panel">
-      <div><p class="section-code">Step 6 / Review</p><h2>This source is ready</h2><p>Authorization, the first sync and at least one explicit use are in place. You can change permissions or disconnect at any time.</p></div>
-      <div class="complete-actions"><a href="/jkai/sources">Finish setup →</a><a href="/jkai/activity?connection={data.connection.id}">Review activity</a></div>
+      <div><p class="section-code">Step 8 / Payoff</p><h2>This source is ready to be useful</h2><p>Try this with Daydream: “{payoffPrompt()}” You can change permissions or disconnect at any time.</p></div>
+      <div class="complete-actions"><a href="/jkai/daydreams/feed">Open Daydream →</a><a href="/jkai/activity?connection={data.connection.id}">Review the evidence</a><a href="/jkai/sources">Finish setup</a></div>
     </section>
   {/if}
 

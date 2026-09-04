@@ -7,6 +7,7 @@ import { getActivityFeatureState } from '$lib/activity/providers/catalog.server'
 import { beginActivityOauthTransaction } from '$lib/activity/oauth/transactions.server';
 import { buildSteamOpenIdUrl } from '$lib/activity/providers/steam/openid';
 import { activityErrorResponse, activityProblem } from '$lib/activity/http.server';
+import { requireActivityOnboardingSession } from '$lib/activity/store/onboarding.server';
 
 export const POST: RequestHandler = async (event) => {
   const principal = await requireOwnerActivityPrincipal(event);
@@ -24,12 +25,25 @@ export const POST: RequestHandler = async (event) => {
       return activityProblem(503, 'provider_not_configured', 'Steam Web API key is not configured');
     }
 
+    const journeyId = event.url.searchParams.get('journey');
+    if (journeyId) {
+      const onboarding = await requireActivityOnboardingSession(principal.id, journeyId);
+      if (onboarding.connectionId !== connection.id) {
+        return activityProblem(
+          409,
+          'connection_mismatch',
+          'The connection does not belong to this onboarding journey',
+        );
+      }
+    }
+
     const baseUrl = (publicEnv.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const redirectPath = `/jkai/sources/connections/${connection.id}${journeyId ? `?journey=${encodeURIComponent(journeyId)}` : ''}`;
     const transaction = await beginActivityOauthTransaction({
       principalId: principal.id,
       connectionId: connection.id,
       provider: connection.provider,
-      redirectPath: `/jkai/sources/connections/${connection.id}`,
+      redirectPath,
       scopes: [],
     });
     const callback = new URL('/api/activity/v1/providers/steam/callback', baseUrl);

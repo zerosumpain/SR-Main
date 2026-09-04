@@ -43,11 +43,26 @@
   }
 
   function actionLabel(provider: PageData['providers'][number]): string {
-    if (provider.canStart) return 'Start setup →';
-    if (provider.startBlocker === 'operator_setup_required') return 'Setup guide · service configuration pending →';
-    if (provider.startBlocker === 'not_launched') return 'Preview onboarding →';
-    if (provider.startBlocker === 'fabric_disabled') return 'Setup guide · fabric paused →';
-    return 'Setup guide · source disabled →';
+    if (provider.canStart) return 'Choose this source →';
+    if (provider.startBlocker === 'not_launched') return 'Prepare this source →';
+    return 'Review this source →';
+  }
+
+  function onboardingProviderName(id: string | null): string {
+    return data.providers.find((provider) => provider.id === id)?.name ?? 'your next source';
+  }
+
+  function onboardingStatus(value: string): string {
+    return {
+      choosing_source: 'Choose a recommended source',
+      preparing: 'Continue preparation',
+      waiting_export: 'Waiting for your export',
+      connecting: 'Finish connecting',
+      verifying: 'Review the first evidence',
+      choosing_uses: 'Choose permissions',
+      syncing: 'Finish the initial sync',
+      paused: 'Setup paused',
+    }[value] ?? 'Continue setup';
   }
 </script>
 
@@ -61,7 +76,10 @@
         <h1>Sources</h1>
         <p class="lede">Connect accounts and archives once. Decide separately what JKAI, Daydream and workflows may learn from them.</p>
       </div>
-      <a class="audit-link" href="/jkai/activity">Open activity audit →</a>
+      <div class="head-actions">
+        <a class="primary-action" href="/jkai/sources/onboard?restart=1">Start guided setup →</a>
+        <a class="audit-link" href="/jkai/activity">Open activity audit</a>
+      </div>
     </div>
   </header>
 
@@ -70,6 +88,16 @@
       <span class="state-mark">STAGED</span>
       <p><strong>The fabric is off.</strong> The catalogue is visible, but no provider can connect or sync until the owner enables the fabric and that provider.</p>
     </aside>
+  {/if}
+
+  {#if data.onboarding}
+    <a class="resume-card" href={data.onboarding.connectionId
+      ? `/jkai/sources/connections/${data.onboarding.connectionId}?journey=${data.onboarding.id}`
+      : `/jkai/sources/onboard?session=${data.onboarding.id}`}>
+      <span class="resume-mark">Resume</span>
+      <span><strong>{onboardingStatus(data.onboarding.status)}</strong><small>{onboardingProviderName(data.onboarding.selectedProvider)} · your choices are saved</small></span>
+      <span aria-hidden="true">→</span>
+    </a>
   {/if}
 
   <section class="section" aria-labelledby="connected-title">
@@ -84,7 +112,7 @@
     {#if data.connections.length === 0}
       <div class="empty">
         <p>No activity sources yet.</p>
-        <span>A connection will appear here only after you have seen its evidence limits and confirmed its downstream uses.</span>
+        <span>A connection appears after you choose its evidence boundary. Every downstream use remains off until you grant it separately.</span>
       </div>
     {:else}
       <ul class="connections">
@@ -141,7 +169,7 @@
                   <p class="policy-note">Policy gate · {provider.policyGate}</p>
                 {/if}
                 <div class="card-action">
-                  <a class:ready={provider.canStart} href="/jkai/sources/{provider.id}/connect">{actionLabel(provider)}</a>
+                  <a class:ready={provider.canStart} href="/jkai/sources/onboard?provider={provider.id}&restart=1">{actionLabel(provider)}</a>
                 </div>
               </article>
             {/each}
@@ -180,6 +208,13 @@
   .fabric-state { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; margin: 22px 0 0; padding: 14px; border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--accent, #c4570a) 7%, transparent); }
   .fabric-state p { margin: 0; color: var(--text-muted); line-height: 1.5; }
   .fabric-state strong { color: var(--text-primary); }
+  .head-actions { display: grid; justify-items: end; gap: 9px; }
+  .head-actions .primary-action { padding: 9px 12px; border: 1px solid var(--accent, #c4570a); color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+  .resume-card { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; margin-top: 22px; padding: 16px; border: 1px solid var(--success, #2d7a3a); background: color-mix(in srgb, var(--success, #2d7a3a) 6%, transparent); color: inherit; text-decoration: none; }
+  .resume-card:hover strong { color: var(--success, #2d7a3a); }
+  .resume-mark { padding: 3px 6px; border: 1px solid currentColor; color: var(--success, #2d7a3a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
+  .resume-card > span:nth-child(2) { display: grid; gap: 3px; }
+  .resume-card small { color: var(--text-muted); }
   .state-mark, .availability { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.09em; text-transform: uppercase; }
   .state-mark { padding: 2px 6px; border: 1px solid currentColor; color: var(--accent, #c4570a); }
   .section { padding: 34px 0; border-bottom: 1px solid var(--line-strong); }
@@ -227,6 +262,7 @@
   @media (max-width: 820px) {
     .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .title-row { align-items: flex-start; flex-direction: column; }
+    .head-actions { justify-items: start; }
   }
   @media (max-width: 620px) {
     .sources-shell { width: min(100% - 20px, 1120px); padding-top: 28px; }
