@@ -7,7 +7,12 @@ import {
   integrationCredentials,
   type ActivityConnection,
 } from '$lib/db/schema';
-import { defaultConsumerGrants, type ConnectionMode } from '../contracts';
+import {
+  ACTIVITY_DATA_CLASSES,
+  defaultConsumerGrants,
+  type ActivityDataClass,
+  type ConnectionMode,
+} from '../contracts';
 import { getCatalogProvider } from '../providers/catalog';
 import { randomActivityId, stableActivityId } from './ids';
 import { encryptPayload } from '$lib/secrets/crypto';
@@ -18,6 +23,7 @@ export class ActivityConnectionError extends Error {
       | 'provider_not_found'
       | 'provider_unavailable'
       | 'mode_not_supported'
+      | 'invalid_data_class'
       | 'connection_not_found'
       | 'credential_mismatch',
     message: string,
@@ -33,6 +39,7 @@ export interface CreateActivityConnectionInput {
   mode: ConnectionMode;
   label?: string;
   scopes?: string[];
+  dataClasses?: ActivityDataClass[];
   /** Local/test fixture is the only provider allowed while catalogued as hidden. */
   allowUnavailable?: boolean;
 }
@@ -55,6 +62,18 @@ export async function createActivityConnection(
       `${manifest.name} is not available yet`,
     );
   }
+  const dataClasses = input.dataClasses ?? manifest.dataClasses;
+  if (
+    dataClasses.length === 0 ||
+    dataClasses.some(
+      (value) => !ACTIVITY_DATA_CLASSES.includes(value) || !manifest.dataClasses.includes(value),
+    )
+  ) {
+    throw new ActivityConnectionError(
+      'invalid_data_class',
+      `${manifest.name} does not offer the selected data class`,
+    );
+  }
 
   const id = randomActivityId('aconn');
   return db.transaction(async (tx) => {
@@ -67,7 +86,7 @@ export async function createActivityConnection(
         mode: input.mode,
         label: input.label?.trim() || manifest.name,
         scopes: input.scopes ?? manifest.scopes.filter((scope) => scope.required).map((scope) => scope.id),
-        dataClasses: manifest.dataClasses,
+        dataClasses,
         capabilities: {
           evidenceModes: manifest.evidenceModes,
           eventTypes: manifest.eventTypes,
@@ -80,7 +99,7 @@ export async function createActivityConnection(
     const grants = defaultConsumerGrants({
       principalId: input.principalId,
       connectionId: id,
-      dataClasses: manifest.dataClasses,
+      dataClasses,
     }).map((grant) => ({ ...grant, allowed: false }));
     if (grants.length > 0) await tx.insert(activityConsumerGrants).values(grants);
     return connection;

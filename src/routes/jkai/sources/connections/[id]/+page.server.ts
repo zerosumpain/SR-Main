@@ -13,16 +13,22 @@ import {
   publicActivityImport,
   publicActivityJob,
 } from '$lib/activity/public.server';
+import {
+  getActivityOnboardingSession,
+  publicActivityOnboardingSession,
+} from '$lib/activity/store/onboarding.server';
 
 export const load: PageServerLoad = async (event) => {
   const principal = await requireOwnerActivityPrincipal(event);
   const connection = await requireActivityConnection(principal.id, event.params.id);
-  const [grants, jobs, imports, feature, previewEvents] = await Promise.all([
+  const journeyId = event.url.searchParams.get('journey');
+  const [grants, jobs, imports, feature, previewEvents, onboarding] = await Promise.all([
     listActivityGrants(principal.id, connection.id),
     listActivityJobs(principal.id, connection.id),
     listActivityImports(principal.id, connection.id),
     getActivityFeatureState(),
     listActivityEvents(principal.id, { connectionIds: [connection.id], limit: 5 }),
+    journeyId ? getActivityOnboardingSession(principal.id, journeyId) : Promise.resolve(null),
   ]);
   const provider = feature.providers.find((item) => item.id === connection.provider);
   if (!provider) throw error(500, 'Provider manifest is missing');
@@ -49,5 +55,9 @@ export const load: PageServerLoad = async (event) => {
       ? event.url.searchParams.get('auth') as 'connected' | 'failed'
       : null,
     fabricEnabled: feature.enabled,
+    onboardingSession:
+      onboarding?.connectionId === connection.id
+        ? publicActivityOnboardingSession(onboarding)
+        : null,
   };
 };

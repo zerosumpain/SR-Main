@@ -24,7 +24,7 @@
   .onboarding-steps {
     list-style: none;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     margin: 0;
     padding: 18px 0;
     border-bottom: 1px solid var(--line-strong);
@@ -70,7 +70,7 @@
   li.active { color: var(--accent, #c4570a); }
   li.complete { color: var(--success, #2d7a3a); }
   @media (max-width: 760px) {
-    .onboarding-steps { grid-template-columns: repeat(6, 1fr); gap: 4px; }
+    .onboarding-steps { grid-template-columns: repeat(8, 1fr); gap: 4px; }
     li { justify-content: center; }
     li::after { left: calc(50% + 12px); width: calc(100% - 24px); }
     small { display: none; }

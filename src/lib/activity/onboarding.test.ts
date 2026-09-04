@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getActivityOnboardingGuide } from './onboarding';
+import {
+  ACTIVITY_ONBOARDING_OUTCOMES,
+  getActivityOnboardingGuide,
+  isActivityOnboardingOutcomeId,
+  recommendActivityProviders,
+} from './onboarding';
 
 describe('activity onboarding guides', () => {
   it('never asks a live provider user for their password', () => {
@@ -23,5 +28,32 @@ describe('activity onboarding guides', () => {
     const guide = getActivityOnboardingGuide('apple_podcasts', 'import');
     expect(guide.actionDescription).toMatch(/does not currently provide/i);
     expect(guide.actionDescription).not.toMatch(/OAuth/i);
+  });
+
+  it('turns user outcomes into ranked, deduplicated source recommendations', () => {
+    const recommendations = recommendActivityProviders(
+      ['listen', 'interests'],
+      [
+        { id: 'steam', category: 'games', canStart: true },
+        { id: 'apple_music', category: 'music_podcasts', canStart: false },
+        { id: 'youtube_takeout', category: 'music_podcasts', canStart: false },
+        { id: 'reddit_archive', category: 'social', canStart: false },
+      ],
+    );
+    expect(recommendations.map((item) => item.provider.id)).toEqual([
+      'youtube_takeout',
+      'apple_music',
+      'reddit_archive',
+    ]);
+    expect(recommendations[0].reasons).toEqual([
+      'Understand my listening',
+      'Follow my interests',
+    ]);
+  });
+
+  it('keeps the outcome vocabulary closed and gives every outcome a payoff', () => {
+    expect(isActivityOnboardingOutcomeId('listen')).toBe(true);
+    expect(isActivityOnboardingOutcomeId('surveillance')).toBe(false);
+    expect(ACTIVITY_ONBOARDING_OUTCOMES.every((outcome) => outcome.daydreamPrompt.length > 20)).toBe(true);
   });
 });

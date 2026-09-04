@@ -10,6 +10,11 @@ import { consumeActivityOauthTransaction } from '$lib/activity/oauth/transaction
 import { enqueueActivityJob } from '$lib/activity/sync/queue.server';
 import { hashOauthState } from '$lib/activity/oauth/pkce';
 
+function resultRedirect(path: string, auth: 'connected' | 'failed'): string {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}onboarding=1&auth=${auth}`;
+}
+
 export const GET: RequestHandler = async (event) => {
   const principal = await requireOwnerActivityPrincipal(event);
   const connectionId = event.url.searchParams.get('connection') ?? '';
@@ -28,7 +33,7 @@ export const GET: RequestHandler = async (event) => {
   try {
     steamId = await verifySteamOpenIdResponse(event.url);
   } catch {
-    throw redirect(303, `${transaction.redirectPath}?onboarding=1&auth=failed`);
+    throw redirect(303, resultRedirect(transaction.redirectPath, 'failed'));
   }
   await activateActivityConnection({
     principalId: principal.id,
@@ -43,5 +48,5 @@ export const GET: RequestHandler = async (event) => {
     kind: 'initial_sync',
     idempotencyKey: `steam-openid:${hashOauthState(state)}`,
   });
-  throw redirect(303, `${transaction.redirectPath}?onboarding=1&auth=connected`);
+  throw redirect(303, resultRedirect(transaction.redirectPath, 'connected'));
 };
