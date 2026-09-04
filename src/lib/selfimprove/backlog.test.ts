@@ -439,6 +439,43 @@ describe('owner edits', () => {
       });
     });
 
+    it('stores a groomed brief and preserves it when a later edit omits grooming', async () => {
+      const created = await createBacklogItem({
+        title: 'Structured feature',
+        detail: 'rough brief',
+        kind: 'feature',
+        priority: 2,
+        grooming: {
+          problem: 'The builder has to guess.',
+          outcome: 'The builder receives a contract.',
+          acceptanceCriteria: ['The contract is persisted', 'The builder reads it', 'The user reviews it'],
+          validation: ['Persistence tests pass'],
+          implementationNotes: ['Use additive record JSON'],
+          openQuestions: [],
+          effort: 'small',
+          risk: 'low',
+          modelId: 'default-test-model',
+          groomedAt: '2026-09-04T09:00:00.000Z',
+          revision: 2,
+        },
+      });
+      expect(created.grooming).toMatchObject({
+        modelId: 'default-test-model',
+        revision: 2,
+        readiness: { status: 'ready' },
+      });
+      expect(created.grooming?.acceptedAt).toBeTruthy();
+
+      await updateBacklogItem(created.slug, {
+        title: 'Structured feature renamed',
+        detail: 'edited without another grooming pass',
+        kind: 'feature',
+        priority: 1,
+      });
+      expect(stored(created.slug).grooming?.revision).toBe(2);
+      expect(stored(created.slug).grooming?.problem).toBe('The builder has to guess.');
+    });
+
     it('locks a shipped item to the kind that produced its artifact', async () => {
       seed(item({ slug: 'built', status: 'shipped', kind: 'tool' }));
       await expect(updateBacklogItem('built', {

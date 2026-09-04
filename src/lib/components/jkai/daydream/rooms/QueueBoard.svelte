@@ -11,20 +11,18 @@
   // Everything derived lives in `$lib/selfimprove/board.ts`, which is pure and
   // unit-tested: stages, legal moves, lane mapping and the filter. This file is
   // the surface only — if a rule here needs a test, it is in the wrong file.
-  import DrillPanel from '$lib/components/jkai/daydream/hub/DrillPanel.svelte';
+  import BacklogEditor from './BacklogEditor.svelte';
   import InflowStrip from './InflowStrip.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import {
     applyFilter,
-    BACKLOG_KINDS,
     canMove,
     sortForBoard,
     STAGE_META,
     WORK_LANES,
     WORK_STAGES,
     type BoardFlag,
-    type BacklogKind,
     type BoardTone,
     type BoardView,
     type IdeaSource,
@@ -71,75 +69,20 @@
   let openId = $state<string | null>(null);
   const open = $derived(openId ? (view.items.find((i) => i.id === openId) ?? null) : null);
   let creating = $state(false);
-  let editTitle = $state('');
-  let editDetail = $state('');
-  let editKind = $state<BacklogKind>('feature');
-  let editPriority = $state(3);
-  let modalError = $state<string | null>(null);
-  let confirmRemove = $state(false);
-
-  const KIND_HELP: Readonly<Record<BacklogKind, string>> = {
-    tool: 'a runtime tool the toolsmith can build',
-    feature: 'repo code handled by the build lane',
-    source: 'a data source to discover and sample',
-    watch: 'a recurring monitor workflow',
-    engine: 'an idea about Daydream itself; never auto-built',
-  };
 
   function closeEditor() {
     creating = false;
     openId = null;
-    confirmRemove = false;
-    modalError = null;
   }
 
   function openCreate() {
     openId = null;
     creating = true;
-    editTitle = '';
-    editDetail = '';
-    editKind = 'feature';
-    editPriority = 3;
-    confirmRemove = false;
-    modalError = null;
   }
 
   function openItem(item: WorkItem) {
     creating = false;
     openId = item.id;
-    editTitle = item.title;
-    editDetail = item.detail;
-    editKind = BACKLOG_KINDS.includes(item.kind as BacklogKind) ? (item.kind as BacklogKind) : 'tool';
-    editPriority = item.priority;
-    confirmRemove = false;
-    modalError = null;
-  }
-
-  async function saveEditor() {
-    modalError = null;
-    if (!editTitle.trim()) {
-      modalError = 'A feature needs a title.';
-      return;
-    }
-    const body = {
-      action: creating ? 'backlog_create' : 'backlog_update',
-      ...(creating ? {} : { slug: open?.slug }),
-      title: editTitle.trim(),
-      detail: editDetail.trim(),
-      kind: editKind,
-      priority: editPriority,
-    };
-    const key = creating ? 'backlog:create' : `edit:${open?.id ?? ''}`;
-    const ok = await act(body, key);
-    if (ok) closeEditor();
-    else modalError = 'The feature was not saved.';
-  }
-
-  async function removeItem(item: WorkItem) {
-    modalError = null;
-    const ok = await act({ action: 'backlog_remove', slug: item.slug }, `remove:${item.id}`);
-    if (ok) closeEditor();
-    else modalError = 'The feature was not removed.';
   }
 
   /** Cards rendered in one column before it stops. 302 in a column is a
@@ -526,6 +469,9 @@
                           onclick={() => bumpPriority(i)}
                         >P{i.priority}</button>
                         <span>{ago(i.updatedAt)}</span>
+                        {#if i.grooming}
+                          <span class="wc-ready {i.grooming.readiness.status}">{i.grooming.readiness.score}% groomed</span>
+                        {/if}
                         {#if i.attempts}<span>{i.attempts}/{i.attemptCeiling} tries</span>{/if}
                         {#if i.calls != null}<span>{i.calls} calls</span>{/if}
                         {#if errRate(i)}<span class="warn">{errRate(i)}</span>{/if}
@@ -588,204 +534,11 @@
   {/if}
 {/if}
 
-{#if creating}
-  <DrillPanel label="Add a backlog feature" kicker="New feature" tone="action" onclose={closeEditor}>
-    {#snippet head()}<span class="pill t-action">added by you</span>{/snippet}
-
-    <form class="edit-form" onsubmit={(event) => { event.preventDefault(); void saveEditor(); }}>
-      <p class="form-intro">
-        This enters the accepted queue immediately. It does not start a build; the matching lane
-        still waits for its budgeted slot.
-      </p>
-      <label class="edit-field wide">
-        <span>Title</span>
-        <input class="text-input" bind:value={editTitle} maxlength="200" placeholder="What should Daydream add?" />
-      </label>
-      <label class="edit-field wide">
-        <span>Detailed brief</span>
-        <textarea class="text-input area" bind:value={editDetail} maxlength="2000" rows="7" placeholder="Describe the outcome, useful context, and what done should look like."></textarea>
-        <small>{editDetail.length}/2000</small>
-      </label>
-      <label class="edit-field">
-        <span>Kind</span>
-        <select class="text-input select" bind:value={editKind}>
-          {#each BACKLOG_KINDS as kind (kind)}<option value={kind}>{kind}</option>{/each}
-        </select>
-        <small>{KIND_HELP[editKind]}</small>
-      </label>
-      <label class="edit-field">
-        <span>Priority</span>
-        <select class="text-input select" bind:value={editPriority}>
-          {#each [1, 2, 3, 4, 5] as priority (priority)}
-            <option value={priority}>P{priority}{priority === 1 ? ' — highest' : priority === 5 ? ' — lowest' : ''}</option>
-          {/each}
-        </select>
-        <small>This is the first field the nightly picker ranks on.</small>
-      </label>
-      {#if modalError}<p class="modal-error" role="alert">{modalError}</p>{/if}
-    </form>
-
-    {#snippet foot()}
-      <div class="actions">
-        <button type="button" class="cta" disabled={busy === 'backlog:create'} onclick={saveEditor}>
-          {busy === 'backlog:create' ? 'Adding…' : 'Add to backlog'}
-        </button>
-        <button type="button" class="btn" disabled={busy === 'backlog:create'} onclick={closeEditor}>Cancel</button>
-      </div>
-    {/snippet}
-  </DrillPanel>
+{#if creating || open}
+  {#key creating ? 'create' : (open?.id ?? 'editor')}
+    <BacklogEditor item={open} onclose={closeEditor} />
+  {/key}
 {/if}
-
-{#if open}
-  {@const o = open}
-  <DrillPanel label={o.title} kicker={`${LANE_MARK[o.lane]} · ${STAGE_META[o.stage].label}`} tone={stageTone(o.stage)} onclose={closeEditor}>
-    {#snippet head()}
-      <span class="pill t-{stageTone(o.stage)}">{STAGE_META[o.stage].question}</span>
-    {/snippet}
-
-    <div class="detail">
-      {#if o.actionable}
-        <form class="edit-form" onsubmit={(event) => { event.preventDefault(); void saveEditor(); }}>
-          <label class="edit-field wide">
-            <span>Title</span>
-            <input class="text-input" bind:value={editTitle} maxlength="200" />
-            <small>The stable identifier remains <code>{o.slug}</code> when the title changes.</small>
-          </label>
-          <label class="edit-field wide">
-            <span>Detailed brief</span>
-            <textarea class="text-input area" bind:value={editDetail} maxlength="2000" rows="7" placeholder="Describe the outcome, useful context, and what done should look like."></textarea>
-            <small>{editDetail.length}/2000</small>
-          </label>
-          <label class="edit-field">
-            <span>Kind</span>
-            <select class="text-input select" bind:value={editKind} disabled={o.backlogStatus === 'shipped'}>
-              {#each BACKLOG_KINDS as kind (kind)}<option value={kind}>{kind}</option>{/each}
-            </select>
-            <small>{o.backlogStatus === 'shipped' ? 'Locked because this has shipped.' : KIND_HELP[editKind]}</small>
-          </label>
-          <label class="edit-field">
-            <span>Priority</span>
-            <select class="text-input select" bind:value={editPriority}>
-              {#each [1, 2, 3, 4, 5] as priority (priority)}
-                <option value={priority}>P{priority}{priority === 1 ? ' — highest' : priority === 5 ? ' — lowest' : ''}</option>
-              {/each}
-            </select>
-            <small>The nightly picker ranks this before age or attempt count.</small>
-          </label>
-          {#if modalError}<p class="modal-error" role="alert">{modalError}</p>{/if}
-        </form>
-      {:else}
-        <div class="detail-block">
-          <p class="field-label">What it asks for</p>
-          <p class="detail-line">{o.detail || 'No detail was recorded.'}</p>
-        </div>
-      {/if}
-
-      <div class="detail-block record-block">
-        <p class="field-label">Immutable record</p>
-        <div class="tbl-wrap">
-          <table class="tbl compact">
-            <tbody>
-              <tr><td>identifier</td><td class="cell-lead"><code>{o.slug}</code></td></tr>
-              <tr><td>state</td><td class="cell-lead">{STAGE_META[o.stage].label} · {STAGE_META[o.stage].question}</td></tr>
-              <tr><td>route</td><td class="cell-lead">{o.kind} → {o.lane} lane</td></tr>
-              <tr><td>arrived through</td><td class="cell-lead">{o.intake ?? 'capability ledger'}</td></tr>
-              <tr><td>attempts</td><td class="cell-lead">{o.attempts} of {o.attemptCeiling}</td></tr>
-              <tr><td>queued</td><td class="cell-lead">{ago(o.createdAt)}</td></tr>
-              <tr><td>last touched</td><td class="cell-lead">{ago(o.updatedAt)}</td></tr>
-              {#if o.epicSlug}<tr><td>theme</td><td class="cell-lead">{o.epicLabel}</td></tr>{/if}
-              {#if o.artifact}
-                <tr>
-                  <td>artifact</td>
-                  <td class="cell-lead">
-                    {#if o.artifactHref}<a class="link" href={o.artifactHref}>{o.artifact}</a>{:else}{o.artifact}{/if}
-                    {#if o.calls != null}· {o.calls} call{o.calls === 1 ? '' : 's'}{/if}
-                    {#if errRate(o)}· {errRate(o)}{/if}
-                  </td>
-                </tr>
-              {/if}
-              {#if o.score != null}<tr><td>score</td><td class="cell-lead">{o.score.toFixed(3)}</td></tr>{/if}
-              {#if o.foldedCount}<tr><td>folded in</td><td class="cell-lead">{o.foldedCount}</td></tr>{/if}
-              {#if o.foldedInto}<tr><td>folded into</td><td class="cell-lead">{o.foldedInto}</td></tr>{/if}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {#if o.evidence.length}
-        <div class="detail-block">
-          <p class="field-label">Where the pressure came from</p>
-          <p class="detail-line">{o.evidence.join(' · ')}</p>
-        </div>
-      {/if}
-
-      {#if o.alreadyServed}
-        <div class="detail-block">
-          <p class="field-label">Looks already served</p>
-          <p class="detail-line said">
-            “{o.servedBy}” has shipped and appears to cover this, but the engine never recorded
-            the link — so it may build the same thing twice. Folding them closes that out.
-          </p>
-        </div>
-      {/if}
-
-      {#if o.lastError}
-        <div class="detail-block">
-          <p class="field-label">Last failure</p>
-          <p class="detail-line said">{o.lastError}</p>
-          <p class="note">Fed back into the next authoring call — this is what the retry budget is for.</p>
-        </div>
-      {/if}
-
-      {#if !o.actionable}
-        <p class="note">
-          This is a capability lead, not a queued feature. Rule on it in
-          <a class="link" href="/jkai/daydreams/improvement#appetite">Improvement → Appetite</a>,
-          where its citations and score are shown.
-        </p>
-      {/if}
-
-      {#if confirmRemove}
-        <div class="remove-confirm" role="alert">
-          <p><strong>Remove “{o.title}” from the backlog?</strong></p>
-          <p>
-            It disappears from this room and no lane will pick it again. A small tombstone stays
-            in the ledger so the nightly engine cannot silently propose the same feature tomorrow.
-            Any artifact that already shipped is left untouched.
-          </p>
-          <div class="actions">
-            <button type="button" class="btn danger picked" disabled={busy === `remove:${o.id}`} onclick={() => removeItem(o)}>
-              {busy === `remove:${o.id}` ? 'Removing…' : 'Yes, remove it'}
-            </button>
-            <button type="button" class="btn" disabled={busy === `remove:${o.id}`} onclick={() => (confirmRemove = false)}>Keep it</button>
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    {#snippet foot()}
-      <div class="actions editor-actions">
-        {#if o.actionable}
-          <button type="button" class="cta" disabled={busy === `edit:${o.id}`} onclick={saveEditor}>
-            {busy === `edit:${o.id}` ? 'Saving…' : 'Save changes'}
-          </button>
-          {#if o.stage === 'parked'}
-            <button type="button" class="btn" disabled={busy === `park:${o.id}`} onclick={async () => { if (await setParked(o, false)) closeEditor(); }}>
-              Put it back
-            </button>
-          {:else if o.stage !== 'live' && o.stage !== 'verifying'}
-            <button type="button" class="btn" disabled={busy === `park:${o.id}`} onclick={async () => { if (await setParked(o, true, 'Parked from the backlog room')) closeEditor(); }}>
-              Park it
-            </button>
-          {/if}
-          <button type="button" class="btn danger remove-button" disabled={busy !== null} onclick={() => (confirmRemove = true)}>Remove feature</button>
-        {/if}
-        <button type="button" class="btn" onclick={closeEditor}>Close</button>
-      </div>
-    {/snippet}
-  </DrillPanel>
-{/if}
-
 <style>
   .qb-manage {
     display: flex;
@@ -1094,6 +847,15 @@
   .wc-meta .warn {
     color: var(--error);
   }
+  .wc-ready {
+    color: var(--accent-ink);
+  }
+  .wc-ready.ready {
+    color: var(--good);
+  }
+  .wc-ready.needs_input {
+    color: var(--warn);
+  }
   .wc-pri {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -1185,92 +947,9 @@
   .hd-of {
     color: var(--text-ghost);
   }
-  /* ── editor modal ─────────────────────────────────────────────────────────────── */
-  .edit-form {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px 14px;
-  }
-  .form-intro,
-  .edit-field.wide,
-  .modal-error {
-    grid-column: 1 / -1;
-  }
-  .form-intro {
-    margin: 0;
-    color: var(--text-secondary);
-    line-height: 1.55;
-  }
-  .edit-field {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    min-width: 0;
-  }
-  .edit-field > span {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .edit-field .text-input {
-    width: 100%;
-  }
-  .edit-field small {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.45;
-    color: var(--text-ghost);
-  }
-  .record-block {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--line-hair);
-  }
-  .modal-error {
-    margin: 0;
-    padding: 9px 11px;
-    color: var(--error);
-    background: var(--error-bg);
-    border-left: 3px solid var(--error);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-  }
-  .remove-confirm {
-    margin-top: 24px;
-    padding: 16px;
-    border: 1px solid var(--error-border);
-    border-left: 4px solid var(--error);
-    background: var(--error-bg);
-  }
-  .remove-confirm p {
-    margin: 0 0 10px;
-    line-height: 1.5;
-    color: var(--text-secondary);
-  }
-  .remove-confirm p:first-child {
-    color: var(--text-primary);
-  }
-  .remove-confirm .actions {
-    margin-top: 14px;
-  }
-  .editor-actions {
-    width: 100%;
-  }
-  .remove-button {
-    margin-left: auto;
-  }
-
   @media (max-width: 700px) {
     .qb-search {
       flex: 1 1 100%;
-    }
-    .edit-form {
-      grid-template-columns: 1fr;
-    }
-    .remove-button {
-      margin-left: 0;
     }
   }
 </style>

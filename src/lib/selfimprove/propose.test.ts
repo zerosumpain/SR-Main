@@ -239,4 +239,41 @@ describe('the ask handed to the builder', () => {
     expect(req).toContain('run7');
     expect(req).toContain('Do not weaken a gate');
   });
+
+  it('hands an accepted structured brief to the builder instead of making it infer done', async () => {
+    h.backlog = [item({
+      slug: 'groomed',
+      grooming: {
+        problem: 'The backlog modal is hard to use.',
+        outcome: 'A clear three-step grooming journey.',
+        acceptanceCriteria: ['The user can ask the model questions', 'The user applies suggestions explicitly'],
+        constraints: ['Use the configured default model'],
+        nonGoals: ['Do not auto-merge'],
+        dependencies: [],
+        implementationNotes: ['Persist only the accepted structured brief'],
+        validation: ['Run route tests', 'Run the Svelte check'],
+        assumptions: [],
+        openQuestions: ['Should transcript history persist?'],
+        decisions: ['Keep transcript ephemeral'],
+        relatedItems: [],
+        effort: 'medium',
+        risk: 'medium',
+        readiness: { score: 64, status: 'needs_input', reason: 'One question remains.' },
+        assistantSummary: 'Drafted the contract.',
+        modelId: 'default-test-model',
+        groomedAt: '2026-09-04T09:00:00.000Z',
+        acceptedAt: '2026-09-04T09:01:00.000Z',
+        revision: 1,
+      },
+    })];
+
+    await proposeFeatures(budget, 'run8', { lanes, autobuild: true });
+
+    const req = h.changeRequests[0].request;
+    expect(req).toContain('Acceptance criteria');
+    expect(req).toContain('The user can ask the model questions');
+    expect(req).toContain('Validation');
+    expect(req).toContain('Use the configured default model');
+    expect(req).toContain('Remaining open questions');
+  });
 });

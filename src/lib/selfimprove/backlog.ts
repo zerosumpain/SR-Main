@@ -25,6 +25,7 @@ import {
 // The channel vocabulary lives in the pure module — see `IDEA_SOURCES` there
 // for why it cannot live in `./types`.
 import { BACKLOG_KINDS, IDEA_SOURCES, type BacklogKind, type IdeaSource } from './board';
+import { acceptGrooming } from './grooming';
 
 /** An idea as proposed by a phase, before it becomes a record. */
 export interface IdeaInput {
@@ -362,6 +363,8 @@ export interface OwnerBacklogInput {
   /** Validated against BACKLOG_KINDS at the write boundary. */
   kind: string;
   priority: number;
+  /** Accepted structured brief. Omitted to preserve an existing one. */
+  grooming?: unknown;
 }
 
 export type OwnerBacklogUpdate = OwnerBacklogInput;
@@ -402,6 +405,7 @@ export async function createBacklogItem(input: OwnerBacklogInput): Promise<Backl
     createdAt: now,
     updatedAt: now,
   };
+  if (input.grooming) item.grooming = acceptGrooming(input.grooming, now);
   await put(item);
   return item;
 }
@@ -434,6 +438,7 @@ export async function updateBacklogItem(
     priority: clampPriority(input.priority),
     updatedAt: new Date().toISOString(),
   };
+  if (input.grooming) next.grooming = acceptGrooming(input.grooming, next.updatedAt);
 
   await put(next);
   return next;

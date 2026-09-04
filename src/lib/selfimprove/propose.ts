@@ -50,6 +50,7 @@ import { listBacklog, markAttempt, pickWork } from './backlog';
 import { openDraftPr, pathAllowed, prConfigured, type FileChange } from '$lib/github/pr';
 import type { BacklogItemData } from './types';
 import { markCapability, ownerAcceptedCapabilities } from '$lib/daydream/appetite/intake';
+import { renderBacklogBrief } from './grooming';
 
 interface ProposedChange {
   title: string;
@@ -102,7 +103,7 @@ function buildMessages(
     '"files": [{"path": "src/lib/…", "content": "<full file contents>"}]}. No prose outside the JSON.';
 
   const user =
-    `Capability to implement:\n${item.title}\n\n${item.detail}\n\n` +
+    `Capability to implement:\n${renderBacklogBrief(item)}\n\n` +
     (item.lastError ? `A previous attempt failed with: ${item.lastError}\n\n` : '') +
     `Platform reference (for context on what already exists):\n${contextText}`;
 
@@ -127,9 +128,7 @@ function prBody(item: BacklogItemData, change: ProposedChange, runId: string): s
     '',
     '## Idea',
     '',
-    `${item.title}`,
-    '',
-    item.detail,
+    renderBacklogBrief(item),
     '',
     '## Summary of the change',
     '',
@@ -159,7 +158,9 @@ function prBody(item: BacklogItemData, change: ProposedChange, runId: string): s
  */
 export function changeRequestBody(item: BacklogItemData, runId: string): string {
   return [
-    item.detail,
+    '## Accepted implementation brief',
+    '',
+    renderBacklogBrief(item),
     '',
     '## Where this came from',
     '',
@@ -222,7 +223,7 @@ export async function proposeFeatures(
       continue;
     }
     try {
-      const res = await lanes.createWatch({ description: `${item.title}. ${item.detail}`.slice(0, 1000) });
+      const res = await lanes.createWatch({ description: renderBacklogBrief(item).slice(0, 1000) });
       await markAttempt(item, { status: 'shipped', runId });
       if (item.capabilitySlug) {
         await markCapability(item.capabilitySlug, 'shipped', `Created as a ${res.label}.`, res.ref);
@@ -232,7 +233,7 @@ export async function proposeFeatures(
         detail: `${res.label} — for "${item.title}"`,
         story: {
           subject: item.title,
-          driver: item.detail.slice(0, 400),
+          driver: (item.grooming?.problem || item.detail).slice(0, 400),
           driverRef: item.slug,
           solution: `Generated a recurring monitor: ${res.label}.`,
           outcome: 'Runs on its schedule and notifies only when something is new.',
@@ -280,7 +281,7 @@ export async function proposeFeatures(
           detail: `${res.label} — "${item.title}"`,
           story: {
             subject: item.title,
-            driver: item.detail.slice(0, 400),
+            driver: (item.grooming?.problem || item.detail).slice(0, 400),
             driverRef: item.slug,
             solution: `Opened a change request and started a gated repo build (${res.label}).`,
             outcome: 'The build runs the gate on every iteration and opens a PR; nothing merges itself.',

@@ -44,6 +44,7 @@ import { staticScan, smokeTest, type SmokeCase, type SmokeResult } from './verif
 import { addIdeas, listBacklog, markAttempt, pickToolWork } from './backlog';
 import { findRelatedIdea } from './narrative';
 import { jkaiTestPromptFor } from './deployment';
+import { renderBacklogBrief } from './grooming';
 
 const NAME_RE = /^[a-z][a-z0-9_]{2,60}$/;
 
@@ -176,7 +177,7 @@ function buildAuthorMessages(
         work
           .map(
             (w) =>
-              `- ${w.title}: ${w.detail}` +
+              renderBacklogBrief(w) +
               (w.attempts > 0
                 ? `\n  PREVIOUS ATTEMPT #${w.attempts} FAILED: ${w.lastError ?? 'unknown'} — take a different approach.`
                 : ''),
