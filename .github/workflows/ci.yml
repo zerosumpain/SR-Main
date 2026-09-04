@@ -212,6 +212,11 @@ jobs:
       PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The dependency audit compares the candidate with its base. On pull
+          # requests HEAD is the synthetic merge commit and HEAD^ is the base;
+          # on pushes HEAD^ is the previous master tip.
+          fetch-depth: 2
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -221,11 +226,17 @@ jobs:
       - run: npm ci
 
       - name: Audit production dependencies
-        # The npm advisory endpoint occasionally accepts the connection and
-        # then never returns (the install registry remains healthy). Bound each
-        # attempt so a transient audit-service fault is retried instead of
-        # consuming the whole job; a real advisory still fails every attempt.
+        # Dependency changes must pass the live advisory service. An unchanged
+        # manifest/lockfile has the same production graph as the already-gated
+        # base, so do not let an npm advisory-service outage block unrelated
+        # application or deployment fixes. The nightly workflow still audits
+        # the graph for advisories disclosed after it entered master.
         run: |
+          if git diff --quiet HEAD^ -- package.json package-lock.json; then
+            echo "Production dependency graph unchanged; retaining the base audit result."
+            exit 0
+          fi
+
           status=1
           for attempt in 1 2 3; do
             echo "Audit attempt $attempt/3"
