@@ -17,22 +17,40 @@
   }
 
   let state = $state<LiveWalkState>({ active: false });
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
 
   onMount(() => {
-    fetchState();
-    pollInterval = setInterval(fetchState, 30000);
+    void fetchState();
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = null;
+      } else {
+        void fetchState();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   });
 
   onDestroy(() => {
-    if (pollInterval) clearInterval(pollInterval);
+    stopped = true;
+    if (pollTimer) clearTimeout(pollTimer);
   });
 
   async function fetchState() {
     try {
       const res = await fetch('/api/live-walk');
       if (res.ok) state = await res.json();
-    } catch {}
+    } catch {
+      // keep the last known state; the next scheduled read retries
+    } finally {
+      if (!stopped && !document.hidden) {
+        // A live walk needs a responsive banner; an absent walk changes rarely.
+        pollTimer = setTimeout(fetchState, state.active ? 15_000 : 120_000);
+      }
+    }
   }
 
   function formatElapsed(startedAt: number): string {

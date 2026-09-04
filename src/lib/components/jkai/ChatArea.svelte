@@ -87,6 +87,8 @@
     activeBuild = null,
     approvalUi,
     active = true,
+    initialHasOlderMessages = false,
+    initialMessageCursor = null,
     onbusychange,
   }: {
     conversationId: string | null;
@@ -138,6 +140,9 @@
      * because a background tab finishing its answer is the entire point.
      */
     active?: boolean;
+    /** Pagination state for the bounded initial history page. */
+    initialHasOlderMessages?: boolean;
+    initialMessageCursor?: { before: string; beforeId: string } | null;
     /**
      * Fires when this thread starts or stops working, so the tab strip can show
      * a dot without polling. `ok` is false when the turn ended in an error.
@@ -261,6 +266,9 @@
   }
 
   let messages = $state<Message[]>([]);
+  let hasOlderMessages = $state(untrack(() => initialHasOlderMessages));
+  let messageCursor = $state(untrack(() => initialMessageCursor));
+  let loadingOlderMessages = $state(false);
   // Seeded once at construction, not in an effect: an effect that writes what
   // it reads would fight the user as soon as they edited the box.
   let input = $state(initialDraft ?? '');
@@ -313,6 +321,60 @@
     onbusychange?.(busy, turnOk);
   });
   let currentJobId = $state<string | null>(null);
+
+  // Token frames can arrive tens of times a second. Rendering each one used to
+  // reassign the transcript and make ChatMessage parse, sanitise and linkify the
+  // entire accumulated answer again. Keep accumulation synchronous for the
+  // terminal fallback, but publish it to Svelte at most once every 50ms. The
+  // first token remains immediate, preserving measured TTFT.
+  type StreamPatch = Pick<Message, 'content'> & Pick<Partial<Message>, 'isProgress'>;
+  const pendingStreamPatches = new Map<string, StreamPatch>();
+  const streamsWithFirstPaint = new Set<string>();
+  let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  const STREAM_FLUSH_MS = 50;
+
+  function flushStreamPatches() {
+    streamFlushTimer = null;
+    if (pendingStreamPatches.size === 0) return;
+    const patches = new Map(pendingStreamPatches);
+    pendingStreamPatches.clear();
+    messages = messages.map((message) => {
+      const patch = patches.get(message.id);
+      return patch ? { ...message, ...patch } : message;
+    });
+    // Hidden panes have no measurable scroll box; activation already performs
+    // one forced tail scroll. Avoid scheduling 20 pointless layout reads a
+    // second while another thread streams in the background.
+    if (active) scrollToBottom();
+  }
+
+  function queueStreamPatch(id: string, patch: StreamPatch) {
+    pendingStreamPatches.set(id, patch);
+    if (!streamsWithFirstPaint.has(id)) {
+      streamsWithFirstPaint.add(id);
+      flushStreamPatches();
+      return;
+    }
+    if (streamFlushTimer === null) {
+      streamFlushTimer = setTimeout(flushStreamPatches, STREAM_FLUSH_MS);
+    }
+  }
+
+  /** A replacement, completion or error supersedes anything waiting to paint. */
+  function finishStreamPatch(id: string) {
+    pendingStreamPatches.delete(id);
+    streamsWithFirstPaint.delete(id);
+    if (pendingStreamPatches.size === 0 && streamFlushTimer !== null) {
+      clearTimeout(streamFlushTimer);
+      streamFlushTimer = null;
+    }
+  }
+
+  function settleStreamPatch(id: string) {
+    if (pendingStreamPatches.has(id)) flushStreamPatches();
+    finishStreamPatch(id);
+  }
+
   // MUST stay in lockstep with HEARTBEAT_INTERVAL_MS in
   // src/lib/workflows/chat/job-store.ts — the server fires beats on a fixed
   // 5s cadence and the countdown maths assumes the same interval.
@@ -731,14 +793,12 @@
 
         if (data.type === 'token') {
           accumulatedContent += data.delta;
-          messages = messages.map((m) =>
-            m.id === progressId ? { ...m, content: accumulatedContent, isProgress: false } : m,
-          );
-          scrollToBottom();
+          queueStreamPatch(progressId, { content: accumulatedContent, isProgress: false });
           return;
         }
         if (data.type === 'replace_bubble') {
           accumulatedContent = data.content;
+          finishStreamPatch(progressId);
           messages = messages.map((m) =>
             m.id === progressId ? { ...m, content: accumulatedContent, isProgress: false } : m,
           );
@@ -767,6 +827,7 @@
           return;
         }
         if (data.type === 'done') {
+          finishStreamPatch(progressId);
           pendingTtft.delete(progressId);
           const result = data.result ?? {};
           meterSettle((result.usage as { outputTokens?: number | null } | undefined)?.outputTokens ?? null);
@@ -781,6 +842,7 @@
           return;
         }
         if (data.type === 'error') {
+          finishStreamPatch(progressId);
           pendingTtft.delete(progressId);
           meterSettle();
           messages = messages.map((m) =>
@@ -799,6 +861,7 @@
       try {
         await chatStream.done;
       } finally {
+        settleStreamPatch(progressId);
         chatStream = null;
         loading = false;
         currentJobId = null;
@@ -810,6 +873,7 @@
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error('[silentSend]', errMsg);
       loading = false;
+      finishStreamPatch(progressId);
       messages = messages.map((m) =>
         m.id === progressId ? { ...m, isProgress: false, content: `Error: ${errMsg}` } : m,
       );
@@ -871,6 +935,10 @@
     return () => {
       undock?.();
       window.removeEventListener('jkai:context-prompt', receiveContextPrompt);
+      pendingStreamPatches.clear();
+      streamsWithFirstPaint.clear();
+      if (streamFlushTimer !== null) clearTimeout(streamFlushTimer);
+      streamFlushTimer = null;
     };
   });
 
@@ -1112,6 +1180,58 @@
     return !!info && info.activity !== 'chat-continuation';
   }
 
+  function hydrateStoredMessage(m: (typeof initialMessages)[number]): Message {
+    const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[]; workflowRefs?: WorkflowChipRef[]; traceId?: string } | undefined;
+    const raw = m as Record<string, unknown>;
+    return {
+      id: m.id,
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+      metadata: m.metadata,
+      source: meta?.source ?? m.source,
+      toolSteps: meta?.toolSteps,
+      fileRefs: meta?.fileRefs ?? undefined,
+      researchRefs: meta?.researchRefs ?? undefined,
+      workflowRefs: meta?.workflowRefs ?? undefined,
+      traceId: meta?.traceId ?? undefined,
+      attachments: (raw.attachments as Message['attachments']) ?? undefined,
+      createdAt: m.createdAt,
+    };
+  }
+
+  async function loadOlderMessages() {
+    if (!conversationId || !hasOlderMessages || !messageCursor || loadingOlderMessages) return;
+    loadingOlderMessages = true;
+    const previousHeight = chatContainer?.scrollHeight ?? 0;
+    const previousTop = chatContainer?.scrollTop ?? 0;
+    try {
+      const query = new URLSearchParams({
+        before: messageCursor.before,
+        beforeId: messageCursor.beforeId,
+      });
+      const response = await fetch(`/api/jkai/conversations/${conversationId}/messages?${query}`);
+      if (!response.ok) return;
+      const page = await response.json() as {
+        messages?: typeof initialMessages;
+        hasOlder?: boolean;
+        cursor?: { before: string; beforeId: string } | null;
+      };
+      const known = new Set(messages.map((message) => message.id));
+      const older = (page.messages ?? [])
+        .map(hydrateStoredMessage)
+        .filter((message) => !known.has(message.id));
+      messages = [...older, ...messages];
+      hasOlderMessages = page.hasOlder === true;
+      messageCursor = page.cursor ?? null;
+      await tick();
+      if (chatContainer) {
+        chatContainer.scrollTop = previousTop + (chatContainer.scrollHeight - previousHeight);
+      }
+    } finally {
+      loadingOlderMessages = false;
+    }
+  }
+
   // Heartbeat output is collapsed to ONE marker for the whole session, pinned in
   // the thread header — not to a marker per contiguous run sitting in the flow of
   // the conversation (John, 2026-07-27).
@@ -1141,36 +1261,7 @@
 
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
-    messages = initialMessages.map((m) => {
-      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[]; workflowRefs?: WorkflowChipRef[]; traceId?: string } | undefined;
-      const raw = m as Record<string, unknown>;
-      return {
-        id: m.id,
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        metadata: m.metadata,
-        // Prefer metadata.source (e.g. 'status_update') over the wrapper source
-        source: meta?.source ?? m.source,
-        // Hydrate tool steps from stored metadata so the drawer persists across reloads
-        toolSteps: meta?.toolSteps,
-        // Hydrate @files references so the "sources" chips persist across reloads
-        fileRefs: meta?.fileRefs ?? undefined,
-        // Hydrate @research references so the "research" chips persist across reloads
-        researchRefs: meta?.researchRefs ?? undefined,
-        // Hydrate workflow chips (created/updated canvases) across reloads
-        workflowRefs: meta?.workflowRefs ?? undefined,
-        // The turn's recorded tool-call chain. For any turn whose
-        // `metadata.toolSteps` was never written, this is the ONLY tool
-        // information that survives a reload: the inline step cards above are
-        // gone by now and the trace page is where the chain lives.
-        traceId: meta?.traceId ?? undefined,
-        attachments: (raw.attachments as Message['attachments']) ?? undefined,
-        // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
-        // mark + an inter-bubble gap. Falls back to undefined for legacy
-        // rows without createdAt.
-        createdAt: m.createdAt,
-      };
-    });
+    messages = initialMessages.map(hydrateStoredMessage);
     // Jump instantly to the latest message on initial load / conversation switch.
     // Child content (markdown, tool drawers, attachments) renders across multiple
     // frames, so retry after layout settles to catch the real scrollHeight.
@@ -1366,16 +1457,14 @@
       if (data.type === 'token') {
         heartbeat = null;
         accRef.value += data.delta;
-        messages = messages.map((m) =>
-          m.id === progressId ? { ...m, content: accRef.value } : m,
-        );
-        scrollToBottom();
+        queueStreamPatch(progressId, { content: accRef.value });
         return;
       }
 
       if (data.type === 'replace_bubble') {
         heartbeat = null;
         accRef.value = data.content;
+        finishStreamPatch(progressId);
         messages = messages.map((m) =>
           m.id === progressId ? { ...m, content: accRef.value } : m,
         );
@@ -1599,6 +1688,7 @@
       }
 
       if (data.type === 'done') {
+        finishStreamPatch(progressId);
         heartbeat = null;
         pendingTtft.delete(progressId);
         pendingPlan = null;
@@ -1653,6 +1743,7 @@
       }
 
       if (data.type === 'error') {
+        finishStreamPatch(progressId);
         turnOk = false;
         heartbeat = null;
         pendingTtft.delete(progressId);
@@ -1712,6 +1803,7 @@
     try {
       await chatStream.done;
     } finally {
+      settleStreamPatch(progressId);
       chatStream = null;
       loading = false;
       currentJobId = null;
@@ -2509,6 +2601,7 @@
       // user bubble queued so it gets the badge.
       const errMsg = err instanceof Error ? err.message : String(err);
       turnOk = false;
+      finishStreamPatch(progressId);
       const isNetworkError = err instanceof TypeError; // `fetch` throws TypeError on network failure
       if (isNetworkError) {
         try {
@@ -2530,6 +2623,7 @@
       }
     }
 
+    settleStreamPatch(progressId);
     loading = false;
     currentJobId = null;
     heartbeat = null;
@@ -2803,6 +2897,16 @@
       </div>
     {:else}
       <div class="msg-stack">
+        {#if hasOlderMessages}
+          <button
+            type="button"
+            class="load-older-messages"
+            disabled={loadingOlderMessages}
+            onclick={loadOlderMessages}
+          >
+            {loadingOlderMessages ? 'Loading…' : 'Load earlier messages'}
+          </button>
+        {/if}
         {#each messages as msg, msgIndex (msg.id)}
           {#if isHeartbeatCheckIn(msg)}
             <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
@@ -3053,6 +3157,23 @@
                    between them. The dots carried no information beyond "the
                    bubble is in-flight" — which the bubble's presence already
                    says — so they were noise stacked on the informative rows. -->
+            {/if}
+            {#if msg.content}
+              <!-- `isProgress` describes the turn lifecycle; it does not mean
+                   the accumulated answer is disposable. Token frames update
+                   this message before `done` clears that flag, so omitting the
+                   content here buffered a healthy stream invisibly and made
+                   the whole reply appear in one block at completion. Keep the
+                   live answer below its status/tool chrome while the job runs. -->
+              <div class="relative msg-slot live-reply" data-mid={msg.id} data-live-reply>
+                <ChatMessage
+                  role="assistant"
+                  content={stripCodeRouteMarkers(stripPromoteMarkers(msg.content))}
+                  {conversationId}
+                  createdAt={msg.createdAt}
+                  {entityMentions}
+                />
+              </div>
             {/if}
           {:else if msg.source === 'status_update'}
             <!-- Mid-task working note — stylistically distinct from a real reply.
@@ -3577,6 +3698,27 @@
     row-gap: 0;
     padding: 8px 0 40px;
     animation: thread-arrive var(--t-slow) var(--ease-out) both;
+  }
+  .load-older-messages {
+    display: block;
+    margin: 0 auto 18px;
+    padding: 7px 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    cursor: pointer;
+  }
+  .load-older-messages:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .load-older-messages:disabled {
+    opacity: 0.55;
+    cursor: wait;
   }
   @keyframes thread-arrive {
     from { opacity:0; transform:translateY(8px); }

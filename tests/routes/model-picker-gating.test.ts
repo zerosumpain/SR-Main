@@ -78,3 +78,16 @@ describe('a stray /model push cannot post a bubble', () => {
     expect(guarded?.length).toBe(2);
   });
 });
+
+describe('the in-flight reply is actually visible', () => {
+  it('renders accumulated token content before the done frame clears isProgress', () => {
+    const start = CHAT_AREA.indexOf('{:else if msg.isProgress}');
+    const end = CHAT_AREA.indexOf("{:else if msg.source === 'status_update'}", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const progressBranch = CHAT_AREA.slice(start, end);
+    expect(progressBranch).toContain('data-live-reply');
+    expect(progressBranch).toMatch(/<ChatMessage[\s\S]*content=\{[^}]*msg\.content/);
+  });
+});

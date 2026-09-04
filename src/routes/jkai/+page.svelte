@@ -6,7 +6,7 @@
   import BriefingCard from '$lib/components/jkai/BriefingCard.svelte';
   import ContextRail from '$lib/components/jkai/ContextRail.svelte';
   import type { ModelContext } from '$lib/server/models/types';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { hub, setLiveRuns, closeGraphSheet } from '$lib/jkai/hub-bus.svelte';
   import { forgetQueued } from '$lib/jkai/queued-sends.svelte';
   import {
@@ -27,6 +27,9 @@
   let { data } = $props();
 
   let conversationList = $state(data.conversations);
+  let conversationsHasMore = $state(untrack(() => data.conversationsHasMore === true));
+  let conversationsLoadingMore = $state(false);
+  let conversationCursor = $state(untrack(() => data.conversationCursor));
   let whatsappThread = $state(data.whatsappThread);
   // The knowledge-graph rail collapses behind a header toggle below 1280px.
   let graphRailOpen = $state(true);
@@ -60,6 +63,8 @@
      *  composer's thinking chip. */
     supportsThinking: boolean;
     activeBuild: { id: string; status: string } | null;
+    hasOlderMessages: boolean;
+    messageCursor: { before: string; beforeId: string } | null;
   }
   let panes = $state<Record<string, PaneData>>({});
   // Threads whose history is in flight. A plain Set: nothing reactive reads it,
@@ -241,15 +246,36 @@
       }).catch(() => { /* ignore — next beat retries */ });
     };
 
-    const tick = () => { void refreshLive(); sendPresence(); };
-    tick();
-    const liveTimer = setInterval(tick, 10_000);
-    // Beat immediately on return-to-tab so presence is fresh the moment the
-    // user comes back, rather than up to 10s stale.
-    const onVisibility = () => { if (document.visibilityState === 'visible') sendPresence(); };
+    let liveTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleTick = () => {
+      if (liveTimer !== null) clearTimeout(liveTimer);
+      liveTimer = null;
+      if (document.visibilityState !== 'visible') return;
+      liveTimer = setTimeout(async () => {
+        liveTimer = null;
+        await refreshLive();
+        sendPresence();
+        scheduleTick();
+      }, 10_000);
+    };
+    const tickNow = () => {
+      void refreshLive();
+      sendPresence();
+      scheduleTick();
+    };
+    tickNow();
+    // Refresh both activity and presence immediately on return-to-tab. Hidden
+    // JKAI tabs now have no recurring timer and make no active-job requests.
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tickNow();
+      else if (liveTimer !== null) {
+        clearTimeout(liveTimer);
+        liveTimer = null;
+      }
+    };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      clearInterval(liveTimer);
+      if (liveTimer !== null) clearTimeout(liveTimer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -278,7 +304,7 @@
       if (!res.ok) {
         // Render it anyway: an empty thread with a working composer beats a
         // permanently blank column, and the history returns on the next open.
-        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null };
+        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null, hasOlderMessages: false, messageCursor: null };
         return;
       }
       const body = await res.json();
@@ -289,9 +315,11 @@
         contextLength: body.modelContextLength ?? null,
         supportsThinking: body.modelSupportsThinking === true,
         activeBuild: body.activeBuild || null,
+        hasOlderMessages: body.hasOlderMessages === true,
+        messageCursor: body.messageCursor ?? null,
       };
     } catch {
-      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null };
+      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, supportsThinking: false, activeBuild: null, hasOlderMessages: false, messageCursor: null };
     } finally {
       loadingPanes.delete(id);
     }
@@ -331,6 +359,8 @@
           contextLength: null,
           supportsThinking: conv.modelSupportsThinking === true,
           activeBuild: null,
+          hasOlderMessages: false,
+          messageCursor: null,
         };
         openTab(conv.id);
         rememberConversation(conv.id);
@@ -338,6 +368,38 @@
       }
     } catch (err) {
       console.error('Failed to create conversation:', err);
+    }
+  }
+
+  async function loadMoreConversations() {
+    if (!conversationsHasMore || !conversationCursor || conversationsLoadingMore) return;
+    conversationsLoadingMore = true;
+    try {
+      const query = new URLSearchParams({
+        limit: '80',
+        before: conversationCursor.before,
+        beforeId: conversationCursor.beforeId,
+        beforePinned: conversationCursor.pinned ? '1' : '0',
+      });
+      const res = await fetch(`/api/jkai/conversations?${query}`);
+      if (!res.ok) return;
+      const page = await res.json() as {
+        items?: typeof conversationList;
+        hasMore?: boolean;
+        cursor?: typeof conversationCursor;
+      };
+      const items = page.items ?? [];
+      const known = new Set(conversationList.map((conversation) => conversation.id));
+      conversationList = [
+        ...conversationList,
+        ...items.filter((conversation) => !known.has(conversation.id)),
+      ];
+      conversationsHasMore = page.hasMore === true;
+      conversationCursor = page.cursor ?? null;
+    } catch (err) {
+      console.error('Failed to load more conversations:', err);
+    } finally {
+      conversationsLoadingMore = false;
     }
   }
 
@@ -513,6 +575,8 @@
             messageCount={pane.messages.length}
             approvalUi={data.approvalUi}
             activeBuild={pane.activeBuild}
+            initialHasOlderMessages={pane.hasOlderMessages}
+            initialMessageCursor={pane.messageCursor}
             active={tab.id === activeId}
             onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}
             onmodelchange={(ctx: ModelContext, supportsThinking?: boolean) =>
@@ -559,6 +623,9 @@
     onClose={() => (libraryOpen = false)}
     {liveConversationIds}
     openTabIds={openTabs.items.map((t) => t.id)}
+    hasMore={conversationsHasMore}
+    loadingMore={conversationsLoadingMore}
+    onLoadMore={loadMoreConversations}
   />
 {/if}
 
