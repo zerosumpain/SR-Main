@@ -12,6 +12,7 @@
     "piUpstreamRepo": "earendil-works/pi"
   },
   "overrides": {
+    "@asamuzakjp/css-color": "^5.1.11",
     "@xmldom/xmldom": "0.8.15",
     "minimatch@<10": {
       "brace-expansion": "2.1.4"
