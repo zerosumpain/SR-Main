@@ -12,6 +12,7 @@
   // unit-tested: stages, legal moves, lane mapping and the filter. This file is
   // the surface only — if a rule here needs a test, it is in the wrong file.
   import DrillPanel from '$lib/components/jkai/daydream/hub/DrillPanel.svelte';
+  import InflowStrip from './InflowStrip.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import {
@@ -24,6 +25,7 @@
     type BoardFlag,
     type BoardTone,
     type BoardView,
+    type IdeaSource,
     type WorkItem,
     type WorkLane,
     type WorkStage,
@@ -32,15 +34,29 @@
 
   interface Props {
     view: BoardView;
+    /** Tonight's ceilings, read off WORK_CAPS/BUDGET_CAPS by the page. */
+    caps: {
+      tools: number;
+      builds: number;
+      watches: number;
+      repairs: number;
+      calls: number;
+      minutes: number;
+      window: string;
+    };
     busy: string | null;
     act: (body: Record<string, unknown>, key: string) => Promise<boolean>;
   }
 
-  let { view, busy, act }: Props = $props();
+  let { view, caps, busy, act }: Props = $props();
 
   // ── Controls ────────────────────────────────────────────────────────────
   let lanes = $state<WorkLane[]>([]);
   let flags = $state<BoardFlag[]>([]);
+  // The intake channel lives with every other filter rather than in the strip
+  // that displays it: pressing a channel narrows the SAME board, and two
+  // places holding filter state is two places to forget to reset.
+  let sources = $state<IdeaSource[]>([]);
   let query = $state('');
   let grouped = $state(false);
   let dense = $state(false);
@@ -74,7 +90,7 @@
     { id: 'folded', label: 'has folds' },
   ];
 
-  const filter = $derived({ lanes, flags, query: query.trim() });
+  const filter = $derived({ lanes, flags, sources, query: query.trim() });
   const visible = $derived(sortForBoard(applyFilter(view.items, filter)));
   const totals = $derived(view.totals);
 
@@ -82,7 +98,7 @@
     return view.items.filter((i) => i.lane === l).length;
   }
   function flagCount(f: BoardFlag): number {
-    return applyFilter(view.items, { lanes: [], flags: [f], query: '' }).length;
+    return applyFilter(view.items, { lanes: [], flags: [f], sources: [], query: '' }).length;
   }
 
   function toggle<T>(list: T[], v: T): T[] {
@@ -92,6 +108,7 @@
   function reset() {
     lanes = [];
     flags = [];
+    sources = [];
     query = '';
     selected = [];
   }
@@ -292,6 +309,12 @@
     </p>
   </div>
 {:else}
+  <!-- Inside the guard, never above it: a failed load returns EMPTY_BOARD, and
+       a strip rendered over that would show a drain meter of measured zeros
+       directly above "the queue could not be read". -->
+  <p class="field-label if-head">Where the work came from</p>
+  <InflowStrip flow={view.inflow} active={sources} {caps} ontoggle={(s) => (sources = toggle(sources, s))} />
+
   <!-- ── Controls ──────────────────────────────────────────────────────── -->
   <div class="qb-bar">
     <span class="qb-lab">Lane</span>
@@ -593,6 +616,10 @@
 {/if}
 
 <style>
+  .if-head {
+    margin-top: clamp(18px, 2.4vw, 26px);
+  }
+
   /* ── controls ─────────────────────────────────────────────────────────── */
   .qb-bar {
     display: flex;

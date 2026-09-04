@@ -33,6 +33,55 @@ import { findRelatedIdea, looksSameSubject, type ToolHealth } from './narrative'
 import type { BacklogItemData } from './types';
 
 // ---------------------------------------------------------------------------
+// The intake channels
+// ---------------------------------------------------------------------------
+
+/**
+ * Which channel an idea arrived through.
+ *
+ * Declared HERE rather than in `types.ts` for the reason at the top of this
+ * file: a `.svelte` needs these as VALUES, and `types.ts` value-imports
+ * `$lib/toolpolicy/policy`, which reaches `$lib/db` and `$env/dynamic/private`.
+ * Importing it for real fails the BUILD while `svelte-check` passes clean —
+ * which is exactly what happened when this list started life over there.
+ * `WORK_LANES` and `WORK_STAGES` live here for the same reason.
+ *
+ * A CLOSED set, stamped by the call site and never by a model. `coercePlan`
+ * whitelists the fields it reads out of the author's JSON, so an idea cannot
+ * arrive claiming its own provenance; `coerceSource` in `backlog.ts` is the
+ * second lock.
+ *
+ * `unattributed` is load-bearing and permanent: 455 rows already existed when
+ * this was added and there is no way to recover which channel any of them came
+ * through. Guessing would be worse than saying so — the rule `driverSource`
+ * follows, where a driver that could not be established reads `unknown` rather
+ * than inventing a plausible one.
+ */
+export const IDEA_SOURCES = [
+  /** Mined from the questions the owner actually asked. */
+  'question',
+  /** A `daydream_faults` row: daydreaming tried something and could not. */
+  'fault',
+  /** A workflow-doctor finding that needed repo code, escalated as a fault. */
+  'doctor',
+  /** A measurement nothing writes — a hypothesis with zero pairs. */
+  'starved',
+  /** A shipped tool erroring or never being called. */
+  'health',
+  /** The appetite ledger: a capability the site has never had. */
+  'appetite',
+  /** The engine's own proposal about itself. Never built by a lane. */
+  'engine',
+  /** The toolsmith's own idea, had while authoring something else. */
+  'toolsmith',
+  /** A chat turn the owner analysed and sent to the engine. */
+  'trace',
+  /** Queued before this field existed. Never a guess. */
+  'unattributed',
+] as const;
+export type IdeaSource = (typeof IDEA_SOURCES)[number];
+
+// ---------------------------------------------------------------------------
 // The stages
 // ---------------------------------------------------------------------------
 
@@ -90,6 +139,12 @@ export const LEGAL_MOVES: Readonly<Record<WorkStage, ReadonlyArray<WorkStage>>> 
   parked: ['accepted'],
 };
 
+/** A channel this build does not know about is a gap in the record, not a
+ *  tenth channel. Mirrors `coerceSource` on the write path. */
+export function coerceIntake(source: unknown): IdeaSource {
+  return IDEA_SOURCES.includes(source as IdeaSource) ? (source as IdeaSource) : 'unattributed';
+}
+
 export function canMove(from: WorkStage, to: WorkStage): boolean {
   return from !== to && (LEGAL_MOVES[from] ?? []).includes(to);
 }
@@ -138,6 +193,25 @@ export function bringsNewData(kind: string): boolean {
 // The item
 // ---------------------------------------------------------------------------
 
+/**
+ * What each intake channel is called on screen, and the one line saying where
+ * it comes from. Here rather than in `types.ts` because this module is the
+ * pure, `.svelte`-importable one — and because these are presentation, whereas
+ * the closed set they key off is data.
+ */
+export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: string }>> = {
+  question: { label: 'Questions you asked', from: 'unmet needs and under-served intents' },
+  fault: { label: 'Faults raised', from: 'daydreaming tried and could not' },
+  doctor: { label: 'Doctor escalations', from: 'a broken canvas needing repo code' },
+  starved: { label: 'Starved measurements', from: 'a metric nothing writes' },
+  health: { label: 'Tool health', from: 'shipped tools erroring or never called' },
+  appetite: { label: 'Inventory gaps', from: 'a capability the site has never had' },
+  engine: { label: 'About the engine', from: 'its own proposals, never built by a lane' },
+  toolsmith: { label: 'The toolsmith', from: 'asides had while authoring' },
+  trace: { label: 'A turn you sent', from: 'a chat trace analysed by hand' },
+  unattributed: { label: 'Before this was recorded', from: 'queued before the channel was stamped' },
+};
+
 export interface WorkItem {
   /** Unique across both sources — `backlog:<slug>` or `capability:<slug>`. */
   id: string;
@@ -182,6 +256,18 @@ export interface WorkItem {
   epicSlug: string | null;
   epicLabel: string;
   capabilitySlug: string | null;
+  /**
+   * Which channel it arrived through.
+   *
+   * NOT `source`, which is already taken and means which LEDGER this row is
+   * from — `backlog` or `capability`. Two different questions, and reusing the
+   * name silently overwrote the older one.
+   *
+   * `unattributed` for rows queued before the stamp existed; `null` for a
+   * capability lead, which IS a channel rather than something arriving through
+   * one.
+   */
+  intake: IdeaSource | null;
   /** Capability leads only. */
   score: number | null;
   evidence: string[];
@@ -246,6 +332,17 @@ export interface BoardTotals {
 
 export interface BoardView {
   items: WorkItem[];
+  /**
+   * Where the queue came from, computed over the WHOLE population.
+   *
+   * On the view rather than derived in the component, for the reason `totals`
+   * is: `trimSettled` drops settled rows past the cap, so anything counted
+   * after the trim describes a smaller set than it names. `channel.total`
+   * would have printed "everything ever queued through this channel" off a
+   * list missing most of the settled ones, and `drained` would have saturated
+   * at the cap — making the published ratio read worse than reality.
+   */
+  inflow: InflowView;
   /** Stage counts over the WHOLE population, so a filtered column can say what
    *  it is hiding. The component counts the visible rows itself. */
   counts: Record<WorkStage, number>;
@@ -255,6 +352,15 @@ export interface BoardView {
 
 export const EMPTY_BOARD: BoardView = {
   items: [],
+  inflow: {
+    windowDays: 30,
+    channels: [],
+    intake: 0,
+    drained: 0,
+    standing: 0,
+    ratio: null,
+    unattributed: 0,
+  },
   counts: { proposed: 0, accepted: 0, building: 0, verifying: 0, live: 0, parked: 0 },
   totals: {
     all: 0,
@@ -436,6 +542,12 @@ export function buildBoard(input: BoardInput): BoardView {
       epicSlug,
       epicLabel: epicLabelFor(epicSlug, epicLabels),
       capabilitySlug: b.capabilitySlug ?? null,
+      // Coerced on READ as well as on write. `coerceSource` in `backlog.ts`
+      // guards what this engine writes; a row edited by hand, restored from a
+      // dump, or left behind by a renamed channel would otherwise carry a
+      // value matching no cell — counted in the totals, shown in no channel,
+      // and unreachable by the filter, so the cells stopped summing.
+      intake: coerceIntake(b.source),
       score: null,
       evidence: [],
       actionable: true,
@@ -481,6 +593,7 @@ export function buildBoard(input: BoardInput): BoardView {
       epicSlug: `cap:${c.slug}`,
       epicLabel: epicLabelFor(`cap:${c.slug}`, epicLabels),
       capabilitySlug: c.slug,
+      intake: null,
       score: c.score,
       evidence: c.evidence ?? [],
       actionable: false,
@@ -489,12 +602,14 @@ export function buildBoard(input: BoardInput): BoardView {
 
   // Totals are computed over EVERYTHING before any trim, so a number on the
   // page can never describe a smaller population than the one it names.
+  // Every one of these runs over the FULL population, before the trim below.
   const totals = summarise(items);
   const counts = countByStage(items);
+  const inflow = summariseInflow(items);
 
   const trimmed = trimSettled(items, input.settledLimit ?? null);
 
-  return { items: trimmed, counts, totals, error: null };
+  return { items: trimmed, counts, totals, inflow, error: null };
 }
 
 /** Newest settled work first, capped. Open work is never trimmed. */
@@ -565,13 +680,16 @@ export type BoardFlag = 'newdata' | 'served' | 'failed' | 'untried' | 'folded';
 export interface BoardFilter {
   lanes: ReadonlyArray<WorkLane>;
   flags: ReadonlyArray<BoardFlag>;
+  /** Intake channels. A capability lead has none, so it never matches one. */
+  sources: ReadonlyArray<IdeaSource>;
   query: string;
 }
 
-export const EMPTY_FILTER: BoardFilter = { lanes: [], flags: [], query: '' };
+export const EMPTY_FILTER: BoardFilter = { lanes: [], flags: [], sources: [], query: '' };
 
 export function matchesFilter(item: WorkItem, f: BoardFilter): boolean {
   if (f.lanes.length && !f.lanes.includes(item.lane)) return false;
+  if (f.sources.length && (item.intake == null || !f.sources.includes(item.intake))) return false;
   if (f.query) {
     const q = f.query.toLowerCase();
     if (!item.title.toLowerCase().includes(q) && !item.detail.toLowerCase().includes(q)) {
@@ -595,4 +713,107 @@ export function matchesFilter(item: WorkItem, f: BoardFilter): boolean {
 
 export function applyFilter(items: WorkItem[], f: BoardFilter): WorkItem[] {
   return items.filter((i) => matchesFilter(i, f));
+}
+
+// ---------------------------------------------------------------------------
+// Inflow — where the work comes from, and whether the queue is draining
+// ---------------------------------------------------------------------------
+
+export interface InflowChannel {
+  source: IdeaSource;
+  label: string;
+  from: string;
+  /** Everything ever queued through this channel. */
+  total: number;
+  /** Still open. */
+  open: number;
+  /** Queued inside the window. */
+  recent: number;
+  /** Open items on this channel a shipped sibling appears to cover already. */
+  served: number;
+}
+
+export interface InflowView {
+  windowDays: number;
+  channels: InflowChannel[];
+  /** Queued inside the window. */
+  intake: number;
+  /**
+   * Settled inside the window — shipped or parked.
+   *
+   * Counted off `backlogStatus`, NOT the derived stage. `stageFor` returns
+   * `parked` for an item that has run out of attempts while its status is
+   * still `open`, and every failed attempt bumps `updatedAt` — so a stage-based
+   * count called an item the engine tried and failed on three nights running
+   * "drained", and subtracted it from the standing queue. Exactly backwards.
+   *
+   * Dated by `updatedAt`, which is the closest thing a backlog row has to a
+   * "settled at". Still not exact: a priority edit moves it too, so an item
+   * settled long ago and touched from the board reads as drained today. That
+   * over-states the drain rather than under-stating it — the direction that
+   * flatters the engine — so the ratio is a FLOOR on how badly intake outruns
+   * it.
+   */
+  drained: number;
+  /** Open right now, whatever window it arrived in. */
+  standing: number;
+  /** intake ÷ drained, or null when nothing drained. */
+  ratio: number | null;
+  /** How much of the queue predates the stamp and can never be attributed. */
+  unattributed: number;
+}
+
+/**
+ * Where the queue came from.
+ *
+ * The room could always say what the engine BUILT and never why it was asked.
+ * Until the stamp existed the honest answer for every row was "nobody
+ * recorded", and that is exactly what `unattributed` reports — 455 rows
+ * predate it, and no amount of inference would make a guess into a record.
+ */
+export function summariseInflow(items: WorkItem[], windowDays = 30, now = Date.now()): InflowView {
+  const since = now - windowDays * 24 * 60 * 60 * 1000;
+  const inWindow = (iso: string) => {
+    const t = Date.parse(iso ?? '');
+    return Number.isFinite(t) && t >= since;
+  };
+
+  const channels: InflowChannel[] = [];
+  for (const source of IDEA_SOURCES) {
+    const mine = items.filter((i) => i.intake === source);
+    if (mine.length === 0) continue;
+    channels.push({
+      source,
+      label: SOURCE_LABEL[source].label,
+      from: SOURCE_LABEL[source].from,
+      total: mine.length,
+      open: mine.filter((i) => i.backlogStatus === 'open').length,
+      recent: mine.filter((i) => inWindow(i.createdAt)).length,
+      served: mine.filter((i) => i.alreadyServed && i.backlogStatus === 'open').length,
+    });
+  }
+  // Busiest first; the channel that can never be attributed sorts last however
+  // large it is, because it is a gap in the record rather than a source.
+  channels.sort(
+    (a, b) =>
+      Number(a.source === 'unattributed') - Number(b.source === 'unattributed') ||
+      b.recent - a.recent ||
+      b.total - a.total,
+  );
+
+  const backlogItems = items.filter((i) => i.intake != null);
+  const intake = backlogItems.filter((i) => inWindow(i.createdAt)).length;
+  const settled = (i: WorkItem) => i.backlogStatus != null && i.backlogStatus !== 'open';
+  const drained = backlogItems.filter((i) => settled(i) && inWindow(i.updatedAt)).length;
+  const standing = backlogItems.filter((i) => !settled(i)).length;
+
+  return {
+    windowDays,
+    channels,
+    intake,
+    drained,
+    standing,
+    ratio: drained > 0 ? Math.round((intake / drained) * 10) / 10 : null,
+    unattributed: items.filter((i) => i.intake === 'unattributed').length,
+  };
 }

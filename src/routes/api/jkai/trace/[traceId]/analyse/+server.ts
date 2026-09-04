@@ -50,7 +50,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       const { addIdeas } = await import('$lib/selfimprove/backlog');
       // addIdeas dedupes on a slug derived from the title, so the same finding
       // arriving from five traces updates one row instead of creating five.
-      const added = await addIdeas(findings.map(findingToIdea));
+      const added = await addIdeas(findings.map((f) => ({ ...findingToIdea(f), source: 'trace' as const })));
       return json({ added, considered: findings.length });
     } catch (err) {
       return json({ error: err instanceof Error ? err.message : 'backlog write failed' }, { status: 500 });

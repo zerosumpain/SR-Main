@@ -186,7 +186,7 @@
       strap="Every idea the engine is holding, in the order it will reach for them. Six stages left to right: proposed, accepted, in build, verifying, live, parked. A card can be dragged to Accepted or Parked and nowhere else — a tool becomes live when jkai calls it, and a drag must never be what starts a build that can spend £2. The priority on a card is the field the picker actually ranks on."
     />
     {#if actionError}<p class="err">{actionError}</p>{/if}
-    <QueueBoard view={data.board} {busy} {act} />
+    <QueueBoard view={data.board} caps={data.caps} {busy} {act} />
 
     <div class="themes" id="themes">
       <SectionHead

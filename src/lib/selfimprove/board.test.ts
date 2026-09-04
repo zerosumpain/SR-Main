@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   buildBoard,
   stageFor,
@@ -9,6 +10,9 @@ import {
   matchesFilter,
   applyFilter,
   sortForBoard,
+  summariseInflow,
+  coerceIntake,
+  SOURCE_LABEL,
   summarise,
   artifactHref,
   EMPTY_FILTER,
@@ -302,6 +306,7 @@ describe('summarise', () => {
       epicSlug: null,
       epicLabel: 'Unfiled',
       capabilitySlug: null,
+      intake: 'question',
       score: null,
       evidence: [],
       actionable: true,
@@ -542,5 +547,279 @@ describe('the untried flag agrees with the untried tile', () => {
     // The chip and the tile sit inches apart on the same screen, so they must
     // count the same population. Before this they did not.
     expect(untried.length).toBe(board.totals.untried);
+  });
+});
+
+// ── Inflow attribution ────────────────────────────────────────────────────
+
+describe('intake channels', () => {
+  it('carries the stamped channel through, and calls an unstamped row unattributed', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'a', title: 'A', source: 'question' }),
+        item({ slug: 'b', title: 'B', source: 'doctor' }),
+        // Written before the field existed. This is 455 rows on production.
+        item({ slug: 'old', title: 'Old' }),
+      ],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    const by = new Map(board.items.map((i) => [i.slug, i]));
+    expect(by.get('a')?.intake).toBe('question');
+    expect(by.get('b')?.intake).toBe('doctor');
+    expect(by.get('old')?.intake).toBe('unattributed');
+  });
+
+  // A capability lead IS a channel; it did not arrive through one.
+  it('gives a capability lead no channel at all', () => {
+    const board = buildBoard({
+      backlog: [],
+      capabilities: [
+        {
+          slug: 'watch:x', kind: 'watch', title: 'A lead', need: 'n', status: 'proposed',
+          score: 0.6, lane: 'watch', outcome: null, outcomeRef: null, backlogSlug: null,
+          evidence: [], lastSeenAt: '2026-09-04T00:00:00.000Z',
+        },
+      ],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    expect(board.items[0].intake).toBeNull();
+    // And it never matches a channel filter, rather than matching all of them.
+    expect(applyFilter(board.items, { ...EMPTY_FILTER, sources: ['appetite'] })).toHaveLength(0);
+  });
+
+  it('filters the board by channel', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'a', title: 'A', source: 'question' }),
+        item({ slug: 'b', title: 'B', source: 'fault' }),
+      ],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    expect(applyFilter(board.items, { ...EMPTY_FILTER, sources: ['question'] }).map((i) => i.slug)).toEqual(['a']);
+    expect(applyFilter(board.items, { ...EMPTY_FILTER, sources: ['question', 'fault'] })).toHaveLength(2);
+  });
+
+  it('names every channel in the closed set', () => {
+    for (const s of ['question', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'unattributed'] as const) {
+      expect(SOURCE_LABEL[s].label.length).toBeGreaterThan(0);
+      expect(SOURCE_LABEL[s].from.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('summariseInflow', () => {
+  const NOW = Date.parse('2026-09-04T12:00:00.000Z');
+  const daysAgo = (n: number) => new Date(NOW - n * 86400000).toISOString();
+
+  it('counts each channel, and reports the drain against the intake', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'q1', title: 'Q1', source: 'question', createdAt: daysAgo(3) }),
+        item({ slug: 'q2', title: 'Q2', source: 'question', createdAt: daysAgo(5) }),
+        item({ slug: 'f1', title: 'F1', source: 'fault', createdAt: daysAgo(2) }),
+        // Settled inside the window — one drained against three in.
+        item({ slug: 'd1', title: 'D1', source: 'question', status: 'abandoned', createdAt: daysAgo(80), updatedAt: daysAgo(1) }),
+      ],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    const flow = summariseInflow(board.items, 30, NOW);
+    expect(flow.intake).toBe(3);
+    expect(flow.drained).toBe(1);
+    expect(flow.standing).toBe(3);
+    expect(flow.ratio).toBe(3);
+    const q = flow.channels.find((c) => c.source === 'question');
+    expect(q?.total).toBe(3);
+    expect(q?.open).toBe(2);
+    expect(q?.recent).toBe(2);
+  });
+
+  it('reports no ratio rather than dividing by nothing', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', source: 'question', createdAt: daysAgo(1) })],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    expect(summariseInflow(board.items, 30, NOW).ratio).toBeNull();
+  });
+
+  it('omits a channel nothing arrived through, rather than listing a zero', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', source: 'question' })],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    const flow = summariseInflow(board.items, 30, NOW);
+    expect(flow.channels.map((c) => c.source)).toEqual(['question']);
+  });
+
+  // A gap in the record is not a source, however big it is.
+  it('sorts the unattributed pile last however large it is', () => {
+    const board = buildBoard({
+      backlog: [
+        ...Array.from({ length: 20 }, (_, n) => item({ slug: `old${n}`, title: `Old ${n}`, createdAt: daysAgo(1) })),
+        item({ slug: 'q', title: 'Q', source: 'question', createdAt: daysAgo(1) }),
+      ],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    const flow = summariseInflow(board.items, 30, NOW);
+    expect(flow.channels[flow.channels.length - 1].source).toBe('unattributed');
+    expect(flow.unattributed).toBe(20);
+  });
+
+  it('leaves capability leads out of the flow arithmetic entirely', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', source: 'question', createdAt: daysAgo(1) })],
+      capabilities: [
+        {
+          slug: 'watch:x', kind: 'watch', title: 'A lead', need: 'n', status: 'proposed',
+          score: 0.6, lane: 'watch', outcome: null, outcomeRef: null, backlogSlug: null,
+          evidence: [], lastSeenAt: '2026-09-04T00:00:00.000Z',
+        },
+      ],
+      tools: [], attemptCeiling: CEILING,
+    });
+    const flow = summariseInflow(board.items, 30, NOW);
+    expect(flow.intake).toBe(1);
+    expect(flow.standing).toBe(1);
+  });
+});
+
+// ── The purity this module depends on ─────────────────────────────────────
+
+describe('board.ts stays importable from a .svelte file', () => {
+  // `types.ts` value-imports `$lib/toolpolicy/policy`, which reaches `$lib/db`
+  // and `$env/dynamic/private`. A VALUE import of it from here fails the BUILD
+  // while `svelte-check` passes clean with zero errors — which is exactly what
+  // happened when `IDEA_SOURCES` was first declared in `types.ts`, and cost a
+  // full remote gate to find. `import type` is erased and always fine.
+  const src = readFileSync(new URL('./board.ts', import.meta.url), 'utf8');
+
+  it('imports nothing from ./types as a value', () => {
+    const lines = src.split('\n').filter((l) => l.includes("from './types'"));
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(line.trimStart().startsWith('import type')).toBe(true);
+  });
+
+  it('imports only from ./narrative and ./types at all', () => {
+    const imported = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
+    expect([...new Set(imported)].sort()).toEqual(['./narrative', './types']);
+  });
+});
+
+// ── Review fixes, 2026-09-04 ──────────────────────────────────────────────
+
+describe('inflow is computed over the whole population', () => {
+  const NOW = Date.parse('2026-09-04T12:00:00.000Z');
+  const daysAgo = (n: number) => new Date(NOW - n * 86400000).toISOString();
+
+  // The same mistake `summarise` was already written to avoid: anything
+  // counted AFTER `trimSettled` describes a smaller set than it names.
+  // `channel.total` would print "everything ever queued" off a list missing
+  // most settled rows, and `drained` would saturate at the cap — making the
+  // published ratio read worse than reality.
+  it('counts settled rows the board trimmed away', () => {
+    const backlog = [
+      ...Array.from({ length: 8 }, (_, n) =>
+        item({
+          slug: `done${n}`,
+          title: `Done ${n}`,
+          source: 'question',
+          status: 'shipped',
+          createdAt: daysAgo(40),
+          updatedAt: daysAgo(2),
+        }),
+      ),
+      item({ slug: 'open1', title: 'Open one', source: 'question', createdAt: daysAgo(1) }),
+    ];
+    const board = buildBoard({ backlog, capabilities: [], tools: [], attemptCeiling: CEILING, settledLimit: 2 });
+    // The board itself is trimmed…
+    expect(board.items.filter((i) => i.backlogStatus === 'shipped')).toHaveLength(2);
+    // …and the inflow is not.
+    const q = board.inflow.channels.find((c) => c.source === 'question');
+    expect(q?.total).toBe(9);
+    expect(board.inflow.drained).toBe(8);
+  });
+
+  it('is carried on the view rather than left to the component', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', source: 'fault' })],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    expect(board.inflow.channels.map((c) => c.source)).toEqual(['fault']);
+  });
+});
+
+describe('drained counts what actually settled', () => {
+  const NOW = Date.parse('2026-09-04T12:00:00.000Z');
+  const daysAgo = (n: number) => new Date(NOW - n * 86400000).toISOString();
+
+  // `stageFor` returns `parked` for an item out of attempts while its status
+  // is still `open`, and every failed attempt bumps `updatedAt`. Counting off
+  // the stage called an item the engine tried and failed on three nights
+  // running "drained", and took it out of the standing queue. Backwards.
+  it('does not call an attempt-exhausted open item drained', () => {
+    const board = buildBoard({
+      backlog: [
+        item({
+          slug: 'stuck',
+          title: 'Tried and failed',
+          source: 'question',
+          status: 'open',
+          attempts: CEILING,
+          createdAt: daysAgo(20),
+          updatedAt: daysAgo(1),
+        }),
+      ],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    // It derives to `parked` on the board, which is right — it is out of tries.
+    expect(board.items[0].stage).toBe('parked');
+    // But it has not left the queue.
+    const flow = summariseInflow(board.items, 30, NOW);
+    expect(flow.drained).toBe(0);
+    expect(flow.standing).toBe(1);
+    expect(flow.channels[0].open).toBe(1);
+  });
+
+  it('still counts a genuinely abandoned item as drained', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'gone', title: 'Parked', source: 'question', status: 'abandoned', createdAt: daysAgo(20), updatedAt: daysAgo(1) }),
+      ],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    const flow = summariseInflow(board.items, 30, NOW);
+    expect(flow.drained).toBe(1);
+    expect(flow.standing).toBe(0);
+  });
+});
+
+describe('coerceIntake', () => {
+  it('keeps a known channel', () => {
+    expect(coerceIntake('doctor')).toBe('doctor');
+  });
+
+  // A row edited by hand, restored from a dump, or left by a renamed channel
+  // would otherwise be counted in the totals, shown in no cell, and
+  // unreachable by the filter — so the cells stopped summing to the total.
+  it('calls anything else a gap in the record, not a tenth channel', () => {
+    expect(coerceIntake('made-up')).toBe('unattributed');
+    expect(coerceIntake(undefined)).toBe('unattributed');
+    expect(coerceIntake(42)).toBe('unattributed');
+  });
+
+  it('is applied on read, so an off-vocabulary row still lands in a cell', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A', source: 'renamed-channel' as never })],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    expect(board.items[0].intake).toBe('unattributed');
+    const total = board.inflow.channels.reduce((n, c) => n + c.total, 0);
+    expect(total).toBe(board.items.length);
   });
 });
