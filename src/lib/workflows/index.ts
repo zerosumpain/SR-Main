@@ -371,10 +371,13 @@ if (runsService('background')) {
 })();
 
 if (runsService('scheduler')) {
+  // The ONLY place the workflow cron scheduler boots. hooks.server.ts used to
+  // start it here too, ungated — see the note there before re-adding one.
+  //
   // Deferred out of module evaluation on purpose. `./scheduler` imports `engine`
   // back from this module, so the two form a cycle. Enter it at scheduler.ts —
-  // hooks.server.ts does, on its second line — and this module evaluates to
-  // completion while scheduler.ts is still suspended on its own import, i.e.
+  // hooks.server.ts still does, via its stopScheduler import — and this module
+  // evaluates to completion while scheduler.ts is suspended on its own import, i.e.
   // before its `let cronOwner` initialiser has run. Calling startScheduler()
   // there put the assignment `cronOwner = true` on a binding still in the
   // temporal dead zone, so every boot logged "Cannot access 'cronOwner' before
