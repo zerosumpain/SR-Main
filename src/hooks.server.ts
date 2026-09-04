@@ -5,6 +5,10 @@ import {
   startHeroTitlesScheduler,
   stopHeroTitlesScheduler,
 } from '$lib/landing/hero-titles-scheduler';
+import {
+  startDependencyMonitor,
+  stopDependencyMonitor,
+} from '$lib/dependencies/monitor.server';
 // JKAI build orchestrator no longer boots in the SvelteKit web app — it runs
 // in the jkai-builder sidecar service (packages/jkai-builder/, system unit
 // jkai-builder.service). Build-control routes call it over the Unix socket
@@ -71,6 +75,10 @@ startForgeScheduler().catch((err) => {
 
 // Start the landing-page hero-title regeneration scheduler
 startHeroTitlesScheduler();
+
+// Record the public journey and upstream provider state every five minutes,
+// including while nobody has /admin open.
+startDependencyMonitor();
 
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
 startOrphanSweep();
@@ -193,6 +201,7 @@ async function gracefulShutdown() {
   stopWorkflowScheduler();
   stopForgeScheduler();
   stopHeroTitlesScheduler();
+  stopDependencyMonitor();
   stopGmailWatcher();
   unregisterGmailBridge();
   stopDatastoreReaper();

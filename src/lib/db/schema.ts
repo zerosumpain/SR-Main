@@ -4013,6 +4013,35 @@ export const releases = pgTable(
 export type Release = typeof releases.$inferSelect;
 export type NewRelease = typeof releases.$inferInsert;
 
+// ==========================================
+// Dependency health history
+// ==========================================
+//
+// Five-minute observations from the public user journey and the official
+// provider status sources shown on /admin. This is intentionally a sample
+// ledger rather than a mutable "current status" row: the question it answers
+// is whether users may have seen degradation earlier, after everything has
+// gone green again. The monitor retains 90 days, while the UI shows 30.
+
+export const dependencyStatusSamples = pgTable(
+  'dependency_status_samples',
+  {
+    id: serial('id').primaryKey(),
+    dependencyId: text('dependency_id').notNull(),
+    status: text('status').notNull(), // 'green' | 'amber' | 'red' | 'unknown'
+    summary: text('summary').notNull(),
+    latencyMs: integer('latency_ms'),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('dependency_status_samples_dep_checked_unique_idx').on(t.dependencyId, t.checkedAt),
+    index('dependency_status_samples_dep_checked_idx').on(t.dependencyId, t.checkedAt),
+    index('dependency_status_samples_checked_idx').on(t.checkedAt),
+  ],
+);
+export type DependencyStatusSample = typeof dependencyStatusSamples.$inferSelect;
+export type NewDependencyStatusSample = typeof dependencyStatusSamples.$inferInsert;
+
 /**
  * One shipped thing inside a release. The point of the table is `includes` /
  * `excludes`: what the change actually covers versus what a reader would
