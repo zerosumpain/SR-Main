@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   createBacklogItem: vi.fn(),
   updateBacklogItem: vi.fn(),
   removeBacklogItem: vi.fn(),
+  groomBacklogDraft: vi.fn(),
 }));
 
 vi.mock('$lib/daydream/budget', () => ({ budgetStatus: mocks.budgetStatus }));
@@ -45,6 +46,9 @@ vi.mock('$lib/selfimprove/backlog', () => ({
   createBacklogItem: mocks.createBacklogItem,
   updateBacklogItem: mocks.updateBacklogItem,
   removeBacklogItem: mocks.removeBacklogItem,
+}));
+vi.mock('$lib/selfimprove/grooming.server', () => ({
+  groomBacklogDraft: mocks.groomBacklogDraft,
 }));
 
 import { POST } from './+server';
@@ -88,6 +92,12 @@ describe('backlog feature management', () => {
     mocks.createBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
     mocks.updateBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
     mocks.removeBacklogItem.mockResolvedValue({ slug: 'owner-feature' });
+    mocks.groomBacklogDraft.mockResolvedValue({
+      assistantMessage: 'I drafted a clear contract.',
+      suggestions: { title: 'Owner feature', detail: 'Clearer', kind: 'feature', priority: 2 },
+      grooming: { readiness: { score: 88, status: 'ready' } },
+      model: 'default-test-model',
+    });
   });
 
   it('creates an owner-authored feature with the editable fields', async () => {
@@ -132,6 +142,29 @@ describe('backlog feature management', () => {
     expect(response.status).toBe(200);
     expect(mocks.removeBacklogItem).toHaveBeenCalledWith('owner-feature');
     await expect(response.json()).resolves.toEqual({ ok: true, slug: 'owner-feature' });
+  });
+
+  it('grooms with a read-only model pass and returns the proposal for review', async () => {
+    const response = await POST(actionEvent({
+      action: 'backlog_groom',
+      slug: 'owner-feature',
+      title: 'Owner feature',
+      detail: 'rough idea',
+      kind: 'feature',
+      priority: 2,
+      message: 'Make the acceptance criteria testable.',
+      conversation: [{ role: 'assistant', content: 'What matters most?' }],
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.groomBacklogDraft).toHaveBeenCalledWith(expect.objectContaining({
+      slug: 'owner-feature',
+      message: 'Make the acceptance criteria testable.',
+    }));
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      model: 'default-test-model',
+      grooming: { readiness: { status: 'ready' } },
+    });
   });
 });
 

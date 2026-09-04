@@ -941,6 +941,35 @@ export const POST: RequestHandler = async ({ request }) => {
       // `daydream.appetite.autobuild` is deliberately inverted, so a drag on a
       // board must never be what starts one.
 
+      /**
+       * Groom a draft with JKAI's configured default model. This is read-only:
+       * the person still applies and saves the returned proposal explicitly.
+       */
+      case 'backlog_groom': {
+        const title = str('title');
+        const detail = str('detail');
+        const message = str('message');
+        if (!title && !detail && !message) {
+          return json({ error: 'add a title, brief or question before grooming' }, { status: 400 });
+        }
+        const { groomBacklogDraft } = await import('$lib/selfimprove/grooming.server');
+        try {
+          const result = await groomBacklogDraft({
+            slug: str('slug') || null,
+            title,
+            detail,
+            kind: str('kind'),
+            priority: Number(body.priority),
+            grooming: body.grooming,
+            conversation: body.conversation,
+            message,
+          });
+          return json({ ok: true, ...result });
+        } catch (err) {
+          return json({ error: errMsg(err) }, { status: 502 });
+        }
+      }
+
       /** Add an owner-authored feature directly to the accepted queue. */
       case 'backlog_create': {
         const title = str('title');
@@ -955,6 +984,7 @@ export const POST: RequestHandler = async ({ request }) => {
           detail: str('detail'),
           kind: str('kind'),
           priority,
+          ...(body.grooming ? { grooming: body.grooming } : {}),
         });
         return json({ ok: true, slug: item.slug });
       }
@@ -975,6 +1005,7 @@ export const POST: RequestHandler = async ({ request }) => {
           detail: str('detail'),
           kind: str('kind'),
           priority,
+          ...(body.grooming ? { grooming: body.grooming } : {}),
         });
         return json({ ok: true, slug: item.slug });
       }

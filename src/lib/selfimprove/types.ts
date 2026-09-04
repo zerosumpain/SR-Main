@@ -406,6 +406,63 @@ export interface ToolAttemptData {
 /** Lifecycle of a queued idea. */
 export type BacklogStatus = 'open' | 'shipped' | 'abandoned';
 
+/** How much implementation work a groomed item is expected to contain. */
+export type BacklogEffort = 'small' | 'medium' | 'large';
+
+/** Delivery risk recorded by the grooming pass. */
+export type BacklogRisk = 'low' | 'medium' | 'high';
+
+/** Whether the brief can be handed to an automated builder without guessing. */
+export type BacklogReadinessStatus = 'draft' | 'needs_input' | 'ready';
+
+export type BacklogRelationKind = 'duplicate' | 'related' | 'blocks' | 'blocked_by';
+
+/** A relationship may only point at another durable backlog slug. */
+export interface BacklogRelation {
+  slug: string;
+  title: string;
+  kind: BacklogItemData['kind'];
+  relation: BacklogRelationKind;
+  reason: string;
+}
+
+/**
+ * The structured contract between backlog grooming and every build lane.
+ *
+ * Raw chat is deliberately not persisted. The accepted brief, its remaining
+ * uncertainty and its model provenance are: that is the useful audit trail,
+ * and it keeps tomorrow's builder from having to reconstruct decisions from a
+ * conversational transcript.
+ */
+export interface BacklogGroomingData {
+  problem: string;
+  outcome: string;
+  acceptanceCriteria: string[];
+  constraints: string[];
+  nonGoals: string[];
+  dependencies: string[];
+  implementationNotes: string[];
+  validation: string[];
+  assumptions: string[];
+  openQuestions: string[];
+  decisions: string[];
+  relatedItems: BacklogRelation[];
+  effort: BacklogEffort;
+  risk: BacklogRisk;
+  readiness: {
+    score: number;
+    status: BacklogReadinessStatus;
+    reason: string;
+  };
+  assistantSummary: string;
+  /** The resolved model actually called, not merely the configured setting. */
+  modelId: string;
+  groomedAt: string;
+  /** Set when a person saves the model draft into the backlog record. */
+  acceptedAt?: string;
+  revision: number;
+}
+
 /**
  * Which channel an idea arrived through — the closed set lives in `./board`,
  * which is the PURE module a `.svelte` file may value-import. Type-only here,
@@ -454,6 +511,9 @@ export interface BacklogItemData {
   /** Which channel it arrived through. Absent on rows written before the
    *  field existed, which read `unattributed` and are never guessed at. */
   source?: IdeaSource;
+
+  /** Accepted, structured build brief. Additive JSON; no datastore migration. */
+  grooming?: BacklogGroomingData;
 
   // ── Owner edits from the queue board (2026-09-04) ────────────────────────
   //

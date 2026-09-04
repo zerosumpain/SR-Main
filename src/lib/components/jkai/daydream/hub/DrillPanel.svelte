@@ -27,9 +27,11 @@
     children: Snippet;
     /** A footer strip — the actions. */
     foot?: Snippet;
+    /** More room for editor journeys with a side-by-side review. */
+    wide?: boolean;
   }
 
-  let { label, kicker = null, tone = 'steady', onclose, head = undefined, children, foot = undefined }: Props = $props();
+  let { label, kicker = null, tone = 'steady', onclose, head = undefined, children, foot = undefined, wide = false }: Props = $props();
 
   /** Move the node to <body>. Same action the feed used. */
   function portal(node: HTMLElement) {
@@ -60,6 +62,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="dp-panel ds-vocab t-{tone}"
+    class:wide
     role="dialog"
     aria-modal="true"
     tabindex="-1"
@@ -107,6 +110,9 @@
     border-left: 4px solid var(--tone);
     border-radius: 0;
     outline: none;
+  }
+  .dp-panel.wide {
+    width: min(1120px, 100%);
   }
   .dp-panel.t-urgent {
     --tone: var(--error);

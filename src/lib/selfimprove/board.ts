@@ -30,7 +30,7 @@
 // is the exact bug that left every driver unrecorded for a fortnight.
 
 import { findRelatedIdea, looksSameSubject, type ToolHealth } from './narrative';
-import type { BacklogItemData } from './types';
+import type { BacklogGroomingData, BacklogItemData } from './types';
 
 // ---------------------------------------------------------------------------
 // The intake channels
@@ -227,6 +227,8 @@ export interface WorkItem {
   slug: string;
   title: string;
   detail: string;
+  /** Accepted structured brief, when the item has been groomed. */
+  grooming: BacklogGroomingData | null;
   kind: string;
   lane: WorkLane;
   stage: WorkStage;
@@ -532,6 +534,7 @@ export function buildBoard(input: BoardInput): BoardView {
       slug: b.slug,
       title: b.title,
       detail: b.detail ?? '',
+      grooming: b.grooming ?? null,
       kind: b.kind,
       lane: laneForKind(b.kind),
       stage,
@@ -583,6 +586,7 @@ export function buildBoard(input: BoardInput): BoardView {
       slug: c.slug,
       title: c.title,
       detail: c.need,
+      grooming: null,
       kind: c.kind,
       lane: laneForKind(c.kind),
       stage: stageForCapability(c.status),
@@ -705,7 +709,8 @@ export function matchesFilter(item: WorkItem, f: BoardFilter): boolean {
   if (f.sources.length && (item.intake == null || !f.sources.includes(item.intake))) return false;
   if (f.query) {
     const q = f.query.toLowerCase();
-    if (!item.title.toLowerCase().includes(q) && !item.detail.toLowerCase().includes(q)) {
+    const grooming = item.grooming ? JSON.stringify(item.grooming).toLowerCase() : '';
+    if (!item.title.toLowerCase().includes(q) && !item.detail.toLowerCase().includes(q) && !grooming.includes(q)) {
       return false;
     }
   }

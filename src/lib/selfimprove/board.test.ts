@@ -299,6 +299,7 @@ describe('summarise', () => {
       slug: 'x',
       title: 'x',
       detail: '',
+      grooming: null,
       kind: 'tool',
       lane: 'toolsmith',
       stage: 'accepted',
@@ -430,6 +431,19 @@ describe('filtering', () => {
   it('filters by query across title and detail', () => {
     expect(applyFilter(base, { ...EMPTY_FILTER, query: 'met office' })).toHaveLength(1);
     expect(applyFilter(base, { ...EMPTY_FILTER, query: 'nothing here' })).toHaveLength(0);
+  });
+
+  it('carries accepted grooming into the board and searches its structured fields', () => {
+    const grooming = {
+      acceptanceCriteria: ['Support keyboard-only review'],
+      readiness: { score: 84, status: 'ready' },
+    } as BacklogItemData['grooming'];
+    const board = buildBoard({
+      backlog: [item({ slug: 'groomed', title: 'Modal polish', grooming })],
+      capabilities: [], tools: [], attemptCeiling: CEILING,
+    });
+    expect(board.items[0].grooming).toBe(grooming);
+    expect(applyFilter(board.items, { ...EMPTY_FILTER, query: 'keyboard-only' })).toHaveLength(1);
   });
 
   // AND, not OR: "brings new data" plus "never tried" should narrow to the
