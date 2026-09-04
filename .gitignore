@@ -44,6 +44,7 @@ packages/jkai-builder/dist/
 # jkai-run-worker bundle — produced by `node packages/jkai-run-worker/build.mjs`
 packages/jkai-run-worker/dist/
 packages/jkai-codex-bridge/dist/
+packages/jkai-wa-worker/dist/
 
 # Scraper scripts — homeserv-local runtime state (LLM-authored per-domain
 # scrape scripts + metadata). Never synced to the VPS; see script-store.ts.
