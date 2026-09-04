@@ -98,6 +98,19 @@ describe('the prebuild/release split across two machines', () => {
       release.indexOf('./scripts/ci-apply-sidecars.sh'),
     );
   });
+
+  it('keeps the protected production env immutable and isolates the Webframe credential', () => {
+    const release = readFileSync(join(ROOT, 'scripts/ci-release.sh'), 'utf8');
+    const webframe = readFileSync(join(ROOT, 'scripts/ci-webframe.sh'), 'utf8');
+
+    expect(webframe).toContain('WEBFRAME_ENV_FILE="$VPS_DIR/.webframe.env"');
+    expect(webframe).toContain('EnvironmentFile=-%s');
+    expect(webframe).toContain('UnsetEnvironment=AUTH_BYPASS');
+    expect(webframe).toContain('--env-file "$WEBFRAME_ENV_FILE"');
+    expect(webframe).not.toContain('ENV_FILE="$VPS_DIR/.env"');
+    expect(webframe).not.toContain('touch "$VPS_DIR/.env"');
+    expect(release).not.toMatch(/sed .*AUTH_BYPASS.*\.env/);
+  });
 });
 
 describe('the local fast path', () => {

@@ -88,10 +88,10 @@ echo "==> Previously deployed sha: ${PREV_SHA:-<none>}"
 echo "==> Placing package manifests..."
 rsync -a package.json package-lock.json "$VPS_DIR/"
 
-# The runtime no longer honours this historical escape hatch. Remove stale
-# production configuration too, so posture checks cannot mistake it for an
-# active control and no rollback can accidentally revive it.
-sudo sed -i '/^AUTH_BYPASS=/d' "$VPS_DIR/.env"
+# The production .env is intentionally immutable in the deployment runner's
+# mount namespace after a historical overwrite incident. ci-webframe.sh installs
+# a systemd UnsetEnvironment drop-in instead, so a stale AUTH_BYPASS entry can
+# never reach this service; current application code also ignores it.
 
 # NOTE: no --delete. The VPS's data/jkai-projects/ holds pages published at
 # runtime by publish_page that do not exist in git; --delete would erase them.
