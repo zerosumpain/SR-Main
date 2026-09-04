@@ -371,9 +371,22 @@ if (runsService('background')) {
 })();
 
 if (runsService('scheduler')) {
-  startScheduler().catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[scheduler] Boot failed:', msg);
+  // Deferred out of module evaluation on purpose. `./scheduler` imports `engine`
+  // back from this module, so the two form a cycle. Enter it at scheduler.ts —
+  // hooks.server.ts does, on its second line — and this module evaluates to
+  // completion while scheduler.ts is still suspended on its own import, i.e.
+  // before its `let cronOwner` initialiser has run. Calling startScheduler()
+  // there put the assignment `cronOwner = true` on a binding still in the
+  // temporal dead zone, so every boot logged "Cannot access 'cronOwner' before
+  // initialization" and the first registration pass was lost (the reconciler
+  // picked the schedules up a minute later, which is why cron still fired and
+  // the fault stayed invisible). A microtask runs only once the whole graph has
+  // finished evaluating, so the binding exists by the time the boot touches it.
+  queueMicrotask(() => {
+    startScheduler().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[scheduler] Boot failed:', msg);
+    });
   });
 
   // Boot stale-run reaper (clears orphaned `running` rows from previous process

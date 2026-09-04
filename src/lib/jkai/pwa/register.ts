@@ -33,6 +33,19 @@ export function isLegacyJkaiScope(scope: string, origin: string): boolean {
 	}
 }
 
+/** Does this registration control the jkai scope — current or legacy? */
+export function isJkaiScope(scope: string, origin: string): boolean {
+	try {
+		const url = new URL(scope, origin);
+		return (
+			url.origin === origin &&
+			(url.pathname === JKAI_SCOPE_PATH || url.pathname === LEGACY_JKAI_SCOPE_PATH)
+		);
+	} catch {
+		return false;
+	}
+}
+
 async function removeLegacyJkaiRegistration(): Promise<void> {
 	if (typeof navigator.serviceWorker.getRegistrations !== 'function') return;
 	try {
@@ -46,6 +59,45 @@ async function removeLegacyJkaiRegistration(): Promise<void> {
 		// A failed migration must not prevent the new, correctly scoped worker
 		// from registering. Leave a useful trace for browser-side diagnosis.
 		console.warn('[jkai-pwa] legacy worker cleanup failed', err);
+	}
+}
+
+/**
+ * Refresh a jkai worker from ANY page.
+ *
+ * Everything that recovers a bad worker — the legacy-scope cleanup, reg.update(),
+ * the version poll — lives in registerJkaiSW(), which runs from the /jkai layout's
+ * onMount. That makes every recovery path reachable only once /jkai has already
+ * rendered. A worker serving a stale navigation response therefore blocks the one
+ * thing that would replace it: the page cannot load, so the code that would fix
+ * the page never runs. Seven deploys in an afternoon is all it takes to land there,
+ * and the only way out was clearing site data by hand.
+ *
+ * This is the way out. It registers nothing — a visitor who never opens /jkai still
+ * gets no worker — and only ever acts on a registration that already exists. The
+ * installed worker calls skipWaiting()/clientsClaim() and drops the legacy
+ * `jkai-navigation` cache on activate, so a single update() is enough to unwedge a
+ * client from any page that still renders.
+ */
+export async function healStaleJkaiSW(): Promise<void> {
+	if (typeof window === 'undefined') return;
+	if (!('serviceWorker' in navigator)) return;
+	if (typeof navigator.serviceWorker.getRegistrations !== 'function') return;
+	try {
+		const registrations = await navigator.serviceWorker.getRegistrations();
+		const origin = window.location.origin;
+		await Promise.all(
+			registrations
+				.filter((registration) => isJkaiScope(registration.scope, origin))
+				.map((registration) =>
+					isLegacyJkaiScope(registration.scope, origin)
+						? registration.unregister()
+						: registration.update(),
+				),
+		);
+	} catch (err) {
+		// Best effort by design: a page that cannot refresh the worker must still render.
+		console.warn('[jkai-pwa] stale worker refresh failed', err);
 	}
 }
 

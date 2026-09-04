@@ -4,6 +4,7 @@
   import { onMount, setContext } from 'svelte';
   import { onNavigate } from '$app/navigation';
   import { createBiomeStore } from '$lib/biome/store.svelte';
+  import { healStaleJkaiSW } from '$lib/jkai/pwa/register';
 
   const store = createBiomeStore();
   setContext('biome', store);
@@ -11,6 +12,12 @@
   onMount(() => {
     store.initTier();
     store.startPolling();
+
+    // Statically imported, and deliberately not behind a dynamic import: the
+    // client this rescues is one already serving stale chunks, so the recovery
+    // must ride in the bundle the page just loaded rather than fetch a new one.
+    // A no-op for anyone without a jkai worker registered.
+    void healStaleJkaiSW();
 
     return () => {
       store.stopPolling();
