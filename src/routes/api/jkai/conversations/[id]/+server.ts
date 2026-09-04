@@ -1,13 +1,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
-import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
+import { conversations, orchestratorChats, jkaiBuilds, openrouterModels } from '$lib/db/schema';
+import { eq, sql, and, notInArray, desc } from 'drizzle-orm';
+import { getConversationMessages } from '$lib/jkai/queries';
 import { getChatInputCapabilities, modelSupportsThinking } from '$lib/server/models/capabilities';
 import { setDefaultThinkingLevel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
-import { isThinkingLevel } from '$lib/models/thinking';
+import { isThinkingLevel, supportsThinking } from '$lib/models/thinking';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const [conv] = await db
@@ -20,42 +21,6 @@ export const GET: RequestHandler = async ({ params }) => {
 		return json({ error: 'Not found' }, { status: 404 });
 	}
 
-	// Load web messages
-	const webMessages = await db
-		.select({
-			id: orchestratorChats.id,
-			role: orchestratorChats.role,
-			content: orchestratorChats.content,
-			metadata: orchestratorChats.metadata,
-			createdAt: orchestratorChats.createdAt,
-		})
-		.from(orchestratorChats)
-		.where(eq(orchestratorChats.conversationId, params.id))
-		.orderBy(asc(orchestratorChats.createdAt));
-
-	// All messages (including migrated WhatsApp) are now in orchestrator_chats
-	const allMessages = webMessages.map((m) => ({
-		...m,
-		source: conv.source === 'whatsapp' ? ('whatsapp' as const) : ('web' as const),
-	}));
-
-	// Fetch attachments for all messages
-	const messageIds = allMessages.map((m: any) => m.id).filter(Boolean);
-	const attachmentsData = messageIds.length > 0
-		? await db.select().from(jkaiAttachments).where(inArray(jkaiAttachments.messageId, messageIds))
-		: [];
-	const attachmentsByMsg = new Map<string, typeof attachmentsData>();
-	for (const a of attachmentsData) {
-		if (!a.messageId) continue;
-		const arr = attachmentsByMsg.get(a.messageId) ?? [];
-		arr.push(a);
-		attachmentsByMsg.set(a.messageId, arr);
-	}
-	const messagesWithAttachments = allMessages.map((m: any) => ({
-		...m,
-		attachments: attachmentsByMsg.get(m.id) ?? [],
-	}));
-
 	// Get model capabilities from conversation's pinned model. Legacy rows can
 	// still carry provider 'zai' + a bare GLM id — coerce to an OpenRouter
 	// context so old conversations render (and price) as openrouter.
@@ -66,7 +31,8 @@ export const GET: RequestHandler = async ({ params }) => {
 	const modelCaps = getChatInputCapabilities(pinnedModel);
 
 	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;
-	const [activeBuild] = await db
+	const historyPromise = getConversationMessages(params.id);
+	const activeBuildPromise = db
 		.select({
 			id: jkaiBuilds.id,
 			title: jkaiBuilds.title,
@@ -85,15 +51,30 @@ export const GET: RequestHandler = async ({ params }) => {
 	// Context window of the pinned model — the header strip renders the last
 	// turn's prompt size against it as `N CTX %`. Null when the catalogue has no
 	// row for the model (self-hosted / just-added ids), and the chunk is dropped.
-	const [catalogue] = await db
+	const cataloguePromise = db
 		.select({
 			contextLength: openrouterModels.contextLength,
 			promptPrice: openrouterModels.promptPrice,
 			completionPrice: openrouterModels.completionPrice,
+			raw: openrouterModels.raw,
 		})
 		.from(openrouterModels)
 		.where(eq(openrouterModels.id, pinnedModel.modelId))
 		.limit(1);
+
+	// History, build state and model metadata are independent after the thread
+	// row is known. Run them together, and reuse the catalogue row for the
+	// thinking gate instead of issuing the same primary-key lookup twice.
+	const [history, [activeBuild], [catalogue]] = await Promise.all([
+		historyPromise,
+		activeBuildPromise,
+		cataloguePromise,
+	]);
+	// All messages (including migrated WhatsApp) are now in orchestrator_chats.
+	const messagesWithAttachments = history.messages.map((message) => ({
+		...message,
+		source: conv.source === 'whatsapp' ? ('whatsapp' as const) : ('web' as const),
+	}));
 
 	// Live prices for the composer's `est. £/turn` chip. `conversations.price_snapshot`
 	// is only written when the model is switched before the first message, so most
@@ -116,13 +97,15 @@ export const GET: RequestHandler = async ({ params }) => {
 			priceSnapshot,
 		},
 		messages: messagesWithAttachments,
+		hasOlderMessages: history.hasOlder,
+		messageCursor: history.cursor,
 		modelCapabilities: modelCaps,
 		modelContextLength: catalogue?.contextLength ?? null,
 		// Whether the composer shows a thinking-level chip at all. Read off the
 		// same catalogue row as the context window rather than a hand-kept list,
 		// so it tracks the nightly refresh; false for a model the catalogue has
 		// never heard of, which is the honest answer.
-		modelSupportsThinking: await modelSupportsThinking(pinnedModel),
+		modelSupportsThinking: supportsThinking(pinnedModel.provider, catalogue?.raw ?? null),
 		activeBuild: activeBuild ?? null,
 	});
 };

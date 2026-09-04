@@ -4,16 +4,26 @@ import { biomeConfig } from '$lib/db/schema';
 import { BIOME_SETTINGS_DEFAULTS, type BiomeSettings } from '$lib/biome/settings';
 import type { RequestHandler } from './$types';
 
+const CACHE_MS = 5 * 60_000;
+let cached: { at: number; settings: BiomeSettings } | null = null;
+
+async function readSettings(): Promise<BiomeSettings> {
+  const rows = await db.select().from(biomeConfig).limit(1);
+  if (rows.length === 0) return BIOME_SETTINGS_DEFAULTS;
+  const parsed = JSON.parse(rows[0].settings) as Partial<BiomeSettings>;
+  return { ...BIOME_SETTINGS_DEFAULTS, ...parsed };
+}
+
 export const GET: RequestHandler = async () => {
   try {
-    const rows = await db.select().from(biomeConfig).limit(1);
-    if (rows.length === 0) {
-      return json(BIOME_SETTINGS_DEFAULTS);
+    if (!cached || Date.now() - cached.at >= CACHE_MS) {
+      cached = { at: Date.now(), settings: await readSettings() };
     }
-    const parsed = JSON.parse(rows[0].settings) as Partial<BiomeSettings>;
-    // Merge with defaults so new keys are always present even if DB row is old
-    const merged: BiomeSettings = { ...BIOME_SETTINGS_DEFAULTS, ...parsed };
-    return json(merged);
+    return json(cached.settings, {
+      headers: {
+        'Cache-Control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=900',
+      },
+    });
   } catch {
     return json(BIOME_SETTINGS_DEFAULTS);
   }
@@ -39,6 +49,7 @@ export const POST: RequestHandler = async ({ request }) => {
         .update(biomeConfig)
         .set({ settings: settingsJson, updatedAt: new Date() });
     }
+    cached = { at: Date.now(), settings: merged };
     return json({ ok: true, settings: merged });
   } catch (err) {
     console.error('Failed to save biome config:', err);
