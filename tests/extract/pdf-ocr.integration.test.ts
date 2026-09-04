@@ -12,7 +12,27 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileToText } from '../../src/lib/file-index/content';
 
-describe('scanned PDF → OCR (real API)', () => {
+// Gate on what this file actually needs, not on what is easiest to check —
+// the same guard `tests/lib/rag/pipeline.integration.test.ts` carries, and for
+// the same reason. This file had NO guard: the nightly runs it with no
+// OpenRouter key, `fileToText` returns `empty` because nothing can read the
+// pixels, and the assertion fails. It is the reason the nightly was red from
+// 2026-08-19 onwards, alongside four others.
+//
+// Skipping is right here rather than asserting the empty case: the subject of
+// this test is what the VISION MODEL reads off a page, and there is no
+// version of that claim a run without a model can make.
+const RUN = await (async () => {
+  try {
+    const { getOpenRouterApiKey } = await import('$lib/server/models/settings');
+    return !!(await getOpenRouterApiKey());
+  } catch {
+    return false;
+  }
+})();
+const d = RUN ? describe : describe.skip;
+
+d('scanned PDF → OCR (real API)', () => {
   it('reads a PDF with no text layer via the vision model', async () => {
     const buf = readFileSync(resolve(__dirname, '../fixtures/extract/scanned.pdf'));
     const out = await fileToText(buf, 'application/pdf', 'scanned.pdf');
