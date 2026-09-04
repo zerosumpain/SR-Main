@@ -4884,6 +4884,69 @@ export const daydreamFaults = pgTable(
 export type DaydreamFault = typeof daydreamFaults.$inferSelect;
 
 /**
+ * What the site could do and cannot — the appetite ledger.
+ *
+ * The sibling of `daydream_faults`, and deliberately not the same table. A
+ * fault says "I tried and failed" and names its own fix in `wants`. A
+ * capability lead says "nothing here has ever tried", and has to argue for
+ * itself: who consumes it, what it unlocks, and which lines of the evidence
+ * pack support it. Everything the engine built before this existed was a
+ * repair or an efficiency; nothing could propose a new faculty.
+ *
+ * `slug` is `<kind>:<title-slug>` so the same idea arriving on five nights is
+ * one row with `recurrence` five, not five rows — the failure that made every
+ * "proposal" in the 19–29 Jul runs a dead string.
+ */
+export const daydreamCapabilities = pgTable(
+  'daydream_capabilities',
+  {
+    id: serial('id').primaryKey(),
+    /** `<kind>:<title-slug>`. Stable identity across nights. */
+    slug: text('slug').notNull(),
+    /** data_source | news_source | watch | tool | feature */
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    /** What is missing, in the proposer's words. */
+    need: text('need').notNull(),
+    /** What it unlocks, in the proposer's words. */
+    value: text('value').notNull(),
+    /** jkai | daydream | site | shared */
+    consumer: text('consumer').notNull(),
+    integrationHint: text('integration_hint'),
+    /** Evidence-pack keys this lead cited, after the audit dropped the rest. */
+    cites: jsonb('cites').notNull().default([]),
+    score: doublePrecision('score').notNull().default(0),
+    /** Every input to `score`, named — never show an unexplained number. */
+    components: jsonb('components'),
+    /** proposed | queued | building | shipped | declined */
+    status: text('status').notNull().default('proposed'),
+    /** Nights this lead has been arrived at, including the first. */
+    recurrence: integer('recurrence').notNull().default(1),
+    /** source | watch | tool | feature — which builder took it. */
+    lane: text('lane'),
+    /** Plain English: what it became. Assembled from recorded fields. */
+    outcome: text('outcome'),
+    /** The thing itself: a tool name, a monitor id, a build id, a PR url. */
+    outcomeRef: text('outcome_ref'),
+    /** The `improvement_backlog` item working on it. */
+    backlogSlug: text('backlog_slug'),
+    /** The bridged thought, so a rating on the feed reaches the lead. */
+    thoughtId: integer('thought_id'),
+    /** owner | engine — who accepted or declined, so the room can say. */
+    decidedBy: text('decided_by'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('daydream_capabilities_slug_idx').on(t.slug),
+    index('daydream_capabilities_status_idx').on(t.status),
+  ],
+);
+
+export type DaydreamCapability = typeof daydreamCapabilities.$inferSelect;
+
+/**
  * One row per local day, per subject — the table that makes a cross-domain
  * correlation computable at all.
  *

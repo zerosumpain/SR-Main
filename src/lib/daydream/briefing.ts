@@ -13,7 +13,7 @@
 import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
-import { daydreamLeads, daydreamMemoryThemes, daydreamPlaces, daydreamThoughts } from '$lib/db/schema';
+import { daydreamCapabilities, daydreamLeads, daydreamMemoryThemes, daydreamPlaces, daydreamThoughts } from '$lib/db/schema';
 import { localDayStart } from './budget';
 import { errMsg } from './types';
 import { digestDay, gatherStats, type DigestStats } from './digest/build';
@@ -42,11 +42,13 @@ export interface DaydreamBriefing {
     placesNamed: number;
     expired: number;
     memoriesLearned: number;
+    wants: number;
   };
   digest: DigestStats | null;
 }
 
 const FEED = '/jkai/daydreams/feed';
+const APPETITE = '/jkai/daydreams/improvement#appetite';
 const trim = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /**
@@ -61,7 +63,7 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
   const day = digestDay(now, 1);
   const inDay = (col: AnyPgColumn) => and(gte(col, dayStart), lt(col, dayEnd));
 
-  const [sent, held, refuted, applied, places, expired, themes, leads, digest] = await Promise.all([
+  const [sent, held, refuted, applied, places, expired, themes, leads, wants, digest] = await Promise.all([
     db
       .select({ id: daydreamThoughts.id, title: daydreamThoughts.title, channel: daydreamThoughts.channel })
       .from(daydreamThoughts)
@@ -105,6 +107,21 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
         open: sql<number>`count(*) filter (where ${daydreamLeads.status} = 'open')::int`,
       })
       .from(daydreamLeads),
+    // What the engine would like to build, straight off the appetite ledger
+    // rather than via the thought path. A capability lead is deliberately
+    // low-scoring next to a health alarm, so it would sit below the cold-start
+    // threshold for weeks and reach him never — and "here is what I think the
+    // site is missing" is the one line of this section he asked for by name.
+    db
+      .select({ slug: daydreamCapabilities.slug, title: daydreamCapabilities.title, kind: daydreamCapabilities.kind })
+      .from(daydreamCapabilities)
+      .where(and(eq(daydreamCapabilities.status, 'proposed'), inDay(daydreamCapabilities.lastSeenAt)))
+      .orderBy(desc(daydreamCapabilities.score))
+      .limit(4)
+      .catch((err) => {
+        console.warn(`[daydream] briefing appetite read failed: ${errMsg(err)}`);
+        return [] as Array<{ slug: string; title: string; kind: string }>;
+      }),
     gatherStats(day).catch((err) => {
       console.warn(`[daydream] briefing digest stats failed: ${errMsg(err)}`);
       return null;
@@ -145,6 +162,15 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
     fact('Learned', themes.map((t) => trim(t.title, 60)).join(' · '), '/jkai/daydreams/memory');
     lines.push(`• Learned: ${themes.map((t) => trim(t.title, 50)).join('; ')}`);
   }
+  if (wants.length) {
+    fact(
+      'Would like to build',
+      wants.map((w) => `${trim(w.title, 60)} (${w.kind.replace(/_/g, ' ')})`).join(' · '),
+      APPETITE,
+    );
+    lines.push(`• Would like to build: ${wants.slice(0, 2).map((w) => trim(w.title, 55)).join('; ')}`);
+    if (wants.length > 2) lines.push(`  …and ${wants.length - 2} more on the appetite ledger`);
+  }
   if (digest && (digest.questionsAsked || digest.questionsAnswered)) {
     const parts: string[] = [];
     if (digest.questionsAsked) parts.push(`asked ${digest.questionsAsked}`);
@@ -168,6 +194,7 @@ export async function buildDaydreamBriefing(now = new Date()): Promise<DaydreamB
     placesNamed: places.length,
     expired: expiredN,
     memoriesLearned: themes.length,
+    wants: wants.length,
   };
   const status: DaydreamBriefing['status'] = facts.length ? 'ok' : 'empty';
   if (status === 'empty') lines.push('• A quiet day — nothing said, nothing held, nothing caught.');

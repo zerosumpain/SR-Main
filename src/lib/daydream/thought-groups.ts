@@ -49,6 +49,11 @@ export const FAMILIES: Record<string, ThoughtFamily> = {
     label: 'Your rules',
     blurb: 'Rules the engine proposed and you approved. Facts are an allow-list of scalars; a rule can never reach a coordinate.',
   },
+  build: {
+    id: 'build',
+    label: 'Build',
+    blurb: 'What the site should be able to do and cannot. Proposed by the appetite scan against an inventory of what already exists; every one cites the evidence that produced it.',
+  },
   patterns: {
     id: 'patterns',
     label: 'Patterns',
@@ -68,6 +73,7 @@ export function familyOf(kind: string): ThoughtFamily {
   if (kind.startsWith('musing_')) return FAMILIES.musings;
   if (kind.startsWith('mail_')) return FAMILIES.mail;
   if (kind.startsWith('intel_')) return FAMILIES.graph;
+  if (kind.startsWith('capability_')) return FAMILIES.build;
   if (kind.startsWith('rule_') || kind === 'rule_driven') return FAMILIES.rules;
   // Both spellings: the detector was renamed in August and the old rows stayed.
   if (kind === 'unknown_place' || kind === 'unknown_frequent_place') return FAMILIES.places;
@@ -87,6 +93,7 @@ export const FAMILY_MARK: Record<string, string> = {
   mail: 'MAIL',
   musings: 'MUSE',
   graph: 'GRAPH',
+  build: 'BUILD',
   rules: 'RULE',
   patterns: 'PATTERN',
 };
@@ -98,7 +105,7 @@ export function familyMark(kind: string): string {
 /** The order families appear down the feed matrix — by what a reader acts on
  *  first, not by count. Counts change hourly; a matrix whose rows reorder
  *  hourly cannot be learned. */
-export const FAMILY_ORDER = ['musings', 'mail', 'places', 'graph', 'patterns', 'rules'] as const;
+export const FAMILY_ORDER = ['musings', 'mail', 'places', 'graph', 'build', 'patterns', 'rules'] as const;
 
 /**
  * The four states a thought can be in from the reader's side.

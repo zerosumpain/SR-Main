@@ -256,6 +256,16 @@ export const MECHANICS: Readonly<Record<string, Mechanics>> = {
     effort: [],
     config: {},
   },
+  appetite: {
+    stage: 'discover',
+    how: 'Once a day, in the evening, it assembles an evidence pack — the types of question the owner has been asking and whether they were served well, an inventory of every signal source, catalogued API, toolset, watch, news feed and enabled schedule the site can already reach, the open faults where daydreaming came up short, and every capability already on the ledger — then asks the model what the site should be able to do and cannot. Each proposal must cite pack keys verbatim; one that cites nothing in the pack is dropped by name on the pulse. Code scores what survives over named inputs (citations, how much new data the lane brings in, and how many separate nights the idea has been arrived at), writes it to the appetite ledger, and offers the strongest as ordinary thoughts routed to the briefing. It cannot build anything.',
+    reads: ['orchestrator chats (14d)', 'question_insights', 'daydream_signals by source', 'api_catalog', 'site-tool toolsets', 'monitors', 'workflow_schedules', 'daydream_faults', 'daydream_hypotheses (starvation)', 'daydream_capabilities'],
+    writes: ['daydream_capabilities', 'daydream_thoughts (capability_* candidates)'],
+    gates: [ENABLED, IDLE, 'once a day', 'window 20:00–23:30 Europe/London', BUDGET],
+    model: CODEX,
+    effort: ['discover → how many capabilities one scan may admit'],
+    config: { idleWindowMinutes: 'how recently the owner must have been quiet', maxLeads: 'proposals per scan; 0 means take it from the effort dial' },
+  },
   improve: {
     stage: 'improve',
     how: 'The self-improvement engine, one activity with eight phases in a 25-minute nightly slot: gather (a week of chats, tool audit), learn (unmet needs, plus — first — the daydream fault ledger, then starvation and health faults, and the engine’s own proposals), discover (search the catalogue then the web for a source each need names, register it with a live probe), build (author ONE runtime tool for the top idea, smoke-test it, ship it live if it passes), repair, optimise, propose (draft PRs for feature-shaped ideas), report. A tool it ships that takes no arguments is sampled the next day as a signal — the return edge.',

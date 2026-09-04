@@ -17,6 +17,7 @@ import { daydreamDetect } from './activities/daydream-detect';
 import { daydreamCompose } from './activities/daydream-compose';
 import { daydreamOffersScan } from './activities/daydream-offers';
 import { daydreamRulesmith } from './activities/daydream-rulesmith';
+import { daydreamAppetite } from './activities/daydream-appetite';
 import { daydreamBank } from './activities/daydream-bank';
 import { daydreamIntelBridge } from './activities/daydream-intel';
 import { daydreamMail } from './activities/daydream-mail';
@@ -53,6 +54,7 @@ const handlers: ActivityHandler[] = [
   daydreamOffersScan,
   daydreamMail,
   daydreamRulesmith,
+  daydreamAppetite,
   daydreamBank,
   daydreamIntelBridge,
   daydreamNotebook,

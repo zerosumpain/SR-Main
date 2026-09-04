@@ -65,6 +65,10 @@ export const WEEKLY_SECONDS = 604_800;
  */
 export const SPENDING_ACTIONS = [
   'daydream-compose',
+  // The appetite scan: one completion a day over the capability pack. Cheap
+  // next to the reviewer, and in this list from the day it shipped rather than
+  // three weeks later — that omission has already happened twice.
+  'daydream-appetite',
   'daydream-offers',
   'daydream-rulesmith',
   'daydream-hypothesise',
