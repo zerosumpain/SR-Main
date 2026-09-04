@@ -176,7 +176,7 @@
     <SectionHead
       kicker="C / The loop, end to end"
       title={['What it could not do,', 'and what that built']}
-      strap="Six stages in the order the work flows: a fault daydream raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
+      strap="Seven stages in the order the work flows: a capability the appetite scan wants, a fault daydreaming raises, an idea self-improve queues, a tool it ships, a signal that tool becomes, a finding the sweep keeps, a thought that finding shapes. The first zero after a non-zero is where the loop is stuck."
     />
     {#if story.error}<p class="err">{story.error}</p>{/if}
     <RollupGrid {cells} min={190} />
