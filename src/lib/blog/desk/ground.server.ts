@@ -17,7 +17,7 @@
 
 import { getLLMClient } from '$lib/llm/client';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
-import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';
+import { hostnameOf, rateSource } from '$lib/blog/reputable-domains';
 import { anchorHash } from './anchor';
 import type { Evidence, Finding } from './types';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
@@ -208,9 +208,11 @@ export async function extractClaims(plainText: string, max: number = MAX_CLAIMS)
     .slice(0, cap);
 }
 
-/** Tavily relevance plus a flat +1 for a reputable domain, which is enough to
- *  lift an ONS page above an SEO farm that matched the query better. Same
- *  formula as the review-claims endpoint; see $lib/blog/reputable-domains. */
+/** Tavily relevance plus the source bonus — reputation, then UK provenance as
+ *  the tie-break. Enough to lift an ONS page above an SEO farm that matched the
+ *  query better, and above an equally reputable US source for a British fact.
+ *  Same formula as the review-claims endpoint, because it is literally the same
+ *  function; see $lib/blog/reputable-domains. */
 function rank(results: { url: string; title: string; content: string; score: number }[]) {
   return results
     .filter((r) => r && typeof r.url === 'string' && r.url)
@@ -218,7 +220,7 @@ function rank(results: { url: string; title: string; content: string; score: num
       url: r.url,
       title: r.title || hostnameOf(r.url),
       snippet: trim(r.content ?? '', 400),
-      score: (r.score ?? 0) + (isReputable(r.url) ? 1 : 0),
+      score: (r.score ?? 0) + rateSource(r.url).bonus,
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, CANDIDATES_PER_CLAIM);

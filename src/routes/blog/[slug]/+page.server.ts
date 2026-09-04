@@ -1,5 +1,6 @@
 import { getPostBySlug } from '$lib/blog';
 import { renderArticle } from '$lib/blog/renderer';
+import { stripReferences } from '$lib/blog/references';
 import { bodyFontVar } from '$lib/blog/fonts';
 import { publishedComments } from '$lib/blog/comments.server';
 import { isOwnerRequest } from '$lib/server/owner';
@@ -38,7 +39,14 @@ export const load: PageServerLoad = async (event) => {
   // payload. The page renders `articleHtml`; shipping the raw body as well sent
   // every post down the wire twice — once as source and once as rendered
   // markup — to produce a single number.
-  const wordCount = post.content.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+  // Counted over the PROSE. The sources block is a list of URLs and counting it
+  // inflates the estimate for a well-cited post — the same reason the
+  // readability score and the segmenter strip it.
+  const wordCount = stripReferences(post.content)
+    .replace(/<[^>]+>/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
   const readingTime = Math.max(1, Math.round(wordCount / 220));
   const { content: _body, previewToken: _token, ...postMeta } = post;
 
@@ -47,6 +55,9 @@ export const load: PageServerLoad = async (event) => {
     readingTime,
     articleHtml: article.html,
     toc: article.toc,
+    // Rendered in the article FOOTER, not in the reading column. Null when the
+    // post cites nothing. See $lib/blog/references.
+    references: article.references,
     bodyFontVar: bodyFontVar(post.bodyFont),
     comments,
     owner,

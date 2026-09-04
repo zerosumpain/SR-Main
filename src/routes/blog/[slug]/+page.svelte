@@ -97,6 +97,17 @@
   <div data-article-end aria-hidden="true"></div>
 
   <div class="art-foot">
+    {#if data.references}
+      <!-- Sources, in the footer and quiet. They used to sit at the end of the
+           prose behind an <h3> the size of a section break, which made the
+           bibliography the most prominent thing on the finished page. -->
+      <section class="art-sources" aria-labelledby="art-sources-h">
+        <h2 class="art-sources-h" id="art-sources-h">Sources</h2>
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html data.references}
+      </section>
+    {/if}
+
     {#if data.owner}
       <p class="art-owner">
         You are reading this as the owner — no view is recorded.
@@ -120,6 +131,56 @@
 </footer>
 
 <style>
+  /* Sources. Everything here is chosen to be QUIET — the mono label at label
+     size, muted colour, no rule above it competing with the article's own. A
+     reader who wants to check a claim finds them; a reader who does not is
+     never made to scroll past a heading in the display face. */
+  .art-sources {
+    margin: 2.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .art-sources-h {
+    margin: 0 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+
+  .art-sources :global(ol.footnotes) {
+    margin: 0;
+    padding-left: 1.4rem;
+    font-size: var(--fs-label);
+    line-height: 1.7;
+    color: var(--text-muted);
+  }
+
+  .art-sources :global(ol.footnotes li) {
+    margin-bottom: 0.3rem;
+  }
+
+  .art-sources :global(ol.footnotes li::marker) {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+
+  /* A raw URL is long and not the point; the source's title is. Wrap rather
+     than overflow, and never widen the measure. */
+  .art-sources :global(ol.footnotes a) {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-word;
+  }
+
+  .art-sources :global(ol.footnotes a:hover) {
+    color: var(--accent);
+  }
+
   /* The article is one grid; the header, cover, body and footer are all rows
      in it, so a full-bleed cover and a measure-width paragraph line up on the
      same column definition rather than on two sets of paddings. */

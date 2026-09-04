@@ -1,7 +1,7 @@
 <svelte:head><title>Edit: {data.post.title} — Admin</title></svelte:head>
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { BODY_FONT_OPTIONS, DEFAULT_BODY_FONT } from '$lib/blog/fonts';
+  import { BODY_FONT_OPTIONS, DEFAULT_BODY_FONT, bodyFontVar } from '$lib/blog/fonts';
   import { AUTOPILOT_MODES } from '$lib/blog/assistant/autopilot';
   import WritingDesk from '$lib/components/blog/WritingDesk.svelte';
   import MediaLibrary from '$lib/components/blog/MediaLibrary.svelte';
@@ -47,11 +47,26 @@
   let isMarkdown = $derived(contentFormat === 'markdown');
   let converting = $state(false);
   let richApi = $state<RichEditorApi | undefined>();
+  /** The post's citations, read out of the document rather than tracked
+   *  separately — the document is the single source of truth and a parallel
+   *  list would drift the moment the author undid an insert. */
+  let references = $state<{ n: number; url: string; title: string }[]>([]);
+  function refreshReferences() {
+    references = richApi?.listReferences() ?? [];
+  }
   type MarkdownEditorComponent = (typeof import('$lib/components/MarkdownEditor.svelte'))['default'];
   type RichEditorComponent = (typeof import('$lib/components/RichEditor.svelte'))['default'];
   let MarkdownEditor = $state<MarkdownEditorComponent | null>(null);
   let RichEditor = $state<RichEditorComponent | null>(null);
   let editorLoadError = $state(false);
+
+  // Populate the sources list once the editor exists. Reads `richApi` and
+  // nothing else, so it re-runs when the editor finishes mounting rather than
+  // on every keystroke — and it writes `references`, which it never reads, so
+  // there is no effect-reads-own-write cycle here.
+  $effect(() => {
+    if (richApi) refreshReferences();
+  });
 
   // The markdown and rich-text editors have separate, sizeable dependency
   // graphs. Load only the one required by this post; conversion loads the other
@@ -229,6 +244,8 @@
       let buffer = '';
       let added = 0;
       let dropped = 0;
+      let keptParagraphs = 0;
+      let keptSentences = 0;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -250,6 +267,11 @@
             autopilotPhase = String(ev.message ?? '');
           } else if (ev.type === 'candidates') {
             dropped = Array.isArray(ev.dropped) ? ev.dropped.length : 0;
+            // The unit matters more than the count now: "4 paragraphs" and
+            // "4 sentences" are very different passes, and a bare number
+            // hides exactly the change this pass exists to make.
+            keptParagraphs = Number(ev.paragraphs ?? 0);
+            keptSentences = Number(ev.sentences ?? 0);
           } else if (ev.type === 'proposal') {
             const proposal = ev.proposal as Proposal;
             proposalStore.add(proposal);
@@ -266,7 +288,13 @@
               // Report what was discarded as well as what survived. A pass that
               // silently drops half its output looks like a weak model rather
               // than a guard doing its job.
-              const bits = [`${added} suggestion${added === 1 ? '' : 's'} in the margin`];
+              const unit =
+                keptParagraphs && keptSentences
+                  ? `${keptParagraphs} paragraph${keptParagraphs === 1 ? '' : 's'}, ${keptSentences} sentence${keptSentences === 1 ? '' : 's'}`
+                  : keptSentences
+                    ? `${added} sentence${added === 1 ? '' : 's'}`
+                    : `${added} paragraph${added === 1 ? '' : 's'}`;
+              const bits = [`${unit} in the margin`];
               if (dropped) bits.push(`${dropped} unsafe or empty`);
               if (offVoice) bits.push(`${offVoice} off-voice`);
               autopilotSummary = added === 0 && !dropped && !offVoice
@@ -791,10 +819,12 @@
       </div>
       <p class="muted ap-note">
         Runs one pass over the whole post in your voice and leaves suggestions in the margin.
-        It never edits or publishes anything — you accept each one. Paragraphs containing links or
-        embedded media are held back, because a plain-text rewrite would delete them. A post that
-        has been through a pass is tagged <strong>assisted</strong>, which keeps it out of the
-        voice corpus.
+        Suggestions are <strong>whole paragraphs</strong> — where the piece loses its thread,
+        repeats itself or buries its point — and drop to a single sentence only when one sentence
+        is the whole problem. It never edits or publishes anything; you accept each one.
+        Paragraphs containing links or embedded media are held back, because a plain-text rewrite
+        would delete them. A post that has been through a pass is tagged
+        <strong>assisted</strong>, which keeps it out of the voice corpus.
       </p>
     </section>
   {/if}
@@ -827,6 +857,7 @@
           onAutoSave={saveContent}
           {uploadImage}
           voiceCard={data.voiceCard}
+          bodyFont={bodyFontVar(bodyFont)}
           bind:api={richApi}
           onProposalAccepted={(id, finalText, preAcceptHtml) => {
             proposalStore.resolve(id, 'accepted');
@@ -886,8 +917,56 @@
       {adminToken}
       getHTML={() => richApi!.getHTML()}
       insertInlineLink={(snippet, url, title) => richApi!.linkSnippet(snippet, url, title)}
-      insertFootnote={(snippet, url, title) => richApi!.addFootnote(snippet, url, title)}
+      insertReference={(snippet, url, title) => {
+        const n = richApi!.addReference(snippet, url, title);
+        refreshReferences();
+        return n;
+      }}
     />
+
+    <!-- The sources the post carries, and the only way to remove ONE of them.
+         The references block in the document is an atom node, so selecting it
+         in the editor removes every citation at once — deliberate, because the
+         ids are what the prose markers link to and a caret in there can break
+         them, but it leaves no per-entry control anywhere else. -->
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Sources in the footer</span>
+        <span style="margin-left: auto;">
+          <button class="nm-btn-ghost" onclick={refreshReferences}>Refresh</button>
+        </span>
+      </div>
+      {#if references.length === 0}
+        <p class="muted">
+          None yet. Cite a claim above and the source lands here — and in the article footer,
+          not in the body.
+        </p>
+      {:else}
+        <ol class="sources-list">
+          {#each references as r (r.n)}
+            <li class="source-row">
+              <span class="source-n">{r.n}</span>
+              <span class="source-body">
+                {#if r.title}<span class="source-title">{r.title}</span>{/if}
+                <a href={r.url} target="_blank" rel="noopener noreferrer" class="source-url">{r.url}</a>
+              </span>
+              <button
+                class="nm-link-btn danger source-del"
+                onclick={() => {
+                  richApi?.removeReference(r.n);
+                  refreshReferences();
+                }}
+                title="Remove this source and its marker"
+              >Remove</button>
+            </li>
+          {/each}
+        </ol>
+        <p class="muted small">
+          Numbers are not re-flowed when one is removed — a citation whose number changed under
+          an already-published post is worse than a gap in the sequence.
+        </p>
+      {/if}
+    </section>
   {/if}
 
   <!-- Readers. The loader has been making four Umami round-trips per page load
@@ -920,6 +999,53 @@
 </PageWrap>
 
 <style>
+  /* Named `sources-*`, not `ref-*`: PostStatsCard renders `.ref-list`/`.ref-row`
+     for traffic REFERRERS on this same page. Same word, different thing. */
+  .sources-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .source-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
+  .source-n {
+    flex: none;
+    min-width: 1.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+
+  .source-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .source-title {
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+
+  .source-url {
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    word-break: break-all;
+  }
+
+  .source-del {
+    flex: none;
+  }
+
   .editor-host { position: relative; }
 
   .saved-flag {

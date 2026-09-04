@@ -12,7 +12,8 @@
   // from the SAME list. They used to be two hand-written copies, so a face
   // added here looked perfect in /admin and was silently stripped on /blog.
   import { FONT_OPTIONS } from '$lib/blog/fonts';
-  import { Figure, ProjectEmbed, PullQuote, Callout, Disclosure, Sidenote } from '$lib/blog/tiptap-extras';
+  import { Figure, ProjectEmbed, PullQuote, Callout, Disclosure, Sidenote, Standfirst, Highlight, References, RefMark } from '$lib/blog/tiptap-extras';
+  import { nextReferenceNumber, parseReferences } from '$lib/blog/references';
   import { readability, type ReadabilityScores } from '$lib/blog/readability';
   import { SuggestionDecorations, suggestionPluginKey } from '$lib/blog/assistant/suggestion-decorations';
   import type { ProseProposal } from '$lib/blog/assistant/proposal';
@@ -28,6 +29,7 @@
     onProposalAccepted,
     onProposalRejected,
     voiceCard = null,
+    bodyFont = 'var(--font-read)',
   }: {
     content?: string;
     onSave?: (html: string) => Promise<void>;
@@ -40,6 +42,17 @@
     onProposalRejected?: (id: string) => void;
     /** Passed through from the page loader. Null simply hides the Voice panel. */
     voiceCard?: VoiceCard | null;
+    /**
+     * The post's reading face, as a `--font-*` reference from $lib/blog/fonts —
+     * the SAME value `ProseContent` is given on the published page.
+     *
+     * The editor used to inherit the admin chrome's DM Sans and set headings
+     * from its own rules, so an author was drafting in one typeface and
+     * publishing in another. Every judgement made while writing — where a
+     * paragraph breaks, whether a heading is too long, whether a pull quote
+     * earns its space — was made against type the reader never sees.
+     */
+    bodyFont?: string;
   } = $props();
 
   let host: HTMLDivElement | undefined = $state();
@@ -265,8 +278,6 @@
     return { from, to };
   }
 
-  let footnoteCount = $state(0);
-
   function setApi() {
     api = {
       getHTML: () => editor?.getHTML() ?? content,
@@ -283,35 +294,65 @@
           .run();
         return true;
       },
-      addFootnote: (snippet, url, title) => {
+      /**
+       * Cite a snippet: a marker where the claim is, an entry in the
+       * references block.
+       *
+       * The number is derived from the DOCUMENT at call time. It used to live
+       * in a component counter seeded once in `onMount` from the existing
+       * `fn-` ids, which is correct on load and goes stale the moment the
+       * document is replaced without a remount — `setContent` after a revision
+       * rollback does exactly that. The counter would then still hold the old
+       * post's highest number and the next citation would collide with an id
+       * already in the restored text. Reading the document has no such window.
+       */
+      addReference: (snippet, url, title) => {
         if (!editor) return 0;
-        footnoteCount += 1;
-        const n = footnoteCount;
+        const doc = editor.getHTML();
+        const n = nextReferenceNumber(doc);
+
         const range = locateSnippet(snippet);
         if (range) {
           editor
             .chain()
             .focus()
             .setTextSelection({ from: range.to, to: range.to })
-            .insertContent(`<sup class="footnote-ref" id="fnref-${n}"><a href="#fn-${n}">[${n}]</a></sup>`)
+            .setRefMark(n)
             .run();
         }
-        // Append (or extend) a footnotes list at the end of the document.
-        const doc = editor.getHTML();
-        const labelHtml = title ? `${escapeHtml(title)} — ` : '';
-        const itemHtml = `<li id="fn-${n}">${labelHtml}<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a></li>`;
-        const listOpen = '<hr><h3>Sources</h3><ol class="footnotes">';
-        if (doc.includes('<ol class="footnotes">')) {
-          const updated = doc.replace('</ol>', `${itemHtml}</ol>`);
-          editor.commands.setContent(updated, { emitUpdate: true });
-        } else {
-          editor
-            .chain()
-            .focus('end')
-            .insertContent(`${listOpen}${itemHtml}</ol>`)
-            .run();
-        }
+
+        // Through the node's own command, NEVER by writing HTML and calling
+        // setContent. TipTap parses setContent against the schema, and a
+        // `<section>` it does not recognise is silently reduced to a bare <ol>
+        // — losing class="footnotes" and every id="fn-N" the prose markers
+        // link to. See the note on `References` in $lib/blog/tiptap-extras.
+        const refs = parseReferences(editor.getHTML());
+        refs.push({ n, url, title: title ?? '' });
+        editor.chain().setReferences(refs).run();
         return n;
+      },
+
+      listReferences: () => (editor ? parseReferences(editor.getHTML()) : []),
+
+      removeReference: (n) => {
+        if (!editor) return false;
+        const refs = parseReferences(editor.getHTML());
+        const kept = refs.filter((r) => r.n !== n);
+        if (kept.length === refs.length) return false;
+        // Numbers are NOT re-flowed. Renumbering would rewrite every remaining
+        // marker in the prose on every deletion, and a citation whose number
+        // changed under an already-published post is worse than a gap in the
+        // sequence.
+        editor.chain().setReferences(kept).run();
+        // The marker in the prose goes with the entry it pointed at. Done as a
+        // separate transaction so a document with no such marker (the snippet
+        // was not found when the citation was added) still drops the entry.
+        const marker = editor.view.dom.querySelector(`sup.ref-mark#fnref-${n}`);
+        if (marker) {
+          const at = editor.view.posAtDOM(marker, 0);
+          editor.chain().deleteRange({ from: at, to: at + 1 }).run();
+        }
+        return true;
       },
       applyProposal: (p) => {
         if (!editor) return false;
@@ -534,6 +575,10 @@
         Placeholder.configure({ placeholder: 'Write your post… paste images directly into the body.' }),
         TextStyle,
         FontFamily,
+        Standfirst,
+        Highlight,
+        References,
+        RefMark,
         FontSize,
         Figure,
         ProjectEmbed,
@@ -660,14 +705,6 @@
     };
 
     recomputeScores();
-    // Initialise footnote counter from any pre-existing footnotes.
-    const existing = editor?.getHTML() ?? '';
-    const matches = existing.match(/id="fn-(\d+)"/g);
-    if (matches) {
-      footnoteCount = matches
-        .map((m) => parseInt(m.replace(/\D/g, ''), 10))
-        .reduce((max, n) => (n > max ? n : max), 0);
-    }
     setApi();
   });
 
@@ -683,7 +720,7 @@
   }
   const noop = () => {};
   // Reactive derivations referencing editor must read state through getters.
-  let activeMap = $state({ bold: false, italic: false, strike: false, underline: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false, image: false, figure: false, fontFamily: '', fontSize: '' });
+  let activeMap = $state({ bold: false, italic: false, strike: false, underline: false, h2: false, h3: false, ul: false, ol: false, quote: false, code: false, link: false, image: false, figure: false, highlight: false, callout: false, pullQuote: false, fontFamily: '', fontSize: '' });
   function refreshActive() {
     if (!editor) return;
     const textStyle = editor.getAttributes('textStyle');
@@ -694,6 +731,9 @@
       underline: editor.isActive('underline'),
       h2: editor.isActive('heading', { level: 2 }),
       h3: editor.isActive('heading', { level: 3 }),
+      highlight: editor.isActive('highlight'),
+      callout: editor.isActive('callout'),
+      pullQuote: editor.isActive('pullQuote'),
       ul: editor.isActive('bulletList'),
       ol: editor.isActive('orderedList'),
       quote: editor.isActive('blockquote'),
@@ -792,7 +832,11 @@
       { key: 'quote', label: 'Quote', hint: 'Block quotation', terms: ['blockquote'], run: () => e.chain().focus().toggleBlockquote().run() },
       { key: 'pull', label: 'Pull quote', hint: 'A line lifted out and set large', terms: ['pullquote', 'feature'], run: () => e.chain().focus().setPullQuote().run() },
       { key: 'note', label: 'Callout', hint: 'A bordered aside', terms: ['aside', 'info'], run: () => e.chain().focus().setCallout('note').run() },
+      { key: 'keypoint', label: 'Key point', hint: 'The one thing to take away', terms: ['takeaway', 'important', 'callout'], run: () => e.chain().focus().setCallout('key').run() },
       { key: 'warn', label: 'Warning callout', hint: 'A callout in the warn colour', terms: ['caution'], run: () => e.chain().focus().setCallout('warn').run() },
+      { key: 'asidecallout', label: 'Quiet aside', hint: 'A callout set back from the argument', terms: ['tangent', 'callout'], run: () => e.chain().focus().setCallout('aside').run() },
+      { key: 'standfirst', label: 'Standfirst', hint: 'The intro that sets the piece up', terms: ['lede', 'lead', 'intro'], run: () => e.chain().focus().setStandfirst().run() },
+      { key: 'highlight', label: 'Highlight', hint: 'Emphasise the selected text', terms: ['mark', 'emphasis', 'marker'], run: () => e.chain().focus().toggleHighlight('plain').run() },
       { key: 'sidenote', label: 'Sidenote', hint: 'A note in the margin', terms: ['margin', 'footnote'], run: () => e.chain().focus().setSidenote().run() },
       { key: 'details', label: 'Collapsible section', hint: 'Hidden until the reader opens it', terms: ['disclosure', 'accordion', 'interactive'], run: () => e.chain().focus().setDisclosure('Details').run() },
       { key: 'code', label: 'Code block', hint: 'Syntax-highlighted code', terms: ['pre'], run: () => e.chain().focus().toggleCodeBlock().run() },
@@ -891,6 +935,34 @@
       <span class="tool-divider"></span>
       <button class="tool-btn" class:active={activeMap.h2} onclick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2">H2</button>
       <button class="tool-btn" class:active={activeMap.h3} onclick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3">H3</button>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <!-- Editorial blocks. These existed as schema nodes and a slash menu from
+           the start, and the slash menu is undiscoverable — an author who does
+           not already know the feature exists never types "/". The toolbar is
+           where they are found. -->
+      <button
+        class="tool-btn"
+        class:active={activeMap.highlight}
+        onclick={() => editor?.chain().focus().toggleHighlight('plain').run()}
+        title="Highlight the selected text"
+      >HL</button>
+      <button
+        class="tool-btn"
+        class:active={activeMap.callout}
+        onclick={() => editor?.chain().focus().setCallout('key').run()}
+        title="Key point — a callout for the one thing to take away"
+      >KEY</button>
+      <button
+        class="tool-btn"
+        onclick={() => editor?.chain().focus().setCallout('note').run()}
+        title="Callout — a bordered aside"
+      >NOTE</button>
+      <button
+        class="tool-btn"
+        class:active={activeMap.pullQuote}
+        onclick={() => editor?.chain().focus().setPullQuote().run()}
+        title="Pull quote — a line lifted out and set large"
+      >QUOTE</button>
       <span class="tool-divider"></span>
       <button class="tool-btn" class:active={activeMap.ul} onclick={() => editor?.chain().focus().toggleBulletList().run()} title="Bullet list">• List</button>
       <button class="tool-btn" class:active={activeMap.ol} onclick={() => editor?.chain().focus().toggleOrderedList().run()} title="Numbered list">1. List</button>
@@ -917,7 +989,7 @@
     </div>
   </div>
 
-  <div bind:this={host} class="rich-host"></div>
+  <div bind:this={host} class="rich-host" style:--prose-font={bodyFont}></div>
 
   {#if slashOpen && slashFiltered.length > 0}
     <!-- position: fixed against viewport coordinates from coordsAtPos, so the
@@ -995,6 +1067,13 @@
     gap: 4px;
   }
   .toolbar-left { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+  .tool-sep {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--line);
+  }
+
   .tool-btn {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 28px; height: 28px; padding: 0 6px;
@@ -1018,7 +1097,32 @@
   .tool-select:hover { background: var(--accent-tint-08); color: var(--text-primary); }
   .rich-host { min-height: 480px; padding: 16px 22px; overflow-y: auto; }
 
-  .rich-host :global(.ProseMirror) { outline: none; min-height: 460px; line-height: 1.7; color: var(--text-secondary); font-size: 1rem; }
+  /* -----------------------------------------------------------------------
+     Editor typography MIRRORS the published reading surface.
+
+     It used to inherit the admin chrome instead: body copy in DM Sans where
+     the article renders the post's chosen reading face, h4-h6 styled by
+     nothing at all where the article sets them in mono, and every piece of
+     editorial furniture — pull quote, callout, standfirst, highlight — drawn
+     as plain paragraphs. So an author judged line breaks, heading length and
+     whether a pull quote earned its space against type the reader never saw.
+
+     These rules deliberately restate the ones in ProseContent rather than
+     importing them: that component is a grid with bleed columns and margin
+     notes, and the editor is a single column with a caret in it. Only the
+     TYPE is shared, and where a value here differs from ProseContent it is
+     because the editor has no --reader-scale and no grid to hang off.
+     ----------------------------------------------------------------------- */
+  .rich-host :global(.ProseMirror) {
+    outline: none;
+    min-height: 460px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    /* The post's reading face, handed down as --prose-font. Falls back to the
+       reading default rather than to the chrome's sans. */
+    font-family: var(--prose-font, var(--font-read));
+  }
   .rich-host :global(.ProseMirror p.is-editor-empty:first-child::before) {
     content: attr(data-placeholder);
     color: var(--text-ghost); float: left; height: 0; font-style: italic; pointer-events: none;
@@ -1028,7 +1132,80 @@
     letter-spacing: -0.01em; color: var(--text-primary); margin-top: 1.4em; margin-bottom: 0.4em;
   }
   .rich-host :global(h2) { font-size: 1.5rem; }
-  .rich-host :global(h3) { font-size: 1.2rem; }
+  .rich-host :global(h3) { font-size: 1.25rem; }
+
+  /* h4-h6 were admitted by the sanitiser, styled on the published page, and
+     styled by NOTHING here — so a fourth-level heading looked like body copy
+     while writing and published as uppercase mono. */
+  .rich-host :global(h4) {
+    font-family: var(--font-mono); font-size: var(--fs-nav); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-muted); margin: 2em 0 0.4em;
+  }
+  .rich-host :global(h5), .rich-host :global(h6) {
+    font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 600;
+    letter-spacing: 0.06em; color: var(--text-muted); margin: 1.6em 0 0.35em;
+  }
+
+  /* Editorial furniture, drawn the way it publishes. */
+  .rich-host :global(aside.pull-quote) {
+    margin: 2rem 0; padding: 1rem 0;
+    border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+    font-family: var(--font-display); font-size: 1.4rem; line-height: 1.25;
+    letter-spacing: -0.01em; color: var(--text-primary);
+  }
+
+  .rich-host :global(aside.standfirst) {
+    margin: 0 0 1.6rem; padding-left: 1rem;
+    border-left: 3px solid var(--accent);
+    font-size: 1.15rem; line-height: 1.55; color: var(--text-secondary);
+  }
+
+  .rich-host :global(aside.callout),
+  .rich-host :global(aside.callout-note),
+  .rich-host :global(aside.callout-warn),
+  .rich-host :global(aside.callout-aside),
+  .rich-host :global(aside.callout-key) {
+    margin: 1.6rem 0; padding: 0.9rem 1.1rem;
+    background: var(--card-bg); border-left: 3px solid var(--accent-ink);
+    line-height: 1.6; color: var(--text-primary);
+  }
+  .rich-host :global(aside.callout-warn) { border-left-color: var(--warn); }
+  .rich-host :global(aside.callout-aside) { border-left-color: var(--card-border); color: var(--text-muted); }
+  .rich-host :global(aside.callout-key) {
+    border-left-width: 4px; border-left-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, var(--card-bg));
+    font-size: 1.05rem;
+  }
+  .rich-host :global(aside p:last-child) { margin-bottom: 0; }
+
+  .rich-host :global(mark),
+  .rich-host :global(mark.hl) {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: inherit; padding: 0.05em 0.15em; border-radius: 2px;
+  }
+  .rich-host :global(mark.hl-warm) { background: color-mix(in srgb, var(--warn, #b4632e) 22%, transparent); }
+  .rich-host :global(mark.hl-cool) { background: color-mix(in srgb, var(--accent-ink) 18%, transparent); }
+
+  /* The citation marker, and the references block the author should be able to
+     SEE without it looking like prose — it publishes to the footer, so it is
+     set apart here rather than styled as the end of the article. */
+  .rich-host :global(sup.ref-mark) { font-family: var(--font-mono); font-size: max(0.7em, var(--fs-label-xs)); line-height: 1; }
+  .rich-host :global(sup.ref-mark a) { color: var(--text-muted); text-decoration: none; }
+
+  .rich-host :global(section.references) {
+    margin-top: 2rem; padding-top: 0.75rem;
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-label); color: var(--text-muted);
+  }
+  .rich-host :global(section.references)::before {
+    content: 'Sources — published in the footer, not in the body';
+    display: block; margin-bottom: 0.5rem;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted);
+  }
+  .rich-host :global(section.references ol) { margin: 0; padding-left: 1.4rem; }
+  .rich-host :global(section.references a) { color: var(--text-secondary); word-break: break-word; }
   .rich-host :global(p) { margin: 0 0 1.1em; }
   .rich-host :global(a) { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
   .rich-host :global(code) {

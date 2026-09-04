@@ -77,6 +77,16 @@
       {@html data.articleHtml}
     </ProseContent>
 
+    {#if data.references}
+      <!-- Sources, in the footer and quiet — the same treatment /blog/[slug]
+           gives them, for the same reason. -->
+      <section class="art-sources" aria-labelledby="pv-sources-h">
+        <h2 class="art-sources-h" id="pv-sources-h">Sources</h2>
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html data.references}
+      </section>
+    {/if}
+
     <!-- Back -->
     <div class="mt-12 pt-6" style="border-top: 2px solid var(--line-strong);">
       <a href="/blog" class="nav-link">← Back to writing</a>
@@ -92,5 +102,45 @@
 <style>
   .preview-body {
     max-width: 78rem;
+  }
+
+  /* Deliberately the same values as /blog/[slug]'s own .art-sources rules.
+     They are restated rather than shared because the two pages have different
+     containers and Svelte scopes CSS per component — a shared class in app.css
+     would lose to ProseContent's `:global` specificity on one of them and not
+     the other, which is the kind of divergence this preview exists to catch. */
+  .art-sources {
+    margin: 2.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .art-sources-h {
+    margin: 0 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+  }
+
+  .art-sources :global(ol.footnotes) {
+    margin: 0;
+    padding-left: 1.4rem;
+    font-size: var(--fs-label);
+    line-height: 1.7;
+    color: var(--text-muted);
+  }
+
+  .art-sources :global(ol.footnotes li) {
+    margin-bottom: 0.3rem;
+  }
+
+  .art-sources :global(ol.footnotes a) {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-word;
   }
 </style>

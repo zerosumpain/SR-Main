@@ -28,13 +28,15 @@ import { getPostById, updatePostFields } from '$lib/blog';
 import { getLLMClient } from '$lib/llm/client';
 import { voiceBlock } from '$lib/voice/block';
 import { scoreVoiceServer } from '$lib/voice/score.server';
-import { segmentBody, getSentence } from '$lib/blog/assistant/segment';
+import { segmentBody, getParagraph, getSentence } from '$lib/blog/assistant/segment';
 import { proseProposal } from '$lib/blog/assistant/tools';
 import {
   autopilotSystemPrompt,
   filterRewrites,
   parseRewrites,
   renderForAutopilot,
+  rewriteAddress,
+  rewriteScope,
   riskyParagraphs,
   type AutopilotMode,
 } from '$lib/blog/assistant/autopilot';
@@ -42,8 +44,11 @@ import type { RequestHandler } from './$types';
 import { withActivity } from '$lib/context/activity';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
 
-const MODES = new Set<AutopilotMode>(['readability', 'context', 'voice']);
-const MAX_REWRITES = 8;
+const MODES = new Set<AutopilotMode>(['flow', 'readability', 'context', 'voice']);
+/** Six, not eight. The unit is the paragraph now, so each suggestion asks for
+ *  more of the author's attention and costs more to read — six paragraph
+ *  rewrites is already a substantial pass over a post. */
+const MAX_REWRITES = 6;
 /** `scoreVoice` needs a reasonable sample; below this it reports noise. */
 const MIN_WORDS_TO_SCORE = 60;
 
@@ -67,7 +72,7 @@ const handlePost: RequestHandler = async ({ params, request }) => {
     return new Response(JSON.stringify({ error: 'Invalid id' }), { status: 400 });
   }
 
-  let mode: AutopilotMode = 'readability';
+  let mode: AutopilotMode = 'flow';
   try {
     const body = (await request.json()) as { mode?: string };
     if (body.mode && MODES.has(body.mode as AutopilotMode)) mode = body.mode as AutopilotMode;
@@ -100,8 +105,8 @@ const handlePost: RequestHandler = async ({ params, request }) => {
         send({
           type: 'phase',
           phase: 'reading',
-          message: `Reading ${sentenceCount} sentences across ${seg.paragraphs.length} paragraphs${
-            risky.size ? ` (${risky.size} held back — links or embedded media)` : ''
+          message: `Reading ${seg.paragraphs.length} paragraphs (${sentenceCount} sentences)${
+            risky.size ? ` — ${risky.size} held back for links or embedded media` : ''
           }…`,
         });
 
@@ -134,9 +139,14 @@ const handlePost: RequestHandler = async ({ params, request }) => {
           type: 'candidates',
           proposed: parsed.length,
           kept: kept.length,
+          // Reported so the panel can say "4 paragraphs, 1 sentence" rather
+          // than a bare count — the whole point of the change is that these are
+          // bigger edits, and a count alone hides that.
+          paragraphs: kept.filter((r) => rewriteScope(r) === 'paragraph').length,
+          sentences: kept.filter((r) => rewriteScope(r) === 'sentence').length,
           // Reported, never swallowed. A pass that quietly discards half its
           // output looks like a weak model rather than a working guard.
-          dropped: dropped.map((d) => ({ at: `${d.rewrite.paragraphIdx}.${d.rewrite.sentenceIdx}`, why: d.why })),
+          dropped: dropped.map((d) => ({ at: rewriteAddress(d.rewrite), why: d.why })),
         });
 
         send({ type: 'phase', phase: 'scoring', message: 'Checking each suggestion against the voice card…' });
@@ -146,7 +156,14 @@ const handlePost: RequestHandler = async ({ params, request }) => {
         let offVoice = 0;
 
         for (const r of kept) {
-          const original = getSentence(seg, r.paragraphIdx, r.sentenceIdx);
+          // Same resolution for both units: the model named an index, the
+          // server turns it back into the exact text. A paragraph rewrite is
+          // anchored to the paragraph's whole collapsed text, which is what the
+          // editor's anchor search looks for.
+          const original =
+            r.sentenceIdx === null
+              ? getParagraph(seg, r.paragraphIdx)
+              : getSentence(seg, r.paragraphIdx, r.sentenceIdx);
           if (!original) continue;
 
           const needle = collapse(original).trim();

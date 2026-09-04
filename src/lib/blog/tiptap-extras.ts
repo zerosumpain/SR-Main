@@ -1,4 +1,4 @@
-import { mergeAttributes, Node } from '@tiptap/core';
+import { Mark, mergeAttributes, Node } from '@tiptap/core';
 import { NodeSelection, Plugin } from '@tiptap/pm/state';
 
 declare module '@tiptap/core' {
@@ -240,15 +240,57 @@ declare module '@tiptap/core' {
       /** Insert a margin note at the cursor. */
       setSidenote: () => ReturnType;
     };
+    standfirst: {
+      /** Lift the selection into a standfirst — the intro that sets up the piece. */
+      setStandfirst: () => ReturnType;
+    };
+    references: {
+      /** Replace the post's references block with these entries. */
+      setReferences: (items: ReferenceItem[]) => ReturnType;
+    };
+    refMark: {
+      /** Insert the inline citation marker for reference `n` at the cursor. */
+      setRefMark: (n: number) => ReturnType;
+    };
+    highlight: {
+      /** Emphasise the selection in the given tone. */
+      setHighlight: (tone?: HighlightTone) => ReturnType;
+      toggleHighlight: (tone?: HighlightTone) => ReturnType;
+      unsetHighlight: () => ReturnType;
+    };
   }
 }
 
-export type CalloutTone = 'note' | 'warn' | 'aside';
+/**
+ * `key` joined the tones on 2026-09-04 — the "this is the point" block, which
+ * is the one an author reaches for most and the one the set was missing. It
+ * reads as emphasis rather than as an interruption, which is what separates it
+ * from `note`.
+ */
+export type CalloutTone = 'note' | 'warn' | 'aside' | 'key';
 
 const CALLOUT_CLASS: Record<CalloutTone, string> = {
   note: 'callout-note',
   warn: 'callout-warn',
   aside: 'callout-aside',
+  key: 'callout-key',
+};
+
+/**
+ * Highlight tones.
+ *
+ * `hl` is the plain marker pen. The other two exist because a post that
+ * highlights everything in one colour has highlighted nothing — a second and
+ * third tone let the author separate "this matters" from "this is the caveat"
+ * without inventing a colour per paragraph. Three is the whole vocabulary and
+ * it is deliberately small.
+ */
+export type HighlightTone = 'plain' | 'warm' | 'cool';
+
+const HIGHLIGHT_CLASS: Record<HighlightTone, string> = {
+  plain: 'hl',
+  warm: 'hl-warm',
+  cool: 'hl-cool',
 };
 
 /** <aside class="pull-quote"> — a line lifted out of the body and set large. */
@@ -421,6 +463,280 @@ export const Sidenote = Node.create({
             type: this.name,
             content: [{ type: 'text', text: 'Note' }],
           }),
+    };
+  },
+});
+
+/**
+ * <aside class="standfirst"> — the intro paragraph, set larger than the body.
+ *
+ * A block node rather than a mark: a standfirst is a structural position in the
+ * piece (the bit before the piece starts), not decoration applied to a
+ * sentence, and making it a node is what lets the reading surface give it its
+ * own measure and spacing.
+ */
+export const Standfirst = Node.create({
+  name: 'standfirst',
+  group: 'block',
+  content: 'inline*',
+  defining: true,
+
+  parseHTML() {
+    return [{ tag: 'aside.standfirst' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['aside', mergeAttributes(HTMLAttributes, { class: 'standfirst' }), 0];
+  },
+
+  addCommands() {
+    return {
+      setStandfirst:
+        () =>
+        ({ commands }) =>
+          commands.setNode(this.name),
+    };
+  },
+});
+
+/**
+ * <mark class="hl…"> — inline emphasis for a phrase.
+ *
+ * A MARK, not a node: it applies to a run of text inside a paragraph and has to
+ * survive being split, merged and partially selected, which is exactly what
+ * marks do and nodes do not. `<mark>` was already in the sanitiser's allowed
+ * tags and nothing could produce one, so this is the editor half of a
+ * capability that was half-built.
+ *
+ * The tone rides as a CLASS, matching Callout above, and `renderHTML` on the
+ * attribute returns nothing so it is never emitted as a bare `tone=` attribute
+ * the sanitiser would strip.
+ */
+export const Highlight = Mark.create({
+  name: 'highlight',
+
+  addAttributes() {
+    return {
+      tone: {
+        default: 'plain' as HighlightTone,
+        parseHTML: (el: HTMLElement) => {
+          for (const tone of Object.keys(HIGHLIGHT_CLASS) as HighlightTone[]) {
+            if (el.classList.contains(HIGHLIGHT_CLASS[tone])) return tone;
+          }
+          return 'plain';
+        },
+        renderHTML: () => ({}),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'mark' }];
+  },
+
+  renderHTML({ HTMLAttributes, mark }) {
+    const tone = (mark.attrs.tone as HighlightTone) ?? 'plain';
+    return ['mark', mergeAttributes(HTMLAttributes, { class: HIGHLIGHT_CLASS[tone] }), 0];
+  },
+
+  addCommands() {
+    return {
+      setHighlight:
+        (tone: HighlightTone = 'plain') =>
+        ({ commands }) =>
+          commands.setMark(this.name, { tone }),
+      toggleHighlight:
+        (tone: HighlightTone = 'plain') =>
+        ({ commands }) =>
+          commands.toggleMark(this.name, { tone }),
+      unsetHighlight:
+        () =>
+        ({ commands }) =>
+          commands.unsetMark(this.name),
+    };
+  },
+});
+
+/** One citation. Mirrors `Reference` in $lib/blog/references — the two are the
+ *  same record, declared here so this module stays free of that import cycle
+ *  (references.ts is pure string handling and must not pull in TipTap). */
+export type ReferenceItem = { n: number; url: string; title: string };
+
+/**
+ * <section class="references"><ol class="footnotes">…</ol></section> — the
+ * post's sources, which the reading surface lifts into the article footer.
+ *
+ * THIS HAD TO BE A SCHEMA NODE, and the reason is the one written at the top of
+ * this section rather than a new one. The first cut of the footer-references
+ * feature wrote the block as raw HTML and handed it to `setContent`. TipTap
+ * parsed it against a schema that had never heard of `<section>`, threw the
+ * wrapper away, and kept an ordinary `<ol>` — dropping `class="footnotes"` and
+ * every `id="fn-N"` with it. Measured, in :
+ *
+ *   in   <section class="references"><ol class="footnotes"><li id="fn-1">…
+ *   out  <ol><li><p>…
+ *
+ * Three things then fail together and none of them looks like a failure: the
+ * block stops being findable by `splitReferences`, so it publishes as a numbered
+ * list at the END OF THE PROSE — precisely the thing this feature exists to
+ * remove; `parseReferences` returns [] so the next citation is numbered 1 again
+ * and collides; and the author sees a list that looks approximately right.
+ *
+ * ATOM, because the citation ids are load-bearing — the markers in the prose
+ * link to them — and a content hole would let a caret into the middle of them.
+ * The author edits the block through the sources panel, not by typing in it.
+ */
+export const References = Node.create({
+  name: 'references',
+  group: 'block',
+  atom: true,
+  draggable: false,
+  // It is always the last thing in the document, and nothing should end up
+  // after it by accident.
+  isolating: true,
+
+  addAttributes() {
+    return {
+      items: {
+        default: [] as ReferenceItem[],
+        // Read the list back out of the DOM rather than out of a serialised
+        // attribute: the DOM is what the sanitiser sees and what the published
+        // page renders, so it is the only representation guaranteed to survive
+        // a round trip through the database.
+        parseHTML: (el: HTMLElement): ReferenceItem[] =>
+          Array.from(el.querySelectorAll('li')).map((li) => {
+            const anchor = li.querySelector('a');
+            const n = Number((li.getAttribute('id') ?? '').replace(/^fn-/, ''));
+            const url = anchor?.getAttribute('href') ?? '';
+            const title = (li.textContent ?? '')
+              .replace(/\s+/g, ' ')
+              .replace(/\s*—\s*https?:\/\/\S+\s*$/, '')
+              .trim();
+            return {
+              n: Number.isFinite(n) ? n : 0,
+              url,
+              title: title && !/^https?:\/\//i.test(title) ? title : '',
+            };
+          }),
+        renderHTML: () => ({}),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'section.references', priority: 100 }];
+  },
+
+  renderHTML({ node }) {
+    const items = (node.attrs.items as ReferenceItem[]) ?? [];
+    return [
+      'section',
+      { class: 'references' },
+      [
+        'ol',
+        { class: 'footnotes' },
+        ...items
+          .slice()
+          .sort((a, b) => a.n - b.n)
+          .map((r) => [
+            'li',
+            { id: `fn-${r.n}` },
+            ...(r.title ? [`${r.title} — `] : []),
+            ['a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, r.url],
+          ]),
+      ],
+    ];
+  },
+
+  addCommands() {
+    return {
+      setReferences:
+        (items: ReferenceItem[]) =>
+        ({ state, chain }) => {
+          // Replace the existing block if there is one, otherwise append. Two
+          // references sections in one document would each be half the truth.
+          let pos: number | null = null;
+          let size = 0;
+          state.doc.descendants((node, at) => {
+            if (node.type.name === 'references') {
+              pos = at;
+              size = node.nodeSize;
+              return false;
+            }
+            return true;
+          });
+          if (!items.length) {
+            return pos === null ? true : chain().deleteRange({ from: pos, to: pos + size }).run();
+          }
+          const content = { type: this.name, attrs: { items } };
+          return pos === null
+            ? chain().insertContentAt(state.doc.content.size, content).run()
+            : chain().deleteRange({ from: pos, to: pos + size }).insertContentAt(pos, content).run();
+        },
+    };
+  },
+});
+
+/**
+ * <sup class="ref-mark" id="fnref-N"><a href="#fn-N">N</a></sup> — the inline
+ * citation marker.
+ *
+ * A NODE, and an atom, for two measured reasons.
+ *
+ * StarterKit has no superscript, so a `<sup>` handed to `insertContent` is
+ * dropped and only its contents survive. What came back was a bare
+ * `<a target="_blank" rel="noopener noreferrer nofollow" href="#fn-1">1</a>`:
+ * the marker lost the class the reading surface styles it with, lost the
+ * `fnref-` id that `removeReference` finds it by, and — because the Link mark's
+ * config applies to every anchor — gained `target="_blank"`, so clicking a
+ * citation opened a blank tab instead of jumping to the footer.
+ *
+ * Atom because the number is derived state. A caret inside the marker lets the
+ * author edit "1" into "12" and silently break the link to its source.
+ */
+export const RefMark = Node.create({
+  name: 'refMark',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: false,
+
+  addAttributes() {
+    return {
+      n: {
+        default: 1,
+        parseHTML: (el: HTMLElement) => {
+          const fromId = Number((el.getAttribute('id') ?? '').replace(/^fnref-/, ''));
+          if (Number.isFinite(fromId) && fromId > 0) return fromId;
+          const fromText = Number((el.textContent ?? '').trim());
+          return Number.isFinite(fromText) && fromText > 0 ? fromText : 1;
+        },
+        renderHTML: () => ({}),
+      },
+    };
+  },
+
+  parseHTML() {
+    // Priority over the Link mark, which would otherwise claim the anchor
+    // inside and leave the <sup> behind as an empty wrapper.
+    return [{ tag: 'sup.ref-mark', priority: 100 }];
+  },
+
+  renderHTML({ node }) {
+    const n = Number(node.attrs.n) || 1;
+    return [
+      'sup',
+      { class: 'ref-mark', id: `fnref-${n}` },
+      ['a', { href: `#fn-${n}` }, String(n)],
+    ];
+  },
+
+  addCommands() {
+    return {
+      setRefMark:
+        (n: number) =>
+        ({ commands }) =>
+          commands.insertContent({ type: this.name, attrs: { n } }),
     };
   },
 });

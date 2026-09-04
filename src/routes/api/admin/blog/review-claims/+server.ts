@@ -3,7 +3,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { resolveBlogModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
-import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';
+import { hostnameOf, rateSource } from '$lib/blog/reputable-domains';
 import { plainTextFromHtml } from '$lib/blog/readability';
 
 const MAX_CLAIMS = 12;
@@ -22,6 +22,10 @@ interface RankedCandidate {
   title: string;
   domain: string;
   reputable: boolean;
+  /** Published in the UK. Surfaced so the panel can say so, not just rank on
+   *  it — an author choosing between two sources deserves to see why one is
+   *  above the other. */
+  uk: boolean;
   why: string;
   score: number;
 }
@@ -87,19 +91,22 @@ function trimWhy(content: string, max = 220): string {
 }
 
 function pickCandidates(results: { url: string; title: string; content: string; score: number }[]): RankedCandidate[] {
-  // Score = Tavily relevance, with a +1 bonus if the domain is reputable.
-  // Returns up to MAX_CANDIDATES_RETURNED, prioritising reputable ones.
+  // Score = Tavily relevance + the shared source bonus (reputation, then UK
+  // provenance as a tie-break). The arithmetic lives in
+  // $lib/blog/reputable-domains so this panel and the writing desk cannot rank
+  // the same claim differently.
   const scored = results
     .filter((r) => r && r.url)
     .map((r) => {
-      const reputable = isReputable(r.url);
+      const rating = rateSource(r.url);
       return {
         url: r.url,
         title: r.title || hostnameOf(r.url),
         domain: hostnameOf(r.url),
-        reputable,
+        reputable: rating.reputable,
+        uk: rating.uk,
         why: trimWhy(r.content),
-        score: (r.score ?? 0) + (reputable ? 1 : 0),
+        score: (r.score ?? 0) + rating.bonus,
       } satisfies RankedCandidate;
     });
   scored.sort((a, b) => b.score - a.score);

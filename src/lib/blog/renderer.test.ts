@@ -186,3 +186,71 @@ describe('renderContent — editorial furniture', () => {
     expect(out).toContain('class="sidenote-body"');
   });
 });
+
+// The editorial capabilities added 2026-09-04. `rich-editor.editor.test.ts`
+// holds the editor half of each of these; a green test over either alone is a
+// green test over a feature that does not work.
+describe('editorial furniture survives the sanitiser', () => {
+  it('keeps a key-point callout', () => {
+    const out = renderContent('<aside class="callout-key"><p>The point.</p></aside>', 'html');
+    expect(out).toContain('class="callout-key"');
+    expect(out).toContain('The point.');
+  });
+
+  it('keeps a standfirst', () => {
+    const out = renderContent('<aside class="standfirst">The intro.</aside>', 'html');
+    expect(out).toContain('class="standfirst"');
+  });
+
+  it.each(['hl', 'hl-warm', 'hl-cool'])('keeps a %s highlight', (cls) => {
+    const out = renderContent(`<p>a <mark class="${cls}">phrase</mark> here</p>`, 'html');
+    expect(out).toContain(`<mark class="${cls}">`);
+  });
+
+  it('drops a class nobody declared, leaving the element plain', () => {
+    const out = renderContent('<aside class="callout-nonsense"><p>x</p></aside>', 'html');
+    expect(out).not.toContain('callout-nonsense');
+    expect(out).toContain('<aside>');
+  });
+
+  it('keeps a highlight readable when it wraps a link', () => {
+    const out = renderContent('<p><mark class="hl"><a href="https://ons.gov.uk/a">source</a></mark></p>', 'html');
+    expect(out).toContain('<mark class="hl">');
+    expect(out).toContain('href="https://ons.gov.uk/a"');
+  });
+});
+
+describe('renderArticle lifts sources out of the reading column', () => {
+  const BODY = '<h2>A section</h2><p>Some prose.</p>';
+
+  it('returns null references for a post that cites nothing', () => {
+    expect(renderArticle(BODY, 'html').references).toBeNull();
+  });
+
+  it('returns the block separately and removes it from the article html', () => {
+    const withRefs =
+      BODY +
+      '<section class="references"><ol class="footnotes">' +
+      '<li id="fn-1">ONS — <a href="https://ons.gov.uk/a">https://ons.gov.uk/a</a></li>' +
+      '</ol></section>';
+    const article = renderArticle(withRefs, 'html');
+    expect(article.references).toContain('ons.gov.uk');
+    expect(article.html).not.toContain('ons.gov.uk');
+    expect(article.html).toContain('Some prose.');
+  });
+
+  // A legacy post carries its list behind a literal <h3>Sources</h3>. Left in
+  // the body that heading is anchored and lands in the contents rail as though
+  // it were a section of the argument.
+  it('keeps a legacy Sources heading out of the outline', () => {
+    const legacy =
+      BODY +
+      '<hr><h3>Sources</h3><ol class="footnotes">' +
+      '<li id="fn-1">BBC — <a href="https://bbc.co.uk/a">https://bbc.co.uk/a</a></li>' +
+      '</ol>';
+    const article = renderArticle(legacy, 'html');
+    expect(article.toc.map((t) => t.text)).toEqual(['A section']);
+    expect(article.references).toContain('bbc.co.uk');
+    expect(article.html).not.toContain('Sources');
+  });
+});

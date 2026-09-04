@@ -1,6 +1,8 @@
 // Flesch Reading Ease & Flesch–Kincaid Grade Level.
 // Pure functions; safe in browser and server.
 
+import { stripReferences } from './references';
+
 export interface ReadabilityScores {
   words: number;
   sentences: number;
@@ -22,7 +24,17 @@ const EMPTY: ReadabilityScores = {
   audience: '—',
 };
 
-export function plainTextFromHtml(html: string): string {
+/**
+ * The post as prose.
+ *
+ * The sources block comes off first. It is a list of URLs, and left in it gets
+ * counted as sentences by the readability score (dragging the grade around for
+ * a reason the author cannot see or act on) and offered to the claim extractor
+ * as assertions to check — the sources are the EVIDENCE, not claims. Same
+ * reason `segmentBody` strips it. See $lib/blog/references.
+ */
+export function plainTextFromHtml(rawHtml: string): string {
+  const html = stripReferences(rawHtml);
   if (!html) return '';
   if (typeof document !== 'undefined') {
     const div = document.createElement('div');

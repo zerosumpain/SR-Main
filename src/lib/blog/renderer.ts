@@ -2,6 +2,7 @@ import { Marked } from 'marked';
 import hljs from '$lib/highlight';
 import sanitize from 'sanitize-html';
 import { FONT_FAMILY_STYLE_PATTERN } from './fonts';
+import { splitReferences } from './references';
 
 function escapeAttr(s: string): string {
   return s
@@ -58,6 +59,8 @@ const SANITIZE_OPTIONS: sanitize.IOptions = {
     // full viewport width is exactly where that costs the most.
     img: ['src', 'srcset', 'sizes', 'alt', 'title', 'width', 'height', 'loading', 'decoding'],
     figure: ['class'],
+    // Highlight carries its tone as a class, the way callouts do.
+    mark: ['class'],
     // <video> and <source> were in allowedTags from the start but had NO
     // attribute entry, and sanitize-html's defaults cover only `a` and `img`.
     // So a published <video src=…> was silently reduced to an empty <video></video>
@@ -88,8 +91,18 @@ const SANITIZE_OPTIONS: sanitize.IOptions = {
   // unrecognised class is dropped and the element degrades to its plain form.
   allowedClasses: {
     figure: ['project-embed', 'bleed', 'wide', 'align-left', 'align-right', 'gallery'],
-    aside: ['pull-quote', 'callout', 'callout-note', 'callout-warn', 'callout-aside'],
-    section: ['interactive'],
+    // `callout-key` and `standfirst` joined on 2026-09-04. A tone that is in
+    // the editor's menu and not in this list round-trips in the editor and is
+    // stripped on publish — the exact failure the note in ./tiptap-extras
+    // describes, and the reason both halves are tested together.
+    aside: [
+      'pull-quote', 'standfirst', 'callout',
+      'callout-note', 'callout-warn', 'callout-aside', 'callout-key',
+    ],
+    // `references` is the sources block the reading surface lifts into the
+    // article footer — see $lib/blog/references.
+    section: ['interactive', 'references'],
+    mark: ['hl', 'hl-warm', 'hl-cool'],
     span: ['sidenote', 'sidenote-body', 'small-caps'],
     // hljs writes these; the code renderer above emits `hljs language-x`.
     code: ['hljs', 'language-*'],
@@ -161,6 +174,10 @@ export type TocEntry = {
 export type RenderedArticle = {
   html: string;
   toc: TocEntry[];
+  /** The sources block, already sanitised, for the page to render in its
+   *  FOOTER rather than in the reading column. Null when the post cites
+   *  nothing. See $lib/blog/references for why it travels inside `content`. */
+  references: string | null;
 };
 
 const HEADING_RE = /<h([23])(\s[^>]*)?>([\s\S]*?)<\/h\1>/gi;
@@ -199,11 +216,15 @@ export function slugifyHeading(text: string): string {
  * are common and must still be separately linkable.
  */
 export function renderArticle(content: string, format: 'html' | 'markdown'): RenderedArticle {
-  const sanitised = renderContent(content, format);
+  // Sources come off BEFORE the heading pass, not after. A legacy post carries
+  // its list behind a literal <h3>Sources</h3>, and leaving that in would put
+  // "Sources" in the contents rail as though it were a section of the argument
+  // — which is precisely the prominence this change exists to remove.
+  const { body, references } = splitReferences(renderContent(content, format));
   const toc: TocEntry[] = [];
   const used = new Map<string, number>();
 
-  const html = sanitised.replace(HEADING_RE, (_m, lvl: string, attrs: string | undefined, inner: string) => {
+  const html = body.replace(HEADING_RE, (_m, lvl: string, attrs: string | undefined, inner: string) => {
     const level = Number(lvl) as 2 | 3;
     const text = textOf(inner);
     // A genuinely empty heading gets no anchor and no outline entry — linking
@@ -221,5 +242,5 @@ export function renderArticle(content: string, format: 'html' | 'markdown'): Ren
     return `<h${lvl} id="${id}"${attrs ?? ''}>${inner}</h${lvl}>`;
   });
 
-  return { html, toc };
+  return { html, toc, references };
 }
