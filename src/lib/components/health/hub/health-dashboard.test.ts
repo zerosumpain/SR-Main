@@ -58,6 +58,40 @@ describe('HealthDashboard — refresh flag', () => {
   });
 });
 
+describe('HealthDashboard — sleep balance', () => {
+  it('renders a signed seven-night balance without presenting carried debt as a bill', () => {
+    const body = html(
+      ownerData({
+        recoveryDebt: {
+          value: {
+            averageBalanceMin: -60,
+            averageActualMin: 420,
+            averageNeedMin: 480,
+            trendActualMin: 15,
+            nightsBelowNeed: 5,
+            latestWhoopDebtAdjustmentMin: 90,
+            strainRecoveryBalance: 2.6,
+            short: true,
+            series: [
+              { date: '2026-08-29', balanceMin: -75 },
+              { date: '2026-08-30', balanceMin: -60 },
+            ],
+          },
+          sufficiency: 'ok',
+          sampleSize: 28,
+          asOf: '2026-08-30T08:00:00.000Z',
+        },
+      }),
+    );
+    expect(body).toContain('Sleep balance');
+    expect(body).toContain('−60');
+    expect(body).toContain('min/night');
+    expect(body).toContain('Carried debt is excluded');
+    expect(body).not.toContain('Recovery debt');
+    expect(body).not.toContain('minutes of debt');
+  });
+});
+
 describe('HealthDashboard — mock-series provenance', () => {
   it('says so, prominently, when the series it is drawing is a fake', () => {
     const body = html(ownerData({ provenance: { seriesIsMock: true, correlationsAreIllustrative: false } }));

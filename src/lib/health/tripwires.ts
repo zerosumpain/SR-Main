@@ -7,12 +7,12 @@
 // Three rules, and they are the whole module:
 //
 //  1. THE TRIGGERS ARE THE REPO'S OWN. Where a threshold already exists as an
-//     exported constant it is imported, never retyped — `SLEEP_DEBT_FLAG_MIN`,
+//     exported constant it is imported, never retyped — `SLEEP_BALANCE_SHORTFALL_MIN`,
 //     `STRAIN_BALANCE_FLAG`, `ACWR_BANDS`, `GETTABLE_GAP_PCT`. Where no constant
 //     existed, one is declared HERE and nowhere else.
 //  2. A NUMBER NOBODY CAN READ HAS NOT TRIPPED, AND SAYS SO. An `insufficient`
 //     MetricResult carries a fully-populated ZERO struct — a confident
-//     `sleepDebtMin: 0` — so every reader checks sufficiency first and an
+//     `averageBalanceMin: 0` — so every reader checks sufficiency first and an
 //     unreadable wire renders `readable: false` with an em dash, never as good
 //     news.
 //  3. CLOSE IS A REAL STATE, NOT A NEAR MISS. Each wire declares where "close"
@@ -24,7 +24,7 @@ import type { MetricResult } from './analytics/types';
 import { dayNumber, type DayPoint } from './analytics/rolling';
 import { ACWR_BANDS, type ACWRResult } from './analytics/acwr';
 import {
-  SLEEP_DEBT_FLAG_MIN,
+  SLEEP_BALANCE_SHORTFALL_MIN,
   STRAIN_BALANCE_FLAG,
   type RecoveryDebtResult,
 } from './analytics/recovery-debt';
@@ -34,7 +34,7 @@ import { GETTABLE_GAP_PCT } from '$lib/trails/segments/form';
 export type TripwireState = 'TRIPPED' | 'CLOSE' | 'ARMED';
 
 export const TRIPWIRE_IDS = [
-  'sleep-debt',
+  'sleep-balance',
   'weekly-volume',
   'acwr',
   'hrv-crossing',
@@ -129,7 +129,7 @@ const VO2_CLOSE_FRACTION = 0.9;
 
 export function computeTripwires(input: TripwireInput): Tripwire[] {
   return [
-    sleepDebt(input),
+    sleepBalance(input),
     weeklyVolume(input),
     acwrWire(input),
     hrvCrossing(input),
@@ -152,26 +152,41 @@ function unread(
 }
 
 // 1 —————————————————————————————————————————————————————————————————
-function sleepDebt(i: TripwireInput): Tripwire {
-  const base = ['sleep-debt', 'Sleep debt', '14d cumulative', `> ${SLEEP_DEBT_FLAG_MIN} min`] as const;
+function sleepBalance(i: TripwireInput): Tripwire {
+  const base = [
+    'sleep-balance',
+    'Sleep balance',
+    '7-night average',
+    `< −${SLEEP_BALANCE_SHORTFALL_MIN} min/night`,
+  ] as const;
   if (!usable(i.recoveryDebt)) {
-    return unread(...base, 'Needs a fortnight of nights with a sleep-need reading behind them.');
+    return unread(...base, 'Needs seven complete scored sleeps with a fresh sleep-need reading.');
   }
-  const minutes = Math.round(i.recoveryDebt.value.sleepDebtMin);
-  const over = minutes / SLEEP_DEBT_FLAG_MIN;
+  const { averageBalanceMin, averageActualMin, averageNeedMin, nightsBelowNeed } =
+    i.recoveryDebt.value;
+  const shortfall = Math.max(0, -averageBalanceMin);
   const state: TripwireState =
-    minutes > SLEEP_DEBT_FLAG_MIN
+    shortfall > SLEEP_BALANCE_SHORTFALL_MIN
       ? 'TRIPPED'
-      : minutes >= SLEEP_DEBT_FLAG_MIN * DEBT_CLOSE_FRACTION
+      : shortfall >= SLEEP_BALANCE_SHORTFALL_MIN * DEBT_CLOSE_FRACTION
         ? 'CLOSE'
         : 'ARMED';
   const meaning =
     state === 'TRIPPED'
-      ? `${over.toFixed(1)} times over the site's own flag. Nightly shortfall against Whoop's sleep need, summed — the fix is a bedtime, not a lie-in.`
+      ? `${nightsBelowNeed} of 7 nights below fresh need: ${sleepDuration(averageActualMin)} actual against ${sleepDuration(averageNeedMin)} needed. Protect the next few nights; there is no historical bill to repay.`
       : state === 'CLOSE'
-        ? `Inside ${SLEEP_DEBT_FLAG_MIN - minutes} minutes of the flag. Two short nights would cross it.`
-        : `${SLEEP_DEBT_FLAG_MIN - minutes} minutes of headroom against the flag.`;
-  return { id: base[0], signal: base[1], window: base[2], trigger: base[3], state, now: `${minutes} min`, meaning, readable: true };
+        ? `${nightsBelowNeed} of 7 nights below fresh need. The signed average is approaching the action line.`
+        : `Within ${SLEEP_BALANCE_SHORTFALL_MIN} minutes per night of fresh need. Nothing accumulated and nothing to pay back.`;
+  return {
+    id: base[0],
+    signal: base[1],
+    window: base[2],
+    trigger: base[3],
+    state,
+    now: `${signed(Math.round(averageBalanceMin))} min/night`,
+    meaning,
+    readable: true,
+  };
 }
 
 // 2 —————————————————————————————————————————————————————————————————
@@ -449,4 +464,11 @@ function num(v: number, dp: number): string {
 
 function signed(v: number): string {
   return v > 0 ? `+${v}` : num(v, 0);
+}
+
+function sleepDuration(minutes: number): string {
+  const rounded = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  return `${hours}h${String(rest).padStart(2, '0')}m`;
 }

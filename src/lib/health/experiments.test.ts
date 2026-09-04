@@ -11,23 +11,54 @@ function thin<T>(zero: T): MetricResult<T> {
   return { value: zero, sufficiency: 'insufficient', sampleSize: 0, asOf: TODAY };
 }
 
-/** Cumulative debt that crossed the 240-minute flag four days ago. */
-function debtSeries(): Array<{ date: string; debt: number }> {
+/** Rolling balance that crossed the −30-minute action line four days ago. */
+function balanceSeries(): Array<{ date: string; balanceMin: number }> {
   const end = Date.parse(TODAY + 'T00:00:00Z');
-  const values = [40, 80, 120, 160, 190, 210, 230, 250, 300, 400, 500, 612];
-  return values.map((debt, i) => ({
+  const values = [0, -5, -10, -15, -20, -25, -29, -31, -35, -40, -45, -60];
+  return values.map((balanceMin, i) => ({
     date: new Date(end - (values.length - 1 - i) * 86_400_000).toISOString().slice(0, 10),
-    value: debt,
-    debt,
+    balanceMin,
   }));
 }
+
+const BALANCE_ZERO = {
+  averageBalanceMin: 0,
+  averageActualMin: 0,
+  averageNeedMin: 0,
+  trendActualMin: null,
+  nightsBelowNeed: 0,
+  latestWhoopDebtAdjustmentMin: null,
+  strainRecoveryBalance: 0,
+  short: false,
+  series: [] as Array<{ date: string; balanceMin: number }>,
+};
+const BALANCE_OK = {
+  ...BALANCE_ZERO,
+  averageBalanceMin: -10,
+  averageActualMin: 470,
+  averageNeedMin: 480,
+  nightsBelowNeed: 3,
+  strainRecoveryBalance: 1,
+};
+const BALANCE_SHORT = {
+  ...BALANCE_ZERO,
+  averageBalanceMin: -60,
+  averageActualMin: 420,
+  averageNeedMin: 480,
+  trendActualMin: -15,
+  nightsBelowNeed: 7,
+  latestWhoopDebtAdjustmentMin: 90,
+  strainRecoveryBalance: 2.6,
+  short: true,
+  series: balanceSeries(),
+};
 
 function prototypeInput(): ExperimentsInput {
   return {
     today: TODAY,
     sri: ok(71),
     circadian: ok({ driftHours: 1.3, baselineMidpointMin: 190, recentMidpointMin: 268, flag: 'drift-late' as const }),
-    recoveryDebt: ok({ sleepDebtMin: 612, strainRecoveryBalance: 2.6, overdrawn: true, series: debtSeries() }),
+    recoveryDebt: ok(BALANCE_SHORT),
     acwr: ok({ acuteEWMA: 6.2, chronicEWMA: 10, ratio: 0.62, zone: 'undertraining' }),
     polarised: ok({ easyPct: 84, midPct: 9, hardPct: 7, verdict: 'pyramid' as const, totalMinutes: 210 }),
     volume: { weekKm: 7.7, medianKm: 20 },
@@ -50,7 +81,7 @@ describe('computeExperiments — the three cards', () => {
   });
 
   it('counts the live one from the day its trigger actually crossed', () => {
-    // The debt series crossed 240 four days before today, so this is day five.
+    // The rolling balance crossed −30 four days before today, so this is day five.
     expect(xs[0].daysSinceOnset).toBe(4);
     expect(xs[0].dayCount).toBe(5);
     expect(xs[0].counter).toBe('DAY 5 OF 21');
@@ -97,7 +128,7 @@ describe('computeExperiments — eligibility', () => {
       ...prototypeInput(),
       sri: ok(90),
       circadian: ok({ driftHours: 0.2, baselineMidpointMin: 190, recentMidpointMin: 202, flag: 'aligned' as const }),
-      recoveryDebt: ok({ sleepDebtMin: 20, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      recoveryDebt: ok(BALANCE_OK),
     });
     expect(xs.map((x) => x.id)).toEqual(['dull-long-day', 'one-hard-effort']);
     expect(xs.map((x) => x.code)).toEqual(['E1', 'E2']);
@@ -109,7 +140,7 @@ describe('computeExperiments — eligibility', () => {
       ...prototypeInput(),
       sri: ok(90),
       circadian: ok({ driftHours: 0.2, baselineMidpointMin: 190, recentMidpointMin: 202, flag: 'aligned' as const }),
-      recoveryDebt: ok({ sleepDebtMin: 20, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      recoveryDebt: ok(BALANCE_OK),
       acwr: ok({ acuteEWMA: 10, chronicEWMA: 10, ratio: 1.05, zone: 'optimal' }),
       volume: { weekKm: 21, medianKm: 20 },
     });
@@ -126,7 +157,7 @@ describe('computeExperiments — eligibility', () => {
         today: TODAY,
         sri: thin(0),
         circadian: thin({ driftHours: 0, baselineMidpointMin: 0, recentMidpointMin: 0, flag: 'aligned' as const }),
-        recoveryDebt: thin({ sleepDebtMin: 0, strainRecoveryBalance: 0, overdrawn: false, series: [] }),
+        recoveryDebt: thin(BALANCE_ZERO),
         acwr: thin({ acuteEWMA: 0, chronicEWMA: 0, ratio: 0, zone: 'detraining' as const }),
         polarised: thin({ easyPct: 0, midPct: 0, hardPct: 0, verdict: 'insufficient-volume' as const, totalMinutes: 0 }),
         volume: null,
@@ -137,7 +168,7 @@ describe('computeExperiments — eligibility', () => {
   it('falls back to day one when the trigger has no dated series behind it', () => {
     const xs = computeExperiments({
       ...prototypeInput(),
-      recoveryDebt: ok({ sleepDebtMin: 100, strainRecoveryBalance: 1, overdrawn: false, series: [] }),
+      recoveryDebt: ok(BALANCE_OK),
     });
     // SRI and drift are still off target, so the experiment stands — but with
     // nothing dated behind it, it cannot claim to have been running.
