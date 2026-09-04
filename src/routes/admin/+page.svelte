@@ -4,6 +4,7 @@
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import HostStatusStrip from '$lib/components/admin/HostStatusStrip.svelte';
+  import DependencyStatusPanel from '$lib/components/admin/DependencyStatusPanel.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -35,6 +36,8 @@
        is meaningless if homeserv has fallen over. Fetches after mount, so it
        costs the console's load time nothing. -->
   <HostStatusStrip />
+
+  <DependencyStatusPanel />
 
   <!-- Top stat strip -->
   <div class="stat-grid">
