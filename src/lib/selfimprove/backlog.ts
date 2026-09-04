@@ -22,6 +22,9 @@ import {
   type BacklogItemData,
   type BacklogStatus,
 } from './types';
+// The channel vocabulary lives in the pure module — see `IDEA_SOURCES` there
+// for why it cannot live in `./types`.
+import { IDEA_SOURCES, type IdeaSource } from './board';
 
 /** An idea as proposed by a phase, before it becomes a record. */
 export interface IdeaInput {
@@ -31,6 +34,9 @@ export interface IdeaInput {
   priority?: number;
   /** The appetite-ledger row this came from, when it came from one. */
   capabilitySlug?: string;
+  /** Which channel this arrived through. Set by the CALL SITE — never read out
+   *  of a model's answer, which is why `coercePlan` whitelists its fields. */
+  source?: IdeaSource;
 }
 
 /** The lanes that bring new data into the building. Kept here because
@@ -108,6 +114,17 @@ function coerceKind(kind: unknown): BacklogItemData['kind'] {
 }
 
 /**
+ * An unrecognised channel becomes `unattributed`, never a guess at the likely
+ * one. The second lock on provenance: `coercePlan` already whitelists the
+ * fields it reads out of the author model's JSON, so nothing a model writes
+ * can reach this — and if a future call site forgets to name its channel, the
+ * row says it does not know rather than claiming a channel it never came from.
+ */
+function coerceSource(source: unknown): IdeaSource {
+  return IDEA_SOURCES.includes(source as IdeaSource) ? (source as IdeaSource) : 'unattributed';
+}
+
+/**
  * Merge ideas into the backlog. Existing slugs are left alone (their attempt
  * history is worth more than a re-description); genuinely new ones are added,
  * up to `MAX_NEW_IDEAS_PER_NIGHT`. Returns the slugs actually created, for the
@@ -164,6 +181,7 @@ export async function addIdeas(ideas: IdeaInput[]): Promise<string[]> {
       updatedAt: now,
     };
     if (idea.capabilitySlug) item.capabilitySlug = idea.capabilitySlug.slice(0, 200);
+    item.source = coerceSource(idea.source);
     try {
       await put(item);
       added.push(slug);

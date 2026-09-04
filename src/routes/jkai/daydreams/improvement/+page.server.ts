@@ -5,9 +5,9 @@ import { MIN_PAIRS } from '$lib/daydream/stats/tests';
 import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 import { describeCite, EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
 import { EMPTY_BOARD, type BoardView } from '$lib/selfimprove/board';
-import type { EpicData } from '$lib/selfimprove/types';
+import { BUDGET_CAPS, WORK_CAPS, type EpicData } from '$lib/selfimprove/types';
 import { doctorRollup, EMPTY_DOCTOR_ROLLUP, type DoctorRollup } from '$lib/workflowdoctor/rollup';
-import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
+import { doctorSchedule, improvementSchedule } from '$lib/heartbeat/activity-schedule';
 
 /** The loop, end to end: faults raised → ideas → tools built → signals → findings → thoughts. */
 export interface LoopStory {
@@ -172,6 +172,19 @@ export const load: PageServerLoad = async () => {
   // is what makes this the honest place to join them — `$lib/workflowdoctor`
   // already imports `$lib/selfimprove`, so neither library could do it.
   const epics = await loadEpics();
+  // What actually fits in a night. Read off the constants rather than restated
+  // in the component, so a change to a cap reaches the page that reports it —
+  // two dashboards once printed a cron expression as the live schedule long
+  // after the schedule had moved.
+  const caps = {
+    tools: WORK_CAPS.maxToolCandidates,
+    builds: WORK_CAPS.maxChangeRequests,
+    watches: WORK_CAPS.maxWatches,
+    repairs: WORK_CAPS.maxToolsRepaired,
+    calls: BUDGET_CAPS.maxLlmCalls,
+    minutes: Math.round(BUDGET_CAPS.maxWallMs / 60000),
+    window: (await improvementSchedule()).window,
+  };
   const [story, appetite, board, doctor, doctorWindow] = await Promise.all([
     loadLoopStory(loop),
     loadAppetite(),
@@ -182,5 +195,5 @@ export const load: PageServerLoad = async () => {
     }),
     doctorSchedule(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, epics, doctor, doctorWindow };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, caps, epics, doctor, doctorWindow };
 };

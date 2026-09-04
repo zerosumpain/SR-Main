@@ -406,6 +406,18 @@ export interface ToolAttemptData {
 /** Lifecycle of a queued idea. */
 export type BacklogStatus = 'open' | 'shipped' | 'abandoned';
 
+/**
+ * Which channel an idea arrived through — the closed set lives in `./board`,
+ * which is the PURE module a `.svelte` file may value-import. Type-only here,
+ * so this direction is erased and no cycle exists at runtime.
+ *
+ * TWO lines, and they are not redundant: `export … from` re-exports without
+ * binding the name locally, so `BacklogItemData.source` below could not see
+ * it. Same trap as the `NEWS_SOURCES` move on 2026-09-04.
+ */
+import type { IdeaSource } from './board';
+export type { IdeaSource } from './board';
+
 /** Shape of an `improvement_backlog` record's `data`. */
 export interface BacklogItemData {
   /** Stable slug key, derived from the title. */
@@ -439,6 +451,9 @@ export interface BacklogItemData {
   /** The `daydream_capabilities` row this came from, so the lane can report
    *  back what the idea became. Absent on fault- and question-mined ideas. */
   capabilitySlug?: string;
+  /** Which channel it arrived through. Absent on rows written before the
+   *  field existed, which read `unattributed` and are never guessed at. */
+  source?: IdeaSource;
 
   // ── Owner edits from the queue board (2026-09-04) ────────────────────────
   //

@@ -471,7 +471,10 @@ export async function buildTool(
   // Queue ideas first — a night that ships nothing must still leave the backlog
   // richer than it found it.
   if (plan.ideas.length) {
-    const added = await addIdeas(plan.ideas);
+    // The author's own asides, stamped HERE and not read out of its answer —
+    // `coercePlan` whitelists the fields it takes from that JSON precisely so
+    // a model cannot claim its idea came from a question the owner asked.
+    const added = await addIdeas(plan.ideas.map((i) => ({ ...i, source: 'toolsmith' as const })));
     for (const slug of added) actions.push({ kind: 'backlog_added', detail: slug });
   }
 
@@ -587,6 +590,7 @@ export async function buildTool(
             detail: `Failed as tool "${spec.name}": ${(outcome.failure ?? '').slice(0, 400)}`,
             kind: 'tool',
             priority: 3,
+            source: 'toolsmith',
           },
         ]);
       }

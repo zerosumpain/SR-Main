@@ -264,6 +264,15 @@ export function coerceInsights(json: unknown, period: string): QuestionInsights 
 }
 
 /** LEARN: one gateway call → insights, upserted to `latest` + `weekly:<YYYY-WW>`. */
+/**
+ * The fault kinds the workflow doctor raises.
+ *
+ * Its findings arrive as ordinary `daydream_faults` rows — that fold is the
+ * design, one door into the engine rather than a second wire — so the kind is
+ * the only thing that still says where they came from.
+ */
+const DOCTOR_FAULT_KINDS: ReadonlyArray<string> = ['workflow_dead_node', 'workflow_failing'];
+
 export async function learnInsights(
   signals: GatheredSignals,
   budget: Budget,
@@ -448,6 +457,12 @@ export async function learnInsights(
   }
 
   try {
+    // Every group is stamped with the channel it arrived through. This is the
+    // only place four of the nine channels are distinguishable at all — once
+    // they are all `IdeaInput`s in one array, a fault and a question look
+    // identical. The doctor's escalations are the interesting split: they
+    // reach `collectFaultIdeas` as ordinary `daydream_faults` rows (that fold
+    // IS the design), so `faultKind` is what tells them apart.
     const added = await addIdeas([
       ...capabilityIdeas.map((s) => ({
         title: s.title,
@@ -455,14 +470,39 @@ export async function learnInsights(
         kind: s.kind,
         priority: s.priority,
         capabilitySlug: s.capabilitySlug,
+        source: 'appetite' as const,
       })),
-      ...[...faultIdeas, ...healthFaults, ...starving, ...engineIdeas].map((s) => ({
+      ...faultIdeas.map((s) => ({
         title: s.title,
         detail: s.detail,
         kind: s.kind,
         priority: s.priority,
+        source: DOCTOR_FAULT_KINDS.includes(s.faultKind) ? ('doctor' as const) : ('fault' as const),
       })),
-      ...ideas,
+      ...healthFaults.map((s) => ({
+        title: s.title,
+        detail: s.detail,
+        kind: s.kind,
+        priority: s.priority,
+        source: 'health' as const,
+      })),
+      ...starving.map((s) => ({
+        title: s.title,
+        detail: s.detail,
+        kind: s.kind,
+        priority: s.priority,
+        source: 'starved' as const,
+      })),
+      ...engineIdeas.map((s) => ({
+        title: s.title,
+        detail: s.detail,
+        kind: s.kind,
+        priority: s.priority,
+        source: 'engine' as const,
+      })),
+      // Everything in `ideas` is mined from the questions the owner asked —
+      // unmet needs, under-served intents, and portfolio opportunities.
+      ...ideas.map((i) => ({ ...i, source: 'question' as const })),
     ]);
     for (const slug of added) actions.push({ kind: 'backlog_added', detail: slug });
   } catch (err) {
