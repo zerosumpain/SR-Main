@@ -49,6 +49,23 @@ export { DEFAULT_SELFIMPROVE_MODEL_ID as SELFIMPROVE_MODEL } from '$lib/constant
 /** app_settings kill-switch key. Default (unset/null) is treated as enabled. */
 export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';
 
+/**
+ * Whether the engine may spend on a lane WITHOUT a tap, and DELIBERATELY
+ * INVERTED: unset/null is disabled, only an explicit `true` permits it.
+ *
+ * Same semantics and the same reason as `workflowdoctor.autoapply` — an
+ * unattended path that spends money or writes to a live schedule must never
+ * enable itself by default. With this off the engine still finds capabilities,
+ * queues them, registers data sources and ships runtime tools (both of which
+ * already have live verification gates and cost pennies); what it will not do
+ * is dispatch a repo build or create a watch until the owner has accepted the
+ * lead on the Improvement room.
+ *
+ * With it on, `WORK_CAPS.maxChangeRequests` and `maxWatches` are the ceiling:
+ * one of each a night.
+ */
+export const SETTINGS_AUTOBUILD_KEY = 'daydream.appetite.autobuild';
+
 // The nightly cron used to live here (`30 3 * * *`, Europe/London). The
 // schedule is now a heartbeat activity — see
 // `$lib/heartbeat/activities/daydream-improve.ts` for the window and
@@ -116,6 +133,18 @@ export const WORK_CAPS = {
   maxToolsRepaired: 3,
   /** Draft PRs opened per night (never merged). */
   maxPullRequests: 2,
+  /**
+   * Change requests handed to the autonomous builder per night.
+   *
+   * ONE. A change-request build runs up to 25 iterations against a £2 ceiling
+   * — roughly ten times what a whole self-improvement night costs — and it
+   * opens a PR a human then has to read. Two a night is a backlog of reviews
+   * by the weekend. Owner decision, 2026-09-04.
+   */
+  maxChangeRequests: 1,
+  /** Monitors generated per night. One workflow generation, and a watch that
+   *  fires is a watch that can notify. */
+  maxWatches: 1,
   /** A tool must beat this error rate to be considered healthy. */
   repairErrorRateThreshold: 0.25,
   /** Minimum runs before an error rate is meaningful. */
@@ -181,6 +210,16 @@ export type ActionKind =
   | 'backlog_added'
   /** A draft PR was opened for review (never merged by the engine). */
   | 'pr_opened'
+  /**
+   * A change request was handed to the autonomous builder: an issue opened, a
+   * branch cut from master, `npm run gate` per iteration, and a PR at the end.
+   * Distinct from `pr_opened` because the engine did not write the code — it
+   * wrote the ask, which is the difference between a patch nothing has run and
+   * one a gate has.
+   */
+  | 'change_requested'
+  /** A recurring monitor was generated and scheduled. */
+  | 'watch_created'
   /** Calls-per-turn was measured and snapshotted. */
   | 'efficiency_measured'
   /** A new tool-call policy version went live on trial. */
@@ -347,10 +386,19 @@ export interface BacklogItemData {
   slug: string;
   title: string;
   detail: string;
-  /** 'tool' = buildable as a runtime custom tool; 'feature' = needs repo code;
-   *  'engine' = a proposal about the daydream engine itself — never picked by
-   *  the toolsmith, never a PR, visible on the ledger for the owner. */
-  kind: 'tool' | 'feature' | 'engine';
+  /** 'tool'    = buildable as a runtime custom tool;
+   *  'feature' = needs repo code — a change request to the autonomous builder;
+   *  'source'  = a data source to find, register and then sample daily;
+   *  'watch'   = a recurring monitor, i.e. a scheduled workflow;
+   *  'engine'  = a proposal about the daydream engine itself — never picked by
+   *              a lane, never a PR, visible on the ledger for the owner.
+   *
+   *  `source` and `watch` arrived with the appetite ledger (2026-09-04). They
+   *  are separate kinds rather than `feature` with a note because the lane is
+   *  what decides the cost: a source is a catalogue registration with a live
+   *  probe, a watch is one workflow generation, and a feature is a repo build
+   *  that can spend £2. */
+  kind: 'tool' | 'feature' | 'engine' | 'source' | 'watch';
   status: BacklogStatus;
   /** 1 (highest) … 5. Drives pick order. */
   priority: number;
@@ -362,6 +410,35 @@ export interface BacklogItemData {
   updatedAt: string;
   /** Set when kind='feature' and a draft PR was opened. */
   prUrl?: string;
+  /** The `daydream_capabilities` row this came from, so the lane can report
+   *  back what the idea became. Absent on fault- and question-mined ideas. */
+  capabilitySlug?: string;
+}
+
+/**
+ * The two builders self-improvement cannot reach for itself.
+ *
+ * Declared here and IMPLEMENTED in `$lib/heartbeat/build-lanes.ts`, which is
+ * the only direction the module boundaries allow: `$lib/jkai` already imports
+ * `$lib/selfimprove`, so importing `$lib/jkai/change-request` from this module
+ * would open a `jkai <-> selfimprove` cycle, and importing `$lib/heartbeat`
+ * would open a `heartbeat <-> selfimprove` one. Injection also means a test can
+ * hand the run fakes and assert what it dispatched without a GitHub token.
+ */
+export interface LaneResult {
+  /** Stable reference for the appetite ledger — `build:<id>` or
+   *  `monitor:<workflowId>`. */
+  ref: string;
+  /** What to show the owner. */
+  label: string;
+}
+
+export interface BuildLanes {
+  /** Open an issue and start a gated repo build. Absent when GitHub is not
+   *  configured; the propose phase then falls back to a draft PR. */
+  changeRequest?: (input: { title: string; request: string }) => Promise<LaneResult>;
+  /** Turn a description into a recurring, scheduled monitor. */
+  createWatch?: (input: { description: string }) => Promise<LaneResult>;
 }
 
 /** Auth spec stored in an api_catalog record (env-var NAMES only, never secrets). */

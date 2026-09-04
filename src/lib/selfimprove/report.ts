@@ -66,6 +66,8 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
   const shipped = data.actions.filter((a) => a.kind === 'tool_shipped');
   const repaired = data.actions.filter((a) => a.kind === 'tool_repaired');
   const prs = data.actions.filter((a) => a.kind === 'pr_opened');
+  const builds = data.actions.filter((a) => a.kind === 'change_requested');
+  const watches = data.actions.filter((a) => a.kind === 'watch_created');
   const apis = countActions(data, ['api_registered', 'api_verified']);
   const rejected = countActions(data, ['tool_rejected']);
   const queued = countActions(data, ['backlog_added']);
@@ -81,18 +83,31 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
   const policyReverted = data.actions.filter((a) => a.kind === 'policy_reverted');
 
   const parts: string[] = [`sr. nightly self-improve (${data.status}):`];
-  // Calls-per-turn leads the message — it is the number the engine exists to
-  // move, and a rollback is the one event worth waking up to.
+  // NEW CAPABILITY LEADS THE MESSAGE (2026-09-04). Calls-per-turn used to,
+  // because it was the engine's stated prime outcome; the owner's instruction
+  // reordered that, and the summary has to agree with the ordering or the
+  // message keeps teaching the old priority. Efficiency still appears, lower.
+  if (builds.length) parts.push(`BUILDING: ${builds.map((a) => a.detail).join('; ')}.`);
+  if (watches.length) parts.push(`New watch: ${watches.map((a) => a.detail).join('; ')}.`);
+  if (shipped.length) parts.push(`SHIPPED ${shipped.length} live tool(s): ${names(shipped)}.`);
+  if (repaired.length) parts.push(`Repaired ${repaired.length}: ${names(repaired)}.`);
+  if (prs.length) parts.push(`${prs.length} draft PR(s) awaiting review.`);
+  if (apis) parts.push(`${apis} API(s) added.`);
   const efficiency = data.actions.find((a) => a.kind === 'efficiency_measured');
   if (efficiency) parts.push(efficiency.detail.split(';')[0].trim() + '.');
   if (policyKept.length) parts.push(`Call policy KEPT: ${policyKept[0].detail}.`);
   if (policyReverted.length) parts.push(`Call policy ROLLED BACK: ${policyReverted[0].detail}.`);
   if (policyPublished.length) parts.push(`New call policy on trial: ${policyPublished[0].detail.split('—')[0].trim()}.`);
-  if (shipped.length) parts.push(`SHIPPED ${shipped.length} live tool(s): ${names(shipped)}.`);
-  if (repaired.length) parts.push(`Repaired ${repaired.length}: ${names(repaired)}.`);
-  if (prs.length) parts.push(`${prs.length} draft PR(s) awaiting review.`);
-  if (apis) parts.push(`${apis} API(s) added.`);
-  if (!shipped.length && !repaired.length && !prs.length && !policyPublished.length && !policyKept.length && !policyReverted.length)
+  if (
+    !shipped.length &&
+    !repaired.length &&
+    !prs.length &&
+    !builds.length &&
+    !watches.length &&
+    !policyPublished.length &&
+    !policyKept.length &&
+    !policyReverted.length
+  )
     parts.push('Nothing shipped.');
   if (rejected) parts.push(`${rejected} rejected.`);
   if (queued) parts.push(`${queued} queued.`);

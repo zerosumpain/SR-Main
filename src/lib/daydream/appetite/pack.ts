@@ -30,7 +30,7 @@ import {
   workflowSchedules,
 } from '$lib/db/schema';
 import { getCollectionBySlug, getRecordByKey, queryRecords } from '$lib/datastore';
-import { NEWS_SOURCES } from '$lib/news/types';
+import { NEWS_SOURCES } from '$lib/constants/news-sources';
 import { errMsg } from '../types';
 import { openFaults } from '../faults';
 import { collectStarvation } from '../starvation';

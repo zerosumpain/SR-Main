@@ -30,6 +30,7 @@ import os from 'os';
 import { getSetting } from '$lib/server/models/settings';
 import { runImprovementNow, isUserActive } from '$lib/selfimprove/run';
 import { SETTINGS_ENABLED_KEY, errMsg, type RunStatus } from '$lib/selfimprove/types';
+import { liveBuildLanes } from '../build-lanes';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'daydream-improve';
@@ -54,7 +55,7 @@ const FAILED_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>(['failed']);
 export const daydreamImprove: ActivityHandler = {
   name: NAME,
   description:
-    'The self-improvement run: learns from recent questions, grows the API catalogue, authors and repairs runtime tools behind verify.ts, trials one tool-call policy overlay, and opens draft PRs for anything needing repo code. One improvement_runs record per night. Skips when the owner has been active in the last hour.',
+    'The self-improvement run: reads the appetite ledger first, then the fault ledger, then recent questions; grows the API catalogue; authors and repairs runtime tools behind verify.ts; hands anything needing repo code to the autonomous builder as a change request and anything needing a schedule to the monitor generator; and only then measures tool-call efficiency. One improvement_runs record per night. Skips when the owner has been active in the last hour.',
   // Daily. The window below is what actually decides when it lands; the cadence
   // only stops it running twice in one night.
   defaultCadenceSeconds: 86_400,
@@ -95,7 +96,11 @@ export const daydreamImprove: ActivityHandler = {
     let runId: string;
     let data;
     try {
-      ({ runId, data } = await runImprovementNow({ trigger: 'cron' }));
+      // The two builders the engine may not import for itself — the
+      // autonomous repo build behind `/jkai/builds`, and the monitor
+      // generator. Injected here because `$lib/heartbeat -> $lib/jkai` is a
+      // one-way edge and `$lib/selfimprove -> $lib/jkai` would be a cycle.
+      ({ runId, data } = await runImprovementNow({ trigger: 'cron', lanes: liveBuildLanes() }));
     } catch (err) {
       // The overlap guard throws when a manual "Run now" is already going.
       // That is a skip, not a fault: nothing is broken and the failure budget
@@ -111,6 +116,8 @@ export const daydreamImprove: ActivityHandler = {
     const repaired = data.actions.filter((a) => a.kind === 'tool_repaired').length;
     const queued = data.actions.filter((a) => a.kind === 'backlog_added').length;
     const prs = data.actions.filter((a) => a.kind === 'pr_opened').length;
+    const builds = data.actions.filter((a) => a.kind === 'change_requested').length;
+    const watches = data.actions.filter((a) => a.kind === 'watch_created').length;
     const policy = data.actions.filter(
       (a) => a.kind === 'policy_published' || a.kind === 'policy_kept' || a.kind === 'policy_reverted',
     ).length;
@@ -120,6 +127,8 @@ export const daydreamImprove: ActivityHandler = {
       `${shipped} tool(s) shipped`,
       ...(repaired ? [`${repaired} repaired`] : []),
       `${queued} queued`,
+      ...(builds ? [`${builds} change request(s) → /jkai/builds`] : []),
+      ...(watches ? [`${watches} watch(es)`] : []),
       ...(prs ? [`${prs} draft PR(s)`] : []),
       ...(policy ? [`${policy} policy action(s)`] : []),
       `${data.llmCalls} LLM call(s)`,
@@ -146,6 +155,8 @@ export const daydreamImprove: ActivityHandler = {
         repaired,
         queued,
         prs,
+        builds,
+        watches,
       },
     };
   },

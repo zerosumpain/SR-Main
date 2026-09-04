@@ -43,7 +43,15 @@ vi.mock('$lib/datastore', () => {
   };
 });
 
-import { addIdeas, listBacklog, markAttempt, pickWork, MAX_NEW_IDEAS_PER_NIGHT } from './backlog';
+import {
+  addIdeas,
+  hasOpenNewDataWork,
+  listBacklog,
+  markAttempt,
+  pickToolWork,
+  pickWork,
+  MAX_NEW_IDEAS_PER_NIGHT,
+} from './backlog';
 import type { BacklogItemData } from './types';
 
 function item(over: Partial<BacklogItemData>): BacklogItemData {
@@ -291,5 +299,65 @@ describe('intake cap', () => {
     expect(await addIdeas([{ title: 'Fresh idea today', detail: 'd', kind: 'tool' }])).toEqual([
       'fresh-idea-today',
     ]);
+  });
+});
+
+// The lanes that arrived with the appetite ledger, 2026-09-04. The bias toward
+// new data is half an ordering and half arithmetic; this is the arithmetic.
+describe('the new-data lanes', () => {
+  const src = (slug: string, over: Partial<BacklogItemData> = {}) =>
+    item({ slug, kind: 'source', priority: 1, ...over });
+  const tool = (slug: string, over: Partial<BacklogItemData> = {}) =>
+    item({ slug, kind: 'tool', priority: 2, ...over });
+
+  it('holds half the toolsmith’s slots for sources when any is open', () => {
+    const picked = pickToolWork(
+      [src('s1'), src('s2'), src('s3'), tool('t1'), tool('t2'), tool('t3')],
+      4,
+    );
+    expect(picked.filter((i) => i.kind === 'source')).toHaveLength(2);
+    expect(picked.filter((i) => i.kind === 'tool')).toHaveLength(2);
+  });
+
+  it('reserves at least one slot even when the share rounds to zero', () => {
+    const picked = pickToolWork([src('s1'), tool('t1')], 1);
+    expect(picked.map((i) => i.slug)).toEqual(['s1']);
+  });
+
+  it('gives the whole night to tools when no source is waiting', () => {
+    const picked = pickToolWork([tool('t1'), tool('t2')], 4);
+    expect(picked.map((i) => i.slug)).toEqual(['t1', 't2']);
+  });
+
+  it('backfills rather than doing less work than the cap allows', () => {
+    const picked = pickToolWork([src('s1'), tool('t1'), tool('t2'), tool('t3')], 4);
+    expect(picked).toHaveLength(4);
+  });
+
+  it('never hands the toolsmith a watch — a monitor is not a runtime tool', () => {
+    const picked = pickToolWork([item({ slug: 'w1', kind: 'watch' }), tool('t1')], 4);
+    expect(picked.map((i) => i.slug)).toEqual(['t1']);
+  });
+
+  it('reports open new-data work, which is what demotes call efficiency', () => {
+    expect(hasOpenNewDataWork([tool('t1')])).toBe(false);
+    expect(hasOpenNewDataWork([src('s1')])).toBe(true);
+    expect(hasOpenNewDataWork([item({ slug: 'w1', kind: 'watch' })])).toBe(true);
+    // Shipped, and exhausted, are not open.
+    expect(hasOpenNewDataWork([src('s1', { status: 'shipped' })])).toBe(false);
+    expect(hasOpenNewDataWork([src('s1', { attempts: 9 })])).toBe(false);
+  });
+
+  it('keeps the new kinds through a write, and coerces an unknown one to tool', async () => {
+    await addIdeas([
+      { title: 'A rail feed', detail: 'd', kind: 'source', capabilitySlug: 'data_source:rail' },
+      { title: 'A watch on something', detail: 'd', kind: 'watch' },
+      { title: 'Something odd', detail: 'd', kind: 'dashboard' as unknown as BacklogItemData['kind'] },
+    ]);
+    const back = await listBacklog();
+    expect(back.find((i) => i.slug === 'a-rail-feed')?.kind).toBe('source');
+    expect(back.find((i) => i.slug === 'a-rail-feed')?.capabilitySlug).toBe('data_source:rail');
+    expect(back.find((i) => i.slug === 'a-watch-on-something')?.kind).toBe('watch');
+    expect(back.find((i) => i.slug === 'something-odd')?.kind).toBe('tool');
   });
 });

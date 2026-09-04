@@ -32,6 +32,7 @@ import { collectStarvation } from '$lib/daydream/starvation';
 import { collectHealthFaults } from '$lib/daydream/health-quality';
 import { collectFaultIdeas } from '$lib/daydream/faults';
 import { engineProposals } from '$lib/daydream/engine-proposals';
+import { collectCapabilityIdeas } from '$lib/daydream/appetite/intake';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -337,6 +338,7 @@ export async function learnInsights(
     },
   ];
 
+
   // Unmet needs are the engine's best source of work. Queue them so they
   // outlive this run — previously they existed only inside one run record.
   const ideas = [
@@ -395,7 +397,26 @@ export async function learnInsights(
   } catch (err) {
     console.error('[selfimprove] health fault collection failed:', errMsg(err));
   }
-  // The fault ledger, FIRST. Every site where daydreaming could not do
+  // The APPETITE LEDGER, first of all.
+  //
+  // The order of these four collections is the engine's priority, and until
+  // 2026-09-04 it ran fault → starvation → health → questions: every driver a
+  // repair of something that already existed. The owner's instruction is that
+  // capability should outrank efficiency, so the leads go in ahead of the
+  // faults — an accepted lead ahead of a proposed one, and inside each group
+  // the lanes that bring new data in first (`collectCapabilityIdeas`).
+  //
+  // This is only half the bias. The other half is `pickWithNewDataFirst`,
+  // which reserves build slots — an ordering alone is discarded by the first
+  // night with more work than slots.
+  let capabilityIdeas: Awaited<ReturnType<typeof collectCapabilityIdeas>> = [];
+  try {
+    capabilityIdeas = await collectCapabilityIdeas();
+  } catch (err) {
+    console.error('[selfimprove] appetite ledger read failed:', errMsg(err));
+  }
+
+  // The fault ledger, next. Every site where daydreaming could not do
   // something writes here with the shape of the fix; nothing else in this
   // pass says as precisely what to build. Then the engine's proposals about
   // itself — kind `engine`, never built, only listed.
@@ -411,7 +432,7 @@ export async function learnInsights(
   } catch (err) {
     console.error('[selfimprove] engine proposals failed:', errMsg(err));
   }
-  for (const s of [...faultIdeas, ...starving, ...healthFaults, ...engineIdeas]) {
+  for (const s of [...capabilityIdeas, ...faultIdeas, ...starving, ...healthFaults, ...engineIdeas]) {
     actions.push({
       kind: 'insight',
       detail: `${s.title} — ${s.evidence}`,
@@ -428,6 +449,13 @@ export async function learnInsights(
 
   try {
     const added = await addIdeas([
+      ...capabilityIdeas.map((s) => ({
+        title: s.title,
+        detail: s.detail,
+        kind: s.kind,
+        priority: s.priority,
+        capabilitySlug: s.capabilitySlug,
+      })),
       ...[...faultIdeas, ...healthFaults, ...starving, ...engineIdeas].map((s) => ({
         title: s.title,
         detail: s.detail,

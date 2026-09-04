@@ -1,14 +1,10 @@
-/**
- * The wired-in news sources.
- *
- * An array rather than a bare union so the set is readable at RUN time: the
- * daydream appetite scan states what the site can already reach, and a source
- * list it cannot enumerate is a source list it will propose again. Adding a
- * feed is a code change — that is the honest thing for the pack to say, and it
- * is why a news source goes down the /build lane rather than a registration.
- */
-export const NEWS_SOURCES = ['hacker-news', 'lobsters'] as const;
-export type NewsSource = (typeof NEWS_SOURCES)[number];
+// The source list lives in the foundation layer so anything that merely needs
+// to KNOW what feeds exist can read it without importing $lib/news — which
+// imports $lib/daydream, and would close a cycle. Re-exported here because
+// every consumer of this module already expects `NewsSource` from it.
+import type { NewsSource } from '$lib/constants/news-sources';
+export { NEWS_SOURCES } from '$lib/constants/news-sources';
+export type { NewsSource };
 export type NewsView = 'top' | 'new' | 'best' | 'favourites';
 export type NewsWireView = Exclude<NewsView, 'favourites'>;
 export type NewsSort = 'time' | 'points';
