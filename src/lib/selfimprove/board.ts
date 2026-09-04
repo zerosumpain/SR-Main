@@ -139,6 +139,12 @@ export const LEGAL_MOVES: Readonly<Record<WorkStage, ReadonlyArray<WorkStage>>> 
   parked: ['accepted'],
 };
 
+/** A channel this build does not know about is a gap in the record, not a
+ *  tenth channel. Mirrors `coerceSource` on the write path. */
+export function coerceIntake(source: unknown): IdeaSource {
+  return IDEA_SOURCES.includes(source as IdeaSource) ? (source as IdeaSource) : 'unattributed';
+}
+
 export function canMove(from: WorkStage, to: WorkStage): boolean {
   return from !== to && (LEGAL_MOVES[from] ?? []).includes(to);
 }
@@ -326,6 +332,17 @@ export interface BoardTotals {
 
 export interface BoardView {
   items: WorkItem[];
+  /**
+   * Where the queue came from, computed over the WHOLE population.
+   *
+   * On the view rather than derived in the component, for the reason `totals`
+   * is: `trimSettled` drops settled rows past the cap, so anything counted
+   * after the trim describes a smaller set than it names. `channel.total`
+   * would have printed "everything ever queued through this channel" off a
+   * list missing most of the settled ones, and `drained` would have saturated
+   * at the cap — making the published ratio read worse than reality.
+   */
+  inflow: InflowView;
   /** Stage counts over the WHOLE population, so a filtered column can say what
    *  it is hiding. The component counts the visible rows itself. */
   counts: Record<WorkStage, number>;
@@ -335,6 +352,15 @@ export interface BoardView {
 
 export const EMPTY_BOARD: BoardView = {
   items: [],
+  inflow: {
+    windowDays: 30,
+    channels: [],
+    intake: 0,
+    drained: 0,
+    standing: 0,
+    ratio: null,
+    unattributed: 0,
+  },
   counts: { proposed: 0, accepted: 0, building: 0, verifying: 0, live: 0, parked: 0 },
   totals: {
     all: 0,
@@ -516,7 +542,12 @@ export function buildBoard(input: BoardInput): BoardView {
       epicSlug,
       epicLabel: epicLabelFor(epicSlug, epicLabels),
       capabilitySlug: b.capabilitySlug ?? null,
-      intake: b.source ?? 'unattributed',
+      // Coerced on READ as well as on write. `coerceSource` in `backlog.ts`
+      // guards what this engine writes; a row edited by hand, restored from a
+      // dump, or left behind by a renamed channel would otherwise carry a
+      // value matching no cell — counted in the totals, shown in no channel,
+      // and unreachable by the filter, so the cells stopped summing.
+      intake: coerceIntake(b.source),
       score: null,
       evidence: [],
       actionable: true,
@@ -571,12 +602,14 @@ export function buildBoard(input: BoardInput): BoardView {
 
   // Totals are computed over EVERYTHING before any trim, so a number on the
   // page can never describe a smaller population than the one it names.
+  // Every one of these runs over the FULL population, before the trim below.
   const totals = summarise(items);
   const counts = countByStage(items);
+  const inflow = summariseInflow(items);
 
   const trimmed = trimSettled(items, input.settledLimit ?? null);
 
-  return { items: trimmed, counts, totals, error: null };
+  return { items: trimmed, counts, totals, inflow, error: null };
 }
 
 /** Newest settled work first, capped. Open work is never trimmed. */
@@ -708,11 +741,18 @@ export interface InflowView {
   /**
    * Settled inside the window — shipped or parked.
    *
+   * Counted off `backlogStatus`, NOT the derived stage. `stageFor` returns
+   * `parked` for an item that has run out of attempts while its status is
+   * still `open`, and every failed attempt bumps `updatedAt` — so a stage-based
+   * count called an item the engine tried and failed on three nights running
+   * "drained", and subtracted it from the standing queue. Exactly backwards.
+   *
    * Dated by `updatedAt`, which is the closest thing a backlog row has to a
-   * "settled at". It is not exact: a priority edit moves it too, so a long-dead
-   * item touched from the board reads as drained today. It over-states the
-   * drain rather than under-stating it, which is the direction that flatters
-   * the engine — so the ratio below is a FLOOR on how badly intake outruns it.
+   * "settled at". Still not exact: a priority edit moves it too, so an item
+   * settled long ago and touched from the board reads as drained today. That
+   * over-states the drain rather than under-stating it — the direction that
+   * flatters the engine — so the ratio is a FLOOR on how badly intake outruns
+   * it.
    */
   drained: number;
   /** Open right now, whatever window it arrived in. */
@@ -747,9 +787,9 @@ export function summariseInflow(items: WorkItem[], windowDays = 30, now = Date.n
       label: SOURCE_LABEL[source].label,
       from: SOURCE_LABEL[source].from,
       total: mine.length,
-      open: mine.filter((i) => !isSettled(i.stage)).length,
+      open: mine.filter((i) => i.backlogStatus === 'open').length,
       recent: mine.filter((i) => inWindow(i.createdAt)).length,
-      served: mine.filter((i) => i.alreadyServed && !isSettled(i.stage)).length,
+      served: mine.filter((i) => i.alreadyServed && i.backlogStatus === 'open').length,
     });
   }
   // Busiest first; the channel that can never be attributed sorts last however
@@ -763,8 +803,9 @@ export function summariseInflow(items: WorkItem[], windowDays = 30, now = Date.n
 
   const backlogItems = items.filter((i) => i.intake != null);
   const intake = backlogItems.filter((i) => inWindow(i.createdAt)).length;
-  const drained = backlogItems.filter((i) => isSettled(i.stage) && inWindow(i.updatedAt)).length;
-  const standing = backlogItems.filter((i) => !isSettled(i.stage)).length;
+  const settled = (i: WorkItem) => i.backlogStatus != null && i.backlogStatus !== 'open';
+  const drained = backlogItems.filter((i) => settled(i) && inWindow(i.updatedAt)).length;
+  const standing = backlogItems.filter((i) => !settled(i)).length;
 
   return {
     windowDays,

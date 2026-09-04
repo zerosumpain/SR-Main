@@ -176,6 +176,18 @@ export const load: PageServerLoad = async () => {
   // in the component, so a change to a cap reaches the page that reports it —
   // two dashboards once printed a cron expression as the live schedule long
   // after the schedule had moved.
+
+  const [story, appetite, board, improveWindow, doctor, doctorWindow] = await Promise.all([
+    loadLoopStory(loop),
+    loadAppetite(),
+    loadQueueBoard(epics.epics),
+    improvementSchedule(),
+    doctorRollup().catch((err): DoctorRollup => {
+      console.error('[daydream] doctor rollup failed:', errMsg(err));
+      return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
+    }),
+    doctorSchedule(),
+  ]);
   const caps = {
     tools: WORK_CAPS.maxToolCandidates,
     builds: WORK_CAPS.maxChangeRequests,
@@ -183,17 +195,7 @@ export const load: PageServerLoad = async () => {
     repairs: WORK_CAPS.maxToolsRepaired,
     calls: BUDGET_CAPS.maxLlmCalls,
     minutes: Math.round(BUDGET_CAPS.maxWallMs / 60000),
-    window: (await improvementSchedule()).window,
+    window: improveWindow.window,
   };
-  const [story, appetite, board, doctor, doctorWindow] = await Promise.all([
-    loadLoopStory(loop),
-    loadAppetite(),
-    loadQueueBoard(epics.epics),
-    doctorRollup().catch((err): DoctorRollup => {
-      console.error('[daydream] doctor rollup failed:', errMsg(err));
-      return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
-    }),
-    doctorSchedule(),
-  ]);
   return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, board, caps, epics, doctor, doctorWindow };
 };

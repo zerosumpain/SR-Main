@@ -109,8 +109,8 @@
 
 <p class="note">
   Ceilings from <code>WORK_CAPS</code> and <code>BUDGET_CAPS</code>. Wall clock is the real
-  constraint — the run has 25 minutes before the 04:00 model-routing job — so a phase that
-  runs late is skipped rather than overrunning into it.
+  constraint — the run has {caps.minutes} minutes before the next scheduled job — so a phase
+  that runs late is skipped rather than overrunning into it.
   {#if flow.unattributed > 0}
     <br /><strong>{flow.unattributed}</strong> rows predate the channel stamp and can never
     be attributed; they get their own cell rather than being spread across the others on a

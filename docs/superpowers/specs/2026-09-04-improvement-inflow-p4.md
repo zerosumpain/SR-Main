@@ -76,3 +76,16 @@ says where they came from. `workflow_dead_node` and `workflow_failing` map to
 - `src/lib/selfimprove/board.ts` — `WorkItem.intake`, `SOURCE_LABEL`,
   `BoardFilter.sources`, `summariseInflow`.
 - `InflowStrip.svelte`, hosted by `QueueBoard.svelte`.
+
+## Code review, applied 2026-09-04
+
+Six findings, all six real and all six fixed with a test.
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | **The whole inflow calculation ran over a truncated population.** `summariseInflow` was called in the component on `view.items`, which `trimSettled` caps at 120 settled rows — so `channel.total` printed "everything ever queued through this channel" off a list missing most of the settled ones, and `drained` would saturate at the cap, making the published ratio read *worse* than reality. The same mistake `summarise` was already written to avoid. | Computed inside `buildBoard` **before** the trim, beside `totals`, and carried on `BoardView.inflow`. |
+| 2 | **The strip rendered above the error guard**, so a failed load showed a drain meter of measured zeros directly above "the queue could not be read". A read failure presented as a measurement. | Moved inside the `{:else}` branch. |
+| 3 | **An attempt-exhausted *open* item was counted as drained.** `stageFor` returns `parked` once attempts hit the ceiling while `status` is still `open`, and every failed attempt bumps `updatedAt` — so an item the engine tried and failed on three nights running counted as drained and was subtracted from the standing queue. Exactly backwards. | Counted off `backlogStatus`, never the derived stage. |
+| 4 | **`intake` was not coerced on read.** `coerceSource` guards the write path only, so a row edited by hand, restored from a dump, or left behind by a renamed channel carried a value matching no cell — counted in the totals, shown in no channel, unreachable by the filter. The cells stopped summing to the total. | `coerceIntake` on read, mirroring the write-path guard. |
+| 5 | **"the run has 25 minutes" hardcoded six lines below the live value it duplicates.** Raising `maxWallMs` would make the tile and the sentence disagree — the exact failure the `caps` prop was added to prevent. | Reads `{caps.minutes}`. |
+| 6 | `improvementSchedule()` awaited serially in a load that otherwise parallelises carefully. | Moved into the `Promise.all` beside its sibling `doctorSchedule()`. |

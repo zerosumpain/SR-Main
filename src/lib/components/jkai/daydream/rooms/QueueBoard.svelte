@@ -22,7 +22,6 @@
     STAGE_META,
     WORK_LANES,
     WORK_STAGES,
-    summariseInflow,
     type BoardFlag,
     type BoardTone,
     type BoardView,
@@ -92,9 +91,6 @@
   ];
 
   const filter = $derived({ lanes, flags, sources, query: query.trim() });
-  // Over the WHOLE population, never the filtered one — a channel cell that
-  // shrank when you pressed it would be reporting on its own filter.
-  const flow = $derived(summariseInflow(view.items));
   const visible = $derived(sortForBoard(applyFilter(view.items, filter)));
   const totals = $derived(view.totals);
 
@@ -301,9 +297,6 @@
 
 <StatDeck {tiles} min={210} />
 
-<p class="field-label if-head">Where the work came from</p>
-<InflowStrip {flow} active={sources} {caps} ontoggle={(s) => (sources = toggle(sources, s))} />
-
 {#if view.error}
   <div class="card t-urgent" style="margin-top:16px">
     <p class="card-body">The queue could not be read: {view.error}</p>
@@ -316,6 +309,12 @@
     </p>
   </div>
 {:else}
+  <!-- Inside the guard, never above it: a failed load returns EMPTY_BOARD, and
+       a strip rendered over that would show a drain meter of measured zeros
+       directly above "the queue could not be read". -->
+  <p class="field-label if-head">Where the work came from</p>
+  <InflowStrip flow={view.inflow} active={sources} {caps} ontoggle={(s) => (sources = toggle(sources, s))} />
+
   <!-- ── Controls ──────────────────────────────────────────────────────── -->
   <div class="qb-bar">
     <span class="qb-lab">Lane</span>
