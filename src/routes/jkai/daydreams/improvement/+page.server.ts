@@ -6,6 +6,7 @@ import { loadImprovementDashboard } from '$lib/dashboard/improvement.server';
 import { EMPTY_APPETITE, toLead, type AppetiteView } from '$lib/daydream/appetite/view';
 import { doctorRollup, EMPTY_DOCTOR_ROLLUP, type DoctorRollup } from '$lib/workflowdoctor/rollup';
 import { doctorSchedule } from '$lib/heartbeat/activity-schedule';
+import { loadOvernight } from '$lib/daydream/rooms/overnight.server';
 
 /** The loop, end to end: faults raised → ideas → tools built → signals → findings → thoughts. */
 export interface LoopStory {
@@ -90,7 +91,7 @@ export const load: PageServerLoad = async () => {
   // The doctor, folded in. A route-level load may import both engines, which
   // is what makes this the honest place to join them — `$lib/workflowdoctor`
   // already imports `$lib/selfimprove`, so neither library could do it.
-  const [story, appetite, doctor, doctorWindow] = await Promise.all([
+  const [story, appetite, doctor, doctorWindow, night] = await Promise.all([
     loadLoopStory(loop),
     loadAppetite(),
     doctorRollup().catch((err): DoctorRollup => {
@@ -98,6 +99,9 @@ export const load: PageServerLoad = async () => {
       return { ...EMPTY_DOCTOR_ROLLUP, error: errMsg(err) };
     }),
     doctorSchedule(),
+    // What actually ran, from the pulse ledger. Its own catch, because a night
+    // that cannot be read must not take the whole room down with it.
+    loadOvernight(),
   ]);
-  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, doctor, doctorWindow };
+  return { loop, loopVerdict: loopVerdict(loop), improvement, story, appetite, doctor, doctorWindow, night };
 };

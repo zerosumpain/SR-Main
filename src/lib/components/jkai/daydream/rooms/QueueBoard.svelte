@@ -12,6 +12,7 @@
   // unit-tested: stages, legal moves, lane mapping and the filter. This file is
   // the surface only — if a rule here needs a test, it is in the wrong file.
   import BacklogEditor from './BacklogEditor.svelte';
+  import OpenCardStrip from './OpenCardStrip.svelte';
   import InflowStrip from './InflowStrip.svelte';
   import QueueList from './QueueList.svelte';
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
@@ -601,20 +602,11 @@
                           aria-label={selected.includes(i.id) ? `Deselect ${i.title}` : `Select ${i.title}`}
                           onclick={() => (selected = toggle(selected, i.id))}
                         ></button>
-                        <button type="button" class="wc-title" onclick={() => openItem(i)}>{i.title}</button>
-                      </div>
-                      <div class="wc-meta">
                         <span class="mark">{LANE_MARK[i.lane]}</span>
-                        <button
-                          type="button"
-                          class="wc-pri"
-                          class:p1={i.priority === 1}
-                          disabled={!i.actionable || i.priority <= 1 || busy === `pri:${i.id}`}
-                          title={i.priority <= 1
-                            ? 'Already top priority — lower it from the card detail'
-                            : 'Raise one step. This is the field pickWork ranks on.'}
-                          onclick={() => bumpPriority(i)}
-                        >P{i.priority}</button>
+                      </div>
+                      <button type="button" class="wc-title" onclick={() => openItem(i)}>{i.title}</button>
+                      <div class="wc-meta">
+                        <span class="wc-pri-n" class:p1={i.priority === 1}>P{i.priority}</span>
                         <span>{ago(i.updatedAt)}</span>
                         {#if i.grooming}
                           <span class="wc-ready {i.grooming.readiness.status}">{i.grooming.readiness.score}% groomed</span>
@@ -639,6 +631,51 @@
                           <p class="wc-ev">{i.artifact}</p>
                         {/if}
                       {/if}
+                      <!-- Drag is the fast path; these are the same two moves for
+                           anyone not using a mouse. `canMove` decides both, so the
+                           keyboard can never assert a transition the drop refuses.
+                           On a shipped row the controls do not grey out — they are
+                           replaced, because "disabled Park" reads as "not yet" and
+                           the truth is "never". -->
+                      <div class="wc-acts">
+                        {#if i.stage === 'live' || i.stage === 'verifying'}
+                          <span class="wc-done" aria-hidden="true">—</span>
+                          <span class="wc-done" title="A tool becomes live when jkai calls it, and parking it would erase the fact that it shipped.">shipped</span>
+                        {:else}
+                          <button
+                            type="button"
+                            class="btn sm"
+                            disabled={!i.actionable || !canMove(i.stage, 'accepted') || busy === `park:${i.id}`}
+                            title="Waiting for a slot. Nothing is spent until one opens."
+                            onclick={() => void setParked(i, false)}
+                          >Accept</button>
+                          <button
+                            type="button"
+                            class="btn sm"
+                            disabled={!i.actionable || !canMove(i.stage, 'parked') || busy === `park:${i.id}`}
+                            title="Declined or folded. Kept, never deleted — it still counts against the appetite scan's evidence."
+                            onclick={() => void setParked(i, true, 'Parked from the queue board')}
+                          >Park</button>
+                        {/if}
+                        {#if i.actionable && i.priority > 1 && i.stage !== 'live' && i.stage !== 'verifying'}
+                          <button
+                            type="button"
+                            class="wc-pri"
+                            disabled={busy === `pri:${i.id}`}
+                            title="Raise one step, stopping at P1. This is the field pickWork ranks on, so it is the only control here that changes what gets built tonight."
+                            onclick={() => bumpPriority(i)}
+                          >P▲</button>
+                        {:else}
+                          <span
+                            class="wc-pri-off"
+                            title={i.stage === 'live' || i.stage === 'verifying'
+                              ? 'Priority ranks open work. On a row that already shipped it would change nothing, so it is a figure here rather than a control.'
+                              : i.priority <= 1
+                                ? 'Already top priority — lower it from the card detail.'
+                                : 'Ruled on in Appetite, which carries its evidence.'}
+                          >P{i.priority}</span>
+                        {/if}
+                      </div>
                     </article>
                   {/each}
                   {#if cell.length > cap}
@@ -694,6 +731,9 @@
 
 {#if creating || open}
   {#key creating ? 'create' : (open?.id ?? 'editor')}
+    <!-- Only for an existing row: a card being created has no history to be
+         read-only about, and an empty strip would imply one. -->
+    {#if open}<OpenCardStrip item={open} />{/if}
     <BacklogEditor item={open} onclose={closeEditor} />
   {/key}
 {/if}
@@ -896,10 +936,15 @@
     border-top: 1px solid var(--line-strong);
     border-bottom: 1px solid var(--line-hair);
   }
+  /* An ink band, so the column heads read as the board's chrome rather than as
+     another row of cards. The tones move with it: the paper accent and olive go
+     muddy on #1a1008, so every one of them takes its on-dark value — the same
+     deviation `StatDeck.dark` records, and the same two literals. */
   .qb-col-hd {
-    --tone: var(--text-ghost);
+    --tone: rgba(237, 228, 212, 0.35);
     padding: 10px 11px 11px;
-    border-right: 1px solid var(--line-hair);
+    background: var(--text-primary);
+    border-right: 1px solid rgba(237, 228, 212, 0.14);
     border-top: 3px solid var(--tone);
     display: flex;
     flex-wrap: wrap;
@@ -909,12 +954,12 @@
   .qb-col-hd:last-child {
     border-right: 0;
   }
-  .qb-col-hd.t-urgent { --tone: var(--error); }
-  .qb-col-hd.t-action { --tone: var(--accent); }
-  .qb-col-hd.t-watch { --tone: var(--warn); }
-  .qb-col-hd.t-good { --tone: var(--good); }
-  .qb-col-hd.t-steady { --tone: var(--accent-ink); }
-  .qb-col-hd.t-quiet { --tone: var(--text-ghost); }
+  .qb-col-hd.t-urgent { --tone: #e08b8b; }
+  .qb-col-hd.t-action { --tone: var(--accent-on-dark); }
+  .qb-col-hd.t-watch { --tone: #d8b45e; }
+  .qb-col-hd.t-good { --tone: var(--good-on-dark); }
+  .qb-col-hd.t-steady { --tone: var(--accent-ink-on-dark); }
+  .qb-col-hd.t-quiet { --tone: rgba(237, 228, 212, 0.35); }
   .hd-name {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -924,17 +969,21 @@
     color: var(--tone);
   }
   .hd-n {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
+    font-family: var(--font-display);
+    font-size: 16px;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
-    color: var(--text-muted);
+    color: var(--bg);
     margin-left: auto;
+  }
+  .hd-of {
+    color: rgba(237, 228, 212, 0.45);
   }
   .hd-q {
     flex: 1 0 100%;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
+    color: rgba(237, 228, 212, 0.45);
   }
 
   .qb-lane {
@@ -1074,10 +1123,13 @@
     outline-offset: 1px;
   }
   .wc-title {
-    font-family: var(--font-body);
-    font-size: var(--fs-nav);
-    line-height: 1.3;
-    font-weight: 500;
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
     text-align: left;
     color: var(--text-primary);
     background: none;
@@ -1109,10 +1161,13 @@
     color: var(--text-muted);
     margin-top: 6px;
   }
-  .wc-meta .mark {
+  .wc-top .mark {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--tone);
     font-weight: 500;
     letter-spacing: 0.09em;
+    text-transform: uppercase;
   }
   .wc-meta .warn {
     color: var(--error);
@@ -1129,7 +1184,33 @@
   .wc-notes {
     color: var(--accent-ink);
   }
+  .wc-pri-n {
+    font-variant-numeric: tabular-nums;
+  }
+  .wc-pri-n.p1 {
+    color: var(--error);
+  }
+
+  /* The two moves a person may assert, plus the one field pickWork ranks on. */
+  .wc-acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 7px;
+  }
+  .wc-done,
+  .wc-pri-off {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: rgba(26, 16, 8, 0.3);
+  }
+  .wc-pri-off {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
   .wc-pri {
+    margin-left: auto;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     padding: 0 4px;

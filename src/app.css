@@ -92,6 +92,12 @@
      NEVER a primary action — that stays --accent. */
   --accent-ink: #0e5b66;
   --accent-ink-hover: #094850;
+  /* The petrol's on-dark partner, the third member of the pattern
+     --accent/--accent-on-dark and --good/--good-on-dark already set. #0e5b66
+     scores 2.4:1 on #1a1008 — it is a DEEP counter-accent, so on ink it stops
+     being a colour and becomes a smudge; this lightens it to 8.5:1 without
+     moving the hue. Paper keeps --accent-ink. */
+  --accent-ink-on-dark: #7fb8c0;
   --accent-ink-tint-06: rgba(14, 91, 102, 0.06);
   --accent-ink-tint-12: rgba(14, 91, 102, 0.12);
   --accent-ink-tint-22: rgba(14, 91, 102, 0.22);
