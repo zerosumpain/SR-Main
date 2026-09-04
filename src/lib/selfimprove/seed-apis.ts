@@ -1,7 +1,7 @@
 // src/lib/selfimprove/seed-apis.ts
 //
 // Idempotent boot seeds for the self-improvement engine:
-//   - the three system collections (create-if-absent, never clobbered),
+//   - the engine's system collections (create-if-absent, never clobbered),
 //   - ~12 known-good public APIs into `api_catalog` (only where the key is
 //     ABSENT — a self-registered entry with the same key is never overwritten).
 //
@@ -237,8 +237,9 @@ export const SEEDED_APIS: SeedApiEntry[] = [
 ];
 
 /**
- * Create the three system collections if absent. Idempotent — `ensureCollection`
- * returns the existing collection unchanged, so existing metadata is preserved.
+ * Create the engine's system collections if absent. Idempotent —
+ * `ensureCollection` returns the existing collection unchanged, so existing
+ * metadata is preserved.
  */
 export async function ensureSystemCollections(): Promise<void> {
   // The tool-call policy collection is owned by $lib/toolpolicy (the MCP read
@@ -298,6 +299,17 @@ export async function ensureSystemCollections(): Promise<void> {
         'Durable queue of ideas the engine intends to build, with attempt counts and last failure — its memory between nights.',
       isSystem: true,
       defaultPermissions: SYSTEM_PERMISSIONS.improvement_backlog,
+    },
+    SYSTEM_ACTOR,
+  );
+  await ensureCollection(
+    COLLECTIONS.epics,
+    {
+      name: 'Improvement Themes',
+      description:
+        'Groupings found in the backlog — which queued ideas are restatements of one another, and what the owner decided about each.',
+      isSystem: true,
+      defaultPermissions: SYSTEM_PERMISSIONS.improvement_epics,
     },
     SYSTEM_ACTOR,
   );

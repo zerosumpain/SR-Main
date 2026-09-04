@@ -190,21 +190,47 @@ const STOP = new Set([
   'their', 'about', 'into', 'over', 'such', 'also', 'may', 'will', 'has', 'have',
 ]);
 
-function tokenSet(text: string): Set<string> {
+/**
+ * The content words of a piece of text — the unit every match here is counted
+ * in.
+ *
+ * Exported so a caller can BLOCK on it before comparing: `looksSameSubject`
+ * needs three shared words, which implies at least one, so an inverted index
+ * built from this function generates a strict superset of the pairs the
+ * predicate could accept. That is what lets the clusterer skip ~99% of the
+ * 103,000 pairs in a 455-row backlog without changing a single verdict. It is
+ * a pre-filter over the same tokens, not a second opinion about them.
+ */
+export function contentWords(text: string): Set<string> {
   const words = (text ?? '').toLowerCase().match(/[a-z0-9]+/g) ?? [];
   return new Set(words.filter((w) => w.length > 2 && !STOP.has(w)));
 }
 
+const tokenSet = contentWords;
+
 /**
- * Overlap normalised by the SMALLER set. A four-word unmet need should be able
- * to match a sixty-word tool description without being punished for the length
+ * How strongly two texts overlap — the raw measurement every verdict in this
+ * file is a threshold on.
+ *
+ * Exported as `subjectOverlap` below so a caller can RANK matches without
+ * re-deriving what "related" means. `looksSameSubject` answers whether; this
+ * answers how much, off the same tokens and the same arithmetic.
+ *
+ * Normalised by the SMALLER set: a four-word unmet need should be able to
+ * match a sixty-word tool description without being punished for the length
  * difference — Jaccard would score that near zero.
  */
-function overlap(a: Set<string>, b: Set<string>): { score: number; hits: number } {
-  if (a.size === 0 || b.size === 0) return { score: 0, hits: 0 };
+function overlap(a: Set<string>, b: Set<string>): { score: number; hits: number; tightness: number } {
+  if (a.size === 0 || b.size === 0) return { score: 0, hits: 0, tightness: 0 };
   let hits = 0;
   for (const t of a) if (b.has(t)) hits++;
-  return { score: hits / Math.min(a.size, b.size), hits };
+  // `score` deliberately ignores how much of the LONGER text went unmatched,
+  // so a four-word need can match a sixty-word description. That is right for
+  // admitting a match and useless for ranking two that both score 1.0 — a
+  // three-word title matches both its exact twin and a six-word title that
+  // contains it. `tightness` is the Jaccard the score throws away, and it is
+  // the tie-break: the twin wins over the superset.
+  return { score: hits / Math.min(a.size, b.size), hits, tightness: hits / (a.size + b.size - hits) };
 }
 
 /** Two shared content words AND a quarter of the smaller set — see tests. */
@@ -226,23 +252,45 @@ function looksLinked(a: string, b: string, minHits = MATCH_MIN_HITS): boolean {
   return hits >= minHits && score >= MATCH_MIN_SCORE;
 }
 
-/** Distinct content words that must coincide before calling an idea "done". */
-export const ALREADY_SERVED_MIN_HITS = 3;
+/** Distinct content words that must coincide before two texts are called the
+ *  same subject. */
+export const SAME_SUBJECT_MIN_HITS = 3;
 
 /**
- * Does something that already shipped look like it covers this idea?
+ * Are these two texts about the same thing?
  *
- * Exported so the ledger and the queue board ask the question the SAME way.
- * There is one definition of "related" in this file on purpose — the builder
- * once had its own one-line matcher that never fired in production — and
- * "already done" is a second, stricter reading of it, not a second matcher.
+ * The strict reading of `looksLinked`, and the ONLY one three callers use: the
+ * ledger asking "has something shipped that already covers this idea", the
+ * queue board asking the same, and the clusterer asking "are these two queued
+ * ideas restatements of one another". They are one question with three
+ * operands, so they get one predicate — a second definition of "related" is
+ * the bug that left every driver unrecorded for a fortnight.
  *
- * Compare titles and shipped subjects, never generated prose: "You asked N
- * questions…" and "Unmet need identified from N questions…" match on the
- * template rather than the subject.
+ * Two hits is far too loose here: short titles are mostly generic words, and
+ * on real data "Live OpenRouter balance" matched `govuk_search` on nothing but
+ * "live" and "api".
+ *
+ * Compare titles and subjects, never generated prose: "You asked N questions…"
+ * and "Unmet need identified from N questions…" match on the template rather
+ * than the subject.
  */
-export function looksAlreadyServed(ideaText: string, shippedText: string): boolean {
-  return looksLinked(ideaText, shippedText, ALREADY_SERVED_MIN_HITS);
+export function looksSameSubject(a: string, b: string): boolean {
+  return looksLinked(a, b, SAME_SUBJECT_MIN_HITS);
+}
+
+/**
+ * The strength behind a `looksSameSubject` verdict, for callers that must rank
+ * several passing matches against each other rather than merely admit them.
+ *
+ * Exported so the clusterer can join an item to its STRONGEST partner instead
+ * of to everything it passes against. Measured on production: joining every
+ * passing pair chained eleven distinct themes into one 100-item component
+ * through a handful of generic bridging titles, which is the standard
+ * single-linkage failure and left 384 of 455 rows ungrouped once that blob
+ * blew the size cap.
+ */
+export function subjectOverlap(a: string, b: string): { score: number; hits: number; tightness: number } {
+  return overlap(tokenSet(a), tokenSet(b));
 }
 
 /** Best of several candidates, or null when none clear the bar. */
@@ -764,7 +812,7 @@ function annotateAlreadyServedIdeas(
     // up-to-date knowledge on UK government projects"), whereas the tool's own
     // description is written in API terms and shares far less vocabulary.
     const match = shipped.find((t) =>
-      looksAlreadyServed(
+      looksSameSubject(
         ideaText,
         // The need in its ORIGINAL wording, never the generated sentence. And a
         // driver GUESSED from the backlog quotes the idea's own words back at

@@ -14,6 +14,7 @@ import { withActivity } from '$lib/context/activity';
 import { upsertRecord } from '$lib/datastore';
 import {
   BUDGET_CAPS,
+  MAX_THEME_PROPOSALS,
   COLLECTIONS,
   IDLE_WINDOW_MS,
   SETTINGS_AUTOBUILD_KEY,
@@ -299,6 +300,29 @@ export async function runImprovementNow(
         'gather',
         async () => {
           state.signals = await gatherSignals();
+          // Scanning the queue for restatements of itself. No LLM, no budget:
+          // measured at 66ms over production's 455 rows, so it rides along
+          // with the cheapest phase rather than earning one of its own. It
+          // writes proposals only — grouping them is the owner's call, and a
+          // matcher never gets to abandon a row on its own say-so.
+          try {
+            const { findThemes } = await import('./epics');
+            const t = await findThemes({ maxProposals: MAX_THEME_PROPOSALS });
+            if (t.proposed.length > 0) {
+              const biggest = t.proposed[0];
+              return [
+                {
+                  kind: 'themes_found' as const,
+                  detail:
+                    `themes: ${t.proposed.length} new grouping(s) proposed across ${t.clusters} found ` +
+                    `(largest “${biggest.label}”, ${biggest.memberSlugs.length} ideas)` +
+                    (t.oversized.length ? `; ${t.oversized.length} component(s) too large to be a theme` : ''),
+                },
+              ];
+            }
+          } catch (err) {
+            console.error('[selfimprove] theme scan failed:', errMsg(err));
+          }
           return [];
         },
       ],

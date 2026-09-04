@@ -45,9 +45,9 @@ beforeEach(() => {
 });
 
 describe('ensureSystemCollections', () => {
-  it('ensures all six system collections (idempotent create-if-absent)', async () => {
+  it('ensures all seven system collections (idempotent create-if-absent)', async () => {
     await ensureSystemCollections();
-    expect(ensureCollection).toHaveBeenCalledTimes(6);
+    expect(ensureCollection).toHaveBeenCalledTimes(7);
     const slugs = vi.mocked(ensureCollection).mock.calls.map((c) => c[0]);
     expect(slugs).toEqual(
       expect.arrayContaining([
@@ -56,6 +56,8 @@ describe('ensureSystemCollections', () => {
         'improvement_runs',
         'tool_attempts',
         'improvement_backlog',
+        // Themes found in that backlog, and what was decided about each.
+        'improvement_epics',
         // The call-policy overlay the MCP read path depends on.
         'tool_call_policy',
       ]),
