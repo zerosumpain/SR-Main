@@ -111,8 +111,23 @@
     border-radius: 0;
     outline: none;
   }
+  /* The editor journey is a DOCUMENT, and 1120px was not enough page for one:
+     its review step put a paragraph of problem statement in a four-row box that
+     clipped mid-word, beside a 350px gutter of wrapped monospace. 1400 is the
+     measure every /health section is set to, and the register borrowed from
+     there needs the same room. Only `BacklogEditor` passes `wide`, so the two
+     narrow drills do not move. */
   .dp-panel.wide {
-    width: min(1120px, 100%);
+    width: min(1400px, 100%);
+  }
+  /* Chrome padding follows the body's, so the header rule, the content and the
+     footer buttons share one left edge rather than stepping in twice. */
+  .dp-panel.wide .dp-body {
+    padding: clamp(20px, 2.4vw, 34px);
+  }
+  .dp-panel.wide .dp-hd,
+  .dp-panel.wide .dp-ft {
+    padding: 13px clamp(20px, 2.4vw, 34px);
   }
   .dp-panel.t-urgent {
     --tone: var(--error);
