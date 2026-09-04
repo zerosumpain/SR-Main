@@ -76,3 +76,24 @@ nothing in the room distinguished those from the ones doing work.
 `verify.ts`, the smoke gate, the strictly-beats-incumbent rule in `repair.ts`,
 and `WORK_CAPS`. The board changes what gets **picked**; it never changes what
 gets **past**.
+
+## Code review, applied 2026-09-04
+
+An adversarial review of the branch found eight issues. All eight are fixed;
+each one is now pinned by a test.
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | **Parking a shipped item destroyed `status: 'shipped'`**, and dragging it back wrote `open` — putting an already-built tool in front of `pickWork` to be built a second time, the exact spend decision #7 exists to prevent. `foldItems` had the same hole. | `LEGAL_MOVES` gives `live` and `verifying` **no exits**; `setParked` and `foldItems` refuse a `shipped` row by name. Nothing was gained by allowing it: a shipped row already stops `addIdeas` re-proposing the idea. |
+| 2 | **Tools were matched against the whole backlog**, so an open idea sharing two content words with `reverse_geocode` rendered "706 calls · 63% errors" for work nothing had built — and, first-match-wins, consumed the tool so the genuinely shipped sibling read `live` instead of `verifying`. That silently deflated the headline "shipped, never called" figure. | Candidates restricted to `status === 'shipped'`. |
+| 3 | **An attempt-exhausted item could not be put back** — it is already `open`, so the write was a no-op and the card snapped straight back to Parked. | `setParked(slug, false)` resets `attempts` when the item is at or over the ceiling, keeping `lastError` (which the author prompt reads). The owner asking again *is* the override. |
+| 4 | **The drill held a stale `WorkItem`** across `invalidateAll()`: after "Raise to P1" it kept showing P2 and a second click rewrote the same value. | The drill holds an **id**; the item is `$derived` from `view.items`. |
+| 5 | **`nextPriority` wrapped 1→5 under a button labelled "Raise"** — one extra click silently sent an item to the bottom of the queue. | Raise clamps at P1 and disables there. Lowering is an explicit P1–P5 row in the drill. |
+| 6 | **Bulk actions fired one full page reload per item** (each re-paging the datastore and re-running the already-served sweep), and did not disable while running. | `backlog_priority` / `backlog_park` take `slugs[]`; one request, one reload. Partial failure is reported per slug rather than swallowed. Buttons disable on `busy`. |
+| 7 | `counts` and `epics` were serialised to the client and never read. | `epics` and `summariseEpics` deleted; `counts` now drives the "N/total" a filtered column shows. |
+| 8 | The "never tried" chip counted every `attempts: 0` row (leads, abandoned work) while the tile beside it counted open work only. | The `untried` flag means open **and** never attempted, so the two agree. |
+
+**Not a finding, recorded anyway:** this page already ships a large payload —
+`loadAttempts` sends 500 `tool_attempts` rows including `handlerCode`, and
+three separate call sites each page all 455 backlog rows per load. The board
+adds to that rather than causing it, and trimming it is its own piece of work.

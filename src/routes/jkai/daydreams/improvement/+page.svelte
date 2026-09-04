@@ -24,7 +24,10 @@
     actionError = null;
     const r = await postThought(body);
     if (!r.ok) actionError = r.error ?? 'that did not work';
-    else await invalidateAll();
+    // Refresh either way. A bulk edit can PARTLY succeed — twenty items parked
+    // with one refused because it had already shipped — and skipping the reload
+    // on failure would leave the board showing the nineteen as unchanged.
+    await invalidateAll();
     busy = null;
     return r.ok;
   }

@@ -389,11 +389,20 @@ export async function setEpic(slug: string, epicSlug: string | null): Promise<Ba
 /**
  * Park an item, or put a parked one back.
  *
- * Park writes `abandoned`, which `pickWork` already skips and `addIdeas`
- * already refuses to overwrite (existence is checked by key). Re-opening
- * deliberately does NOT reset `attempts` — the retry budget is the memory of
- * what has already been tried, and an owner un-parking something is not
- * evidence that the last four failures did not happen.
+ * **A `shipped` item may not be parked.** Parking writes `abandoned`, which on
+ * a shipped row erases the only field saying it shipped; putting it back would
+ * then write `open`, and since a shipped item's `attempts` are well under the
+ * ceiling, `pickWork` would hand it straight back to the toolsmith to build a
+ * second time. Nothing is gained by parking one either — the row already
+ * exists, and `addIdeas` checks existence by key, so the idea cannot be
+ * re-proposed regardless.
+ *
+ * Re-opening normally does NOT reset `attempts`: the retry budget is the
+ * memory of what has been tried. The exception is an item that is parked
+ * BECAUSE it exhausted that budget — there, leaving the count alone makes
+ * "put it back" a silent no-op, since the item is still `open` and still over
+ * the ceiling. The owner asking for it again is the override, so the count
+ * resets and `lastError` is kept, which is what the author prompt reads.
  */
 export async function setParked(
   slug: string,
@@ -401,6 +410,9 @@ export async function setParked(
   reason?: string,
 ): Promise<BacklogItemData> {
   const item = await mustGet(slug);
+  if (item.status === 'shipped') {
+    throw new Error(`“${item.title.slice(0, 80)}” has already shipped — it cannot be parked`);
+  }
   const next: BacklogItemData = {
     ...item,
     status: parked ? 'abandoned' : 'open',
@@ -409,11 +421,52 @@ export async function setParked(
   if (parked) {
     if (reason) next.parkedReason = reason.slice(0, 300);
   } else {
+    if (next.attempts >= MAX_ATTEMPTS) next.attempts = 0;
     delete next.parkedReason;
     delete next.foldedInto;
   }
   await put(next);
   return next;
+}
+
+/**
+ * Reprioritise or park several items in one call.
+ *
+ * The board's bulk buttons act on a selection, and doing that as N separate
+ * requests meant N full page reloads — each one re-paging the datastore and
+ * re-running the whole `already served` sweep. One request, one reload.
+ *
+ * Partial success is REPORTED, not swallowed: a shipped item refuses to be
+ * parked, and a selection of twenty containing one of them must not look like
+ * a clean success or a total failure.
+ */
+export interface BulkResult {
+  changed: string[];
+  failed: Array<{ slug: string; error: string }>;
+}
+
+async function bulk(
+  slugs: string[],
+  apply: (slug: string) => Promise<unknown>,
+): Promise<BulkResult> {
+  const out: BulkResult = { changed: [], failed: [] };
+  for (const slug of [...new Set(slugs.filter(Boolean))]) {
+    try {
+      await apply(slug);
+      out.changed.push(slug);
+    } catch (err) {
+      out.failed.push({ slug, error: errMsg(err) });
+    }
+  }
+  return out;
+}
+
+export function setPriorityMany(slugs: string[], priority: number): Promise<BulkResult> {
+  return bulk(slugs, (slug) => setPriority(slug, priority));
+}
+
+export function setParkedMany(slugs: string[], parked: boolean, reason?: string): Promise<BulkResult> {
+  return bulk(slugs, (slug) => setParked(slug, parked, reason));
 }
 
 /** Which of a fold's members survives.
@@ -450,6 +503,15 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
   const unique = [...new Set(slugs.filter(Boolean))];
   if (unique.length < 2) throw new Error('folding needs at least two items');
   const items = await Promise.all(unique.map((s) => mustGet(s)));
+
+  // Same reason `setParked` refuses one: the losers of a fold are marked
+  // `abandoned`, and doing that to a shipped row would erase the fact that it
+  // shipped. Fold the open restatements together and leave the built thing
+  // alone — the "already served" flag is what points at it.
+  const built = items.find((i) => i.status === 'shipped');
+  if (built) {
+    throw new Error(`“${built.title.slice(0, 80)}” has already shipped — fold the open ideas instead`);
+  }
 
   const explicit = into ? items.find((i) => i.slug === into) : undefined;
   if (into && !explicit) throw new Error(`survivor ${into} is not one of the folded items`);

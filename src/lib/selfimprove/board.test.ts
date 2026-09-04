@@ -10,7 +10,6 @@ import {
   applyFilter,
   sortForBoard,
   summarise,
-  summariseEpics,
   artifactHref,
   EMPTY_FILTER,
   type BoardCapability,
@@ -331,23 +330,16 @@ describe('summarise', () => {
   });
 });
 
-describe('summariseEpics', () => {
-  it('groups by epic and puts unfiled last', () => {
+describe('epic grouping keys', () => {
+  it('prefers an owner-set epic', () => {
     const board = buildBoard({
-      backlog: [
-        item({ slug: 'a', title: 'A', epicSlug: 'epic:money' }),
-        item({ slug: 'b', title: 'B', epicSlug: 'epic:money' }),
-        item({ slug: 'c', title: 'C' }),
-      ],
+      backlog: [item({ slug: 'a', title: 'A', epicSlug: 'epic:money' })],
       capabilities: [],
       tools: [],
       attemptCeiling: CEILING,
     });
-    const epics = summariseEpics(board.items);
-    expect(epics[0].slug).toBe('epic:money');
-    expect(epics[0].total).toBe(2);
-    expect(epics[epics.length - 1].slug).toBe('');
-    expect(epics[epics.length - 1].label).toBe('Unfiled');
+    expect(board.items[0].epicSlug).toBe('epic:money');
+    expect(board.items[0].epicLabel).toBe('Money');
   });
 
   it('falls back to the capability slug when no epic was set by hand', () => {
@@ -358,6 +350,17 @@ describe('summariseEpics', () => {
       attemptCeiling: CEILING,
     });
     expect(board.items[0].epicSlug).toBe('cap:data_source:met-office');
+  });
+
+  it('leaves an unlinked item unfiled rather than inventing a group', () => {
+    const board = buildBoard({
+      backlog: [item({ slug: 'a', title: 'A' })],
+      capabilities: [],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    expect(board.items[0].epicSlug).toBeNull();
+    expect(board.items[0].epicLabel).toBe('Unfiled');
   });
 });
 
@@ -429,5 +432,92 @@ describe('artifactHref', () => {
   it('returns null for a shape it does not recognise rather than a broken link', () => {
     expect(artifactHref('some_tool_name')).toBeNull();
     expect(artifactHref(null)).toBeNull();
+  });
+});
+
+// ── Review fixes, 2026-09-04 ──────────────────────────────────────────────
+
+describe('a shipped row cannot be dragged out of its stage', () => {
+  // Parking writes `abandoned`, which on a shipped row erases the only field
+  // saying it shipped; dragging it back would write `open` and hand an
+  // already-built tool to `pickWork` a second time.
+  it('offers no move at all from live or verifying', () => {
+    expect(canMove('live', 'parked')).toBe(false);
+    expect(canMove('live', 'accepted')).toBe(false);
+    expect(canMove('verifying', 'parked')).toBe(false);
+    expect(canMove('verifying', 'accepted')).toBe(false);
+  });
+
+  it('still lets open work be parked and put back', () => {
+    expect(canMove('accepted', 'parked')).toBe(true);
+    expect(canMove('building', 'parked')).toBe(true);
+    expect(canMove('proposed', 'parked')).toBe(true);
+    expect(canMove('parked', 'accepted')).toBe(true);
+  });
+});
+
+describe('tool matching is confined to shipped ideas', () => {
+  // Searching the whole backlog let an open restatement claim a live tool:
+  // the card then read "706 calls · 63% errors" for work nothing had built,
+  // and — first match wins — the genuinely shipped sibling lost its tool and
+  // fell through to `live` instead of `verifying`, quietly deflating the
+  // "shipped, never called" figure the board exists to expose.
+  it('does not attach a live tool to a never-attempted open idea', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'open-one', title: 'Reliable reverse geocode and nearby places' }),
+        item({ slug: 'shipped-one', title: 'Reverse geocode nearby places lookup', status: 'shipped' }),
+      ],
+      capabilities: [],
+      tools: [
+        tool({ name: 'reverse_geocode', description: 'reverse geocode nearby places lookup', runCount: 0, errorCount: 0 }),
+      ],
+      attemptCeiling: CEILING,
+    });
+    const open = board.items.find((i) => i.slug === 'open-one');
+    const shipped = board.items.find((i) => i.slug === 'shipped-one');
+    expect(open?.artifact).toBeNull();
+    expect(open?.calls).toBeNull();
+    expect(open?.stage).toBe('accepted');
+    expect(shipped?.artifact).toBe('reverse_geocode');
+    expect(shipped?.stage).toBe('verifying');
+    expect(board.totals.neverCalled).toBe(1);
+  });
+});
+
+describe('the untried flag agrees with the untried tile', () => {
+  it('counts only open work, not leads or things abandoned before a try', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'fresh', title: 'A fresh idea' }),
+        item({ slug: 'dropped', title: 'An abandoned idea', status: 'abandoned' }),
+      ],
+      capabilities: [
+        {
+          slug: 'watch:x',
+          kind: 'watch',
+          title: 'A lead',
+          need: 'n',
+          status: 'proposed',
+          score: 0.6,
+          lane: 'watch',
+          outcome: null,
+          outcomeRef: null,
+          backlogSlug: null,
+          evidence: [],
+          lastSeenAt: '2026-09-04T00:00:00.000Z',
+        },
+      ],
+      tools: [],
+      attemptCeiling: CEILING,
+    });
+    const untried = applyFilter(board.items, { ...EMPTY_FILTER, flags: ['untried'] });
+    // The abandoned row is excluded — it was never tried, but it is also not
+    // waiting for anything. The lead counts: it is open work with no attempts.
+    expect(untried.map((i) => i.slug).sort()).toEqual(['fresh', 'watch:x']);
+    expect(untried.some((i) => i.slug === 'dropped')).toBe(false);
+    // The chip and the tile sit inches apart on the same screen, so they must
+    // count the same population. Before this they did not.
+    expect(untried.length).toBe(board.totals.untried);
   });
 });

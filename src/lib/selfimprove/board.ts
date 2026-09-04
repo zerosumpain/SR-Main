@@ -72,15 +72,21 @@ export const STAGE_META: Readonly<Record<WorkStage, StageMeta>> = {
  * Nothing may be dragged INTO `live`: a tool becomes live when jkai calls it,
  * and a board that let a person assert that would be a board that lies. Nothing
  * may be dragged into `building` or `verifying` either — those stages are
- * consequences of an attempt, not intentions. What a person can actually do is
- * accept work, put it back, and park it.
+ * consequences of an attempt, not intentions.
+ *
+ * And nothing may be dragged OUT of `live` or `verifying`. Parking writes
+ * `status: 'abandoned'`, which on a shipped row would erase the only field
+ * saying it shipped — and dragging it back would then write `open`, putting an
+ * already-built tool back in front of `pickWork` to be built a second time.
+ * There is nothing to gain either: a shipped row already stops `addIdeas`
+ * re-proposing the idea, because existence is checked by key.
  */
 export const LEGAL_MOVES: Readonly<Record<WorkStage, ReadonlyArray<WorkStage>>> = {
   proposed: ['accepted', 'parked'],
   accepted: ['parked'],
   building: ['parked'],
-  verifying: ['parked'],
-  live: ['parked'],
+  verifying: [],
+  live: [],
   parked: ['accepted'],
 };
 
@@ -204,15 +210,6 @@ export interface BoardInput {
   settledLimit?: number | null;
 }
 
-export interface EpicSummary {
-  slug: string;
-  label: string;
-  total: number;
-  live: number;
-  open: number;
-  duplicates: number;
-}
-
 export interface BoardTotals {
   all: number;
   open: number;
@@ -230,9 +227,10 @@ export interface BoardTotals {
 
 export interface BoardView {
   items: WorkItem[];
+  /** Stage counts over the WHOLE population, so a filtered column can say what
+   *  it is hiding. The component counts the visible rows itself. */
   counts: Record<WorkStage, number>;
   totals: BoardTotals;
-  epics: EpicSummary[];
   error: string | null;
 }
 
@@ -250,7 +248,6 @@ export const EMPTY_BOARD: BoardView = {
     tiedPriority: null,
     neverCalled: 0,
   },
-  epics: [],
   error: null,
 };
 
@@ -350,9 +347,18 @@ export function buildBoard(input: BoardInput): BoardView {
   // Tools by the idea they serve. `findRelatedIdea` is the ONE definition of
   // "related" in this engine; matching a tool to an idea any other way is how
   // the driver link silently died for a fortnight.
+  //
+  // Candidates are the SHIPPED rows only. Searching the whole backlog let a
+  // never-attempted open idea that shares two content words with
+  // `reverse_geocode` claim it — rendering "706 calls · 63% errors" on work
+  // nothing has built — and, because first match wins, it consumed the tool so
+  // the genuinely shipped sibling fell through to `live` instead of
+  // `verifying`. That is the "shipped, never called" figure this whole board
+  // exists to expose, rounding itself toward the optimistic answer.
+  const shipped = backlog.filter((b) => b.status === 'shipped');
   const toolForSlug = new Map<string, ToolHealth>();
   for (const t of tools) {
-    const idea = findRelatedIdea(`${t.name.replace(/_/g, ' ')} ${t.description ?? ''}`, backlog);
+    const idea = findRelatedIdea(`${t.name.replace(/_/g, ' ')} ${t.description ?? ''}`, shipped);
     // First match wins: a repair ships a second attempt against the same idea,
     // and the tool list is ordered by run count, so the winner is the one
     // actually being used.
@@ -362,7 +368,6 @@ export function buildBoard(input: BoardInput): BoardView {
   // Ideas that something already shipped appears to cover. Compared TITLE to
   // TITLE — the details are the model's long prose and inflate the overlap
   // past anything the three-word threshold was calibrated against.
-  const shipped = backlog.filter((b) => b.status === 'shipped');
   const servedBy = new Map<string, string>();
   for (const item of backlog) {
     if (item.status !== 'open') continue;
@@ -459,11 +464,10 @@ export function buildBoard(input: BoardInput): BoardView {
   // page can never describe a smaller population than the one it names.
   const totals = summarise(items);
   const counts = countByStage(items);
-  const epics = summariseEpics(items);
 
   const trimmed = trimSettled(items, input.settledLimit ?? null);
 
-  return { items: trimmed, counts, totals, epics, error: null };
+  return { items: trimmed, counts, totals, error: null };
 }
 
 /** Newest settled work first, capped. Open work is never trimmed. */
@@ -525,31 +529,6 @@ export function summarise(items: WorkItem[]): BoardTotals {
   };
 }
 
-export function summariseEpics(items: WorkItem[]): EpicSummary[] {
-  const by = new Map<string, WorkItem[]>();
-  for (const i of items) {
-    const key = i.epicSlug ?? '';
-    const list = by.get(key);
-    if (list) list.push(i);
-    else by.set(key, [i]);
-  }
-  const out: EpicSummary[] = [];
-  for (const [slug, group] of by) {
-    out.push({
-      slug,
-      label: group[0].epicLabel,
-      total: group.length,
-      live: group.filter((i) => i.stage === 'live').length,
-      open: group.filter((i) => !isSettled(i.stage)).length,
-      duplicates: group.filter((i) => i.alreadyServed).length,
-    });
-  }
-  // Unfiled last; otherwise the lane with the most open work leads.
-  return out.sort(
-    (a, b) => Number(a.slug === '') - Number(b.slug === '') || b.open - a.open || b.total - a.total,
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Client-side filtering — exported so it is tested, not asserted by screenshot
 // ---------------------------------------------------------------------------
@@ -578,7 +557,10 @@ export function matchesFilter(item: WorkItem, f: BoardFilter): boolean {
     if (flag === 'newdata' && !item.newData) return false;
     if (flag === 'served' && !item.alreadyServed) return false;
     if (flag === 'failed' && !item.lastError) return false;
-    if (flag === 'untried' && item.attempts !== 0) return false;
+    // Open AND never attempted. Counting every `attempts: 0` row would include
+    // capability leads and anything abandoned before a first try, and the chip
+    // would then disagree with the "never once attempted" tile inches above it.
+    if (flag === 'untried' && (item.attempts !== 0 || isSettled(item.stage))) return false;
     if (flag === 'folded' && !item.foldedCount) return false;
   }
   return true;

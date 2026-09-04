@@ -45,8 +45,13 @@
   let grouped = $state(false);
   let dense = $state(false);
   let selected = $state<string[]>([]);
-  let open = $state<WorkItem | null>(null);
   let collapsed = $state<string[]>([]);
+  /** The drill holds an ID, never the object. `act()` awaits `invalidateAll()`,
+   *  which replaces every item in `view.items` — a captured object would keep
+   *  rendering the pre-action values, so "Raise to P1" would still read P2 and
+   *  a second click would rewrite the same number. */
+  let openId = $state<string | null>(null);
+  const open = $derived(openId ? (view.items.find((i) => i.id === openId) ?? null) : null);
 
   /** Cards rendered in one column before it stops. 302 in a column is a
    *  scroll nobody reads; the counts above are computed over everything, so
@@ -133,30 +138,47 @@
     if (ok) selected = [];
   }
 
+  /** Both bulk buttons send ONE request. Doing an item at a time meant one
+   *  `invalidateAll()` per item — a full re-run of the page load, re-paging the
+   *  datastore and re-running the already-served sweep, twenty times over for
+   *  twenty selected duplicates. */
+  const bulkPriorityTargets = $derived(picked.filter((p) => p.actionable).map((p) => p.slug));
+  const bulkParkTargets = $derived(
+    picked.filter((p) => p.actionable && p.stage !== 'parked' && p.stage !== 'live').map((p) => p.slug),
+  );
+
   async function bulkPriority() {
-    for (const i of picked.filter((p) => p.actionable)) {
-      await act({ action: 'backlog_priority', slug: i.slug, priority: 1 }, `pri:${i.id}`);
-    }
-    selected = [];
+    if (bulkPriorityTargets.length === 0) return;
+    const ok = await act({ action: 'backlog_priority', slugs: bulkPriorityTargets, priority: 1 }, 'bulk');
+    if (ok) selected = [];
   }
 
   async function bulkPark() {
-    for (const i of picked.filter((p) => p.actionable && p.stage !== 'parked')) {
-      await act({ action: 'backlog_park', slug: i.slug, parked: true }, `park:${i.id}`);
-    }
-    selected = [];
+    if (bulkParkTargets.length === 0) return;
+    const ok = await act(
+      { action: 'backlog_park', slugs: bulkParkTargets, parked: true, reason: 'Parked from the queue board' },
+      'bulk',
+    );
+    if (ok) selected = [];
   }
 
   // ── Single-item actions ─────────────────────────────────────────────────
-  /** Cycle 5→4→3→2→1→5. `pickWork` ranks on this, so it is the one control
-   *  here that changes what the engine reaches for tonight. */
+  /** One step up the queue, stopping at 1. It used to wrap 1→5, which meant a
+   *  second click on a button labelled "Raise" silently sent the item to the
+   *  bottom — the exact ordering lever this board exists to fix. Lowering is an
+   *  explicit choice, so it lives in the drill as its own control. */
   function nextPriority(p: number): number {
-    return p <= 1 ? 5 : p - 1;
+    return Math.max(1, p - 1);
+  }
+
+  async function setPriority(i: WorkItem, priority: number) {
+    if (!i.actionable) return;
+    await act({ action: 'backlog_priority', slug: i.slug, priority }, `pri:${i.id}`);
   }
 
   async function bumpPriority(i: WorkItem) {
-    if (!i.actionable) return;
-    await act({ action: 'backlog_priority', slug: i.slug, priority: nextPriority(i.priority) }, `pri:${i.id}`);
+    if (i.priority <= 1) return;
+    await setPriority(i, nextPriority(i.priority));
   }
 
   async function setParked(i: WorkItem, parked: boolean, reason?: string) {
@@ -308,10 +330,11 @@
 
   <p class="note">
     Showing <b>{visible.length}</b> of {view.items.length}. Drag a card to <b>Accepted</b> or
-    <b>Parked</b>; nothing may be dragged into Live, because a tool becomes live when jkai
-    calls it. Click a priority to raise it — that writes the field
-    <code>pickWork</code> ranks on. Select two or more with the square, then fold the
-    restatements into one.
+    <b>Parked</b>. Nothing may be dragged into Live — a tool becomes live when jkai calls it —
+    and nothing may be dragged <em>out</em> of Live or Verifying, because parking a shipped
+    row would erase the fact that it shipped. Click a priority to raise it one step; that
+    writes the field <code>pickWork</code> ranks on. Select two or more with the square, then
+    fold the restatements into one.
   </p>
 
   <!-- ── The board ─────────────────────────────────────────────────────── -->
@@ -319,9 +342,12 @@
     <div class="qb" class:dense>
       <div class="qb-head">
         {#each WORK_STAGES as s (s)}
+          {@const shown = visible.filter((i) => i.stage === s).length}
           <div class="qb-col-hd t-{stageTone(s)}">
             <span class="hd-name">{STAGE_META[s].label}</span>
-            <span class="hd-n">{visible.filter((i) => i.stage === s).length}</span>
+            <span class="hd-n">
+              {shown}{#if shown !== view.counts[s]}<span class="hd-of">/{view.counts[s]}</span>{/if}
+            </span>
             <span class="hd-q">{STAGE_META[s].question}</span>
           </div>
         {/each}
@@ -382,7 +408,7 @@
                           aria-label={selected.includes(i.id) ? `Deselect ${i.title}` : `Select ${i.title}`}
                           onclick={() => (selected = toggle(selected, i.id))}
                         ></button>
-                        <button type="button" class="wc-title" onclick={() => (open = i)}>{i.title}</button>
+                        <button type="button" class="wc-title" onclick={() => (openId = i.id)}>{i.title}</button>
                       </div>
                       <div class="wc-meta">
                         <span class="mark">{LANE_MARK[i.lane]}</span>
@@ -390,8 +416,10 @@
                           type="button"
                           class="wc-pri"
                           class:p1={i.priority === 1}
-                          disabled={!i.actionable || busy === `pri:${i.id}`}
-                          title="Raise the priority pickWork ranks on"
+                          disabled={!i.actionable || i.priority <= 1 || busy === `pri:${i.id}`}
+                          title={i.priority <= 1
+                            ? 'Already top priority — lower it from the card detail'
+                            : 'Raise one step. This is the field pickWork ranks on.'}
                           onclick={() => bumpPriority(i)}
                         >P{i.priority}</button>
                         <span>{ago(i.updatedAt)}</span>
@@ -440,8 +468,18 @@
       <button type="button" class="cta sm" disabled={!foldable || busy === 'fold'} onclick={fold}>
         {busy === 'fold' ? 'Folding…' : 'Fold into one'}
       </button>
-      <button type="button" class="btn sm" onclick={bulkPriority}>Raise to P1</button>
-      <button type="button" class="btn sm danger" onclick={bulkPark}>Park all</button>
+      <button
+        type="button"
+        class="btn sm"
+        disabled={bulkPriorityTargets.length === 0 || busy === 'bulk'}
+        onclick={bulkPriority}
+      >Raise {bulkPriorityTargets.length} to P1</button>
+      <button
+        type="button"
+        class="btn sm danger"
+        disabled={bulkParkTargets.length === 0 || busy === 'bulk'}
+        onclick={bulkPark}
+      >Park {bulkParkTargets.length}</button>
       <button type="button" class="btn sm" onclick={() => (selected = [])}>Clear</button>
     </div>
   {/if}
@@ -449,7 +487,7 @@
 
 {#if open}
   {@const o = open}
-  <DrillPanel label={o.title} kicker={`${LANE_MARK[o.lane]} · ${STAGE_META[o.stage].label}`} tone={stageTone(o.stage)} onclose={() => (open = null)}>
+  <DrillPanel label={o.title} kicker={`${LANE_MARK[o.lane]} · ${STAGE_META[o.stage].label}`} tone={stageTone(o.stage)} onclose={() => (openId = null)}>
     {#snippet head()}
       <span class="pill t-{stageTone(o.stage)}">{STAGE_META[o.stage].question}</span>
     {/snippet}
@@ -524,20 +562,31 @@
     {#snippet foot()}
       <div class="actions">
         {#if o.actionable}
-          <button type="button" class="btn sm" disabled={busy === `pri:${o.id}`} onclick={() => bumpPriority(o)}>
-            Raise to P{nextPriority(o.priority)}
-          </button>
+          <!-- Explicit, not a cycling stepper: lowering an item has to be a
+               thing you chose, and "Raise" must never wrap round to P5. -->
+          <span class="pri-set">
+            <span class="pri-lab">Priority</span>
+            {#each [1, 2, 3, 4, 5] as p (p)}
+              <button
+                type="button"
+                class="btn sm pri-btn"
+                class:picked={o.priority === p}
+                disabled={busy === `pri:${o.id}`}
+                onclick={() => setPriority(o, p)}
+              >P{p}</button>
+            {/each}
+          </span>
           {#if o.stage === 'parked'}
-            <button type="button" class="btn sm" disabled={busy === `park:${o.id}`} onclick={async () => { if (await setParked(o, false)) open = null; }}>
+            <button type="button" class="btn sm" disabled={busy === `park:${o.id}`} onclick={async () => { if (await setParked(o, false)) openId = null; }}>
               Put it back
             </button>
-          {:else}
-            <button type="button" class="btn sm danger" disabled={busy === `park:${o.id}`} onclick={async () => { if (await setParked(o, true, 'Parked from the queue board')) open = null; }}>
+          {:else if o.stage !== 'live' && o.stage !== 'verifying'}
+            <button type="button" class="btn sm danger" disabled={busy === `park:${o.id}`} onclick={async () => { if (await setParked(o, true, 'Parked from the queue board')) openId = null; }}>
               Park it
             </button>
           {/if}
         {/if}
-        <button type="button" class="btn sm" onclick={() => (open = null)}>Close</button>
+        <button type="button" class="btn sm" onclick={() => (openId = null)}>Close</button>
       </div>
     {/snippet}
   </DrillPanel>
@@ -917,6 +966,26 @@
   }
   .sel-msg b {
     color: var(--accent);
+  }
+  .hd-of {
+    color: var(--text-ghost);
+  }
+  .pri-set {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .pri-lab {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+    margin-right: 4px;
+  }
+  .pri-btn {
+    padding: 5px 8px;
   }
 
   @media (max-width: 700px) {

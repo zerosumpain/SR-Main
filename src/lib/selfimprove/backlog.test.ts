@@ -54,7 +54,9 @@ import {
   pickWork,
   setEpic,
   setParked,
+  setParkedMany,
   setPriority,
+  setPriorityMany,
   MAX_NEW_IDEAS_PER_NIGHT,
 } from './backlog';
 import type { BacklogItemData } from './types';
@@ -520,5 +522,111 @@ describe('owner edits', () => {
       await expect(foldItems(['a'])).rejects.toThrow(/at least two/);
       await expect(foldItems(['a', 'a'])).rejects.toThrow(/at least two/);
     });
+  });
+});
+
+// ── Review fixes, 2026-09-04 ──────────────────────────────────────────────
+
+describe('a shipped item is protected from the board', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+  function seed(...items: BacklogItemData[]) {
+    h.records = items.map((i) => ({ key: i.slug, data: i }));
+  }
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  // Parking writes `abandoned`, erasing the only field saying it shipped —
+  // and putting it back would write `open`, handing an already-built tool to
+  // `pickWork` to be built a second time.
+  it('refuses to park it, and leaves the record untouched', async () => {
+    seed(item({ slug: 'built', title: 'PayPal transaction history tool', status: 'shipped', attempts: 1 }));
+    await expect(setParked('built', true)).rejects.toThrow(/already shipped/);
+    expect(stored('built').status).toBe('shipped');
+  });
+
+  it('refuses to fold it, and leaves every member untouched', async () => {
+    seed(
+      item({ slug: 'built', title: 'Subscription renewal calendar', status: 'shipped' }),
+      item({ slug: 'open-dupe', title: 'Subscription renewal reminders' }),
+    );
+    await expect(foldItems(['built', 'open-dupe'])).rejects.toThrow(/already shipped/);
+    expect(stored('built').status).toBe('shipped');
+    expect(stored('open-dupe').status).toBe('open');
+    expect(stored('open-dupe').foldedInto).toBeUndefined();
+  });
+
+  it('still folds two open restatements of the same shipped thing', async () => {
+    seed(
+      item({ slug: 'a', title: 'Subscription renewal reminders', priority: 2 }),
+      item({ slug: 'b', title: 'Subscription renewal alerts', priority: 5 }),
+    );
+    const res = await foldItems(['a', 'b']);
+    expect(res.survivor).toBe('a');
+    expect(stored('b').status).toBe('abandoned');
+  });
+});
+
+describe('putting an attempt-exhausted item back', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  // Without this, "put it back" is a silent no-op: the item is already `open`
+  // and still over the ceiling, so it snaps straight back to Parked.
+  it('resets the attempt count so pickWork can reach it again', async () => {
+    h.records = [{ key: 'spent', data: item({ slug: 'spent', attempts: 4, lastError: 'HTTP 405' }) }];
+    await setParked('spent', false);
+    expect(stored('spent').status).toBe('open');
+    expect(stored('spent').attempts).toBe(0);
+    // The failure text survives — it is what the next author call reads.
+    expect(stored('spent').lastError).toBe('HTTP 405');
+    expect(pickWork([stored('spent')], 'tool', 3)).toHaveLength(1);
+  });
+
+  it('leaves the count alone for an item that had attempts left', async () => {
+    h.records = [{ key: 'some', data: item({ slug: 'some', status: 'abandoned', attempts: 2 }) }];
+    await setParked('some', false);
+    expect(stored('some').attempts).toBe(2);
+  });
+});
+
+describe('bulk edits', () => {
+  beforeEach(() => {
+    h.records = [];
+    h.keyReadFails = false;
+  });
+  const stored = (slug: string) => h.records.find((r) => r.key === slug)?.data as BacklogItemData;
+
+  it('applies a priority to every slug in one call', async () => {
+    h.records = ['a', 'b', 'c'].map((slug) => ({ key: slug, data: item({ slug, priority: 4 }) }));
+    const res = await setPriorityMany(['a', 'b', 'c'], 1);
+    expect(res.changed.sort()).toEqual(['a', 'b', 'c']);
+    expect(res.failed).toEqual([]);
+    expect(['a', 'b', 'c'].map((s) => stored(s).priority)).toEqual([1, 1, 1]);
+  });
+
+  // Twenty selected duplicates containing one shipped row must not look like
+  // a clean success, nor like a total failure.
+  it('reports partial failure by slug rather than swallowing it', async () => {
+    h.records = [
+      { key: 'ok', data: item({ slug: 'ok' }) },
+      { key: 'built', data: item({ slug: 'built', title: 'Already built', status: 'shipped' }) },
+    ];
+    const res = await setParkedMany(['ok', 'built'], true, 'bulk park');
+    expect(res.changed).toEqual(['ok']);
+    expect(res.failed).toHaveLength(1);
+    expect(res.failed[0].slug).toBe('built');
+    expect(res.failed[0].error).toMatch(/already shipped/);
+    expect(stored('built').status).toBe('shipped');
+  });
+
+  it('de-duplicates a slug sent twice', async () => {
+    h.records = [{ key: 'a', data: item({ slug: 'a', priority: 3 }) }];
+    const res = await setPriorityMany(['a', 'a'], 2);
+    expect(res.changed).toEqual(['a']);
   });
 });
