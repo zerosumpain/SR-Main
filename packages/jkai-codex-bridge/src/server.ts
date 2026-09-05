@@ -19,7 +19,13 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODELS, DEFAULT_CODEX_MODEL_SLUG, toCodexSlug } from '$lib/server/models/codex-catalogue';
-import { runOnce, runStreamed, activeTransport, type CapturedToolCall } from './codex-runner';
+import {
+  runOnce,
+  runStreamed,
+  activeTransport,
+  type CapturedToolCall,
+  type CodexEffort,
+} from './codex-runner';
 import { toAnnotations, type CapturedSearch } from './web-search';
 import type { ChatMessage } from './messages';
 import {
@@ -225,7 +231,11 @@ interface ChatCompletionRequest {
   reasoning_effort?: string;
 }
 
-const REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
+/** Mirrors CODEX_REASONING_EFFORTS in the site catalogue. `max` and `ultra` are
+ *  accepted here for every model — the per-model ceiling is enforced by the
+ *  caller ($lib/models/thinking), because the bridge has no idea which model the
+ *  site is about to hand it beyond the slug in the request. */
+const REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
 interface HandlerOptions {
   /** Set only by the /v1/grounded route. Never read from the request body. */
@@ -267,7 +277,7 @@ async function handleChatCompletions(
 
   const reasoningEffort =
     body.reasoning_effort && REASONING_EFFORTS.has(body.reasoning_effort)
-      ? (body.reasoning_effort as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh')
+      ? (body.reasoning_effort as CodexEffort)
       : undefined;
 
   const controller = new AbortController();

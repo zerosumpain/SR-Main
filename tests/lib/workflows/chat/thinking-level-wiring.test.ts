@@ -69,14 +69,23 @@ describe('thinking level reaches the request', () => {
     for (const body of narration) expect(body).not.toContain('...thinking');
   });
 
-  it('reads the provider off the round’s own context, not the conversation’s', () => {
+  it('reads the model off the round’s own context, not the conversation’s', () => {
+    // A persisted row can carry a codex/ id under provider 'openrouter', so the
+    // round's context is coerced before it is read.
+    const derived = SRC.match(/const (\w+) = coerceModelContext\((\w+)\);/);
+    expect(derived, 'the round’s context is no longer coerced here').not.toBeNull();
+    const [, name, source] = derived!;
+    expect(source).toBe('turnCtx');
+
     const assignment = SRC.match(/const thinking = thinkingRequestParams\(\s*([^)]*)\)/);
     expect(assignment, 'thinking params are no longer built here').not.toBeNull();
     const args = assignment![1];
-    expect(args).toContain('turnCtx');
+    // Provider AND model: the effort ceiling is per model on Codex, so passing
+    // the provider alone silently caps a thread at xhigh on a model that goes
+    // deeper — and offers a 400 on one that does not.
+    expect(args).toContain(`${name}.provider`);
+    expect(args).toContain(`${name}.modelId`);
     expect(args).not.toContain('baseCtx');
     expect(args).not.toContain('options.modelContext');
-    // A persisted row can carry a codex/ id under provider 'openrouter'.
-    expect(args).toContain('coerceModelContext');
   });
 });

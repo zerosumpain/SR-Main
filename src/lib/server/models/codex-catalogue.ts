@@ -35,8 +35,29 @@
 
 import { isSubscriptionModelId } from '$lib/llm/usage-meter';
 
-/** Reasoning effort levels the Codex SDK accepts (`ThreadOptions.modelReasoningEffort`). */
-export const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+/**
+ * Reasoning effort levels Codex accepts.
+ *
+ * WIDER than the SDK's own `ThreadOptions.modelReasoningEffort`, which stops at
+ * `xhigh`. The bridge reaches Codex over the Responses API (see
+ * responses-transport.ts), which takes `max` and `ultra` as well; only the
+ * `sdk` rollback transport is bound by the SDK's spelling, and it clamps rather
+ * than 400s.
+ *
+ * NOT every model accepts the top two — the per-model ceiling is
+ * `CODEX_EFFORT_CEILING` in $lib/models/thinking, which lives there rather than
+ * here because the chat picker needs it in the browser and `$lib/server/*`
+ * cannot cross that boundary. codex-catalogue.test asserts the two agree.
+ */
+export const CODEX_REASONING_EFFORTS = [
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number];
 
 export interface CodexModel {
@@ -54,12 +75,28 @@ export interface CodexModel {
 }
 
 /**
- * Source: OpenAI's Codex model documentation (learn.chatgpt.com/docs/models),
- * read 2026-08-08. Re-check when a GPT generation ships — nothing in the code
- * detects a stale entry, a retired slug simply fails at call time with the
- * bridge surfacing Codex's own error.
+ * Source: the account's own catalogue, `GET
+ * chatgpt.com/backend-api/codex/models?client_version=<v>`, read 2026-09-05.
+ * Re-check when a GPT generation ships — nothing in the code detects a stale
+ * entry, a retired slug simply fails at call time with the bridge surfacing
+ * Codex's own error.
+ *
+ * THE CATALOGUE ENDPOINT HIDES NEW MODELS FROM OLD CLIENTS. Each row carries a
+ * `minimal_client_version` and the listing is filtered by the `client_version`
+ * query parameter: Astra (`minimal_client_version: 0.153.0`) is simply absent
+ * when you ask as 0.147.0, which is the SDK version this repo pins. That gate
+ * is on the LISTING only — the Responses API itself accepts Astra from any
+ * client, verified end-to-end against the production bridge before this row was
+ * added — so reading "not in my catalogue" as "not available to us" would have
+ * been wrong. Pass a current `client_version` when checking for new models.
  */
 export const CODEX_MODELS: CodexModel[] = [
+  {
+    slug: 'gpt-6-astra',
+    name: 'GPT-6 Astra',
+    description:
+      'GPT-6 flagship, and the site default. State of the art on coding, computer use, research and professional work; 272k context and the deepest reasoning ladder Codex offers.',
+  },
   {
     slug: 'gpt-5.6-sol',
     name: 'GPT-5.6 Sol',
@@ -89,8 +126,15 @@ export const CODEX_MODELS: CodexModel[] = [
   },
 ];
 
-/** The model a Codex pick falls back to when none is named. */
-export const DEFAULT_CODEX_MODEL_SLUG = 'gpt-5.6-terra';
+/**
+ * The model a Codex pick falls back to when none is named.
+ *
+ * Astra since 2026-09-05, taking over from Terra: it is the frontier model on
+ * the same subscription, so the fallback costs the same quota shape it always
+ * did. This is also the model the OpenRouter failover lands on when credit runs
+ * out ($lib/llm/client), which is the case that most wants the better model.
+ */
+export const DEFAULT_CODEX_MODEL_SLUG = 'gpt-6-astra';
 
 /** ModelContext ids carry the `codex/` prefix so provider is recoverable from
  *  the id alone — persisted rows, localStorage and workflow node configs all

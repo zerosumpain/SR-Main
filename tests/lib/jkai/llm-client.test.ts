@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DEFAULT_CODEX_MODEL_SLUG } from '$lib/server/models/codex-catalogue';
 
 vi.mock('$lib/server/models/settings', () => ({
   getOpenRouterApiKey: vi.fn(async () => 'or-test-key'),
@@ -210,7 +211,10 @@ describe('routing while OpenRouter is down', () => {
     vi.mocked(getOpenRouterApiKey).mockResolvedValue(undefined);
     vi.mocked(isCodexEnabled).mockResolvedValue(true);
     const { client, model } = await getLLMClient({ provider: 'openrouter', modelId: 'openai/gpt-oss-120b' });
-    expect(model).toBe('gpt-5.6-terra');
+    // The catalogue's default rather than a literal: which model that is has
+    // changed twice now, and the thing under test is that the call left
+    // OpenRouter at all, not which Codex model caught it.
+    expect(model).toBe(DEFAULT_CODEX_MODEL_SLUG);
     expect((client as any).baseURL).toContain('5207');
   });
 
@@ -218,7 +222,7 @@ describe('routing while OpenRouter is down', () => {
     vi.mocked(isCodexEnabled).mockResolvedValue(true);
     markOpenrouterDown();
     const { model } = await getLLMClient({ provider: 'openrouter', modelId: 'openai/gpt-oss-120b' });
-    expect(model).toBe('gpt-5.6-terra');
+    expect(model).toBe(DEFAULT_CODEX_MODEL_SLUG);
   });
 
   it('still refuses to send an EMBEDDING model to Codex', async () => {
