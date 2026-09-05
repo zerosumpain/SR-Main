@@ -90,6 +90,9 @@
     initialHasOlderMessages = false,
     initialMessageCursor = null,
     onbusychange,
+    recentThreads = [],
+    onselectthread,
+    onopenlibrary,
   }: {
     conversationId: string | null;
     initialDraft?: string;
@@ -148,6 +151,22 @@
      * a dot without polling. `ok` is false when the turn ended in an error.
      */
     onbusychange?: (busy: boolean, ok: boolean) => void;
+    /**
+     * The thread list, for the empty-state's "pick up where you left off"
+     * column. The hub keeps the library behind a rail that is collapsed by
+     * default, so a fresh thread otherwise opens with no route back to the
+     * work already in flight — see the empty state below.
+     */
+    recentThreads?: Array<{
+      id: string;
+      title: string | null;
+      source: string;
+      updatedAt: string | Date;
+      lastMessage: string | null;
+      messageCount: number;
+    }>;
+    onselectthread?: (id: string) => void;
+    onopenlibrary?: () => void;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -1837,6 +1856,45 @@
     void send();
   }
 
+  /** Same shape as the thread library's own column: minutes, hours, days, then
+   *  a date. Kept local because the library does not export its copy. */
+  function threadAge(value: string | Date): string {
+    const elapsed = Date.now() - new Date(value).getTime();
+    if (!Number.isFinite(elapsed) || elapsed < 0) return 'now';
+    const minutes = Math.floor(elapsed / 60_000);
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    return days < 7
+      ? `${days}d`
+      : new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(value));
+  }
+
+  /**
+   * Threads worth offering back. Empty ones are dropped rather than listed:
+   * every page load opens a fresh conversation, so an unfiltered list is mostly
+   * "New thread" rows that were never used — including the one being rendered.
+   */
+  const startedThreads = $derived(
+    recentThreads.filter((c) => c.source !== 'whatsapp' && (c.messageCount ?? 0) > 0),
+  );
+  const recentThreadRows = $derived(
+    startedThreads
+      .filter((c) => c.id !== conversationId)
+      .slice(0, 5)
+      .map((c) => ({
+        id: c.id,
+        label:
+          c.title?.trim() ||
+          c.lastMessage?.trim().split('\n')[0]?.slice(0, 60) ||
+          'Untitled thread',
+        when: threadAge(c.updatedAt),
+        count: c.messageCount ?? 0,
+      })),
+  );
+
   // ── Model switcher ────────────────────────────────────────────────────────
 
   function onComposerInput() {
@@ -2701,7 +2759,12 @@
       clearPin();
     } else if (!stickToBottom) return;
     requestAnimationFrame(() => {
-      chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior });
+      if (!chatContainer) return;
+      // An empty thread has no tail to follow — the opening page IS the content.
+      // Sending it to the foot hides the headline on any pane shorter than the
+      // page, which is what a stacked hero on a mid-width screen is.
+      const top = messages.length === 0 ? 0 : chatContainer.scrollHeight;
+      chatContainer.scrollTo({ top, behavior });
     });
   }
 
@@ -2849,30 +2912,61 @@
       </div>
     {:else if messages.length === 0}
       <div class="new-thread-state">
+       <div class="hero-panel">
         <div class="hero">
           <p class="hero-kicker"><span>Live workspace</span> jkai / start anywhere</p>
           <h1 class="hero-title">What are we making today?</h1>
           <p class="hero-sub">
             Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
           </p>
-          <div class="direction-grid" aria-label="Workspace directions">
-            {#each LANDING_DIRECTIONS as direction (direction.label)}
-              <a class="direction-card" href={direction.href}>
-                <span class="direction-index">{direction.index}</span>
-                <span class="direction-copy">
-                  <strong>{direction.label}</strong>
-                  <small>{direction.note}</small>
-                </span>
-                <span class="direction-meta">{direction.metric}</span>
-                <span class="direction-arrow" aria-hidden="true">↗</span>
-              </a>
-            {/each}
-          </div>
-          <div class="hero-metrics" aria-label="Current workspace status">
-            <span><small>Routes</small><strong>04</strong></span>
-            <span><small>Model</small><strong>{shortModelLabel(currentModel.modelId)}</strong></span>
-            <span><small>Context</small><strong>{contextTokens === null ? 'ready' : `${Math.round(contextTokens / 1000)}k`}</strong></span>
-            <span><small>Build</small><strong>{activeBuild?.status ?? 'ready'}</strong></span>
+          <div class="hero-body">
+           <div class="hero-main">
+            <div class="direction-grid" aria-label="Workspace directions">
+              {#each LANDING_DIRECTIONS as direction (direction.label)}
+                <a class="direction-card" href={direction.href}>
+                  <span class="direction-index">{direction.index}</span>
+                  <span class="direction-copy">
+                    <strong>{direction.label}</strong>
+                    <small>{direction.note}</small>
+                  </span>
+                  <span class="direction-meta">{direction.metric}</span>
+                  <span class="direction-arrow" aria-hidden="true">↗</span>
+                </a>
+              {/each}
+            </div>
+            <div class="hero-metrics" aria-label="Current workspace status">
+              <span><small>Threads</small><strong>{startedThreads.length}</strong></span>
+              <span><small>Model</small><strong>{shortModelLabel(currentModel.modelId)}</strong></span>
+              <span><small>Context</small><strong>{contextTokens === null ? 'ready' : `${Math.round(contextTokens / 1000)}k`}</strong></span>
+              <span><small>Build</small><strong>{activeBuild?.status ?? 'ready'}</strong></span>
+            </div>
+           </div>
+           <!-- The thread library is a rail that starts collapsed, so on a fresh
+                thread there is no left pane and nothing pointing back at work
+                already under way. This column is that pane, folded into the
+                opening page. -->
+           <aside class="hero-side" aria-label="Recent threads">
+            <p class="side-head">
+              <span>Pick up where you left off</span>
+              {#if onopenlibrary}
+                <button type="button" class="side-all" onclick={() => onopenlibrary?.()}>Library ↗</button>
+              {/if}
+            </p>
+            {#if recentThreadRows.length === 0}
+              <p class="side-empty">Nothing to carry over yet — this is the first thread with anything in it.</p>
+            {:else}
+              <ul class="recent-list">
+                {#each recentThreadRows as t (t.id)}
+                  <li>
+                    <button type="button" class="recent-row" onclick={() => onselectthread?.(t.id)}>
+                      <span class="recent-title">{t.label}</span>
+                      <span class="recent-meta">{t.when} · {t.count} message{t.count === 1 ? '' : 's'}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+           </aside>
           </div>
           <div class="hero-rule"><span>Or ask now</span></div>
           <div class="hero-chips">
@@ -2894,6 +2988,7 @@
             {/each}
           </div>
         </div>
+       </div>
       </div>
     {:else}
       <div class="msg-stack">
@@ -3472,8 +3567,23 @@
         {/if}
         <ComposerAttachmentTray items={pendingAttachments} onRemove={removeAttachment} />
 
-        <!-- Chip row: model, workflow, attach, voice — then a live per-turn
-             cost estimate pushed to the right. -->
+        <!-- One field, not four parts. The textarea, the per-turn controls and
+             send share a single border that lights on :focus-within, so the
+             composer reads as one instrument instead of a box flanked by two
+             loose buttons and a detached chip row. -->
+        <div class="composer-field">
+        <input bind:this={fileInputEl} type="file" class="hidden" multiple accept={acceptAttrForCaps()} onchange={onFilePick} />
+        <textarea
+          bind:this={textareaEl}
+          bind:value={input}
+          onkeydown={handleKeydown}
+          oninput={onComposerInput}
+          onpaste={onPaste}
+          placeholder={loading ? 'Type a follow-up — it goes next…' : composerPlaceholder}
+          class="composer-textarea"
+          rows="1"
+        ></textarea>
+        <div class="composer-bar">
         <div class="chip-row">
           <!-- The model switcher is NOT gated on the engine. The loop honours
                the per-conversation pin — it coerces `conv.modelProvider` /
@@ -3585,25 +3695,14 @@
             <span class="chip-glyph" aria-hidden="true">+</span><span class="chip-word">file</span>
           </button>
           <VoiceRecorder onRecorded={handleVoiceBlob} disabled={modelCapabilities != null && !modelCapabilities.audio} />
+        </div>
+
+        <div class="composer-actions">
           {#if estPerTurnUsd !== null}
             <span class="chip-est" title="Estimated cost of the next turn at this model and context size">
               est. {formatGbp(estPerTurnUsd)} / turn
             </span>
           {/if}
-        </div>
-
-        <div class="composer-input-row">
-          <input bind:this={fileInputEl} type="file" class="hidden" multiple accept={acceptAttrForCaps()} onchange={onFilePick} />
-          <textarea
-            bind:this={textareaEl}
-            bind:value={input}
-            onkeydown={handleKeydown}
-            oninput={onComposerInput}
-            onpaste={onPaste}
-            placeholder={loading ? 'Type a follow-up — it goes next…' : composerPlaceholder}
-            class="composer-textarea"
-            rows="1"
-          ></textarea>
           <button
             type="button"
             onclick={openLauncher}
@@ -3618,10 +3717,15 @@
             onclick={() => send()}
             disabled={!input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
             class="composer-send"
+            title="Send — Enter"
             aria-label="Send"
           >
-            ▸
+            <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3.5 10h12" /><path d="M10.5 5l5 5-5 5" />
+            </svg>
           </button>
+        </div>
+        </div>
         </div>
       </div>
     </div>
@@ -3794,11 +3898,39 @@
     border-color: var(--accent-tint-35);
   }
 
+  /* One bordered instrument. The hairline is the composer's only frame — the
+     textarea inside it is borderless, so focus lights the whole field. */
+  .composer-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid rgba(26, 16, 8, 0.18);
+    background: var(--bg);
+    transition: border-color 0.2s ease-out;
+  }
+  .composer-field:focus-within {
+    border-color: var(--accent);
+  }
+  .composer-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 5px 5px 5px 9px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .composer-actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
   .chip-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 7px;
+    flex: 1;
+    min-width: 0;
     flex-wrap: wrap;
   }
   .composer-chip {
@@ -3823,7 +3955,6 @@
     color: var(--accent);
   }
   .chip-est {
-    margin-left: auto;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
@@ -3832,11 +3963,6 @@
     white-space: nowrap;
   }
 
-  .composer-input-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-  }
   .queued-strip {
     display: flex;
     flex-direction: column;
@@ -3880,16 +4006,16 @@
     color: var(--status-fail);
   }
 
-  /* One hairline field on the page ground — the 2px card border read as a
-     second frame inside the composer's own top rule. */
+  /* Borderless — `.composer-field` is the frame now, so the box no longer
+     draws a second rule inside it. */
   .composer-textarea {
     flex: 1;
     min-width: 0;
-    min-height: 44px;
-    padding: 11px 13px;
-    border: 1px solid rgba(26, 16, 8, 0.18);
+    min-height: 42px;
+    padding: 11px 13px 7px;
+    border: 0;
     border-radius: 0;
-    background: var(--bg);
+    background: transparent;
     font-family: var(--font-body);
     font-size: var(--fs-body);
     line-height: 1.5;
@@ -3910,7 +4036,6 @@
   }
   .composer-textarea:focus {
     outline: none;
-    border-color: var(--accent);
   }
 
   /* Wrap div for the second heartbeat-line render site — kept as a hook
@@ -4108,18 +4233,30 @@
   }
   .approval-reason { font-size: var(--fs-label); color: var(--text-secondary); margin-bottom: 4px; }
 
-  /* /health's dark cover becomes the opening page of an empty thread. */
+  /* /health's dark cover becomes the opening page of an empty thread — as an
+     INSET panel rather than a full-bleed wall. The cream margin is what stops
+     the ink reading as a truncated page when the thread rail is collapsed and
+     there is no left pane to bound it. */
   .new-thread-state {
     min-height:100%;
     display:flex;
+    align-items:stretch;
+    padding:clamp(10px, 1.5vw, 20px);
+    background:var(--bg);
+  }
+  .hero-panel {
+    flex:1;
+    min-width:0;
+    display:flex;
     align-items:center;
-    padding:clamp(24px, 4vw, 56px);
+    padding:clamp(22px, 3vw, 44px);
     background:var(--text-primary);
     color:var(--bg);
   }
   .hero {
     text-align: left;
-    width:min(940px, 100%);
+    width:min(1180px, 100%);
+    margin-inline:auto;
     animation: hero-in 0.3s ease both;
   }
   @keyframes hero-in {
@@ -4138,12 +4275,13 @@
   .hero-kicker span { margin-right:12px; color:var(--accent-on-dark); }
   .hero-title {
     font-family: var(--font-display);
-    font-size: clamp(2.5rem, 5.5vw, 4.9rem);
-    line-height: 0.9;
-    letter-spacing: -0.045em;
+    font-size: clamp(1.9rem, 3.2vw, 3.15rem);
+    line-height: 0.95;
+    letter-spacing: -0.035em;
     text-transform: uppercase;
     color: var(--bg);
-    margin: 0 0 1rem;
+    margin: 0 0 0.85rem;
+    max-width: 22ch;
     text-wrap:balance;
   }
   .hero-sub {
@@ -4154,10 +4292,67 @@
     margin: 0 0 1.35rem;
     max-width: 58ch;
   }
+  .hero-body { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(250px,1fr); gap:clamp(20px, 2.6vw, 40px); align-items:start; margin-bottom:20px; }
+  .hero-main { min-width:0; }
+
+  /* The collapsed thread rail, folded into the opening page. Rows are the
+     facet-row shape used across the hub: a hairline drawn as the container's
+     ground through a 1px gap, and a hover that inverts to cream. */
+  .hero-side { min-width:0; }
+  .side-head {
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+    margin:0 0 10px;
+    font-family:var(--font-mono); font-size:var(--fs-label-xs);
+    text-transform:uppercase; letter-spacing:var(--tracking-label);
+    color:rgba(237,228,212,.46);
+  }
+  .side-all {
+    flex:none;
+    background:none; border:0; padding:0; cursor:pointer;
+    font-family:var(--font-mono); font-size:var(--fs-label-xs);
+    text-transform:uppercase; letter-spacing:var(--tracking-label);
+    color:var(--accent-on-dark);
+  }
+  .side-all:hover { color:var(--bg); }
+  .side-all:focus-visible { outline:2px solid var(--accent-on-dark); outline-offset:2px; }
+  .side-empty {
+    margin:0; padding:12px 0 0;
+    border-top:1px solid rgba(237,228,212,.25);
+    font-size:var(--fs-label); line-height:1.5; color:rgba(237,228,212,.52);
+  }
+  .recent-list {
+    list-style:none; margin:0; padding:0;
+    display:flex; flex-direction:column; gap:1px;
+    border-top:1px solid rgba(237,228,212,.25);
+    border-bottom:1px solid rgba(237,228,212,.25);
+    background:rgba(237,228,212,.25);
+  }
+  .recent-row {
+    display:block; width:100%; text-align:left;
+    padding:9px 10px;
+    border:0; background:var(--text-primary); cursor:pointer;
+    transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  }
+  .recent-title {
+    display:block; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:var(--fs-label); line-height:1.35; color:rgba(237,228,212,.88);
+  }
+  .recent-meta {
+    display:block; margin-top:3px;
+    font-family:var(--font-mono); font-size:var(--fs-label-xs);
+    text-transform:uppercase; letter-spacing:.08em;
+    color:rgba(237,228,212,.42);
+  }
+  .recent-row:hover { background:var(--bg); }
+  .recent-row:hover .recent-title { color:var(--text-primary); }
+  .recent-row:hover .recent-meta { color:var(--text-muted); }
+  .recent-row:focus-visible { outline:2px solid var(--accent-on-dark); outline-offset:-2px; }
+
   .hero-rule { display:flex; align-items:center; gap:12px; margin-bottom:12px; color:rgba(237,228,212,.46); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:var(--tracking-label); }
   .hero-rule::after { content:''; flex:1; height:1px; background:rgba(237,228,212,.2); }
   .direction-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-top:1px solid rgba(237,228,212,.25); border-left:1px solid rgba(237,228,212,.25); }
-  .direction-card { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:start; gap:11px; min-height:86px; padding:14px 42px 14px 14px; border-right:1px solid rgba(237,228,212,.25); border-bottom:1px solid rgba(237,228,212,.25); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
+  .direction-card { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:4px 11px; min-height:86px; padding:14px 42px 14px 14px; border-right:1px solid rgba(237,228,212,.25); border-bottom:1px solid rgba(237,228,212,.25); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
   .direction-card:hover { background:var(--bg); color:var(--text-primary); }
   .direction-index { padding-top:3px; color:var(--accent-on-dark); font-family:var(--font-mono); font-size:var(--fs-label-xs); font-variant-numeric:tabular-nums; }
   .direction-card:hover .direction-index { color:var(--accent); }
@@ -4165,12 +4360,12 @@
   .direction-copy strong { display:block; font-family:var(--font-display); font-size:var(--fs-display-xs); font-weight:400; line-height:1; text-transform:uppercase; }
   .direction-copy small { display:block; margin-top:6px; color:rgba(237,228,212,.62); font-size:var(--fs-label-xs); line-height:1.3; }
   .direction-card:hover .direction-copy small { color:var(--text-muted); }
-  .direction-meta { align-self:end; color:rgba(237,228,212,.48); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; white-space:nowrap; }
+  .direction-meta { grid-column:2; align-self:end; margin-top:2px; color:rgba(237,228,212,.48); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; white-space:nowrap; }
   .direction-card:hover .direction-meta { color:var(--text-muted); }
   .direction-arrow { position:absolute; top:12px; right:14px; color:var(--accent-on-dark); font-size:var(--fs-body-lg); transition:transform var(--t-fast) var(--ease-out); }
   .direction-card:hover .direction-arrow { color:var(--accent); transform:translate(2px,-2px); }
   .direction-card:focus-visible { z-index:1; outline:2px solid var(--accent-on-dark); outline-offset:-2px; }
-  .hero-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:10px 0 18px; border:1px solid rgba(237,228,212,.14); }
+  .hero-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:10px 0 0; border:1px solid rgba(237,228,212,.14); }
   .hero-metrics > span { min-width:0; padding:8px 10px; border-right:1px solid rgba(237,228,212,.14); }
   .hero-metrics > span:last-child { border-right:0; }
   .hero-metrics small, .hero-metrics strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -4840,8 +5035,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 32px;
     flex: none;
     background: var(--accent);
     color: #fff;
@@ -4864,7 +5059,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 44px;
+    height: 32px;
     padding: 0 9px;
     flex: none;
     background: transparent;
@@ -4893,12 +5088,18 @@
       padding-top:4px;
     }
     .new-thread-state {
-      padding:32px 20px;
+      padding:0;
+      align-items:flex-start;
+    }
+    .hero-panel {
+      padding:28px 20px;
       align-items:flex-start;
     }
     .hero-title {
-      font-size:clamp(2.5rem, 15vw, 4rem);
+      font-size:clamp(2rem, 10vw, 2.9rem);
+      max-width:none;
     }
+    .hero-body { grid-template-columns:minmax(0,1fr); gap:26px; }
     .direction-grid { grid-template-columns:1fr; }
     .direction-card { min-height:74px; }
     .hero-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -4913,7 +5114,8 @@
     .msg-stack > .msg-slot {
       padding-bottom: 8px;
     }
-    /* Chips reduce to glyphs and the row scrolls rather than wrapping. */
+    /* Chips reduce to glyphs and the row scrolls rather than wrapping. The
+       action cluster is outside that scroller, so send never scrolls away. */
     .chip-row {
       flex-wrap: nowrap;
       overflow-x: auto;
@@ -4933,17 +5135,28 @@
       display: none;
     }
     .composer-textarea {
-      min-height: 48px;
+      min-height: 46px;
       /* No font-size bump needed here any more — the base rule is 16px, which
          is what keeps iOS from zooming the viewport on focus. */
     }
     .composer-send {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 36px;
     }
+    .chip-est {
+      display: none;
+    }
+  }
+  /* The pane loses ~390px to the context rail, so the viewport is comfortably
+     wider than the space the hero actually gets. Stack below 1340px rather than
+     squeezing a 250px thread column out of a 500px pane. */
+  @media (min-width: 800px) and (max-width: 1339px) {
+    .hero-body { grid-template-columns:minmax(0,1fr); }
+    .hero-side { max-width:520px; }
   }
   @media (prefers-reduced-motion:reduce) {
     .hero, .msg-stack { animation:none; }
+    .recent-row { transition:none; }
     .direction-card, .direction-arrow { transition:none; }
   }
 

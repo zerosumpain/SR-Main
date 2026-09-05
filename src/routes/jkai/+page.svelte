@@ -578,6 +578,9 @@
             initialHasOlderMessages={pane.hasOlderMessages}
             initialMessageCursor={pane.messageCursor}
             active={tab.id === activeId}
+            recentThreads={conversationList}
+            onselectthread={selectConversation}
+            onopenlibrary={() => (libraryOpen = true)}
             onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}
             onmodelchange={(ctx: ModelContext, supportsThinking?: boolean) =>
               handleModelChange(tab.id, ctx, supportsThinking)}
