@@ -56,13 +56,13 @@
     display: grid;
     place-items: center;
     border: 1px solid currentColor;
-    background: var(--surface, var(--background, #fff));
+    background: var(--bg);
     font-size: var(--fs-label-xs);
   }
   small {
     overflow: hidden;
     padding-right: 8px;
-    background: var(--surface, var(--background, #fff));
+    background: var(--bg);
     font-size: var(--fs-label-xs);
     text-overflow: ellipsis;
     white-space: nowrap;
