@@ -43,7 +43,7 @@ describe('system prompt is assembled stable-first, for the cache', () => {
   it('splits the prompt into a stable prefix and a per-turn suffix', () => {
     expect(SRC).toMatch(/const stablePrefix = `/);
     expect(SRC).toMatch(/const perTurnSuffix = `/);
-    expect(SRC).toContain('const systemContent = `' + slot('stablePrefix') + slot('perTurnSuffix') + slot('BEHAVIOUR_POLICY') + '${renderGlobalGuidance(capabilityPolicy)}`');
+    expect(SRC).toContain('const systemContent = `' + slot('stablePrefix') + slot('perTurnSuffix') + slot('BEHAVIOUR_POLICY') + '${renderGlobalGuidance(capabilityPolicy)}${renderAnswerContract(contract)}`');
   });
 
   it.each(STABLE)('%s sits in the cacheable prefix', (name) => {

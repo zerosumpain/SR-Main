@@ -83,7 +83,7 @@ describe('compressHistory — reads the cache, never writes it', () => {
     expect(r.needsRefresh).toBe(false);
   });
 
-  it('flags a stale summary rather than implying it covers what it has not seen', async () => {
+  it('retains the raw gap when a summary is stale', async () => {
     getRecordByKey.mockResolvedValue({
       data: {
         conversationId: 'c1',
@@ -95,25 +95,27 @@ describe('compressHistory — reads the cache, never writes it', () => {
     });
     const r = await compressHistory(hist(50), 'c1', 30);
     expect(r.summary).toContain('first few turns');
-    expect(r.degraded).toBe(true);
+    expect(r.degraded).toBe(false);
+    expect(r.messages).toHaveLength(49);
     expect(r.needsRefresh).toBe(true);
     // Counts what it covers PLUS what it does not yet.
-    expect(r.compressedCount).toBeGreaterThan(1);
+    expect(r.compressedCount).toBe(1);
   });
 
   describe('honest degradation', () => {
     it('keeps MORE raw messages, not fewer, when there is no summary yet', async () => {
       getRecordByKey.mockResolvedValue(undefined);
       const r = await compressHistory(hist(200), 'c1', 30);
-      expect(r.messages.length).toBe(60);
-      expect(r.degraded).toBe(true);
+      expect(r.messages.length).toBe(200);
+      expect(r.degraded).toBe(false);
       expect(r.needsRefresh).toBe(true);
     });
 
-    it('says earlier context is missing rather than pretending it never existed', async () => {
+    it('needs no missing-context warning when all raw messages are available', async () => {
       getRecordByKey.mockResolvedValue(undefined);
       const r = await compressHistory(hist(50), 'c1', 30);
-      expect(renderCompressionSection(r)).toContain('not available in this turn');
+      expect(renderCompressionSection(r)).toBe('');
+      expect(r.messages).toHaveLength(50);
     });
 
     it('falls back to truncation without a conversation id, and flags it', async () => {

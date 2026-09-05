@@ -1,3 +1,5 @@
+import { answerContract, renderAnswerContract, type AnswerAssessment } from '$lib/jkai/grounding/answer';
+import { assessAnswer } from '$lib/jkai/grounding/answer.server';
 import { contextResult } from '$lib/jkai/grounding/evidence';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 import { renderMemories } from '$lib/jkai/memory/contracts';
@@ -474,6 +476,7 @@ async function runSingleToolCall(
               emit: () => {},
             }
           : undefined);
+    if (toolCtx && ctx.toolWhitelist) Object.assign(toolCtx, { allowedTools: ctx.toolWhitelist });
     if (jobId) setJobPhase(jobId, 'tool_running', runningSummary || fnName);
     if (isDestructive(fnName)) {
       if (!jobId) {
@@ -776,6 +779,9 @@ async function runGeneralChat(
   // The opening ack is armed by the `generalChat` wrapper above and disarmed
   // through `cancelAck` — see ACK_SILENCE_MS for why it no longer runs at t=0.
 
+  const contract = answerContract(userMessage);
+  let answerAssessment: AnswerAssessment | undefined;
+  let reviewAttempts = 0;
   // Check if user wants to capture knowledge
   maybeIngestAsNote(userMessage);
 
@@ -933,7 +939,7 @@ async function runGeneralChat(
   const stablePrefix = `${personaSection}${basePrompt}${siteSection}${skillsSection}${apiFirstSection}${memorySection}${canvasSection}`;
   const perTurnSuffix = `${compressionSection}${scraperSection}${newsSection}${pastedUrlsSection}${graphSection}${clarifySection}${planSection}`;
   const capabilityPolicy = await getActivePolicy();
-  const systemContent = `${stablePrefix}${perTurnSuffix}${BEHAVIOUR_POLICY}${renderGlobalGuidance(capabilityPolicy)}`;
+  const systemContent = `${stablePrefix}${perTurnSuffix}${BEHAVIOUR_POLICY}${renderGlobalGuidance(capabilityPolicy)}${renderAnswerContract(contract)}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -1342,7 +1348,7 @@ async function runGeneralChat(
             cancelAck();
           }
           fullContent += delta.content;
-          options.onStreamEvent?.({ type: 'token', delta: delta.content });
+          if (!contract.needsReview) options.onStreamEvent?.({ type: 'token', delta: delta.content });
         }
         if (Array.isArray(delta.tool_calls)) {
           // A tool call is a visible sign of life too: the tool card renders in
@@ -1532,7 +1538,17 @@ async function runGeneralChat(
           `usage=${JSON.stringify(lastUsage)}`,
         );
       }
-      responseText = trimmed || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
+      if (trimmed && contract.needsReview) {
+        options.onStreamEvent?.({ type: 'status', text: 'Checking the answer against the sources and requested coverage…' });
+        answerAssessment = await assessAnswer(userMessage, trimmed,
+          JSON.stringify(messages.filter(m => m.role === 'tool' || m.role === 'user').slice(-16)).slice(0, 60000), options.modelContext);
+        if ((answerAssessment.supported === false || answerAssessment.complete === false) && reviewAttempts++ === 0 && round + 1 < maxRounds) {
+          messages.push(msg, { role: 'user', content: `Answer checks found these gaps: ${answerAssessment.issues.join('; ')}. Resolve them with targeted tools or explicitly state what cannot be established. Reuse existing valid evidence.` });
+          continue;
+        }
+        if (answerAssessment.supported === false && answerAssessment.revisedAnswer) msg.content = answerAssessment.revisedAnswer;
+      }
+      responseText = (msg.content as string | undefined)?.trim() || trimmed || `Sorry, the model (${model}) returned an empty response. This may indicate rate limiting or a service issue.`;
       break;
     }
 
@@ -1583,5 +1599,6 @@ async function runGeneralChat(
     void refreshCompression(conversationHistory, options.conversationId, MAX_HISTORY);
   }
 
+  if (contract.needsReview) options.onStreamEvent?.({ type: 'token', delta: responseText });
   return { response: responseText };
 }
