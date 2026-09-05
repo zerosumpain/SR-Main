@@ -1,3 +1,4 @@
+import { currentExecution, withExecution } from '$lib/jkai/grounding/execution';
 import { retainEvidence } from '$lib/jkai/grounding/evidence.server';
 import { validateArguments } from '$lib/jkai/grounding/schema';
 // Tool Registry — Slim Coordinator
@@ -178,13 +179,17 @@ export async function executeTool(
   args: Record<string, unknown>,
   ctx?: import('./registry-internal').ToolExecContext,
 ): Promise<ToolResult> {
+  ctx = ctx ?? currentExecution();
+  if (ctx?.allowedTools && !ctx.allowedTools.includes(name)) return { success: false, error: `Tool ${name} is outside this caller's capability scope` };
+  if (ctx?.signal?.aborted || (ctx?.deadline && Date.now() > ctx.deadline)) return { success: false, error: 'Invocation cancelled or expired' };
+  if ((ctx?.depth ?? 0) > 5) return { success: false, error: 'Nested capability depth exceeded' };
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
   const issues = validateArguments(tool.parameters, args);
   if (issues.length) return { success: false, error: 'invalid_arguments', data: { issues, inputSchema: tool.parameters } };
   let result: ToolResult;
   try {
-    result = await tool.handler(args, ctx);
+    result = await withExecution(ctx ?? { emit: () => {} }, () => tool.handler(args, ctx));
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }

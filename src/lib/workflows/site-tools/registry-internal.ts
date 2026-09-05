@@ -10,6 +10,10 @@ export type ToolResult = { success: boolean; data?: unknown; error?: string; evi
  * onto the active job's SSE stream.
  */
 export interface ToolExecContext {
+  allowedTools?: string[];
+  depth?: number;
+  signal?: AbortSignal;
+  deadline?: number;
   emit: (text: string) => void;
   jobId?: string;
   conversationId?: string;

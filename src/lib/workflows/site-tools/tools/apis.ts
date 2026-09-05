@@ -488,7 +488,7 @@ const AUTH_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization'])
  * and auth/cookie headers are dropped the moment a redirect leaves the original
  * origin. `undici`'s own `fetch` is used so the dispatcher is honoured.
  */
-async function guardedFetch(
+export async function guardedFetch(
   url: string,
   opts: {
     method?: string;

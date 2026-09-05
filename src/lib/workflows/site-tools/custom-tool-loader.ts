@@ -1,3 +1,5 @@
+import { runAuthored, validateHandler } from '$lib/jkai/grounding/authored.server';
+import { currentExecution } from '$lib/jkai/grounding/execution';
 // src/lib/workflows/site-tools/custom-tool-loader.ts
 
 import { db } from '$lib/db';
@@ -31,7 +33,7 @@ export interface ToolPlatform {
 function buildPlatform(callerName: string): ToolPlatform {
   return {
     async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-      if (currentDepth >= MAX_PLATFORM_CALL_DEPTH) {
+      if ((currentExecution()?.depth ?? 0) >= MAX_PLATFORM_CALL_DEPTH) {
         return {
           success: false,
           error: `platform.call depth limit (${MAX_PLATFORM_CALL_DEPTH}) exceeded while calling "${name}" from "${callerName}". Check for tools calling each other in a loop.`,
@@ -41,11 +43,11 @@ function buildPlatform(callerName: string): ToolPlatform {
       if (refusal) return refusal;
       // Lazy import to avoid circular init between registry.ts and this module.
       const { executeTool } = await import('./registry');
-      currentDepth++;
+
       try {
-        return await executeTool(name, args);
+        return await executeTool(name, args, { emit: () => {}, ...currentExecution(), depth: (currentExecution()?.depth ?? 0) + 1 });
       } finally {
-        currentDepth--;
+
       }
     },
   };
@@ -62,19 +64,13 @@ function buildPlatform(callerName: string): ToolPlatform {
  * Must return { success: boolean, data?: unknown, error?: string }.
  */
 function buildHandler(name: string, code: string): (args: Record<string, unknown>) => Promise<ToolResult> {
-  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-  const fn = new AsyncFunction('args', 'fetch', 'platform', code) as (
-    args: Record<string, unknown>,
-    fetch: typeof globalThis.fetch,
-    platform: ToolPlatform,
-  ) => Promise<ToolResult>;
-
+  validateHandler(code);
   const platform = buildPlatform(name);
 
   return async (args: Record<string, unknown>) => {
     let result: ToolResult;
     try {
-      result = await fn(args, globalThis.fetch, platform);
+      result = await runAuthored(code, args, platform.call);
     } catch (err) {
       result = { success: false, error: `Custom tool "${name}" failed: ${err instanceof Error ? err.message : String(err)}` };
     }
