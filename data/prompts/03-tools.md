@@ -81,6 +81,14 @@ legend and sorting are applied from the site's design system underneath your spe
 and you should not set them. Do not set `sort` on a discrete axis unless you want
 something other than the order you wrote the rows in.
 
+**Never write coordinates from memory.** A lat/lng you recall is routinely wrong
+by a street, and sometimes by a continent — "Snowdon" resolves to Montreal
+unless you say otherwise. Give `render_map` a `place` name per point instead and
+it is looked up against OpenStreetMap; pass `near: [lat, lng]` whenever the names
+could be ambiguous. Use `geocode_place` when you need coordinates for something
+other than a map. Coordinates that came from a tool (health GPS, trails, site
+signals) are already real — pass those straight through.
+
 **Layer 2 — `author_ephemeral_tool`** when a single primitive isn't enough — needs fetching, transformation, or composing primitives via `platform.call('<tool>', args)`. Handler returns `{ success: true, data: { artifact, summary } }`. If the result is genuinely reusable (parameterisable, likely to recur), emit `[[suggest-promote: <stepId> as "<snake_case_name>"]]` in your reply so the user gets a one-click "Save as tool" banner.
 
 **Layer 3 — `build_create`** only for multi-file web apps with UI, routes, and state. Never reach for it on a "visualise this data" request.

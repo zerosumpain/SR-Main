@@ -6,6 +6,7 @@
 import { register } from '../registry-internal';
 import type { ToolResult } from '../registry-internal';
 import type { Artifact, ArtifactToolData, TableColumn } from '../artifact-types';
+import { geocodePlace, geocodePlaces } from '../geocode';
 
 function ok(artifact: Artifact, summary: string): ToolResult {
   const data: ArtifactToolData = { artifact, summary };
@@ -162,9 +163,18 @@ register({
 
 // -------- render_map --------
 
+type MapPointArg = {
+  lat?: number;
+  lng?: number;
+  /** A place NAME, resolved server-side when lat/lng are absent. */
+  place?: string;
+  label?: string;
+  weight?: number;
+};
+
 type MapLayerArg = {
   kind: 'points' | 'track' | 'heatmap';
-  points: Array<{ lat: number; lng: number; label?: string; weight?: number }>;
+  points: MapPointArg[];
 };
 
 function summariseMap(layers: MapLayerArg[]): string {
@@ -201,13 +211,19 @@ register({
               type: 'array',
               items: {
                 type: 'object',
+                description:
+                  'Either coordinates (`lat` + `lng`) or a `place` name to look up. PREFER `place` — a name is looked up against OpenStreetMap and plotted exactly, where a coordinate written from memory is usually wrong by a street or more.',
                 properties: {
                   lat: { type: 'number' },
                   lng: { type: 'number' },
+                  place: {
+                    type: 'string',
+                    description:
+                      'Place name to geocode, e.g. "Norwich Cathedral" or "Mousehold Heath, Norwich". Used when lat/lng are omitted. Include the town or county — the more specific, the better the hit.',
+                  },
                   label: { type: 'string' },
                   weight: { type: 'number', description: 'Only used for heatmap layers.' },
                 },
-                required: ['lat', 'lng'],
               },
             },
           },
@@ -220,6 +236,12 @@ register({
         items: { type: 'number' },
       },
       zoom: { type: 'number', description: 'Optional zoom level (1–18).' },
+      near: {
+        type: 'array',
+        description:
+          'Optional [lat, lng] hint for resolving `place` names. Strongly recommended when the names are ambiguous — "Snowdon" alone resolves to Montreal, not Wales.',
+        items: { type: 'number' },
+      },
       caption: { type: 'string' },
     },
     required: ['layers'],
@@ -228,6 +250,7 @@ register({
     const layers = args.layers as MapLayerArg[] | undefined;
     const center = args.center as [number, number] | undefined;
     const zoom = args.zoom as number | undefined;
+    const near = args.near as [number, number] | undefined;
     const caption = args.caption as string | undefined;
 
     if (!Array.isArray(layers) || layers.length === 0) {
@@ -244,20 +267,71 @@ register({
       }
       for (let j = 0; j < l.points.length; j++) {
         const p = l.points[j];
-        if (!p || typeof p.lat !== 'number' || typeof p.lng !== 'number') {
-          return fail(`layers[${i}].points[${j}] must have numeric lat and lng`);
+        if (!p || typeof p !== 'object') return fail(`layers[${i}].points[${j}] must be an object`);
+        const hasCoords = typeof p.lat === 'number' && typeof p.lng === 'number';
+        const hasPlace = typeof p.place === 'string' && p.place.trim().length > 1;
+        if (!hasCoords && !hasPlace) {
+          return fail(
+            `layers[${i}].points[${j}] needs either numeric lat and lng, or a "place" name to look up`,
+          );
         }
       }
+    }
+
+    // Resolve every `place` in one pass. Batched deliberately: geocodePlaces
+    // de-duplicates and paces itself against Nominatim's one-per-second policy,
+    // which a per-point lookup inside the loop below would not.
+    const wanted: string[] = [];
+    for (const l of layers) {
+      for (const p of l.points) {
+        if (typeof p.lat !== 'number' || typeof p.lng !== 'number') {
+          if (typeof p.place === 'string') wanted.push(p.place);
+        }
+      }
+    }
+    const resolved = new Map<string, { lat: number; lng: number; label: string } | null>();
+    if (wanted.length > 0) {
+      for (const r of await geocodePlaces(wanted, near ? { near } : {})) {
+        resolved.set(r.place.trim().toLowerCase(), r.hit);
+      }
+    }
+
+    // A place that would not resolve fails the whole call. Plotting the rest
+    // would draw a map that looks complete and is quietly missing somewhere —
+    // the exact failure this lookup exists to prevent.
+    const unresolved: string[] = [];
+    const plotted: MapLayerArg[] = layers.map((l) => ({
+      kind: l.kind,
+      points: l.points.map((p) => {
+        if (typeof p.lat === 'number' && typeof p.lng === 'number') {
+          return { lat: p.lat, lng: p.lng, label: p.label, weight: p.weight };
+        }
+        const hit = resolved.get((p.place ?? '').trim().toLowerCase());
+        if (!hit) {
+          unresolved.push(p.place ?? '(unnamed)');
+          return { lat: 0, lng: 0 };
+        }
+        // Nominatim's label is kept when the caller supplied none, so the
+        // tooltip says which "Newcastle" it actually plotted.
+        return { lat: hit.lat, lng: hit.lng, label: p.label ?? hit.label, weight: p.weight };
+      }),
+    }));
+
+    if (unresolved.length > 0) {
+      return fail(
+        `could not find ${unresolved.map((u) => JSON.stringify(u)).join(', ')} — add the town or county to the name, or pass lat/lng directly` +
+          (near ? '' : ', or set `near` to bias the lookup'),
+      );
     }
 
     const artifact: Artifact = {
       type: 'map',
       center,
       zoom,
-      layers: layers as Artifact extends { type: 'map'; layers: infer L } ? L : never,
+      layers: plotted as Artifact extends { type: 'map'; layers: infer L } ? L : never,
       caption,
     };
-    const summary = summariseMap(layers);
+    const summary = summariseMap(plotted);
     return ok(artifact, summary);
   },
 });
@@ -327,5 +401,55 @@ register({
     const lines = code.split('\n').length;
     const summary = `${kind ?? header.split(/\s+/)[0]} diagram: ${lines} lines`;
     return ok(artifact, summary);
+  },
+});
+
+// -------- geocode_place --------
+
+register({
+  name: 'geocode_place',
+  description:
+    'Look up the coordinates of a place by name, against OpenStreetMap. Use it whenever you need a lat/lng and do not have one from a tool — never write coordinates from memory, which are routinely wrong by a street or a country. render_map can take a `place` directly, so this is for the other cases: a distance calculation, a weather lookup, a trail start.',
+  toolset: 'visualise',
+  category: 'Visualise',
+  parameters: {
+    type: 'object',
+    properties: {
+      place: {
+        type: 'string',
+        description:
+          'The place name, as specific as you can make it — "Norwich Cathedral, Norfolk" beats "the cathedral".',
+      },
+      near: {
+        type: 'array',
+        description:
+          'Optional [lat, lng] hint. Worth passing whenever the name is ambiguous: "Snowdon" alone resolves to Montreal.',
+        items: { type: 'number' },
+      },
+    },
+    required: ['place'],
+  },
+  handler: async (args): Promise<ToolResult> => {
+    const place = args.place as string | undefined;
+    const near = args.near as [number, number] | undefined;
+    if (typeof place !== 'string' || place.trim().length < 2) {
+      return fail('place must be a non-empty name');
+    }
+    const hit = await geocodePlace(place, near ? { near } : {});
+    if (!hit) {
+      return fail(
+        `could not find ${JSON.stringify(place)} — add the town or county, or pass a \`near\` hint`,
+      );
+    }
+    return {
+      success: true,
+      data: {
+        lat: hit.lat,
+        lng: hit.lng,
+        // The matched label, so a wrong hit is caught here rather than on a map.
+        label: hit.label,
+        source: hit.source,
+      },
+    };
   },
 });
