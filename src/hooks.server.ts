@@ -805,10 +805,21 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Robots-Tag', 'noindex');
     response.headers.set('Referrer-Policy', 'no-referrer');
   }
+  // `microphone=(self)`, NOT `microphone=()`. An empty allowlist disables the
+  // feature for every origin INCLUDING this one, and a Permissions Policy is
+  // checked BEFORE the permission prompt: `getUserMedia` then rejects with
+  // NotAllowedError and the browser never asks. The site setting stays on
+  // "Ask" — because nothing ever asked — so it looks exactly like a user
+  // denial that site settings cannot fix. That shipped in #2, before the site
+  // had a microphone at all, and silently broke the notebook's voice notes
+  // (#711/#712), /capture and the chat recorder. Only widen this for a feature
+  // the first-party site genuinely uses: camera, payment and usb stay closed.
+  // Untrusted builder output is a different document and keeps the empty
+  // allowlist — see safeGeneratedResponseHeaders in $lib/server/generated-content.
   if (!response.headers.has('Permissions-Policy')) {
     response.headers.set(
       'Permissions-Policy',
-      'geolocation=(self), microphone=(), camera=(), payment=(), usb=()',
+      'geolocation=(self), microphone=(self), camera=(), payment=(), usb=()',
     );
   }
   // HSTS only for hosts that actually serve HTTPS. The homeserv systemd build
