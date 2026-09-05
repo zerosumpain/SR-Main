@@ -2258,6 +2258,8 @@ export const jkaiMemories = pgTable(
     category: text('category').notNull(), // people, preferences, places, health, devices, situations
     content: text('content').notNull(),
     sourceConversationId: text('source_conversation_id'),
+    provenance: jsonb('provenance').$type<import('$lib/jkai/memory/contracts').MemoryProvenance>(),
+    embedding: vector('embedding'),
     confidence: text('confidence').notNull().default('high'), // high, medium
     /**
      * Why this shared-store row is eligible for Daydream's private learning

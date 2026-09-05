@@ -1,3 +1,4 @@
+import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 // Unified Knowledge Recall — one search that fans out across every place JKai
 // remembers things: intel notes + the entity graph, /drive file embeddings,
 // deep-dive research facts, personal memory, and datastore records. Each branch
@@ -144,19 +145,14 @@ async function branchResearch(query: string, limit: number): Promise<KnowledgeHi
 async function branchMemory(query: string, limit: number): Promise<KnowledgeHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const rows = await db
-    .select()
-    .from(jkaiMemories)
-    .where(and(ilike(jkaiMemories.content, `%${q}%`), isNull(jkaiMemories.supersededBy)))
-    .orderBy(desc(jkaiMemories.updatedAt))
-    .limit(limit);
+  const rows = await retrieveMemories(q, undefined, limit);
   return rows.map((r) => ({
     source: 'memory' as const,
     title: r.category || 'memory',
     passage: clip(r.content),
     score: KEYWORD_SCORE,
     matchKind: 'keyword' as const,
-    ref: { memoryId: r.id, category: r.category },
+    ref: { memoryId: r.id, category: r.category, confidence: r.confidence, provenance: r.provenance, updatedAt: r.updatedAt },
   }));
 }
 
