@@ -1,3 +1,4 @@
+import { validateArguments } from '$lib/jkai/grounding/schema';
 // Tool Registry — Slim Coordinator
 // Types and register() live in registry-internal.ts to avoid circular init with domain modules.
 
@@ -177,6 +178,8 @@ export async function executeTool(
 ): Promise<ToolResult> {
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
+  const issues = validateArguments(tool.parameters, args);
+  if (issues.length) return { success: false, error: 'invalid_arguments', data: { issues, inputSchema: tool.parameters } };
   let result: ToolResult;
   try {
     result = await tool.handler(args, ctx);
