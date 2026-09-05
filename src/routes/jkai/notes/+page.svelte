@@ -388,7 +388,7 @@
       <div class="cover-copy">
         <p class="wordmark"><span>&gt;</span> strangeramblings.com<em>/jkai/notes</em></p>
         <p class="kicker">Notebook · private working memory</p>
-        <h1>A PLACE<br />TO THINK.</h1>
+        <h1>A place to think.</h1>
         <p class="standfirst">
           Capture the unfinished thing. The engine can research around it and weave it into the
           graph, but your words remain your own.
@@ -472,7 +472,7 @@
         <div class="blank">
           <p class="section-no">02 / Writing desk</p>
           <p class="blank-mark" aria-hidden="true">✦</p>
-          <h2>START WITH<br />THE ROUGH VERSION.</h2>
+          <h2>Start with the rough version.</h2>
           <p>Choose a note from the library, or open a fresh page. Markdown is welcome; polish is optional.</p>
           <button type="button" class="new-note paper" onclick={newNote}>+ New note</button>
           <span class="shortcut">⌘⌥N · NEW &nbsp;&nbsp; ⌘S · SAVE</span>
@@ -614,7 +614,7 @@
   .cover {
     background: var(--text-primary);
     color: var(--bg);
-    padding: clamp(30px, 4vw, 58px) clamp(18px, 3.2vw, 48px) clamp(32px, 3.6vw, 52px);
+    padding: clamp(18px, 2.2vw, 30px) clamp(18px, 3.2vw, 48px) clamp(20px, 2.4vw, 30px);
   }
   .cover-inner {
     max-width: 1500px;
@@ -626,7 +626,7 @@
   }
   .cover-copy { flex: 1 1 600px; min-width: 0; }
   .wordmark {
-    margin: 0 0 22px;
+    margin: 0 0 9px;
     font-family: var(--font-brand);
     font-size: var(--fs-label);
     color: rgba(237, 228, 212, 0.58);
@@ -634,50 +634,65 @@
   .wordmark span { color: var(--accent-on-dark); }
   .wordmark em { color: rgba(237, 228, 212, 0.34); font-style: normal; }
   .cover .kicker {
-    margin: 0 0 13px;
+    margin: 0 0 7px;
     color: var(--accent-on-dark);
   }
   .cover h1 {
     margin: 0;
     font-family: var(--font-display);
-    font-size: clamp(3rem, 7.4vw, 7.1rem);
-    line-height: 0.82;
-    letter-spacing: -0.035em;
+    font-size: clamp(1.9rem, 3.9vw, 3.35rem);
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
     color: var(--bg);
   }
   .standfirst {
-    max-width: 60ch;
-    margin: 24px 0 0;
-    font-size: var(--fs-body-lg);
-    line-height: 1.55;
+    max-width: 56ch;
+    margin: 11px 0 0;
+    font-size: var(--fs-body);
+    line-height: 1.5;
     color: rgba(237, 228, 212, 0.7);
     text-wrap: pretty;
   }
   .cover-readout {
-    flex: 0 1 290px;
+    flex: 0 1 404px;
     display: grid;
-    width: min(100%, 290px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 404px);
     border-top: 1px solid rgba(237, 228, 212, 0.25);
+  }
+  .cover-readout .new-note { grid-column: 1 / -1; }
+  /* Left column of the 2x2 keeps clear of the divider; right column clears it
+     on the other side. Without both, "automatic · 1.2s" butts "daydream". */
+  .cover-readout p:nth-of-type(1),
+  .cover-readout p:nth-of-type(3) {
+    padding-right: 14px;
+  }
+  .cover-readout p:nth-of-type(2),
+  .cover-readout a {
+    padding-left: 14px;
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
   }
   .cover-readout p,
   .cover-readout a {
     display: flex;
     justify-content: space-between;
-    gap: 18px;
+    gap: 12px;
     margin: 0;
-    padding: 10px 0;
+    padding: 8px 0;
     border-bottom: 1px solid rgba(237, 228, 212, 0.14);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
+    white-space: nowrap;
     color: rgba(237, 228, 212, 0.78);
   }
   .cover-readout p span { color: rgba(237, 228, 212, 0.38); }
   .cover-readout a { color: var(--accent-on-dark); text-decoration: none; }
   .new-note {
-    padding: 13px 18px;
-    margin: 0 0 18px;
+    padding: 10px 16px;
+    margin: 0 0 12px;
     border: 1px solid var(--accent-on-dark);
     border-radius: 0;
     background: var(--accent-on-dark);
@@ -704,8 +719,8 @@
     max-width: 1500px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: minmax(300px, 0.34fr) minmax(0, 1fr);
-    min-height: 720px;
+    grid-template-columns: minmax(320px, 0.42fr) minmax(0, 1fr);
+    min-height: 520px;
     border-left: 1px solid var(--line-hair);
     border-right: 1px solid var(--line-hair);
   }
@@ -729,7 +744,7 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 18px;
-    padding: 28px 24px 20px;
+    padding: 18px 20px 13px;
     border-bottom: 2px solid var(--text-primary);
   }
   .library-head h2,
@@ -748,7 +763,7 @@
     display: flex;
     align-items: center;
     gap: 9px;
-    margin: 18px 18px 10px;
+    margin: 12px 16px 8px;
     padding: 0 11px;
     border: 1px solid var(--line-strong);
     background: var(--bg);
@@ -757,7 +772,7 @@
   .search-wrap input {
     flex: 1;
     min-width: 0;
-    padding: 11px 0;
+    padding: 9px 0;
     border: 0;
     outline: 0;
     background: transparent;
@@ -776,7 +791,7 @@
   .folders {
     display: flex;
     gap: 0;
-    margin: 0 18px 12px;
+    margin: 0 16px 8px;
     padding-bottom: 4px;
     overflow-x: auto;
   }
@@ -803,10 +818,10 @@
   }
   .item {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
+    grid-template-columns: 26px minmax(0, 1fr);
     gap: 10px;
     width: 100%;
-    padding: 15px 18px 16px;
+    padding: 10px 16px 11px;
     border: 0;
     border-left: 3px solid transparent;
     border-bottom: 1px solid var(--line-hair);
@@ -837,7 +852,7 @@
   .pin { margin-right: 6px; color: var(--accent); font-size: var(--fs-label-xs); }
   .item-excerpt {
     display: -webkit-box;
-    margin-top: 4px;
+    margin-top: 3px;
     overflow: hidden;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -845,28 +860,31 @@
     font-size: var(--fs-label);
     line-height: 1.35;
   }
-  .item-meta { display: flex; flex-wrap: wrap; gap: 7px 10px; margin-top: 8px; font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .item-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 5px; font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .item-meta b { color: var(--accent); font-weight: 500; }
   .engine-mark { color: var(--accent-ink); }
-  .empty-list { padding: 34px 24px; }
+  .empty-list { padding: 22px 20px; }
   .empty-list strong { font-family: var(--font-display); font-size: var(--fs-display-xs); }
   .empty-list p { max-width: 28ch; color: var(--text-muted); line-height: 1.5; }
 
   .editor { min-width: 0; background: var(--bg); }
+  /* Top-aligned and compact. Centred in a 650px minimum it read as a second
+     page rather than the continuation of the library beside it, and the desk
+     opened with ~400px of nothing above the fold. */
   .blank {
-    min-height: 650px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    justify-content: center;
-    padding: clamp(40px, 8vw, 110px);
+    justify-content: flex-start;
+    padding: 18px clamp(22px, 3.2vw, 52px) clamp(28px, 3.4vw, 52px);
     border: 0;
     text-align: left;
   }
-  .blank-mark { margin: 0 0 20px; color: var(--accent); font-size: 2rem; }
-  .blank h2 { margin: 0; font-family: var(--font-display); font-size: clamp(2.4rem, 5vw, 5rem); line-height: 0.88; }
-  .blank > p:not(.section-no):not(.blank-mark) { max-width: 52ch; margin: 22px 0; color: var(--text-muted); font-size: var(--fs-body-lg); line-height: 1.55; }
-  .blank .new-note.paper { margin: 2px 0 18px; background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .blank-mark { margin: 0 0 10px; color: var(--accent); font-size: 1.35rem; }
+  .blank h2 { margin: 0; max-width: 20ch; font-family: var(--font-display); font-size: clamp(1.6rem, 2.8vw, 2.45rem); line-height: 0.98; text-transform: uppercase; }
+  .blank > p:not(.section-no):not(.blank-mark) { max-width: 54ch; margin: 12px 0; color: var(--text-muted); font-size: var(--fs-body); line-height: 1.5; }
+  .blank .new-note.paper { margin: 2px 0 12px; background: var(--accent); border-color: var(--accent); color: var(--bg); }
   .blank .new-note.paper:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
   .shortcut { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); letter-spacing: 0.09em; }
 
@@ -907,12 +925,12 @@
   button:disabled { opacity: 0.48; cursor: not-allowed; }
   button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .page { padding: clamp(34px, 6vw, 82px) clamp(24px, 8vw, 110px) 70px; }
+  .page { padding: clamp(22px, 2.6vw, 40px) clamp(22px, 3.6vw, 60px) 46px; }
   .page .title {
     display: block;
     width: 100%;
-    margin: 0 0 24px;
-    padding: 0 0 18px;
+    margin: 0 0 15px;
+    padding: 0 0 12px;
     border: 0;
     border-bottom: 2px solid var(--text-primary);
     border-radius: 0;
@@ -920,8 +938,11 @@
     background: transparent;
     color: var(--text-primary);
     font-family: var(--font-display);
-    font-size: clamp(2.1rem, 5vw, 4.8rem);
-    line-height: 0.95;
+    /* An <input> cannot wrap: at 4.8rem an everyday title ran past the column
+       edge and was clipped mid-word. This fits ~34 characters at 1600px. */
+    font-size: clamp(1.5rem, 2.5vw, 2.35rem);
+    line-height: 1.05;
+    text-overflow: ellipsis;
   }
   .page .title::placeholder { color: rgba(26, 16, 8, 0.22); }
   .page .title:focus { border-bottom-color: var(--accent); }
@@ -929,9 +950,9 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
-    gap: 14px 28px;
-    margin-bottom: 28px;
-    padding-bottom: 14px;
+    gap: 12px 26px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--line-hair);
   }
   .note-meta label { display: flex; flex: 1 1 220px; flex-direction: column; gap: 4px; }
@@ -943,7 +964,7 @@
   .body-box {
     display: block;
     width: 100%;
-    min-height: 520px;
+    min-height: 460px;
     padding: 0;
     border: 0;
     outline: 0;
@@ -957,11 +978,11 @@
   .page textarea::placeholder { color: var(--text-ghost); }
 
   .engine-deck {
-    padding: clamp(32px, 4vw, 54px) clamp(24px, 5vw, 72px) 60px;
+    padding: clamp(22px, 2.8vw, 38px) clamp(22px, 3.6vw, 56px) 40px;
     background: var(--text-primary);
     color: var(--bg);
   }
-  .engine-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid rgba(237, 228, 212, 0.2); }
+  .engine-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 15px; border-bottom: 1px solid rgba(237, 228, 212, 0.2); }
   .engine-head .section-no { color: var(--accent-on-dark); }
   .engine-head h2 { color: var(--bg); }
   .engine-head > p { max-width: 36ch; margin: 0; color: rgba(237, 228, 212, 0.55); font-size: var(--fs-label); line-height: 1.45; }
@@ -1021,7 +1042,12 @@
   .foot p { margin: 0; }
 
   @media (max-width: 900px) {
-    .cover-inner { align-items: flex-start; flex-direction: column; }
+    /* Once this stacks, the flex main axis is vertical — so `flex: 1 1 600px`
+       on the copy stopped meaning "600px wide" and started meaning "600px
+       TALL", which is where ~430px of empty ink under the standfirst came
+       from. The basis has to be reset, not just the readout's. */
+    .cover-inner { align-items: flex-start; flex-direction: column; gap: 18px; }
+    .cover-copy { flex: 0 0 auto; }
     .cover-readout { flex-basis: auto; }
     .workspace { grid-template-columns: minmax(0, 1fr); }
     .library { border-right: 0; border-bottom: 2px solid var(--text-primary); }
@@ -1029,9 +1055,8 @@
     .editor-head { top: 0; }
   }
   @media (max-width: 620px) {
-    .cover { padding-top: 24px; }
-    .cover h1 { font-size: clamp(2.8rem, 16vw, 4.8rem); }
-    .standfirst { font-size: var(--fs-body); }
+    .cover { padding-top: 18px; }
+    .cover h1 { font-size: clamp(1.7rem, 7.4vw, 2.4rem); }
     .library-head { padding: 22px 18px 16px; }
     .editor-head { align-items: flex-start; flex-direction: column; }
     .editor-actions { width: 100%; overflow-x: auto; padding-bottom: 2px; }
