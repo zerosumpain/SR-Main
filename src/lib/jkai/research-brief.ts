@@ -745,7 +745,38 @@ async function synthesiseBrief(
   };
 
   const usable = isBriefUsable(brief);
-  if (!usable.ok) throw new Error(`Research stage: ${usable.reason}`);
+  if (!usable.ok) {
+    // Say what the research actually FOUND before throwing it away.
+    //
+    // The gate runs at the very end of the stage, so by the time it rejects,
+    // a full deep-dive has already run — tens of minutes and real spend — and
+    // the brief is about to be discarded unstored (orchestrator.ts aborts the
+    // build without writing `research_brief`). Until this log existed the only
+    // surviving trace was the one-line reason, which says a count and not a
+    // topic: "only 2 distinct sources across 15 facts" gives no way to tell a
+    // topic with no public material from a search that went sideways.
+    //
+    // That distinction is the whole diagnosis. The 2026-09-03 rejection was an
+    // explainer about this site's own daydream feature — a subject the public
+    // web genuinely does not cover, where no amount of re-running helps and the
+    // answer is to change the topic or the evidence source. Seeing the two
+    // source URLs says that immediately.
+    const sources = [...new Set(brief.facts.map((f) => f.sourceUrl).filter(Boolean))];
+    await emitLog(
+      buildId,
+      'error',
+      `Research brief REJECTED — ${usable.reason}\n` +
+        `What the stage found: ${brief.facts.length} sourced fact(s) across ${sources.length} ` +
+        `distinct source(s), ${brief.causalMap.length} causal link(s), ${brief.gaps.length} gap(s).` +
+        (sources.length
+          ? `\nSources: ${sources.slice(0, 10).join(', ')}${sources.length > 10 ? ` (+${sources.length - 10} more)` : ''}`
+          : '\nSources: none — the research produced no usable citation at all.') +
+        `\nThe brief is discarded, so a retry re-runs the whole stage. If the sources above are ` +
+        `thin because the topic is internal or very recent, changing the topic will help and ` +
+        `re-running will not.`,
+    );
+    throw new Error(`Research stage: ${usable.reason}`);
+  }
 
   await emitLog(
     buildId,
