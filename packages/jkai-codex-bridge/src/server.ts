@@ -231,11 +231,11 @@ interface ChatCompletionRequest {
   reasoning_effort?: string;
 }
 
-/** Mirrors CODEX_REASONING_EFFORTS in the site catalogue. `max` and `ultra` are
- *  accepted here for every model — the per-model ceiling is enforced by the
- *  caller ($lib/models/thinking), because the bridge has no idea which model the
- *  site is about to hand it beyond the slug in the request. */
-const REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+/** Mirrors CODEX_REASONING_EFFORTS in the site catalogue. `max` is accepted here
+ *  for every model — the per-model ceiling is enforced by the caller
+ *  ($lib/models/thinking), because the bridge has no idea which model the site
+ *  is about to hand it beyond the slug in the request. */
+const REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 interface HandlerOptions {
   /** Set only by the /v1/grounded route. Never read from the request body. */
