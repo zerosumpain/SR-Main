@@ -5,8 +5,9 @@ if ! command -v bwrap >/dev/null 2>&1; then
   sudo apt-get update -qq
   sudo apt-get install -y --no-install-recommends bubblewrap
 fi
+node_bin="$(node -p 'process.execPath')"
 smoke() {
-  bwrap --unshare-all --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --proc /proc --dev /dev --tmpfs /tmp -- /usr/bin/node -e 'process.exit(0)'
+  bwrap --unshare-all --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --proc /proc --dev /dev --tmpfs /tmp --dir /runtime --ro-bind "$node_bin" /runtime/node -- /runtime/node -e 'process.exit(0)'
 }
 if smoke; then exit 0; fi
 # Ubuntu's kernel can enforce userns restrictions even when its packaged

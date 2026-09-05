@@ -37,7 +37,8 @@ export function runAuthored(code: string, args: Record<string, unknown>, call: (
     const child = spawn('/usr/bin/bwrap', ['--unshare-all', '--die-with-parent', '--new-session', '--clearenv',
       '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib', '--ro-bind', '/lib64', '/lib64',
       '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--chdir', '/tmp',
-      '--', '/usr/bin/node', '--max-old-space-size=96', '-e', WORKER], { env: {}, stdio: ['pipe', 'pipe', 'pipe'] });
+      '--dir', '/runtime', '--ro-bind', process.execPath, '/runtime/node',
+      '--', '/runtime/node', '--max-old-space-size=96', '-e', WORKER], { env: {}, stdio: ['pipe', 'pipe', 'pipe'] });
     let ended = false; let bytes = 0; let calls = 0; let errors = '';
     const finish = (result: ToolResult) => { if (ended) return; ended = true; clearTimeout(timer); child.kill('SIGKILL'); resolve(result); };
     const timer = setTimeout(() => finish({ success: false, error: 'Authored handler deadline exceeded; sandbox terminated' }), timeoutMs);
