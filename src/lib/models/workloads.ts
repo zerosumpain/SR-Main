@@ -43,6 +43,7 @@ import {
   DEFAULT_EMBEDDING_MODEL_ID,
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_ART_DIRECTOR_MODEL_ID,
+  DEFAULT_DESIGN_REVIEW_MODEL_ID,
   DEFAULT_RESEARCH_FAST_MODEL_ID,
   DEFAULT_DAYDREAM_REVIEW_MODEL_ID,
   DEFAULT_NOTE_REVIEW_MODEL_ID,
@@ -343,6 +344,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'tools',
     reason:
       'Follows the site default. Note a build PINS its model at creation from whatever this resolves to, so changing it affects new builds only — the same rule chat conversations follow.',
+  },
+  {
+    id: 'design-review',
+    scope: 'site',
+    label: 'Build design review',
+    blurb: 'Judges a studio build’s rendered chapters against the explainer kit’s design rubric.',
+    key: 'jkai.builder.design_review_model',
+    fallbackModelId: DEFAULT_DESIGN_REVIEW_MODEL_ID,
+    requires: 'image-input',
+    catalogue: 'tools',
+    reason:
+      'The only stage of a build that looks at pixels rather than source, so it must accept images — a text-only model (any codex/ id) does not fail here, it answers the prompt and ignores the screenshot. It is also the only stage making an aesthetic judgement, and it runs once per iteration on at most four images, which makes it the cheapest place in a build to buy a better model. Resolved per iteration, NOT stamped at creation like `builder`, so a change reaches builds already running.',
   },
   {
     id: 'heartbeat',

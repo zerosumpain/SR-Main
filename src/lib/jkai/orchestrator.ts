@@ -1747,6 +1747,75 @@ class Orchestrator {
             ) {
               studioComplete = true;
             }
+
+            // Design review. The gate above answers "does it teach"; every one
+            // of its checks is structural, and a chapter can clear all four and
+            // still look wrong — until this stage there was nothing anywhere in
+            // the build loop that had ever looked at a rendered pixel. The
+            // design system's whole footprint on a build was a prompt block, a
+            // mount and three regexes in design-lint.ts, and all three check
+            // CONFORMANCE (no raw hex, no Tailwind, no bare font-family). A
+            // page can violate none of them and still get hierarchy, rhythm,
+            // palette weighting and template discipline wrong.
+            //
+            // Runs on the same served build, right after the gate, for the same
+            // reason the gate runs after promotion: it should judge what the
+            // user is looking at.
+            //
+            // NEVER ABORTS, exactly like the gate — findings ride the
+            // evaluation into the next iteration and nothing more. A visual
+            // judgement is the last thing that should be allowed to end a
+            // build: it is the most subjective signal in the loop, so a
+            // disagreement the agent cannot resolve is precisely the
+            // design_lint_loop shape (three iterations of an unfixable finding
+            // killing an app that was complete and serving 200). It
+            // deliberately does not gate `studioComplete` above either — a
+            // build that cannot finish until a reviewer runs out of taste
+            // objections is the same trap wearing a politer face.
+            //
+            // Only chapters that are actually BUILT get shot — `built`, not
+            // `chaptersDue`, which is deliberately one ahead (it is the gate's
+            // "what this build owes by now"). Reviewing a placeholder produces
+            // findings the agent has been explicitly told not to act on yet,
+            // the premature-findings bug the gate had before `chaptersDue`
+            // existed; and `chaptersDue - 1` would silently drop the final
+            // chapter on a finished build, since chaptersDue stops climbing
+            // once every chapter exists.
+            const reviewable = build.chapterPlan
+              .filter((c) => c.n <= built)
+              .map((c) => ({ n: c.n, title: c.title, path: `/chapter-${c.n}/` }));
+            if (reviewable.length === 0) {
+              await emitLog(
+                buildId,
+                'system',
+                'Design review skipped — no finished chapter to look at yet.',
+                iteration.id,
+              );
+            } else {
+              const { runDesignReview, describeDesignReview } = await import('./design-review');
+              const review = await runDesignReview({
+                buildId,
+                baseUrl: `http://127.0.0.1:${port}`,
+                chapters: reviewable,
+              });
+              const reviewSummary = describeDesignReview(review);
+              await emitLog(
+                buildId,
+                // A skip is an error, not an aside: it means nothing looked at
+                // how this build looks, and nothing else will. Findings
+                // themselves are ordinary — they are the stage working.
+                review.ran ? 'system' : 'error',
+                reviewSummary,
+                iteration.id,
+              );
+              if (review.ran && !review.passed && result.evaluation) {
+                result.evaluation = `${result.evaluation}\n\n## Design review\n${reviewSummary}`;
+                await db
+                  .update(jkaiIterations)
+                  .set({ evaluation: result.evaluation })
+                  .where(eq(jkaiIterations.id, iteration.id));
+              }
+            }
           }
         }
       }

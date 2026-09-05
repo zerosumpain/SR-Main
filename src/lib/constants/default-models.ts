@@ -122,6 +122,22 @@ export const DEFAULT_AUDIO_MODEL_ID = 'google/gemini-2.0-flash-001';
 export const DEFAULT_ART_DIRECTOR_MODEL_ID = 'z-ai/glm-5.2';
 
 /**
+ * The studio build's visual design review — the one stage in the builder that
+ * looks at a rendered screenshot rather than at source.
+ *
+ * Pinned off the site default for two reasons that both have to hold. It must
+ * accept images, and any `codex/` id is text-only, so a Codex site default
+ * would not fail here — it would answer the prompt and ignore the picture, the
+ * `vision` role's exact failure mode. And unlike `vision`, whose job is to
+ * transcribe what is in front of it, this one is asked to make an aesthetic
+ * judgement against a written rubric, which is the thing cheap models are
+ * worst at: a flash-tier model returns fluent findings that do not correspond
+ * to the pixels. It runs once per iteration on at most four images, so it is
+ * the cheapest place in a whole build to spend on a better model.
+ */
+export const DEFAULT_DESIGN_REVIEW_MODEL_ID = 'anthropic/claude-sonnet-4.5';
+
+/**
  * The budgeted research tiers (instant / scan / brief).
  *
  * The requirement is narrow and worth restating where the literal lives: fast,
