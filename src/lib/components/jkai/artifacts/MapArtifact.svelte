@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { Action } from 'svelte/action';
   import type { MapArtifact } from '$lib/workflows/site-tools/artifact-types';
 
   // Loose global typing — Leaflet loaded via static script tag, not npm.
@@ -34,13 +35,76 @@
   let scrollZoomActive = $state(false);
   let mapRef: LeafletMap | null = $state(null);
 
+  /**
+   * Move the figure to <body> while it is fullscreen, and put it back after.
+   *
+   * `position: fixed` is NOT relative to the viewport when any ancestor carries
+   * a transform — that ancestor becomes the containing block instead. Every
+   * chat message sits inside `.msg-stack`, which runs `animation: thread-arrive
+   * … both`, and the `both` fill-mode leaves `transform: translateY(0)` applied
+   * for ever. So the "fullscreen" map was being sized against the message
+   * column: measured at 870×288 at (20, 89) on a 1280×800 viewport, with an
+   * 800px-tall Leaflet pane clipped inside it.
+   *
+   * No amount of z-index or inset fixes that from inside the subtree — the only
+   * cure is to leave it, which is the same portal the site's modals use. A
+   * local action, not `$lib/canvas/portal`: that one re-appends on destroy and
+   * would resurrect the overlay (see the sr-design skill).
+   */
+  const portalWhileFullscreen: Action<HTMLElement, boolean> = (node, active) => {
+    // A comment node holds the figure's place in the thread, so it goes back
+    // exactly where it was rather than at the end of its parent.
+    const home = document.createComment('map-artifact');
+    node.before(home);
+
+    const place = (isFullscreen: boolean) => {
+      if (isFullscreen && node.parentElement !== document.body) document.body.appendChild(node);
+      else if (!isFullscreen && node.parentElement === document.body) home.after(node);
+    };
+    // Honour the initial value too: `update` only fires on a CHANGE, so a map
+    // that mounted already fullscreen would otherwise stay in the thread.
+    place(active);
+
+    return {
+      update: place,
+      destroy() {
+        // Take the node out of <body> before the placeholder goes, or a
+        // fullscreen map unmounted mid-flight leaves an orphan pinned over
+        // the page with no way to dismiss it.
+        if (node.parentElement === document.body) node.remove();
+        home.remove();
+      },
+    };
+  };
+
   function toggleFullscreen() {
     fullscreen = !fullscreen;
-    // Leaflet needs to recalculate tile layout after the container resizes
-    requestAnimationFrame(() => {
-      mapRef?.invalidateSize();
-    });
   }
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && fullscreen) {
+      event.stopPropagation();
+      fullscreen = false;
+    }
+  }
+
+  $effect(() => {
+    // Reads `fullscreen` only; everything it writes is outside Svelte's graph,
+    // so there is no effect-reads-own-write loop here.
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeydown, true);
+    // Two frames: the first applies the class, the second lets layout settle
+    // before Leaflet measures. One frame measured the old box on a cold map.
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => mapRef?.invalidateSize()));
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', onKeydown, true);
+      document.body.style.overflow = previous;
+      requestAnimationFrame(() => mapRef?.invalidateSize());
+    };
+  });
 
   function activateScrollZoom() {
     if (scrollZoomActive) return;
@@ -167,7 +231,7 @@
   });
 </script>
 
-<figure class="map-artifact" class:fullscreen>
+<figure class="map-artifact" class:fullscreen use:portalWhileFullscreen={fullscreen}>
   {#if artifact.caption}
     <figcaption>{artifact.caption}</figcaption>
   {/if}
@@ -223,10 +287,20 @@
     border-radius: 0;
     border: none;
     z-index: 9999;
-    background: #fff;
+    background: var(--surface-elevated);
+    /* The caption takes its own row rather than floating over the map, so the
+       top strip of the map is never hidden behind it. */
+    display: flex;
+    flex-direction: column;
   }
   .map-artifact.fullscreen .map-container {
-    height: 100vh;
+    /* flex: 1 rather than 100vh — the caption is a sibling now, and 100vh would
+       push the map that much taller than the space left for it. `min-height: 0`
+       because a flex item's default `min-height: auto` refuses to shrink and
+       would overflow the figure. */
+    flex: 1;
+    min-height: 0;
+    height: auto;
   }
   .fs-toggle {
     position: absolute;
@@ -239,14 +313,13 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    border: 1px solid rgba(0,0,0,0.2);
-    border-radius: 4px;
-    background: white;
-    color: #333;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-round);
+    background: var(--surface-elevated);
+    color: var(--text-primary);
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
   }
-  .fs-toggle:hover { background: #f5f5f5; }
+  .fs-toggle:hover { background: var(--bg); }
   figcaption {
     padding: 0.4rem 0.75rem;
     font-family: var(--font-mono);
@@ -258,14 +331,9 @@
     border-bottom: 1px solid var(--line-strong);
   }
   .map-artifact.fullscreen figcaption {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    /* Opaque, and a token — the map scrolls under it. `--surface-elevated`
-       rather than a hard white, which the rest of the cream system never uses. */
-    background: var(--surface-elevated);
-    z-index: 1;
+    /* Nothing to override: the flex column above already gives it a row of its
+       own at the top, which is where it sits inline too. */
+    flex: none;
   }
   .error {
     color: var(--error);

@@ -69,8 +69,22 @@ echo "==> gating $(basename "$ROOT") [$(git rev-parse --abbrev-ref HEAD 2>/dev/n
 # homeserv's own 127.0.0.1:5433, which is not reachable from porkserv, and
 # shipping real secrets to a third machine to run unit tests is a cost with no
 # benefit. CI has no .env either and its tests pass.
-echo "==> rsync → ${REMOTE}:${REMOTE_WORK}"
+# Ship to a PER-RUN staging directory, never straight into the workspace.
+#
+# The workspace is shared and the lock below is what protects it — but a plain
+# `rsync ... work/` happens BEFORE that lock is held, so a second invocation
+# could replace the tree of a run already in progress (`--delete` and all) and
+# the first run would grade the second one's files. That is not hypothetical:
+# on 2026-09-05 a run reported "0 errors in 215 files" and `gate passed` for a
+# tree whose files were not in the checkout that launched it. A false PASS is
+# the dangerous direction — it is a green light for code nobody checked.
+#
+# Staging is per-run so nothing else writes to it, and the swap into the shared
+# workspace happens inside the lock, where it is safe.
+STAGE="${REMOTE_ROOT}/stage-$$-$(date +%s)"
+echo "==> rsync → ${REMOTE}:${STAGE}"
 rsync -a --delete --info=stats1 \
+  --rsync-path="mkdir -p '${STAGE}' && rsync" \
   --exclude='.git' \
   --exclude='.env' \
   --exclude='keys.json' \
@@ -79,7 +93,7 @@ rsync -a --delete --info=stats1 \
   --exclude='build' \
   --exclude='.worktrees' \
   --exclude='.claude/worktrees' \
-  ./ "${REMOTE}:${REMOTE_WORK}/"
+  ./ "${REMOTE}:${STAGE}/"
 RSYNC_EC=$?
 if [ "$RSYNC_EC" -ne 0 ]; then
   echo "ERROR: rsync failed (exit ${RSYNC_EC}) — nothing ran on ${REMOTE}." >&2
@@ -97,9 +111,23 @@ fi
 # worktrees gated at once would otherwise interleave into the same directory.
 # -w 3600 waits rather than failing, because "another gate is running" is a
 # reason to queue, not to error.
+# The swap and the run are ONE locked step. node_modules, .svelte-kit and build
+# are preserved across it — they are the expensive state the shared workspace
+# exists to keep, and the stamps in gate-remote-run.sh decide when to refresh
+# them. The staging copy is removed either way, including when the gate fails.
 ssh -n "$REMOTE" \
-  "GATE_WITH_BUILD=${WITH_BUILD} flock -w 3600 '${REMOTE_ROOT}/.lock' '${REMOTE_WORK}/scripts/gate-remote-run.sh'"
+  "GATE_WITH_BUILD=${WITH_BUILD} flock -w 3600 '${REMOTE_ROOT}/.lock' bash -c '
+     set -e
+     mkdir -p \"${REMOTE_WORK}\"
+     rsync -a --delete \
+       --exclude=node_modules --exclude=.svelte-kit --exclude=build \
+       \"${STAGE}/\" \"${REMOTE_WORK}/\"
+     rm -rf \"${STAGE}\"
+     exec \"${REMOTE_WORK}/scripts/gate-remote-run.sh\"
+   '"
 EC=$?
+# A staging dir left behind by a failed swap would otherwise accumulate.
+ssh -n "$REMOTE" "rm -rf '${STAGE}'" 2>/dev/null || true
 
 if [ "$EC" -ne 0 ]; then
   echo "==> GATE FAILED on ${REMOTE} (exit ${EC})" >&2

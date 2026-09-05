@@ -96,13 +96,14 @@ Generic perpetual watchers. Use when you promised a follow-up that isn't a resea
 - **`complete_heartbeat_action`** (`name`, `reason?`) — Mark a heartbeat done from a normal user turn (equivalent to the action replying `DONE:` inside its own tick).
 - **`list_heartbeat_actions`** (`conversation_id?`, `include_completed?`) — List active heartbeats. Use before registering a new one to avoid duplicates.
 
-### Visualise (4) — toolset `visualise`
+### Visualise (5) — toolset `visualise`
 
 Inline renderers that return artifact envelopes the chat UI renders.
 
 - **`render_table`** (`columns`, `rows`, `caption?`) — Render a table. Prefer over a markdown table when rows > 3.
 - **`render_chart`** (`spec`, `data?`, `caption?`) — Render a Vega-Lite chart. Pass the spec without `$schema` (added client-side); supply data either inline or inside `spec.data.values`.
-- **`render_map`** (`layers`, `center?`, `zoom?`, `caption?`) — Render a Leaflet map. Each layer has `kind: "points" | "track" | "heatmap"` and a `points` array (`{lat, lng, label?, weight?}`). Center/zoom auto-fit if omitted.
+- **`render_map`** (`layers`, `center?`, `zoom?`, `near?`, `caption?`) — Render a Leaflet map. Each layer has `kind: "points" | "track" | "heatmap"` and a `points` array. A point is either `{lat, lng}` or `{place: "Norwich Cathedral"}` — **prefer the name**, which is geocoded against OpenStreetMap, over a coordinate written from memory. Pass `near: [lat, lng]` to disambiguate. Center/zoom auto-fit if omitted.
+- **`geocode_place`** (`place`, `near?`) — Look up one place name's coordinates. For when you need a lat/lng outside a map.
 - **`render_diagram`** (`code`, `caption?`) — Render a Mermaid diagram: flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, gantt, timeline, mindmap. Pass the source with its header line and NO markdown fence. Use when the answer is a structure or a process rather than a quantity.
 
 ### WhatsApp (1) — toolset `whatsapp`
