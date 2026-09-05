@@ -62,6 +62,12 @@ beforeEach(() => {
 });
 
 describe('news search', () => {
+  it('recognizes Ars Technica requests and exposes the source filter', async () => {
+    expect(newsQueryTerms('latest Ars Technica news')).toEqual([]);
+    expect(await searchNews({ query: 'latest Ars Technica news' })).toMatchObject({ data: { source: 'ars-technica' } });
+    expect(await searchNews({ source: 'ars-technica' })).toMatchObject({ data: { source: 'ars-technica' } });
+    expect(await searchNews({ source: 'all', query: 'Ars Technica news' })).toMatchObject({ data: { source: 'all' } });
+  });
   it('drops news-request filler and ranks actual topic matches', () => {
     expect(newsQueryTerms('What is the latest news about AI today?')).toEqual(['ai']);
     const matches = searchNewsStories(feed.stories, { query: 'latest AI news' });

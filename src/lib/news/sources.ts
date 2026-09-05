@@ -6,6 +6,7 @@ import type {
   NewsWireView,
 } from './types';
 
+import { fetchArs, getArsStory, isArsStoryId } from './ars';
 const HN_API = 'https://hacker-news.firebaseio.com/v0';
 const LOBSTERS = 'https://lobste.rs';
 export const NEWS_PAGE_SIZE = 25;
@@ -293,13 +294,19 @@ async function loadFeed(
   previous: NewsFeed | null,
   storyLimit: number,
 ): Promise<NewsFeed> {
-  const [hn, lobsters] = await Promise.allSettled([
+  const [hn, lobsters, ars] = await Promise.allSettled([
     fetchHackerNews(view, storyLimit),
     fetchLobsters(view, storyLimit),
+    fetchArs(view, storyLimit),
   ]);
   const hnStories = hn.status === 'fulfilled' ? hn.value : [];
   const lobsterStories = lobsters.status === 'fulfilled' ? lobsters.value : [];
+  const arsStories = ars.status === 'fulfilled' ? ars.value : [];
   const states: NewsSourceState[] = [
+    {
+      source: 'ars-technica', label: 'Ars Technica', count: arsStories.length,
+      ok: ars.status === 'fulfilled', error: ars.status === 'rejected' ? message(ars.reason) : null,
+    },
     {
       source: 'hacker-news',
       label: 'Hacker News',
@@ -317,10 +324,10 @@ async function loadFeed(
   ];
   const stories =
     view === 'best'
-      ? [...hnStories, ...lobsterStories].sort(
+      ? [...hnStories, ...lobsterStories, ...arsStories].sort(
           (a, b) => b.score - a.score || Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
         )
-      : interleave([hnStories, lobsterStories]);
+      : interleave([hnStories, lobsterStories, arsStories]);
   const previousKeys = previous ? new Set(previous.stories.map((story) => story.key)) : null;
   return {
     view,
@@ -365,15 +372,17 @@ export async function getNewsFeed(
 }
 
 export function isNewsSource(value: string): value is NewsSource {
-  return value === 'hacker-news' || value === 'lobsters';
+  return value === 'hacker-news' || value === 'lobsters' || value === 'ars-technica';
 }
 
 export function isNewsStoryId(source: NewsSource, value: string): boolean {
+  if (source === 'ars-technica') return isArsStoryId(value);
   return source === 'hacker-news' ? /^\d{1,12}$/.test(value) : /^[a-z0-9]{6}$/i.test(value);
 }
 
 export async function getNewsStory(source: NewsSource, id: string): Promise<NewsStory> {
   if (!isNewsStoryId(source, id)) throw new Error('Invalid news story id');
+  if (source === 'ars-technica') return getArsStory(id);
   if (source === 'hacker-news') {
     const story = normalizeHackerNews(
       await fetchJson<HackerNewsItem>(`${HN_API}/item/${id}.json`),

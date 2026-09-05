@@ -30,6 +30,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
           view,
           stories,
           sources: [
+            { source: 'ars-technica' as const, label: 'Ars Technica', count: stories.filter((story) => story.source === 'ars-technica').length, ok: true, error: null },
             {
               source: 'hacker-news' as const,
               label: 'Hacker News',

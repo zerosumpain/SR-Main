@@ -77,6 +77,7 @@ describe('news sources', () => {
       }));
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.startsWith('https://arstechnica.com/feed/')) return new Response('<rss><channel/></rss>');
       if (url.endsWith('/topstories.json')) return response(hnIds);
       if (url.includes('/item/')) {
         const id = Number(url.match(/item\/(\d+)/)?.[1]);
@@ -97,8 +98,8 @@ describe('news sources', () => {
     const initial = await getNewsFeed('top');
     const expanded = await getNewsFeed('top', { limit: 50 });
 
-    expect(initial.sources.map((source) => source.count)).toEqual([25, 25]);
-    expect(expanded.sources.map((source) => source.count)).toEqual([50, 50]);
+    expect(initial.sources.map((source) => source.count)).toEqual([0, 25, 25]);
+    expect(expanded.sources.map((source) => source.count)).toEqual([0, 50, 50]);
     expect(expanded.stories).toHaveLength(100);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://lobste.rs/page/2.json',
@@ -112,6 +113,7 @@ describe('news sources', () => {
   it('interleaves healthy sources and reports a partial source failure', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.startsWith('https://arstechnica.com/feed/')) return new Response('<rss><channel/></rss>');
       if (url.endsWith('/topstories.json')) return response([101, 102]);
       if (url.endsWith('/item/101.json')) return response({ id: 101, type: 'story', title: 'HN one', url: 'https://one.example/', time: 1, score: 10 });
       if (url.endsWith('/item/102.json')) return response({ id: 102, type: 'story', title: 'HN two', url: 'https://two.example/', time: 2, score: 8 });
@@ -123,6 +125,7 @@ describe('news sources', () => {
     const feed = await getNewsFeed('top', { force: true });
     expect(feed.stories.map((story) => story.id)).toEqual(['101', '102']);
     expect(feed.sources).toEqual([
+      expect.objectContaining({ source: 'ars-technica', ok: true, count: 0 }),
       expect.objectContaining({ source: 'hacker-news', ok: true, count: 2 }),
       expect.objectContaining({ source: 'lobsters', ok: false, count: 0, error: 'HTTP 503' }),
     ]);
@@ -133,6 +136,7 @@ describe('news sources', () => {
     let gather = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.startsWith('https://arstechnica.com/feed/')) return new Response('<rss><channel/></rss>');
       if (url.endsWith('/topstories.json')) {
         gather += 1;
         return response(gather === 1 ? [101] : [102, 101]);
@@ -164,6 +168,7 @@ describe('news sources', () => {
     const now = Math.floor(Date.now() / 1000);
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
+      if (url.startsWith('https://arstechnica.com/feed/')) return new Response('<rss><channel/></rss>');
       if (url.endsWith('/topstories.json')) return response([101, 102, 103]);
       if (url.endsWith('/item/101.json')) {
         return response({ id: 101, type: 'story', title: 'HN ten', time: now - 60, score: 10 });
@@ -228,5 +233,16 @@ describe('news sources', () => {
     vi.stubGlobal('fetch', fetchMock);
     await expect(getNewsStory('lobsters', '../bad')).rejects.toThrow('Invalid news story id');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reports Ars failure independently of healthy community feeds', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input) => String(input).startsWith('https://arstechnica.com/')
+      ? new Response('Unavailable', { status: 503 }) : response([])));
+    const feed = await getNewsFeed('new', { force: true });
+    expect(feed.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: 'ars-technica', ok: false, error: 'HTTP 503' }),
+      expect.objectContaining({ source: 'hacker-news', ok: true }),
+      expect.objectContaining({ source: 'lobsters', ok: true }),
+    ]));
   });
 });

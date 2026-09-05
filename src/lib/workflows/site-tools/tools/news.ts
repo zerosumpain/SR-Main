@@ -11,7 +11,9 @@ function requestedView(value: unknown, query: string): NewsWireView {
 }
 
 function requestedSource(value: unknown, query: string): NewsSource | 'all' {
-  if (value === 'hacker-news' || value === 'lobsters') return value;
+  if (value === 'all') return 'all';
+  if (value == null && /\bars(?:\s+technica)?\b/i.test(query) && !/\bhacker\s+news\b|\blobsters\b/i.test(query)) return 'ars-technica';
+  if (value === 'hacker-news' || value === 'lobsters' || value === 'ars-technica') return value;
   if (/\bhacker\s+news\b/i.test(query) && !/\blobsters\b/i.test(query)) return 'hacker-news';
   if (/\blobsters\b/i.test(query) && !/\bhacker\s+news\b/i.test(query)) return 'lobsters';
   return 'all';
@@ -69,7 +71,7 @@ export async function searchNews(args: Record<string, unknown>) {
       message:
         matches.length > 0
           ? 'Use the returned original or discussion URLs as inline sources in the answer.'
-          : 'No matching story is on the currently fetched Hacker News or Lobsters wire.',
+          : 'No matching story is on the currently fetched Hacker News, Lobsters, or Ars Technica wire.',
     },
   };
 }
@@ -77,7 +79,7 @@ export async function searchNews(args: Record<string, unknown>) {
 register({
   name: 'news_search',
   description:
-    'Search the live news desk backed by Hacker News and Lobsters. Use when the user specifically asks for news, headlines, recent stories, or what either community is discussing. Returns relevant story metadata plus original, discussion, and internal reader links so the answer can cite its sources. Omit query for the current headlines; use view="new" for newest stories and view="best" for the strongest stories from the last 24 hours.',
+    'Search the live news desk backed by Hacker News, Lobsters, and Ars Technica. Use when the user specifically asks for news, headlines, recent stories, or what these sources is discussing. Returns relevant story metadata plus original, discussion, and internal reader links so the answer can cite its sources. Omit query for the current headlines; use view="new" for newest stories and view="best" for the strongest stories from the last 24 hours.',
   parameters: {
     type: 'object',
     properties: {
@@ -92,8 +94,8 @@ register({
       },
       source: {
         type: 'string',
-        enum: ['all', 'hacker-news', 'lobsters'],
-        description: 'Limit results to one community. Defaults to both.',
+        enum: ['all', 'hacker-news', 'lobsters', 'ars-technica'],
+        description: 'Limit results to one source. Defaults to all three.',
       },
       limit: {
         type: 'number',
