@@ -3,8 +3,10 @@ import {
   canChooseOutput,
   canRequestMic,
   micStateNote,
+  micPermissionStatus,
   outputLabel,
   readMicPermission,
+  unblockHint,
 } from './audio-access';
 
 describe('canRequestMic', () => {
@@ -85,5 +87,53 @@ describe('micStateNote', () => {
     expect(micStateNote('denied')).toMatch(/site settings/i);
     expect(micStateNote('insecure')).toMatch(/https/i);
     expect(micStateNote('granted')).toMatch(/ready/i);
+  });
+});
+
+describe('unblockHint', () => {
+  it('names the address-bar control for Chromium, Edge and Firefox', () => {
+    expect(unblockHint('Mozilla/5.0 Chrome/120 Safari/537.36')).toMatch(/address bar/i);
+    expect(unblockHint('Mozilla/5.0 Chrome/120 Edg/120')).toMatch(/address bar/i);
+    expect(unblockHint('Mozilla/5.0 Firefox/121.0')).toMatch(/permissions icon/i);
+  });
+
+  it('sends Safari to the right menu, and is not fooled by Chrome saying "Safari"', () => {
+    // Every Chromium UA string contains "Safari"; order of the checks is what
+    // keeps a Chrome user from being told to open a Safari menu.
+    expect(unblockHint('Mozilla/5.0 Version/17.0 Safari/605.1.15')).toMatch(/Settings for This Website/);
+    expect(unblockHint('Mozilla/5.0 Chrome/120 Safari/537.36')).not.toMatch(/Settings for This Website/);
+  });
+
+  it('still says something useful for an unknown browser', () => {
+    expect(unblockHint('')).toMatch(/site settings|address bar/i);
+  });
+});
+
+describe('micStateNote', () => {
+  it('carries the browser-specific unblock instruction when denied', () => {
+    expect(micStateNote('denied', 'Mozilla/5.0 Firefox/121.0')).toMatch(/permissions icon/i);
+  });
+});
+
+describe('micPermissionStatus', () => {
+  it('returns the live status object so the page can watch for a change', async () => {
+    // This is what makes unblocking take effect without a reload.
+    const status = { state: 'denied', addEventListener() {} };
+    const nav = { mediaDevices: {}, permissions: { query: async () => status } };
+    const out = await micPermissionStatus(nav, true);
+    expect(out.state).toBe('denied');
+    expect(out.status).toBe(status);
+  });
+
+  it('returns a null status when the browser gives no event target', async () => {
+    const nav = { mediaDevices: {}, permissions: { query: async () => ({ state: 'granted' }) } };
+    const out = await micPermissionStatus(nav, true);
+    expect(out.state).toBe('granted');
+    expect(out.status).toBeNull();
+  });
+
+  it('is insecure-first, before it looks at permissions at all', async () => {
+    const nav = { mediaDevices: {}, permissions: { query: async () => ({ state: 'granted' }) } };
+    await expect(micPermissionStatus(nav, false)).resolves.toEqual({ state: 'insecure', status: null });
   });
 });

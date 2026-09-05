@@ -53,6 +53,7 @@
     "gate:source-footprint": "node scripts/check-source-footprint.mjs",
     "gate:boundaries": "node scripts/check-module-boundaries.mjs",
     "gate:schema-imports": "node scripts/check-schema-imports.mjs",
+    "gate:schema-drift": "node scripts/check-schema-drift.mjs",
     "gate:check": "npm run gate:sync && npm run gate:check:only",
     "gate:sync": "svelte-kit sync",
     "gate:check:only": "NODE_OPTIONS=--max-old-space-size=8192 svelte-check --tsconfig ./tsconfig.json --threshold error",
