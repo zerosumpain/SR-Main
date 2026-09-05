@@ -20,12 +20,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { eq, like } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes, intelMatchDecisions } from '$lib/db/schema';
+import { sweepDuplicates, invalidateResolutionCaches } from './merge';
 import { recordDecision, loadDecisions, clearDecision, repointDecisions } from './decisions';
 import { pairKeyOf } from './pair-key';
 
 const TAG = 'itest-decisions';
 let dbReady = false;
-const ids = { typeId: '', a: '', b: '', c: '' };
+const ids = { typeId: '', a: '', b: '', c: '', alpha: '', alphaBoard: '' };
 
 async function cleanup() {
   const rows = await db
@@ -63,11 +64,18 @@ beforeAll(async () => {
       { name: `${TAG} A`, typeId: ids.typeId },
       { name: `${TAG} B`, typeId: ids.typeId },
       { name: `${TAG} C`, typeId: ids.typeId },
+      // A pair the matcher actually scores, so the sweep has something to
+      // report a verdict against: the shorter name's tokens are a subset of the
+      // longer one's, which is `token_subset` at 0.55.
+      { name: `${TAG} Alpha Programme`, typeId: ids.typeId },
+      { name: `${TAG} Alpha Programme Board`, typeId: ids.typeId },
     ])
     .returning({ id: intelEntities.id, name: intelEntities.name });
   ids.a = rows.find((r) => r.name.endsWith(' A'))!.id;
   ids.b = rows.find((r) => r.name.endsWith(' B'))!.id;
   ids.c = rows.find((r) => r.name.endsWith(' C'))!.id;
+  ids.alpha = rows.find((r) => r.name.endsWith(' Alpha Programme'))!.id;
+  ids.alphaBoard = rows.find((r) => r.name.endsWith(' Alpha Programme Board'))!.id;
 });
 
 beforeEach(async () => {
@@ -76,6 +84,7 @@ beforeEach(async () => {
     [ids.a, ids.b],
     [ids.a, ids.c],
     [ids.b, ids.c],
+    [ids.alpha, ids.alphaBoard],
   ]) {
     await clearDecision(x, y);
   }
@@ -146,6 +155,59 @@ describe('match decisions', () => {
     await recordDecision({ aId: ids.a, bId: ids.b, verdict: 'different', decidedBy: 'human' });
     await repointDecisions(ids.a, ids.b);
     expect((await loadDecisions()).get(pairKeyOf(ids.a, ids.b))).toBeUndefined();
+  });
+
+  // The lift is GONE, and this is what stops it coming back.
+  //
+  // It used to add `0.1 × verdictConfidence` so an adjudicator could carry a
+  // pair over the 0.85 auto-merge line. It never could: every confirmation the
+  // first production run produced sat at 0.49-0.55, because an abbreviation and
+  // its expansion share almost no words — which is precisely why a reader was
+  // needed. A model must not be able to move a score it did not compute.
+  it('labels a confirmed pair without touching its score', async () => {
+    if (!dbReady) return;
+    await clearDecision(ids.alpha, ids.alphaBoard);
+    invalidateResolutionCaches();
+    const before = (await sweepDuplicates(0.35)).reports.find(
+      (r) => r.keep.id === ids.alpha || r.merge.id === ids.alpha,
+    );
+    expect(before, 'the seeded pair must be scored, or this test proves nothing').toBeTruthy();
+
+    await recordDecision({
+      aId: ids.alpha,
+      bId: ids.alphaBoard,
+      verdict: 'same',
+      decidedBy: 'llm',
+      verdictConfidence: 0.95,
+      rationale: 'one is the other',
+    });
+    invalidateResolutionCaches();
+    const after = (await sweepDuplicates(0.35)).reports.find(
+      (r) => r.keep.id === ids.alpha || r.merge.id === ids.alpha,
+    )!;
+
+    expect(after.candidate.confidence).toBe(before!.candidate.confidence);
+    // Labelled, counted and explained — just not promoted.
+    expect(after.candidate.signals).toContain('adjudicated');
+    expect(after.decision?.verdict).toBe('same');
+  });
+
+  it('counts a confirmation the display filter would hide', async () => {
+    if (!dbReady) return;
+    await recordDecision({
+      aId: ids.alpha,
+      bId: ids.alphaBoard,
+      verdict: 'same',
+      decidedBy: 'llm',
+      verdictConfidence: 0.95,
+    });
+    invalidateResolutionCaches();
+    // A floor far above the pair's score: the row is gone from the list and the
+    // count must survive, or the quality page reports zero to act on at exactly
+    // the moment there is something.
+    const sweep = await sweepDuplicates(0.9);
+    expect(sweep.reports.some((r) => r.keep.id === ids.alpha)).toBe(false);
+    expect(sweep.confirmedSame).toBeGreaterThanOrEqual(1);
   });
 
   it('drops a rewrite that contradicts a verdict already on the target pair', async () => {
