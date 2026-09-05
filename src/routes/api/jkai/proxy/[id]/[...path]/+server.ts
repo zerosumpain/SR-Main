@@ -9,6 +9,13 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { isOwnerRequest } from '$lib/server/owner';
 import { safeGeneratedResponseHeaders } from '$lib/server/generated-content';
+import {
+  PREVIEW_TICKET_PREFIX,
+  issuePreviewTicket,
+  splitPreviewTicket,
+  verifyPreviewTicket,
+} from '$lib/server/preview-ticket';
+import { env } from '$env/dynamic/private';
 
 // Track in-flight revive attempts so concurrent requests during the wake-up
 // window don't all fan out to startProjectServer (which is expensive).
@@ -169,18 +176,40 @@ function wakingUpHtml(refreshUrl: string): string {
 
 const handler: RequestHandler = async (event) => {
   const { params, request } = event;
-  // Preview identifiers are not capabilities. Every preview request, including
-  // assets and mutations, requires a real owner session (or dev-only local
-  // access); public projects are served through /projects instead.
-  if (!(await isOwnerRequest(event))) return new Response('Not found', { status: 404 });
+
+  // Preview identifiers are still not capabilities: a bare build id authorises
+  // nothing. But an owner SESSION cannot carry the whole preview on its own,
+  // because the generated document's opaque origin (CSP `sandbox` without
+  // `allow-same-origin`) makes every subresource cross-site and the
+  // `SameSite=Lax` cookie is withheld — the HTML loaded, its assets all 404ed,
+  // and studio explainers rendered blank. See $lib/server/preview-ticket.
+  //
+  // So: an owner session OR a valid ticket for THIS build. The ticket is minted
+  // below and injected into the <base href>, so the app's own relative URLs
+  // carry it. A ticket that is present but does not verify is unauthorised —
+  // never fall through to the stripped path, or the prefix becomes a way to
+  // rewrite request paths.
+  const { ticket, path: assetPath } = splitPreviewTicket(params.path || '');
+  const owner = await isOwnerRequest(event);
+  const ticketOk = verifyPreviewTicket(ticket ?? undefined, params.id, env.AUTH_SECRET);
+  if (!owner && !ticketOk) return new Response('Not found', { status: 404 });
 
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
   if (!build?.serveConfig) return new Response('Project not serving', { status: 404 });
 
   const config = build.serveConfig as ServeConfig;
-  const path = '/' + (params.path || '');
+  const path = '/' + assetPath;
+  // Reuse the caller's ticket when it verified, so one page load and everything
+  // it pulls share a lifetime; mint a fresh one for an owner-session request
+  // (which is what a top-level navigation to the preview is). Falling back to
+  // an unticketed base href keeps the route working if AUTH_SECRET is unset in
+  // a dev environment, where an owner session covers subresources anyway.
+  let ticketSegment = ticketOk && ticket ? `${PREVIEW_TICKET_PREFIX}${ticket}/` : '';
+  if (!ticketSegment && env.AUTH_SECRET) {
+    ticketSegment = `${PREVIEW_TICKET_PREFIX}${issuePreviewTicket(params.id, env.AUTH_SECRET)}/`;
+  }
   // Base href ensures all relative URLs in the proxied app resolve through the proxy
-  const baseHref = `/api/jkai/proxy/${params.id}/`;
+  const baseHref = `/api/jkai/proxy/${params.id}/${ticketSegment}`;
 
   // Static-kind builds (e.g. register_chat_build output: a single index.html
   // app, no dev server) have port=0 / startCommand=null. The proxy path below
@@ -190,7 +219,10 @@ const handler: RequestHandler = async (event) => {
   // would copy to /projects/<slug>/. When HOST_MODE=1 (VPS prod), workspace
   // files live on the host fs and are readable by this node process.
   if (config.kind === 'static') {
-    const result = await serveStaticBuild(params.id, params.path || '', baseHref);
+    // assetPath, not params.path — the ticket segment is authorisation, not
+    // part of the filename, and passing it through would look for a directory
+    // called `_t_<ticket>` inside the workspace and 404 every asset.
+    const result = await serveStaticBuild(params.id, assetPath, baseHref);
     return result;
   }
 
@@ -212,7 +244,10 @@ const handler: RequestHandler = async (event) => {
         .catch(() => {})
         .finally(() => reviving.delete(params.id));
     }
-    return new Response(wakingUpHtml(`/api/jkai/proxy/${params.id}/`), {
+    // Refresh through baseHref so the ticket survives the wait. Inside the
+    // preview iframe this meta-refresh is not a top-level navigation, so
+    // without it the retry arrives with no cookie and no ticket and 404s.
+    return new Response(wakingUpHtml(baseHref), {
       status: 503,
       headers: safeGeneratedResponseHeaders(new Headers({
         'content-type': 'text/html; charset=utf-8',
