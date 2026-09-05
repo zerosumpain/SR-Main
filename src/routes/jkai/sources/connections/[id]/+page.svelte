@@ -17,7 +17,7 @@
       ? `${data.provider.name} authorization succeeded. The first sync is queued.`
       : data.authResult === 'failed'
         ? `${data.provider.name} did not authorize this connection. You can try again.`
-        : null,
+        : data.notice,
   ));
   let grants = $state(untrack(() => data.grants.map((grant) => ({ ...grant }))));
   let importFile = $state<File | null>(null);
@@ -124,8 +124,13 @@
   function payoffPrompt(): string {
     const outcomeId = data.onboardingSession?.outcomes.find(isActivityOnboardingOutcomeId);
     return outcomeId
-      ? getActivityOnboardingOutcome(outcomeId).daydreamPrompt
-      : 'Look across my recent activity and surface one grounded pattern worth noticing.';
+      ? getActivityOnboardingOutcome(outcomeId).jkaiPrompt
+      : 'Summarise my activity from my connected sources and point out one grounded pattern.';
+  }
+
+  /** Hand the question to the chat and send it: jkai's `activity` toolset answers from the grants just saved. */
+  function askJkaiHref(): string {
+    return `/jkai?q=${encodeURIComponent(payoffPrompt())}&send=1`;
   }
 
   function previewLabel(activityEvent: PageData['previewEvents'][number]): string {
@@ -440,8 +445,13 @@
 
   {#if currentOnboardingStep() === 8}
     <section class="complete-panel">
-      <div><p class="section-code">Step 8 / Payoff</p><h2>This source is ready to be useful</h2><p>Try this with Daydream: “{payoffPrompt()}” You can change permissions or disconnect at any time.</p></div>
-      <div class="complete-actions"><a href="/jkai/daydreams/feed">Open Daydream →</a><a href="/jkai/activity?connection={data.connection.id}">Review the evidence</a><a href="/jkai/sources">Finish setup</a></div>
+      <div><p class="section-code">Step 8 / Payoff</p><h2>This source is ready to be useful</h2><p>Ask jkai now. It reads only what you granted above, and says when a source is unavailable instead of guessing. You can change permissions or disconnect at any time.</p></div>
+      <div class="complete-actions">
+        <a class="primary" href={askJkaiHref()}>Ask jkai: “{payoffPrompt()}” →</a>
+        <a href="/jkai/activity?connection={data.connection.id}">Review the evidence</a>
+        <a href="/jkai/sources/onboard?restart=1">Set up another source</a>
+        <a href="/jkai/sources">Back to Sources</a>
+      </div>
     </section>
   {/if}
 
@@ -540,6 +550,8 @@
   .complete-panel p:last-child { max-width: 620px; margin: 7px 0 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
   .complete-actions { display: grid; justify-items: end; gap: 7px; }
   .complete-actions a { color: var(--success, #2d7a3a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+  .complete-actions a.primary { max-width: 360px; padding: 9px 12px; border: 1px solid var(--success, #2d7a3a); white-space: normal; text-align: right; line-height: 1.4; }
+  .complete-actions a:hover { text-decoration: underline; text-underline-offset: 3px; }
   .danger p:last-child { max-width: 620px; margin: 7px 0 0; color: var(--text-muted); font-size: var(--fs-label); }
   .danger > button { color: var(--error, #a33); border-color: currentColor; white-space: nowrap; }
   @media (max-width: 650px) {
@@ -553,5 +565,6 @@
     .preview > ol li { grid-template-columns: 1fr auto; }
     .preview time { grid-column: 1 / -1; }
     .complete-actions { justify-items: start; }
+    .complete-actions a.primary { text-align: left; }
   }
 </style>

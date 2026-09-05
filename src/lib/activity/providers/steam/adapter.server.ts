@@ -3,7 +3,9 @@ import type {
   ActivityProviderAdapter,
   ProviderPage,
 } from '../../contracts';
+import { redactSecrets, resolveSecretForUrl, SecretError } from '$lib/secrets/registry';
 import { ActivitySyncError } from '../../sync/errors';
+import { STEAM_WEB_API_ENV, STEAM_WEB_API_SECRET_HANDLE } from './credential';
 import { steamManifest } from './manifest';
 import {
   normaliseSteamSnapshot,
@@ -35,17 +37,53 @@ interface SteamAchievementsResponse {
   };
 }
 
+/**
+ * Attach the application key to a Steam request.
+ *
+ * `.env` first, for hosts set up the original way. Otherwise the vault: the
+ * key is resolved against THIS url, so the owner-set host binding
+ * (`api.steampowered.com`, GET) is enforced on every call and no activity code
+ * ever holds the value except to scrub it out of error text.
+ */
+async function authenticateSteamUrl(url: URL): Promise<string[]> {
+  const envKey = process.env[STEAM_WEB_API_ENV];
+  if (envKey) {
+    url.searchParams.set('key', envKey);
+    return [envKey];
+  }
+  let resolved: Awaited<ReturnType<typeof resolveSecretForUrl>>;
+  try {
+    resolved = await resolveSecretForUrl(STEAM_WEB_API_SECRET_HANDLE, url.toString(), 'GET');
+  } catch (error) {
+    // Only "no such row" is "not configured". A row that cannot be decrypted
+    // here, or a binding refusal, is a credential fault with a cause the
+    // owner needs to read; a database blip is transient and must retry, not
+    // flip the connection to action-required with a lie.
+    if (error instanceof SecretError) {
+      const missing = /no secret registered/i.test(error.message);
+      throw new ActivitySyncError(
+        'credential',
+        missing ? 'Steam Web API key is not configured' : `Steam Web API key cannot be used: ${error.message}`,
+      );
+    }
+    throw new ActivitySyncError(
+      'temporary_provider',
+      `Steam Web API key lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+    );
+  }
+  for (const [name, value] of Object.entries(resolved.query)) url.searchParams.set(name, value);
+  return resolved.plaintexts;
+}
+
 async function steamGet<T>(
   path: string,
   params: Record<string, string>,
   fetchFn: typeof fetch = fetch,
 ): Promise<T> {
-  const key = process.env.STEAM_WEB_API_KEY;
-  if (!key) throw new ActivitySyncError('credential', 'Steam Web API key is not configured');
   const url = new URL(path, API_ROOT);
-  url.searchParams.set('key', key);
   url.searchParams.set('format', 'json');
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
+  const plaintexts = await authenticateSteamUrl(url);
   let response: Response;
   try {
     response = await fetchFn(url, {
@@ -55,7 +93,10 @@ async function steamGet<T>(
   } catch (error) {
     throw new ActivitySyncError(
       'temporary_provider',
-      `Steam request did not complete: ${error instanceof Error ? error.message : 'network error'}`,
+      redactSecrets(
+        `Steam request did not complete: ${error instanceof Error ? error.message : 'network error'}`,
+        plaintexts,
+      ),
     );
   }
   if (response.status === 401 || response.status === 403) {

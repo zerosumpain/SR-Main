@@ -8,6 +8,10 @@ const DECK_PATTERN = /\bdecks?\b|\bslides?\b|\bpresentations?\b|\bpitch\b|\bkeyn
 
 const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'health', pattern: /sleep|heart|readiness|train(?:ing)?|health|hrv|recovery|workout|exercise|strain|\brun\b|\bruns\b|cycling|fitness|activity|strava/i },
+  // Personal activity sources (/jkai/sources): games, listening, archives.
+  // `activity` alone still loads `health` above — the two overlap on the word
+  // and both answer "what have I been doing"; the model picks by tool name.
+  { toolset: 'activity', pattern: /\bsteam\b|playtime|achievements?|\b(?:games?|game)\s+(?:i|i've|i have|have i|did i)\b|\b(?:played|playing)\b.*\b(?:game|games|lately|recently|this\s+(?:week|month))\b|what\s+(?:have\s+i|did\s+i|am\s+i)\s+(?:been\s+)?(?:play|playing|listen|listening|watch|watching)|listening\s+(?:history|habits|to\s+lately)|apple\s+music|youtube\s+music|\bpodcasts?\b|my\s+activity|activity\s+sources?|connected\s+(?:accounts?|sources?)|data\s+sources?/i },
   { toolset: 'blog', pattern: /blog|post|draft|publish|article|write\s+about/i },
   { toolset: 'builds', pattern: /build|app|deploy|publish\s*app|scaffold|create\s*app|publish\s+(?:this|the|a|my|it)?\s*(?:page|report|analysis|dashboard)/i },
   { toolset: 'research', pattern: /research|investigate|deep\s*dive|look\s+into|find\s+out/i },

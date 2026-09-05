@@ -20,6 +20,7 @@
     workflowCount,
     workflowLiveCount,
     workflowFailedToday = 0,
+    activitySourceCount = 0,
     buildVersion = 'development',
   }: {
     tokensToday: number;
@@ -35,6 +36,8 @@
     workflowCount: number;
     workflowLiveCount: number;
     workflowFailedToday?: number;
+    /** Personal activity sources with an active connection (/jkai/sources). */
+    activitySourceCount?: number;
     buildVersion?: string;
   } = $props();
 
@@ -127,7 +130,7 @@
     { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
     { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
   ]);
-  const library: MenuRow[] = [
+  const library = $derived<MenuRow[]>([
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
     { label: 'News', href: '/news', meta: 'LIVE WIRE' },
     { label: 'Research', href: '/research', meta: 'DEEP DIVE' },
@@ -135,7 +138,16 @@
     // feed, so the destination is unchanged, but the row now lights as `current`
     // on every daydream page instead of only on the feed.
     { label: 'Daydreams', href: '/jkai/daydreams', meta: 'BRIEF · WATCH · LEARN' },
-  ];
+    // Personal data. These were in the ⌘K launcher only, which made the
+    // catalogue an endpoint nobody could find from the page they were on.
+    // The count is the nudge: `CONNECT ACCOUNTS` until one is live.
+    {
+      label: 'Sources',
+      href: '/jkai/sources',
+      meta: activitySourceCount > 0 ? `${activitySourceCount} CONNECTED` : 'CONNECT ACCOUNTS',
+    },
+    { label: 'Activity', href: '/jkai/activity', meta: 'EVIDENCE AUDIT' },
+  ]);
   const system = $derived<MenuRow[]>([
     { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },
       { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },

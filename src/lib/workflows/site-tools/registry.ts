@@ -9,6 +9,7 @@ import type { ToolResult } from './registry-internal';
 
 // --- Load all domain modules (each calls register() on import) ---
 import './tools/health';
+import './tools/activity';
 import './tools/blog';
 import './tools/builds';
 import './tools/studio';
@@ -121,6 +122,7 @@ export function getToolsetManifest(): Array<{
 }> {
   const toolsetDescriptions: Record<string, string> = {
     health: 'Health & fitness data — weekly stats, readiness, sleep, training load, timeline',
+    activity: 'Personal activity sources connected on /jkai/sources — games and playtime (Steam), listening, archives; grant-gated summaries, search and provenance',
     blog: 'Blog post management — list, create, update, publish/unpublish',
     builds: 'JKAI autonomous builder — create, monitor, control, inspect, publish builds',
     research: 'Deep dive research — start sessions, get reports, query findings, web search',

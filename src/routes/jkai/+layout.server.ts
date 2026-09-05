@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/db';
-import { agentActions, workflows, workflowRuns, workflowSchedules } from '$lib/db/schema';
+import { activityConnections, agentActions, workflows, workflowRuns, workflowSchedules } from '$lib/db/schema';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
 import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
@@ -33,6 +33,7 @@ export const load: LayoutServerLoad = async () => {
     [liveCount],
     [runningWorkflowRuns],
     [failedWorkflowRunsToday],
+    [activeSources],
     budgetSetting,
     credits,
     codex,
@@ -64,6 +65,14 @@ export const load: LayoutServerLoad = async () => {
         .select({ count: sql<number>`count(*)::int` })
         .from(workflowRuns)
         .where(and(eq(workflowRuns.status, 'failed'), gte(workflowRuns.startedAt, dayStart))),
+      // Personal activity sources that have connected. The menu row for
+      // Sources carries this so the nudge to connect one is a number, not a
+      // word; the table is tiny and `activity_connections_next_sync_idx`
+      // (status, next_sync_at) serves a status-only count.
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(activityConnections)
+        .where(eq(activityConnections.status, 'active')),
       getSetting<number>(DAILY_BUDGET_SETTING_KEY),
       // Cached in-process for a minute, so this does not become an OpenRouter
       // round-trip on every hub navigation.
@@ -117,6 +126,7 @@ export const load: LayoutServerLoad = async () => {
       workflowCount: workflowCount?.count ?? 0,
       workflowLiveCount: liveCount?.count ?? 0,
       workflowFailedToday: failedWorkflowRunsToday?.count ?? 0,
+      activitySourceCount: activeSources?.count ?? 0,
     },
   };
 };

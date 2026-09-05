@@ -111,6 +111,23 @@ export async function claimNextActivityJob(
   return rows[0] ? mapJobRow(rows[0]) : null;
 }
 
+/**
+ * `db.execute` hands back raw driver rows, where a timestamptz is a STRING,
+ * not a Date. `runAfter` from a claimed row flows straight back into
+ * `failActivityJob`'s `.set({ runAfter })` on the non-retryable path, and
+ * drizzle's timestamp mapper calls `.toISOString()` on it — so every
+ * policy/credential/private-source failure threw inside the catch, left the
+ * job `running` under a lease, and the connection page showed a sync that
+ * never finished. Found draining a fixture sync with the provider flag off.
+ */
+function jobDate(value: unknown): Date {
+  return value instanceof Date ? value : new Date(String(value));
+}
+
+function jobDateOrNull(value: unknown): Date | null {
+  return value === null || value === undefined ? null : jobDate(value);
+}
+
 function mapJobRow(row: Record<string, unknown>): ActivitySyncJob {
   return {
     id: String(row.id),
@@ -120,9 +137,9 @@ function mapJobRow(row: Record<string, unknown>): ActivitySyncJob {
     kind: String(row.kind),
     status: String(row.status),
     priority: Number(row.priority),
-    runAfter: row.run_after as Date,
+    runAfter: jobDate(row.run_after),
     leaseOwner: row.lease_owner === null ? null : String(row.lease_owner),
-    leaseExpiresAt: row.lease_expires_at as Date | null,
+    leaseExpiresAt: jobDateOrNull(row.lease_expires_at),
     attempt: Number(row.attempt),
     maxAttempts: Number(row.max_attempts),
     idempotencyKey: row.idempotency_key === null ? null : String(row.idempotency_key),
@@ -130,10 +147,10 @@ function mapJobRow(row: Record<string, unknown>): ActivitySyncJob {
     progress: (row.progress ?? {}) as Record<string, unknown>,
     errorCode: row.error_code === null ? null : String(row.error_code),
     errorText: row.error_text === null ? null : String(row.error_text),
-    startedAt: row.started_at as Date | null,
-    finishedAt: row.finished_at as Date | null,
-    createdAt: row.created_at as Date,
-    updatedAt: row.updated_at as Date,
+    startedAt: jobDateOrNull(row.started_at),
+    finishedAt: jobDateOrNull(row.finished_at),
+    createdAt: jobDate(row.created_at),
+    updatedAt: jobDate(row.updated_at),
   };
 }
 

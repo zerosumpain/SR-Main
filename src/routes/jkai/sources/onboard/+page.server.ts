@@ -38,5 +38,7 @@ export const load: PageServerLoad = async (event) => {
     ...feature,
     requestedProvider,
     onboarding: onboarding ? publicActivityOnboardingSession(onboarding) : null,
+    /** Steam asks for a domain name when issuing a key; this is the one to type. */
+    siteHost: event.url.host,
   };
 };

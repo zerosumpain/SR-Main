@@ -89,6 +89,7 @@
     workflowCount={data.hub.workflowCount}
     workflowLiveCount={data.hub.workflowLiveCount}
     workflowFailedToday={data.hub.workflowFailedToday}
+    activitySourceCount={data.hub.activitySourceCount}
     buildVersion={data.deploy.short}
   />
 
