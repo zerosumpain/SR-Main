@@ -15,6 +15,7 @@
   // box only ever contains what John typed.
   import { onMount } from 'svelte';
   import { marked } from 'marked';
+  import NoteRecorder from '$lib/components/jkai/NoteRecorder.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import type { PageData } from './$types';
 
@@ -36,6 +37,14 @@
   let folder = $state('');
   let actions = $state<Action[]>([]);
   let supporting = $state<string | null>(null);
+  type Recording = {
+    id: string; mimeType: string; sizeBytes: number; durationSec: number | null;
+    transcript: string | null; language: string | null; engine: string | null; createdAt: string;
+  };
+  let recordings = $state<Recording[]>([]);
+  /** One flag for both entry points: the cover's recorder and the editor's
+   *  share an upload, and neither should accept a second while one is running. */
+  let transcribing = $state(false);
 
   let saving = $state(false);
   let busy = $state<string | null>(null);
@@ -98,6 +107,72 @@
     return out;
   }
 
+  /**
+   * Send a recording up. `noteId` empty means "make a note out of this"; set
+   * means "append it to the one that is open".
+   *
+   * Transcription is synchronous by design — a dictated note is worth waiting a
+   * few seconds for, and a half-finished note appearing before its words is
+   * worse than a spinner. The audio is kept either way: if transcription fails
+   * the server still stores the recording and says so, because the recording is
+   * the part that cannot be made again.
+   */
+  async function uploadRecording(blob: Blob, durationSec: number, noteId: string) {
+    if (transcribing) return;
+    transcribing = true;
+    error = null;
+    notice = null;
+    try {
+      if (noteId && dirty && !(await save({ quiet: true }))) return;
+      const form = new FormData();
+      form.append('audio', new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' }));
+      form.append('durationSec', String(durationSec));
+      if (noteId) form.append('noteId', noteId);
+      else if (folderFilter) form.append('folder', folderFilter);
+
+      const res = await fetch('/api/daydream/notes/audio', { method: 'POST', body: form });
+      const out = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) throw new Error(String(out.message ?? out.error ?? 'that did not work'));
+
+      const n = out.note as Note | null;
+      if (!n) throw new Error('the server saved no note');
+      const recs = (out.recordings ?? []) as Recording[];
+      notes = notes.some((x) => x.id === n.id)
+        ? notes.map((x) => (x.id === n.id ? n : x))
+        : [n, ...notes];
+      applyOpen(n, recs);
+      if (!noteId) actions = [];
+      preview = false;
+      setOpenInUrl(n.id);
+      // `ok: false` is the transcription-failed case — the recording is saved
+      // and playable, so this is a notice about the words, not a failed upload.
+      if (out.ok === false) error = String(out.error ?? 'Transcription failed.');
+      else notice = 'Transcribed into the note.';
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      transcribing = false;
+    }
+  }
+
+  async function deleteRecording(id: string) {
+    if (!confirm('Delete this recording? The transcript stays in the note.')) return;
+    try {
+      const res = await fetch(`/api/daydream/notes/audio/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('could not delete that recording');
+      recordings = recordings.filter((r) => r.id !== id);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  function clockFrom(seconds: number | null): string {
+    if (!seconds || !Number.isFinite(seconds)) return '—';
+    const m = Math.floor(seconds / 60);
+    const sec = Math.round(seconds % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+
   function setOpenInUrl(id: string | null) {
     if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
@@ -115,7 +190,7 @@
     try {
       const out = await post({ action: 'get', id });
       const n = out.note as Note;
-      applyOpen(n);
+      applyOpen(n, (out.recordings ?? []) as Recording[]);
       actions = (out.actions ?? []) as Action[];
       setOpenInUrl(n.id);
     } catch (err) {
@@ -123,7 +198,12 @@
     }
   }
 
-  function applyOpen(n: Note) {
+  function applyOpen(n: Note, recs?: Recording[]) {
+    // Undefined means "same note, new fields" — the callers that re-apply an
+    // open note after a review, a pin or a clear have no recordings to pass and
+    // must not wipe the ones on screen. Only a genuinely different note passes
+    // a list (or an empty one).
+    if (recs !== undefined) recordings = recs;
     openId = n.id;
     title = n.title;
     body = n.body;
@@ -141,7 +221,7 @@
       const out = await post({ action: 'save', title: '', body: '', folder: folderFilter });
       const n = out.note as Note;
       notes = [n, ...notes];
-      applyOpen(n);
+      applyOpen(n, []);
       actions = [];
       preview = false;
       setOpenInUrl(n.id);
@@ -180,6 +260,7 @@
     body = '';
     folder = '';
     actions = [];
+    recordings = [];
     supporting = null;
     savedSnapshot = '';
     notice = null;
@@ -396,6 +477,14 @@
       </div>
       <div class="cover-readout">
         <button type="button" class="new-note" onclick={newNote}>+ New note</button>
+        <div class="cover-rec">
+          <NoteRecorder
+            tone="ink"
+            label="Voice note"
+            busy={transcribing}
+            onrecorded={(blob, secs) => uploadRecording(blob, secs, '')}
+          />
+        </div>
         <p><span>Active</span>{notes.length} note{notes.length === 1 ? '' : 's'}</p>
         <p><span>Folders</span>{folders.length || '—'}</p>
         <p><span>Save</span>Automatic · 1.2s</p>
@@ -484,6 +573,12 @@
             <span class:dirty>{saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}</span>
           </div>
           <div class="editor-actions">
+            <NoteRecorder
+              label="Dictate"
+              busy={transcribing}
+              disabled={!openId}
+              onrecorded={(blob, secs) => uploadRecording(blob, secs, openId ?? '')}
+            />
             <button type="button" class:on={preview} onclick={() => (preview = !preview)}>{preview ? 'Edit' : 'Preview'}</button>
             <button type="button" class:on={open?.pinned} disabled={busy === 'pin'} onclick={togglePin}>{open?.pinned ? 'Pinned' : 'Pin'}</button>
             <button type="button" onclick={closeNote}>Close</button>
@@ -508,6 +603,34 @@
             <div class="md body-box">{@html rendered}</div>
           {:else}
             <textarea bind:this={bodyEl} bind:value={body} placeholder="Write the thing before it disappears…" spellcheck="true"></textarea>
+          {/if}
+
+          <!-- What was said, kept beside what it became. The body above is
+               yours to rewrite; these stay as recorded. -->
+          {#if recordings.length}
+            <section class="rec-list" aria-label="Recordings">
+              <p class="rec-list-hd">
+                <span>Recordings</span>
+                <span>{recordings.length}</span>
+              </p>
+              {#each recordings as r (r.id)}
+                <article class="rec-row">
+                  <div class="rec-row-hd">
+                    <span class="rec-when">{when(r.createdAt)} · {clockFrom(r.durationSec)}</span>
+                    {#if r.engine}<span class="rec-engine" title={r.engine === 'local' ? 'Transcribed on this machine, at no cost' : 'Transcribed by the metered API'}>{r.engine}</span>{/if}
+                    {#if r.language}<span class="rec-lang">{r.language}</span>{/if}
+                    <button type="button" class="rec-del" onclick={() => deleteRecording(r.id)}>Delete</button>
+                  </div>
+                  <!-- svelte-ignore a11y_media_has_caption -->
+                  <audio controls preload="metadata" src={`/api/daydream/notes/audio/${r.id}`}></audio>
+                  {#if r.transcript === null}
+                    <p class="rec-note">Not transcribed — the audio is safe, the words did not come back.</p>
+                  {:else if r.transcript.trim() === ''}
+                    <p class="rec-note">Transcribed to nothing — the recording was silent.</p>
+                  {/if}
+                </article>
+              {/each}
+            </section>
           {/if}
         </article>
 
@@ -946,6 +1069,37 @@
   }
   .page .title::placeholder { color: rgba(26, 16, 8, 0.22); }
   .page .title:focus { border-bottom-color: var(--accent); }
+  /* The cover's recorder sits under "+ New note" and spans the readout, so a
+     spoken note is a peer of a typed one rather than a hidden alternative. */
+  .cover-rec { grid-column: 1 / -1; margin: 0 0 12px; }
+
+  /* Recordings — provenance under the writing surface, not content. Quiet by
+     construction: the words are already in the body above. */
+  .rec-list { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line-hair); }
+  .rec-list-hd {
+    display: flex; justify-content: space-between; gap: 12px; margin: 0 0 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-ghost);
+  }
+  .rec-row { padding: 10px 0; border-bottom: 1px solid var(--line-hair); }
+  .rec-row:last-child { border-bottom: 0; }
+  .rec-row-hd {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 7px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .rec-when { color: var(--text-muted); }
+  .rec-engine { color: var(--accent-ink); }
+  .rec-lang { color: var(--text-ghost); }
+  .rec-del {
+    margin-left: auto; padding: 0; border: 0; background: none; cursor: pointer;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-ghost);
+  }
+  .rec-del:hover { color: var(--error); }
+  .rec-row audio { width: 100%; max-width: 420px; height: 34px; }
+  .rec-note { margin: 7px 0 0; font-size: var(--fs-label); color: var(--text-muted); }
+
   .note-meta {
     display: flex;
     flex-wrap: wrap;
