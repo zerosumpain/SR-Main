@@ -266,6 +266,18 @@ export const resolveResearchDeepModel = () => resolveById('research-deep');
 /** The autonomous builder — pi runs and the orchestrator planner. */
 export const resolveBuilderModel = () => resolveById('builder');
 
+/**
+ * The studio build's visual design review. Must accept images.
+ *
+ * Deliberately resolved at review time rather than read off the build row.
+ * `builder` is stamped onto `jkai_builds.model_id` at creation, so moving it
+ * only reaches new builds; this role has no such column, which means changing
+ * it takes effect on the next iteration of a build already in flight — the
+ * point being that you can fix a studio build's design review while the build
+ * that needs it is still running.
+ */
+export const resolveDesignReviewModel = () => resolveById('design-review');
+
 /** Unattended heartbeat turns. */
 export const resolveHeartbeatModel = () => resolveById('heartbeat');
 

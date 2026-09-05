@@ -128,6 +128,11 @@ rsync -a scripts/studio-gate.mjs "$VPS_DIR/scripts/"
 # system prompt simply does not exist on the VPS, and the agent goes back to
 # working blind — which is the condition this whole change set exists to end.
 rsync -a scripts/studio-verify.mjs "$VPS_DIR/scripts/"
+# The design review's capture half. It IMPORTS studio-gate.mjs (for
+# injectBaseHref), so this line and the studio-gate one above are a pair —
+# shipping this without that one makes the import throw at load and the stage
+# reports { ran: false } forever, which is the same silent-absence trap again.
+rsync -a scripts/studio-shots.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/studio-image.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/studio-research.mjs "$VPS_DIR/scripts/"
 # The build-history graph's pull channel. The agent is told in REPO_SYSTEM_PROMPT
