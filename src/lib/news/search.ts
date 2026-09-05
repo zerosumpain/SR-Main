@@ -1,6 +1,8 @@
 import type { NewsSource, NewsStory } from './types';
 
 const SEARCH_FILLER = new Set([
+  'ars',
+  'technica',
   'a',
   'about',
   'an',

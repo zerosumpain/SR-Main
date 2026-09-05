@@ -9,10 +9,13 @@
 // `$lib/daydream` (a story saved to the notebook), so reading it from there
 // would close a `daydream <-> news` cycle.
 //
-// Adding a feed is a CODE change: a reader beside the two in
+// Adding a feed is a CODE change: a reader beside the existing readers in
 // `$lib/news/sources.ts`. That is the honest thing for the appetite pack to
 // say, and it is why a news source goes down the /build lane rather than a
 // registration.
 
-export const NEWS_SOURCES = ['hacker-news', 'lobsters'] as const;
+export const NEWS_SOURCES = ['hacker-news', 'lobsters', 'ars-technica'] as const;
 export type NewsSource = (typeof NEWS_SOURCES)[number];
+export const NEWS_SOURCE_LABELS: Record<NewsSource, string> = {
+  'hacker-news': 'Hacker News', lobsters: 'Lobsters', 'ars-technica': 'Ars Technica',
+};

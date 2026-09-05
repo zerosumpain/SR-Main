@@ -92,7 +92,7 @@
     { href: '/news?view=best', label: 'Best' },
   ]}
   live={story.sourceLabel}
-  meta={[`${story.score} points`, `${story.commentCount} comments`]}
+  meta={[story.source === 'ars-technica' ? 'Unscored' : `${story.score} points`, `${story.commentCount} comments`]}
   footer={[
     'strangeramblings.com/news · reading copy',
     `${story.sourceLabel} · ${story.domain}`,
@@ -103,14 +103,14 @@
 
   <header class="article-head">
     <div class="source-lockup">
-      <span class="source-code">{story.source === 'hacker-news' ? 'HN' : 'L'}</span>
+      <span class="source-code">{story.source === 'ars-technica' ? 'ARS' : story.source === 'hacker-news' ? 'HN' : 'L'}</span>
       <span>{story.sourceLabel} · {story.domain}</span>
     </div>
     <h1>{story.title}</h1>
     <p class="article-meta">
       <time datetime={story.publishedAt}>{calendarDate(story.publishedAt)}</time>
       {#if story.author}<span>Submitted by {story.author}</span>{/if}
-      <span>{story.score} points</span>
+      <span>{story.source === 'ars-technica' ? 'Unscored' : `${story.score} points`}</span>
       <a href={story.discussionUrl} target="_blank" rel="noopener">{story.commentCount} comments ↗</a>
     </p>
   </header>

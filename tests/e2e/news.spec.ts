@@ -54,3 +54,39 @@ test('news desk fits a narrow mobile viewport', async ({ page }) => {
   }
   await page.screenshot({ path: '/tmp/news-mobile.png' });
 });
+
+test('Ars stories open in the reader and retain their source when saved', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/news');
+  await expect(async () => {
+    const filter = page.getByRole('button', { name: 'Ars Technica', exact: true });
+    await filter.click();
+    await expect(filter).toHaveAttribute('aria-pressed', 'true', { timeout: 500 });
+  }).toPass();
+  await expect(page.locator('.story').first()).toContainText('Unscored');
+  const reader = page.locator('.story-reader').first();
+  const href = (await reader.getAttribute('href'))!;
+  expect(href).toMatch(/^\/news\/ars-technica\//);
+  await reader.click();
+  await expect(page.locator('.source-code')).toHaveText('ARS');
+  await expect(page.getByRole('link', { name: 'Open original ↗' })).toHaveAttribute('href', /^https:\/\/arstechnica.com\//);
+  const favourite = page.locator('button.favourite');
+  const wasSaved = await favourite.getAttribute('aria-pressed') === 'true';
+  if (!wasSaved) {
+    await favourite.click();
+    await expect(favourite).toHaveAttribute('aria-pressed', 'true', { timeout: 20_000 });
+  }
+  try {
+    await page.goto('/news?view=favourites');
+    await expect(page.locator(`a.story-reader[href="${href}"]`)).toBeVisible();
+  } finally {
+    if (!wasSaved) {
+      const restored = await page.request.post('/api/news/actions', {
+        headers: { origin: 'http://127.0.0.1:5273' },
+        data: { action: 'favourite', source: 'ars-technica', id: href.split('/').at(-1) },
+      });
+      expect(restored.ok()).toBe(true);
+      expect(await restored.json()).toMatchObject({ favourited: false });
+    }
+  }
+});

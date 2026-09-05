@@ -1,6 +1,6 @@
 <svelte:head>
   <title>News — Strange Ramblings</title>
-  <meta name="description" content="A live reading desk for Hacker News and Lobsters." />
+  <meta name="description" content="A live reading desk for Hacker News, Lobsters, and Ars Technica." />
 </svelte:head>
 
 <script lang="ts">
@@ -61,7 +61,7 @@
   }
 
   function sourceCode(value: NewsSource): string {
-    return value === 'hacker-news' ? 'HN' : 'L';
+    return value === 'ars-technica' ? 'ARS' : value === 'hacker-news' ? 'HN' : 'L';
   }
 
   function gatheredTime(iso: string): string {
@@ -87,13 +87,13 @@
 <div class="news-frame" data-sveltekit-preload-data="hover">
 <HealthShell
   path="/news"
-  kicker={data.feed.view === 'favourites' ? 'Saved reading list' : 'Live wire · two communities'}
+  kicker={data.feed.view === 'favourites' ? 'Saved reading list' : 'Live wire · three sources'}
   nav={[]}
-  live={sourcesLive ? 'Hacker News · Lobsters' : null}
+  live={sourcesLive ? 'Hacker News · Lobsters · Ars Technica' : null}
   meta={shellMeta}
   footer={[
     'strangeramblings.com/news · live reading desk',
-    'Hacker News · Lobsters',
+    'Hacker News · Lobsters · Ars Technica',
     `${data.stats.retainedCount} stories retained`,
     `Desk updated ${gatheredDate(data.feed.updatedAt)} ${gatheredTime(data.feed.updatedAt)}`,
   ]}
@@ -102,7 +102,7 @@
   <section class="news-lede">
     <div class="lede-inner">
       <div class="lede-copy">
-        <p class="eyebrow">Live desk · two communities</p>
+        <p class="eyebrow">Live desk · three sources</p>
         <h1>READ FIRST.<br /><span>DECIDE WHAT LASTS.</span></h1>
         <p class="standfirst">
           The technical web, gathered in one place. Read a story, then keep what earns a place in your notes.
@@ -167,6 +167,7 @@
         <button type="button" aria-pressed={source === 'all'} class:active={source === 'all'} onclick={() => (source = 'all')}>All</button>
         <button type="button" aria-pressed={source === 'hacker-news'} class:active={source === 'hacker-news'} onclick={() => (source = 'hacker-news')}>Hacker News</button>
         <button type="button" aria-pressed={source === 'lobsters'} class:active={source === 'lobsters'} onclick={() => (source = 'lobsters')}>Lobsters</button>
+        <button type="button" aria-pressed={source === 'ars-technica'} class:active={source === 'ars-technica'} onclick={() => (source = 'ars-technica')}>Ars Technica</button>
       </div>
       <nav class="sort-tabs" aria-label="Order stories">
         <span>Order</span>
@@ -180,7 +181,7 @@
       <a class="refresh" data-sveltekit-preload-data="off" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
     </div>
 
-    <p class="desk-status" role="status">{updating ? 'Updating stories…' : `${stories.length} stories shown`}{#if !updating && !sourcesLive} · Some sources are unavailable{/if}</p>
+    <p class="desk-status" role="status">{updating ? 'Updating stories…' : `${stories.length} stories shown`}{#if source === 'ars-technica'} · Latest articles{data.feed.view === 'best' ? ' from 24h' : ''}; no voting scores{/if}{#if !updating && !sourcesLive} · Some sources are unavailable{/if}</p>
 
     {#if stories.length === 0}
       <div class="empty">
@@ -203,13 +204,13 @@
                 <strong>{story.title}</strong>
                 <span class="story-byline">
                   {story.domain} · {timeAgo(story.publishedAt)}{#if story.author} · {story.author}{/if}
-                  {#if story.source === 'lobsters' && story.tags[0]}
+                  {#if story.tags[0]}
                     <span class="story-category">{story.tags[0]}</span>
                   {/if}
                 </span>
               </span>
               <span class="story-signal">
-                <span><b>{story.score}</b> points</span>
+                <span>{#if story.source === 'ars-technica'}Unscored{:else}<b>{story.score}</b> points{/if}</span>
                 <span><b>{story.commentCount}</b> replies</span>
               </span>
             </a>
@@ -277,7 +278,7 @@
   .view-tabs a:last-child { border-right: 0; }
   .view-tabs a[aria-current='page'] { background: var(--accent); color: var(--bg); }
   .desk-tools { display: grid; grid-template-columns: max-content auto minmax(180px, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
-  .filters { display: grid; grid-template-columns: repeat(3, max-content); align-items: stretch; min-width: 0; }
+  .filters { display: grid; grid-template-columns: repeat(4, max-content); align-items: stretch; min-width: 0; }
   .filters button, .refresh, .sort-tabs a, .sort-tabs > span { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; text-decoration: none; }
   .filters button:hover, .filters button.active, .refresh:hover, .sort-tabs a:hover, .sort-tabs a[aria-current='page'] { color: var(--accent); background: var(--accent-tint-04); }
   .sort-tabs { display: flex; align-items: stretch; border-left: 1px solid var(--line-strong); }
@@ -327,8 +328,10 @@
   }
   @media (max-width: 560px) {
     .desk-tools { grid-template-columns: minmax(0, 1fr) auto; }
-    .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .filters button { padding-inline: 8px; }
+    .filters > :nth-child(-n + 2) { border-bottom: 1px solid var(--line-strong); }
+    .filters > :nth-child(2n) { border-right: 0; }
     .filters > :last-child { border-right: 0; }
     .sort-tabs { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
     .search { border-right: 1px solid var(--line-strong); }
