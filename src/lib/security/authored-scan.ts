@@ -38,4 +38,3 @@ export function staticScan(code: string): StaticScanResult {
   }
   return { ok: violations.length === 0, violations };
 }
-
