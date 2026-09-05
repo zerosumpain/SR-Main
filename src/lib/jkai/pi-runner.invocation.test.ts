@@ -174,6 +174,16 @@ describe('piThinkingLevel', () => {
     }
     expect(piThinkingLevel('openrouter', 'minimal')).toBe('minimal');
   });
+
+  it('clamps the two rungs the pinned pi predates', () => {
+    // `max`/`ultra` exist for Astra and reach Codex through the site's own
+    // bridge. A build goes through pi instead, whose catalogue stops at
+    // gpt-5.5, so the deepest each provider knows is what it gets.
+    expect(piThinkingLevel('openai-codex', 'max')).toBe('xhigh');
+    expect(piThinkingLevel('openai-codex', 'ultra')).toBe('xhigh');
+    expect(piThinkingLevel('openrouter', 'max')).toBe('high');
+    expect(piThinkingLevel('openrouter', 'ultra')).toBe('high');
+  });
 });
 
 // The pin only works if every consumer agrees on one number. package.json is

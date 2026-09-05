@@ -77,12 +77,24 @@ const GROUNDED_THREAD_OPTIONS = {
  *  nothing of ours in scope. Recreated on boot; never written to by us. */
 const WORKDIR = process.env.CODEX_BRIDGE_WORKDIR || join(tmpdir(), 'jkai-codex-bridge-workdir');
 
+/**
+ * The reasoning efforts Codex accepts, which is NOT the SDK's own union.
+ *
+ * `@openai/codex-sdk`'s `ModelReasoningEffort` stops at `xhigh` (0.147), but the
+ * Responses transport — the default, and the only one the site uses — is a
+ * hand-written client, and the API behind it takes `max` and `ultra` on the 5.6
+ * line and on GPT-6 Astra. Typing this off the SDK would have made the deepest
+ * two rungs untypeable on a path the SDK is not even on. `sdkEffort` clamps for
+ * the rollback transport, which really is bound by the SDK's spelling.
+ */
+export type CodexEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+
 export interface RunRequest {
   model: string;
   prompt: string;
   /** JSON schema when the caller asked for structured output. */
   outputSchema?: unknown;
-  reasoningEffort?: ThreadOptions['modelReasoningEffort'];
+  reasoningEffort?: CodexEffort;
   signal?: AbortSignal;
   /** URL of the per-request MCP server publishing the caller's tools. When set,
    *  Codex may call them and the run stops at the first dispatch. */
@@ -110,6 +122,16 @@ export interface RunRequest {
  * one-env-var rollback rather than deleted, because this is the only route the
  * site has to the ChatGPT subscription and a bad day should not need a deploy
  * to undo.
+ *
+ * SINCE ASTRA, THE ROLLBACK IS ALSO A MODEL DOWNGRADE. The SDK drives the
+ * `codex` CLI it vendors, and the server refuses a model whose
+ * `minimal_client_version` is above that CLI — Astra wants 0.153.0 and the
+ * pinned SDK ships 0.147.0, so on this transport it fails with "requires a
+ * newer version of Codex" rather than answering. The Responses API applies no
+ * such gate, which is why the default path is unaffected. Flipping the env var
+ * therefore means also pinning a 5.6 model at /admin/ai/models until the SDK
+ * dependency is moved, which is a bridge deploy (scripts/deploy-codex-bridge.sh)
+ * and not a merge.
  */
 export type Transport = 'responses' | 'sdk';
 export function activeTransport(): Transport {
@@ -178,6 +200,19 @@ function clientFor(toolServerUrl?: string): Codex {
   return new Codex({ config: { mcp_servers: { caller: { url: toolServerUrl } } } });
 }
 
+/**
+ * `max`/`ultra` down to what the bundled `codex` CLI will accept.
+ *
+ * The SDK path drives that CLI, and the server refuses an effort the client
+ * version does not know — the same gate that hides Astra from the catalogue at
+ * 0.147.0. A clamp keeps the rollback transport a rollback: it thinks as hard as
+ * it can rather than failing the call outright.
+ */
+function sdkEffort(effort: CodexEffort | undefined): ThreadOptions['modelReasoningEffort'] | undefined {
+  if (!effort) return undefined;
+  return effort === 'max' || effort === 'ultra' ? 'xhigh' : effort;
+}
+
 function threadOptions(req: RunRequest): ThreadOptions {
   return {
     ...LOCKED_THREAD_OPTIONS,
@@ -186,7 +221,7 @@ function threadOptions(req: RunRequest): ThreadOptions {
     ...(req.webSearch ? GROUNDED_THREAD_OPTIONS : {}),
     workingDirectory: WORKDIR,
     model: req.model,
-    ...(req.reasoningEffort ? { modelReasoningEffort: req.reasoningEffort } : {}),
+    ...(req.reasoningEffort ? { modelReasoningEffort: sdkEffort(req.reasoningEffort) } : {}),
   };
 }
 

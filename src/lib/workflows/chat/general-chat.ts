@@ -1191,9 +1191,11 @@ async function runGeneralChat(
     // conversation's: an escalated round can land on the other provider, and
     // the two spell the field differently. `coerceModelContext` because a
     // persisted row can carry a codex/ id under provider 'openrouter'.
+    const turnModel = coerceModelContext(turnCtx);
     const thinking = thinkingRequestParams(
-      coerceModelContext(turnCtx).provider,
+      turnModel.provider,
       options.thinkingLevel,
+      turnModel.modelId,
     );
 
     // Halfway through available rounds: get a plain-English status update so

@@ -2341,7 +2341,12 @@
     untrack(() => (isThinkingLevel(conversation?.thinkingLevel) ? conversation.thinkingLevel : null)),
   );
   let thinkingMenuOpen = $state(false);
-  const thinkingOptions = $derived(thinkingLevelsFor(coerceModelContext(currentModel).provider));
+  // The model as well as the provider: `ultra` is real on Astra and a 400 on
+  // Luna, so the menu has to be built from the model that is actually pinned.
+  const thinkingOptions = $derived.by(() => {
+    const ctx = coerceModelContext(currentModel);
+    return thinkingLevelsFor(ctx.provider, ctx.modelId);
+  });
   const thinkingLabel = $derived(thinkingLevel ?? 'auto');
 
   async function setThinkingLevel(level: ThinkingLevel | null) {

@@ -343,7 +343,7 @@ async function runReview(thought: ThoughtToReview): Promise<ReviewResult> {
         // rather than by hand: the Codex bridge wants `reasoning_effort` and
         // OpenRouter wants a `reasoning` object, and getting that wrong fails
         // silently by simply not thinking any harder.
-        ...thinkingRequestParams(ctx.provider, REVIEW_EFFORT),
+        ...thinkingRequestParams(ctx.provider, REVIEW_EFFORT, ctx.modelId),
         max_tokens: 1400,
       } as never);
       promptTokens += res.usage?.prompt_tokens ?? 0;

@@ -301,9 +301,16 @@ export function piInvocation(ctx: { provider?: string | null; modelId: string })
  * PR #151). The build form offers `minimal` for every model, so without this a
  * Codex build picked with minimal thinking fails every iteration on a
  * validation error that says nothing about thinking levels.
+ *
+ * The same is true at the other end since the ladder gained `max` and `ultra`
+ * for Astra: those reach Codex through the site's own bridge, but a BUILD goes
+ * through pi, and the pinned pi (see PI_VERSION) predates both rungs — its
+ * catalogue stops at gpt-5.5. Clamp to the deepest each provider does know:
+ * `xhigh` for Codex, `high` for OpenRouter's unified enum.
  */
 export function piThinkingLevel(provider: PiInvocation['provider'], level: string | undefined): string | undefined {
   if (provider === 'openai-codex' && level === 'minimal') return 'low';
+  if (level === 'max' || level === 'ultra') return provider === 'openai-codex' ? 'xhigh' : 'high';
   return level;
 }
 

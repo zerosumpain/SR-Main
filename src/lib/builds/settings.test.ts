@@ -22,7 +22,9 @@ describe('sanitiseBuildPatch', () => {
   });
 
   it('rejects a thinking level outside the known set', () => {
-    expect(sanitiseBuildPatch({ thinkingLevel: 'ultra' })).toEqual({});
+    // Was 'ultra', which became a real rung when Astra landed. Pick something
+    // that cannot plausibly be added later.
+    expect(sanitiseBuildPatch({ thinkingLevel: 'ludicrous' })).toEqual({});
   });
 
   it('coerces the two booleans rather than requiring real booleans', () => {

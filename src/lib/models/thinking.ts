@@ -16,13 +16,23 @@
  *    which it hands to the SDK as `modelReasoningEffort`.
  *
  * THE LADDER IS SHARED WITH BUILDS on purpose. `jkai_builds.thinking_level`
- * already stored these six values and $lib/builds/settings re-exports them from
+ * already stored these values and $lib/builds/settings re-exports them from
  * here, so a build's thinking level and a chat's are the same vocabulary rather
- * than two lists that drift.
+ * than two lists that drift. It is a `text` column, so adding a rung needs no
+ * migration — but pi does not accept the top two, see `piThinkingLevel`.
  */
 import type { ModelProvider } from '$lib/server/models/types';
 
-export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+export const THINKING_LEVELS = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 export function isThinkingLevel(v: unknown): v is ThinkingLevel {
@@ -34,18 +44,56 @@ export function isThinkingLevel(v: unknown): v is ThinkingLevel {
  *
  * Every level below still maps to something the provider honours (see
  * `thinkingRequestParams`), but an option that silently clamps onto its
- * neighbour is a lie in a dropdown. Two levels are missing per provider:
+ * neighbour is a lie in a dropdown. What each provider does not get:
  *
  *  - Codex has no "off": the Codex agent always reasons, and the GPT-5.6 line
  *    additionally 400s on `minimal` (see piThinkingLevel, PR #151).
- *  - OpenRouter's unified effort enum is low/medium/high. `minimal` and `xhigh`
- *    are OpenAI-only spellings that do not survive the translation layer.
+ *  - OpenRouter's unified effort enum is low/medium/high. `minimal`, `xhigh`,
+ *    `max` and `ultra` are OpenAI-only spellings that do not survive the
+ *    translation layer.
+ *  - `max` and `ultra` are per-MODEL on Codex rather than per-provider — Astra,
+ *    Sol and Terra reason that deep, Luna stops at `max`, everything older
+ *    stops at `xhigh`. That is what `modelId` is for; omit it and you get the
+ *    conservative list, which is what every caller got before Astra landed.
  */
 const OPENROUTER_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high'];
-const CODEX_LEVELS: ThinkingLevel[] = ['low', 'medium', 'high', 'xhigh'];
+const CODEX_LEVELS: ThinkingLevel[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
-export function thinkingLevelsFor(provider: ModelProvider): ThinkingLevel[] {
-  return provider === 'codex' ? CODEX_LEVELS : OPENROUTER_LEVELS;
+/**
+ * The deepest effort each Codex model accepts, by bare slug.
+ *
+ * Source: the account's own catalogue (`supported_reasoning_levels` from
+ * chatgpt.com/backend-api/codex/models), read 2026-09-05. The table lives on
+ * THIS side of the server boundary because the chat picker runs in the browser
+ * and cannot import `$lib/server/*`; codex-catalogue.test asserts every
+ * catalogued model has an entry here, so the two cannot drift apart silently.
+ *
+ * An unknown slug gets `xhigh` — every Codex model has always accepted that, so
+ * a model nobody has catalogued is never offered an effort that 400s.
+ */
+export const CODEX_EFFORT_CEILING: Record<string, ThinkingLevel> = {
+  'gpt-6-astra': 'ultra',
+  'gpt-5.6-sol': 'ultra',
+  'gpt-5.6-terra': 'ultra',
+  'gpt-5.6-luna': 'max',
+  'gpt-5.5': 'xhigh',
+  'gpt-5.3-codex-spark': 'xhigh',
+};
+
+/** Bare slug from a possibly-prefixed id. `toCodexSlug` does the same job, but
+ *  it lives in `$lib/server/*` and this module is imported by the chat UI. */
+function codexSlug(modelId: string | null | undefined): string {
+  const id = modelId ?? '';
+  return id.startsWith('codex/') ? id.slice('codex/'.length) : id;
+}
+
+export function thinkingLevelsFor(
+  provider: ModelProvider,
+  modelId?: string | null,
+): ThinkingLevel[] {
+  if (provider !== 'codex') return OPENROUTER_LEVELS;
+  const ceiling = CODEX_EFFORT_CEILING[codexSlug(modelId)] ?? 'xhigh';
+  return CODEX_LEVELS.slice(0, CODEX_LEVELS.indexOf(ceiling) + 1);
 }
 
 /**
@@ -67,6 +115,23 @@ export function supportsThinking(provider: ModelProvider, raw: unknown): boolean
 }
 
 /**
+ * The ladder collapsed onto OpenRouter's unified enum.
+ *
+ * Total on purpose: adding a rung to THINKING_LEVELS now fails the typecheck
+ * here rather than quietly sending OpenRouter an effort it has never heard of,
+ * which is how `xhigh` used to reach it before the explicit ternary was added.
+ */
+const OPENROUTER_EFFORT: Record<Exclude<ThinkingLevel, 'off'>, 'low' | 'medium' | 'high'> = {
+  minimal: 'low',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'high',
+  max: 'high',
+  ultra: 'high',
+};
+
+/**
  * The request fields that carry a thinking level, ready to spread into a
  * chat-completions body. Empty object for "no level chosen" — the provider's
  * own default then applies, which is what every call did before this existed.
@@ -74,20 +139,27 @@ export function supportsThinking(provider: ModelProvider, raw: unknown): boolean
  * Levels outside a provider's offered list are clamped rather than dropped: a
  * conversation can carry a level chosen while it was pinned to the other
  * provider, and clamping keeps the user's INTENT (think hard / think little)
- * instead of silently reverting them to the default.
+ * instead of silently reverting them to the default. `modelId` extends that to
+ * the per-model Codex ceiling — pass it wherever you know it.
  */
 export function thinkingRequestParams(
   provider: ModelProvider,
   level: ThinkingLevel | null | undefined,
+  modelId?: string | null,
 ): Record<string, unknown> {
   if (!level) return {};
   if (provider === 'codex') {
-    return { reasoning_effort: level === 'off' || level === 'minimal' ? 'low' : level };
+    if (level === 'off' || level === 'minimal') return { reasoning_effort: 'low' };
+    // A conversation can carry `ultra` from a model that reasons that deep and
+    // then be pointed at one that does not: Luna answers `ultra` with a 400,
+    // not with less thinking. Clamp to this model's own ceiling.
+    const offered = thinkingLevelsFor('codex', modelId);
+    const effort = offered.includes(level) ? level : offered[offered.length - 1];
+    return { reasoning_effort: effort };
   }
   // `enabled: false` is OpenRouter's own switch for models where reasoning is
   // optional — the fix for a GLM reply truncated because reasoning tokens ate
   // the max_tokens budget. Models that cannot stop reasoning ignore it.
   if (level === 'off') return { reasoning: { enabled: false } };
-  const effort = level === 'minimal' ? 'low' : level === 'xhigh' ? 'high' : level;
-  return { reasoning: { effort } };
+  return { reasoning: { effort: OPENROUTER_EFFORT[level] } };
 }

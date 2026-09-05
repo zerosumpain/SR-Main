@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CODEX_MODELS,
+  CODEX_REASONING_EFFORTS,
   DEFAULT_CODEX_MODEL_SLUG,
   toCodexModelId,
   toCodexSlug,
@@ -15,6 +16,7 @@ import {
   siteDefaultBlockReason,
 } from './capabilities';
 import { priceFor, isSubscriptionProvider } from '$lib/llm/pricing';
+import { CODEX_EFFORT_CEILING, thinkingLevelsFor } from '$lib/models/thinking';
 
 describe('codex model ids', () => {
   it('round-trips slug → id → slug', () => {
@@ -37,6 +39,26 @@ describe('codex model ids', () => {
 
   it('has a default that exists in the catalogue', () => {
     expect(findCodexModel(DEFAULT_CODEX_MODEL_SLUG)).toBeDefined();
+  });
+});
+
+describe('codex reasoning ceilings', () => {
+  // The ceiling table cannot live beside the catalogue — the chat picker reads
+  // it in the browser and `$lib/server/*` cannot cross that boundary — so this
+  // is the seam where the two hand-maintained lists are held together. Adding a
+  // model without a ceiling would silently offer it `xhigh` and no more.
+  it('gives every catalogued model a ceiling, and names no model that is gone', () => {
+    expect(Object.keys(CODEX_EFFORT_CEILING).sort()).toEqual(CODEX_MODELS.map((m) => m.slug).sort());
+  });
+
+  it('names only efforts the bridge will forward', () => {
+    for (const effort of Object.values(CODEX_EFFORT_CEILING)) {
+      expect(CODEX_REASONING_EFFORTS).toContain(effort);
+    }
+  });
+
+  it('lets the default model reason as deep as it can', () => {
+    expect(thinkingLevelsFor('codex', DEFAULT_CODEX_MODEL_SLUG)).toContain('ultra');
   });
 });
 
