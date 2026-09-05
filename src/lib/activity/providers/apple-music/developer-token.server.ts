@@ -26,7 +26,7 @@ export function loadAppleMusicDeveloperTokenConfig(): AppleMusicDeveloperTokenCo
     teamId,
     keyId,
     privateKey,
-    origin: process.env.PUBLIC_BASE_URL?.replace(/\/$/, ''),
+    origin: (process.env.PUBLIC_BASE_URL ?? process.env.PUBLIC_SITE_URL)?.replace(/\/$/, ''),
   };
 }
 
