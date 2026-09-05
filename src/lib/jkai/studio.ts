@@ -123,7 +123,30 @@ export async function createStudioBuild({
   try {
     await builderClient.startBuild(build.id);
   } catch (err) {
-    await db.update(jkaiBuilds).set({ status: 'failed' }).where(eq(jkaiBuilds.id, build.id));
+    // Record WHY, not just that. This marked the row `failed` with a null
+    // `failure` and rethrew, so the reason existed only in the POST response —
+    // gone the moment the tab moved on, which for a studio build is instantly,
+    // because the form navigates to /jkai/builds/<id> on success. Three builds
+    // in the production history carry status='failed' with no envelope at all
+    // and there is now no way to learn what happened to them.
+    //
+    // This is the sidecar-unreachable path specifically: the row is written and
+    // the handoff is what failed, so it is a tooling problem rather than
+    // anything the prompt did.
+    await db
+      .update(jkaiBuilds)
+      .set({
+        status: 'failed',
+        failure: {
+          kind: 'tooling_unavailable',
+          message:
+            `The build was created but the builder sidecar would not start it: ` +
+            `${err instanceof Error ? err.message : String(err)}. ` +
+            `Check jkai-builder.service on the build host.`,
+          attempts: 1,
+        },
+      })
+      .where(eq(jkaiBuilds.id, build.id));
     throw err;
   }
 
