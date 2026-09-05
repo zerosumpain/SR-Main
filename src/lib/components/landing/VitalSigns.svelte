@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getContext, onMount } from 'svelte';
+  import { getContext, onMount, type Snippet } from 'svelte';
   import VitalTile from './VitalTile.svelte';
   import { fillStrap } from '$lib/landing/hero-titles-buckets';
   import type { BiomeStore } from '$lib/biome/store.svelte';
@@ -34,6 +34,7 @@
     heroTitle,
     fallbackHero,
     steps,
+    statusBackground,
   }: {
     /** Today's shipping, read off the same release showcase the Shipped section
      *  uses. Null when the loader had nothing to say. */
@@ -43,6 +44,7 @@
     /** Deterministic first-paint copy while the live selection streams in. */
     fallbackHero: HeroCopy;
     steps: number;
+    statusBackground?: Snippet;
   } = $props();
 
   let mounted = $state(false);
@@ -218,6 +220,11 @@
   </div>
 
   <div class="v-hero">
+    {#if statusBackground}
+      <div class="v-status-background" aria-hidden="true">
+        {@render statusBackground()}
+      </div>
+    {/if}
     {#await heroTitle}
       {@render status(fallbackHero)}
     {:then copy}
@@ -329,11 +336,14 @@
      so on ink it was the single biggest solid mass on the front door and the
      page read as intense. Painting nothing here does better than the cream
      fill that replaced it: it takes that mass out, it makes the live copy the
-     one open cell of an otherwise dark instrument, and it lets the hero's ECG
-     run through the rail behind the words selected by the current readings.
+     one open cell of an otherwise dark instrument, and it holds the ECG
+     behind the words selected by the current readings.
      The kicker above it and the deck below it stay ink, so the masthead's L
      still runs unbroken from the nav down the rail's edge. */
   .v-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: flex;
     /* The band takes the panel's slack and centres the compact status in it. */
     flex: 1 1 auto;
@@ -347,7 +357,14 @@
     /* Value change is the edge on both sides — no rule above, none below. */
     border-bottom: none;
   }
+  .v-status-background {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
   .v-status {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -389,6 +406,7 @@
     overflow-wrap: anywhere;
   }
   .v-hero-dot {
+    position: relative;
     width: 9px;
     height: 9px;
     flex: none;
