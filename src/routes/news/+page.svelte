@@ -7,6 +7,7 @@
   import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
   import type { PageData } from './$types';
   import type { NewsSource } from '$lib/news/types';
+  import { navigating } from '$app/state';
 
   let { data }: { data: PageData } = $props();
 
@@ -19,7 +20,7 @@
       .filter((story) => {
         if (source !== 'all' && story.source !== source) return false;
         if (!q) return true;
-        return `${story.title} ${story.domain} ${story.author ?? ''} ${story.tags.join(' ')}`
+        return `${story.title} ${story.domain} ${story.sourceLabel} ${story.author ?? ''} ${story.tags.join(' ')}`
           .toLowerCase()
           .includes(q);
       })
@@ -76,20 +77,18 @@
   }
 
   const sourcesLive = $derived(data.feed.sources.every((item) => item.ok));
+  const updating = $derived(navigating.to?.url.pathname === '/news');
   const shellMeta = $derived([
     `${data.feed.stories.length} stories`,
     `gathered ${gatheredTime(data.feed.updatedAt)}`,
   ]);
 </script>
 
+<div class="news-frame" data-sveltekit-preload-data="hover">
 <HealthShell
   path="/news"
   kicker={data.feed.view === 'favourites' ? 'Saved reading list' : 'Live wire · two communities'}
-  nav={[
-    { href: feedHref('top'), label: 'Top' },
-    { href: feedHref('new'), label: 'New' },
-    { href: feedHref('best'), label: 'Best' },
-  ]}
+  nav={[]}
   live={sourcesLive ? 'Hacker News · Lobsters' : null}
   meta={shellMeta}
   footer={[
@@ -106,8 +105,7 @@
         <p class="eyebrow">Live desk · two communities</p>
         <h1>READ FIRST.<br /><span>DECIDE WHAT LASTS.</span></h1>
         <p class="standfirst">
-          A quiet front page for the technical web. Open the story here, then keep only what earns a
-          place in your notes, research, or knowledge graph.
+          The technical web, gathered in one place. Read a story, then keep what earns a place in your notes.
         </p>
       </div>
 
@@ -142,7 +140,7 @@
     </div>
   </section>
 
-  <section class="desk" aria-labelledby="desk-title">
+  <section class="desk" aria-labelledby="desk-title" aria-busy={updating}>
     <header class="desk-head">
       <div>
         <p class="section-no">01 / The wire</p>
@@ -156,23 +154,19 @@
                 : 'FAVOURITES'}
         </h2>
       </div>
-      <nav class="view-tabs" aria-label="Feed order">
+      <nav class="view-tabs" aria-label="Feed order" data-sveltekit-noscroll>
         <a href={feedHref('top')} aria-current={data.feed.view === 'top' ? 'page' : undefined}>Top</a>
         <a href={feedHref('new')} aria-current={data.feed.view === 'new' ? 'page' : undefined}>New</a>
         <a href={feedHref('best')} aria-current={data.feed.view === 'best' ? 'page' : undefined}>Best</a>
+        <a href="/news?view=favourites&sort=time" aria-current={data.feed.view === 'favourites' ? 'page' : undefined}>Saved {data.stats.favouriteCount}</a>
       </nav>
     </header>
 
-    <div class="desk-tools">
+    <div class="desk-tools" data-sveltekit-noscroll>
       <div class="filters" role="group" aria-label="Filter source">
-        <button type="button" class:active={source === 'all'} onclick={() => (source = 'all')}>All</button>
-        <button type="button" class:active={source === 'hacker-news'} onclick={() => (source = 'hacker-news')}>Hacker News</button>
-        <button type="button" class:active={source === 'lobsters'} onclick={() => (source = 'lobsters')}>Lobsters</button>
-        <a
-          class:active={data.feed.view === 'favourites'}
-          href="/news?view=favourites&sort=time"
-          aria-current={data.feed.view === 'favourites' ? 'page' : undefined}
-        >Favourites {data.stats.favouriteCount}</a>
+        <button type="button" aria-pressed={source === 'all'} class:active={source === 'all'} onclick={() => (source = 'all')}>All</button>
+        <button type="button" aria-pressed={source === 'hacker-news'} class:active={source === 'hacker-news'} onclick={() => (source = 'hacker-news')}>Hacker News</button>
+        <button type="button" aria-pressed={source === 'lobsters'} class:active={source === 'lobsters'} onclick={() => (source = 'lobsters')}>Lobsters</button>
       </div>
       <nav class="sort-tabs" aria-label="Order stories">
         <span>Order</span>
@@ -183,8 +177,10 @@
         <span>Find</span>
         <input type="search" bind:value={query} placeholder="title, tag, source…" />
       </label>
-      <a class="refresh" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
+      <a class="refresh" data-sveltekit-preload-data="off" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
     </div>
+
+    <p class="desk-status" role="status">{updating ? 'Updating stories…' : `${stories.length} stories shown`}{#if !updating && !sourcesLive} · Some sources are unavailable{/if}</p>
 
     {#if stories.length === 0}
       <div class="empty">
@@ -237,7 +233,7 @@
         {/each}
       </ol>
       {#if canLoadMore}
-        <div class="more-stories">
+        <div class="more-stories" data-sveltekit-noscroll>
           <span>Showing up to {data.limit} stories from each source</span>
           <a href={moreHref()}>Show 25 more from each →</a>
         </div>
@@ -248,6 +244,7 @@
   </section>
 </div>
 </HealthShell>
+</div>
 
 <style>
   /* 100vh flat, NOT `calc(100vh - var(--site-nav-height))`. This page wears
@@ -256,20 +253,22 @@
      is not on it. HealthShell's head is sticky and in normal flow, so it takes
      its own height out of the viewport without being told. */
   .news-page { min-height: 100vh; background: var(--bg); }
-  .news-lede { padding: clamp(32px, 4vw, 56px) clamp(20px, 3vw, 44px); border-bottom: 1px solid rgba(237, 228, 212, 0.16); background: var(--text-primary); color: var(--bg); }
-  .lede-inner { width: min(1400px, 100%); margin: 0 auto; }
-  .lede-copy { padding-bottom: clamp(38px, 6vw, 68px); }
+  .news-lede { padding: clamp(24px, 3vw, 40px) clamp(20px, 3vw, 44px); border-bottom: 1px solid rgba(237, 228, 212, 0.16); background: var(--text-primary); color: var(--bg); }
+  .lede-inner { display: grid; grid-template-columns: 1.3fr 1fr; align-items: center; gap: 36px; width: min(1280px, 100%); margin: 0 auto; }
+  .lede-copy { min-width: 0; }
   .eyebrow, .section-no { margin: 0 0 18px; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: var(--tracking-label-wide); text-transform: uppercase; color: var(--accent); }
   .news-lede .eyebrow { color: var(--accent-on-dark); }
-  h1 { margin: 0; max-width: 11ch; font-family: var(--font-display); font-size: clamp(3.25rem, 7vw, 7rem); font-weight: 900; line-height: 0.87; letter-spacing: -0.045em; color: var(--bg); }
+  h1 { margin: 0; max-width: 18ch; font-family: var(--font-display); font-size: clamp(2.75rem, 4.3vw, 4.5rem); font-weight: 900; line-height: 0.95; letter-spacing: -0.045em; color: var(--bg); }
   h1 span { color: transparent; -webkit-text-stroke: 1.5px var(--bg); }
-  .standfirst { max-width: 61ch; margin: 28px 0 0; font-size: var(--fs-body-lg); line-height: 1.55; color: rgba(237, 228, 212, 0.7); }
-  .desk-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0; }
-  .desk-summary > div { min-width: 0; padding: 18px; border: 1px solid rgba(237, 228, 212, 0.16); background: rgba(237, 228, 212, 0.05); }
+  .standfirst { max-width: 55ch; margin: 18px 0 0; font-size: var(--fs-body); line-height: 1.55; color: rgba(237, 228, 212, 0.7); }
+  .desk-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; border-top: 1px solid rgba(237, 228, 212, 0.16); border-left: 1px solid rgba(237, 228, 212, 0.16); }
+  .desk-summary > div { min-width: 0; padding: 14px; border-right: 1px solid rgba(237, 228, 212, 0.16); border-bottom: 1px solid rgba(237, 228, 212, 0.16); }
   .desk-summary dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(237, 228, 212, 0.55); }
   .desk-summary dd { margin: 10px 0 8px; font-family: var(--font-display); font-size: 32px; font-weight: 800; line-height: 0.9; letter-spacing: -0.02em; color: var(--bg); font-variant-numeric: tabular-nums; }
   .desk-summary small { display: block; overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.35; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-on-dark); text-overflow: ellipsis; }
-  .desk { width: min(1180px, 100%); margin: 0 auto; padding: 54px clamp(20px, 5vw, 64px) 90px; }
+  .desk { box-sizing: border-box; width: min(1368px, 100%); margin: 0 auto; padding: 28px clamp(20px, 3vw, 44px) 64px; }
+  .desk-status { min-height: 1.5em; margin: 0; padding: 8px 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .desk :is(a, button, input):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .desk-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--text-primary); }
   .desk-head .section-no { margin-bottom: 7px; }
   h2 { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3.25rem); line-height: 0.95; }
@@ -278,10 +277,9 @@
   .view-tabs a:last-child { border-right: 0; }
   .view-tabs a[aria-current='page'] { background: var(--accent); color: var(--bg); }
   .desk-tools { display: grid; grid-template-columns: max-content auto minmax(180px, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
-  .filters { display: grid; grid-template-columns: repeat(4, max-content); align-items: stretch; min-width: 0; }
-  .filters button, .filters a, .refresh, .sort-tabs a, .sort-tabs > span { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; text-decoration: none; }
-  .filters a { display: flex; align-items: center; }
-  .filters button:hover, .filters button.active, .filters a:hover, .filters a.active, .refresh:hover, .sort-tabs a:hover, .sort-tabs a[aria-current='page'] { color: var(--accent); background: var(--accent-tint-04); }
+  .filters { display: grid; grid-template-columns: repeat(3, max-content); align-items: stretch; min-width: 0; }
+  .filters button, .refresh, .sort-tabs a, .sort-tabs > span { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; text-decoration: none; }
+  .filters button:hover, .filters button.active, .refresh:hover, .sort-tabs a:hover, .sort-tabs a[aria-current='page'] { color: var(--accent); background: var(--accent-tint-04); }
   .sort-tabs { display: flex; align-items: stretch; border-left: 1px solid var(--line-strong); }
   .sort-tabs > span { display: flex; align-items: center; color: var(--text-ghost); cursor: default; }
   .search { display: flex; align-items: center; gap: 9px; padding: 0 12px; border-left: 1px solid var(--line-strong); border-right: 1px solid var(--line-strong); }
@@ -291,20 +289,20 @@
   .story-list { margin: 0; padding: 0; list-style: none; }
   .story { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-hair); transition: background var(--t-fast) var(--ease-out); }
   .story:hover { background: var(--accent-tint-04); }
-  .story-reader { display: grid; grid-template-columns: 38px 38px minmax(0, 1fr) 132px; align-items: center; gap: 14px; min-width: 0; min-height: 72px; padding: 10px 8px; color: var(--text-primary); text-decoration: none; }
+  .story-reader { display: grid; grid-template-columns: 28px 32px minmax(0, 1fr) 90px; align-items: center; gap: 12px; min-width: 0; min-height: 64px; padding: 8px; color: var(--text-primary); text-decoration: none; }
   .story-reader:focus-visible, .story-action:focus-visible, .more-stories a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .story-index { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); font-variant-numeric: tabular-nums; }
   .story-source { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid currentColor; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 700; color: var(--accent); }
   .story-source.source-lobsters { color: var(--accent-ink); }
   .story-main { display: grid; gap: 5px; min-width: 0; }
-  .story-main strong { font-size: var(--fs-body-lg); line-height: 1.25; font-weight: 600; text-wrap: balance; }
+  .story-main strong { font-size: var(--fs-body-lg); line-height: 1.3; font-weight: 600; }
   .story-byline { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.35; color: var(--text-muted); }
   .story-category { color: var(--accent-ink); text-transform: uppercase; letter-spacing: 0.06em; }
   .story-category::before { content: '· '; color: var(--text-ghost); }
   .story-signal { display: grid; grid-template-columns: 1fr; gap: 4px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .story-signal b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .story-actions { display: grid; grid-template-columns: repeat(2, minmax(86px, auto)); align-items: stretch; gap: 7px; padding: 12px 8px 12px 0; }
-  .story-action { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--line-strong); background: var(--surface-card); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
+  .story-actions { display: grid; grid-template-columns: 1fr; align-content: center; gap: 4px; padding: 8px 0 8px 8px; }
+  .story-action { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 5px 8px; border: 1px solid transparent; background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
   .story-action span { color: var(--accent); }
   .story-action:hover { border-color: var(--accent); background: var(--accent-tint-08); color: var(--accent-ink); }
   .more-stories { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 8px; border-bottom: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-ghost); }
@@ -319,6 +317,7 @@
     .sort-tabs { border-left: 0; }
   }
   @media (max-width: 780px) {
+    .lede-inner { grid-template-columns: 1fr; gap: 24px; }
     .search { border-left: 0; }
     .story { grid-template-columns: 1fr; }
     .story-reader { grid-template-columns: 32px 34px minmax(0, 1fr); gap: 10px; padding: 11px 4px 7px; }
@@ -328,20 +327,21 @@
   }
   @media (max-width: 560px) {
     .desk-tools { grid-template-columns: minmax(0, 1fr) auto; }
-    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .filters button, .filters a { justify-content: center; }
-    .filters > :nth-child(-n + 2) { border-bottom: 1px solid var(--line-strong); }
-    .filters > :nth-child(2n) { border-right: 0; }
+    .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .filters button { padding-inline: 8px; }
+    .filters > :last-child { border-right: 0; }
     .sort-tabs { grid-column: 1 / -1; border-bottom: 1px solid var(--line-strong); }
     .search { border-right: 1px solid var(--line-strong); }
   }
   @media (max-width: 520px) {
-    h1 { font-size: clamp(2.75rem, 14vw, 4.1rem); }
+    .news-frame :global(.hs-kicker), .news-frame :global(.hs-head-right) { display: none; }
+    h1 { font-size: clamp(2.5rem, 10vw, 3.25rem); }
     .standfirst { font-size: var(--fs-body); }
-    .desk-summary { grid-template-columns: 1fr; }
+    .desk-summary small { display: none; }
     .desk-summary dd { margin-top: 6px; }
-    .desk { padding-top: 38px; }
-    .desk-head { align-items: center; }
+    .desk { padding-top: 24px; }
+    .desk-head { align-items: stretch; flex-direction: column; gap: 16px; }
+    .view-tabs a { flex: 1; padding-inline: 10px; text-align: center; }
     .story-reader { grid-template-columns: 30px minmax(0, 1fr); }
     .story-index { display: none; }
     .story-main { grid-column: 2; }

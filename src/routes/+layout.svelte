@@ -28,6 +28,9 @@
   // an instant swap where unsupported or when the visitor prefers reduced
   // motion. Crossfade timing lives in app.css (::view-transition-old/new).
   onNavigate((navigation) => {
+    // Feed controls update this desk in place; a document-wide crossfade makes
+    // every query change look like a refresh, including browser back/forward.
+    if (navigation.from?.url.pathname === '/news' && navigation.to?.url.pathname === '/news') return;
     const start = (document as any).startViewTransition?.bind(document) as
       | ((cb: () => Promise<void> | void) => unknown)
       | undefined;
