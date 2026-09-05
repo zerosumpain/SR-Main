@@ -200,20 +200,39 @@ export const study: Study = {
       minutes: 5,
       question: 'What arrived, and why is it now in the same conversation as a paragraph on page 98?',
       claim: {
-        text: '<b>The announced spine and the built federation are two different objects.</b> One is a paragraph with no architecture attached. The other is a node access layer in production, on one live node.',
+        text: {
+          research:
+            '<b>The announced spine and the built federation are two different objects.</b> One is a paragraph with no architecture attached. The other is a node access layer in production, on one live node.',
+          plain:
+            '<b>Two different things got called a data spine.</b> One is a promise in a government document, with no design attached. The other is working software, running on one school group’s system.',
+        },
         confidence: 'fact',
         cites: [1, 2, 3],
       },
-      standfirst:
-        'Two documents landed three weeks apart. A deck that says what has been built and, unusually, what has not; and a clickthrough that walks a fictional research organisation from an invitation to a checked answer. Neither is the thing the white paper announced. That is the interesting part.',
+      standfirst: {
+        research:
+          'Two documents landed three weeks apart. A deck that says what has been built and, unusually, what has not; and a clickthrough that walks a fictional research organisation from an invitation to a checked answer. Neither is the thing the white paper announced. That is the interesting part.',
+        plain:
+          'Two documents turned up three weeks apart: a slide deck saying what has been built and, unusually, what has not; and a clickable walkthrough of the working parts. Neither is the thing the government announced. That is what makes them interesting.',
+      },
       marginNotes: [
         {
           label: 'Capacity',
-          text: 'I have no relationship with Open Education AI or Edequity AI and no access to either system. Everything here comes from two files and four screenshots.',
+          text: {
+            research:
+              'I have no relationship with Open Education AI or Edequity AI and no access to either system. Everything here comes from two files and four screenshots.',
+            plain:
+              'I do not know these people and have no access to their system. Everything here comes from two files and four screenshots.',
+          },
         },
         {
           label: 'Dates',
-          text: 'The deck is 22 July 2026. The demo cites evidence dated 7–8 August and captures dated 10 August. Sixteen to nineteen days separate them, and on one point they say different things.',
+          text: {
+            research:
+              'The deck is 22 July 2026. The demo cites evidence dated 7–8 August and captures dated 10 August. Sixteen to nineteen days separate them, and on one point they say different things.',
+            plain:
+              'The slide deck is from 22 July. The walkthrough says its evidence is from 7–8 August and its screenshots from 10 August. Two to three weeks apart — and on one point they say different things.',
+          },
         },
       ],
       prose: [
@@ -249,8 +268,12 @@ export const study: Study = {
           chart: 'reach-span',
           unit: 'schools',
           cites: [1, 6],
-          caption:
-            'The demonstrated estate against the state-school census. The 809 is the deck’s own figure for 22 July 2026; the 22,018 is the census WhichMIS reconciles to. What this leaves out is the thing that would make it a fair fraction: the deck does not say how many of the 809 are English or state-sector, so the denominator is a join I made and neither source makes. Read it as an order of magnitude, not a share.',
+          caption: {
+            research:
+              'The demonstrated estate against the state-school census. The 809 is the deck’s own figure for 22 July 2026; the 22,018 is the census WhichMIS reconciles to. What this leaves out is the thing that would make it a fair fraction: the deck does not say how many of the 809 are English or state-sector, so the denominator is a join I made and neither source makes. Read it as an order of magnitude, not a share.',
+            plain:
+              'How much of the school system this covers so far. The 809 is their own figure for July 2026; the 22,018 is the number of state schools in England. What it leaves out is the thing that would make it a fair fraction: they never say how many of the 809 are English state schools, so the bottom number is one I supplied and neither document does. Read it as a rough order of size, not a percentage.',
+          },
           data: {
             spans: [
               {
@@ -278,7 +301,12 @@ export const study: Study = {
           template: 'T7',
           title: 'Two accounts, three weeks apart',
           claim: {
-            text: 'The announced spine and the built federation ran on separate clocks and never once refer to each other. Neither document mentions the other.',
+            text: {
+              research:
+                'The announced spine and the built federation ran on separate clocks and never once refer to each other. Neither document mentions the other.',
+              plain:
+                'The announced spine and the built one ran on separate clocks and never mention each other. Neither document refers to the other at all.',
+            },
             confidence: 'fact',
             cites: [3, 1],
           },
@@ -344,10 +372,19 @@ export const study: Study = {
             'The two accounts do not net off. One thread accumulates authority without a design; the other accumulates a design without authority. A consultation that never reads the second thread will specify the first from scratch, and a federation that never enters the first will stay at one node.',
         },
       ],
-      soWhat:
-        'I went in expecting to find a pitch overstating itself and found a document doing the opposite. That changes what this study can usefully be. It is not an audit and it cannot be one — I ran nothing. It is a reading, and the most useful thing a reading can do here is take the boundary they drew and ask what sits just outside it.',
+      soWhat: {
+        research:
+          'I went in expecting to find a pitch overstating itself and found a document doing the opposite. That changes what this study can usefully be. It is not an audit and it cannot be one — I ran nothing. It is a reading, and the most useful thing a reading can do here is take the boundary they drew and ask what sits just outside it.',
+        plain:
+          'I expected a sales pitch that overstated itself and found the opposite. That changes what this study can be. It is not an audit — I ran nothing. It is a reading, and the useful thing a reading can do is take the limits they drew themselves and ask what sits just outside them.',
+      },
       openQuestion: {
-        text: 'Has anyone put the two documents in front of the same people? The consultation has not opened, and neither artefact mentions the other.',
+        text: {
+          research:
+            'Has anyone put the two documents in front of the same people? The consultation has not opened, and neither artefact mentions the other.',
+          plain:
+            'Has anyone shown both documents to the same people? The consultation has not started, and neither document mentions the other.',
+        },
         falsifier: 'a departmental response, or a consultation document that names a federated node contract',
       },
     },
@@ -361,20 +398,39 @@ export const study: Study = {
       minutes: 7,
       question: 'What is running, what is designed, and how would I know which is which?',
       claim: {
-        text: '<b>The boundary is the artefacts’ own, and it is short.</b> Four consumption surfaces and one live node are claimed as production; the DP layer, the spine central environment and the research runner are named as designed, not built.',
+        text: {
+          research:
+            '<b>The boundary is the artefacts’ own, and it is short.</b> Four consumption surfaces and one live node are claimed as production; the DP layer, the spine central environment and the research runner are named as designed, not built.',
+          plain:
+            '<b>They wrote down what is finished and what is not, and the unfinished list is short.</b> Four ways of getting data out work today, on one school group. Three bigger pieces are drawn but not built.',
+        },
         confidence: 'fact',
         cites: [1, 2],
       },
-      standfirst:
-        'Every row below is a statement one of the two artefacts makes about itself, with the artefact and its date against it. Nothing here was tested. That is the whole limitation of this beat, and it is on the page rather than in the footer.',
+      standfirst: {
+        research:
+          'Every row below is a statement one of the two artefacts makes about itself, with the artefact and its date against it. Nothing here was tested. That is the whole limitation of this beat, and it is on the page rather than in the footer.',
+        plain:
+          'Everything in the table below is something they said about their own system, with the date they said it. I did not test any of it, and this beat says so rather than hiding it in a footnote.',
+      },
       marginNotes: [
         {
           label: 'Method',
-          text: 'I have not verified a single row. A status here means one of two documents says so, on the date that document carries.',
+          text: {
+            research:
+              'I have not verified a single row. A status here means one of two documents says so, on the date that document carries.',
+            plain:
+              'I checked none of this myself. "Built" here means one of the two documents says it is built, on the date that document carries.',
+          },
         },
         {
           label: 'The one disagreement',
-          text: 'On 22 July the SDC and pseudonymisation transforms are “the next build”. On 7–8 August they are “built and proven”, scoped to aggregate MCP answers. Read in date order that is a sequence, not a contradiction — but neither document records the crossing.',
+          text: {
+            research:
+              'On 22 July the SDC and pseudonymisation transforms are “the next build”. On 7–8 August they are “built and proven”, scoped to aggregate MCP answers. Read in date order that is a sequence, not a contradiction — but neither document records the crossing.',
+            plain:
+              'On 22 July the privacy filters are "the next thing we will build". On 7 August they are "built and working". Read in date order that is progress, not a contradiction — but neither document records the moment it changed.',
+          },
         },
       ],
       prose: [
@@ -516,10 +572,19 @@ export const study: Study = {
           'Whether the 37 organisations resemble the sector. Nothing in either artefact names a phase, an establishment type or an MIS supplier among them.',
         ],
       },
-      soWhat:
-        'The unbuilt list is short, and most of it is the kind of thing that gets built. What I would not have guessed from the summary line is which side of the boundary the publication floor sits on: the floor is drawn on the node-to-spine path, and three of the four built consumption surfaces are not on that path. The diagram and the surface list are describing different systems, and only one of them is the one running.',
+      soWhat: {
+        research:
+          'The unbuilt list is short, and most of it is the kind of thing that gets built. What I would not have guessed from the summary line is which side of the boundary the publication floor sits on: the floor is drawn on the node-to-spine path, and three of the four built consumption surfaces are not on that path. The diagram and the surface list are describing different systems, and only one of them is the one running.',
+        plain:
+          'The unfinished list is short, and most of it is the sort of thing that does get finished. The surprise is where the dividing line falls: the diagram shows totals flowing upward, but three of the four working routes send rows straight out sideways and are not on that diagram at all.',
+      },
       openQuestion: {
-        text: 'Did the SDC and pseudonymisation transforms ship between 22 July and 7 August, or did the two documents scope the same claim differently? Neither says.',
+        text: {
+          research:
+            'Did the SDC and pseudonymisation transforms ship between 22 July and 7 August, or did the two documents scope the same claim differently? Neither says.',
+          plain:
+            'Did the privacy filters get built between 22 July and 7 August, or were the two documents just describing different things? Neither says.',
+        },
         falsifier: 'a dated change record, or a build note that names the transform and the day it went in',
       },
     },
@@ -533,20 +598,39 @@ export const study: Study = {
       minutes: 7,
       question: 'Layer by layer, what has this design actually answered?',
       claim: {
-        text: '<b>Exchange is answered in running software, and much of governance with it. The identifier layer is not answered at all</b> — the only identity bound anywhere is the consumer’s, not the child’s.',
+        text: {
+          research:
+            '<b>Exchange is answered in running software, and much of governance with it. The identifier layer is not answered at all</b> — the only identity bound anywhere is the consumer’s, not the child’s.',
+          plain:
+            '<b>The moving-the-data part is built. The knowing-which-child part is missing entirely.</b> The only identity this system checks is the researcher’s. Nothing anywhere identifies a pupil.',
+        },
         confidence: 'hypothesis',
         cites: [1, 2, 5],
       },
-      standfirst:
-        'The five layers are mine, from the study next door. Neither document uses them, so this whole beat is an overlay: a frame OEAI never agreed to, laid over a design that owes it nothing.',
+      standfirst: {
+        research:
+          'The five layers are mine, from the study next door. Neither document uses them, so this whole beat is an overlay: a frame OEAI never agreed to, laid over a design that owes it nothing.',
+        plain:
+          'The five layers are my own, borrowed from the study next door. They never agreed to be judged by them — so where the fit is bad, my frame is more likely to be wrong than their design.',
+      },
       marginNotes: [
         {
           label: 'Overlay',
-          text: 'Mapping their design onto my anatomy is an interpretive move. Where the fit is bad, the frame is more likely wrong than the design.',
+          text: {
+            research:
+              'Mapping their design onto my anatomy is an interpretive move. Where the fit is bad, the frame is more likely wrong than the design.',
+            plain:
+              'Judging their design against my five layers is my choice, not theirs. Where the fit is bad, my frame is the more likely thing to be wrong.',
+          },
         },
         {
           label: 'Not a gotcha',
-          text: 'The identifier gap is not a thing they failed to do. Pupil identifiers staying inside the node is the design working. The gap is that the deck’s own flagship case needs a join across the boundary, and no source says how it is made.',
+          text: {
+            research:
+              'The identifier gap is not a thing they failed to do. Pupil identifiers staying inside the node is the design working. The gap is that the deck’s own flagship case needs a join across the boundary, and no source says how it is made.',
+            plain:
+              'The missing pupil-identity part is not something they got wrong. Keeping pupil names inside the school is the design working. The problem is that their own headline example needs to match records across that line, and neither document says how.',
+          },
         },
       ],
       prose: [
@@ -594,8 +678,12 @@ export const study: Study = {
           chart: 'gate-flow',
           unit: 'stage',
           cites: [1, 2],
-          caption:
-            'The governed path of one request, as the clickthrough walks it: ten scenes collapsed to the six points where an authority acts. The verdict row is the argument — asking is not access, and the thing that separates them is a person. What this leaves out is that the demo’s own gates constrain only its primary buttons: the rail, the arrow keys and the step hash navigate unconditionally, so a presenter can reach the last scene having approved nothing. Every state shown is seeded.',
+          caption: {
+            research:
+              'The governed path of one request, as the clickthrough walks it: ten scenes collapsed to the six points where an authority acts. The verdict row is the argument — asking is not access, and the thing that separates them is a person. What this leaves out is that the demo’s own gates constrain only its primary buttons: the rail, the arrow keys and the step hash navigate unconditionally, so a presenter can reach the last scene having approved nothing. Every state shown is seeded.',
+            plain:
+              'The path one request takes, from the walkthrough: ten scenes boiled down to the six points where somebody has to act. The verdict row is the whole argument — asking is not the same as receiving, and what separates them is a person. What it leaves out: in the demo itself only the main buttons are gated, so a presenter can skip to the end with the arrow keys having approved nothing. Every value shown is made up for the demo.',
+          },
           data: {
             stages: [
               {
@@ -645,7 +733,12 @@ export const study: Study = {
           template: 'T6',
           title: 'The five layers, overlaid',
           claim: {
-            text: 'The identifier layer is the one with no answer at all. The resolution standard this study calls its single largest gap belongs to standards rather than to identifiers, and it is in neither document.',
+            text: {
+              research:
+                'The identifier layer is the one with no answer at all. The resolution standard this study calls its single largest gap belongs to standards rather than to identifiers, and it is in neither document.',
+              plain:
+                'The "which child is this?" layer is the one with no answer at all. The way of matching records that my study calls its biggest gap belongs to the standards layer, and it is in neither document.',
+            },
             confidence: 'hypothesis',
             cites: [5, 1],
           },
@@ -713,10 +806,19 @@ export const study: Study = {
             'L1. Four layers have an answer of some kind. The identifier layer has none — and the deck’s own flagship case, the one it calls the flagship, needs it.',
         },
       ],
-      soWhat:
-        'I expected the disagreement to be about federation and it is not; on that we agree, and neither of us invented it. The disagreement is about the default and about the middle. They inverted my opt-out into an opt-in and hid the non-participants; they answered my custodian question with an option I had not listed. Both moves are defensible, both are load-bearing, and neither is a bug.',
+      soWhat: {
+        research:
+          'I expected the disagreement to be about federation and it is not; on that we agree, and neither of us invented it. The disagreement is about the default and about the middle. They inverted my opt-out into an opt-in and hid the non-participants; they answered my custodian question with an option I had not listed. Both moves are defensible, both are load-bearing, and neither is a bug.',
+        plain:
+          'I thought we would disagree about the basic shape and we do not. We disagree about the default — they ask schools to opt in and hide the ones who say nothing, where I would assume yes until someone objects and tell the researcher who is missing. And they answered my "who runs the middle?" question with an option I had not thought of.',
+      },
       openQuestion: {
-        text: 'How is a school-side pupil associated with a local-authority outcome, in this design? The flagship case turns on the join and neither document contains the word.',
+        text: {
+          research:
+            'How is a school-side pupil associated with a local-authority outcome, in this design? The flagship case turns on the join and neither document contains the word.',
+          plain:
+            'How does this design match a pupil at school to what happened to them afterwards? The headline example depends on that match, and neither document contains the word.',
+        },
         falsifier: 'a published resolution standard, or a statement that the design deliberately does not make that join',
       },
     },
@@ -730,20 +832,39 @@ export const study: Study = {
       minutes: 6,
       question: 'How is the argument drawn, and what does the drawing leave out?',
       claim: {
-        text: '<b>Neither drawing encodes build status.</b> The architecture page uses four box treatments and none of them tracks what is built; the demo carries its boundary in words and in disabled attributes, not in its palette.',
+        text: {
+          research:
+            '<b>Neither drawing encodes build status.</b> The architecture page uses four box treatments and none of them tracks what is built; the demo carries its boundary in words and in disabled attributes, not in its palette.',
+          plain:
+            '<b>Neither picture shows you what is finished.</b> The diagram draws unbuilt things exactly like built ones. The clickthrough is honest about it, but in words and greyed-out buttons rather than in the drawing itself.',
+        },
         confidence: 'hypothesis',
         cites: [2, 1],
       },
-      standfirst:
-        'This beat is about the pictures, which sounds like the frivolous lens and is not. A diagram is a claim about what is one system and what is two, and a colour is a claim about what belongs with what.',
+      standfirst: {
+        research:
+          'This beat is about the pictures, which sounds like the frivolous lens and is not. A diagram is a claim about what is one system and what is two, and a colour is a claim about what belongs with what.',
+        plain:
+          'This beat is about the pictures, which sounds like the trivial one and is not. A diagram is an argument about what counts as one system, and a colour is an argument about what belongs together.',
+      },
       marginNotes: [
         {
           label: 'Method',
-          text: 'Read from a text extraction of the deck PDF plus a render of two of its pages, and from the demo’s shipped CSS and four embedded captures. An extraction is blind to vector artwork: absence in the text layer is not absence on the slide.',
+          text: {
+            research:
+              'Read from a text extraction of the deck PDF plus a render of two of its pages, and from the demo’s shipped CSS and four embedded captures. An extraction is blind to vector artwork: absence in the text layer is not absence on the slide.',
+            plain:
+              'Read from the text pulled out of the PDF, pictures of two of its pages, and the walkthrough’s own stylesheet and screenshots. Pulling out text cannot see drawings, so something missing from the text is not necessarily missing from the slide.',
+          },
         },
         {
           label: 'Own house',
-          text: 'My study’s honesty is a build-failing test. Theirs is a sentence they chose to write. Mine catches a missing asOf date automatically; theirs caught a missing capability I would never have found.',
+          text: {
+            research:
+              'My study’s honesty is a build-failing test. Theirs is a sentence they chose to write. Mine catches a missing asOf date automatically; theirs caught a missing capability I would never have found.',
+            plain:
+              'My honesty is a test that breaks the build. Theirs is a sentence somebody decided to write. Mine catches a missing date on its own; theirs caught a missing feature I would never have found.',
+          },
         },
       ],
       prose: [
@@ -791,8 +912,12 @@ export const study: Study = {
           chart: 'build-state',
           unit: 'component',
           cites: [1, 2],
-          caption:
-            'The architecture page’s own rows, redrawn with the one thing its four box treatments do not encode. This is not the deck’s diagram — it is the deck’s content with a build-status legend added, which is exactly the change I am arguing for. What it leaves out is the architecture: a status list cannot show what gates what, which is the thing the original page draws well and this does not.',
+          caption: {
+            research:
+              'The architecture page’s own rows, redrawn with the one thing its four box treatments do not encode. This is not the deck’s diagram — it is the deck’s content with a build-status legend added, which is exactly the change I am arguing for. What it leaves out is the architecture: a status list cannot show what gates what, which is the thing the original page draws well and this does not.',
+            plain:
+              'Their own diagram’s contents, redrawn with the one thing its four styles of box never show: what is actually finished. This is not their picture — it is their content with a "built / not built" key added, which is exactly the change I am arguing for. What it loses is the architecture: a status list cannot show what gates what, which is the thing their original page does well and this does not.',
+          },
           data: {
             rows: [
               { name: 'Node access layer', state: 'live', note: 'Two UK regions, grant-gated, fails closed. One live node.' },
@@ -818,8 +943,12 @@ export const study: Study = {
           chart: 'counter-row',
           unit: 'counter',
           cites: [2],
-          caption:
-            'The three-counter row on the two captures where the viewer holds an authority. Redrawn rather than reproduced: the argument is about the device, and a screenshot would carry a great deal of seeded data that is not the argument. Only the middle counter sits inside a solid ochre rule, and on both screens it is the count the viewer must personally clear. What this leaves out is that the other two captures carry four counters and no rule at all — so this is a pattern on two screens, not on four. Every figure shown is a seeded value captured 10 August 2026 against an in-memory stub.',
+          caption: {
+            research:
+              'The three-counter row on the two captures where the viewer holds an authority. Redrawn rather than reproduced: the argument is about the device, and a screenshot would carry a great deal of seeded data that is not the argument. Only the middle counter sits inside a solid ochre rule, and on both screens it is the count the viewer must personally clear. What this leaves out is that the other two captures carry four counters and no rule at all — so this is a pattern on two screens, not on four. Every figure shown is a seeded value captured 10 August 2026 against an in-memory stub.',
+            plain:
+              'The three-number row that appears on both screens where the person looking has a decision to make. Redrawn rather than screenshotted, because the point is the device and a screenshot carries a lot of made-up data that is not the point. Only the middle number is boxed, and on both screens it is the one the viewer personally has to clear. What it leaves out: the other two screens have four numbers and no box, so this is a pattern on two screens, not four. Every figure shown is seeded demo data from 10 August 2026.',
+          },
           data: {
             screens: [
               {
@@ -847,10 +976,19 @@ export const study: Study = {
       ],
       pullQuote:
         'The demo refuses what it cannot do with a real disabled attribute rather than a warning class. That is rarer than it sounds.',
-      soWhat:
-        'The deck draws the design it wants and the demo enacts the design it has, and the gap between them is exactly the gap the deck’s own boundary paragraph describes. If I were them I would put the boundary on the diagram — one legend, two fills — because the sentence three slides later is doing work no reader of the picture will do for it.',
+      soWhat: {
+        research:
+          'The deck draws the design it wants and the demo enacts the design it has, and the gap between them is exactly the gap the deck’s own boundary paragraph describes. If I were them I would put the boundary on the diagram — one legend, two fills — because the sentence three slides later is doing work no reader of the picture will do for it.',
+        plain:
+          'The deck draws the system they want; the clickthrough acts out the system they have. The gap between the two is exactly the gap their own honesty paragraph describes. If it were mine I would put that line on the diagram — one key, two shades — because the sentence three slides later does work no one looking at the picture will do for it.',
+      },
       openQuestion: {
-        text: 'Would a build-status legend on the architecture page cost them anything? I cannot see what, and I can see what it buys.',
+        text: {
+          research:
+            'Would a build-status legend on the architecture page cost them anything? I cannot see what, and I can see what it buys.',
+          plain:
+            'Would adding a "built / not built" key to the diagram cost them anything? I cannot see what, and I can see what it would buy.',
+        },
         falsifier: 'a later version of the deck that marks built and designed on the diagram — or a good reason not to',
       },
     },
@@ -864,20 +1002,39 @@ export const study: Study = {
       minutes: 5,
       question: 'What does this design buy, and for whom?',
       claim: {
-        text: '<b>Three cost lines, kept separate — and the middle one is an estimate.</b> The deck prices the participation increment at tens of pounds a month and says the proof-of-concept replaces that engineering estimate with a measured number.',
+        text: {
+          research:
+            '<b>Three cost lines, kept separate — and the middle one is an estimate.</b> The deck prices the participation increment at tens of pounds a month and says the proof-of-concept replaces that engineering estimate with a measured number.',
+          plain:
+            '<b>The money argument is unusually clean, and its key number is still a guess.</b> They say joining costs a school group tens of pounds a month — and say plainly that a twelve-week trial is what would turn that guess into a measurement.',
+        },
         confidence: 'fact',
         cites: [1],
       },
-      standfirst:
-        'The economics are the part of this package I found most persuasive and least tested, which is an awkward combination and worth saying in that order.',
+      standfirst: {
+        research:
+          'The economics are the part of this package I found most persuasive and least tested, which is an awkward combination and worth saying in that order.',
+        plain:
+          'The money is the part I found most convincing and the part with the least evidence behind it. That is an awkward pairing, and worth saying in that order.',
+      },
       marginNotes: [
         {
           label: 'Not measured',
-          text: 'Every number on the cost slide is prospective. The twelve-week proof-of-concept is an ask of funders and school groups, not a run that happened.',
+          text: {
+            research:
+              'Every number on the cost slide is prospective. The twelve-week proof-of-concept is an ask of funders and school groups, not a run that happened.',
+            plain:
+              'Every number on the cost slide is a forecast. The twelve-week trial is something they are asking to be paid for, not something that has happened.',
+          },
         },
         {
           label: 'The clock',
-          text: 'The headline metric runs from “question locked” to a pooled published answer. My own trace starts twelve days earlier, at framing, and that difference is a third of the gap between our two numbers.',
+          text: {
+            research:
+              'The headline metric runs from “question locked” to a pooled published answer. My own trace starts twelve days earlier, at framing, and that difference is a third of the gap between our two numbers.',
+            plain:
+              'Their headline timing starts once the question is agreed and ends at a published answer. My own version starts twelve days earlier, when the arguing about the question begins — which is a third of the gap between our two numbers.',
+          },
         },
       ],
       ledger: {
@@ -885,25 +1042,45 @@ export const study: Study = {
         activeLens: 'School group',
         benefits: [
           {
-            text: 'No new collection burden, no central store to breach, and a cost model that books the platform layer to the sector rather than to the spine — conflating them, the deck says, overstates the spine by an order of magnitude',
+            text: {
+              research:
+                'No new collection burden, no central store to breach, and a cost model that books the platform layer to the sector rather than to the spine — conflating them, the deck says, overstates the spine by an order of magnitude',
+              plain:
+                'No new paperwork for schools, and no giant central database to be hacked — and the cost of the analytics platform is booked to the schools who already pay for it, not to the spine. Muddling the two, they say, makes the spine look ten times more expensive than it is',
+            },
             confidence: 'fact',
             lenses: ['School group', 'DfE'],
             cites: [1],
           },
           {
-            text: 'Benchmarking returns to participants: cross-trust comparison flows back to the organisations whose data makes it possible, and participation is priced to be better than cost-neutral for the sector',
+            text: {
+              research:
+                'Benchmarking returns to participants: cross-trust comparison flows back to the organisations whose data makes it possible, and participation is priced to be better than cost-neutral for the sector',
+              plain:
+                'Schools that take part get the comparison back first: if your data makes the benchmark, you see the benchmark. And taking part is priced to leave a school better off than not bothering',
+            },
             confidence: 'fact',
             lenses: ['School group', 'Operator / provider'],
             cites: [1],
           },
           {
-            text: 'Consent is the mechanism rather than the obstacle — nothing exists until a controller affirmatively acts, and each opt-in creates one revocable grant while the advert itself creates nothing',
+            text: {
+              research:
+                'Consent is the mechanism rather than the obstacle — nothing exists until a controller affirmatively acts, and each opt-in creates one revocable grant while the advert itself creates nothing',
+              plain:
+                'Saying yes is how the thing works rather than a hurdle in the way. Nothing exists until a school actively agrees, each agreement can be withdrawn, and a request on its own gets you nothing',
+            },
             confidence: 'fact',
             lenses: ['School group', 'Parent'],
             cites: [1, 2],
           },
           {
-            text: 'The worked example refuses to invent a conclusion: the actual NEET outcome is not in the grant, and the named next requirement is a separately governed outcomes source or linkage rather than a finding',
+            text: {
+              research:
+                'The worked example refuses to invent a conclusion: the actual NEET outcome is not in the grant, and the named next requirement is a separately governed outcomes source or linkage rather than a finding',
+              plain:
+                'The worked example stops rather than making something up: the actual outcome for those pupils is not in the data they were given, and it says so instead of guessing',
+            },
             confidence: 'hypothesis',
             lenses: ['Researcher', 'Parent'],
             cites: [4, 2],
@@ -911,38 +1088,67 @@ export const study: Study = {
         ],
         risks: [
           {
-            text: 'The no-honeypot benefit is asserted as a property of the architecture rather than a policy commitment — but the component it belongs to, the spine core, is the same central environment the deck lists as designed, not built',
+            text: {
+              research:
+                'The no-honeypot benefit is asserted as a property of the architecture rather than a policy commitment — but the component it belongs to, the spine core, is the same central environment the deck lists as designed, not built',
+              plain:
+                'The "there is no big database to steal" claim is presented as a fact about the design rather than a promise — but the piece it belongs to is one of the pieces they have not built yet',
+            },
             confidence: 'hypothesis',
             lenses: ['Parent', 'DfE'],
             cites: [1],
           },
           {
-            text: 'The scale figures are prospective: the increment is an engineering estimate, and the ~6–8 weeks is the headline metric of a twelve-week proof-of-concept that has not run',
+            text: {
+              research:
+                'The scale figures are prospective: the increment is an engineering estimate, and the ~6–8 weeks is the headline metric of a twelve-week proof-of-concept that has not run',
+              plain:
+                'The headline numbers are forecasts, not measurements. The running cost is an engineer’s estimate, and the six-to-eight weeks is the target of a trial that has not happened',
+            },
             confidence: 'fact',
             lenses: ['DfE', 'Operator / provider'],
             cites: [1],
           },
           {
-            text: 'The economics presuppose the very platform spend this study leaves unpriced and decisive for the long tail, and nothing in the deck characterises how the 37 organisations differ from the sector',
+            text: {
+              research:
+                'The economics presuppose the very platform spend this study leaves unpriced and decisive for the long tail, and nothing in the deck characterises how the 37 organisations differ from the sector',
+              plain:
+                'The whole cost argument assumes schools already pay for the analytics platform underneath — which is the spending my own study found decisive and unpriced — and nothing says how the 37 organisations differ from everyone else',
+            },
             confidence: 'hypothesis',
             lenses: ['DfE', 'Operator / provider'],
             cites: [1, 6],
           },
           {
-            text: 'Two of the four products are absent from the clickthrough entirely — benchmarking and the value-return funding rule return no matches anywhere in it; the demo walks governed research access and nothing else',
+            text: {
+              research:
+                'Two of the four products are absent from the clickthrough entirely — benchmarking and the value-return funding rule return no matches anywhere in it; the demo walks governed research access and nothing else',
+              plain:
+                'Two of the four things they promise never appear in the walkthrough at all: the benchmarks going back to schools, and the money returning to them. The demo shows research access and nothing else',
+            },
             confidence: 'fact',
             lenses: ['School group', 'Operator / provider'],
             cites: [1, 2],
           },
           {
-            text: 'The clock starts at “question locked”, which brackets out the twelve days of framing this study costs before that point, on a candidate question chosen so that it needs no new cross-domain linkage',
+            text: {
+              research:
+                'The clock starts at “question locked”, which brackets out the twelve days of framing this study costs before that point, on a candidate question chosen so that it needs no new cross-domain linkage',
+              plain:
+                'The clock starts once the question is settled, which quietly leaves out the twelve days of arguing about the question that my own study counts — on an example chosen because it needs no awkward data matching',
+            },
             confidence: 'hypothesis',
             lenses: ['Researcher'],
             cites: [5],
           },
         ],
-        balance:
-          'Read as a school group this tips clearly positive, and that is the design working as intended: the deck sets out to win a school’s trust and says so — schools say yes to questions they can see, scoped and revocable. Read as a parent it tips the other way, for the same reason. The words parent, family, guardian, citizen, data subject, objection and opt-out appear nowhere in either document. That is not an oversight so much as a choice of audience: OEAI’s answer to the parent is architectural, that the core never materialises pupil-level rows, plus a public jobs log that belongs to the environment they have not built yet.',
+        balance: {
+          research:
+            'Read as a school group this tips clearly positive, and that is the design working as intended: the deck sets out to win a school’s trust and says so — schools say yes to questions they can see, scoped and revocable. Read as a parent it tips the other way, for the same reason. The words parent, family, guardian, citizen, data subject, objection and opt-out appear nowhere in either document. That is not an oversight so much as a choice of audience: OEAI’s answer to the parent is architectural, that the core never materialises pupil-level rows, plus a public jobs log that belongs to the environment they have not built yet.',
+          plain:
+            'Read as a school, this comes out clearly positive — which is the design working as intended, because winning a school’s trust is exactly what it sets out to do. Read as a parent it goes the other way, for the same reason. The words parent, family, guardian, citizen and objection appear nowhere in either document. That is less an oversight than a choice of audience: their answer to the parent is architectural — the middle never holds a pupil record — plus a public log of who asked what, which belongs to the part they have not built yet.',
+        },
         byActor: [
           {
             actor: 'School group',
@@ -981,10 +1187,19 @@ export const study: Study = {
           },
         ],
       },
-      soWhat:
-        'The cost argument is the cleanest thing in the deck, and it is clean partly because it is not measured yet. Three separated lines and a stated order-of-magnitude penalty for merging them is better discipline than most business cases manage. The thing I would want before believing it is the one thing the deck also wants: the twelve weeks, run.',
+      soWhat: {
+        research:
+          'The cost argument is the cleanest thing in the deck, and it is clean partly because it is not measured yet. Three separated lines and a stated order-of-magnitude penalty for merging them is better discipline than most business cases manage. The thing I would want before believing it is the one thing the deck also wants: the twelve weeks, run.',
+        plain:
+          'The money argument is the cleanest thing in the deck, and it is clean partly because nobody has measured it yet. Keeping three costs separate, and saying out loud that merging them would overstate things tenfold, is better discipline than most business cases manage. What I want before believing it is the thing they want too: the twelve weeks, actually run.',
+      },
       openQuestion: {
-        text: 'How much of the sector is already on an analytics platform? The whole economic argument rests on that penetration, and the deck asserts it without a figure.',
+        text: {
+          research:
+            'How much of the sector is already on an analytics platform? The whole economic argument rests on that penetration, and the deck asserts it without a figure.',
+          plain:
+            'How many schools already pay for the kind of platform this needs? The whole money argument rests on that number, and the deck never gives it.',
+        },
         falsifier: 'a published survey of analytics-platform coverage across English school groups',
       },
     },
@@ -998,20 +1213,39 @@ export const study: Study = {
       minutes: 5,
       question: 'What does this design not do, and what has not been shown?',
       claim: {
-        text: '<b>Three of the gaps are not engineering.</b> Nothing in either artefact names an auditor of OEAI, admits a data subject to the cast, or says what protects consent-as-mechanism from a later statutory duty to supply.',
+        text: {
+          research:
+            '<b>Three of the gaps are not engineering.</b> Nothing in either artefact names an auditor of OEAI, admits a data subject to the cast, or says what protects consent-as-mechanism from a later statutory duty to supply.',
+          plain:
+            '<b>The three problems left are not coding problems.</b> Nobody checks the organisation doing the checking. No parent or child appears anywhere in either document. And nothing stops a future government simply making the sharing compulsory.',
+        },
         confidence: 'contested',
         cites: [1, 2, 5],
       },
-      standfirst:
-        'The unbuilt list is short, honest and will shrink on its own. This beat is about the things that will not shrink on their own, and about the ones I am least sure of.',
+      standfirst: {
+        research:
+          'The unbuilt list is short, honest and will shrink on its own. This beat is about the things that will not shrink on their own, and about the ones I am least sure of.',
+        plain:
+          'The list of things they have not built yet is short, honest, and will shrink by itself. This beat is about the problems that will not — and about the ones I am least sure of.',
+      },
       marginNotes: [
         {
           label: 'Escrow',
-          text: 'Lock-in is answered — a node is a contract, not a product, hosting-neutral by contract, with one demonstrated configuration-only tenancy move. Escrow and a provider ceasing to trade are not mentioned anywhere, and the second provider sits in Phase E.',
+          text: {
+            research:
+              'Lock-in is answered — a node is a contract, not a product, hosting-neutral by contract, with one demonstrated configuration-only tenancy move. Escrow and a provider ceasing to trade are not mentioned anywhere, and the second provider sits in Phase E.',
+            plain:
+              'Getting stuck with one supplier is answered: joining is a set of promises, not a product, and they have moved the software into a customer’s own cloud once to prove it. What is not mentioned anywhere is what happens if a supplier goes bust, and the second supplier is in the last phase.',
+          },
         },
         {
           label: 'Fairness',
-          text: 'A capture of the “Read activity” panel stops about a hundred pixels above the frame’s edge. That is a screenshot boundary, not a missing feature, and I nearly wrote it up as one.',
+          text: {
+            research:
+              'A capture of the “Read activity” panel stops about a hundred pixels above the frame’s edge. That is a screenshot boundary, not a missing feature, and I nearly wrote it up as one.',
+            plain:
+              'One screenshot cuts off about a hundred pixels early. That is where the picture ends, not where the feature ends — and I nearly wrote it up as a missing feature.',
+          },
         },
       ],
       ledger: {
@@ -1019,19 +1253,34 @@ export const study: Study = {
         activeLens: 'Privacy advocate',
         benefits: [
           {
-            text: 'The boundary is volunteered rather than extracted: the deck names four things as not yet built and the demo files six under Not built / not claimed, including capabilities nobody had asked about',
+            text: {
+              research:
+                'The boundary is volunteered rather than extracted: the deck names four things as not yet built and the demo files six under Not built / not claimed, including capabilities nobody had asked about',
+              plain:
+                'They volunteered their own limits rather than being caught out. The deck names four things as unbuilt and the walkthrough lists six more, including ones nobody had asked about',
+            },
             confidence: 'fact',
             lenses: ['Me', 'ICO'],
             cites: [1, 2],
           },
           {
-            text: 'The demo blocks what it cannot support with a real disabled attribute rather than a warning class, and ships that apparatus unchanged into the attendee build',
+            text: {
+              research:
+                'The demo blocks what it cannot support with a real disabled attribute rather than a warning class, and ships that apparatus unchanged into the attendee build',
+              plain:
+                'Where the demo cannot do something, the button is genuinely dead rather than carrying a warning label — and the version handed to the audience keeps every one of those admissions',
+            },
             confidence: 'fact',
             lenses: ['Me', 'ICO'],
             cites: [2],
           },
           {
-            text: 'Containment is real where accountability is thin: the vetting gate never sees a grant or a row, so a compromised gate admits a consumer who still receives nothing until a controller grants',
+            text: {
+              research:
+                'Containment is real where accountability is thin: the vetting gate never sees a grant or a row, so a compromised gate admits a consumer who still receives nothing until a controller grants',
+              plain:
+                'The damage is contained even where the accountability is thin: the organisation that vets researchers never sees the data or the permissions, so even if it were compromised the attacker still gets nothing until a school says yes',
+            },
             confidence: 'fact',
             lenses: ['Privacy advocate', 'ICO'],
             cites: [1, 2],
@@ -1039,50 +1288,89 @@ export const study: Study = {
         ],
         risks: [
           {
-            text: 'Nothing in the deck names an auditor of OEAI itself, no board or trustee structure appears anywhere in it, and capture is never raised as a risk — the vetting log records every decision without naming anyone entitled to read it',
+            text: {
+              research:
+                'Nothing in the deck names an auditor of OEAI itself, no board or trustee structure appears anywhere in it, and capture is never raised as a risk — the vetting log records every decision without naming anyone entitled to read it',
+              plain:
+                'Nobody is named as checking the organisation that does the checking. There is no board or trustee structure anywhere in the deck, being captured is never listed as a risk, and the log of their decisions has no named reader',
+            },
             confidence: 'fact',
             lenses: ['Privacy advocate', 'ICO', 'Me'],
             cites: [1],
           },
           {
-            text: 'The words parent, family, guardian, citizen, data subject, objection and opt-out appear nowhere in either artefact, and the audience for the audit trail is named as the regulator: read activity is the regulator-facing record',
+            text: {
+              research:
+                'The words parent, family, guardian, citizen, data subject, objection and opt-out appear nowhere in either artefact, and the audience for the audit trail is named as the regulator: read activity is the regulator-facing record',
+              plain:
+                'The words parent, family, guardian, citizen and objection appear nowhere in either document. The audit trail is built for the regulator, and the regulator is who they say it is for',
+            },
             confidence: 'contested',
             lenses: ['Privacy advocate', 'Me'],
             cites: [1, 2, 5],
           },
           {
-            text: 'Neither artefact describes any mechanism accounting for disclosure across repeated queries or across the answers pooled from several nodes; the implemented rule is per-answer suppression and rounding, and the controls that would compose are named and deferred',
+            text: {
+              research:
+                'Neither artefact describes any mechanism accounting for disclosure across repeated queries or across the answers pooled from several nodes; the implemented rule is per-answer suppression and rounding, and the controls that would compose are named and deferred',
+              plain:
+                'Nothing describes what happens when someone asks many small questions instead of one big one, or pools answers from several schools. Each answer is rounded and small numbers hidden — but those protections do not add up across answers, and the ones that would are named and postponed',
+            },
             confidence: 'hypothesis',
             lenses: ['Statistician', 'ICO'],
             cites: [1, 2],
           },
           {
-            text: 'The deck presents no representativeness, coverage, weighting or non-participation analysis — bias, representative, sample, weighting, selection, generalisability, coverage and population appear nowhere across the eighteen slides',
+            text: {
+              research:
+                'The deck presents no representativeness, coverage, weighting or non-participation analysis — bias, representative, sample, weighting, selection, generalisability, coverage and population appear nowhere across the eighteen slides',
+              plain:
+                'There is no analysis of whether these schools look like schools in general. The words bias, representative, sample, weighting, coverage and population do not appear once across eighteen slides',
+            },
             confidence: 'fact',
             lenses: ['Statistician'],
             cites: [1],
           },
           {
-            text: 'Withdrawal is booked only as a governance virtue; the proof-of-concept offers trusts review of outputs before publication and the benchmark first, and the deck nowhere books withdrawal correlated with results as an inferential cost',
+            text: {
+              research:
+                'Withdrawal is booked only as a governance virtue; the proof-of-concept offers trusts review of outputs before publication and the benchmark first, and the deck nowhere books withdrawal correlated with results as an inferential cost',
+              plain:
+                'Pulling out is only ever described as a good thing about the governance. Schools get to see the results before publication and get the benchmark first — and nowhere does the deck count the cost of schools leaving because they did not like what they saw',
+            },
             confidence: 'hypothesis',
             lenses: ['Statistician'],
             cites: [1],
           },
           {
-            text: 'A node contract binds its parties, not a future minister — and neither document says what protects consent-as-mechanism from a later statutory duty to supply',
+            text: {
+              research:
+                'A node contract binds its parties, not a future minister — and neither document says what protects consent-as-mechanism from a later statutory duty to supply',
+              plain:
+                'A contract binds the people who signed it, not a future minister. Neither document says what stops consent-by-choice becoming supply-by-law later on',
+            },
             confidence: 'contested',
             lenses: ['A future minister', 'Privacy advocate'],
             cites: [1, 5, 3],
           },
           {
-            text: 'Neither artefact names a comparator — OpenSAFELY, X-Road, Ed-Fi and trusted research environments are all absent — and the one this study does hold is not ahead on the missing runner: OpenSAFELY Schools extracts into a segregated Azure tenancy and currently runs a direct SQL runner',
+            text: {
+              research:
+                'Neither artefact names a comparator — OpenSAFELY, X-Road, Ed-Fi and trusted research environments are all absent — and the one this study does hold is not ahead on the missing runner: OpenSAFELY Schools extracts into a segregated Azure tenancy and currently runs a direct SQL runner',
+              plain:
+                'Neither document names anything to compare itself against — not OpenSAFELY, X-Road, Ed-Fi or trusted research environments. And the one I do hold up is not ahead of them on the missing piece: OpenSAFELY Schools copies data into its own secure tenancy and currently runs a more direct query layer',
+            },
             confidence: 'fact',
             lenses: ['Me', 'Statistician'],
             cites: [7, 5],
           },
         ],
-        balance:
-          'The unbuilt list is the least worrying thing on this page, because it is short, it is theirs, and most of it is the kind of thing that gets built. The three that will not build themselves are an auditor, a data subject and a statute. None of them is engineering, all three are cheap relative to the cryptography already in the design, and the deck answers none of them — which is fair enough for an eighteen-slide architecture pitch, and is exactly why they should be conditions of the money rather than deliverables of Phase E.',
+        balance: {
+          research:
+            'The unbuilt list is the least worrying thing on this page, because it is short, it is theirs, and most of it is the kind of thing that gets built. The three that will not build themselves are an auditor, a data subject and a statute. None of them is engineering, all three are cheap relative to the cryptography already in the design, and the deck answers none of them — which is fair enough for an eighteen-slide architecture pitch, and is exactly why they should be conditions of the money rather than deliverables of Phase E.',
+          plain:
+            'The unfinished list is the least worrying thing here, because it is short, they wrote it themselves, and most of it is the sort of thing that gets finished. The three that will not finish themselves are a checker, a child, and a law. None of them is a coding problem, all three are cheap next to the security work already in the design, and the deck answers none of them — which is fair enough for an eighteen-slide pitch, and is exactly why they should be conditions of the money rather than promises for later.',
+        },
         byActor: [
           {
             actor: 'Privacy advocate',
@@ -1114,10 +1402,19 @@ export const study: Study = {
           },
         ],
       },
-      soWhat:
-        'I went looking for the thing they had overstated and did not find one. What I found instead is a design whose remaining problems are all in the layer nobody can ship — who audits the auditor, who speaks for the child, and what happens the first time a minister finds a consented feed useful enough to compel.',
+      soWhat: {
+        research:
+          'I went looking for the thing they had overstated and did not find one. What I found instead is a design whose remaining problems are all in the layer nobody can ship — who audits the auditor, who speaks for the child, and what happens the first time a minister finds a consented feed useful enough to compel.',
+        plain:
+          'I came looking for the exaggeration and could not find it. What is left instead are problems nobody can code their way out of: who watches the watchers, who stands up for the child, and what happens the first time a minister decides this is too useful to stay optional.',
+      },
       openQuestion: {
-        text: 'If withdrawal is correlated with what the benchmark says about you, the bias in a consented federation is a function of the published answer. Nobody has looked.',
+        text: {
+          research:
+            'If withdrawal is correlated with what the benchmark says about you, the bias in a consented federation is a function of the published answer. Nobody has looked.',
+          plain:
+            'If the schools that pull out are the ones the results made look bad, then the bias depends on the answer itself. Nobody has checked.',
+        },
         falsifier: 'a statistical design note that models correlated withdrawal, which the deck asks a research partner to co-author',
       },
     },
@@ -1131,23 +1428,46 @@ export const study: Study = {
       minutes: 4,
       question: 'Having read both documents, what would I actually do?',
       claim: {
-        text: '<b>Fund the twelve weeks, and attach two conditions neither document contains</b> — an auditor independent of whoever runs the exchange, and an access log a parent can read.',
+        text: {
+          research:
+            '<b>Fund the twelve weeks, and attach two conditions neither document contains</b> — an auditor independent of whoever runs the exchange, and an access log a parent can read.',
+          plain:
+            '<b>Pay for the twelve-week trial, and ask for two things neither document mentions</b> — somebody independent to check the checkers, and a record of who saw what that a parent can actually read.',
+        },
         confidence: 'hypothesis',
         cites: [1, 5],
       },
-      standfirst:
-        'I have no money and no standing, so this is a recommendation to nobody in particular. It is still the honest end of the argument: having read both, this is what I would ask for.',
+      standfirst: {
+        research:
+          'I have no money and no standing, so this is a recommendation to nobody in particular. It is still the honest end of the argument: having read both, this is what I would ask for.',
+        plain:
+          'Nobody is asking me, and I am not paying for any of it. But an argument ought to end with what you would actually do, so here is mine.',
+      },
       marginNotes: [
         {
           label: 'Not an evaluation',
-          text: 'I read two documents and four screenshots. I ran nothing, tested nothing and spoke to nobody. This beat is a reader’s recommendation, not an assessment.',
+          text: {
+            research:
+              'I read two documents and four screenshots. I ran nothing, tested nothing and spoke to nobody. This beat is a reader’s recommendation, not an assessment.',
+            plain:
+              'Two files and four pictures, read at my own desk. Nothing was run, nothing measured, nobody interviewed. Treat this as one reader’s opinion.',
+          },
         },
       ],
       position: {
-        statement: 'Fund the pilot. Ask for an auditor and a parent-visible log.',
+        statement: {
+          research:
+            'Fund the pilot. Ask for an auditor and a parent-visible log.',
+          plain:
+            'Fund the trial. Ask for an independent checker and a log parents can read.',
+        },
         confidence: 'hypothesis',
-        elaboration:
-          'The twelve-week proof-of-concept is entirely within the programme’s gift, and the deck is explicit that it replaces an engineering estimate with a measured number. Two things should be conditions of the money rather than Phase E deliverables: an audit function independent of whoever runs the exchange, and an access log a family can read. Neither is expensive. Neither is in either document. Both are already conditions this study named before OEAI existed on my desk.',
+        elaboration: {
+          research:
+            'The twelve-week proof-of-concept is entirely within the programme’s gift, and the deck is explicit that it replaces an engineering estimate with a measured number. Two things should be conditions of the money rather than Phase E deliverables: an audit function independent of whoever runs the exchange, and an access log a family can read. Neither is expensive. Neither is in either document. Both are already conditions this study named before OEAI existed on my desk.',
+          plain:
+            'The twelve-week trial is entirely within their own gift to run, and the deck says plainly that it replaces a guess with a measurement. Two things should be conditions of the money rather than promises for later: somebody independent to check the organisation doing the checking, and a record of who saw what that a family can actually read. Neither is expensive. Neither is in either document. Both were already conditions in my own study, written before I had heard of these people.',
+        },
         because: [
           {
             headline: 'The weakest number in the package is the one the pilot exists to replace.',
@@ -1190,8 +1510,12 @@ export const study: Study = {
           'A second, independently operated node before any conformance claim',
           'Central output checking on pooled answers, not only per-node suppression',
         ],
-        sinkers:
-          'If the twelve weeks run and the elapsed-days number comes back inside six to eight, the economics stand and most of this beat is noise, which would be the good outcome. What sinks the recommendation is the reverse: a pilot that never runs, or one that runs on a single node. One node cannot demonstrate one notebook across heterogeneous nodes, cannot exercise a conformance profile against a second, and cannot pool anything — so a single-node pilot would produce a number that measures nothing this design is actually claiming. If Phase E’s second provider stays in Phase E, the federation is a node, and the argument for it stays an argument about a design.',
+        sinkers: {
+          research:
+            'If the twelve weeks run and the elapsed-days number comes back inside six to eight, the economics stand and most of this beat is noise, which would be the good outcome. What sinks the recommendation is the reverse: a pilot that never runs, or one that runs on a single node. One node cannot demonstrate one notebook across heterogeneous nodes, cannot exercise a conformance profile against a second, and cannot pool anything — so a single-node pilot would produce a number that measures nothing this design is actually claiming. If Phase E’s second provider stays in Phase E, the federation is a node, and the argument for it stays an argument about a design.',
+          plain:
+            'If the trial runs and the answer comes back inside six to eight weeks, the money argument stands and most of this beat is noise — which would be the good outcome. What sinks the recommendation is the opposite: a trial that never happens, or one that runs on a single school group. One node cannot show that the same analysis works across different systems, cannot test one setup against another, and cannot pool anything — so a single-node trial would produce a number that measures none of what is being claimed. If the second provider stays permanently in the last phase, the federation is just one node, and the argument for it stays an argument about a drawing.',
+        },
         phases: [
           {
             label: 'Now',
@@ -1220,10 +1544,19 @@ export const study: Study = {
           },
         ],
       },
-      soWhat:
-        'The thing I did not expect to write is that the design is further along than the argument about it. There is a running node access layer with a governance model I would mostly defend, and the open questions left are the ones a document cannot close: an auditor, a family, and a statute. Those were my open questions in February too, against a completely different object. That is either a sign I am asking the right question or a sign I only know one.',
+      soWhat: {
+        research:
+          'The thing I did not expect to write is that the design is further along than the argument about it. There is a running node access layer with a governance model I would mostly defend, and the open questions left are the ones a document cannot close: an auditor, a family, and a statute. Those were my open questions in February too, against a completely different object. That is either a sign I am asking the right question or a sign I only know one.',
+        plain:
+          'What surprised me is that the building has gone further than the talking. Working software exists, with rules I would mostly stand behind. What is left are things no document can settle: who checks the checkers, who speaks for the child, and what a future law might force. I was asking those same questions in February about something else entirely — which either means it is the right question or that it is the only one I know.',
+      },
       openQuestion: {
-        text: 'Do the twelve weeks ever get funded? Everything in this beat is downstream of an ask made to funders in July, and I have no way to see the answer.',
+        text: {
+          research:
+            'Do the twelve weeks ever get funded? Everything in this beat is downstream of an ask made to funders in July, and I have no way to see the answer.',
+          plain:
+            'Does the twelve-week trial ever get paid for? Everything here follows from a request made to funders in July, and I have no way to see the answer.',
+        },
         falsifier: 'a published start date for the proof-of-concept, or a published decision not to run it',
       },
     },
