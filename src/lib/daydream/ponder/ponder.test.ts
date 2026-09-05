@@ -102,6 +102,11 @@ describe('assemblePack', () => {
     expect(renderPack(pack)).not.toContain('Jemima swims on Tuesdays');
   });
 
+  it('admits personal context with a source identity without treating it as a finding', () => {
+    const pack = assemblePack(inputs({ snapshot: snap({ memories: [{ id: 'personal', category: 'preferences', content: 'Prefers quiet routes', contextOnly: true }] }) }));
+    expect(pack.cards.find(c => c.ref.id === 'personal')?.text).toContain('not independent corroboration');
+  });
+
   it('cards consolidated memory as a sourced lesson and preserves that ref in a musing', () => {
     const pack = assemblePack(inputs({
       snapshot: snap({

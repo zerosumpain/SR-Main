@@ -454,7 +454,7 @@ export async function buildSnapshot(
       .from(jkaiMemories).where(and(isNull(jkaiMemories.supersededBy), isNull(jkaiMemories.daydreamOrigin),
         sql`(${jkaiMemories.provenance}->>'validUntil' is null or ${jkaiMemories.provenance}->>'validUntil' > ${new Date().toISOString()})`))
       .orderBy(sql`coalesce((${jkaiMemories.provenance}->>'pinned')::boolean, false) desc`, desc(jkaiMemories.updatedAt)).limit(20);
-    memories.push(...personal.map(m => ({ id: m.id, category: m.category,
+    memories.push(...personal.map(m => ({ contextOnly: true, id: m.id, category: m.category,
       content: `[Personal context; ${m.provenance?.assertion ?? 'unverified'}; ${m.confidence} confidence] ${m.content}` })));
     sources.push({
       key: 'memories',

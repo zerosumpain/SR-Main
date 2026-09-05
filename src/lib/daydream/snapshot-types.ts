@@ -88,6 +88,7 @@ export interface Offer {
 }
 
 export interface MemoryRow {
+  contextOnly?: boolean;
   id: string;
   category: string;
   content: string;
