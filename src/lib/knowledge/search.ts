@@ -196,11 +196,13 @@ async function branchDatastore(
 }
 
 async function branchActivity(query: string, limit: number): Promise<KnowledgeHit[]> {
-  const { executeTool } = await import('$lib/workflows/site-tools/registry');
-  const result = await executeTool('activity_search', { query, limit });
-  if (!result.success) throw new Error(result.error ?? 'Activity search unavailable');
-  const data = result.data as { coverage: string; results: Array<Record<string, any>> };
-  if (data.coverage === 'unavailable') throw new Error('Activity sources are unavailable or not granted');
+  const { loadActivitySources } = await import('$lib/activity/policy/source-context.server');
+  const { searchActivityEvents } = await import('$lib/activity/store/summary.server');
+  const { principalId, sources, overall } = await loadActivitySources();
+  if (overall === 'unavailable') throw new Error('Activity sources are unavailable or not granted');
+  const ids = sources.filter(s => s.grants.activity && s.grants.metadata).map(s => s.id);
+  const results = await searchActivityEvents(principalId, { query, limit, connectionIds: ids });
+  const data = { results, coverage: overall };
   return data.results.map(r => ({ source: 'activity', title: String(r.object?.label ?? r.type),
     passage: clip(JSON.stringify({ type: r.type, measures: r.measures, occurredAt: r.occurredAt, observedAt: r.observedAt })),
     score: KEYWORD_SCORE, matchKind: 'keyword', ref: { eventId: r.id, url: `/jkai/activity/${r.id}`, evidenceMode: r.evidenceMode, occurredAt: r.occurredAt, observedAt: r.observedAt, coverage: data.coverage } }));

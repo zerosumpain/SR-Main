@@ -107,24 +107,36 @@ export async function recordRulingMemory(
   thoughtId: string,
   r: RulingInput,
 ): Promise<RulingResult> {
-  const [thought] = await db
-    .select({ id: daydreamThoughts.id, reviewMemoryId: daydreamThoughts.reviewMemoryId })
-    .from(daydreamThoughts)
-    .where(eq(daydreamThoughts.id, thoughtId))
-    .limit(1);
-  if (!thought) throw new Error(`no such thought: ${thoughtId}`);
+  return db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`);
+    const [thought] = await tx
+      .select({ id: daydreamThoughts.id, reviewMemoryId: daydreamThoughts.reviewMemoryId, evidence: daydreamThoughts.evidence })
+      .from(daydreamThoughts)
+      .where(eq(daydreamThoughts.id, thoughtId))
+      .limit(1);
+    if (!thought) throw new Error(`no such thought: ${thoughtId}`);
 
-  const content = rulingContent(r);
+    const content = rulingContent(r);
+    const refs = thought.evidence ?? [];
+    const sourceMemoryIds = refs.filter(e => e.kind === 'memory').map(e => e.id);
+    const themeIds = refs.filter(e => e.kind === 'memory-theme').map(e => e.id);
+    if (themeIds.length) {
+      const { daydreamMemoryThemeSources } = await import('$lib/db/schema');
+      const { inArray } = await import('drizzle-orm');
+      const links = await tx.select({ memoryId: daydreamMemoryThemeSources.memoryId }).from(daydreamMemoryThemeSources).where(inArray(daydreamMemoryThemeSources.themeId, themeIds));
+      sourceMemoryIds.push(...links.map(l => l.memoryId));
+    }
 
-  const memory = await writeMemory({ category: 'situations', content, daydreamOrigin: 'ruling', replacesId: thought.reviewMemoryId,
-    provenance: { origin: 'daydream-ruling', sourceId: thoughtId, assertion: 'inferred' } });
+    const memory = await writeMemory({ category: 'situations', content, daydreamOrigin: 'ruling', replacesId: thought.reviewMemoryId,
+      provenance: { origin: 'daydream-ruling', sourceId: thoughtId, sourceMemoryIds: [...new Set(sourceMemoryIds)], assertion: 'inferred' } }, tx);
 
-  await db
-    .update(daydreamThoughts)
-    .set({ reviewMemoryId: memory.id, updatedAt: new Date() })
-    .where(eq(daydreamThoughts.id, thoughtId));
+    await tx
+      .update(daydreamThoughts)
+      .set({ reviewMemoryId: memory.id, updatedAt: new Date() })
+      .where(eq(daydreamThoughts.id, thoughtId));
 
-  return { memoryId: memory.id, content };
+    return { memoryId: memory.id, content };
+  });
 }
 
 /**

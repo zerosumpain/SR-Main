@@ -1,4 +1,4 @@
-import { writeMemory } from '$lib/jkai/memory/service.server';
+import { writeMemory, backfillMemoryEmbeddings } from '$lib/jkai/memory/service.server';
 // src/lib/workflows/chat/memory-review.ts
 
 import { db } from '$lib/db';
@@ -141,6 +141,7 @@ async function reviewConversation(conversationId: string): Promise<number> {
 }
 
 async function runMemoryReview(): Promise<void> {
+  await backfillMemoryEmbeddings().catch(() => {});
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
 
   try {

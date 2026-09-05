@@ -20,6 +20,8 @@ register({
         enum: CATEGORIES,
         description: 'Memory category',
       },
+      assertion: { type: 'string', enum: ['stated', 'inferred'], description: 'stated only for an explicit user statement; otherwise inferred (default).' },
+      sourceMessageId: { type: 'string', description: 'Source user message or evidence identifier, when available.' },
       replacesId: { type: 'string', description: 'Explicit current memory ID to replace; omit for an independent fact.' },
       content: {
         type: 'string',
@@ -33,7 +35,7 @@ register({
   handler: async (args, ctx) => {
     const row = await writeMemory({ category: args.category as string, content: args.content as string,
       replacesId: args.replacesId as string | undefined, sourceConversationId: ctx?.conversationId,
-      provenance: { origin: 'user', assertion: 'stated', sourceId: ctx?.conversationId },
+      provenance: { origin: 'user', assertion: args.assertion === 'stated' ? 'stated' : 'inferred', sourceId: (args.sourceMessageId as string | undefined) ?? ctx?.conversationId },
     });
     return { success: true, data: { id: row.id, category: row.category, content: row.content, stored: row.stored } };
   },

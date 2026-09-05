@@ -34,7 +34,7 @@ describe('jkai_extended meta-tool', () => {
       for (const entry of list) {
         expect(typeof entry.name).toBe('string');
         expect(typeof entry.description).toBe('string');
-        expect('destructive' in entry).toBe(false);
+        expect(typeof entry.destructive).toBe('boolean');
         expect((entry.description as string).length).toBeLessThanOrEqual(120);
       }
     });
@@ -64,7 +64,7 @@ describe('jkai_extended meta-tool', () => {
       );
       const list = result as unknown as Array<Record<string, unknown>>;
       expect(list.length).toBeGreaterThan(0);
-      expect(list.every((t) => 'destructive' in t === false)).toBe(true);
+      expect(list.every((t) => typeof t.destructive === 'boolean')).toBe(true);
     });
   });
 
@@ -122,12 +122,13 @@ describe('jkai_extended meta-tool', () => {
       expect((result.inputSchema as { type?: string }).type).toBe('object');
     });
 
-    it('returns an error object for an essential tool (essentials are not in the extended catalogue)', async () => {
+    it('resolves an essential tool through the stable schema alias', async () => {
       const result = (await dispatchMetaTool(
         { operation: 'schema', name: 'save_memory' },
         fakeCtx,
       )) as { error?: string };
-      expect(result.error).toMatch(/unknown tool/i);
+      expect(result.error).toBeUndefined();
+      expect(result).toHaveProperty('inputSchema');
     });
 
     it('returns an error object for an unknown tool name', async () => {
@@ -230,12 +231,12 @@ describe('jkai_extended meta-tool', () => {
       expect(Array.isArray((result.data as { types: unknown[] }).types)).toBe(true);
     });
 
-    it('refuses to invoke an essential tool (essentials are not in the extended catalogue)', async () => {
+    it('routes essential invocation to the same input validation', async () => {
       const result = (await dispatchMetaTool(
         { operation: 'invoke', name: 'save_memory', args: { fact: 'x' } },
         fakeCtx,
       )) as { error?: string };
-      expect(result.error).toMatch(/unknown tool/i);
+      expect(result.error).toBe('invalid_arguments');
     });
   });
 
@@ -323,7 +324,7 @@ describe('list entries carry required argument names', () => {
     const list = (await dispatchMetaTool({ operation: 'list', compact: true, query: 'apple calendar' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
     const create = list.find((e) => e.name === 'apple_calendar_create');
     expect(create!.required).toEqual(expect.arrayContaining(['calendar', 'title']));
-    expect('destructive' in create!).toBe(false);
+    expect(create!.destructive).toBe(true);
   });
 });
 

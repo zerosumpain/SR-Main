@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { parse } from '@babel/parser';
-import { staticScan } from '$lib/selfimprove/verify';
+import { staticScan } from '$lib/security/authored-scan';
 import type { ToolResult } from '$lib/workflows/site-tools/registry-internal';
 
 export function validateHandler(code: string) {
@@ -45,9 +45,9 @@ export function runAuthored(code: string, args: Record<string, unknown>, call: (
     child.stderr.on('data', chunk => { errors = (errors + chunk.toString()).slice(0, 1000); });
     child.on('exit', () => finish({ success: false, error: `Isolated handler stopped before returning: ${errors}` }));
     child.stdin.on('error', () => {});
+    child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes > 2_000_000) finish({ success: false, error: 'Handler output budget exceeded' }); });
     const lines = createInterface({ input: child.stdout });
     lines.on('line', async line => {
-      bytes += line.length;
       if (bytes > 2_000_000) return finish({ success: false, error: 'Handler output budget exceeded' });
       let msg: any; try { msg = JSON.parse(line); } catch { return finish({ success: false, error: 'Invalid sandbox response' }); }
       if (msg.done) return finish(msg.result && typeof msg.result.success === 'boolean' ? msg.result : { success: false, error: 'Handler must return { success, data?, error? }' });

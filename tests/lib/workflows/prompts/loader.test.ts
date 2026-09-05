@@ -31,6 +31,7 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn(),
 }));
 
+import { BEHAVIOUR_POLICY } from '$lib/jkai/grounding/policy';
 import { syncPrompts, getPromptFiles, compilePromptFiles } from '$lib/workflows/prompts/loader';
 
 const TEST_DIR = join(process.cwd(), 'test-prompts-tmp');
@@ -53,7 +54,7 @@ describe('Prompt Loader', () => {
 
     const result = compilePromptFiles(TEST_DIR);
 
-    expect(result.compiled).toBe('First file\n\n---\n\nSecond file\n\n---\n\nThird file');
+    expect(result.compiled).toBe('First file\n\n---\n\nSecond file\n\n---\n\nThird file' + BEHAVIOUR_POLICY);
     expect(result.manifest).toHaveLength(3);
     expect(result.manifest[0].name).toBe('01-first.md');
     expect(result.manifest[1].name).toBe('02-second.md');
@@ -90,7 +91,7 @@ describe('Prompt Loader', () => {
     expect(mockInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'default',
-        compiledPrompt: 'Alpha\n\n---\n\nBeta',
+        compiledPrompt: 'Alpha\n\n---\n\nBeta' + BEHAVIOUR_POLICY,
       }),
     );
   });

@@ -7,6 +7,9 @@ vi.mock('drizzle-orm', () => ({ and: () => ({}), desc: () => ({}), ilike: () => 
 vi.mock('$lib/db/schema', () => ({ jkaiMemories: { content: 'c', supersededBy: 's', updatedAt: 'u' } }));
 
 const memRows: unknown[] = [];
+vi.mock('$lib/jkai/memory/retrieve.server', () => ({ retrieveMemories: async () => memRows }));
+vi.mock('$lib/activity/policy/source-context.server', () => ({ loadActivitySources: async () => ({ principalId: 'owner', sources: [], overall: 'complete' }) }));
+vi.mock('$lib/activity/store/summary.server', () => ({ searchActivityEvents: async () => [] }));
 vi.mock('$lib/db', () => {
   const chain: Record<string, unknown> = {
     select: () => chain,

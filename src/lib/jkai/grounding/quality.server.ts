@@ -5,6 +5,7 @@ import type { AnswerAssessment } from './answer';
 export interface QualityRecord {
   jobId: string; conversationId?: string | null; policyVersion: number; promptHash: string;
   model: string; taskClass: string; assessment?: AnswerAssessment; elapsedMs: number;
+  capabilityHash?: string; candidates?: string[];
   firstTool?: string; firstSuccessfulTool?: string; schemaErrors: number; evidenceCount: number;
 }
 export async function recordAnswerQuality(record: QualityRecord) {

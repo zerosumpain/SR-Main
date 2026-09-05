@@ -1,3 +1,5 @@
+import type { AnswerAssessment } from '$lib/constants/grounding';
+export type { AnswerAssessment } from '$lib/constants/grounding';
 export interface AnswerContract { depth: 'brief' | 'detailed'; requestedItems?: number; needsReview: boolean }
 export function answerContract(request: string): AnswerContract {
   const count = request.match(/\b(\d{1,2})\s+(?:improvements|options|reasons|recommendations|examples|steps)\b/i);
@@ -7,7 +9,7 @@ export function answerContract(request: string): AnswerContract {
 export function renderAnswerContract(contract: AnswerContract): string {
   return `\n--- Answer contract ---\nDepth: ${contract.depth}. ${contract.requestedItems ? `Address all ${contract.requestedItems} requested items.` : 'Address each requested subquestion.'} Give the answer, supporting evidence inline, interpretation and material unknowns. Distinguish observed events, remembered facts and inferences. Partial retrieval never establishes absence. Before finishing, check every requested part and each externally verifiable claim against evidence.\n`;
 }
-export interface AnswerAssessment { supported: boolean | null; complete: boolean | null; issues: string[]; revisedAnswer?: string }
+
 export function parseAssessment(text: string): AnswerAssessment {
   try {
     const obj = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));

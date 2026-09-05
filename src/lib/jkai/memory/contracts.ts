@@ -1,14 +1,5 @@
-export type MemoryOrigin = 'user' | 'extraction' | 'daydream-note' | 'daydream-ruling' | 'daydream-place' | 'legacy';
-export interface MemoryProvenance {
-  origin: MemoryOrigin;
-  sourceId?: string;
-  sourceMemoryIds?: string[];
-  subject?: string;
-  predicate?: string;
-  assertion?: 'stated' | 'observed' | 'inferred';
-  validUntil?: string;
-  pinned?: boolean;
-}
+import type { MemoryProvenance } from '$lib/constants/grounding';
+export type { MemoryProvenance, MemoryOrigin } from '$lib/constants/grounding';
 export interface RankedMemory {
   id: string; content: string; category: string; confidence: string;
   updatedAt: Date; provenance?: MemoryProvenance | null; daydreamOrigin?: string | null;

@@ -8,7 +8,7 @@ import { memoryScore } from './contracts';
 export async function retrieveMemories(query = '', category?: string, limit = 30) {
   const live = and(isNull(jkaiMemories.supersededBy), category ? eq(jkaiMemories.category, category) : undefined,
     sql`(${jkaiMemories.provenance}->>'validUntil' is null or ${jkaiMemories.provenance}->>'validUntil' > ${new Date().toISOString()})`);
-  const lexical = query.trim() ? sql`to_tsvector('english', ${jkaiMemories.content}) @@ plainto_tsquery('english', ${query})` : undefined;
+  const lexical = query.trim() ? sql`to_tsvector('english', ${jkaiMemories.content}) @@ websearch_to_tsquery('english', ${(query.match(/[\p{L}\p{N}]{3,}/gu) ?? []).join(' OR ')})` : undefined;
   const rows = await db.select().from(jkaiMemories).where(and(live, query.trim() ? or(lexical, sql`${jkaiMemories.provenance}->>'pinned' = 'true'`) : undefined))
     .orderBy(desc(jkaiMemories.updatedAt)).limit(100);
   if (query.trim()) {

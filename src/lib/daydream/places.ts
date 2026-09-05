@@ -473,77 +473,81 @@ export async function confirmPlace(
   kind: PlaceKind,
   opts: { conversationId?: string | null } = {},
 ): Promise<{ memoryId: string; thoughtsResolved: number }> {
-  const [place] = await db
-    .select()
-    .from(daydreamPlaces)
-    .where(eq(daydreamPlaces.id, placeId))
-    .limit(1);
-  if (!place) throw new Error(`no such place: ${placeId}`);
 
-  const clean = label.trim().slice(0, 200);
-  if (!clean) throw new Error('a place needs a name');
+  return db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`);
+    const [place] = await tx
+      .select()
+      .from(daydreamPlaces)
+      .where(eq(daydreamPlaces.id, placeId))
+      .limit(1);
+    if (!place) throw new Error(`no such place: ${placeId}`);
 
-  const rhythm = describePlaceRhythm(place);
-  const content = `${clean} (${kind}) — a place John visits: ${rhythm}.`;
+    const clean = label.trim().slice(0, 200);
+    if (!clean) throw new Error('a place needs a name');
 
-  const memory = await writeMemory({ category: 'places', content, daydreamOrigin: 'place', replacesId: place.memoryId,
-    sourceConversationId: opts.conversationId ?? null,
-    provenance: { origin: 'daydream-place', sourceId: placeId, assertion: 'stated' } });
+    const rhythm = describePlaceRhythm(place);
+    const content = `${clean} (${kind}) — a place John visits: ${rhythm}.`;
 
-  await db
-    .update(daydreamPlaces)
-    .set({
-      label: clean,
-      kind,
-      source: 'confirmed',
-      memoryId: memory.id,
-      updatedAt: new Date(),
-    })
-    .where(eq(daydreamPlaces.id, placeId));
+    const memory = await writeMemory({ category: 'places', content, daydreamOrigin: 'place', replacesId: place.memoryId,
+      sourceConversationId: opts.conversationId ?? null,
+      provenance: { origin: 'daydream-place', sourceId: placeId, assertion: 'stated' } }, tx);
 
-  // The question has been answered, so the thought asking it is finished
-  // business. Without this it sits on the ledger still saying "What is this
-  // place you keep going to?" about somewhere that now has a name — the detector
-  // stops raising it, which is precisely why nothing would ever come along and
-  // tidy the existing row.
-  //
-  // `actioned` is a PROTECTED status, so a later run cannot resurrect it.
-  //
-  // Recorded as feedback, but LABELLED as inferred.
-  //
-  // This block used to record nothing, on the correct grounds that quietly
-  // manufacturing an upvote would inflate a kind's score with something the
-  // owner never said. The cost of that correctness was severe: he named five
-  // places — the exact act the whole feature exists to elicit — and the ledger
-  // learned nothing, while `coldStartThreshold` sat pinned at 0.75 waiting for
-  // 25 responses it had no way to collect.
-  //
-  // Keeping the provenance answers both. `feedbackSource: 'action'` weighs 0.4
-  // of a stated verdict, so it moves the threshold over time and cannot on its
-  // own make a kind look loved, and the page says "inferred from naming the
-  // place" rather than "you said useful". The original objection was to
-  // pretending; it was never to noticing.
-  const { daydreamThoughts } = await import('$lib/db/schema');
-  const resolved = await db
-    .update(daydreamThoughts)
-    .set({
-      status: 'actioned',
-      // Only where he has not already ruled explicitly — a stated verdict is
-      // never overwritten by an inferred one.
-      feedback: sql`coalesce(${daydreamThoughts.feedback}, 'useful')`,
-      feedbackSource: sql`coalesce(${daydreamThoughts.feedbackSource}, 'action')`,
-      feedbackAt: sql`coalesce(${daydreamThoughts.feedbackAt}, now())`,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(daydreamThoughts.placeId, placeId),
-        inArray(daydreamThoughts.status, ['new', 'delivered', 'seen', 'suppressed']),
-      ),
-    )
-    .returning({ id: daydreamThoughts.id });
+    await tx
+      .update(daydreamPlaces)
+      .set({
+        label: clean,
+        kind,
+        source: 'confirmed',
+        memoryId: memory.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(daydreamPlaces.id, placeId));
 
-  return { memoryId: memory.id, thoughtsResolved: resolved.length };
+    // The question has been answered, so the thought asking it is finished
+    // business. Without this it sits on the ledger still saying "What is this
+    // place you keep going to?" about somewhere that now has a name — the detector
+    // stops raising it, which is precisely why nothing would ever come along and
+    // tidy the existing row.
+    //
+    // `actioned` is a PROTECTED status, so a later run cannot resurrect it.
+    //
+    // Recorded as feedback, but LABELLED as inferred.
+    //
+    // This block used to record nothing, on the correct grounds that quietly
+    // manufacturing an upvote would inflate a kind's score with something the
+    // owner never said. The cost of that correctness was severe: he named five
+    // places — the exact act the whole feature exists to elicit — and the ledger
+    // learned nothing, while `coldStartThreshold` sat pinned at 0.75 waiting for
+    // 25 responses it had no way to collect.
+    //
+    // Keeping the provenance answers both. `feedbackSource: 'action'` weighs 0.4
+    // of a stated verdict, so it moves the threshold over time and cannot on its
+    // own make a kind look loved, and the page says "inferred from naming the
+    // place" rather than "you said useful". The original objection was to
+    // pretending; it was never to noticing.
+    const { daydreamThoughts } = await import('$lib/db/schema');
+    const resolved = await tx
+      .update(daydreamThoughts)
+      .set({
+        status: 'actioned',
+        // Only where he has not already ruled explicitly — a stated verdict is
+        // never overwritten by an inferred one.
+        feedback: sql`coalesce(${daydreamThoughts.feedback}, 'useful')`,
+        feedbackSource: sql`coalesce(${daydreamThoughts.feedbackSource}, 'action')`,
+        feedbackAt: sql`coalesce(${daydreamThoughts.feedbackAt}, now())`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(daydreamThoughts.placeId, placeId),
+          inArray(daydreamThoughts.status, ['new', 'delivered', 'seen', 'suppressed']),
+        ),
+      )
+      .returning({ id: daydreamThoughts.id });
+
+    return { memoryId: memory.id, thoughtsResolved: resolved.length };
+  });
 }
 
 /** "Stop asking about this one." A place-level mute that survives
