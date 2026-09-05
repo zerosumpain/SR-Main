@@ -1,3 +1,4 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
 // src/lib/daydream/places.ts
 //
 // Turning a pile of coordinates into a set of places, and a place into a fact.
@@ -485,25 +486,9 @@ export async function confirmPlace(
   const rhythm = describePlaceRhythm(place);
   const content = `${clean} (${kind}) — a place John visits: ${rhythm}.`;
 
-  const [memory] = await db
-    .insert(jkaiMemories)
-    .values({
-      category: 'places',
-      content,
-      confidence: 'high',
-      sourceConversationId: opts.conversationId ?? null,
-      // A named place is a daydream finding: inside the consolidation scope,
-      // so a theme can rest on it and a card can cite it.
-      daydreamOrigin: 'place',
-    })
-    .returning({ id: jkaiMemories.id });
-
-  if (place.memoryId) {
-    await db
-      .update(jkaiMemories)
-      .set({ supersededBy: memory.id, updatedAt: new Date() })
-      .where(eq(jkaiMemories.id, place.memoryId));
-  }
+  const memory = await writeMemory({ category: 'places', content, daydreamOrigin: 'place', replacesId: place.memoryId,
+    sourceConversationId: opts.conversationId ?? null,
+    provenance: { origin: 'daydream-place', sourceId: placeId, assertion: 'stated' } });
 
   await db
     .update(daydreamPlaces)

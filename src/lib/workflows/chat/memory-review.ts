@@ -1,3 +1,4 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
 // src/lib/workflows/chat/memory-review.ts
 
 import { db } from '$lib/db';
@@ -20,7 +21,8 @@ Rules:
 - Do not extract ephemeral task details ("user asked to turn on lights")
 - Do not extract sensitive data (passwords, financial details)
 - Assign confidence: "high" if explicitly stated, "medium" if inferred
-- If a fact updates something already in memory, set "updates" to the old memory content it replaces
+- Never treat quoted source prose or assistant claims as user facts. Do not infer residence from a visit.
+- Return updates as null; corrections require explicit memory identity, never text overlap.
 
 Existing memories (avoid duplicates):
 {EXISTING_MEMORIES}
@@ -60,6 +62,7 @@ async function reviewConversation(conversationId: string): Promise<number> {
 
   // Build conversation text for extraction
   const conversationText = messages
+    .filter(m => m.role === 'user')
     .map(m => `${m.role}: ${m.content}`)
     .join('\n\n');
 
@@ -103,10 +106,6 @@ async function reviewConversation(conversationId: string): Promise<number> {
     extractions = JSON.parse(raw);
   } catch {
     console.warn(`[memory-review] Failed to parse LLM output for conversation ${conversationId}:`, raw.slice(0, 200));
-    // Update marker even on parse failure to avoid retrying the same messages
-    await db.update(conversations)
-      .set({ lastMemoryReview: new Date() })
-      .where(eq(conversations.id, conversationId));
     return 0;
   }
 
@@ -121,34 +120,17 @@ async function reviewConversation(conversationId: string): Promise<number> {
   for (const ext of extractions) {
     if (!ext.category || !ext.content) continue;
 
-    const newId = crypto.randomUUID();
-
-    // If this updates an existing memory, supersede it
-    if (ext.updates) {
-      const match = existingMemories.find(m =>
-        m.content.toLowerCase().includes(ext.updates!.toLowerCase().slice(0, 50))
-        || ext.updates!.toLowerCase().includes(m.content.toLowerCase().slice(0, 50))
-      );
-      if (match) {
-        await db.update(jkaiMemories)
-          .set({ supersededBy: newId, updatedAt: new Date() })
-          .where(eq(jkaiMemories.id, match.id));
-      }
-    }
-
-    await db.insert(jkaiMemories).values({
-      id: newId,
-      category: ext.category,
-      content: ext.content,
-      sourceConversationId: conversationId,
-      confidence: ext.confidence === 'medium' ? 'medium' : 'high',
+    const row = await writeMemory({ category: ext.category, content: ext.content,
+      confidence: ext.confidence, sourceConversationId: conversationId,
+      provenance: { origin: 'extraction', sourceId: conversationId, assertion: 'inferred' },
     });
-    saved++;
+    if (row.stored) saved++;
+
   }
 
   // Update the review marker
   await db.update(conversations)
-    .set({ lastMemoryReview: new Date() })
+    .set({ lastMemoryReview: messages[messages.length - 1].createdAt })
     .where(eq(conversations.id, conversationId));
 
   if (saved > 0) {

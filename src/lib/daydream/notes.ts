@@ -1,3 +1,4 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
 // src/lib/daydream/notes.ts
 //
 // Saying something back, in your own words.
@@ -67,17 +68,8 @@ export async function addNote(thoughtId: string, text: string): Promise<NoteResu
   // without knowing what it was answering.
   const content = `On the daydream suggestion "${thought.title}": ${clean}`;
 
-  const [memory] = await db
-    .insert(jkaiMemories)
-    .values({ category: 'situations', content, confidence: 'high', daydreamOrigin: 'note' })
-    .returning({ id: jkaiMemories.id });
-
-  if (thought.noteMemoryId) {
-    await db
-      .update(jkaiMemories)
-      .set({ supersededBy: memory.id, updatedAt: new Date() })
-      .where(eq(jkaiMemories.id, thought.noteMemoryId));
-  }
+  const memory = await writeMemory({ category: 'situations', content, daydreamOrigin: 'note', replacesId: thought.noteMemoryId,
+    provenance: { origin: 'daydream-note', sourceId: thoughtId, assertion: 'stated' } });
 
   await db
     .update(daydreamThoughts)

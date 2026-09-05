@@ -1,3 +1,4 @@
+import { isDaydreamFindingTheme } from './memory-scope.server';
 // src/lib/daydream/compose.ts
 //
 // The only step that spends anything.
@@ -17,7 +18,7 @@
 //
 // All model access goes through `$lib/llm/client`, never a provider SDK.
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and, isNull } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamMemoryThemes, daydreamPlaces, jkaiMemories } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
@@ -86,10 +87,10 @@ export async function gatherFacts(evidence: EvidenceRef[]): Promise<string[]> {
   const memoryIds = evidence.filter((e) => e.kind === 'memory').map((e) => e.id);
   if (memoryIds.length) {
     const memories = await db
-      .select({ content: jkaiMemories.content })
+      .select({ id: jkaiMemories.id, content: jkaiMemories.content, confidence: jkaiMemories.confidence, provenance: jkaiMemories.provenance })
       .from(jkaiMemories)
-      .where(inArray(jkaiMemories.id, memoryIds));
-    for (const m of memories) facts.push(`MEMORY: ${m.content}`);
+      .where(and(inArray(jkaiMemories.id, memoryIds), isNull(jkaiMemories.supersededBy)));
+    for (const m of memories) facts.push(`MEMORY ${m.id} (${m.provenance?.origin ?? 'legacy'}, ${m.provenance?.assertion ?? 'unverified'}, ${m.confidence}): ${m.content}`);
   }
 
   const themeIds = evidence.filter((e) => e.kind === 'memory-theme').map((e) => e.id);
@@ -102,7 +103,7 @@ export async function gatherFacts(evidence: EvidenceRef[]): Promise<string[]> {
         confidence: daydreamMemoryThemes.confidence,
       })
       .from(daydreamMemoryThemes)
-      .where(inArray(daydreamMemoryThemes.id, themeIds));
+      .where(and(inArray(daydreamMemoryThemes.id, themeIds), eq(daydreamMemoryThemes.status, 'active'), isDaydreamFindingTheme()));
     for (const theme of themes) {
       facts.push(
         `MEMORY ${theme.kind.toUpperCase()}: ${theme.statement} Apply when relevant: ${theme.guidance} (${theme.confidence} confidence).`,

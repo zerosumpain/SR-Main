@@ -1,3 +1,4 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
 // src/lib/daydream/rulings.ts
 //
 // What the reviewer learned, written somewhere it will be read again.
@@ -115,25 +116,8 @@ export async function recordRulingMemory(
 
   const content = rulingContent(r);
 
-  const [memory] = await db
-    .insert(jkaiMemories)
-    .values({
-      category: 'situations',
-      content,
-      daydreamOrigin: 'ruling',
-      // A ruling the reviewer could not settle is not a high-confidence fact
-      // about the world, and marking it as one would let an "I could not tell"
-      // outrank a thing that was actually checked.
-      confidence: r.verdict === 'uncertain' ? 'medium' : 'high',
-    })
-    .returning({ id: jkaiMemories.id });
-
-  if (thought.reviewMemoryId) {
-    await db
-      .update(jkaiMemories)
-      .set({ supersededBy: memory.id, updatedAt: new Date() })
-      .where(eq(jkaiMemories.id, thought.reviewMemoryId));
-  }
+  const memory = await writeMemory({ category: 'situations', content, daydreamOrigin: 'ruling', replacesId: thought.reviewMemoryId,
+    provenance: { origin: 'daydream-ruling', sourceId: thoughtId, assertion: 'inferred' } });
 
   await db
     .update(daydreamThoughts)
