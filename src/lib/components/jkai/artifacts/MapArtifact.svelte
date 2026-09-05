@@ -19,6 +19,13 @@
     latLngBounds: (corners: Array<[number, number]>) => { extend: (p: [number, number]) => unknown };
   };
 
+  // Leaflet paints into inline SVG attributes and cannot read a CSS custom
+  // property, so the tokens are mirrored here — the same arrangement, and the
+  // same reason, as $lib/jkai/artifacts/vega-theme.ts.
+  const MAP_TRACK = '#c4570a';      /* --accent */
+  const MAP_HEAT_FILL = '#0e5b66';  /* --accent-ink */
+  const MAP_HEAT_EDGE = '#094850';  /* --accent-ink-hover */
+
   let { artifact }: { artifact: MapArtifact } = $props();
 
   let container: HTMLDivElement | undefined = $state();
@@ -117,7 +124,9 @@
             }
           } else if (layer.kind === 'track') {
             const coords = layer.points.map((p) => [p.lat, p.lng] as [number, number]);
-            L.polyline(coords, { color: '#2563eb', weight: 3 }).addTo(map);
+            // Burnt orange, the site's identity colour, and what a single
+            // series wears everywhere else on the site — not Leaflet's blue.
+            L.polyline(coords, { color: MAP_TRACK, weight: 3 }).addTo(map);
             allPoints.push(...coords);
           } else {
             // heatmap — fallback to weighted circle markers (no external plugin in v1)
@@ -125,8 +134,10 @@
               const w = typeof p.weight === 'number' ? p.weight : 1;
               L.circleMarker([p.lat, p.lng], {
                 radius: Math.min(Math.max(w * 4, 3), 20),
-                fillColor: '#ef4444',
-                color: '#b91c1c',
+                // Petrol, the counter-accent: heat has to read as a different
+                // measure from a track, and red is the site's error colour.
+                fillColor: MAP_HEAT_FILL,
+                color: MAP_HEAT_EDGE,
                 weight: 1,
                 fillOpacity: 0.5,
               }).addTo(map);
@@ -157,6 +168,9 @@
 </script>
 
 <figure class="map-artifact" class:fullscreen>
+  {#if artifact.caption}
+    <figcaption>{artifact.caption}</figcaption>
+  {/if}
   <div class="map-container" bind:this={container}></div>
 
   <button
@@ -181,9 +195,6 @@
 
   {#if error}
     <p class="error">Map failed to render: {error}</p>
-  {/if}
-  {#if artifact.caption}
-    <figcaption>{artifact.caption}</figcaption>
   {/if}
 </figure>
 
@@ -238,17 +249,23 @@
   .fs-toggle:hover { background: #f5f5f5; }
   figcaption {
     padding: 0.4rem 0.75rem;
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     color: var(--text-muted);
-    border-top: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--line-strong);
   }
   .map-artifact.fullscreen figcaption {
     position: absolute;
-    bottom: 0;
+    top: 0;
     left: 0;
     right: 0;
-    background: rgba(255,255,255,0.95);
-    border-top: 1px solid var(--line-strong);
+    /* Opaque, and a token — the map scrolls under it. `--surface-elevated`
+       rather than a hard white, which the rest of the cream system never uses. */
+    background: var(--surface-elevated);
+    z-index: 1;
   }
   .error {
     color: var(--error);

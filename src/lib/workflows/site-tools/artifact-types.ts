@@ -49,7 +49,15 @@ export type TableArtifact = {
   caption?: string;
 };
 
-export type Artifact = ChartArtifact | MapArtifact | TableArtifact;
+/** Mermaid diagram source plus the caption shown above it. */
+export type DiagramArtifact = {
+  type: 'diagram';
+  /** Mermaid source, including its leading graph/sequenceDiagram/... header. */
+  code: string;
+  caption?: string;
+};
+
+export type Artifact = ChartArtifact | MapArtifact | TableArtifact | DiagramArtifact;
 
 /** Envelope returned by any tool that produced an artifact. */
 export type ArtifactToolData = {
@@ -61,5 +69,5 @@ export type ArtifactToolData = {
 export function isArtifact(v: unknown): v is Artifact {
   if (!v || typeof v !== 'object') return false;
   const t = (v as { type?: unknown }).type;
-  return t === 'chart' || t === 'map' || t === 'table';
+  return t === 'chart' || t === 'map' || t === 'table' || t === 'diagram';
 }

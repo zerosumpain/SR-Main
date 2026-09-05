@@ -88,8 +88,11 @@
   }
   figcaption {
     padding: 0.4rem 0.75rem;
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
     background: var(--surface-sunken);
     border-bottom: 1px solid var(--line-strong);
   }

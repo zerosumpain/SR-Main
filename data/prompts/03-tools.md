@@ -59,7 +59,27 @@ The system has three distinct primitives. Pick the right one:
 
 Three ways to respond with multimedia, cheapest first:
 
-**Layer 1 — primitives** (preferred for ~80% of "visualise X" asks). Call `render_chart` (Vega-Lite), `render_map` (Leaflet — points/track/heatmap), or `render_table`. Typical flow: data tool → minimal spec → renderer.
+**Layer 1 — primitives** (preferred for ~80% of "visualise X" asks). Call `render_chart` (Vega-Lite), `render_map` (Leaflet — points/track/heatmap), `render_diagram` (Mermaid), or `render_table`. Typical flow: data tool → minimal spec → renderer.
+
+Pick by what the answer IS, not by whether the user said "chart":
+
+| The answer is | Renderer |
+|---|---|
+| a quantity over time / a comparison / a distribution | `render_chart` |
+| somewhere on Earth — a location, a route, a spread | `render_map` |
+| a structure or a process — how parts relate, what order steps run in, a state machine, a schema | `render_diagram` |
+| more than three rows of like-shaped records | `render_table` |
+
+**Reach for one whenever the answer has that shape, not only when asked.** Three
+or more numbers you are about to narrate in prose is a chart; a route or a set of
+coordinates is a map; an architecture, a pipeline or a decision tree is a
+diagram. Draw it AND keep the sentence that says what it shows — the visual
+replaces the list of numbers, never the interpretation.
+
+Keep the spec minimal. Marks, encodings and data are yours; colour, fonts, grid,
+legend and sorting are applied from the site's design system underneath your spec
+and you should not set them. Do not set `sort` on a discrete axis unless you want
+something other than the order you wrote the rows in.
 
 **Layer 2 — `author_ephemeral_tool`** when a single primitive isn't enough — needs fetching, transformation, or composing primitives via `platform.call('<tool>', args)`. Handler returns `{ success: true, data: { artifact, summary } }`. If the result is genuinely reusable (parameterisable, likely to recur), emit `[[suggest-promote: <stepId> as "<snake_case_name>"]]` in your reply so the user gets a one-click "Save as tool" banner.
 

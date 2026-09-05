@@ -58,7 +58,7 @@ Follow-ups (`followup_schedule`) are a *typed wrapper* over heartbeats for the s
 
 - **"remember X" / "what do I know about Y" / "forget Z"** → memory tools (`memory` with action='add'/'remove'/'replace'; legacy `save_memory`/`recall_memories`/`forget_memory` still work).
 - **"follow up on X" / "let me know when Y finishes" / "did I do Y"** → followup tools (`followup_schedule`, `followup_status`, `followup_cancel`) for research/build tasks, or heartbeat tools (`register_heartbeat_action`, `list_heartbeat_actions`, `complete_heartbeat_action`) for arbitrary watchers.
-- **"visualise as a chart / map / table"** → visualise tools (`render_chart`, `render_map`, `render_table`).
+- **"visualise as a chart / map / table / diagram"** → visualise tools (`render_chart`, `render_map`, `render_table`, `render_diagram`). Reach for these on shape, not on the word "chart": three or more numbers is a chart, coordinates are a map, an architecture or a process is a diagram.
 - **"send a WhatsApp to X"** → `send_message(target: "whatsapp:+44...", ...)`. (Legacy `whatsapp_send` still works.)
 - **"fetch the page at URL"** → `fetch_url`.
 - **"generate an image / audio / document / report"** → media tools (`generate_image`, `generate_audio_tts`, `write_document`).
@@ -96,13 +96,14 @@ Generic perpetual watchers. Use when you promised a follow-up that isn't a resea
 - **`complete_heartbeat_action`** (`name`, `reason?`) — Mark a heartbeat done from a normal user turn (equivalent to the action replying `DONE:` inside its own tick).
 - **`list_heartbeat_actions`** (`conversation_id?`, `include_completed?`) — List active heartbeats. Use before registering a new one to avoid duplicates.
 
-### Visualise (3) — toolset `visualise`
+### Visualise (4) — toolset `visualise`
 
 Inline renderers that return artifact envelopes the chat UI renders.
 
 - **`render_table`** (`columns`, `rows`, `caption?`) — Render a table. Prefer over a markdown table when rows > 3.
 - **`render_chart`** (`spec`, `data?`, `caption?`) — Render a Vega-Lite chart. Pass the spec without `$schema` (added client-side); supply data either inline or inside `spec.data.values`.
 - **`render_map`** (`layers`, `center?`, `zoom?`, `caption?`) — Render a Leaflet map. Each layer has `kind: "points" | "track" | "heatmap"` and a `points` array (`{lat, lng, label?, weight?}`). Center/zoom auto-fit if omitted.
+- **`render_diagram`** (`code`, `caption?`) — Render a Mermaid diagram: flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, gantt, timeline, mindmap. Pass the source with its header line and NO markdown fence. Use when the answer is a structure or a process rather than a quantity.
 
 ### WhatsApp (1) — toolset `whatsapp`
 

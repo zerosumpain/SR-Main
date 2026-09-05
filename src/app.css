@@ -1047,11 +1047,30 @@ a {
   --fs-hypothesis: var(--accent);
   --fs-contested: #8a2d3a;
 
-  /* categorical hues — LEGEND ONLY. Never chrome, never a claim. */
+  /* categorical hues — LEGEND ONLY. Never chrome, never a claim.
+
+     These are the site's one categorical ramp, shared by the field studies and
+     by jkai's chat charts ($lib/jkai/artifacts/vega-theme.ts). Four hues, in a
+     fixed assignment order; a fifth series folds into "other" or facets rather
+     than inventing a hue.
+
+     `operational` was #2f7d4f until 2026-09-05. Against `standards` it scored
+     OKLab ΔE 4.0 under protanopia — well under the 6.0 floor — so the two read
+     as one colour to a red-blind viewer wherever they sat side by side. It is
+     re-stepped to #3a8658: the same green to a full-colour eye (0.031 drift in
+     OKLCH) and ΔE 6.2 under protan. That still sits in the 6–8 band, which is
+     legal only alongside a secondary encoding, so anything using this ramp must
+     carry a legend or direct labels — never colour alone. */
   --fs-cat-identifier: #7a5aa6;
-  --fs-cat-operational: #2f7d4f;
+  --fs-cat-operational: #3a8658;
   --fs-cat-standards: #b4632e;
   --fs-cat-trust: #8a2d3a;
+
+  /* The same four, named by slot for a chart that assigns by series index. */
+  --chart-cat-1: var(--fs-cat-identifier);
+  --chart-cat-2: var(--fs-cat-standards);
+  --chart-cat-3: var(--fs-cat-operational);
+  --chart-cat-4: var(--fs-cat-trust);
 
   /* NO MEASURE TOKEN. There used to be `--fs-measure: 72ch`, and its only
      effect was to make every paragraph stop two-thirds of the way across

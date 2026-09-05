@@ -99,9 +99,20 @@ Hard constraints, in priority order over any aesthetic judgement:
 
 - `Confidence = 'fact' | 'hypothesis' | 'contested'` — the shipped type in
   `src/lib/fieldstudy/types.ts`. Do not invent levels or rename these.
-- Categorical hues (`#7a5aa6` identifier, `#2f7d4f` operational/federated, `#b4632e`
+- Categorical hues (`#7a5aa6` identifier, `#3a8658` operational/federated, `#b4632e`
   standards, `#8a2d3a` trust/governance) appear only inside a legend and the marks that
-  legend labels. Never in chrome, never on a claim.
+  legend labels. Never in chrome, never on a claim. They live in `src/app.css` as
+  `--fs-cat-*` and are shared with jkai's chat charts
+  (`src/lib/jkai/artifacts/vega-theme.ts`) — one ramp, not two.
+
+  **`operational` was `#2f7d4f` until 2026-09-05.** Against `standards` it scored OKLab
+  ΔE 4.0 under protanopia, against a floor of 6, so the two read as one colour to a
+  red-blind viewer. `#3a8658` is the same green to a full-colour eye (0.031 drift in
+  OKLCH) and scores 6.2. Re-step it only with the dataviz skill's
+  `validate_palette.js`, never by eye, and keep the set at four — a fifth series folds
+  into "other" or facets. The pair still sits in the 6–8 band, which is legal only
+  alongside a secondary encoding, so a legend or direct labels are mandatory wherever
+  these are used.
 - Confidence chips use the site palette: petrol `--accent-ink` for fact, orange `--accent`
   for hypothesis, claret `#8a2d3a` for contested.
 - Radius `0`, `2px` or `100px` only. No shadows inside a page. No emoji.

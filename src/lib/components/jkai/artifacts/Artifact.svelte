@@ -3,6 +3,7 @@
   import ChartArtifact from './ChartArtifact.svelte';
   import MapArtifact from './MapArtifact.svelte';
   import TableArtifact from './TableArtifact.svelte';
+  import DiagramArtifact from './DiagramArtifact.svelte';
 
   let { artifact }: { artifact: Artifact } = $props();
 </script>
@@ -13,4 +14,6 @@
   <MapArtifact {artifact} />
 {:else if artifact.type === 'table'}
   <TableArtifact {artifact} />
+{:else if artifact.type === 'diagram'}
+  <DiagramArtifact {artifact} />
 {/if}

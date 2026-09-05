@@ -21,7 +21,7 @@ function fail(error: string): ToolResult {
 register({
   name: 'render_table',
   description:
-    'Render a structured table inline in the chat. Use for tabular data (lists of metrics, comparisons, rankings). Prefer this over a markdown table when data has >3 rows.',
+    'Render a structured table inline in the chat — sortable, and it does not bloat the reply the way a markdown table does. Prefer it over a markdown table whenever there are more than three rows of like-shaped records (metrics, comparisons, rankings).',
   toolset: 'visualise',
   category: 'Visualise',
   parameters: {
@@ -119,7 +119,7 @@ function summariseChart(spec: Record<string, unknown>, data: unknown[]): string 
 register({
   name: 'render_chart',
   description:
-    'Render a chart inline in the chat using a Vega-Lite spec. Prefer this over describing data in prose when the user asks to visualise, plot, or chart. Supply the data either as the `data` argument or inside `spec.data.values`.',
+    'Render a chart inline in the chat using a Vega-Lite spec. Reach for it whenever the answer is a quantity over time, a comparison, or a distribution — three or more numbers you would otherwise narrate in prose is a chart, whether or not the user used the word. Supply the data either as the `data` argument or inside `spec.data.values`. Keep the spec minimal: colour, fonts, grid, legend and sorting come from the site design system underneath your spec, so do not set them.',
   toolset: 'visualise',
   category: 'Visualise',
   parameters: {
@@ -184,7 +184,7 @@ function summariseMap(layers: MapLayerArg[]): string {
 register({
   name: 'render_map',
   description:
-    'Render an interactive map inline in the chat. Use for GPS data: locations, routes, heatmaps. Center/zoom auto-fit from point bounds if omitted.',
+    'Render an interactive map inline in the chat. Reach for it whenever the answer is somewhere on Earth — a location, a route, a spread of points — not only when the user asks for a map. Center/zoom auto-fit from point bounds if omitted.',
   toolset: 'visualise',
   category: 'Visualise',
   parameters: {
@@ -258,6 +258,74 @@ register({
       caption,
     };
     const summary = summariseMap(layers);
+    return ok(artifact, summary);
+  },
+});
+
+// -------- render_diagram --------
+
+/** The mermaid diagram headers worth advertising. A model that writes anything
+ *  else still gets rendered — mermaid decides — but the enum keeps the prompt
+ *  honest about what the chat is good at. */
+const DIAGRAM_KINDS = [
+  'flowchart',
+  'sequenceDiagram',
+  'stateDiagram-v2',
+  'erDiagram',
+  'classDiagram',
+  'gantt',
+  'timeline',
+  'mindmap',
+  'journey',
+  'pie',
+] as const;
+
+register({
+  name: 'render_diagram',
+  description:
+    'Render a Mermaid diagram inline in the chat — flowcharts, sequence, state, ER, class, gantt, timeline, mindmap. Use when the answer is a STRUCTURE or a PROCESS (how components relate, what order steps happen in, a state machine) rather than a quantity. For quantities use render_chart; for places use render_map.',
+  toolset: 'visualise',
+  category: 'Visualise',
+  parameters: {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        description:
+          'Mermaid source including its header line, e.g. "flowchart TD\\n  A[Start] --> B{Check}\\n  B -->|yes| C[Done]". Do NOT wrap it in a markdown code fence.',
+      },
+      caption: { type: 'string', description: 'Optional caption shown above the diagram.' },
+    },
+    required: ['code'],
+  },
+  handler: async (args): Promise<ToolResult> => {
+    const raw = args.code as string | undefined;
+    const caption = args.caption as string | undefined;
+
+    if (typeof raw !== 'string' || raw.trim().length === 0) {
+      return fail('code must be a non-empty Mermaid source string');
+    }
+    // Models reach for a fence out of habit; mermaid chokes on the backticks.
+    // Stripping one is kinder than failing the call over punctuation.
+    const code = raw
+      .trim()
+      .replace(/^```(?:mermaid)?\s*\n?/i, '')
+      .replace(/\n?```$/, '')
+      .trim();
+    if (!code) return fail('code was an empty Mermaid fence');
+
+    const header = code.split('\n', 1)[0]?.trim() ?? '';
+    const kind = DIAGRAM_KINDS.find((k) => header.toLowerCase().startsWith(k.toLowerCase()));
+    // `graph` is flowchart's older spelling and still the one models write most.
+    if (!kind && !/^(graph|gitGraph|quadrantChart|requirementDiagram|C4Context)\b/i.test(header)) {
+      return fail(
+        `first line must be a Mermaid diagram header (got ${JSON.stringify(header.slice(0, 40))}). Expected one of: ${DIAGRAM_KINDS.join(', ')}`,
+      );
+    }
+
+    const artifact: Artifact = { type: 'diagram', code, caption };
+    const lines = code.split('\n').length;
+    const summary = `${kind ?? header.split(/\s+/)[0]} diagram: ${lines} lines`;
     return ok(artifact, summary);
   },
 });
