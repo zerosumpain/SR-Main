@@ -33,7 +33,27 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/jkai/workspace /opt/jkai-builds /opt/strange-rambling-svelte/data/jkai-projects /run/jkai-builder
+# `/home/johnk/.pi` is pi's OWN config directory and it must be WRITABLE, which
+# is not obvious and cost every build on the box for the fourteen hours after
+# this hardening landed (2026-09-04 20:18 → 2026-09-05, builds dead with
+# `EROFS: read-only file system, mkdir '/home/johnk/.pi/agent/trust.json.lock'`).
+#
+# Reading auth.json is not enough. Since 0.84 pi takes a **lock directory beside
+# every config file it touches**, on reads as well as writes — `auth.json.lock`,
+# `settings.json.lock`, `trust.json.lock`. Under ProtectHome=read-only all three
+# fail, and they fail in three different registers:
+#
+#   trust.json.lock     → uncaught EROFS, process exits non-zero. The loud one.
+#   auth.json.lock      → "Credential store read failed for <provider>" — the
+#                         Codex ChatGPT OAuth is simply unavailable.
+#   settings.json.lock  → "Invalid settings file", warning only, and the Codex
+#                         `transport: sse` pin is silently ignored. That one
+#                         would have survived the crash being fixed.
+#
+# So the entry is `.pi`, not `.pi/agent/trust.json`: locking is how pi reads its
+# config now, and a narrower grant just moves which of the three breaks.
+# `tests/scripts/jkai-builder-unit.test.ts` holds this line in place.
+ReadWritePaths=/home/jkai/workspace /opt/jkai-builds /opt/strange-rambling-svelte/data/jkai-projects /run/jkai-builder /home/johnk/.pi
 InaccessiblePaths=-/opt/strange-rambling-svelte/.env -/home/johnk/.ssh -/home/johnk/.config/gh -/root/.ssh -/run/docker.sock -/var/run/docker.sock
 ProtectClock=true
 ProtectControlGroups=true
