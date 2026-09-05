@@ -65,13 +65,41 @@ export function outputLabel(device: { deviceId?: string; label?: string } | null
   return device.deviceId && device.deviceId !== 'default' ? 'Selected output' : 'System default';
 }
 
+/**
+ * Where the control to unblock a microphone actually lives.
+ *
+ * A page CANNOT re-open the permission prompt once it has been persistently
+ * denied — there is no `permissions.request()` in any shipping browser, and
+ * Chrome removed `permissions.revoke()` years ago. That is deliberate: it is
+ * what stops a site asking forever. So the best a page can do is say precisely
+ * where the switch is, and notice the moment it is flipped.
+ *
+ * UA sniffing, and only for this sentence — never for a capability. Getting the
+ * wrong hint is a slightly less helpful sentence; getting a capability wrong
+ * from a UA string is a broken feature.
+ */
+export function unblockHint(userAgent: string): string {
+  const ua = userAgent || '';
+  if (/Firefox\//.test(ua)) {
+    return 'Click the permissions icon just left of the address bar and clear the block.';
+  }
+  // Order matters: Chrome's UA contains "Safari", and Edge's contains "Chrome".
+  if (/Edg\//.test(ua) || /Chrome\//.test(ua) || /Chromium\//.test(ua)) {
+    return 'Click the blocked-microphone icon at the right of the address bar, choose “Always allow”, then try again.';
+  }
+  if (/Safari\//.test(ua)) {
+    return 'In the Safari menu choose Settings for This Website, then set Microphone to Allow.';
+  }
+  return 'Allow the microphone for this site in your browser’s address bar or site settings.';
+}
+
 /** One line saying what the state means, in the terms the page uses. */
-export function micStateNote(state: MicPermission): string {
+export function micStateNote(state: MicPermission, userAgent = ''): string {
   switch (state) {
     case 'granted':
       return 'Microphone ready.';
     case 'denied':
-      return 'Microphone blocked — allow it in the browser’s site settings.';
+      return `Microphone blocked. ${unblockHint(userAgent)}`;
     case 'insecure':
       return 'Microphone needs https — open this page over https or on localhost.';
     case 'prompt':
@@ -92,19 +120,34 @@ export async function readMicPermission(
   nav: NavigatorLike | undefined,
   secure: boolean,
 ): Promise<MicPermission> {
-  if (!secure) return 'insecure';
-  if (!nav?.mediaDevices) return 'insecure';
+  return (await micPermissionStatus(nav, secure)).state;
+}
+
+/**
+ * The state, plus the live `PermissionStatus` when the browser offers one.
+ *
+ * The status object fires `change` the instant the user flips the switch in the
+ * browser's own UI — which is the difference between "unblock it and the page
+ * catches up" and "unblock it, then work out that you also have to reload".
+ */
+export async function micPermissionStatus(
+  nav: NavigatorLike | undefined,
+  secure: boolean,
+): Promise<{ state: MicPermission; status: EventTarget | null }> {
+  if (!secure || !nav?.mediaDevices) return { state: 'insecure', status: null };
   const query = nav.permissions?.query as
-    | ((d: { name: string }) => Promise<{ state: string }>)
+    | ((d: { name: string }) => Promise<{ state: string } & EventTarget>)
     | undefined;
-  if (typeof query !== 'function') return 'unknown';
+  if (typeof query !== 'function') return { state: 'unknown', status: null };
   try {
     const status = await query.call(nav.permissions, { name: 'microphone' });
-    if (status.state === 'granted' || status.state === 'denied' || status.state === 'prompt') {
-      return status.state;
-    }
-    return 'unknown';
+    const state =
+      status.state === 'granted' || status.state === 'denied' || status.state === 'prompt'
+        ? (status.state as MicPermission)
+        : 'unknown';
+    return { state, status: typeof status.addEventListener === 'function' ? status : null };
   } catch {
-    return 'unknown';
+    // Safari throws a TypeError for the unsupported name rather than rejecting.
+    return { state: 'unknown', status: null };
   }
 }

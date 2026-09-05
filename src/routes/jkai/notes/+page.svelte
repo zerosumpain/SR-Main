@@ -21,9 +21,10 @@
     canChooseOutput,
     canRequestMic,
     canRouteOutput,
+    micPermissionStatus,
     micStateNote,
     outputLabel,
-    readMicPermission,
+    unblockHint,
     type MicPermission,
   } from '$lib/jkai/media/audio-access';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
@@ -64,10 +65,26 @@
   let sinkId = $state<string>('');
   let sinkName = $state<string>('System default');
   let audioNote = $state<string | null>(null);
+  /** Read once on mount — `navigator` does not exist during SSR. */
+  let browserUa = $state('');
+  /** False until the permission has actually been read. Without it the first
+   *  paint shows "state unknown" with no button for a frame or two, because the
+   *  component renders before onMount runs — a message that flashes and then
+   *  changes its mind is worse than one that waits. */
+  let micReady = $state(false);
 
   /** Ask once, ahead of recording, so the first note is not interrupted by a
    *  permission dialog mid-thought. The tracks are stopped immediately — the
    *  grant is the only thing wanted here, not a stream. */
+  /**
+   * Ask for the microphone.
+   *
+   * Worth attempting even when the last read said `denied`: a browser will not
+   * re-open the prompt after a PERSISTENT block, but Firefox's default block is
+   * only for the session unless "Remember this decision" was ticked, and a read
+   * can be stale. If it does throw, the message names the exact control that
+   * unblocks it — a page has no way to bring the prompt back itself.
+   */
   async function requestMic() {
     audioNote = null;
     try {
@@ -76,13 +93,13 @@
       micState = 'granted';
       audioNote = 'Microphone allowed.';
     } catch (err) {
-      // NotAllowedError is a refusal; anything else (no device, a policy block)
-      // is worth showing verbatim rather than flattened to "denied".
-      micState = (err as DOMException)?.name === 'NotAllowedError' ? 'denied' : micState;
-      audioNote =
-        (err as DOMException)?.name === 'NotFoundError'
-          ? 'No microphone found on this device.'
-          : micStateNote(micState);
+      const name = (err as DOMException)?.name;
+      if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        audioNote = 'No microphone found on this device.';
+        return;
+      }
+      micState = name === 'NotAllowedError' ? 'denied' : micState;
+      audioNote = micStateNote(micState, navigator.userAgent);
     }
   }
 
@@ -544,10 +561,21 @@
 
     // Read the microphone state without prompting, so the page can say what is
     // wrong before a click fails, and restore a previously chosen speaker.
+    browserUa = navigator.userAgent;
     micAskable = canRequestMic(navigator, window.isSecureContext);
     outputChoosable = canChooseOutput(navigator) && canRouteOutput();
-    void readMicPermission(navigator, window.isSecureContext).then((state) => {
+    // Subscribe, not just read: when the block is lifted in the browser's own
+    // UI the page becomes usable immediately instead of needing a reload.
+    void micPermissionStatus(navigator, window.isSecureContext).then(({ state, status }) => {
       micState = state;
+      micReady = true;
+      status?.addEventListener('change', (e) => {
+        const next = (e.target as { state?: string } | null)?.state;
+        if (next === 'granted' || next === 'denied' || next === 'prompt') {
+          micState = next;
+          audioNote = next === 'granted' ? 'Microphone allowed.' : null;
+        }
+      });
     });
     try {
       const saved = localStorage.getItem(SINK_STORAGE_KEY);
@@ -602,12 +630,14 @@
             disabled={micState === 'insecure'}
             onrecorded={(blob, secs) => uploadRecording(blob, secs, '')}
           />
-          {#if micState !== 'granted'}
+          {#if micReady && micState !== 'granted'}
             <p class="mic-ask">
-              {#if micAskable && micState !== 'denied'}
-                <button type="button" onclick={requestMic}>Allow microphone</button>
+              {#if micAskable}
+                <button type="button" onclick={requestMic}>
+                  {micState === 'denied' ? 'Try again' : 'Allow microphone'}
+                </button>
               {/if}
-              <span>{audioNote ?? micStateNote(micState)}</span>
+              <span>{audioNote ?? micStateNote(micState, browserUa)}</span>
             </p>
           {:else if audioNote}
             <p class="mic-ask"><span>{audioNote}</span></p>
