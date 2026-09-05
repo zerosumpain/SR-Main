@@ -175,19 +175,11 @@
 >
   {#if bgMode === 'biome' && BiomeBackground}
     <BiomeBackground {store} position="absolute" transparent />
-  {:else}
-    <div class="absolute inset-0 pointer-events-none">
-      {#if ecgStyle === 'ascii'}
-        <EcgAscii rhr={roundPulse(pulse)} steps={data.steps} />
-      {:else}
-        <Ecg rhr={roundPulse(pulse)} showGrid={false} />
-      {/if}
-    </div>
   {/if}
 
   <!-- Center — hero copy (left) + live "Vital Signs" tiles (right). heroTitle is
        streamed; render fallback copy until it lands so the hero paints without
-       waiting on the external weather fetch. The tiles sit at z-10 over the ECG
+       waiting on the external weather fetch. The tiles sit at z-10 over the background
        and stack below the copy on narrow viewports. -->
   <div class="relative z-10 flex-1 flex items-stretch">
     <div class="hero-grid">
@@ -201,7 +193,17 @@
           heroTitle={data.heroTitle}
           fallbackHero={FALLBACK_HERO}
           steps={data.steps}
-        />
+        >
+          {#snippet statusBackground()}
+            {#if bgMode !== 'biome' || !BiomeBackground}
+              {#if ecgStyle === 'ascii'}
+                <EcgAscii rhr={roundPulse(pulse)} steps={data.steps} />
+              {:else}
+                <Ecg rhr={roundPulse(pulse)} showGrid={false} />
+              {/if}
+            {/if}
+          {/snippet}
+        </VitalSigns>
       </aside>
     </div>
   </div>
@@ -346,7 +348,7 @@
     position: relative;
   }
   /* A warm bloom behind the type — accent from the top left, petrol from the
-     bottom right. The ECG still shows through it. */
+     bottom right. */
   .hero-copy::before {
     content: '';
     position: absolute;
