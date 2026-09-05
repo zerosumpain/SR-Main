@@ -142,6 +142,7 @@
     "layerchart": "^1.0.13",
     "mammoth": "^1.12.0",
     "marked": "^17.0.6",
+    "mermaid": "^11.17.2",
     "nodemailer": "^9.1.1",
     "openai": "^6.32.0",
     "pdfjs-dist": "^5.4.296",
@@ -157,6 +158,7 @@
     "undici": "^7.29.0",
     "vega": "^6.4.0",
     "vega-embed": "^7.2.0",
+    "vega-interpreter": "^2.3.2",
     "vega-lite": "^6.4.3",
     "web-push": "^3.6.7",
     "zod": "^4.3.6"

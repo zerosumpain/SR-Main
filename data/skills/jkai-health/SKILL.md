@@ -135,7 +135,7 @@ Yield. If the user wants this as a chart instead of prose, **don't render it you
 
 Yield back to `jkai-general` (which will route) when the user:
 
-- Wants a **chart / visualisation** of the data → `jkai-utility`'s `render_chart` or `render_table` (or `visualise_*` tools if they exist with that name in your bridge). Pull the raw data with the relevant `health_*` tool first, then hand the series to the utility skill to plot. If the user explicitly says "show me a chart", don't just narrate the numbers.
+- Wants a **chart / visualisation** of the data → `render_chart` or `render_table` (always available; no bridge lookup needed, and there are no `visualise_*` aliases). Pull the raw data with the relevant `health_*` tool first, then hand the series to the renderer. Draw it whenever the answer is three or more numbers — waiting to be asked for a chart is how a week of readings ends up as a paragraph.
 - Wants a **GPS map of a route** → `jkai-utility`'s `render_map`. The health tools don't return per-activity geojson; the activity's route lives in the activities table and is exposed via the `file_*` or `activity_*` tools (different domain).
 - Asks about **blog posts, email, scrapers, scheduled jobs, home assistant, files** → wrong skill; yield.
 - Asks for **a custom date range** these tools don't support ("sleep over the last 60 days"). Say so plainly; if they want it badly, it's a workflow on `/jkai/canvas/<id>` against the raw biome tables.

@@ -28,6 +28,11 @@ describe('isArtifact', () => {
     expect(isArtifact(a)).toBe(true);
   });
 
+  it('accepts a diagram artifact', () => {
+    const a: Artifact = { type: 'diagram', code: 'flowchart TD\n  A --> B' };
+    expect(isArtifact(a)).toBe(true);
+  });
+
   it('rejects a plain object', () => {
     expect(isArtifact({})).toBe(false);
     expect(isArtifact({ type: 'nope' })).toBe(false);

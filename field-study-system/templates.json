@@ -12,10 +12,10 @@
     "contested": "#8a2d3a"
   },
   "categoricalHues": {
-    "$comment": "Legend-only. Never in chrome, never on a claim. Values are the shipped ones.",
+    "$comment": "Legend-only. Never in chrome, never on a claim. Values are the shipped ones, and must match --fs-cat-* in src/app.css. operational/federated moved off #2f7d4f on 2026-09-05: it failed colourblind separation against standards (OKLab dE 4.0 protan, floor 6). Re-step only with the dataviz validator.",
     "identifier": "#7a5aa6",
-    "operational": "#2f7d4f",
-    "federated": "#2f7d4f",
+    "operational": "#3a8658",
+    "federated": "#3a8658",
     "standards": "#b4632e",
     "trust": "#8a2d3a",
     "governance": "#8a2d3a",
