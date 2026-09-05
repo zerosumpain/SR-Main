@@ -1,3 +1,4 @@
+import { assessPolicyQuality } from '$lib/jkai/grounding/quality.server';
 // src/lib/selfimprove/efficiency.ts
 //
 // The prime outcome: how many tool calls it takes to answer one question.
@@ -188,7 +189,11 @@ export async function assessActiveTrial(): Promise<{ decision: TrialDecision; ac
   const pct = before > 0 ? ((after - before) / before) * 100 : 0;
   const movement = `${before.toFixed(2)} → ${after.toFixed(2)} calls/turn (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%) over ${turnsObserved} turns`;
 
-  if (trialImproved(before, after)) {
+  const quality = await assessPolicyQuality(policy.version, policy.trial.startedAt);
+  if (quality === 'insufficient' && ageDays < TRIAL.maxDays) {
+    return { decision: { kind: 'waiting', turnsObserved, needed: TRIAL.minTurns, ageDays }, actions };
+  }
+  if (trialImproved(before, after) && quality === 'pass') {
     await updatePolicyTrial(policy.version, {
       ...policy.trial,
       status: 'kept',
@@ -209,7 +214,7 @@ export async function assessActiveTrial(): Promise<{ decision: TrialDecision; ac
     status: 'reverted',
     turnsObserved,
     result,
-    verdict: `Reverted: ${movement}`,
+    verdict: `Reverted: quality=${quality}; ${movement}`,
     decidedAt: new Date().toISOString(),
   });
   try {

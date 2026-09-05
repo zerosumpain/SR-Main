@@ -23,9 +23,9 @@ const SRC = readFileSync(resolve(ROOT, 'src/lib/workflows/chat/general-chat.ts')
  */
 
 /** Rebuilt from this message, every turn. */
-const VOLATILE = ['graphSection', 'pastedUrlsSection', 'scraperSection', 'compressionSection'];
+const VOLATILE = ['scraperSection', 'compressionSection'];
 /** Identical on the next turn of the same conversation. */
-const STABLE = ['basePrompt', 'siteSection', 'skillsSection', 'apiFirstSection', 'memorySection'];
+const STABLE = ['basePrompt', 'siteSection', 'skillsSection', 'apiFirstSection'];
 
 /** The two halves of the system prompt, exactly as written in the source. */
 function promptHalves(): { prefix: string; suffix: string } {
@@ -43,7 +43,7 @@ describe('system prompt is assembled stable-first, for the cache', () => {
   it('splits the prompt into a stable prefix and a per-turn suffix', () => {
     expect(SRC).toMatch(/const stablePrefix = `/);
     expect(SRC).toMatch(/const perTurnSuffix = `/);
-    expect(SRC).toContain('const systemContent = `' + slot('stablePrefix') + slot('perTurnSuffix') + '`');
+    expect(SRC).toContain('const systemContent = `' + slot('stablePrefix') + slot('perTurnSuffix') + slot('BEHAVIOUR_POLICY') + '${renderGlobalGuidance(capabilityPolicy)}${renderAnswerContract(contract)}`');
   });
 
   it.each(STABLE)('%s sits in the cacheable prefix', (name) => {
@@ -67,11 +67,10 @@ describe('system prompt is assembled stable-first, for the cache', () => {
     expect(firstVolatile).toBeGreaterThan(lastStable);
   });
 
-  it('keeps memory below the instructions, which 07-memory.md promises', () => {
-    // "Facts you've learned about John are loaded ... below your instructions."
+  it('keeps retrieved memory, pages and graph outside the system instructions', () => {
     const { prefix, suffix } = promptHalves();
-    const whole = prefix + suffix;
-    expect(whole.indexOf(slot('memorySection'))).toBeGreaterThan(whole.indexOf(slot('basePrompt')));
+    for (const name of ['memorySection', 'pastedUrlsSection', 'graphSection']) expect(prefix + suffix).not.toContain(slot(name));
+    expect(SRC).toContain('JSON.stringify({ memory: memorySection, graph: graphSection, pages: pastedUrlsSection })');
   });
 });
 

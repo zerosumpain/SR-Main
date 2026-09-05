@@ -1,3 +1,4 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
 // src/lib/daydream/notes.ts
 //
 // Saying something back, in your own words.
@@ -47,44 +48,38 @@ export interface NoteResult {
  * re-confirming a place.
  */
 export async function addNote(thoughtId: string, text: string): Promise<NoteResult> {
-  const clean = text.trim().slice(0, MAX_NOTE_CHARS);
-  if (!clean) throw new Error('a note needs some words');
+  return db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`);
+    const clean = text.trim().slice(0, MAX_NOTE_CHARS);
+    if (!clean) throw new Error('a note needs some words');
 
-  const [thought] = await db
-    .select({
-      id: daydreamThoughts.id,
-      kind: daydreamThoughts.kind,
-      title: daydreamThoughts.title,
-      noteMemoryId: daydreamThoughts.noteMemoryId,
-    })
-    .from(daydreamThoughts)
-    .where(eq(daydreamThoughts.id, thoughtId))
-    .limit(1);
-  if (!thought) throw new Error(`no such thought: ${thoughtId}`);
+    const [thought] = await tx
+      .select({
+        id: daydreamThoughts.id,
+        kind: daydreamThoughts.kind,
+        title: daydreamThoughts.title,
+        noteMemoryId: daydreamThoughts.noteMemoryId,
+      })
+      .from(daydreamThoughts)
+      .where(eq(daydreamThoughts.id, thoughtId))
+      .limit(1);
+    if (!thought) throw new Error(`no such thought: ${thoughtId}`);
 
-  // The quoted thought travels with the note, because a note read on its own
-  // months later — "some of those are rolling reminders" — is unintelligible
-  // without knowing what it was answering.
-  const content = `On the daydream suggestion "${thought.title}": ${clean}`;
+    // The quoted thought travels with the note, because a note read on its own
+    // months later — "some of those are rolling reminders" — is unintelligible
+    // without knowing what it was answering.
+    const content = `On the daydream suggestion "${thought.title}": ${clean}`;
 
-  const [memory] = await db
-    .insert(jkaiMemories)
-    .values({ category: 'situations', content, confidence: 'high', daydreamOrigin: 'note' })
-    .returning({ id: jkaiMemories.id });
+    const memory = await writeMemory({ category: 'situations', content, daydreamOrigin: 'note', replacesId: thought.noteMemoryId,
+      provenance: { origin: 'daydream-note', sourceId: thoughtId, assertion: 'stated' } }, tx);
 
-  if (thought.noteMemoryId) {
-    await db
-      .update(jkaiMemories)
-      .set({ supersededBy: memory.id, updatedAt: new Date() })
-      .where(eq(jkaiMemories.id, thought.noteMemoryId));
-  }
+    await tx
+      .update(daydreamThoughts)
+      .set({ note: clean, noteMemoryId: memory.id, noteAt: new Date(), updatedAt: new Date() })
+      .where(eq(daydreamThoughts.id, thoughtId));
 
-  await db
-    .update(daydreamThoughts)
-    .set({ note: clean, noteMemoryId: memory.id, noteAt: new Date(), updatedAt: new Date() })
-    .where(eq(daydreamThoughts.id, thoughtId));
-
-  return { memoryId: memory.id, note: clean };
+    return { memoryId: memory.id, note: clean };
+  });
 }
 
 /**

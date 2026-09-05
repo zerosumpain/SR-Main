@@ -8,8 +8,8 @@ const run = async (n: string, args: Record<string, unknown> = {}) =>
   (await byName(n)!.handler(args)) as { success: boolean; data?: never; error?: string };
 
 describe('discovery toolset', () => {
-  it('registers all four verbs', () => {
-    for (const n of ['skills_list', 'skill_view', 'tool_search', 'tool_describe']) {
+  it('registers discovery and evidence recovery verbs', () => {
+    for (const n of ['skills_list', 'skill_view', 'tool_search', 'tool_describe', 'evidence_read']) {
       expect(byName(n), `${n} not registered`).toBeDefined();
       expect(byName(n)!.toolset).toBe('discovery');
     }
@@ -17,7 +17,7 @@ describe('discovery toolset', () => {
 
   it('is reachable without activating a toolset first', () => {
     // Tools for FINDING tools are useless if you must know to activate them.
-    expect(getToolsetDefinitions('discovery').length).toBe(4);
+    expect(getToolsetDefinitions('discovery').length).toBe(5);
   });
 
   it('skills_list returns the library, and filters when asked', async () => {

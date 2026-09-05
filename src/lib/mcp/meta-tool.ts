@@ -1,3 +1,4 @@
+import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // jkai_extended — single dispatcher tool that collapses ~128 extended tools
 // behind list / schema / invoke operations. Surfaced in `tools/list` only
 // when JKAI_MCP_META_TOOL=1 (see ./essentials.ts). The underlying registry
@@ -170,28 +171,8 @@ export function searchTools<T extends { name: string; description?: string }>(
   tools: readonly T[],
   query: string,
 ): T[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return [...tools];
-  const words = q.split(/[^a-z0-9_]+/).filter((w) => w.length > 1 && !STOPWORDS.has(w));
-  const scored = tools
-    .map((t) => {
-      const name = t.name.toLowerCase();
-      const desc = (t.description ?? '').toLowerCase();
-      const haystack = `${name} ${desc}`;
-      let score = 0;
-      // Whole query as a phrase — the old behaviour, now the strongest signal.
-      if (name.includes(q)) score += 100;
-      else if (desc.includes(q)) score += 50;
-      // Then per-word overlap, weighted towards the name.
-      for (const w of words) {
-        if (name.includes(w)) score += 10;
-        else if (haystack.includes(w)) score += 3;
-      }
-      return { t, score };
-    })
-    .filter((s) => s.score > 0);
-  scored.sort((a, b) => b.score - a.score || a.t.name.localeCompare(b.t.name));
-  return scored.map((s) => s.t);
+  return resolveCapabilities(tools.map(t => ({ ...t, description: t.description ?? '', toolset: '' })), query, 100);
+
 }
 
 /**
@@ -262,16 +243,19 @@ export async function dispatchMetaTool(
       // `required` rides even the compact survey. It is the one field that can
       // replace a whole round trip, and a handful of argument names is cheaper
       // than the description already being returned beside it.
-      return filtered.map((t) => ({
+      return filtered.map((t, index) => ({
         name: t.name,
         description: truncateDescription(describeWithPolicy(policy, t.name, t.description ?? '')),
         ...withRequired(t.parameters),
+        ...(query && index < 3 ? { inputSchema: t.parameters } : {}),
+        destructive: t.destructive ?? false,
       }));
     }
-    return filtered.map((t) => ({
+    return filtered.map((t, index) => ({
       name: t.name,
       description: describeWithPolicy(policy, t.name, t.description ?? ''),
       ...withRequired(t.parameters),
+      ...(query && index < 3 ? { inputSchema: t.parameters } : {}),
       ...(t.destructive ? { destructive: true } : {}),
     }));
   }
@@ -297,7 +281,7 @@ export async function dispatchMetaTool(
     const schemas: ExtendedToolSchemaEntry[] = [];
     const unknown: string[] = [];
     for (const n of requested) {
-      const tool = extended.find((t) => t.name === n);
+      const tool = getTools().find((t) => t.name === n);
       if (!tool) {
         unknown.push(n);
         continue;
@@ -326,7 +310,7 @@ export async function dispatchMetaTool(
 
   if (operation === 'invoke') {
     if (!name) return { error: 'jkai_extended: operation="invoke" requires "name"' };
-    const tool = extended.find((t) => t.name === name);
+    const tool = getTools().find((t) => t.name === name);
     if (!tool) return { error: `jkai_extended: unknown tool "${name}" (not in extended catalogue)` };
     // Reuse the registry's executeTool so we get the same handler error
     // envelope as a direct tools/call. ctx is forwarded so progress emits

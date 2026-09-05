@@ -7,6 +7,7 @@ import type { JkaiAttachment } from '$lib/db/schema';
 export interface HistoryMessage {
   role: string;
   content: string;
+  evidence?: unknown;
   attachments: JkaiAttachment[];
   createdAt: Date;
 }
@@ -62,6 +63,7 @@ export async function loadConversationHistory(
         id: orchestratorChats.id,
         role: orchestratorChats.role,
         content: orchestratorChats.content,
+        metadata: orchestratorChats.metadata,
         createdAt: orchestratorChats.createdAt,
       })
       .from(orchestratorChats)
@@ -79,6 +81,7 @@ export async function loadConversationHistory(
     return trimmed.map((m) => ({
       role: m.role,
       content: m.content,
+      evidence: (m.metadata as { evidence?: unknown; toolSteps?: unknown } | null)?.toolSteps,
       attachments: byMsg.get(m.id) ?? [],
       createdAt: m.createdAt,
     }));

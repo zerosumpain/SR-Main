@@ -14,7 +14,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const sources = Array.isArray(body.sources)
     ? (body.sources as unknown[]).filter((s): s is KnowledgeSource =>
-        ['files', 'research', 'memory', 'datastore'].includes(s as string),
+        ['notes', 'entities', 'files', 'research', 'memory', 'datastore', 'activity'].includes(s as string),
       )
     : undefined;
 

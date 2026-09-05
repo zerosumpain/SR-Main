@@ -125,6 +125,7 @@
     "@tiptap/starter-kit": "^3.30.5",
     "@whiskeysockets/baileys": "^7.0.0-rc.14",
     "3d-force-graph": "^1.80.0",
+    "ajv": "^8.20.0",
     "croner": "^10.0.1",
     "d3": "^7.9.0",
     "d3-force-3d": "^3.0.6",

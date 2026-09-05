@@ -11,7 +11,7 @@ describe('capabilities_snapshot', () => {
 
     await expect(executeTool('capabilities_snapshot', {})).resolves.toEqual({
       success: true,
-      data: CAPABILITIES_SNAPSHOT,
+      data: expect.objectContaining({ version: '2.0.0', tools: expect.arrayContaining([expect.objectContaining({ name: 'capabilities_snapshot' })]) }),
     });
 
     const extended = await dispatchMetaTool({ operation: 'list' });

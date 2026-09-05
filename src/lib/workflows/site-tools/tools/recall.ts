@@ -1,3 +1,5 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
+import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 // `recall` toolset — look things up in past conversations and in stored memory.
 //
 // The two verbs this replaces are low-volume (session_search 4 calls,
@@ -90,19 +92,7 @@ register({
     const args = (raw ?? {}) as { query?: string; category?: string; limit?: number };
     const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
     try {
-      // Superseded memories are history, not current belief — never return them.
-      const where = [isNull(jkaiMemories.supersededBy)];
-      const q = (args.query ?? '').trim();
-      if (q) where.push(ilike(jkaiMemories.content, `%${q}%`));
-      if (args.category) where.push(eq(jkaiMemories.category, args.category));
-
-      const rows = await db
-        .select()
-        .from(jkaiMemories)
-        .where(and(...where))
-        .orderBy(desc(jkaiMemories.updatedAt))
-        .limit(limit);
-
+      const rows = await retrieveMemories(args.query, args.category, limit);
       return {
         success: true,
         data: {
@@ -132,6 +122,9 @@ register({
   parameters: {
     type: 'object',
     properties: {
+      assertion: { type: 'string', enum: ['stated', 'inferred'], description: 'stated only for an explicit user statement; inferred by default.' },
+      sourceMessageId: { type: 'string' },
+      replacesId: { type: 'string', description: 'Current memory ID being corrected, if any.' },
       content: { type: 'string', description: 'The fact, stated plainly in one sentence.' },
       category: {
         type: 'string',
@@ -142,25 +135,15 @@ register({
   },
   category: 'Recall',
   toolset: 'recall',
-  handler: async (raw: Record<string, unknown>) => {
-    const args = (raw ?? {}) as { content?: string; category?: string };
+  handler: async (raw: Record<string, unknown>, ctx) => {
+    const args = (raw ?? {}) as { content?: string; category?: string; assertion?: string; sourceMessageId?: string; replacesId?: string };
     const content = (args.content ?? '').trim();
     const category = (args.category ?? '').trim();
     if (!content) return { success: false, error: 'content is required' };
     if (!category) return { success: false, error: 'category is required' };
     try {
-      // Cheap duplicate guard: the automatic extractor also writes here, and two
-      // routes into one table is exactly how a memory list fills with near-copies.
-      const existing = await db
-        .select({ id: jkaiMemories.id })
-        .from(jkaiMemories)
-        .where(and(isNull(jkaiMemories.supersededBy), sql`lower(${jkaiMemories.content}) = lower(${content})`))
-        .limit(1);
-      if (existing.length > 0) {
-        return { success: true, data: { stored: false, reason: 'already remembered', content } };
-      }
-      await db.insert(jkaiMemories).values({ category, content, confidence: 'high' });
-      return { success: true, data: { stored: true, category, content } };
+      const memory = await writeMemory({ category, content, replacesId: args.replacesId, sourceConversationId: ctx?.conversationId, provenance: { origin: 'user', sourceId: args.sourceMessageId ?? ctx?.conversationId ?? undefined, assertion: args.assertion === 'stated' ? 'stated' : 'inferred' } });
+      return { success: true, data: { id: memory.id, stored: memory.stored, category, content } };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'memory_remember failed' };
     }

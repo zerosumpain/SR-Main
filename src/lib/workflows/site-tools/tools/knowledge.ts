@@ -17,7 +17,7 @@ register({
   description:
     'Unified recall across EVERYTHING JKai knows: intel notes, the intel entity graph, /drive file contents, deep-dive research facts, saved personal memory, and datastore records — in one call. ' +
     'Use this whenever the user asks "what do I know / have I got anything about X", or when a question could be answered from any of your own stores and you are not sure which. ' +
-    'Broader than file_search (files only) or research_search (research only). Returns ranked hits, each tagged with its source (notes/entities/files/research/memory/datastore), a passage, a relevance score, and a citation ref. ' +
+    'Broader than file_search (files only) or research_search (research only). Returns ranked hits, each tagged with its source (notes/entities/files/research/memory/datastore/activity), a passage, a relevance score, and a citation ref. ' +
     'When the user writes "@knowledge", use this tool.',
   parameters: {
     type: 'object',
@@ -26,7 +26,7 @@ register({
       sources: {
         type: 'array',
         items: { type: 'string', enum: ALL_SOURCES },
-        description: 'Optional subset of stores to search: notes, entities, files, research, memory, datastore. Omit to search all.',
+        description: 'Optional subset of stores to search: notes, entities, files, research, memory, datastore, activity. Omit to search all.',
       },
       limitPerSource: { type: 'number', description: 'Max hits per store before merging (default 5, max 20).' },
       collections: {

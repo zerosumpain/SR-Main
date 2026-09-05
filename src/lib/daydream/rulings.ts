@@ -1,3 +1,4 @@
+import { writeMemory } from '$lib/jkai/memory/service.server';
 // src/lib/daydream/rulings.ts
 //
 // What the reviewer learned, written somewhere it will be read again.
@@ -106,41 +107,36 @@ export async function recordRulingMemory(
   thoughtId: string,
   r: RulingInput,
 ): Promise<RulingResult> {
-  const [thought] = await db
-    .select({ id: daydreamThoughts.id, reviewMemoryId: daydreamThoughts.reviewMemoryId })
-    .from(daydreamThoughts)
-    .where(eq(daydreamThoughts.id, thoughtId))
-    .limit(1);
-  if (!thought) throw new Error(`no such thought: ${thoughtId}`);
+  return db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('jkai-memory-write'))`);
+    const [thought] = await tx
+      .select({ id: daydreamThoughts.id, reviewMemoryId: daydreamThoughts.reviewMemoryId, evidence: daydreamThoughts.evidence })
+      .from(daydreamThoughts)
+      .where(eq(daydreamThoughts.id, thoughtId))
+      .limit(1);
+    if (!thought) throw new Error(`no such thought: ${thoughtId}`);
 
-  const content = rulingContent(r);
+    const content = rulingContent(r);
+    const refs = thought.evidence ?? [];
+    const sourceMemoryIds = refs.filter(e => e.kind === 'memory').map(e => e.id);
+    const themeIds = refs.filter(e => e.kind === 'memory-theme').map(e => e.id);
+    if (themeIds.length) {
+      const { daydreamMemoryThemeSources } = await import('$lib/db/schema');
+      const { inArray } = await import('drizzle-orm');
+      const links = await tx.select({ memoryId: daydreamMemoryThemeSources.memoryId }).from(daydreamMemoryThemeSources).where(inArray(daydreamMemoryThemeSources.themeId, themeIds));
+      sourceMemoryIds.push(...links.map(l => l.memoryId));
+    }
 
-  const [memory] = await db
-    .insert(jkaiMemories)
-    .values({
-      category: 'situations',
-      content,
-      daydreamOrigin: 'ruling',
-      // A ruling the reviewer could not settle is not a high-confidence fact
-      // about the world, and marking it as one would let an "I could not tell"
-      // outrank a thing that was actually checked.
-      confidence: r.verdict === 'uncertain' ? 'medium' : 'high',
-    })
-    .returning({ id: jkaiMemories.id });
+    const memory = await writeMemory({ category: 'situations', content, daydreamOrigin: 'ruling', replacesId: thought.reviewMemoryId,
+      provenance: { origin: 'daydream-ruling', sourceId: thoughtId, sourceMemoryIds: [...new Set(sourceMemoryIds)], assertion: 'inferred' } }, tx);
 
-  if (thought.reviewMemoryId) {
-    await db
-      .update(jkaiMemories)
-      .set({ supersededBy: memory.id, updatedAt: new Date() })
-      .where(eq(jkaiMemories.id, thought.reviewMemoryId));
-  }
+    await tx
+      .update(daydreamThoughts)
+      .set({ reviewMemoryId: memory.id, updatedAt: new Date() })
+      .where(eq(daydreamThoughts.id, thoughtId));
 
-  await db
-    .update(daydreamThoughts)
-    .set({ reviewMemoryId: memory.id, updatedAt: new Date() })
-    .where(eq(daydreamThoughts.id, thoughtId));
-
-  return { memoryId: memory.id, content };
+    return { memoryId: memory.id, content };
+  });
 }
 
 /**

@@ -448,6 +448,14 @@ export async function buildSnapshot(
         .orderBy(desc(daydreamMemoryThemes.sourceCount), desc(daydreamMemoryThemes.updatedAt))
         .limit(80),
     ]);
+    // Personal facts inform reasoning but never enter the Daydream consolidation queue.
+    const personal = await db.select({ id: jkaiMemories.id, category: jkaiMemories.category,
+      content: jkaiMemories.content, confidence: jkaiMemories.confidence, provenance: jkaiMemories.provenance })
+      .from(jkaiMemories).where(and(isNull(jkaiMemories.supersededBy), isNull(jkaiMemories.daydreamOrigin),
+        sql`(${jkaiMemories.provenance}->>'validUntil' is null or ${jkaiMemories.provenance}->>'validUntil' > ${new Date().toISOString()})`))
+      .orderBy(sql`coalesce((${jkaiMemories.provenance}->>'pinned')::boolean, false) desc`, desc(jkaiMemories.updatedAt)).limit(20);
+    memories.push(...personal.map(m => ({ contextOnly: true, id: m.id, category: m.category,
+      content: `[Personal context; ${m.provenance?.assertion ?? 'unverified'}; ${m.confidence} confidence] ${m.content}` })));
     sources.push({
       key: 'memories',
       status: memories.length || memoryThemes.length ? 'ok' : 'empty',

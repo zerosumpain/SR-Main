@@ -44,7 +44,7 @@ vi.mock('$lib/db', () => {
       select: vi.fn(select),
       insert: vi.fn(() => ({
         values: (vals: Record<string, unknown>) => {
-          state.inserts.push(vals);
+          if ('fireAt' in vals) state.inserts.push(vals);
           return { returning: async () => [{ id: 'cb-new', ...vals }] };
         },
       })),

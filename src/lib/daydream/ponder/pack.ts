@@ -182,6 +182,10 @@ export function assemblePack(inputs: PackInputs): FactPack {
   for (const a of inputs.aggregates) {
     add('past', { kind: 'features', id: a.key }, a.text);
   }
+  for (const memory of s.memories.filter(m => m.contextOnly).slice(0, 20)) {
+    add('past', { kind: 'memory', id: memory.id },
+      `Memory context, not independent corroboration: ${memory.content}`, 360);
+  }
   for (const theme of s.memoryThemes.slice(0, PACK_LIMITS.memoryThemes)) {
     add(
       'past',

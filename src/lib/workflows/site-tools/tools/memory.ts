@@ -1,3 +1,5 @@
+import { writeMemory, forgetMemory } from '$lib/jkai/memory/service.server';
+import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 // src/lib/workflows/site-tools/tools/memory.ts
 
 import { register } from '../registry-internal';
@@ -9,7 +11,7 @@ const CATEGORIES = ['people', 'preferences', 'places', 'health', 'devices', 'sit
 
 register({
   name: 'save_memory',
-  description: 'Save a fact about the user to persistent memory. Use proactively when you learn something important (names, preferences, locations, health details). If this updates an existing memory, the old one is automatically superseded.',
+  description: 'Save a fact about the user to persistent memory. Use proactively when you learn something important (names, preferences, locations, health details). If this updates an existing memory, supply its exact replacesId to supersede it. Independent facts are never merged by word overlap.',
   parameters: {
     type: 'object',
     properties: {
@@ -18,6 +20,9 @@ register({
         enum: CATEGORIES,
         description: 'Memory category',
       },
+      assertion: { type: 'string', enum: ['stated', 'inferred'], description: 'stated only for an explicit user statement; otherwise inferred (default).' },
+      sourceMessageId: { type: 'string', description: 'Source user message or evidence identifier, when available.' },
+      replacesId: { type: 'string', description: 'Explicit current memory ID to replace; omit for an independent fact.' },
       content: {
         type: 'string',
         description: 'The fact to remember, in natural language (e.g. "John\'s mum lives in Whitley Bay")',
@@ -27,51 +32,12 @@ register({
   },
   category: 'Memory',
   toolset: 'memory',
-  handler: async (args) => {
-    const category = args.category as string;
-    const content = args.content as string;
-
-    // Check for existing memories in the same category that this might update
-    const existing = await db.select()
-      .from(jkaiMemories)
-      .where(and(
-        eq(jkaiMemories.category, category),
-        isNull(jkaiMemories.supersededBy),
-      ));
-
-    // Simple keyword overlap check for deduplication
-    const contentWords = content.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const match = existing.find(m => {
-      const memWords = m.content.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-      const overlap = contentWords.filter(w => memWords.includes(w));
-      return overlap.length >= Math.min(3, contentWords.length * 0.5);
+  handler: async (args, ctx) => {
+    const row = await writeMemory({ category: args.category as string, content: args.content as string,
+      replacesId: args.replacesId as string | undefined, sourceConversationId: ctx?.conversationId,
+      provenance: { origin: 'user', assertion: args.assertion === 'stated' ? 'stated' : 'inferred', sourceId: (args.sourceMessageId as string | undefined) ?? ctx?.conversationId },
     });
-
-    const newId = crypto.randomUUID();
-
-    if (match) {
-      // Supersede the old memory
-      await db.update(jkaiMemories)
-        .set({ supersededBy: newId, updatedAt: new Date() })
-        .where(eq(jkaiMemories.id, match.id));
-    }
-
-    await db.insert(jkaiMemories).values({
-      id: newId,
-      category,
-      content,
-      confidence: 'high',
-    });
-
-    return {
-      success: true,
-      data: {
-        id: newId,
-        category,
-        content,
-        superseded: match ? { id: match.id, content: match.content } : null,
-      },
-    };
+    return { success: true, data: { id: row.id, category: row.category, content: row.content, stored: row.stored } };
   },
 });
 
@@ -98,15 +64,7 @@ register({
     const query = args.query as string | undefined;
     const category = args.category as string | undefined;
 
-    const conditions = [isNull(jkaiMemories.supersededBy)];
-    if (category) conditions.push(eq(jkaiMemories.category, category));
-    if (query) conditions.push(ilike(jkaiMemories.content, `%${query}%`));
-
-    const rows = await db.select()
-      .from(jkaiMemories)
-      .where(and(...conditions))
-      .orderBy(desc(jkaiMemories.updatedAt))
-      .limit(50);
+    const rows = await retrieveMemories(query, category, 50);
 
     return { success: true, data: { memories: rows, count: rows.length } };
   },
@@ -129,16 +87,7 @@ register({
   toolset: 'memory',
   handler: async (args) => {
     const id = args.id as string;
-    const [memory] = await db.select()
-      .from(jkaiMemories)
-      .where(eq(jkaiMemories.id, id))
-      .limit(1);
-
-    if (!memory) return { success: false, error: 'Memory not found' };
-
-    await db.update(jkaiMemories)
-      .set({ supersededBy: 'forgotten', updatedAt: new Date() })
-      .where(eq(jkaiMemories.id, id));
+    const memory = await forgetMemory(id);
 
     return { success: true, data: { forgotten: memory.content } };
   },

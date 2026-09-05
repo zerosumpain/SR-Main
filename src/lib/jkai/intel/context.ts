@@ -13,6 +13,7 @@ interface KnowledgeContext {
     relationships: string[];
   }>;
   noteExcerpts: Array<{
+    id?: string;
     title: string | null;
     excerpt: string;
     date: string;
@@ -220,6 +221,7 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
   return {
     entities,
     noteExcerpts: relevantNotes.map((n: any) => ({
+      id: n.id,
       title: n.title,
       excerpt: n.excerpt,
       date: new Date(n.created_at).toLocaleDateString(),
@@ -325,7 +327,7 @@ function formatContext(context: KnowledgeContext): string {
   if (context.noteExcerpts.length > 0) {
     parts.push('\n**Relevant Notes:**');
     for (const note of context.noteExcerpts) {
-      parts.push(`\n- "${note.title ?? 'Untitled'}" (${note.date}):`);
+      parts.push(`\n- "${note.title ?? 'Untitled'}" (${note.date}; /jkai/intel/notes/${note.id ?? "unknown"}):`);
       parts.push(`  ${note.excerpt}`);
     }
   }

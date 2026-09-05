@@ -29,6 +29,9 @@ PUBLIC_URL="${PUBLIC_URL:-https://strangeramblings.com}"
 KEEP_RELEASES="${KEEP_RELEASES:-3}"
 PUBLIC_BASE="${PUBLIC_URL%/}"
 
+# Authored handlers require OS namespaces; fail before switching production.
+./scripts/check-authored-runner.sh
+
 SHA="$(git rev-parse HEAD)"
 RELEASE_DIR="$VPS_DIR/releases/$SHA"
 STATE_DIR="$VPS_DIR/.deploy-state"

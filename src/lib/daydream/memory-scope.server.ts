@@ -52,7 +52,8 @@ export function isDaydreamFindingTheme() {
       where ${daydreamMemoryThemeSources.themeId} = ${daydreamMemoryThemes.id}
         and (
           ${jkaiMemories.daydreamOrigin} is null
-          or ${jkaiMemories.daydreamOrigin} not in ('ruling', 'note')
+          or ${jkaiMemories.daydreamOrigin} not in ('ruling', 'note', 'place')
+          or ${jkaiMemories.supersededBy} is not null
         )
     )
   `;

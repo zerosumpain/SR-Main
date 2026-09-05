@@ -1,3 +1,5 @@
+import { runAuthored, validateHandler } from '$lib/jkai/grounding/authored.server';
+import { currentExecution } from '$lib/jkai/grounding/execution';
 // src/lib/workflows/site-tools/tools/ephemeral-tools.ts
 // Meta-tools that let the LLM author one-shot tools and, later, promote
 // them into the persistent customTools registry.
@@ -24,14 +26,14 @@ const MAX_EPHEMERAL_DEPTH = 5;
 let currentDepth = 0;
 
 function compileHandler(code: string): Handler {
-  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-  return new AsyncFunction('args', 'fetch', 'platform', code) as Handler;
+  validateHandler(code);
+  return (args, _fetch, platform) => runAuthored(code, args, platform.call);
 }
 
 async function buildEphemeralPlatform(callerName: string): Promise<{ call: PlatformCall }> {
   return {
     async call(name, args) {
-      if (currentDepth >= MAX_EPHEMERAL_DEPTH) {
+      if ((currentExecution()?.depth ?? 0) >= MAX_EPHEMERAL_DEPTH) {
         return {
           success: false,
           error: `ephemeral platform.call depth limit (${MAX_EPHEMERAL_DEPTH}) exceeded while calling "${name}" from "${callerName}".`,
@@ -40,11 +42,11 @@ async function buildEphemeralPlatform(callerName: string): Promise<{ call: Platf
       const refusal = await refuseDestructiveCall(name, callerName);
       if (refusal) return refusal;
       const { executeTool } = await import('../registry');
-      currentDepth++;
+
       try {
-        return await executeTool(name, args);
+        return await executeTool(name, args, { emit: () => {}, ...currentExecution(), depth: (currentExecution()?.depth ?? 0) + 1 });
       } finally {
-        currentDepth--;
+
       }
     },
   };

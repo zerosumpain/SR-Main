@@ -1,3 +1,5 @@
+import { getActivePolicy } from '$lib/toolpolicy/policy';
+import { applyCapabilityPolicy } from '$lib/jkai/grounding/capabilities';
 import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
@@ -18,9 +20,11 @@ export const GET: RequestHandler = async ({ request }) => {
   if (!build) throw error(404, 'build not found');
   const enabled = (build.enabledToolsets ?? ['all']) as string[];
   const manifest = manifestForBuild(enabled);
-  const definitions = definitionsForBuild(enabled);
+  const policy = await getActivePolicy();
+  const definitions = applyCapabilityPolicy(definitionsForBuild(enabled), policy);
   return json({
     buildId,
+    policyVersion: policy.version,
     manifest,
     tools: definitions.map((d) => ({
       name: d.function.name,

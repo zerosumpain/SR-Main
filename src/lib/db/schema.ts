@@ -2258,6 +2258,8 @@ export const jkaiMemories = pgTable(
     category: text('category').notNull(), // people, preferences, places, health, devices, situations
     content: text('content').notNull(),
     sourceConversationId: text('source_conversation_id'),
+    provenance: jsonb('provenance').$type<import('$lib/constants/grounding').MemoryProvenance>(),
+    embedding: vector('embedding'),
     confidence: text('confidence').notNull().default('high'), // high, medium
     /**
      * Why this shared-store row is eligible for Daydream's private learning
@@ -2280,7 +2282,8 @@ export const jkaiMemories = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     supersededBy: text('superseded_by'),
   },
-  (t) => [index('jkai_memories_daydream_pending_idx').on(t.daydreamOrigin, t.consolidatedAt, t.createdAt)],
+  (t) => [index('jkai_memories_daydream_pending_idx').on(t.daydreamOrigin, t.consolidatedAt, t.createdAt),
+    index('jkai_memory_lexical_idx').using('gin', sql`to_tsvector('english', ${t.content})`).where(sql`${t.supersededBy} is null`)],
 );
 
 export type JkaiMemory = typeof jkaiMemories.$inferSelect;
@@ -6780,3 +6783,21 @@ export const geoDailySnapshot = pgTable(
 
 export type GeoDailySnapshot = typeof geoDailySnapshot.$inferSelect;
 export type NewGeoDailySnapshot = typeof geoDailySnapshot.$inferInsert;
+
+/** Durable evidence independent of preview clipping; scoped to its conversation. */
+export const jkaiEvidenceResults = pgTable('jkai_evidence_results', {
+  id: text('id').primaryKey(),
+  conversationId: text('conversation_id').notNull(),
+  tool: text('tool').notNull(),
+  result: jsonb('result').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('jkai_evidence_conversation_idx').on(t.conversationId)]);
+
+export const jkaiAnswerQuality = pgTable('jkai_answer_quality', {
+  id: text('id').primaryKey(),
+  policyVersion: integer('policy_version').notNull(),
+  taskClass: text('task_class').notNull(),
+  assessment: jsonb('assessment').$type<import('$lib/constants/grounding').AnswerAssessment | null>(),
+  details: jsonb('details').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('jkai_answer_quality_policy_idx').on(t.policyVersion, t.createdAt)]);

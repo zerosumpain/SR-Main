@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { BEHAVIOUR_POLICY, BEHAVIOUR_VERSION } from '$lib/jkai/grounding/policy';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { db } from '$lib/db';
@@ -47,7 +49,7 @@ export function compilePromptFiles(dir: string = DEFAULT_PROMPTS_DIR): CompileRe
   }
 
   return {
-    compiled: contents.join('\n\n---\n\n'),
+    compiled: contents.join('\n\n---\n\n') + BEHAVIOUR_POLICY,
     manifest,
   };
 }
@@ -112,18 +114,12 @@ export async function syncPrompts(dir: string = DEFAULT_PROMPTS_DIR): Promise<st
   return compiled;
 }
 
+/** Read disk hashes, so another worker's stale cache cannot override this release. */
 export async function getCompiledPrompt(dir: string = DEFAULT_PROMPTS_DIR): Promise<string> {
-  try {
-    const [cached] = await db
-      .select()
-      .from(promptCache)
-      .where(eq(promptCache.id, 'default'))
-      .limit(1);
+  const { compiled } = compilePromptFiles(dir);
+  return compiled;
+}
 
-    if (cached?.compiledPrompt) {
-      return cached.compiledPrompt;
-    }
-  } catch {}
-
-  return syncPrompts(dir);
+export function promptIdentity(text: string): string {
+  return `${BEHAVIOUR_VERSION}:${createHash('sha256').update(text).digest('hex')}`;
 }
