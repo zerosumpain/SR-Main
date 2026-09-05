@@ -12,3 +12,8 @@ it('terminates non-returning code', async () => {
 it('refuses ambient environment access before launching', () => {
   expect(() => runAuthored('return process.env', {}, async () => ({ success: true }))).toThrow();
 });
+it('rejects credential headers in the array form of HeadersInit', async () => {
+  const result = await runAuthored('await fetch("https://example.org", { headers: [["Authorization", "fixture"]] }); return { success: true }', {}, async () => ({ success: true }));
+  expect(result.success).toBe(false);
+  expect(result.error).toContain('authenticated services');
+});

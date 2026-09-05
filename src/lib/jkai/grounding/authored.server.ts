@@ -59,9 +59,10 @@ export function runAuthored(code: string, args: Record<string, unknown>, call: (
         else if (msg.kind === 'fetch') {
           const opts = msg.args.options ?? {};
           if (opts.method && !['GET', 'HEAD'].includes(String(opts.method).toUpperCase())) throw new Error('Public fetch is read-only; compose an authorized platform tool for writes');
-          if (opts.headers && Object.keys(opts.headers).some(k => /authorization|cookie|key|token/i.test(k))) throw new Error('Use platform.call for authenticated services');
+          const headers = new Headers(opts.headers);
+          if ([...headers.keys()].some(k => /authorization|cookie|key|token/i.test(k))) throw new Error('Use platform.call for authenticated services');
           const { guardedFetch } = await import('$lib/workflows/site-tools/tools/apis');
-          result = await guardedFetch(String(msg.args.url), { method: opts.method, headers: opts.headers });
+          result = await guardedFetch(String(msg.args.url), { method: opts.method, headers: Object.fromEntries(headers) });
         } else throw new Error('Unknown sandbox capability');
         if (!ended) child.stdin.write(JSON.stringify({ id: msg.id, result }) + '\n');
       } catch (err) { if (!ended) child.stdin.write(JSON.stringify({ id: msg.id, error: err instanceof Error ? err.message : String(err) }) + '\n'); }
