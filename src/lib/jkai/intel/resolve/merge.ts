@@ -693,7 +693,8 @@ export const SEMANTIC_BLOCK_DISTANCE = 0.28;
  * The lowest score a pair is scored at all.
  *
  * Every sweep generates down to here regardless of the confidence it is asked
- * to report at, so a decision that RAISES a pair's score has something to raise.
+ * to report at, so the counters describing withheld and confirmed pairs can see
+ * the rows they are counting.
  */
 export const CANDIDATE_FLOOR = 0.35;
 /** Nearest neighbours to consider per entity. */
@@ -881,12 +882,16 @@ export async function sweepDuplicates(
   // Candidates are generated at the REVIEW floor and filtered at `minConfidence`
   // only after decisions have been applied.
   //
-  // Generating at `minConfidence` directly looks equivalent and is not: an
-  // adjudicator's "yes, the same thing" LIFTS a pair's score, and the whole
-  // point of that lift is to carry a pair that scored 0.80 over the 0.85
-  // auto-merge line. Filter first and the pair is gone before the lift can
-  // reach it, so the verdict would have been recorded, displayed, and quietly
-  // unable to do the one thing it exists for.
+  // No verdict raises a score any more, so this is no longer about promotion.
+  // It is about the three counters taken BEFORE the filter, each of which would
+  // otherwise report zero at exactly the moment it mattered:
+  //
+  //   confirmedSame   the reader's confirmations land at 0.49-0.55 and the
+  //                   page's floor defaults to 0.5, so counting them after the
+  //                   filter hides most of what there is to act on.
+  //   seriesVariants  capped at 0.38, i.e. below any display floor by design.
+  //   ruledOut        a pair a person has answered is withheld, and the count
+  //                   of what was withheld is the honesty of the whole panel.
   const reports = findDuplicateCandidates(entities, {
     minConfidence: Math.min(minConfidence, CANDIDATE_FLOOR),
     addressIdentities,
@@ -929,13 +934,24 @@ export async function sweepDuplicates(
           }
         } else if (decision.verdict === 'same' && decision.decidedBy !== 'human') {
           confirmedSame++;
-          // Corroboration, capped: an adjudicator agreeing with the rules can
-          // carry a pair over the auto-merge line, but only from a score that
-          // was already close to it. It cannot manufacture one from nothing.
-          const lift = 0.1 * (decision.verdictConfidence ?? 0.7);
+          // LABELLED, NOT PROMOTED. The score is deliberately untouched.
+          //
+          // This used to add `0.1 × verdictConfidence` on the theory that an
+          // adjudicator agreeing with the rules could carry a pair over the
+          // 0.85 auto-merge line. The first production run showed the theory is
+          // empty: all 49 confirmed pairs scored 0.49–0.55 on names alone, and
+          // they score there for the very reason a reader was needed — an
+          // abbreviation and its expansion share almost no words. A +0.094
+          // maximum cannot reach 0.85 from 0.55, and measured against those 49,
+          // exactly zero could cross.
+          //
+          // So the lift never promoted anything; all it did was make the number
+          // on screen disagree with the matcher's own reasoning. A confirmation
+          // reaches a merge the honest way instead: counted in `confirmedSame`,
+          // shown with the reader's rationale, and applied by a person from the
+          // quality page's "select the N confirmed".
           scored = {
             ...candidate,
-            confidence: Math.min(0.95, candidate.confidence + lift),
             signals: [...candidate.signals, 'adjudicated'],
             // The rationale is NOT appended here. It travels on the decision
             // and every surface renders it in its own right, so folding it in
