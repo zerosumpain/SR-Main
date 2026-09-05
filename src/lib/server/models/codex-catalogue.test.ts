@@ -58,7 +58,7 @@ describe('codex reasoning ceilings', () => {
   });
 
   it('lets the default model reason as deep as it can', () => {
-    expect(thinkingLevelsFor('codex', DEFAULT_CODEX_MODEL_SLUG)).toContain('ultra');
+    expect(thinkingLevelsFor('codex', DEFAULT_CODEX_MODEL_SLUG)).toContain('max');
   });
 });
 

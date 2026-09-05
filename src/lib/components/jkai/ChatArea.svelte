@@ -2341,8 +2341,9 @@
     untrack(() => (isThinkingLevel(conversation?.thinkingLevel) ? conversation.thinkingLevel : null)),
   );
   let thinkingMenuOpen = $state(false);
-  // The model as well as the provider: `ultra` is real on Astra and a 400 on
-  // Luna, so the menu has to be built from the model that is actually pinned.
+  // The model as well as the provider: `max` is real on Astra and a 400 on
+  // gpt-5.5, so the menu has to be built from the model that is actually
+  // pinned.
   const thinkingOptions = $derived.by(() => {
     const ctx = coerceModelContext(currentModel);
     return thinkingLevelsFor(ctx.provider, ctx.modelId);

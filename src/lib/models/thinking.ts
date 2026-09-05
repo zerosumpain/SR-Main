@@ -23,16 +23,7 @@
  */
 import type { ModelProvider } from '$lib/server/models/types';
 
-export const THINKING_LEVELS = [
-  'off',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-  'ultra',
-] as const;
+export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 export function isThinkingLevel(v: unknown): v is ThinkingLevel {
@@ -48,33 +39,43 @@ export function isThinkingLevel(v: unknown): v is ThinkingLevel {
  *
  *  - Codex has no "off": the Codex agent always reasons, and the GPT-5.6 line
  *    additionally 400s on `minimal` (see piThinkingLevel, PR #151).
- *  - OpenRouter's unified effort enum is low/medium/high. `minimal`, `xhigh`,
- *    `max` and `ultra` are OpenAI-only spellings that do not survive the
- *    translation layer.
- *  - `max` and `ultra` are per-MODEL on Codex rather than per-provider — Astra,
- *    Sol and Terra reason that deep, Luna stops at `max`, everything older
- *    stops at `xhigh`. That is what `modelId` is for; omit it and you get the
- *    conservative list, which is what every caller got before Astra landed.
+ *  - OpenRouter's unified effort enum is low/medium/high. `minimal`, `xhigh`
+ *    and `max` are OpenAI-only spellings that do not survive the translation
+ *    layer.
+ *  - `max` is per-MODEL on Codex rather than per-provider — the 5.6 line and
+ *    Astra take it, everything older answers `Unsupported value: 'max' is not
+ *    supported with the '<model>' model`. That is what `modelId` is for; omit
+ *    it and you get the conservative list, which is what every caller got
+ *    before Astra landed.
  */
 const OPENROUTER_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high'];
-const CODEX_LEVELS: ThinkingLevel[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+const CODEX_LEVELS: ThinkingLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 /**
  * The deepest effort each Codex model accepts, by bare slug.
  *
- * Source: the account's own catalogue (`supported_reasoning_levels` from
- * chatgpt.com/backend-api/codex/models), read 2026-09-05. The table lives on
- * THIS side of the server boundary because the chat picker runs in the browser
- * and cannot import `$lib/server/*`; codex-catalogue.test asserts every
- * catalogued model has an entry here, so the two cannot drift apart silently.
+ * Source: what the API actually ACCEPTED, one call per model against the
+ * production bridge on 2026-09-05 — not the catalogue's own
+ * `supported_reasoning_levels`, which is where the first version of this table
+ * came from and was wrong. The catalogue advertises `ultra` on Astra, Sol and
+ * Terra; the Responses API refuses it on all three with `Invalid value:
+ * 'ultra'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high',
+ * 'xhigh', and 'max'`. So the catalogue describes a rung this transport cannot
+ * reach, and the ladder stops at `max`. Re-measure rather than re-read when a
+ * model ships.
+ *
+ * The table lives on THIS side of the server boundary because the chat picker
+ * runs in the browser and cannot import `$lib/server/*`; codex-catalogue.test
+ * asserts every catalogued model has an entry here, so the two cannot drift
+ * apart silently.
  *
  * An unknown slug gets `xhigh` — every Codex model has always accepted that, so
  * a model nobody has catalogued is never offered an effort that 400s.
  */
 export const CODEX_EFFORT_CEILING: Record<string, ThinkingLevel> = {
-  'gpt-6-astra': 'ultra',
-  'gpt-5.6-sol': 'ultra',
-  'gpt-5.6-terra': 'ultra',
+  'gpt-6-astra': 'max',
+  'gpt-5.6-sol': 'max',
+  'gpt-5.6-terra': 'max',
   'gpt-5.6-luna': 'max',
   'gpt-5.5': 'xhigh',
   'gpt-5.3-codex-spark': 'xhigh',
@@ -128,7 +129,6 @@ const OPENROUTER_EFFORT: Record<Exclude<ThinkingLevel, 'off'>, 'low' | 'medium' 
   high: 'high',
   xhigh: 'high',
   max: 'high',
-  ultra: 'high',
 };
 
 /**
@@ -150,8 +150,8 @@ export function thinkingRequestParams(
   if (!level) return {};
   if (provider === 'codex') {
     if (level === 'off' || level === 'minimal') return { reasoning_effort: 'low' };
-    // A conversation can carry `ultra` from a model that reasons that deep and
-    // then be pointed at one that does not: Luna answers `ultra` with a 400,
+    // A conversation can carry `max` from a model that reasons that deep and
+    // then be pointed at one that does not: gpt-5.5 answers `max` with a 400,
     // not with less thinking. Clamp to this model's own ceiling.
     const offered = thinkingLevelsFor('codex', modelId);
     const effort = offered.includes(level) ? level : offered[offered.length - 1];

@@ -82,12 +82,15 @@ const WORKDIR = process.env.CODEX_BRIDGE_WORKDIR || join(tmpdir(), 'jkai-codex-b
  *
  * `@openai/codex-sdk`'s `ModelReasoningEffort` stops at `xhigh` (0.147), but the
  * Responses transport — the default, and the only one the site uses — is a
- * hand-written client, and the API behind it takes `max` and `ultra` on the 5.6
- * line and on GPT-6 Astra. Typing this off the SDK would have made the deepest
- * two rungs untypeable on a path the SDK is not even on. `sdkEffort` clamps for
- * the rollback transport, which really is bound by the SDK's spelling.
+ * hand-written client, and the API behind it takes `max` on the 5.6 line and on
+ * GPT-6 Astra. Typing this off the SDK would have made the deepest rung
+ * untypeable on a path the SDK is not even on. `sdkEffort` clamps for the
+ * rollback transport, which really is bound by the SDK's spelling.
+ *
+ * It stops at `max` and not `ultra`: the model catalogue advertises `ultra` but
+ * the API refuses it on every model that claims it.
  */
-export type CodexEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+export type CodexEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface RunRequest {
   model: string;
@@ -201,7 +204,7 @@ function clientFor(toolServerUrl?: string): Codex {
 }
 
 /**
- * `max`/`ultra` down to what the bundled `codex` CLI will accept.
+ * `max` down to what the bundled `codex` CLI will accept.
  *
  * The SDK path drives that CLI, and the server refuses an effort the client
  * version does not know — the same gate that hides Astra from the catalogue at
@@ -210,7 +213,7 @@ function clientFor(toolServerUrl?: string): Codex {
  */
 function sdkEffort(effort: CodexEffort | undefined): ThreadOptions['modelReasoningEffort'] | undefined {
   if (!effort) return undefined;
-  return effort === 'max' || effort === 'ultra' ? 'xhigh' : effort;
+  return effort === 'max' ? 'xhigh' : effort;
 }
 
 function threadOptions(req: RunRequest): ThreadOptions {

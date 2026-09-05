@@ -40,11 +40,14 @@ import { isSubscriptionModelId } from '$lib/llm/usage-meter';
  *
  * WIDER than the SDK's own `ThreadOptions.modelReasoningEffort`, which stops at
  * `xhigh`. The bridge reaches Codex over the Responses API (see
- * responses-transport.ts), which takes `max` and `ultra` as well; only the
- * `sdk` rollback transport is bound by the SDK's spelling, and it clamps rather
- * than 400s.
+ * responses-transport.ts), which takes `max` as well; only the `sdk` rollback
+ * transport is bound by the SDK's spelling, and it clamps rather than 400s.
  *
- * NOT every model accepts the top two — the per-model ceiling is
+ * `ultra` is NOT here, though the model catalogue lists it under
+ * `supported_reasoning_levels` for Astra, Sol and Terra. The Responses API
+ * refuses it on every one of them — measured, see CODEX_EFFORT_CEILING.
+ *
+ * NOT every model accepts `max` either — the per-model ceiling is
  * `CODEX_EFFORT_CEILING` in $lib/models/thinking, which lives there rather than
  * here because the chat picker needs it in the browser and `$lib/server/*`
  * cannot cross that boundary. codex-catalogue.test asserts the two agree.
@@ -56,7 +59,6 @@ export const CODEX_REASONING_EFFORTS = [
   'high',
   'xhigh',
   'max',
-  'ultra',
 ] as const;
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number];
 

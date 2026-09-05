@@ -22,17 +22,15 @@ describe('thinking levels', () => {
     expect(thinkingLevelsFor('openrouter')).toEqual(['off', 'low', 'medium', 'high']);
   });
 
-  it('offers the deep rungs only on the Codex models that have them', () => {
-    // Astra reasons to `ultra`, Luna stops at `max`, and 5.5 predates both.
-    expect(thinkingLevelsFor('codex', 'codex/gpt-6-astra')).toContain('ultra');
-    expect(thinkingLevelsFor('codex', 'codex/gpt-5.6-luna')).toEqual([
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-      'max',
-    ]);
+  it('offers the deepest rung only on the Codex models that have it', () => {
+    // Astra and the 5.6 line take `max`; 5.5 predates it and answers it with a
+    // 400. Nothing takes `ultra` — the catalogue advertises it, the API refuses
+    // it, and the ladder therefore stops at `max`.
+    const deep = ['low', 'medium', 'high', 'xhigh', 'max'];
+    expect(thinkingLevelsFor('codex', 'codex/gpt-6-astra')).toEqual(deep);
+    expect(thinkingLevelsFor('codex', 'codex/gpt-5.6-luna')).toEqual(deep);
     expect(thinkingLevelsFor('codex', 'codex/gpt-5.5')).toEqual(['low', 'medium', 'high', 'xhigh']);
+    expect(thinkingLevelsFor('codex', 'codex/gpt-6-astra')).not.toContain('ultra');
   });
 
   it('takes a bare slug as readily as a prefixed id', () => {
@@ -101,10 +99,9 @@ describe('thinkingRequestParams', () => {
   it('clamps the OpenAI-only spellings onto OpenRouter’s enum', () => {
     expect(thinkingRequestParams('openrouter', 'minimal')).toEqual({ reasoning: { effort: 'low' } });
     expect(thinkingRequestParams('openrouter', 'xhigh')).toEqual({ reasoning: { effort: 'high' } });
-    // The OpenAI-only rungs above xhigh collapse the same way rather than
+    // The OpenAI-only rung above xhigh collapses the same way rather than
     // reaching OpenRouter as an effort its unified enum has never heard of.
     expect(thinkingRequestParams('openrouter', 'max')).toEqual({ reasoning: { effort: 'high' } });
-    expect(thinkingRequestParams('openrouter', 'ultra')).toEqual({ reasoning: { effort: 'high' } });
   });
 
   it('speaks reasoning_effort to the Codex bridge', () => {
@@ -119,9 +116,9 @@ describe('thinkingRequestParams', () => {
     expect(thinkingRequestParams('codex', 'minimal')).toEqual({ reasoning_effort: 'low' });
   });
 
-  it('sends the deep rungs through when the model has them', () => {
-    expect(thinkingRequestParams('codex', 'ultra', 'codex/gpt-6-astra')).toEqual({
-      reasoning_effort: 'ultra',
+  it('sends the deepest rung through when the model has it', () => {
+    expect(thinkingRequestParams('codex', 'max', 'codex/gpt-6-astra')).toEqual({
+      reasoning_effort: 'max',
     });
     expect(thinkingRequestParams('codex', 'max', 'codex/gpt-5.6-luna')).toEqual({
       reasoning_effort: 'max',
@@ -129,17 +126,14 @@ describe('thinkingRequestParams', () => {
   });
 
   it('clamps a level the chosen Codex model cannot reach', () => {
-    // The failure this exists for: a thread set to `ultra` on Astra and then
-    // pointed at Luna, which answers `ultra` with a 400 rather than with less
-    // thinking. Same for a model that predates both rungs.
-    expect(thinkingRequestParams('codex', 'ultra', 'codex/gpt-5.6-luna')).toEqual({
-      reasoning_effort: 'max',
-    });
-    expect(thinkingRequestParams('codex', 'ultra', 'codex/gpt-5.5')).toEqual({
+    // The failure this exists for: a thread set to `max` on Astra and then
+    // pointed at gpt-5.5, which answers `max` with a 400 rather than with less
+    // thinking.
+    expect(thinkingRequestParams('codex', 'max', 'codex/gpt-5.5')).toEqual({
       reasoning_effort: 'xhigh',
     });
     // No model named: the conservative ceiling, as for every caller that has
     // not been taught to pass one.
-    expect(thinkingRequestParams('codex', 'ultra')).toEqual({ reasoning_effort: 'xhigh' });
+    expect(thinkingRequestParams('codex', 'max')).toEqual({ reasoning_effort: 'xhigh' });
   });
 });
