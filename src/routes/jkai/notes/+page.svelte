@@ -16,6 +16,16 @@
   import { onMount } from 'svelte';
   import { marked } from 'marked';
   import NoteRecorder from '$lib/components/jkai/NoteRecorder.svelte';
+  import {
+    SINK_STORAGE_KEY,
+    canChooseOutput,
+    canRequestMic,
+    canRouteOutput,
+    micStateNote,
+    outputLabel,
+    readMicPermission,
+    type MicPermission,
+  } from '$lib/jkai/media/audio-access';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import type { PageData } from './$types';
 
@@ -42,6 +52,93 @@
     transcript: string | null; language: string | null; engine: string | null; createdAt: string;
   };
   let recordings = $state<Recording[]>([]);
+
+  // ── Microphone and speakers ──────────────────────────────────────────────
+  // Two different things. The mic is a real permission that can be asked for
+  // ahead of the first recording; the speaker is a routing choice with no
+  // permission behind it at all. Both are read defensively — see
+  // $lib/jkai/media/audio-access.
+  let micState = $state<MicPermission>('unknown');
+  let micAskable = $state(false);
+  let outputChoosable = $state(false);
+  let sinkId = $state<string>('');
+  let sinkName = $state<string>('System default');
+  let audioNote = $state<string | null>(null);
+
+  /** Ask once, ahead of recording, so the first note is not interrupted by a
+   *  permission dialog mid-thought. The tracks are stopped immediately — the
+   *  grant is the only thing wanted here, not a stream. */
+  async function requestMic() {
+    audioNote = null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      micState = 'granted';
+      audioNote = 'Microphone allowed.';
+    } catch (err) {
+      // NotAllowedError is a refusal; anything else (no device, a policy block)
+      // is worth showing verbatim rather than flattened to "denied".
+      micState = (err as DOMException)?.name === 'NotAllowedError' ? 'denied' : micState;
+      audioNote =
+        (err as DOMException)?.name === 'NotFoundError'
+          ? 'No microphone found on this device.'
+          : micStateNote(micState);
+    }
+  }
+
+  /** Chromium's output picker. Returns the device the user chose; everything
+   *  that plays on this page is then routed to it. */
+  async function chooseOutput() {
+    audioNote = null;
+    try {
+      const device = await (
+        navigator.mediaDevices as unknown as {
+          selectAudioOutput: () => Promise<MediaDeviceInfo>;
+        }
+      ).selectAudioOutput();
+      sinkId = device.deviceId ?? '';
+      sinkName = outputLabel(device);
+      try {
+        localStorage.setItem(SINK_STORAGE_KEY, JSON.stringify({ id: sinkId, name: sinkName }));
+      } catch {
+        /* private mode — the choice just will not survive a reload */
+      }
+    } catch {
+      // Dismissing the picker is a normal outcome, not an error worth shouting.
+    }
+  }
+
+  function useSystemOutput() {
+    sinkId = '';
+    sinkName = 'System default';
+    try {
+      localStorage.removeItem(SINK_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Route one <audio> to the chosen device.
+   *
+   * An action rather than an $effect: it reads and writes the node it is given
+   * and nothing else, which is exactly the shape an effect gets wrong here (and
+   * the same reasoning as the autogrow action elsewhere). `update` re-runs it
+   * when the sink changes, so a new choice reaches players already on screen.
+   */
+  function sink(node: HTMLAudioElement, id: string) {
+    const apply = (value: string) => {
+      const el = node as HTMLAudioElement & { setSinkId?: (v: string) => Promise<void> };
+      if (typeof el.setSinkId !== 'function') return;
+      // '' is the documented way to say "system default" — not a no-op.
+      el.setSinkId(value).catch(() => {
+        // A device can vanish between choosing and playing. Falling back to the
+        // default beats throwing inside an action.
+      });
+    };
+    apply(id);
+    return { update: apply };
+  }
   /** One flag for both entry points: the cover's recorder and the editor's
    *  share an upload, and neither should accept a second while one is running. */
   let transcribing = $state(false);
@@ -444,6 +541,26 @@
   onMount(() => {
     const q = new URL(location.href).searchParams.get('open');
     if (q) void openNote(q);
+
+    // Read the microphone state without prompting, so the page can say what is
+    // wrong before a click fails, and restore a previously chosen speaker.
+    micAskable = canRequestMic(navigator, window.isSecureContext);
+    outputChoosable = canChooseOutput(navigator) && canRouteOutput();
+    void readMicPermission(navigator, window.isSecureContext).then((state) => {
+      micState = state;
+    });
+    try {
+      const saved = localStorage.getItem(SINK_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { id?: string; name?: string };
+        if (parsed.id) {
+          sinkId = parsed.id;
+          sinkName = parsed.name || 'Selected output';
+        }
+      }
+    } catch {
+      /* ignore a corrupt or unreadable value — the default is fine */
+    }
     // Saving on the way out costs nothing and is the difference between a
     // notebook you trust and one you do not.
     const leave = () => {
@@ -482,8 +599,19 @@
             tone="ink"
             label="Voice note"
             busy={transcribing}
+            disabled={micState === 'insecure'}
             onrecorded={(blob, secs) => uploadRecording(blob, secs, '')}
           />
+          {#if micState !== 'granted'}
+            <p class="mic-ask">
+              {#if micAskable && micState !== 'denied'}
+                <button type="button" onclick={requestMic}>Allow microphone</button>
+              {/if}
+              <span>{audioNote ?? micStateNote(micState)}</span>
+            </p>
+          {:else if audioNote}
+            <p class="mic-ask"><span>{audioNote}</span></p>
+          {/if}
         </div>
         <p><span>Active</span>{notes.length} note{notes.length === 1 ? '' : 's'}</p>
         <p><span>Folders</span>{folders.length || '—'}</p>
@@ -611,6 +739,16 @@
             <section class="rec-list" aria-label="Recordings">
               <p class="rec-list-hd">
                 <span>Recordings</span>
+                {#if outputChoosable}
+                  <span class="out-pick">
+                    <button type="button" onclick={chooseOutput} title="Choose which speakers play these back">
+                      Output · {sinkName}
+                    </button>
+                    {#if sinkId}
+                      <button type="button" class="out-reset" onclick={useSystemOutput} title="Back to the system default">reset</button>
+                    {/if}
+                  </span>
+                {/if}
                 <span>{recordings.length}</span>
               </p>
               {#each recordings as r (r.id)}
@@ -622,7 +760,7 @@
                     <button type="button" class="rec-del" onclick={() => deleteRecording(r.id)}>Delete</button>
                   </div>
                   <!-- svelte-ignore a11y_media_has_caption -->
-                  <audio controls preload="metadata" src={`/api/daydream/notes/audio/${r.id}`}></audio>
+                  <audio controls preload="metadata" use:sink={sinkId} src={`/api/daydream/notes/audio/${r.id}`}></audio>
                   {#if r.transcript === null}
                     <p class="rec-note">Not transcribed — the audio is safe, the words did not come back.</p>
                   {:else if r.transcript.trim() === ''}
@@ -1075,6 +1213,43 @@
 
   /* Recordings — provenance under the writing surface, not content. Quiet by
      construction: the words are already in the body above. */
+  .mic-ask {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin: 8px 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(237, 228, 212, 0.6);
+  }
+  .mic-ask button {
+    padding: 5px 10px;
+    border: 1px solid var(--accent-on-dark);
+    border-radius: 0;
+    background: transparent;
+    color: var(--accent-on-dark);
+    font: inherit;
+    cursor: pointer;
+  }
+  .mic-ask button:hover { background: var(--accent-on-dark); color: var(--text-primary); }
+
+  .out-pick { display: inline-flex; align-items: center; gap: 8px; }
+  .out-pick button {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  .out-pick button:hover { color: var(--accent); }
+  .out-pick .out-reset { color: var(--text-ghost); }
+
   .rec-list { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line-hair); }
   .rec-list-hd {
     display: flex; justify-content: space-between; gap: 12px; margin: 0 0 10px;
