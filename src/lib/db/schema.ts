@@ -6791,3 +6791,12 @@ export const jkaiEvidenceResults = pgTable('jkai_evidence_results', {
   result: jsonb('result').$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, t => [index('jkai_evidence_conversation_idx').on(t.conversationId)]);
+
+export const jkaiAnswerQuality = pgTable('jkai_answer_quality', {
+  id: text('id').primaryKey(),
+  policyVersion: integer('policy_version').notNull(),
+  taskClass: text('task_class').notNull(),
+  assessment: jsonb('assessment').$type<import('$lib/jkai/grounding/answer').AnswerAssessment | null>(),
+  details: jsonb('details').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('jkai_answer_quality_policy_idx').on(t.policyVersion, t.createdAt)]);

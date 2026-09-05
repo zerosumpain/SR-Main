@@ -1,3 +1,4 @@
+import { recordAnswerQuality } from '$lib/jkai/grounding/quality.server';
 import { answerContract, renderAnswerContract, type AnswerAssessment } from '$lib/jkai/grounding/answer';
 import { assessAnswer } from '$lib/jkai/grounding/answer.server';
 import { contextResult } from '$lib/jkai/grounding/evidence';
@@ -29,7 +30,7 @@ import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/exe
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
 import { BEHAVIOUR_POLICY } from '$lib/jkai/grounding/policy';
-import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
+import { getCompiledPrompt, promptIdentity } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
@@ -779,6 +780,7 @@ async function runGeneralChat(
   // The opening ack is armed by the `generalChat` wrapper above and disarmed
   // through `cancelAck` — see ACK_SILENCE_MS for why it no longer runs at t=0.
 
+  const turnStarted = Date.now();
   const contract = answerContract(userMessage);
   let answerAssessment: AnswerAssessment | undefined;
   let reviewAttempts = 0;
@@ -1599,6 +1601,15 @@ async function runGeneralChat(
     void refreshCompression(conversationHistory, options.conversationId, MAX_HISTORY);
   }
 
+  const outcomes = messages.filter(m => m.role === 'tool').map(m => { try { return JSON.parse(m.content); } catch { return {}; } });
+  const calls = messages.flatMap(m => m.tool_calls ?? []).map((c: any) => c.function?.name);
+  void recordAnswerQuality({ jobId: options.jobId ?? crypto.randomUUID(), conversationId: options.conversationId,
+    policyVersion: capabilityPolicy.version, promptHash: promptIdentity(systemContent), model: JSON.stringify(options.modelContext),
+    taskClass: contract.depth, assessment: answerAssessment, elapsedMs: Date.now() - turnStarted,
+    firstTool: calls[0], firstSuccessfulTool: calls[outcomes.findIndex(r => r.success)],
+    schemaErrors: outcomes.filter(r => r.error === 'invalid_arguments').length,
+    evidenceCount: outcomes.filter(r => r.evidence?.resultHandle).length,
+  });
   if (contract.needsReview) options.onStreamEvent?.({ type: 'token', delta: responseText });
   return { response: responseText };
 }
