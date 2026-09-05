@@ -122,6 +122,9 @@ register({
   parameters: {
     type: 'object',
     properties: {
+      assertion: { type: 'string', enum: ['stated', 'inferred'], description: 'stated only for an explicit user statement; inferred by default.' },
+      sourceMessageId: { type: 'string' },
+      replacesId: { type: 'string', description: 'Current memory ID being corrected, if any.' },
       content: { type: 'string', description: 'The fact, stated plainly in one sentence.' },
       category: {
         type: 'string',
@@ -132,14 +135,14 @@ register({
   },
   category: 'Recall',
   toolset: 'recall',
-  handler: async (raw: Record<string, unknown>) => {
-    const args = (raw ?? {}) as { content?: string; category?: string };
+  handler: async (raw: Record<string, unknown>, ctx) => {
+    const args = (raw ?? {}) as { content?: string; category?: string; assertion?: string; sourceMessageId?: string; replacesId?: string };
     const content = (args.content ?? '').trim();
     const category = (args.category ?? '').trim();
     if (!content) return { success: false, error: 'content is required' };
     if (!category) return { success: false, error: 'category is required' };
     try {
-      const memory = await writeMemory({ category, content, provenance: { origin: 'user', assertion: 'stated' } });
+      const memory = await writeMemory({ category, content, replacesId: args.replacesId, sourceConversationId: ctx?.conversationId, provenance: { origin: 'user', sourceId: args.sourceMessageId ?? ctx?.conversationId ?? undefined, assertion: args.assertion === 'stated' ? 'stated' : 'inferred' } });
       return { success: true, data: { id: memory.id, stored: memory.stored, category, content } };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'memory_remember failed' };

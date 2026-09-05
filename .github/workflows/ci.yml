@@ -375,6 +375,10 @@ jobs:
           GATE_LEVEL: ${{ needs.level.outputs.level }}
           GATE_BASE: HEAD^
 
+      - name: Memory and evidence database contracts
+        if: matrix.shard == 1
+        run: npx vitest run src/lib/jkai/memory/service.integration.test.ts src/lib/jkai/grounding/evidence.integration.test.ts src/lib/daydream/memory-consolidation.integration.test.ts
+
   # ── the build ────────────────────────────────────────────────────────────────
   #
   # The PR build is also a release candidate. It carries the real adapter and is
