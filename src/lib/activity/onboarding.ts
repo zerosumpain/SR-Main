@@ -1,4 +1,5 @@
 import type { ConnectionMode } from './contracts';
+import { STEAM_API_KEY_URL, STEAM_WEB_API_ENV } from './providers/steam/credential';
 
 export const ACTIVITY_ONBOARDING_OUTCOMES = [
   {
@@ -8,6 +9,7 @@ export const ACTIVITY_ONBOARDING_OUTCOMES = [
     description: 'Game libraries, achievements and honest playtime changes.',
     providerIds: ['steam'],
     daydreamPrompt: 'Notice the games I return to and reflect on what is holding my attention.',
+    jkaiPrompt: 'What games have I been playing lately, and what seems to be holding my attention?',
   },
   {
     id: 'listen',
@@ -16,6 +18,7 @@ export const ACTIVITY_ONBOARDING_OUTCOMES = [
     description: 'Recent music plus listening evidence from archives and future device bridges.',
     providerIds: ['apple_music', 'youtube_takeout', 'apple_podcasts'],
     daydreamPrompt: 'Reflect on the themes and shifts in what I have been listening to lately.',
+    jkaiPrompt: 'What have I been listening to lately? Use my connected activity sources.',
   },
   {
     id: 'interests',
@@ -24,6 +27,7 @@ export const ACTIVITY_ONBOARDING_OUTCOMES = [
     description: 'Interest signals without silently treating every click as intent.',
     providerIds: ['reddit_archive', 'youtube_takeout', 'apple_podcasts'],
     daydreamPrompt: 'Find the interests that keep recurring across my recent activity.',
+    jkaiPrompt: 'Looking at my connected activity sources, which interests keep recurring?',
   },
   {
     id: 'making',
@@ -32,6 +36,7 @@ export const ACTIVITY_ONBOARDING_OUTCOMES = [
     description: 'Contribution evidence and repository activity within explicit scopes.',
     providerIds: ['github'],
     daydreamPrompt: 'Reflect on the projects receiving my energy and where momentum is changing.',
+    jkaiPrompt: 'What have I been building lately, judging by my connected activity sources?',
   },
   {
     id: 'whole_story',
@@ -40,6 +45,7 @@ export const ACTIVITY_ONBOARDING_OUTCOMES = [
     description: 'A broader view assembled source by source, with separate permission choices.',
     providerIds: ['steam', 'apple_music', 'youtube_takeout', 'apple_podcasts', 'reddit_archive', 'github'],
     daydreamPrompt: 'Look across my recent activity and surface one grounded pattern worth noticing.',
+    jkaiPrompt: 'Summarise my activity from my connected sources and point out one grounded pattern.',
   },
 ] as const;
 
@@ -236,4 +242,184 @@ export function getActivityOnboardingGuide(
   mode: ConnectionMode,
 ): ActivityOnboardingGuide {
   return guides[providerId] ?? genericGuide(providerId, mode);
+}
+
+// ---------------------------------------------------------------------------
+// Readiness — the Connect step as a checklist that does things
+//
+// Every reason a provider cannot start has a row here, and every row that the
+// owner can clear from the page carries the control that clears it. Pure, so
+// the wizard's states are unit tested without a browser.
+// ---------------------------------------------------------------------------
+
+export type ActivityStartBlocker =
+  | 'not_launched'
+  | 'operator_setup_required'
+  | 'fabric_disabled'
+  | 'provider_disabled'
+  | null;
+
+/** How the guided setup collects an application secret it can hold for the owner. */
+export interface ActivityOperatorGuide {
+  secret: string;
+  label: string;
+  url: string;
+  steps: string[];
+  placeholder: string;
+}
+
+export const ACTIVITY_OPERATOR_GUIDES: Record<string, ActivityOperatorGuide> = {
+  [STEAM_WEB_API_ENV]: {
+    secret: STEAM_WEB_API_ENV,
+    label: 'Steam Web API key',
+    url: STEAM_API_KEY_URL,
+    steps: [
+      'Open Steam’s API key page and sign in to your own Steam account.',
+      'Enter this site’s domain name and agree to Steam’s terms; Steam shows a 32-character key.',
+      'Paste the key below. It is encrypted into the site vault, bound to api.steampowered.com, and never shown again.',
+    ],
+    placeholder: '32-character key from Steam',
+  },
+};
+
+export interface ActivityReadinessProvider {
+  name: string;
+  availability: string;
+  availabilityNote: string;
+  policyGate?: string;
+  modes: readonly string[];
+  enabled: boolean;
+  canStart: boolean;
+  startBlocker: ActivityStartBlocker;
+  operatorSetup: ReadonlyArray<{
+    name: string;
+    configured: boolean;
+    source: 'env' | 'vault' | null;
+    vaultManaged: boolean;
+    unavailableReason?: string;
+  }>;
+}
+
+export interface ActivityReadinessRow {
+  id: 'launch' | 'vault' | 'key' | 'switch' | 'next';
+  label: string;
+  /** `done` is complete; `todo` has a control on the page; `blocked` waits on something else. */
+  state: 'done' | 'todo' | 'blocked';
+  detail: string;
+  /** For `key` rows: which secret the inline form collects, if it can. */
+  secret?: string;
+}
+
+export function readinessRows(
+  provider: ActivityReadinessProvider,
+  fabricEnabled: boolean,
+  vaultConfigured = true,
+): ActivityReadinessRow[] {
+  const launched = provider.availability === 'available' || provider.availability === 'beta';
+  const rows: ActivityReadinessRow[] = [];
+
+  rows.push(
+    launched
+      ? {
+          id: 'launch',
+          label: 'Launch gate',
+          state: 'done',
+          detail: provider.availability === 'beta' ? 'Passed · beta' : 'Passed',
+        }
+      : {
+          id: 'launch',
+          label: 'Launch gate',
+          state: 'blocked',
+          detail: provider.policyGate ?? provider.availabilityNote,
+        },
+  );
+
+  // Account tokens and vault keys are encrypted with the server's master key.
+  // Without it nothing below can be done from the page, and the old checklist
+  // would have shown every row done while the last one stayed blocked.
+  if (!vaultConfigured) {
+    rows.push({
+      id: 'vault',
+      label: 'Server vault key',
+      state: 'blocked',
+      detail: 'INTEGRATION_CREDENTIALS_KEY is missing or invalid on this server. It must be set in the server environment before any source can hold a credential.',
+    });
+  }
+
+  for (const secret of provider.operatorSetup) {
+    const guide = ACTIVITY_OPERATOR_GUIDES[secret.name];
+    if (secret.configured) {
+      rows.push({
+        id: 'key',
+        label: guide?.label ?? secret.name,
+        state: 'done',
+        detail: secret.source === 'vault' ? 'Stored in the site vault' : 'Set in the server environment',
+        secret: secret.name,
+      });
+    } else if (secret.vaultManaged && guide && vaultConfigured) {
+      rows.push({
+        id: 'key',
+        label: guide.label,
+        state: launched ? 'todo' : 'blocked',
+        detail: launched
+          ? secret.unavailableReason
+            ? `${secret.unavailableReason} Paste it again here; the value is never shown.`
+            : 'Needed before JKAI can read anything. Paste it here; the value is never shown again.'
+          : 'Collected here once the launch gate passes.',
+        secret: secret.name,
+      });
+    } else {
+      rows.push({
+        id: 'key',
+        label: guide?.label ?? secret.name,
+        state: 'blocked',
+        detail:
+          secret.unavailableReason ??
+          `Set ${secret.name} in the server environment; it cannot be collected from the page.`,
+        secret: secret.name,
+      });
+    }
+  }
+
+  const switchedOn = fabricEnabled && provider.enabled;
+  rows.push(
+    switchedOn
+      ? { id: 'switch', label: 'Sync switch', state: 'done', detail: 'On · the fabric and this source are enabled' }
+      : {
+          id: 'switch',
+          label: 'Sync switch',
+          state: launched ? 'todo' : 'blocked',
+          detail: launched
+            ? fabricEnabled
+              ? 'This source is off. Nothing syncs until you turn it on.'
+              : 'The fabric is off. Turning this source on also switches the fabric on.'
+            : 'Stays off until the launch gate passes.',
+        },
+  );
+
+  const isImport = provider.modes.length > 0 && provider.modes.every((mode) => mode === 'import' || mode === 'device');
+  rows.push({
+    id: 'next',
+    label: isImport ? 'Archive upload' : 'Account sign-in',
+    state: provider.canStart ? 'todo' : 'blocked',
+    detail: provider.canStart
+      ? isImport
+        ? 'Next: choose what to import, then upload the archive for inspection.'
+        : `Next: choose what to connect, then sign in at ${provider.name}. JKAI never sees the password.`
+      : 'Unlocks when the rows above are done.',
+  });
+
+  return rows;
+}
+
+/** One line for a catalogue card or a badge. */
+const BLOCKER_WORDS: Record<Exclude<ActivityStartBlocker, null>, string> = {
+  not_launched: 'Waiting for launch evidence',
+  operator_setup_required: 'Needs an application key',
+  fabric_disabled: 'Fabric is off',
+  provider_disabled: 'Source is off',
+};
+
+export function describeStartBlocker(blocker: ActivityStartBlocker): string {
+  return blocker ? BLOCKER_WORDS[blocker] : 'Ready now';
 }

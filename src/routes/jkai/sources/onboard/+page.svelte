@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import { untrack } from 'svelte';
   import ActivityOnboardingStepper from '$lib/components/jkai/ActivityOnboardingStepper.svelte';
   import {
     ACTIVITY_ONBOARDING_OUTCOMES,
+    ACTIVITY_OPERATOR_GUIDES,
+    describeStartBlocker,
     getActivityOnboardingGuide,
+    readinessRows,
     recommendActivityProviders,
     type ActivityOnboardingOutcomeId,
   } from '$lib/activity/onboarding';
@@ -60,6 +63,16 @@
       ? getActivityOnboardingGuide(selectedProvider.id, selectedProvider.modes[0] as ConnectionMode)
       : null,
   );
+
+  // The Connect step as a checklist. Each row that the owner can clear from
+  // this page carries its control; `data` refreshes through invalidateAll()
+  // after every action, so the rows recompute without local bookkeeping.
+  const readiness = $derived(
+    selectedProvider ? readinessRows(selectedProvider, data.enabled, data.vaultConfigured) : [],
+  );
+  const keyRow = $derived(readiness.find((row) => row.id === 'key' && row.state === 'todo') ?? null);
+  const keyGuide = $derived(keyRow?.secret ? (ACTIVITY_OPERATOR_GUIDES[keyRow.secret] ?? null) : null);
+  let keyDraft = $state('');
 
   const dataClassCopy: Record<ActivityDataClass, { label: string; description: string }> = {
     metadata: {
@@ -177,6 +190,49 @@
     }
   }
 
+  async function turnOn() {
+    if (!selectedProvider || busy) return;
+    busy = true;
+    message = null;
+    try {
+      const response = await fetch(`/api/activity/v1/providers/${encodeURIComponent(selectedProvider.id)}/enable`, {
+        method: 'POST',
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? 'Could not turn this source on');
+      await invalidateAll();
+      message = body.provider?.canStart
+        ? `${body.provider.name} is on. You can connect it now.`
+        : `${body.provider?.name ?? 'This source'} is on. One more row to clear before it can connect.`;
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'Could not turn this source on';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveKey() {
+    if (!selectedProvider || !keyDraft.trim() || busy) return;
+    busy = true;
+    message = null;
+    try {
+      const response = await fetch(`/api/activity/v1/providers/${encodeURIComponent(selectedProvider.id)}/credential`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: keyDraft }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? 'Could not save the key');
+      keyDraft = '';
+      await invalidateAll();
+      message = 'Key stored in the site vault. It is bound to api.steampowered.com and will not be shown again.';
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'Could not save the key';
+    } finally {
+      busy = false;
+    }
+  }
+
   async function continueFromData() {
     if (!selectedProvider || selectedDataClasses.length === 0 || busy) return;
     busy = true;
@@ -207,7 +263,28 @@
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? 'Could not create the source connection');
-      await goto(`/jkai/sources/connections/${body.connection.id}?journey=${sessionId}`);
+      const connectionPath = `/jkai/sources/connections/${body.connection.id}?journey=${sessionId}`;
+      // A sign-in provider goes straight to the provider: creating the pending
+      // connection and beginning authorization used to be two clicks on two
+      // pages. The callback lands on the connection page at step 5. Apple
+      // Music authorizes in the browser (MusicKit) from that page, and an
+      // archive is uploaded there, so those still navigate.
+      if (selectedProvider.modes.includes('openid')) {
+        const auth = await fetch(`/api/activity/v1/connections/${body.connection.id}/authorize?journey=${encodeURIComponent(sessionId ?? '')}`, {
+          method: 'POST',
+        });
+        const authBody = await auth.json();
+        if (auth.ok && typeof authBody.authorizationUrl === 'string') {
+          window.location.assign(authBody.authorizationUrl);
+          return;
+        }
+        // The connection exists now, so the retry lives on its page — but the
+        // reason travels with it rather than being dropped on the floor.
+        const notice = typeof authBody.detail === 'string' ? authBody.detail : 'Could not begin authorization';
+        await goto(`${connectionPath}&notice=${encodeURIComponent(notice)}`);
+        return;
+      }
+      await goto(connectionPath);
     } catch (error) {
       savedForLater = false;
       message = error instanceof Error ? error.message : 'Could not continue this setup';
@@ -284,10 +361,44 @@
       <p class="section-code">Step 3 / Connect</p>
       <div class="provider-heading">
         <div><h2 id="connect-title">Prepare {selectedProvider.name}</h2><p>{guide.actionDescription}</p></div>
-        <span class:ready={selectedProvider.canStart}>{selectedProvider.canStart ? 'Ready now' : selectedProvider.availability.replaceAll('_', ' ')}</span>
+        <span class:ready={selectedProvider.canStart}>{describeStartBlocker(selectedProvider.startBlocker)}</span>
       </div>
       <div class="connect-grid">
         <div>
+          <h3>Readiness</h3>
+          <ol class="readiness" aria-label="What {selectedProvider.name} needs before it can connect">
+            {#each readiness as row (row.id + row.label)}
+              <li class="row-{row.state}">
+                <span class="mark" aria-hidden="true">{row.state === 'done' ? '✓' : row.state === 'todo' ? '→' : '·'}</span>
+                <div class="row-body">
+                  <strong>{row.label}<small>{row.state === 'done' ? 'Done' : row.state === 'todo' ? 'To do' : 'Waiting'}</small></strong>
+                  <p>{row.detail}</p>
+                  {#if row.id === 'switch' && row.state === 'todo'}
+                    <button class="row-action" onclick={turnOn} disabled={busy}>{busy ? 'Working…' : `Turn ${selectedProvider.name} on`}</button>
+                  {/if}
+                  {#if row.id === 'key' && row.state === 'todo' && keyGuide}
+                    <div class="key-form">
+                      <ol>{#each keyGuide.steps as item}<li>{item}</li>{/each}</ol>
+                      <p class="key-domain">Domain name to enter: <code>{data.siteHost}</code></p>
+                      <a href={keyGuide.url} target="_blank" rel="noreferrer">Open Steam’s API key page ↗</a>
+                      <label for="operator-key">{keyGuide.label}</label>
+                      <div class="key-row">
+                        <input
+                          id="operator-key"
+                          type="password"
+                          autocomplete="off"
+                          spellcheck="false"
+                          placeholder={keyGuide.placeholder}
+                          bind:value={keyDraft}
+                        />
+                        <button class="row-action" onclick={saveKey} disabled={busy || !keyDraft.trim()}>{busy ? 'Saving…' : 'Save key'}</button>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ol>
           <h3>What happens</h3>
           <dl class="facts">
             <div><dt>Method</dt><dd>{guide.method}</dd></div>
@@ -402,6 +513,29 @@
   .connect-grid > div { padding: 20px; }
   .connect-grid > div + div { border-left: 1px solid var(--line-strong); }
   .connect-grid h3 { margin-bottom: 14px; font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: .08em; text-transform: uppercase; }
+  .readiness { list-style: none; margin: 0 0 22px; padding: 0; border-top: 1px solid var(--line-strong); }
+  .readiness > li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line-strong); }
+  .mark { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid currentColor; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .row-done .mark { color: var(--success, #2d7a3a); }
+  .row-todo .mark { color: var(--accent, #c4570a); }
+  .row-body { display: grid; gap: 5px; min-width: 0; }
+  .row-body strong { display: flex; align-items: baseline; gap: 10px; font-size: var(--fs-label); }
+  .row-body strong small { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--text-ghost); }
+  .row-done strong small { color: var(--success, #2d7a3a); }
+  .row-todo strong small { color: var(--accent, #c4570a); }
+  .row-body p { margin: 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
+  .row-blocked .row-body { color: var(--text-ghost); }
+  .row-action { width: fit-content; margin-top: 4px; padding: 8px 11px; border: 1px solid var(--accent, #c4570a); background: transparent; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
+  .key-form { display: grid; gap: 8px; margin-top: 6px; padding: 12px; border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--accent, #c4570a) 4%, transparent); }
+  .key-form ol { margin: 0; padding-left: 18px; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.55; }
+  .key-domain { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
+  .key-domain code { padding: 1px 5px; border: 1px solid var(--line-strong); text-transform: none; }
+  .key-form > a { width: fit-content; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-decoration: none; text-transform: uppercase; }
+  .key-form label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--text-ghost); }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 0; background: var(--surface, var(--bg)); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-label); }
+  .key-row input:focus { outline: 2px solid var(--accent, #c4570a); outline-offset: -1px; }
+  .key-row .row-action { margin-top: 0; }
   .preparation { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line-strong); }
   .preparation ol, .boundary ul { margin: 0; padding-left: 20px; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.6; }
   .preparation p { color: var(--text-ghost); font-size: var(--fs-label-xs); line-height: 1.5; }
@@ -426,6 +560,7 @@
     .choice-grid, .recommendations, .data-choices, .connect-grid { grid-template-columns: 1fr; }
     .connect-grid > div + div { border-top: 1px solid var(--line-strong); border-left: 0; }
     .provider-heading, .saved-panel { align-items: flex-start; flex-direction: column; }
+    .key-row { flex-direction: column; }
     .next-note { grid-template-columns: 1fr; }
     .saved-panel > div:last-child { justify-items: start; }
   }

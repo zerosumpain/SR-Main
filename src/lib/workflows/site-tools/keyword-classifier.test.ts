@@ -39,6 +39,25 @@ describe('inferToolsets', () => {
     });
   });
 
+  describe('activity — the personal sources on /jkai/sources', () => {
+    // Registered with the fabric (2026-09-04) but with no pattern here, so a
+    // question about games played could only ever reach the health toolset.
+    it.each([
+      'what games have I been playing lately?',
+      'how much playtime did I log on Steam this month',
+      'any new achievements this week?',
+      'what have I been listening to lately',
+      'which data sources are connected to jkai?',
+      'summarise my activity from my connected accounts',
+    ])('activates on %j', (msg) => {
+      expect(inferToolsets(msg)).toContain('activity');
+    });
+
+    it('does not fire on ordinary chat', () => {
+      expect(inferToolsets('draft a reply to the email from the council')).not.toContain('activity');
+    });
+  });
+
   describe('decks', () => {
     // Both toolsets or neither: the builders take a spec whose vocabulary only
     // presentation_describe_vocabulary can explain.

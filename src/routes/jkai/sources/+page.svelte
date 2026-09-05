@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getActivityOnboardingGuide } from '$lib/activity/onboarding';
+  import { describeStartBlocker, getActivityOnboardingGuide } from '$lib/activity/onboarding';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -45,7 +45,8 @@
   function actionLabel(provider: PageData['providers'][number]): string {
     if (provider.canStart) return 'Choose this source →';
     if (provider.startBlocker === 'not_launched') return 'Prepare this source →';
-    return 'Review this source →';
+    // A key to paste or a switch to flip — both live on the Connect step now.
+    return 'Set up and connect →';
   }
 
   function onboardingProviderName(id: string | null): string {
@@ -86,7 +87,7 @@
   {#if !data.enabled}
     <aside class="fabric-state" aria-label="Activity fabric status">
       <span class="state-mark">STAGED</span>
-      <p><strong>The fabric is off.</strong> The catalogue is visible, but no provider can connect or sync until the owner enables the fabric and that provider.</p>
+      <p><strong>The fabric is off.</strong> Nothing connects or syncs until you turn it on. The switch is on the Connect step of guided setup — pick a source and it is one click.</p>
     </aside>
   {/if}
 
@@ -165,6 +166,9 @@
                   {/each}
                 </div>
                 <p class="provider-note">{provider.availabilityNote}</p>
+                {#if !provider.canStart && provider.startBlocker !== 'not_launched'}
+                  <p class="blocker-note">{describeStartBlocker(provider.startBlocker)} · fixed in guided setup</p>
+                {/if}
                 {#if provider.policyGate}
                   <p class="policy-note">Policy gate · {provider.policyGate}</p>
                 {/if}
@@ -251,6 +255,7 @@
   .mode-row span { padding: 2px 5px; border: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .provider-note, .policy-note { margin: 12px 0 0; font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-ghost); }
   .policy-note { color: var(--accent, #c4570a); }
+  .blocker-note { margin: 10px 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--accent, #c4570a); }
   .card-action { margin-top: auto; padding-top: 18px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
   .card-action a { color: var(--accent, #c4570a); text-decoration: none; }
   .card-action a:not(.ready) { color: var(--text-muted); }

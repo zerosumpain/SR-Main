@@ -228,6 +228,11 @@ export const SECTIONS: NavSection[] = [
       { label: 'Builds', href: '/jkai/builds' },
       { label: 'Daydreams', href: '/jkai/daydreams' },
       { label: 'Notes', href: '/jkai/notes' },
+      // Personal data: the source catalogue and the evidence audit. Two cells,
+      // not one — `/jkai/activity` is a sibling of `/jkai/sources`, not a child,
+      // so the back link from the audit walks to the hub, not to the catalogue.
+      { label: 'Sources', href: '/jkai/sources' },
+      { label: 'Activity', href: '/jkai/activity' },
       { label: 'Agent team', href: '/jkai/agents' },
     ],
   },

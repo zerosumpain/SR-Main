@@ -71,8 +71,11 @@ export async function consumeActivityOauthTransaction(input: {
     const row = rows[0];
     if (!row) throw new ActivityOauthError('invalid_state', 'OAuth state is unknown or mismatched');
     if (row.consumed_at) throw new ActivityOauthError('replayed_state', 'OAuth state was already used');
-    const expiresAt = row.expires_at as Date;
-    if (expiresAt.getTime() <= now.getTime()) {
+    // Raw `execute` rows carry timestamptz as a STRING, not a Date — the same
+    // driver behaviour that broke the job queue's failure path. Coerce before
+    // comparing, or every provider callback dies on `.getTime()`.
+    const expiresAt = row.expires_at instanceof Date ? row.expires_at : new Date(String(row.expires_at));
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= now.getTime()) {
       throw new ActivityOauthError('expired_state', 'OAuth state has expired');
     }
     await tx

@@ -8,6 +8,8 @@ import { beginActivityOauthTransaction } from '$lib/activity/oauth/transactions.
 import { buildSteamOpenIdUrl } from '$lib/activity/providers/steam/openid';
 import { activityErrorResponse, activityProblem } from '$lib/activity/http.server';
 import { requireActivityOnboardingSession } from '$lib/activity/store/onboarding.server';
+import { isActivitySecretConfigured } from '$lib/activity/providers/secrets.server';
+import { STEAM_WEB_API_ENV } from '$lib/activity/providers/steam/credential';
 
 export const POST: RequestHandler = async (event) => {
   const principal = await requireOwnerActivityPrincipal(event);
@@ -21,7 +23,7 @@ export const POST: RequestHandler = async (event) => {
     if (connection.provider !== 'steam' || connection.mode !== 'openid') {
       return activityProblem(409, 'authorization_not_implemented', 'This authorization mode is not implemented yet');
     }
-    if (!process.env.STEAM_WEB_API_KEY) {
+    if (!(await isActivitySecretConfigured(STEAM_WEB_API_ENV))) {
       return activityProblem(503, 'provider_not_configured', 'Steam Web API key is not configured');
     }
 

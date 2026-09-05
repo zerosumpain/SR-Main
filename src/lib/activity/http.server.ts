@@ -5,6 +5,8 @@ import { ActivityConnectionError } from './store/connections.server';
 import { ActivityGrantError } from './store/grants.server';
 import { ActivityImportError } from './imports/store.server';
 import { ActivityOnboardingError } from './store/onboarding.server';
+import { ActivityFlagError } from './providers/flags.server';
+import { SteamCredentialError } from './providers/steam/credential';
 
 export class ActivityRequestError extends Error {
   constructor(readonly code: string, message: string, readonly status = 400) {
@@ -66,6 +68,12 @@ export function activityErrorResponse(error: unknown) {
   if (error instanceof ActivityOnboardingError) {
     const status = error.code === 'session_not_found' ? 404 : 409;
     return activityProblem(status, error.code, error.message);
+  }
+  if (error instanceof ActivityFlagError) {
+    return activityProblem(error.code === 'provider_not_found' ? 404 : 409, error.code, error.message);
+  }
+  if (error instanceof SteamCredentialError) {
+    return activityProblem(400, 'invalid_key', error.message);
   }
   console.error('[activity-api]', safeActivityErrorText(error));
   return activityProblem(500, 'internal_error', 'The activity request could not be completed');

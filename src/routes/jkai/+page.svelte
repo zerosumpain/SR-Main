@@ -566,6 +566,7 @@
             conversationId={tab.id}
             initialMessages={pane.messages}
             initialDraft={tab.id === activeId ? data.pendingQuestion : ''}
+            autoSend={tab.id === activeId && data.pendingSend}
             conversation={pane.conversation}
             modelContextLength={pane.contextLength}
             modelSupportsThinking={pane.supportsThinking}

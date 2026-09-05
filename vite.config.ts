@@ -104,7 +104,18 @@ export default defineConfig({
 	server: {
 		allowedHosts: ['homeserv.tail668b8c.ts.net', 'homeserv'],
 		watch: {
-			ignored: ['**/.claude/worktrees/**', '**/.svelte-kit/**', '**/node_modules/**'],
+			// `.worktrees/` too: thirty-odd worktrees with their own node_modules and
+			// build output live under the repo, and watching them exhausted
+			// fs.inotify.max_user_watches (ENOSPC) before the dev server served a page.
+			// The build ignore is ANCHORED: `**/build/**` also matched the real route
+			// directory src/routes/projects/policy-engine/build/ and froze its HMR.
+			ignored: [
+				'**/.claude/worktrees/**',
+				'**/.worktrees/**',
+				'**/.svelte-kit/**',
+				'**/node_modules/**',
+				`${fileURLToPath(new URL('./build', import.meta.url))}/**`,
+			],
 		},
 	},
 	test: {
