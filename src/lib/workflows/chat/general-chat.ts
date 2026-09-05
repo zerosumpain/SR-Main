@@ -1,3 +1,7 @@
+import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
+import { renderMemories } from '$lib/jkai/memory/contracts';
+import { getActivePolicy, renderGlobalGuidance } from '$lib/toolpolicy/policy';
+import { applyCapabilityPolicy } from '$lib/jkai/grounding/capabilities';
 // src/lib/workflows/chat/general-chat.ts — full replacement
 
 import { withChatContext, emptyChatUsage, type ChatUsageTotals } from '$lib/context/chat';
@@ -21,6 +25,7 @@ import { META_TOOL_DEFINITIONS, getToolsetDefinitions, getToolDefinitionsByName,
 import { executeSiteTool, isRegisteredTool } from '$lib/workflows/site-tools/executor';
 import { setJobPhase } from '$lib/workflows/chat/job-store';
 import { handleJkaiHelp, handleCreateTool, handleListCustomTools, handleDeleteTool } from '$lib/workflows/site-tools/meta-tools';
+import { BEHAVIOUR_POLICY } from '$lib/jkai/grounding/policy';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { inferToolsets } from '$lib/workflows/site-tools/keyword-classifier';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
@@ -263,37 +268,9 @@ interface ChatOptions {
 
 const MEMORY_BUDGET = 4000; // max chars for memory section
 
-async function buildMemorySection(): Promise<string> {
-  let rows;
-  try {
-    rows = await db.select()
-      .from(jkaiMemories)
-      .where(isNull(jkaiMemories.supersededBy))
-      .orderBy(desc(jkaiMemories.updatedAt));
-  } catch (err) {
-    console.warn('[general-chat] Failed to load memories:', err instanceof Error ? err.message : err);
-    return '';
-  }
-
-  if (rows.length === 0) return '';
-
-  // Group by category
-  const grouped: Record<string, string[]> = {};
-  let totalChars = 0;
-
-  for (const row of rows) {
-    if (totalChars + row.content.length > MEMORY_BUDGET) break;
-    if (!grouped[row.category]) grouped[row.category] = [];
-    grouped[row.category].push(row.content);
-    totalChars += row.content.length;
-  }
-
-  const sections = Object.entries(grouped).map(([cat, items]) => {
-    const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-    return `**${label}:**\n${items.map(i => `- ${i}`).join('\n')}`;
-  });
-
-  return `\n\n--- Memory ---\n${sections.join('\n\n')}`;
+async function buildMemorySection(query = ''): Promise<string> {
+  try { return renderMemories(await retrieveMemories(query), query, MEMORY_BUDGET); }
+  catch (err) { console.warn('[memory] retrieval failed', err instanceof Error ? err.message : err); return '\nMemory retrieval unavailable; do not treat this as no saved facts.'; }
 }
 
 function maybeIngestAsNote(userMessage: string): void {
@@ -864,7 +841,7 @@ async function runGeneralChat(
 
   const [basePrompt, memorySection, graphSection, canvasSection, pastedUrlsSection] = await Promise.all([
     getCompiledPrompt(),
-    buildMemorySection(),
+    buildMemorySection(userMessage),
     graphSectionPromise,
     buildCanvasContextSection(options.workflowId),
     buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
@@ -902,7 +879,7 @@ async function runGeneralChat(
   // The tools it names (api_search, api_call, datastore_query) are pushed into
   // the always-on set above, so they stay reachable regardless of which toolsets
   // the classifier activated — hence unconditional rather than inferred-gated.
-  const apiFirstSection = `\n\n--- API-first data answering ---\nFor questions about current, factual, numeric, or external data, prefer a live source over model memory: (1) call \`api_search\` first to find a catalogued API for the ask; (2) fetch with \`api_call\` and cite the API you used inline, where its figure lands; (3) fall back to your own knowledge only when no API fits — and say so; (4) if you hit a useful API that isn't catalogued yet, \`api_register\` it. Recurring structured data worth querying again belongs in the datastore — \`datastore_save\` to record it, \`datastore_query\` to read it back — not \`save_memory\`, which is for distilled personal facts.`;
+  const apiFirstSection = '\nUse the authoritative behaviour policy for source routing; prefer known domain tools and valid prior evidence.';
 
   // Plan/clarify gates only fire when there's a UI to render the card and
   // PATCH the ack — that's /jkai today. Canvas chat (workflowId set) does
@@ -957,7 +934,8 @@ async function runGeneralChat(
   // the model it does.
   const stablePrefix = `${personaSection}${basePrompt}${siteSection}${skillsSection}${apiFirstSection}${memorySection}${canvasSection}`;
   const perTurnSuffix = `${compressionSection}${scraperSection}${newsSection}${pastedUrlsSection}${graphSection}${clarifySection}${planSection}`;
-  const systemContent = `${stablePrefix}${perTurnSuffix}`;
+  const capabilityPolicy = await getActivePolicy();
+  const systemContent = `${stablePrefix}${perTurnSuffix}${BEHAVIOUR_POLICY}${renderGlobalGuidance(capabilityPolicy)}`;
 
   // Build messages
   const messages: Array<any> = [
@@ -1268,9 +1246,10 @@ async function runGeneralChat(
     // On the final round, drop tools to force a text response instead of
     // another tool call. Also inject a directive so the model summarises
     // using what it already gathered.
+    const policyTools = applyCapabilityPolicy(activeTools, capabilityPolicy);
     const filteredActiveTools = options.toolWhitelist
-      ? activeTools.filter((t: any) => options.toolWhitelist!.includes(t?.function?.name))
-      : activeTools;
+      ? policyTools.filter((t: any) => options.toolWhitelist!.includes(t?.function?.name))
+      : policyTools;
     const tools = isFinalRound ? undefined : (filteredActiveTools.length > 0 ? filteredActiveTools : undefined);
     if (isFinalRound) {
       messages.push({

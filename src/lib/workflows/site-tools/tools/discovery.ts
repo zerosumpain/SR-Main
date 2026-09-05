@@ -1,3 +1,5 @@
+import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
+import { getActivePolicy, describeWithPolicy } from '$lib/toolpolicy/policy';
 // `discovery` toolset — how the model finds capability it was not handed.
 //
 // The old gateway gave the chat surface four discovery verbs, and they were its second
@@ -116,23 +118,8 @@ register({
     try {
       const terms = String(args?.query ?? '').toLowerCase().split(/\s+/).filter((t) => t.length > 1);
       if (terms.length === 0) return { success: false, error: 'query is required' };
-      const scored = allTools.map((t) => {
-        const name = t.name.toLowerCase();
-        const desc = (t.description ?? '').toLowerCase();
-        const set = (t.toolset ?? '').toLowerCase();
-        let score = 0;
-        for (const term of terms) {
-          if (name === term) score += 10;
-          if (name.includes(term)) score += 4;
-          if (set.includes(term)) score += 2;
-          if (desc.includes(term)) score += 2;
-        }
-        return { t, score };
-      });
-      const hits = scored
-        .filter((r) => r.score > 0)
-        .sort((a, b) => b.score - a.score || a.t.name.localeCompare(b.t.name))
-        .slice(0, args?.limit ?? 12);
+      const policy = await getActivePolicy();
+      const hits = resolveCapabilities(allTools, String(args.query), args.limit ?? 12).map(t => ({ t }));
       return {
         success: true,
         data: {
@@ -141,7 +128,9 @@ register({
           tools: hits.map((r) => ({
             name: r.t.name,
             toolset: r.t.toolset,
-            description: (r.t.description ?? '').slice(0, 200),
+            description: describeWithPolicy(policy, r.t.name, r.t.description),
+            inputSchema: r.t.parameters,
+            destructive: r.t.destructive ?? false,
           })),
         },
       };

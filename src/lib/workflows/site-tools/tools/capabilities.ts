@@ -2,7 +2,7 @@
 // future capability discovery can extend the empty tools array without
 // exposing runtime configuration or credentials.
 
-import { register } from '../registry-internal';
+import { register, tools } from '../registry-internal';
 
 export const CAPABILITIES_SNAPSHOT = {
   version: '1.0.0',
@@ -15,5 +15,5 @@ register({
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Capabilities',
   toolset: 'capabilities',
-  handler: async () => ({ success: true, data: CAPABILITIES_SNAPSHOT }),
+  handler: async () => ({ success: true, data: { version: '2.0.0', tools: tools.map(t => ({ name: t.name, toolset: t.toolset, destructive: !!t.destructive })), note: 'Registered capabilities; provider availability is checked on invocation.' } }),
 });
