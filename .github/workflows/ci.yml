@@ -334,7 +334,7 @@ jobs:
           cache: npm
 
       - name: Install isolated handler runner
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends bubblewrap
+        run: ./scripts/check-authored-runner.sh
 
       - run: npm ci
 

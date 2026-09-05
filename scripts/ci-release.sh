@@ -29,12 +29,8 @@ PUBLIC_URL="${PUBLIC_URL:-https://strangeramblings.com}"
 KEEP_RELEASES="${KEEP_RELEASES:-3}"
 PUBLIC_BASE="${PUBLIC_URL%/}"
 
-# Authored handlers require OS namespaces; never fall back to in-process code.
-if ! command -v bwrap >/dev/null 2>&1; then
-  sudo apt-get update -qq
-  sudo apt-get install -y --no-install-recommends bubblewrap
-fi
-bwrap --unshare-all --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --proc /proc --dev /dev --tmpfs /tmp -- /usr/bin/node -e 'process.exit(0)'
+# Authored handlers require OS namespaces; fail before switching production.
+./scripts/check-authored-runner.sh
 
 SHA="$(git rev-parse HEAD)"
 RELEASE_DIR="$VPS_DIR/releases/$SHA"
