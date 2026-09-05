@@ -1,7 +1,7 @@
 // Internal registry state — separated to avoid circular initialization with domain modules.
 // Domain modules import `register` from here. The public API in registry.ts re-exports everything.
 
-export type ToolResult = { success: boolean; data?: unknown; error?: string };
+export type ToolResult = { success: boolean; data?: unknown; error?: string; evidence?: import('$lib/jkai/grounding/evidence').EvidenceEnvelope };
 
 /**
  * Context passed to long-running tool handlers so they can emit user-visible

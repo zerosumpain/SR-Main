@@ -13,8 +13,8 @@ import { searchResearch } from '$lib/deepdive/research-search';
 import { searchIntel, type IntelItem } from '$lib/jkai/intel/search';
 import { listCollections, queryRecords } from '$lib/datastore';
 
-export type KnowledgeSource = 'notes' | 'entities' | 'files' | 'research' | 'memory' | 'datastore';
-export const ALL_SOURCES: KnowledgeSource[] = ['notes', 'entities', 'files', 'research', 'memory', 'datastore'];
+export type KnowledgeSource = 'notes' | 'entities' | 'files' | 'research' | 'memory' | 'datastore' | 'activity';
+export const ALL_SOURCES: KnowledgeSource[] = ['notes', 'entities', 'files', 'research', 'memory', 'datastore', 'activity'];
 
 export interface KnowledgeHit {
   source: KnowledgeSource;
@@ -195,6 +195,17 @@ async function branchDatastore(
   return hits;
 }
 
+async function branchActivity(query: string, limit: number): Promise<KnowledgeHit[]> {
+  const { executeTool } = await import('$lib/workflows/site-tools/registry');
+  const result = await executeTool('activity_search', { query, limit });
+  if (!result.success) throw new Error(result.error ?? 'Activity search unavailable');
+  const data = result.data as { coverage: string; results: Array<Record<string, any>> };
+  if (data.coverage === 'unavailable') throw new Error('Activity sources are unavailable or not granted');
+  return data.results.map(r => ({ source: 'activity', title: String(r.object?.label ?? r.type),
+    passage: clip(JSON.stringify({ type: r.type, measures: r.measures, occurredAt: r.occurredAt, observedAt: r.observedAt })),
+    score: KEYWORD_SCORE, matchKind: 'keyword', ref: { eventId: r.id, url: `/jkai/activity/${r.id}`, evidenceMode: r.evidenceMode, occurredAt: r.occurredAt, observedAt: r.observedAt, coverage: data.coverage } }));
+}
+
 /**
  * Fan out `query` across every knowledge store in parallel, merge, and rank by
  * score (semantic similarity for files/research, a keyword prior for
@@ -227,6 +238,7 @@ export async function searchKnowledge(
   if (sources.includes('entities')) branches.push(['entities', withTimeout(intel.entities(), 'entities')]);
   if (sources.includes('files')) branches.push(['files', withTimeout(branchFiles(query, perSource), 'files')]);
   if (sources.includes('research')) branches.push(['research', withTimeout(branchResearch(query, perSource), 'research')]);
+  if (sources.includes('activity')) branches.push(['activity', withTimeout(branchActivity(query, perSource), 'activity')]);
   if (sources.includes('memory')) branches.push(['memory', withTimeout(branchMemory(query, perSource), 'memory')]);
   if (sources.includes('datastore'))
     branches.push(['datastore', withTimeout(branchDatastore(query, perSource, options.datastoreCollections), 'datastore')]);
@@ -234,7 +246,7 @@ export async function searchKnowledge(
   const settled = await Promise.allSettled(branches.map(([, p]) => p));
 
   const hits: KnowledgeHit[] = [];
-  const counts = { notes: 0, entities: 0, files: 0, research: 0, memory: 0, datastore: 0 } as Record<KnowledgeSource, number>;
+  const counts = { notes: 0, entities: 0, files: 0, research: 0, memory: 0, datastore: 0, activity: 0 } as Record<KnowledgeSource, number>;
   const errors: Partial<Record<KnowledgeSource, string>> = {};
 
   settled.forEach((res, i) => {

@@ -1,3 +1,4 @@
+import { retainEvidence } from '$lib/jkai/grounding/evidence.server';
 import { validateArguments } from '$lib/jkai/grounding/schema';
 // Tool Registry — Slim Coordinator
 // Types and register() live in registry-internal.ts to avoid circular init with domain modules.
@@ -9,6 +10,7 @@ import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from
 import type { ToolResult } from './registry-internal';
 
 // --- Load all domain modules (each calls register() on import) ---
+import './tools/evidence';
 import './tools/health';
 import './tools/activity';
 import './tools/blog';
@@ -214,7 +216,7 @@ export async function executeTool(
     }
   }
 
-  return result;
+  return retainEvidence(name, result, ctx);
 }
 
 /** Compact system prompt section — lists toolsets, not individual tools */

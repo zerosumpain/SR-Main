@@ -6782,3 +6782,12 @@ export const geoDailySnapshot = pgTable(
 
 export type GeoDailySnapshot = typeof geoDailySnapshot.$inferSelect;
 export type NewGeoDailySnapshot = typeof geoDailySnapshot.$inferInsert;
+
+/** Durable evidence independent of preview clipping; scoped to its conversation. */
+export const jkaiEvidenceResults = pgTable('jkai_evidence_results', {
+  id: text('id').primaryKey(),
+  conversationId: text('conversation_id').notNull(),
+  tool: text('tool').notNull(),
+  result: jsonb('result').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('jkai_evidence_conversation_idx').on(t.conversationId)]);
