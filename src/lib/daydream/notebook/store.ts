@@ -11,7 +11,7 @@
 import { and, asc, desc, eq, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
-import { daydreamNotebook, daydreamNotebookActions } from '$lib/db/schema';
+import { daydreamNotebook, daydreamNotebookActions, daydreamNotebookAudio } from '$lib/db/schema';
 
 /** Long enough for a blog draft, short enough that one note is one idea. */
 export const MAX_BODY = 40_000;
@@ -148,10 +148,135 @@ export async function saveNote(input: SaveInput): Promise<NoteRow> {
   return toRow(r);
 }
 
-export async function deleteNote(id: string): Promise<void> {
+/**
+ * Delete a note, and report the audio files it orphaned.
+ *
+ * The FK cascade removes the recording ROWS; the bytes behind them live in the
+ * media store and have to be unlinked by the caller. They are returned rather
+ * than deleted here so this module keeps its `$lib/db`-only dependency —
+ * `$lib/jkai/media/storage` is the route's business, not the store's.
+ */
+export async function deleteNote(id: string): Promise<{ orphanedDiskPaths: string[] }> {
+  const rows = await db
+    .select({ diskPath: daydreamNotebookAudio.diskPath })
+    .from(daydreamNotebookAudio)
+    .where(eq(daydreamNotebookAudio.noteId, id));
   // Actions cascade — the FK says so, and a note's action list has no meaning
-  // without the note.
+  // without the note. So do recordings.
   await db.delete(daydreamNotebook).where(eq(daydreamNotebook.id, id));
+  return { orphanedDiskPaths: rows.map((r) => r.diskPath) };
+}
+
+export interface RecordingRow {
+  id: string;
+  noteId: string;
+  mimeType: string;
+  sizeBytes: number;
+  durationSec: number | null;
+  transcript: string | null;
+  language: string | null;
+  engine: string | null;
+  createdAt: string;
+}
+
+/** Never includes `diskPath` — the browser addresses a recording by id, and the
+ *  storage key is not something a page has any use for. */
+function toRecording(r: typeof daydreamNotebookAudio.$inferSelect): RecordingRow {
+  return {
+    id: r.id,
+    noteId: r.noteId,
+    mimeType: r.mimeType,
+    sizeBytes: r.sizeBytes,
+    durationSec: r.durationSec ?? null,
+    transcript: r.transcript ?? null,
+    language: r.language ?? null,
+    engine: r.engine ?? null,
+    createdAt: (r.createdAt as Date).toISOString(),
+  };
+}
+
+export async function listRecordings(noteId: string): Promise<RecordingRow[]> {
+  const rows = await db
+    .select()
+    .from(daydreamNotebookAudio)
+    .where(eq(daydreamNotebookAudio.noteId, noteId))
+    .orderBy(asc(daydreamNotebookAudio.createdAt));
+  return rows.map(toRecording);
+}
+
+export async function addRecording(input: {
+  noteId: string;
+  mimeType: string;
+  sizeBytes: number;
+  diskPath: string;
+  durationSec?: number | null;
+  transcript?: string | null;
+  language?: string | null;
+  engine?: string | null;
+}): Promise<RecordingRow> {
+  const [row] = await db
+    .insert(daydreamNotebookAudio)
+    .values({
+      noteId: input.noteId,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      diskPath: input.diskPath,
+      durationSec: input.durationSec ?? null,
+      transcript: input.transcript ?? null,
+      language: input.language ?? null,
+      engine: input.engine ?? null,
+    })
+    .returning();
+  return toRecording(row);
+}
+
+/** The row plus its storage key — for the two callers that must reach the
+ *  bytes: serving playback, and deleting one. */
+export async function getRecordingWithPath(
+  id: string,
+): Promise<{ recording: RecordingRow; diskPath: string } | null> {
+  const [row] = await db
+    .select()
+    .from(daydreamNotebookAudio)
+    .where(eq(daydreamNotebookAudio.id, id))
+    .limit(1);
+  return row ? { recording: toRecording(row), diskPath: row.diskPath } : null;
+}
+
+export async function deleteRecording(id: string): Promise<void> {
+  await db.delete(daydreamNotebookAudio).where(eq(daydreamNotebookAudio.id, id));
+}
+
+/**
+ * Append a transcript to the note's BODY.
+ *
+ * This is the one write outside `saveNote` that touches `body`, and it does not
+ * break the module's rule: a transcript is the owner's own words, arriving
+ * through a microphone instead of a keyboard. That is why it bumps `updatedAt`
+ * — unlike `appendSupporting`, this IS an owner edit, and the review should see
+ * a changed note afterwards.
+ *
+ * Nothing the model produced ever reaches here; `supporting` is still the only
+ * door the review path has.
+ */
+export async function appendTranscriptToBody(id: string, text: string): Promise<NoteRow | null> {
+  const clean = text.trim();
+  if (!clean) return getNote(id);
+  const [row] = await db
+    .update(daydreamNotebook)
+    .set({
+      // Clamped to the same ceiling `saveNote` applies, so a long dictation
+      // cannot walk the body past a limit every other write respects.
+      body: sql`left(case
+        when ${daydreamNotebook.body} is null or ${daydreamNotebook.body} = ''
+        then ${clean}
+        else ${daydreamNotebook.body} || E'\n\n' || ${clean}
+      end, ${MAX_BODY})`,
+      updatedAt: new Date(),
+    })
+    .where(eq(daydreamNotebook.id, id))
+    .returning();
+  return row ? toRow(row) : null;
 }
 
 /**

@@ -25,6 +25,8 @@ export async function extractAudio(
           meta: {
             kind: 'audio',
             language: local.language ?? options?.language,
+            durationSec: local.duration,
+            engine: 'local',
           },
         };
       }
@@ -59,6 +61,7 @@ export async function extractAudio(
       meta: {
         kind: 'audio',
         language: options?.language,
+        engine: 'remote',
       },
     };
   } catch (err) {

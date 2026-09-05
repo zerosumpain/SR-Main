@@ -17,7 +17,11 @@ export type ExtractMeta =
   | { kind: 'pptx'; slideCount: number; slides: Array<{ index: number; text: string }> }
   | { kind: 'markdown'; headings: Array<{ level: number; text: string }> }
   | { kind: 'text'; encoding: 'utf-8' | 'latin-1' }
-  | { kind: 'audio'; durationSec?: number; segments?: Array<{ start: number; end: number; text: string }>; language?: string }
+  /** `engine` names the path that actually produced the text — 'local' is
+   *  faster-whisper on the box (free), 'remote' is whisper-1 (metered). It is
+   *  set where the transcript is RETURNED, not where the path is chosen, so a
+   *  local attempt that failed and fell back reports 'remote'. */
+  | { kind: 'audio'; durationSec?: number; segments?: Array<{ start: number; end: number; text: string }>; language?: string; engine?: 'local' | 'remote' }
   | { kind: 'video'; durationSec?: number; segments?: Array<{ start: number; end: number; text: string }>; language?: string }
   | { kind: 'spreadsheet'; sheets: Array<{ name: string; rowCount: number; columns: string[] }> };
 

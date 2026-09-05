@@ -6329,6 +6329,50 @@ export const daydreamNotebookActions = pgTable(
 
 export type DaydreamNoteAction = typeof daydreamNotebookActions.$inferSelect;
 
+/**
+ * A voice note's recording — the audio as captured, kept beside the note.
+ *
+ * The transcript is stored HERE as well as being written into the note's body,
+ * and the duplication is the point: `body` is the owner's to edit, tidy and
+ * rewrite, while this column keeps what was actually said. It is the same
+ * separation `supporting` draws between the owner's words and the model's,
+ * one step further back — provenance for a paragraph that arrived by voice.
+ *
+ * Bytes live in the jkai media store (`$lib/jkai/media/storage`), which is the
+ * filesystem on homeserv and Azure Blob in production, so `diskPath` is a
+ * relative key in both. Deleting a note cascades these ROWS; the files behind
+ * them have to be unlinked explicitly — see `deleteNote` in notebook/store.
+ */
+export const daydreamNotebookAudio = pgTable(
+  'daydream_notebook_audio',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    noteId: text('note_id')
+      .notNull()
+      .references(() => daydreamNotebook.id, { onDelete: 'cascade' }),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Relative key in the media store — never an absolute path. */
+    diskPath: text('disk_path').notNull(),
+    /** Seconds, as reported by the recorder or the transcriber. Null when
+     *  neither could say — a duration is a nicety, not a reason to fail. */
+    durationSec: doublePrecision('duration_sec'),
+    /** Verbatim, as transcribed. Empty string means "transcribed to nothing",
+     *  which is a real outcome for a silent recording and must not read as
+     *  "not transcribed yet" — that is null. */
+    transcript: text('transcript'),
+    /** BCP-47-ish, as whisper reports it. */
+    language: text('language'),
+    /** Which path produced the transcript: 'local' (faster-whisper, free) or
+     *  'remote' (whisper-1, metered). Worth knowing when a bill looks odd. */
+    engine: text('engine'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('daydream_notebook_audio_note_idx').on(t.noteId)],
+);
+
+export type DaydreamNoteAudio = typeof daydreamNotebookAudio.$inferSelect;
+
 
 export const daydreamOffers = pgTable(
   'daydream_offers',

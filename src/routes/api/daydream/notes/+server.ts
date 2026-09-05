@@ -20,6 +20,7 @@ import {
   listNotes,
   saveNote,
   clearSupporting,
+  listRecordings,
 } from '$lib/daydream/notebook/store';
 
 export const GET: RequestHandler = async () => {
@@ -67,12 +68,29 @@ export const POST: RequestHandler = async ({ request }) => {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
         const note = await getNote(id);
         if (!note) return json({ error: 'no such note' }, { status: 404 });
-        return json({ note, actions: await listActions(id) });
+        // Recordings ride along with the note rather than costing a second
+        // round trip — the same reasoning that ships full bodies in the list.
+        const [actions, recordings] = await Promise.all([listActions(id), listRecordings(id)]);
+        return json({ note, actions, recordings });
       }
 
       case 'delete': {
         if (!id) return json({ error: 'id is required' }, { status: 400 });
-        await deleteNote(id);
+        // The FK cascades the recording rows; their bytes live in the media
+        // store and would otherwise be orphaned there for ever.
+        const { orphanedDiskPaths } = await deleteNote(id);
+        if (orphanedDiskPaths.length > 0) {
+          const { deleteByDiskPath } = await import('$lib/jkai/media/storage');
+          await Promise.all(
+            orphanedDiskPaths.map((p) =>
+              deleteByDiskPath(p).catch((err) =>
+                // The note is already gone; a stranded file is not worth
+                // failing the request over, but it IS worth saying so.
+                console.error('[notebook] could not remove recording file:', p, errMsg(err)),
+              ),
+            ),
+          );
+        }
         return json({ ok: true });
       }
 
