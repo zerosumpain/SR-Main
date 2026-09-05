@@ -211,3 +211,11 @@ describe('renderCompressionSection', () => {
     expect(renderCompressionSection({ messages: [], summary: null, compressedCount: 0, degraded: false, needsRefresh: false })).toBe('');
   });
 });
+
+it.each([1, 2, 3, 4, 5, 6, 7, 8])('retains all %i messages not yet covered by the summary', async gap => {
+  getRecordByKey.mockResolvedValue({ data: { conversationId: 'gap', summary: 'earlier decisions', coversUpTo: new Date(1_000_000 + 19 * 1000).toISOString(), messageCount: 20 } });
+  const result = await compressHistory(hist(50 + gap), 'gap', 30);
+  expect(result.messages).toHaveLength(30 + gap);
+  expect(result.messages[0].content).toBe('message 20');
+  expect(result.degraded).toBe(false);
+});

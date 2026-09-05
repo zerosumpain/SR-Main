@@ -117,6 +117,8 @@ const PROMPT = `You are compressing the earlier part of a conversation so it can
 
 Write a factual digest of what follows. It replaces the raw messages entirely, so anything omitted is lost.
 
+Keep a structured digest with these labelled sections: Objective; Constraints; Decisions; Authorization (quote user source, never infer approval); Resource IDs; Evidence (source IDs, times, scope); Pending work.
+
 Keep:
 - decisions made and the reasoning behind them
 - facts established, names, numbers, file paths, identifiers
@@ -218,13 +220,13 @@ export async function compressHistory(
 
   if (cached) {
     return {
-      messages: recent,
+      messages: [...fresh, ...recent],
       summary: cached.summary,
       // Count what the summary actually covers, plus anything it does not yet.
-      compressedCount: cached.messageCount + (stale ? fresh.length : 0),
+      compressedCount: cached.messageCount,
       // A summary that is behind is still better than none, but the turn should
       // not imply it covers messages it has never seen.
-      degraded: stale,
+      degraded: false,
       needsRefresh: stale,
     };
   }
@@ -232,10 +234,10 @@ export async function compressHistory(
   // Nothing cached yet. Keep MORE than we otherwise would and be explicit that
   // the earlier part is missing — the summary will exist for the next turn.
   return {
-    messages: history.slice(-(keepRecent * 2)),
+    messages: history,
     summary: null,
-    compressedCount: older.length,
-    degraded: true,
+    compressedCount: 0,
+    degraded: false,
     needsRefresh: true,
   };
 }
@@ -249,7 +251,7 @@ export async function compressHistory(
  * a summary that fails to refresh degrades the next turn's context, which the
  * prompt says out loud, and that is not worth failing a turn over.
  */
-export async function refreshCompression(
+async function refreshCompressionUnlocked(
   history: HistoryMessage[],
   conversationId: string,
   keepRecent = KEEP_RECENT,
@@ -298,4 +300,14 @@ export function renderCompressionSection(c: CompressedHistory): string {
     return `\n\n--- Earlier in this conversation ---\n${c.compressedCount} earlier messages are not available in this turn and could not be summarised. If the user refers to something you cannot see, say so rather than guessing at it.\n--- end ---\n`;
   }
   return '';
+}
+
+const refreshes = new Map<string, Promise<unknown>>();
+/** Serialize refreshes per thread; newer snapshots always follow earlier writes. */
+export async function refreshCompression(history: HistoryMessage[], conversationId: string, keepRecent = KEEP_RECENT) {
+  const previous = refreshes.get(conversationId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(() => refreshCompressionUnlocked(history, conversationId, keepRecent));
+  refreshes.set(conversationId, next);
+  try { return await next; }
+  finally { if (refreshes.get(conversationId) === next) refreshes.delete(conversationId); }
 }

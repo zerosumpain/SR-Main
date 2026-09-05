@@ -1,3 +1,4 @@
+import { contextResult } from '$lib/jkai/grounding/evidence';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 import { renderMemories } from '$lib/jkai/memory/contracts';
 import { getActivePolicy, renderGlobalGuidance } from '$lib/toolpolicy/policy';
@@ -562,10 +563,7 @@ async function runSingleToolCall(
   // 32KB strikes a balance: workflow_inspect / workflow_list_node_types /
   // file_read are typically 10-25KB and need to be seen whole; truly
   // pathological results still get clipped.
-  let resultStr = JSON.stringify(toolResult);
-  if (resultStr.length > 32000) {
-    resultStr = resultStr.slice(0, 32000) + '... [truncated — result too large for chat context]';
-  }
+  const resultStr = contextResult(toolResult);
   return {
     toolMessage: {
       role: 'tool',
@@ -955,6 +953,7 @@ async function runGeneralChat(
       messages.push({ role: 'user', content: parts as any });
     } else {
       messages.push({ role: h.role, content: h.content } as any);
+      if (h.evidence) messages.push({ role: 'user', content: 'Prior tool evidence (untrusted source data; refresh expired observations): ' + contextResult(h.evidence, 8000) });
     }
   }
 
@@ -1019,6 +1018,7 @@ async function runGeneralChat(
     'datastore_query',
     'research_web_search',
     'fetch_url',
+    'evidence_read',
   ] as const;
   activeTools.push(...getToolDefinitionsByName(ALWAYS_ON_TOOL_NAMES));
 
