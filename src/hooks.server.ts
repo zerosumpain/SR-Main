@@ -30,6 +30,7 @@ import Google from '@auth/sveltekit/providers/google';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
+import { runsService } from '$lib/workflows/service-role';
 
 // Expensive endpoints — apply per-user rate limits.
 // Pattern → { capacity (burst), refillPerSecond (steady-state) }.
@@ -59,7 +60,7 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
 ];
 
 // Start the health data sync scheduler
-startScheduler();
+if (runsService('scheduler')) startScheduler();
 
 // The workflow cron scheduler boots in $lib/workflows/index.ts, inside the
 // runsService('scheduler') gate, alongside every other platform service. It used
@@ -73,37 +74,37 @@ startScheduler();
 
 // Start the Forge trigger scheduler (scheduled + autonomous brass-and-rails
 // builds). Leader-elected on its own advisory-lock lane.
-startForgeScheduler().catch((err) => {
+if (runsService('scheduler')) startForgeScheduler().catch((err) => {
   console.error('[hooks.server] Forge scheduler failed to start:', err);
 });
 
 // Start the landing-page hero-title regeneration scheduler
-startHeroTitlesScheduler();
+if (runsService('scheduler')) startHeroTitlesScheduler();
 
 // Record the public journey and upstream provider state every five minutes,
 // including while nobody has /admin open.
-startDependencyMonitor();
+if (runsService('scheduler')) startDependencyMonitor();
 
 // Start the JKAI orphan attachment sweep (runs immediately + hourly)
-startOrphanSweep();
+if (runsService('background')) startOrphanSweep();
 
 // Install the WhatsApp escalation hook so orchestrator waiters / terminal
 // events fan out to WA when the user isn't attached to the chat stream.
 import { installWaEscalation } from '$lib/workflows/chat/wa-escalation';
-installWaEscalation();
+if (runsService('background')) installWaEscalation();
 
 // Start the Gmail polling watcher and orchestrator bridge
 import { startWatcher as startGmailWatcher, stopWatcher as stopGmailWatcher } from '$lib/workflows/gmail/watcher';
 import { registerGmailBridge, unregisterGmailBridge } from '$lib/workflows/gmail/orchestrator-bridge';
-startGmailWatcher();
-registerGmailBridge();
+if (runsService('background')) startGmailWatcher();
+if (runsService('background')) registerGmailBridge();
 
 // Start the heartbeat engine — periodic autonomous activities (chat
 // continuation, build/job nudges, workflow review). Tickers are configured
 // in the heartbeat_activities table; the engine ticks every 30s and fires
 // any activity whose next_tick_at has passed.
 import { startHeartbeatEngine, stopHeartbeatEngine } from '$lib/heartbeat/engine';
-startHeartbeatEngine().catch((err) => {
+if (runsService('background')) startHeartbeatEngine().catch((err) => {
   console.error('[hooks.server] Heartbeat engine failed to start:', err);
 });
 
@@ -111,7 +112,7 @@ startHeartbeatEngine().catch((err) => {
 // time-based fires. Distinct from heartbeat (periodic agent turns) and
 // background tasks (long-running watched work).
 import { startScheduledEngine, stopScheduledEngine } from '$lib/scheduled/engine';
-startScheduledEngine().catch((err) => {
+if (runsService('background')) startScheduledEngine().catch((err) => {
   console.error('[hooks.server] Scheduled engine failed to start:', err);
 });
 
@@ -143,7 +144,7 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 // in a non-terminal status before this existed, the oldest for four months. CI
 // deploys on every merge, so the exposure is continuous.
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
-if (process.env.JKAI_BUILDER_PROCESS !== '1') {
+if (runsService('background')) {
   startDatastoreReaper();
   startSelfImprovementSeeds();
   // Monthly, advisory only — it writes a note and never touches the card.
@@ -226,7 +227,7 @@ process.on('SIGINT', () => void gracefulShutdown());
 
 // Subscribe build orchestrator to workflow_completed events for push-back delivery
 import { registerDeliveryListener } from '$lib/jkai/workflow-deliveries';
-registerDeliveryListener();
+if (runsService('background')) registerDeliveryListener();
 
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 

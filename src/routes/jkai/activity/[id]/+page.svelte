@@ -1,4 +1,5 @@
 <script lang="ts">
+  import '$lib/styles/sources.css';
   import type { PageData } from './$types';
   let { data }: { data: PageData } = $props();
 
@@ -23,7 +24,7 @@
 
 <svelte:head><title>Activity evidence — JKAI</title></svelte:head>
 
-<main class="event-shell">
+<main class="event-shell source-surface">
   <a class="back" href="/jkai/activity">← Activity</a>
   <header>
     <p class="eyebrow">{data.event.type.replaceAll('.', ' · ')}</p>
@@ -53,11 +54,9 @@
 </main>
 
 <style>
-  .event-shell { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 80px; color: var(--text-primary); }
   .back { display: inline-block; margin-bottom: 34px; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label); text-decoration: none; }
-  header { padding-bottom: 26px; border-bottom: 2px solid var(--line-strong); }
+  header { padding-bottom: 26px; border-bottom: 2px solid var(--line-title); }
   .eyebrow, .section-code { margin: 0 0 8px; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .12em; text-transform: uppercase; }
-  h1 { margin: 0; font-family: var(--font-display); font-size: clamp(34px, 7vw, 60px); font-weight: 500; line-height: 1; overflow-wrap: anywhere; }
   header p:last-child { margin: 10px 0 0; color: var(--text-muted); }
   .time-grid { display: grid; grid-template-columns: repeat(3, 1fr); padding: 0; border-left: 1px solid var(--line-strong); }
   .time-grid div { display: grid; align-content: start; gap: 6px; padding: 14px; border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
@@ -67,12 +66,11 @@
   section:not(.time-grid) { padding: 28px 0; border-bottom: 1px solid var(--line-strong); }
   dl { margin: 0; border-top: 1px solid var(--line-strong); }
   dl div { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; padding: 10px 0; border-bottom: 1px solid var(--line-strong); }
-  dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); overflow-wrap: anywhere; }
+  dd { margin: 0; font-family: var(--font-code); font-size: var(--fs-label); overflow-wrap: anywhere; }
   .empty, .fine { margin: 0; color: var(--text-muted); font-size: var(--fs-label); }
   .fine { margin-top: 13px; line-height: 1.5; }
   @media (max-width: 650px) {
-    .event-shell { width: min(100% - 20px, 820px); }
-    .time-grid { grid-template-columns: 1fr; }
+      .time-grid { grid-template-columns: 1fr; }
     dl div { grid-template-columns: 1fr; gap: 4px; }
   }
 </style>

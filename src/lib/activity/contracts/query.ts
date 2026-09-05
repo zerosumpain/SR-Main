@@ -16,6 +16,9 @@ export interface ActivityEventQuery {
   to?: string;
   cursor?: string;
   limit?: number;
+  sort?: ActivityDateSort;
+  then?: ActivityDateSort | null;
+  direction?: 'asc' | 'desc';
 }
 
 export interface BoundedActivityEventQuery extends ActivityEventQuery {
@@ -50,4 +53,17 @@ export function boundActivityEventQuery(query: ActivityEventQuery): BoundedActiv
   }
 
   return { ...query, limit };
+}
+
+/** Both clocks remain distinct: missing occurrence dates are never inferred. */
+export type ActivityDateSort = 'occurred' | 'observed';
+
+export function activityEventSort(params: URLSearchParams) {
+  const sort: ActivityDateSort = params.get('sort') === 'occurred' ? 'occurred' : 'observed';
+  const requestedThen = params.get('then');
+  const then: ActivityDateSort | null =
+    (requestedThen === 'occurred' || requestedThen === 'observed') && requestedThen !== sort
+      ? requestedThen : null;
+  const direction: 'asc' | 'desc' = params.get('direction') === 'asc' ? 'asc' : 'desc';
+  return { sort, then, direction };
 }

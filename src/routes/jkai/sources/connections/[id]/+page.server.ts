@@ -1,3 +1,4 @@
+import { activityEventSort } from '$lib/activity/contracts/query';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { requireOwnerActivityPrincipal } from '$lib/activity/principal.server';
@@ -20,6 +21,7 @@ import {
 } from '$lib/activity/store/onboarding.server';
 
 export const load: PageServerLoad = async (event) => {
+  const ordering = activityEventSort(event.url.searchParams);
   const principal = await requireOwnerActivityPrincipal(event);
   const connection = await requireActivityConnection(principal.id, event.params.id);
   const journeyId = event.url.searchParams.get('journey');
@@ -28,7 +30,7 @@ export const load: PageServerLoad = async (event) => {
     listActivityJobs(principal.id, connection.id),
     listActivityImports(principal.id, connection.id),
     getActivityFeatureState(),
-    listActivityEvents(principal.id, { connectionIds: [connection.id], limit: 5 }),
+    listActivityEvents(principal.id, { connectionIds: [connection.id], limit: 5, ...ordering }),
     journeyId ? getActivityOnboardingSession(principal.id, journeyId) : Promise.resolve(null),
   ]);
   // A connection outlives its catalogue entry: the local fixture is hidden
@@ -39,6 +41,7 @@ export const load: PageServerLoad = async (event) => {
     withdrawnProvider(connection.provider);
   if (!provider) throw error(500, 'Provider manifest is missing');
   return {
+    ordering,
     connection: publicActivityConnection(connection),
     provider,
     grants: grants.map(publicActivityGrant),

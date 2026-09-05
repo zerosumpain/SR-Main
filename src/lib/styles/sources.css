@@ -1,0 +1,49 @@
+/* Sources and evidence share the JKAI frame, with paper content and ruled controls. */
+.source-surface {
+  box-sizing: border-box;
+  width: min(1280px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+  padding: clamp(24px, 3vw, 40px) clamp(16px, 3vw, 40px) 72px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+.source-surface h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 4vw, 3.375rem);
+  line-height: 1;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+}
+.source-surface :is(a, button, input, select, summary):focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+.source-surface :is(input, select, textarea) { font-size: var(--fs-body); }
+.source-surface :is(button, a) { touch-action: manipulation; }
+.source-surface :is(p, dd, strong, small) { overflow-wrap: anywhere; }
+.source-surface :is(.title-row, .section-head, .actions, .upload-row) { min-width: 0; }
+.source-surface .event-time strong { font-family: var(--font-code); }
+.source-surface .event-list a:hover,
+.source-surface .connections a:hover { background: var(--accent-tint-04); }
+.source-surface .head-actions .primary-action,
+.source-surface .actions button:not(.secondary) { background: var(--accent); color: var(--bg); }
+.source-surface .head-actions .primary-action:hover,
+.source-surface .actions button:not(.secondary):hover { background: var(--accent-hover); }
+.source-surface :is(.choice-grid, .data-choices) button.selected {
+  box-shadow: none;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.source-surface :is(.choice-grid, .data-choices) button.selected:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+.source-surface :is(.boundary, .facts, .export-help) { background: var(--surface-sunken); }
+@media (max-width: 620px) {
+  .source-surface :is(.actions, .upload-row) { display: flex; flex-wrap: wrap; }
+  .source-surface :is(.actions, .upload-row) > * { max-width: 100%; }
+  .source-surface .title-row { align-items: flex-start; }
+}

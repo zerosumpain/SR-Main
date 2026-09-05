@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import {
   activityEvents,
@@ -158,13 +158,22 @@ export async function listActivityEvents(
     );
   }
 
+  const direction = query.direction === 'asc' ? asc : desc;
+  const column = (key: string | undefined) => key === 'occurred'
+    ? activityEvents.occurredAt : activityEvents.observedAt;
+  const ordering = [sql`${direction(column(query.sort))} nulls last`];
+  if (query.then && query.then !== query.sort) {
+    ordering.push(sql`${direction(column(query.then))} nulls last`);
+  }
+  ordering.push(direction(activityEvents.id));
+
   // Cursor decoding is added with the API contract in M2. Store callers still
   // get a hard page cap now, so a missing cursor cannot become an unbounded read.
   return db
     .select()
     .from(activityEvents)
     .where(and(...conditions))
-    .orderBy(desc(activityEvents.observedAt), desc(activityEvents.id))
+    .orderBy(...ordering)
     .limit(query.limit);
 }
 

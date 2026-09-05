@@ -1,4 +1,5 @@
 <script lang="ts">
+  import '$lib/styles/sources.css';
   /**
    * The sources family publishes its own menu into the hub header, the way
    * Intel and Codegraph do: the chip reads `sources`, and the dropdown holds

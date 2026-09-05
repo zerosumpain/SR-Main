@@ -296,7 +296,7 @@
 
 <svelte:head><title>Add a source — JKAI</title></svelte:head>
 
-<main class="onboard-shell">
+<main class="onboard-shell source-surface">
   <div class="topline">
     <a href="/jkai/sources">← Sources</a>
     {#if sessionId}<span>Progress saved automatically</span>{/if}
@@ -468,30 +468,29 @@
 </main>
 
 <style>
-  .onboard-shell { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 80px; color: var(--text-primary); }
   .topline { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 34px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
   .topline a, .actions a { color: var(--text-muted); text-decoration: none; }
   .topline span { color: var(--success, #2d7a3a); }
-  header { padding-bottom: 28px; border-bottom: 2px solid var(--line-strong); }
+  header { padding-bottom: 28px; border-bottom: 2px solid var(--line-title); }
   .eyebrow, .section-code { margin: 0 0 8px; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .12em; text-transform: uppercase; }
-  h1 { max-width: 760px; margin: 0; font-family: var(--font-display); font-size: clamp(42px, 7vw, 72px); font-weight: 500; line-height: .98; }
   header > p:last-child { max-width: 690px; margin: 15px 0 0; color: var(--text-muted); line-height: 1.55; }
   section { padding: 34px 0; }
-  h2 { margin: 0; font-family: var(--font-display); font-size: clamp(30px, 5vw, 46px); font-weight: 500; }
-  h3 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 500; }
+  h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 500; }
+  h3 { margin: 0; font-family: var(--font-display); font-size: var(--fs-display-xs); font-weight: 500; }
   .section-copy { max-width: 710px; margin: 9px 0 22px; color: var(--text-muted); line-height: 1.55; }
   .message { margin: 18px 0 0; padding: 11px 13px; border-left: 3px solid var(--accent, #c4570a); color: var(--text-muted); }
   button { border-radius: 0; cursor: pointer; }
   button:disabled { opacity: .45; cursor: default; }
   .choice-grid, .data-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line-strong); border-left: 1px solid var(--line-strong); }
   .choice-grid button, .data-choices button { min-height: 150px; display: grid; align-content: start; gap: 7px; padding: 17px; border: 0; border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); background: transparent; color: inherit; text-align: left; }
-  .choice-grid button.selected, .data-choices button.selected { background: color-mix(in srgb, var(--accent, #c4570a) 7%, transparent); box-shadow: inset 0 0 0 1px var(--accent, #c4570a); }
+  .choice-grid button.selected, .data-choices button.selected { background: color-mix(in srgb, var(--accent, #c4570a) 7%, transparent); outline: 1px solid var(--accent); outline-offset: -1px; }
   .choice-grid span, .data-choices span { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
   .choice-grid button.selected span, .data-choices button.selected span { color: var(--accent, #c4570a); }
   .choice-grid strong, .data-choices strong { margin-top: 8px; font-family: var(--font-display); font-size: 23px; font-weight: 500; }
   .choice-grid small, .data-choices small { color: var(--text-muted); font-size: var(--fs-label); line-height: 1.45; }
   .actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 22px; }
   .actions button, .preparation button { padding: 9px 12px; border: 1px solid var(--accent, #c4570a); background: transparent; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
+  .actions button:not(.secondary) { background: var(--accent); color: var(--bg); min-height: 44px; }
   .actions button.secondary { border-color: var(--line-strong); color: var(--text-muted); }
   .actions a { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
   .recommendations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line-strong); border-left: 1px solid var(--line-strong); }
@@ -556,8 +555,7 @@
   .saved-panel > div:last-child { display: grid; justify-items: end; gap: 8px; }
   .saved-panel a { color: var(--success, #2d7a3a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-decoration: none; text-transform: uppercase; }
   @media (max-width: 700px) {
-    .onboard-shell { width: min(100% - 20px, 980px); padding-top: 24px; }
-    .choice-grid, .recommendations, .data-choices, .connect-grid { grid-template-columns: 1fr; }
+      .choice-grid, .recommendations, .data-choices, .connect-grid { grid-template-columns: 1fr; }
     .connect-grid > div + div { border-top: 1px solid var(--line-strong); border-left: 0; }
     .provider-heading, .saved-panel { align-items: flex-start; flex-direction: column; }
     .key-row { flex-direction: column; }

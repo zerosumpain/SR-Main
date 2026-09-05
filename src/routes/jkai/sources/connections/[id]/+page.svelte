@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EvidenceSort from '$lib/components/activity/EvidenceSort.svelte';
   import { goto, invalidateAll } from '$app/navigation';
   import { onMount, untrack } from 'svelte';
   import ActivityOnboardingStepper from '$lib/components/jkai/ActivityOnboardingStepper.svelte';
@@ -283,7 +284,7 @@
 
 <svelte:head><title>{data.connection.label} — Sources</title></svelte:head>
 
-<main class="detail-shell">
+<main class="detail-shell source-surface">
   <a class="back" href={data.onboardingSession ? `/jkai/sources/onboard?session=${data.onboardingSession.id}` : '/jkai/sources'}>← {data.onboardingSession ? 'Guided setup' : 'Sources'}</a>
   <header>
     <div>
@@ -384,15 +385,17 @@
     <section class="preview" aria-labelledby="preview-title">
       <div class="section-head">
         <div><p class="section-code">Step 5 / Preview</p><h2 id="preview-title">A sample before sharing</h2></div>
-        <a href="/jkai/activity?connection={data.connection.id}">Open full audit →</a>
+        <a href="/jkai/activity?connection={data.connection.id}&sort={data.ordering.sort}&direction={data.ordering.direction}&then={data.ordering.then ?? ''}">Open full audit →</a>
       </div>
       <p class="section-copy">These normalized records came from the source. They remain unavailable to JKAI and Daydream until you enable their permissions below.</p>
+      <EvidenceSort ordering={data.ordering} preserve={{ journey: data.onboardingSession?.id }} />
+      <p class="section-copy preview-limit">Up to 5 records in the selected order.</p>
       <ol>
         {#each data.previewEvents as activityEvent (activityEvent.id)}
           <li>
             <span><strong>{previewLabel(activityEvent)}</strong><small>{activityEvent.type.replaceAll('.', ' ')}</small></span>
             <span class="evidence">{activityEvent.evidenceMode.replaceAll('_', ' ')}</span>
-            <time>{when(activityEvent.occurredAt ?? activityEvent.observedAt)}</time>
+            <span class="preview-dates"><small>Occurred</small><strong>{activityEvent.occurredAt ? when(activityEvent.occurredAt) : 'Unknown'}</strong><small>Observed</small><strong>{when(activityEvent.observedAt)}</strong></span>
           </li>
         {/each}
       </ol>
@@ -448,7 +451,7 @@
       <div><p class="section-code">Step 8 / Payoff</p><h2>This source is ready to be useful</h2><p>Ask jkai now. It reads only what you granted above, and says when a source is unavailable instead of guessing. You can change permissions or disconnect at any time.</p></div>
       <div class="complete-actions">
         <a class="primary" href={askJkaiHref()}>Ask jkai: “{payoffPrompt()}” →</a>
-        <a href="/jkai/activity?connection={data.connection.id}">Review the evidence</a>
+        <a href="/jkai/activity?connection={data.connection.id}&sort={data.ordering.sort}&direction={data.ordering.direction}&then={data.ordering.then ?? ''}">Review the evidence</a>
         <a href="/jkai/sources/onboard?restart=1">Set up another source</a>
         <a href="/jkai/sources">Back to Sources</a>
       </div>
@@ -475,11 +478,12 @@
 </main>
 
 <style>
-  .detail-shell { width: min(940px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 80px; color: var(--text-primary); }
+  .preview-dates { display: grid; gap: 3px; font-size: var(--fs-label); }
+  .preview-dates strong { font-family: var(--font-code); font-weight: 400; }
+  .preview-limit { margin-top: 12px; }
   .back { display: inline-block; margin-bottom: 34px; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label); text-decoration: none; }
-  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding-bottom: 28px; border-bottom: 2px solid var(--line-strong); }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding-bottom: 28px; border-bottom: 2px solid var(--line-title); }
   .eyebrow, .section-code { margin: 0 0 8px; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: .12em; text-transform: uppercase; }
-  h1 { margin: 0; font-family: var(--font-display); font-size: clamp(36px, 7vw, 64px); font-weight: 500; line-height: 1; }
   header p:last-child { max-width: 650px; margin: 11px 0 0; color: var(--text-muted); }
   .status { padding: 4px 7px; border: 1px solid currentColor; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; color: var(--text-muted); }
   .status-active { color: var(--success, #2d7a3a); }
@@ -487,7 +491,7 @@
   .message { margin: 16px 0 0; padding: 10px; border-left: 3px solid var(--accent, #c4570a); color: var(--text-muted); font-size: var(--fs-label); }
   section { padding: 30px 0; border-bottom: 1px solid var(--line-strong); }
   .section-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 15px; }
-  h2 { margin: 0; font-family: var(--font-display); font-size: 30px; font-weight: 500; }
+  h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 500; }
   .section-head > button, .permission-actions button, .danger > button { padding: 7px 10px; border: 1px solid var(--accent, #c4570a); border-radius: 0; background: transparent; color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; cursor: pointer; }
   .section-head > a { color: var(--accent, #c4570a); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-decoration: none; text-transform: uppercase; }
   .permission-actions { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -544,7 +548,7 @@
   .preview > ol li { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line-strong); }
   .preview li > span:first-child { display: grid; gap: 3px; }
   .preview small { color: var(--text-ghost); font-size: var(--fs-label-xs); text-transform: uppercase; }
-  .preview .evidence, .preview time { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
+  .preview .evidence { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; }
   .preview .evidence { padding: 2px 5px; border: 1px solid currentColor; }
   .complete-panel { display: flex; align-items: center; justify-content: space-between; gap: 24px; border: 1px solid var(--success, #2d7a3a); padding-inline: 18px; background: color-mix(in srgb, var(--success, #2d7a3a) 7%, transparent); }
   .complete-panel p:last-child { max-width: 620px; margin: 7px 0 0; color: var(--text-muted); font-size: var(--fs-label); line-height: 1.5; }
@@ -555,15 +559,14 @@
   .danger p:last-child { max-width: 620px; margin: 7px 0 0; color: var(--text-muted); font-size: var(--fs-label); }
   .danger > button { color: var(--error, #a33); border-color: currentColor; white-space: nowrap; }
   @media (max-width: 650px) {
-    .detail-shell { width: min(100% - 20px, 940px); }
-    header, .section-head, .danger, .authorize, .onboarding-callout, .complete-panel { align-items: flex-start; flex-direction: column; }
+      header, .section-head, .danger, .authorize, .onboarding-callout, .complete-panel { align-items: flex-start; flex-direction: column; }
     .facts { grid-template-columns: 1fr; }
     .jobs li { grid-template-columns: 1fr auto; }
     .jobs time { grid-column: 1 / -1; }
     .upload-row { grid-template-columns: 1fr; align-items: start; }
     .upload-row label { grid-column: auto; }
     .preview > ol li { grid-template-columns: 1fr auto; }
-    .preview time { grid-column: 1 / -1; }
+    .preview-dates { grid-column: 1 / -1; }
     .complete-actions { justify-items: start; }
     .complete-actions a.primary { text-align: left; }
   }
