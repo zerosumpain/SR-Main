@@ -17,7 +17,13 @@
 // throw in enough browsers that assuming any of them is how a page ends up with
 // a dead button.
 
-export type MicPermission = 'granted' | 'denied' | 'prompt' | 'unknown' | 'insecure';
+export type MicPermission =
+  | 'granted'
+  | 'denied'
+  | 'prompt'
+  | 'unknown'
+  | 'insecure'
+  | 'blocked';
 
 /** Where a chosen output device is remembered, per browser. */
 export const SINK_STORAGE_KEY = 'jkai.notes.audioSink';
@@ -29,6 +35,50 @@ interface NavigatorLike {
     enumerateDevices?: unknown;
   };
   permissions?: { query?: unknown };
+}
+
+interface DocumentLike {
+  /** Current name. */
+  permissionsPolicy?: { allowsFeature?: unknown };
+  /** The name Chrome shipped first, still what some versions expose. */
+  featurePolicy?: { allowsFeature?: unknown };
+}
+
+/**
+ * Both names are non-standard, so lib.dom declares NEITHER on `Document`. That
+ * makes `DocumentLike` a "weak type" with nothing in common with the real
+ * thing, and passing `document` is a type error rather than the obvious call it
+ * looks like. Accepting the union keeps the cast in one place here instead of
+ * at every call site.
+ */
+type PolicyDocument = DocumentLike | Document;
+
+/**
+ * Does this DOCUMENT allow a microphone at all?
+ *
+ * A third way to have no microphone, and the meanest, because it does not look
+ * like itself. A `Permissions-Policy: microphone=()` response header disables
+ * the feature for every origin including this one, and the policy is checked
+ * BEFORE the permission prompt — so `getUserMedia` rejects with
+ * NotAllowedError, no dialog ever appears, and the browser's site setting sits
+ * on "Ask" because nothing ever asked. Read as a permission it is
+ * indistinguishable from the user having said no, which sends them to site
+ * settings that cannot possibly fix it. Only the document knows.
+ *
+ * Returns null where the browser exposes neither name (Firefox, Safari):
+ * "cannot tell" must never be reported as "blocked", or the browsers where the
+ * feature works fine would accuse the site of blocking it.
+ */
+export function micPolicyAllowed(doc: PolicyDocument | undefined): boolean | null {
+  const d = doc as DocumentLike | undefined;
+  const policy = d?.permissionsPolicy ?? d?.featurePolicy;
+  const allows = policy?.allowsFeature;
+  if (typeof allows !== 'function') return null;
+  try {
+    return Boolean((allows as (feature: string) => boolean).call(policy, 'microphone'));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -102,6 +152,10 @@ export function micStateNote(state: MicPermission, userAgent = ''): string {
       return `Microphone blocked. ${unblockHint(userAgent)}`;
     case 'insecure':
       return 'Microphone needs https — open this page over https or on localhost.';
+    case 'blocked':
+      // Deliberately does NOT mention site settings: this one is the site's own
+      // fault and no amount of clicking in the browser will clear it.
+      return 'Microphone disabled for this page by its Permissions-Policy header — a site fault, not a browser setting.';
     case 'prompt':
       return 'Microphone not asked for yet.';
     default:
@@ -119,8 +173,9 @@ export function micStateNote(state: MicPermission, userAgent = ''): string {
 export async function readMicPermission(
   nav: NavigatorLike | undefined,
   secure: boolean,
+  doc?: PolicyDocument,
 ): Promise<MicPermission> {
-  return (await micPermissionStatus(nav, secure)).state;
+  return (await micPermissionStatus(nav, secure, doc)).state;
 }
 
 /**
@@ -133,8 +188,12 @@ export async function readMicPermission(
 export async function micPermissionStatus(
   nav: NavigatorLike | undefined,
   secure: boolean,
+  doc?: PolicyDocument,
 ): Promise<{ state: MicPermission; status: EventTarget | null }> {
   if (!secure || !nav?.mediaDevices) return { state: 'insecure', status: null };
+  // Ahead of the permission, because the document outranks it: where the policy
+  // refuses, the permission may well read 'prompt' and still never prompt.
+  if (micPolicyAllowed(doc) === false) return { state: 'blocked', status: null };
   const query = nav.permissions?.query as
     | ((d: { name: string }) => Promise<{ state: string } & EventTarget>)
     | undefined;
@@ -150,4 +209,39 @@ export async function micPermissionStatus(
     // Safari throws a TypeError for the unsupported name rather than rejecting.
     return { state: 'unknown', status: null };
   }
+}
+
+/**
+ * Turn a `getUserMedia` rejection into a sentence worth reading.
+ *
+ * The reason this exists: `catch { 'No microphone access.' }` is true for four
+ * unrelated faults that have four different fixes — a site-set Permissions
+ * Policy, a user refusal, no hardware, and a non-secure origin. Flattened, the
+ * only actionable-looking reading is "check your browser settings", which is
+ * wrong for three of them and actively misleading for the first.
+ *
+ * `err` is deliberately last in importance: a DOMException name alone cannot
+ * separate a policy block from a refusal (both are NotAllowedError), so the
+ * document and the origin are consulted first.
+ */
+export function micErrorMessage(
+  err: unknown,
+  nav: NavigatorLike | undefined,
+  doc: PolicyDocument | undefined,
+  secure: boolean,
+  userAgent = '',
+): string {
+  if (!secure || !nav?.mediaDevices) return micStateNote('insecure');
+  if (micPolicyAllowed(doc) === false) return micStateNote('blocked');
+  const name = (err as { name?: string } | null)?.name;
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+    return 'No microphone found on this device.';
+  }
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return micStateNote('denied', userAgent);
+  }
+  if (name === 'NotReadableError') {
+    return 'The microphone is in use by another application.';
+  }
+  return 'Could not start the microphone. Check that one is connected and not in use elsewhere.';
 }

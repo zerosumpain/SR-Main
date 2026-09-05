@@ -22,6 +22,7 @@
     canRequestMic,
     canRouteOutput,
     micPermissionStatus,
+    micPolicyAllowed,
     micStateNote,
     outputLabel,
     unblockHint,
@@ -98,7 +99,13 @@
         audioNote = 'No microphone found on this device.';
         return;
       }
-      micState = name === 'NotAllowedError' ? 'denied' : micState;
+      // NotAllowedError covers BOTH a user refusal and a document the policy
+      // never allowed to ask. Only the document can tell them apart, and
+      // calling the second one "denied" sends the user to site settings that
+      // cannot fix it.
+      if (name === 'NotAllowedError') {
+        micState = micPolicyAllowed(document) === false ? 'blocked' : 'denied';
+      }
       audioNote = micStateNote(micState, navigator.userAgent);
     }
   }
@@ -566,7 +573,7 @@
     outputChoosable = canChooseOutput(navigator) && canRouteOutput();
     // Subscribe, not just read: when the block is lifted in the browser's own
     // UI the page becomes usable immediately instead of needing a reload.
-    void micPermissionStatus(navigator, window.isSecureContext).then(({ state, status }) => {
+    void micPermissionStatus(navigator, window.isSecureContext, document).then(({ state, status }) => {
       micState = state;
       micReady = true;
       status?.addEventListener('change', (e) => {
@@ -627,12 +634,14 @@
             tone="ink"
             label="Voice note"
             busy={transcribing}
-            disabled={micState === 'insecure'}
+            disabled={micState === 'insecure' || micState === 'blocked'}
             onrecorded={(blob, secs) => uploadRecording(blob, secs, '')}
           />
           {#if micReady && micState !== 'granted'}
             <p class="mic-ask">
-              {#if micAskable}
+              <!-- No button when the policy blocks it: there is nothing the
+                   click could achieve, and offering one implies there is. -->
+              {#if micAskable && micState !== 'blocked'}
                 <button type="button" onclick={requestMic}>
                   {micState === 'denied' ? 'Try again' : 'Allow microphone'}
                 </button>

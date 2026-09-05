@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   canChooseOutput,
   canRequestMic,
+  micErrorMessage,
+  micPolicyAllowed,
   micStateNote,
   micPermissionStatus,
   outputLabel,
@@ -135,5 +137,111 @@ describe('micPermissionStatus', () => {
   it('is insecure-first, before it looks at permissions at all', async () => {
     const nav = { mediaDevices: {}, permissions: { query: async () => ({ state: 'granted' }) } };
     await expect(micPermissionStatus(nav, false)).resolves.toEqual({ state: 'insecure', status: null });
+  });
+});
+
+describe('micPolicyAllowed', () => {
+  it('reports a document-level block, which is what `microphone=()` produces', () => {
+    // A Permissions Policy is checked BEFORE the prompt, so this is the state
+    // where site settings still read "Ask" and cannot fix anything.
+    expect(micPolicyAllowed({ permissionsPolicy: { allowsFeature: () => false } })).toBe(false);
+    expect(micPolicyAllowed({ permissionsPolicy: { allowsFeature: () => true } })).toBe(true);
+  });
+
+  it('reads the older featurePolicy name too', () => {
+    expect(micPolicyAllowed({ featurePolicy: { allowsFeature: () => false } })).toBe(false);
+  });
+
+  it('says "cannot tell" rather than "blocked" where the API is absent', () => {
+    // Firefox and Safari ship neither name. Guessing "blocked" here would put a
+    // false accusation on screen in the browsers that work fine.
+    expect(micPolicyAllowed({})).toBe(null);
+    expect(micPolicyAllowed(undefined)).toBe(null);
+    expect(micPolicyAllowed({ permissionsPolicy: {} })).toBe(null);
+  });
+
+  it('does not throw when allowsFeature does', () => {
+    expect(
+      micPolicyAllowed({
+        permissionsPolicy: {
+          allowsFeature: () => {
+            throw new TypeError('unsupported feature');
+          },
+        },
+      }),
+    ).toBe(null);
+  });
+});
+
+describe('micPermissionStatus with a policy block', () => {
+  const nav = {
+    mediaDevices: {},
+    permissions: { query: async () => ({ state: 'prompt' }) },
+  };
+
+  it('reports blocked ahead of the permission state', async () => {
+    // The permission genuinely is "prompt" — that is the trap. The document is
+    // what refuses, so reporting "prompt" would promise a dialog that never comes.
+    const out = await micPermissionStatus(nav, true, {
+      permissionsPolicy: { allowsFeature: () => false },
+    });
+    expect(out.state).toBe('blocked');
+  });
+
+  it('is unaffected when the policy allows the feature', async () => {
+    const out = await micPermissionStatus(nav, true, {
+      permissionsPolicy: { allowsFeature: () => true },
+    });
+    expect(out.state).toBe('prompt');
+  });
+
+  it('still reports insecure first — that is the more basic fault', async () => {
+    const out = await micPermissionStatus(nav, false, {
+      permissionsPolicy: { allowsFeature: () => false },
+    });
+    expect(out.state).toBe('insecure');
+  });
+});
+
+describe('micStateNote for a policy block', () => {
+  it('does not send the user to site settings, which cannot fix it', () => {
+    const note = micStateNote('blocked');
+    expect(note).toMatch(/permissions-policy/i);
+    expect(note).not.toMatch(/site settings/i);
+  });
+});
+
+describe('micErrorMessage', () => {
+  const nav = { mediaDevices: { getUserMedia: () => {} } };
+  const open = { permissionsPolicy: { allowsFeature: () => true } };
+  const shut = { permissionsPolicy: { allowsFeature: () => false } };
+  const err = (name: string) => Object.assign(new Error(name), { name });
+
+  it('blames the header, not the reader, when the policy blocks it', () => {
+    // The exact fault that shipped: NotAllowedError with the site setting on
+    // "Ask". Telling the reader to check site settings here wastes their time.
+    const msg = micErrorMessage(err('NotAllowedError'), nav, shut, true);
+    expect(msg).toMatch(/permissions-policy/i);
+    expect(msg).not.toMatch(/site settings/i);
+  });
+
+  it('reports a genuine refusal as a refusal', () => {
+    expect(micErrorMessage(err('NotAllowedError'), nav, open, true)).toMatch(/blocked/i);
+  });
+
+  it('separates "no device" from "not allowed"', () => {
+    expect(micErrorMessage(err('NotFoundError'), nav, open, true)).toMatch(/no microphone found/i);
+  });
+
+  it('reports an insecure origin before anything about permissions', () => {
+    // http://homeserv — mediaDevices is undefined and the call throws a
+    // TypeError, which has nothing to do with permission at all.
+    expect(micErrorMessage(err('TypeError'), nav, open, false)).toMatch(/https/i);
+  });
+
+  it('still says something useful for an unrecognised failure', () => {
+    const msg = micErrorMessage(err('AbortError'), nav, open, true);
+    expect(msg).toBeTruthy();
+    expect(msg).toMatch(/microphone/i);
   });
 });

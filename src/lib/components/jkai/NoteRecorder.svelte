@@ -10,6 +10,8 @@
   // It owns no upload logic. `onrecorded` hands the blob and its duration up,
   // and the page decides whether that becomes a new note or joins the open one.
 
+  import { micErrorMessage } from '$lib/jkai/media/audio-access';
+
   let {
     label = 'Record',
     busy = false,
@@ -48,10 +50,17 @@
     chunks = [];
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      // Denied, or no device. Say so in the UI rather than only the console —
-      // a record button that does nothing is the worst version of this.
-      micError = 'No microphone access.';
+    } catch (err) {
+      // Say WHICH failure, not just that there was one. "No microphone access"
+      // covers four different faults with four different fixes, and the flat
+      // version sent the reader to browser settings that were already correct.
+      micError = micErrorMessage(
+        err,
+        navigator,
+        document,
+        window.isSecureContext,
+        navigator.userAgent,
+      );
       return;
     }
     const preferred = 'audio/webm;codecs=opus';
