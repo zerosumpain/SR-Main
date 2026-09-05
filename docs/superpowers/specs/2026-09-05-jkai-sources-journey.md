@@ -132,6 +132,7 @@ Found on the way, fixed here because the journey drives them:
 | Hub menu meta for Sources | static word; or a live count | **live count** | One index-only `count(*)` on a tiny table; the layout already pays for three such aggregates and the number is the nudge. | Yes |
 | Archive providers still gated | open upload for inspection anyway; or keep the gate | **keep** | The spec's launch gate is evidence-based; the fixture step needs a real export. The UI now says so plainly instead of implying an action. | Yes |
 | `remindAt` delivery | wire into briefing/push; or leave | **leave, log** | Out of the brief; noted as follow-up. | — |
+| Source-footprint budget (CI red: production 606,982 / 606,000) | (a) retire ~1,000 lines nearby; (b) descope the toolset; (c) raise `production` to 608,000 | **c** | The guard was set the day before at 411 lines above master. An import scan of `src/lib` found no unimported module; the July/August sweeps already took the dead code; the nearest code is the fabric this feature completes. Descoping the toolset leaves the payoff hollow. One number, dated and explained in the script — **the first thing for John to review**. The redirect-only `sources/[provider]/connect` shim (no callers) was retired alongside. | Yes |
 | Flip prod settings myself | write `app_settings` from a shell; or leave the button to the owner | **leave** | Enabling Steam needs his Steam key anyway; the button is the deliverable and it is one click. | — |
 
 ## Follow-ups (not in this change)
