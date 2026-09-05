@@ -8,6 +8,7 @@ import { beginActivityOauthTransaction } from '$lib/activity/oauth/transactions.
 import { buildSteamOpenIdUrl } from '$lib/activity/providers/steam/openid';
 import { activityErrorResponse, activityProblem } from '$lib/activity/http.server';
 import { requireActivityOnboardingSession } from '$lib/activity/store/onboarding.server';
+import { activityPublicOrigin } from '$lib/activity/origin';
 import { isActivitySecretConfigured } from '$lib/activity/providers/secrets.server';
 import { STEAM_WEB_API_ENV } from '$lib/activity/providers/steam/credential';
 
@@ -39,7 +40,9 @@ export const POST: RequestHandler = async (event) => {
       }
     }
 
-    const baseUrl = (publicEnv.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+    // Production sets PUBLIC_SITE_URL and ORIGIN, not PUBLIC_BASE_URL — the old
+    // localhost fallback is where Steam sent the owner on 2026-09-05.
+    const baseUrl = activityPublicOrigin(event.url, publicEnv);
     const redirectPath = `/jkai/sources/connections/${connection.id}${journeyId ? `?journey=${encodeURIComponent(journeyId)}` : ''}`;
     const transaction = await beginActivityOauthTransaction({
       principalId: principal.id,
