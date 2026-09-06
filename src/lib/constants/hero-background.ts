@@ -1,3 +1,5 @@
+import type { HeroSlot } from './hero-slots';
+
 export interface HeroBackgroundSettings {
   enabled: boolean;
   delayMs: number;
@@ -32,6 +34,7 @@ export interface HeroPreparationJob {
   id: string;
   phase: 'running' | 'succeeded' | 'failed';
   sourceName: string;
+  slot?: HeroSlot;
   expiresAt: number;
   error?: string;
 }

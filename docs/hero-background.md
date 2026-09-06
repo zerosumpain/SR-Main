@@ -9,9 +9,30 @@ frame layer over the title. The vitals rail is outside the animation.
 To change the animation without a deployment:
 
 1. Upload an MP4 directly into `siteherobackground` in `/drive`.
-2. Open `/admin/content/hero`, refresh the folder, and select the MP4.
+2. Open `/admin/content/hero`, choose an animation slot, refresh the folder,
+   and select the MP4.
 3. Click **Prepare & apply**. Progress survives navigation; the current animation
    stays active until preparation succeeds.
+
+There are seven independent slots: Default, plus Inactive / Averagely active /
+Very active for weekdays and weekends. Select a slot card to edit it; its asset
+is also used by **Preview / replay** in the shared playback controls below.
+Clearing a conditional slot makes it use Default. The pre-existing animation is
+preserved as Default; if that has no custom assignment, the bundled asset is used.
+
+The homepage chooses one animation on page load from today's recorded steps.
+Activity rules are adjustable in admin: initially, inactive is below 3,000 steps,
+averagely active is 3,000–9,999 and very active is 10,000+. These thresholds are
+presentation choices. Weekends are Saturday/Sunday in `Europe/London`; the step
+query uses the same local calendar day, including daylight-saving transitions.
+Missing or invalid readings use Default; a recorded zero counts as inactive.
+Only the selected video's desktop or phone variant is requested. A page already
+open keeps its animation until reloaded. Playback controls apply to all slots.
+
+Assignments use `landing.hero.slot.<slot>` in `app_settings`, with the existing
+`landing.hero.selected` key retained for Default. Rules use
+`landing.hero.activity`; no schema migration is needed. Preparation assigns only
+the requested slot after success. Other assignments remain untouched.
 
 Preparation runs on the server and preserves the original. It creates desktop
 and phone MP4s plus a final-frame WebP, saved in
@@ -79,3 +100,10 @@ was preserved; the prepared copies are 1,069,969 bytes at 960 × 550 (desktop),
 380,718 bytes at 480 × 274 (phone), and a 51,382-byte final-frame WebP. Both
 videos retain 24fps and have no audio. The source share capability is deliberately
 not stored in the repository.
+
+`node scripts/qa/hero-slots-preview.mjs` prepares seven independent slot
+assignments and checks persistence, real step-based homepage selection, saved
+thresholds, clearing a slot to Default, and desktop/phone controls. It removes
+its synthetic clips and readings, then restores the original assignments/rules.
+Unit tests cover all six combinations, threshold boundaries, missing readings,
+London weekend boundaries, DST day lengths and the default fallback chain.

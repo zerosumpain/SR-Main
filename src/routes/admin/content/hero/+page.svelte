@@ -6,12 +6,16 @@
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import HeroBackgroundControls from '$lib/components/admin/HeroBackgroundControls.svelte';
+  import HeroActivityRules from '$lib/components/admin/HeroActivityRules.svelte';
+  import type { HeroSlot } from '$lib/constants/hero-slots';
   import HeroSourcePicker from '$lib/components/admin/HeroSourcePicker.svelte';
   import type { ActionData, PageData } from './$types';
   import type { GeneratedRow } from '$lib/landing/hero-titles-service';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
+  let previewSlot = $state<HeroSlot>('default');
+  let previewAsset = $derived(data.backgroundSlots.find(slot => slot.id === previewSlot)?.asset ?? data.backgroundAsset);
   let style = $state('');
   let headlineWords = $state(3);
   let strapWords = $state(22);
@@ -166,8 +170,9 @@
     sub="Generate the copy the landing hero snaps to. {data.count} entries saved; last generated {fmtDate(data.generatedAt)}."
   />
 
-  <HeroSourcePicker sources={data.backgroundSources} activeSource={data.backgroundSource} initialJob={data.backgroundJob} />
-  <HeroBackgroundControls settings={data.backgroundSettings} asset={data.backgroundAsset} result={form} />
+  <HeroSourcePicker sources={data.backgroundSources} slots={data.backgroundSlots} activity={data.activity} initialJob={data.backgroundJob} onselect={slot => previewSlot = slot} />
+  <HeroActivityRules rules={data.activityRules} result={form} />
+  <HeroBackgroundControls settings={data.backgroundSettings} asset={previewAsset} result={form} />
 
   {#if error}
     <div class="banner banner-error">{error}</div>

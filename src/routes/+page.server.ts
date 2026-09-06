@@ -1,6 +1,5 @@
-import { db } from '$lib/db';
-import { appleHealthMetrics } from '$lib/db/schema';
-import { and, eq, gte } from 'drizzle-orm';
+import { getHeroActivity } from '$lib/server/hero-activity';
+import { HEALTH_TIMEZONE } from '$lib/health/day';
 import { snapHeroTitle } from '$lib/landing/hero-titles-service';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { isOwnerRequest } from '$lib/server/owner';
@@ -9,26 +8,11 @@ import { getHeroBackgroundSettings, getHeroBackgroundAsset, heroBackgroundAsset 
 import { HERO_BACKGROUND_DEFAULTS } from '$lib/constants/hero-background';
 
 export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) => {
-  const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
-
-  // Fast, awaited — a single indexed read. The hero strap and the title snap
-  // both need today's step count, and it's cheap enough to block first paint.
-  const stepsRows = await db
-    .select({ value: appleHealthMetrics.value })
-    .from(appleHealthMetrics)
-    .where(
-      and(
-        eq(appleHealthMetrics.metricName, 'step_count'),
-        gte(appleHealthMetrics.date, todayStart),
-      ),
-    )
-    .catch(() => []);
-
-  // Steps are stored * 100, sum all readings for today
-  const steps = stepsRows.reduce((sum, r) => sum + Math.round((r.value || 0) / 100), 0);
+  const activity = await getHeroActivity().catch(() => ({ steps: null, slot: 'default' as const }));
+  const steps = activity.steps ?? 0;
 
   const dateStr = new Date()
-    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: HEALTH_TIMEZONE })
     .toUpperCase();
 
   // Streamed (un-awaited) — /api/biome/state hits an external weather API
@@ -91,7 +75,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
     : null;
 
   const backgroundSettings = await getHeroBackgroundSettings().catch(() => ({ ...HERO_BACKGROUND_DEFAULTS, enabled: false }));
-  const backgroundAsset = await getHeroBackgroundAsset().catch(() => heroBackgroundAsset);
+  const backgroundAsset = await getHeroBackgroundAsset(activity.slot).catch(() => heroBackgroundAsset);
   return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention, mergeablePrs,
     backgroundSettings, backgroundAsset };
 };

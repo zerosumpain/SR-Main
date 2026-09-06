@@ -3,13 +3,15 @@ import { getSetting, setSetting } from '$lib/server/models/settings';
 import { HERO_BACKGROUND_DEFAULTS } from '$lib/constants/hero-background';
 import type { HeroBackgroundAsset, HeroBackgroundSettings } from '$lib/constants/hero-background';
 import asset from '$lib/constants/hero-background-asset.json';
+import type { HeroSlot } from '$lib/constants/hero-slots';
 import { selectedHero } from './hero-sources';
 
 const KEY = 'landing.hero.background';
 export const heroBackgroundAsset = asset as HeroBackgroundAsset | null;
 
-export async function getHeroBackgroundAsset() {
-  return (await selectedHero())?.asset ?? heroBackgroundAsset;
+export async function getHeroBackgroundAsset(slot: HeroSlot = 'default') {
+  const selected = await selectedHero(slot);
+  return selected?.asset ?? (slot === 'default' ? null : (await selectedHero())?.asset) ?? heroBackgroundAsset;
 }
 
 export async function getHeroBackgroundSettings(): Promise<HeroBackgroundSettings> {
