@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { getIntegrationAdapter } from '$lib/integrations/registry';
 import { getManualCredentialSpec } from '$lib/integrations/manual-credentials';
 import { createCredential } from '$lib/integrations/credentials';
+import { isMapboxPublicToken } from '$lib/maps/config';
 
 /**
  * Create a manually-entered (apikey / basic) credential for an integration that
@@ -40,6 +41,10 @@ export const POST: RequestHandler = async ({ request }) => {
     const v = typeof input[f.key] === 'string' ? (input[f.key] as string).trim() : '';
     if (!v) throw error(400, `${f.label} is required`);
     values[f.key] = v;
+  }
+
+  if (integrationType === 'mapbox' && !isMapboxPublicToken(values.key)) {
+    throw error(400, 'Mapbox requires a public token beginning with pk.; secret tokens cannot be used in browser maps.');
   }
 
   // Build the kind-specific payload from the validated fields (see the contract

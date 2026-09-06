@@ -8,7 +8,7 @@
 import type { DateWindowKey, PlayerIdentity } from './identity';
 
 /** One dissolved, Chaikin-smoothed component of somebody's ground.
- *  Coordinates are [lat, lon], which is Leaflet's order. */
+ *  Coordinates are [lat, lon], the stored site format (converted at the Mapbox boundary). */
 export interface LandgrabRegion {
   /** Cells in this component — the area model, not the ring's shoelace area. */
   t: number;

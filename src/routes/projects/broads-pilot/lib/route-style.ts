@@ -44,7 +44,7 @@ export function bandColor(t_s: number): string {
 }
 
 // Graduated dash by posted speed: faster = solid (open water), slower = more
-// broken. Leaflet dashArray strings; undefined = solid line.
+// broken. Mapbox dashArray strings; undefined = solid line.
 export interface DashBand {
   maxMph: number; // applies to limits <= this (and > the previous band's)
   dash: string | undefined;
@@ -57,7 +57,7 @@ export const DASH_BANDS: DashBand[] = [
   { maxMph: Infinity, dash: undefined, label: '6 mph+' },
 ];
 
-/** Speed limit (mph) → Leaflet dashArray (undefined = solid at 6 mph+). */
+/** Speed limit (mph) → Mapbox dashArray (undefined = solid at 6 mph+). */
 export function speedDash(limit_mph: number): string | undefined {
   for (const b of DASH_BANDS) if (limit_mph <= b.maxMph) return b.dash;
   return undefined;

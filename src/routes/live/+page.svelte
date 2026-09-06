@@ -1,10 +1,9 @@
 <svelte:head>
   <title>Live Walk — Strange Ramblings</title>
-  <link rel="stylesheet" href="/vendor/leaflet.min.css" />
-  <script src="/vendor/leaflet.min.js"></script>
 </svelte:head>
 
 <script lang="ts">
+  import { loadMapbox, type MapTools } from '$lib/maps/loader';
   import { onMount, onDestroy, tick } from 'svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SiteFooter from '$lib/components/SiteFooter.svelte';
@@ -30,6 +29,9 @@
   let liveState = $state<LiveState>({ active: false });
   let mapContainer: HTMLDivElement | undefined = $state(undefined);
   let map: any = null;
+  let M: MapTools | null = null;
+  let disposed = false;
+  let mapError = $state<string | null>(null);
   let trackLine: any = null;
   let posMarker: any = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -39,10 +41,12 @@
 
   onMount(async () => {
     await fetchState();
+    if (disposed) return;
     pollInterval = setInterval(fetchState, 15000);
   });
 
   onDestroy(() => {
+    disposed = true;
     if (pollInterval) clearInterval(pollInterval);
     map?.remove();
   });
@@ -54,34 +58,29 @@
         liveState = await res.json();
         if (isLive && !mapInitialized) {
           await tick(); // wait for DOM to update with the map container
-          initMap();
+          await initMap();
         }
         updateMap();
       }
-    } catch {}
+    } catch (err) { mapError = err instanceof Error ? err.message : 'Map unavailable'; }
   }
 
-  function initMap() {
+  async function initMap() {
     if (mapInitialized || !mapContainer) return;
-    const L = (window as any).L;
-    if (!L) return;
+    M = await loadMapbox();
+    if (disposed || !mapContainer) return;
 
-    map = L.map(mapContainer).setView([54.0, -2.0], 7);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 18
-    }).addTo(map);
+    map = M.map(mapContainer).setView([54.0, -2.0], 7);
     mapInitialized = true;
   }
 
   function updateMap() {
-    const L = (window as any).L;
-    if (!map || !L || !liveState.track || liveState.track.length === 0) return;
+    if (!map || !M || !liveState.track || liveState.track.length === 0) return;
 
-    const latlngs = liveState.track.map((p: any) => [p.lat, p.lng]);
+    const latlngs = liveState.track.map((p: any) => [p.lat, p.lng] as [number, number]);
 
     if (trackLine) trackLine.remove();
-    trackLine = L.polyline(latlngs, {
+    trackLine = M.polyline(latlngs, {
       color: 'var(--accent, #c4570a)',
       weight: 4,
       opacity: 0.9
@@ -89,10 +88,10 @@
 
     const last = liveState.track[liveState.track.length - 1];
     if (posMarker) posMarker.remove();
-    // Leaflet can't read CSS vars, so resolve --accent at runtime.
+    // Mapbox can't read CSS vars, so resolve --accent at runtime.
     const accent =
       getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c4570a';
-    posMarker = L.circleMarker([last.lat, last.lng], {
+    posMarker = M.circleMarker([last.lat, last.lng], {
       radius: 8,
       fillColor: accent,
       fillOpacity: 1,
@@ -152,6 +151,7 @@
       </div>
     </div>
 
+    {#if mapError}<p role="alert">{mapError}</p>{/if}
     <div class="live-map" bind:this={mapContainer}></div>
 
     <div class="live-stats">

@@ -64,7 +64,7 @@ Create `src/routes/<topic>/<slug>/+page.svelte` — a SvelteKit page that fetche
 Key patterns for the page:
 
 - **Data fetching:** Use `fetch('/api/<topic>/current')` on mount, re-fetch every 30s with `setInterval`
-- **Mapper integration:** If using Leaflet, load it via CDN in `svelte:head`
+- **Mapper integration:** Use `loadMapbox` from `$lib/maps/loader`; it loads the pinned Mapbox renderer and the public token from the site credential manager.
 - **Auto-refresh:** Call `setInterval(fetchData, 30000)` in `onMount`
 - **Svelte 5 runes:** Use `$state()` for mutable state, `$derived()` for computed values, NOT `$:` syntax
 - **Chart rendering:** Use `<canvas>` with 2D context for speed charts (no extra dependencies)

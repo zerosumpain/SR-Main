@@ -29,6 +29,12 @@ export type ManualCredentialSpec = {
 };
 
 export const MANUAL_CREDENTIAL_SPECS: Record<string, ManualCredentialSpec> = {
+  mapbox: {
+    kind: 'apikey',
+    fields: [{ key: 'key', label: 'Mapbox public access token', type: 'password', placeholder: 'pk.…' }],
+    helpText: 'Use a public (pk.) token with styles:read and fonts:read, restricted to this site’s URLs (and localhost for preview). Stored encrypted here, then sent to browsers to render maps. Secret (sk.) tokens are not accepted. The newest Mapbox credential is used sitewide.',
+    helpUrl: 'https://docs.mapbox.com/help/dive-deeper/access-tokens/',
+  },
   'apple-calendar': {
     kind: 'basic',
     fields: [

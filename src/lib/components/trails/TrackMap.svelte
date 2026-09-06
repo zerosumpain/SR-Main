@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { loadMapbox } from '$lib/maps/loader';
+  import { onMount } from 'svelte';
   import type { TrackPoint } from '$lib/trails/track';
 
   let {
@@ -28,52 +29,11 @@
   let container: HTMLDivElement | undefined = $state();
   let error = $state<string | null>(null);
 
-  // Leaflet handles are plain refs, never $state: a $state map handle that is
+  // Mapbox handles are plain refs, never $state: a $state map handle that is
   // both read and written by the same lifecycle function subscribes its effect
   // to itself and loops until effect_update_depth_exceeded.
   let mapRef: any = null;
   let scrollZoomActive = false;
-
-  interface LeafletGlobal {
-    map: (el: HTMLElement, opts?: Record<string, unknown>) => any;
-    tileLayer: (url: string, opts?: Record<string, unknown>) => any;
-    polyline: (latlngs: unknown, opts?: Record<string, unknown>) => any;
-    circleMarker: (latlng: [number, number], opts?: Record<string, unknown>) => any;
-    latLngBounds: (a: [number, number], b: [number, number]) => any;
-  }
-
-  function ensureLeafletLoaded(): Promise<LeafletGlobal> {
-    const existing = (globalThis as unknown as { L?: LeafletGlobal }).L;
-    if (existing) return Promise.resolve(existing);
-
-    if (!document.querySelector('link[data-leaflet]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = '/vendor/leaflet.min.css';
-      link.dataset.leaflet = 'true';
-      document.head.appendChild(link);
-    }
-
-    return new Promise((resolve, reject) => {
-      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => {
-          const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-          L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-        });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = '/vendor/leaflet.min.js';
-      script.dataset.leaflet = 'true';
-      script.onload = () => {
-        const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-        L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-      };
-      script.onerror = () => reject(new Error('Failed to load /vendor/leaflet.min.js'));
-      document.head.appendChild(script);
-    });
-  }
 
   /** Metres between two [lng, lat] points — enough for a per-segment speed. */
   function stepMetres(a: TrackPoint, b: TrackPoint): number {
@@ -111,13 +71,14 @@
 
   onMount(() => {
     let cancelled = false;
+    let disposeOffline = () => {};
 
     (async () => {
       try {
-        const L = await ensureLeafletLoaded();
+        const M = await loadMapbox({ offline });
         if (cancelled || !container || coordinates.length < 2) return;
 
-        const map = L.map(container, {
+        const map = M.map(container, {
           scrollWheelZoom: false,
           zoomControl: true,
           attributionControl: true,
@@ -136,13 +97,9 @@
         });
 
         if (offline) {
-          const { createOfflineTileLayer } = await import('$lib/trails/field/offline-layer');
-          createOfflineTileLayer(L).addTo(map);
-        } else {
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap',
-            maxZoom: 19,
-          }).addTo(map);
+          const { attachOfflineTiles } = await import('$lib/trails/field/offline-layer');
+          if (cancelled) return;
+          disposeOffline = attachOfflineTiles(map);
         }
 
         const latlngs = coordinates.map(([lng, lat]) => [lat, lng] as [number, number]);
@@ -150,20 +107,23 @@
         if (colourBy === 'pace') {
           const colours = paceColours(coordinates);
           // A casing line underneath keeps the ramp legible over busy tiles.
-          L.polyline(latlngs, { color: '#1a1008', weight: 6, opacity: 0.35 }).addTo(map);
+          M.polyline(latlngs, { color: '#1a1008', weight: 6, opacity: 0.35 }).addTo(map);
+          // A source per GPS sample overwhelms WebGL on long activities.
+          const segments = new Map<string, [number, number][][]>();
           for (let i = 1; i < latlngs.length; i++) {
-            L.polyline([latlngs[i - 1], latlngs[i]], {
-              color: colours[i - 1],
-              weight: 4,
-              opacity: 0.95,
-            }).addTo(map);
+            const colour = colours[i - 1];
+            if (!segments.has(colour)) segments.set(colour, []);
+            segments.get(colour)!.push([latlngs[i - 1], latlngs[i]]);
+          }
+          for (const [color, lines] of segments) {
+            M.multiPolyline(lines, { color, weight: 4, opacity: 0.95 }).addTo(map);
           }
         } else {
-          L.polyline(latlngs, { color: '#1a1008', weight: 6, opacity: 0.3 }).addTo(map);
-          L.polyline(latlngs, { color: '#c4570a', weight: 3.5, opacity: 1 }).addTo(map);
+          M.polyline(latlngs, { color: '#1a1008', weight: 6, opacity: 0.3 }).addTo(map);
+          M.polyline(latlngs, { color: '#c4570a', weight: 3.5, opacity: 1 }).addTo(map);
         }
 
-        L.circleMarker(latlngs[0], {
+        M.circleMarker(latlngs[0], {
           radius: 5,
           color: '#1a1008',
           weight: 2,
@@ -173,7 +133,7 @@
           .addTo(map)
           .bindTooltip('Start');
 
-        L.circleMarker(latlngs[latlngs.length - 1], {
+        M.circleMarker(latlngs[latlngs.length - 1], {
           radius: 5,
           color: '#1a1008',
           weight: 2,
@@ -185,7 +145,7 @@
 
         if (bounds) {
           map.fitBounds(
-            L.latLngBounds([bounds.s, bounds.w], [bounds.n, bounds.e]),
+            M.latLngBounds([bounds.s, bounds.w], [bounds.n, bounds.e]),
             { padding: [24, 24] },
           );
         } else {
@@ -198,13 +158,13 @@
 
     return () => {
       cancelled = true;
+      disposeOffline();
+      mapRef?.remove();
+      mapRef = null;
     };
   });
 
-  onDestroy(() => {
-    mapRef?.remove();
-    mapRef = null;
-  });
+
 </script>
 
 {#if error}
@@ -227,8 +187,7 @@
 {/if}
 
 <style>
-  /* New stacking context: Leaflet's internal panes reach z-index ~700 and
-     will otherwise sit on top of page chrome. */
+  /* Keep map controls below the surrounding page chrome. */
   .map-frame {
     position: relative;
     isolation: isolate;
@@ -283,7 +242,7 @@
     color: var(--text-muted);
   }
 
-  :global(.leaflet-container) {
+  :global(.mapboxgl-map) {
     font-family: var(--font-mono);
     background: #e8dece;
   }

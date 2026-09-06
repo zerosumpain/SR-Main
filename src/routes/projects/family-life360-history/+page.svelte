@@ -1,10 +1,9 @@
 <svelte:head>
   <title>Family location history — Strange Ramblings</title>
-  <link rel="stylesheet" href="/vendor/leaflet.min.css" />
-  <script src="/vendor/leaflet.min.js"></script>
 </svelte:head>
 
 <script lang="ts">
+  import { loadMapbox } from '$lib/maps/loader';
   import SiteHeader from '$lib/components/SiteHeader.svelte';
   import { onDestroy, onMount, tick } from 'svelte';
   import type {
@@ -33,6 +32,7 @@
   let error = $state<string | null>(null);
   let mapContainer = $state<HTMLDivElement | undefined>(undefined);
   let map: any = null;
+  let disposed = false;
   let markerLayer: any = null;
 
   const people = $derived(history ? Object.entries(history.people) : []);
@@ -42,7 +42,7 @@
     void refresh();
   });
 
-  onDestroy(() => map?.remove());
+  onDestroy(() => { disposed = true; map?.remove(); });
 
   async function refresh() {
     loading = true;
@@ -52,7 +52,7 @@
       if (!response.ok) throw new Error(`History request failed (${response.status})`);
       history = await response.json();
       await tick();
-      updateMap();
+      await updateMap();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unable to load location history';
     } finally {
@@ -64,22 +64,18 @@
     return getComputedStyle(document.documentElement).getPropertyValue(PERSON_COLOUR_TOKENS[index]).trim();
   }
 
-  function updateMap() {
+  async function updateMap() {
     if (!mapContainer || !history || pointCount === 0) {
       map?.remove();
       map = null;
       markerLayer = null;
       return;
     }
-    const L = (window as any).L;
-    if (!L) return;
+    const M = await loadMapbox();
+    if (disposed || !mapContainer) return;
     if (!map) {
-      map = L.map(mapContainer).setView([54, -2], 7);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 18,
-      }).addTo(map);
-      markerLayer = L.layerGroup().addTo(map);
+      map = M.map(mapContainer).setView([54, -2], 7);
+      markerLayer = M.layerGroup().addTo(map);
     }
     markerLayer.clearLayers();
     const points: [number, number][] = [];
@@ -89,14 +85,14 @@
         if (!transition.point) return;
         const { lat, lng } = transition.point;
         points.push([lat, lng]);
-        L.circleMarker([lat, lng], {
+        M.circleMarker([lat, lng], {
           radius: 7,
           color: colour,
           fillColor: colour,
           fillOpacity: 0.8,
           weight: 2,
         })
-          .bindPopup(`<strong>${name}</strong><br>${transition.state} · ${formatDate(transition.at)}`)
+          .bindPopup(`${name} · ${transition.state} · ${formatDate(transition.at)}`)
           .addTo(markerLayer);
       });
     });
@@ -223,7 +219,7 @@
   .timeline { display: grid; gap: 0.65rem; padding: 0; margin: 0; list-style: none; }
   .timeline li { border-left: 3px solid var(--accent); padding-left: 0.75rem; line-height: 1.5; }
   .timeline-date { display: block; margin-bottom: 0.15rem; }
-  :global(.leaflet-container) { font-family: var(--font-body); background: var(--surface-sunken); }
+  :global(.mapboxgl-map) { font-family: var(--font-body); background: var(--surface-sunken); }
   @media (max-width: 800px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 560px) { .wrap { margin-top: 1.25rem; padding: 0 1rem; } .page-hdr { align-items: flex-start; flex-direction: column; } .map { height: 18rem; } .summary-grid { grid-template-columns: 1fr; } }
 </style>

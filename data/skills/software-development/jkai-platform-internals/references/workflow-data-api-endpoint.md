@@ -71,7 +71,7 @@ const filtered = events.filter(e => new Date(e.ts) >= since);
 
 Build a single `index.html` file that:
 - Fetches from the **relative** API path (`/api/<topic>/stats?range=7d`)
-- Uses CDN libraries (Leaflet for maps, Chart.js for charts)
+- Uses the shared Mapbox renderer (`$lib/maps/loader`) for maps and Chart.js for charts
 - Applies the SR design system tokens (Archivo Black, DM Sans, JetBrains Mono, cream/brown palette)
 
 Register via `register_chat_build` → publish via `build_control(action=publish)` → served at `/projects/<slug>/`.

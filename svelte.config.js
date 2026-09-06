@@ -23,7 +23,8 @@ const config = {
 				'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'blob:', 'https:'],
 				'media-src': ['self', 'data:', 'blob:', 'https:'],
-				'connect-src': ['self', 'https:', 'wss:'],
+				// Mapbox fetches the offline tile blobs held in this browser’s IndexedDB.
+				'connect-src': ['self', 'blob:', 'https:', 'wss:'],
 				'worker-src': ['self', 'blob:'],
 				'manifest-src': ['self'],
 				'frame-src': [

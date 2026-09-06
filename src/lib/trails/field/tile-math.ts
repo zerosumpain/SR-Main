@@ -1,6 +1,6 @@
 // Slippy-map tile arithmetic. Ported from JKAImaps.
 //
-// Pure — no Leaflet, no IndexedDB — so the download estimator can be tested
+// Pure — no Mapbox, no IndexedDB — so the download estimator can be tested
 // without a browser.
 
 export interface TileCoord {

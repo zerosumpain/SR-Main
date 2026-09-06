@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Thin shell for Broads Pilot. Loads Leaflet (same vendor bundle as /live),
+  // Thin shell for Broads Pilot. The map loads Mapbox on demand,
   // links the PWA manifest, and renders a slim SR top bar above the slot.
   import { page } from '$app/stores';
   let { children } = $props();
@@ -7,8 +7,6 @@
 </script>
 
 <svelte:head>
-  <link rel="stylesheet" href="/vendor/leaflet.min.css" />
-  <script src="/vendor/leaflet.min.js"></script>
   <link rel="manifest" href="/broads-pilot/manifest.webmanifest" />
   <meta name="theme-color" content="#c4570a" />
 </svelte:head>
