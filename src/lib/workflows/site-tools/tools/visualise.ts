@@ -1,7 +1,7 @@
 // src/lib/workflows/site-tools/tools/visualise.ts
 // Primitive renderer tools. Each returns an ArtifactToolData envelope so
 // ChatArea can render the output inline. Kept dependency-free on the server;
-// client components pull in vega-embed / leaflet at render time.
+// client components pull in vega-embed / Mapbox at render time.
 
 import { register } from '../registry-internal';
 import type { ToolResult } from '../registry-internal';

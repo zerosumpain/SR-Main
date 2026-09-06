@@ -2,7 +2,7 @@
   /**
    * A Mermaid diagram, rendered inline in the chat.
    *
-   * Mermaid is loaded on demand exactly as vega-embed and Leaflet are — it is
+   * Mermaid is loaded on demand exactly as vega-embed and Mapbox are — it is
    * a large dependency and most turns never draw a diagram, so it must not sit
    * in the entry bundle.
    *

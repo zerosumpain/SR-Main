@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { loadMapbox, type MapView } from '$lib/maps/loader';
   import { onDestroy } from 'svelte';
   import * as d3 from 'd3';
   import FacetPopover from './FacetPopover.svelte';
@@ -92,24 +93,11 @@
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ---- Map state ----
-  type LeafletMap = {
-    setView: (c: [number, number], z: number) => unknown;
-    fitBounds: (b: unknown, opts?: Record<string, unknown>) => unknown;
-    invalidateSize: () => unknown;
-    scrollWheelZoom: { enable: () => unknown; disable: () => unknown };
-    on: (ev: string, fn: () => void) => unknown;
-    remove: () => void;
-  };
-  type LeafletGlobal = {
-    map: (el: HTMLElement, opts?: Record<string, unknown>) => LeafletMap;
-    tileLayer: (url: string, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown };
-    marker: (latlng: [number, number], opts?: Record<string, unknown>) => { addTo: (m: unknown) => { bindTooltip: (t: string) => unknown } };
-    latLngBounds: (corners: Array<[number, number]>) => { extend: (p: [number, number]) => unknown };
-  };
 
   let mapContainer = $state<HTMLDivElement | undefined>();
-  let leafletMap: LeafletMap | null = null;
+  let mapboxMap: MapView | null = null;
   let mapLoading = $state(false);
+  let mapGeneration = 0;
   let mapError = $state<string | null>(null);
   type GeoItem = { id: string; name: string; lat: number; lng: number; type: string };
   let geoItems = $state<GeoItem[]>([]);
@@ -220,45 +208,14 @@
     exploreOpen = !exploreOpen;
   }
 
-  // ---- Leaflet helpers ----
-
-  function ensureLeafletLoaded(): Promise<LeafletGlobal> {
-    const existing = (globalThis as unknown as { L?: LeafletGlobal }).L;
-    if (existing) return Promise.resolve(existing);
-
-    if (!document.querySelector('link[data-leaflet]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = '/vendor/leaflet.min.css';
-      link.dataset.leaflet = 'true';
-      document.head.appendChild(link);
-    }
-
-    return new Promise((resolve, reject) => {
-      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => {
-          const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-          L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-        });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = '/vendor/leaflet.min.js';
-      script.dataset.leaflet = 'true';
-      script.onload = () => {
-        const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-        L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-      };
-      script.onerror = () => reject(new Error('Failed to load /vendor/leaflet.min.js'));
-      document.head.appendChild(script);
-    });
-  }
+  // ---- Mapbox helpers ----
 
   function destroyMap() {
-    if (leafletMap) {
-      leafletMap.remove();
-      leafletMap = null;
+    mapGeneration++;
+    mapLoading = false;
+    if (mapboxMap) {
+      mapboxMap.remove();
+      mapboxMap = null;
     }
     mapInitialized = false;
     mapError = null;
@@ -267,6 +224,7 @@
 
   async function initMap() {
     if (mapInitialized || mapLoading) return;
+    const generation = mapGeneration;
     mapLoading = true;
     mapError = null;
     try {
@@ -278,6 +236,7 @@
       });
       if (!res.ok) throw new Error(`Geo API error: ${res.status}`);
       const data = await res.json();
+      if (generation !== mapGeneration) return;
       geoItems = data.items ?? [];
 
       if (geoItems.length === 0) {
@@ -288,37 +247,32 @@
 
       // Wait for container to be in the DOM
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
-      if (!mapContainer) {
+      if (generation !== mapGeneration || !mapContainer) {
         mapLoading = false;
         return;
       }
 
-      const L = await ensureLeafletLoaded();
-      if (!mapContainer) {
+      const M = await loadMapbox();
+      if (generation !== mapGeneration || !mapContainer) {
         mapLoading = false;
         return;
       }
 
-      const map = L.map(mapContainer, {
+      const map = M.map(mapContainer, {
         scrollWheelZoom: false,
         zoomControl: true,
         touchZoom: true,
         doubleClickZoom: true,
         dragging: true,
       });
-      leafletMap = map;
+      mapboxMap = map;
 
       map.on('focus', () => map.scrollWheelZoom.enable());
       map.on('blur', () => map.scrollWheelZoom.disable());
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 19,
-      }).addTo(map);
-
       const allPoints: Array<[number, number]> = [];
       for (const item of geoItems) {
-        const m = L.marker([item.lat, item.lng]).addTo(map);
+        const m = M.marker([item.lat, item.lng]).addTo(map);
         m.bindTooltip(item.name);
         allPoints.push([item.lat, item.lng]);
       }
@@ -327,16 +281,16 @@
         map.setView(allPoints[0], 12);
       } else if (allPoints.length > 1) {
         const [head, ...rest] = allPoints;
-        const bounds = L.latLngBounds([head, head]);
+        const bounds = M.latLngBounds([head, head]);
         for (const p of rest) bounds.extend(p);
         map.fitBounds(bounds, { padding: [20, 20] });
       }
 
       mapInitialized = true;
     } catch (err) {
-      mapError = err instanceof Error ? err.message : String(err);
+      if (generation === mapGeneration) mapError = err instanceof Error ? err.message : String(err);
     } finally {
-      mapLoading = false;
+      if (generation === mapGeneration) mapLoading = false;
     }
   }
 

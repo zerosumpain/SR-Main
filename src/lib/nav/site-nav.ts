@@ -85,7 +85,7 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
   { prefix: '/auth-error', why: 'The auth gate’s failure page — same reason as /login.' },
   {
     prefix: '/broads/speed',
-    why: 'Opened from a WhatsApp link by people with no session and no /broads index to be a child of. Full-bleed Leaflet map.',
+    why: 'Opened from a WhatsApp link by people with no session and no /broads index to be a child of. Full-bleed Mapbox map.',
   },
   {
     prefix: '/deepdive/share',

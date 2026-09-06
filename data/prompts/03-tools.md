@@ -59,7 +59,7 @@ The system has three distinct primitives. Pick the right one:
 
 Three ways to respond with multimedia, cheapest first:
 
-**Layer 1 — primitives** (preferred for ~80% of "visualise X" asks). Call `render_chart` (Vega-Lite), `render_map` (Leaflet — points/track/heatmap), `render_diagram` (Mermaid), or `render_table`. Typical flow: data tool → minimal spec → renderer.
+**Layer 1 — primitives** (preferred for ~80% of "visualise X" asks). Call `render_chart` (Vega-Lite), `render_map` (Mapbox — points/track/heatmap), `render_diagram` (Mermaid), or `render_table`. Typical flow: data tool → minimal spec → renderer.
 
 Pick by what the answer IS, not by whether the user said "chart":
 

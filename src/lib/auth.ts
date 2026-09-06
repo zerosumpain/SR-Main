@@ -73,6 +73,9 @@ const PUBLIC_PATHS = [
   // Anonymous GET only; the handler self-limits and caches Google Places data
   // server-side (no OAuth, since holidaymakers using the planner never sign in).
   '/api/broads-pilot',
+  // Read-only public Mapbox browser token, validated as pk. only. Maps on public
+  // projects and shared chats need it; no credential metadata is returned.
+  '/api/maps/config',
   // Service-to-service endpoints for the stealth-scrape + interactive-VNC
   // proxy. Auth is enforced by each handler via SCRAPER_SERVICE_TOKEN
   // (Bearer header) — not Google OAuth, because the caller is the VPS

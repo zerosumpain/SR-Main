@@ -56,6 +56,7 @@
 /api/landing/ecg-telemetry
 /api/landing/vitals
 /api/live-walk
+/api/maps/config
 /api/mcp
 /api/mcp/local
 /api/policy-engine/ingest

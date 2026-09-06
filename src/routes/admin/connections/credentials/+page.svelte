@@ -191,7 +191,7 @@
   <PageHeader
     kicker="Integrations"
     title="Credentials"
-    sub="Encrypted credentials for external services, used by workflow nodes. Add here, then reference in canvas nodes."
+    sub="Encrypted credentials for external services used across the site and in workflows."
   />
   {#if data.adapters.length === 0}
     <section class="nm-sec">

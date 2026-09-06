@@ -11,7 +11,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 
 await page.goto(URL, { waitUntil: 'networkidle', timeout: 45000 });
-await page.waitForTimeout(3500); // Leaflet + dataset load
+await page.waitForTimeout(3500); // Mapbox + dataset load
 // dismiss onboarding
 await page.getByText('Start planning').click().catch(() => {});
 await page.waitForTimeout(400);

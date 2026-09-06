@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { loadMapbox } from '$lib/maps/loader';
   import { onMount, onDestroy } from 'svelte';
   import type { Coord } from '$lib/trails/scoring';
 
@@ -25,48 +26,17 @@
   let error = $state<string | null>(null);
   let ready = $state(false);
 
-  // Leaflet objects are machinery, never $state — a handle that an effect both
+  // Mapbox objects are machinery, never $state — a handle that an effect both
   // reads and writes subscribes that effect to itself and loops.
-  let L: any = null;
+  let M: any = null;
   let map: any = null;
   let startMarker: any = null;
   let finishMarker: any = null;
   let routeLayers: any[] = [];
   let fittedKey = '';
 
-  function ensureLeaflet(): Promise<any> {
-    const existing = (globalThis as unknown as { L?: unknown }).L;
-    if (existing) return Promise.resolve(existing);
-
-    if (!document.querySelector('link[data-leaflet]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = '/vendor/leaflet.min.css';
-      link.dataset.leaflet = 'true';
-      document.head.appendChild(link);
-    }
-
-    return new Promise((resolve, reject) => {
-      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      const settle = () => {
-        const g = (globalThis as unknown as { L?: unknown }).L;
-        g ? resolve(g) : reject(new Error('Leaflet loaded but window.L missing'));
-      };
-      if (existingScript) {
-        existingScript.addEventListener('load', settle);
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = '/vendor/leaflet.min.js';
-      script.dataset.leaflet = 'true';
-      script.onload = settle;
-      script.onerror = () => reject(new Error('Failed to load /vendor/leaflet.min.js'));
-      document.head.appendChild(script);
-    });
-  }
-
   function pinIcon(colour: string) {
-    return L.divIcon({
+    return M.divIcon({
       className: 'plan-pin',
       html: `<span style="background:${colour}"></span>`,
       iconSize: [16, 16],
@@ -82,12 +52,12 @@
     finishMarker = null;
 
     if (start) {
-      startMarker = L.marker([start[1], start[0]], { icon: pinIcon('#0e5b66') })
+      startMarker = M.marker([start[1], start[0]], { icon: pinIcon('#0e5b66') })
         .addTo(map)
         .bindTooltip('Start');
     }
     if (finish) {
-      finishMarker = L.marker([finish[1], finish[0]], { icon: pinIcon('#c4570a') })
+      finishMarker = M.marker([finish[1], finish[0]], { icon: pinIcon('#c4570a') })
         .addTo(map)
         .bindTooltip('Finish');
     }
@@ -104,7 +74,7 @@
       const selected = i === selectedIndex;
       // Unselected candidates stay visible but recede, so the comparison is
       // possible without them competing with the choice.
-      const layer = L.polyline(latlngs, {
+      const layer = M.polyline(latlngs, {
         color: selected ? '#c4570a' : '#1a1008',
         weight: selected ? 4 : 2,
         opacity: selected ? 1 : 0.25,
@@ -128,16 +98,11 @@
     let cancelled = false;
     (async () => {
       try {
-        L = await ensureLeaflet();
+        M = await loadMapbox();
         if (cancelled || !container) return;
 
-        map = L.map(container, { scrollWheelZoom: false, zoomControl: true });
+        map = M.map(container, { scrollWheelZoom: false, zoomControl: true });
         map.setView(start ? [start[1], start[0]] : [53.3811, -1.4701], 13);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map);
 
         map.on('focus', () => map.scrollWheelZoom.enable());
         map.on('blur', () => map.scrollWheelZoom.disable());
@@ -164,8 +129,8 @@
     map = null;
   });
 
-  // Redraw on data change. Guarded on `ready` so it is inert until Leaflet
-  // exists; the draw functions touch only Leaflet handles, never $state, so
+  // Redraw on data change. Guarded on `ready` so it is inert until Mapbox
+  // exists; the draw functions touch only Mapbox handles, never $state, so
   // they cannot re-trigger this effect.
   $effect(() => {
     void start;
@@ -243,7 +208,7 @@
     border-radius: 100px;
   }
 
-  :global(.leaflet-container) {
+  :global(.mapboxgl-map) {
     font-family: var(--font-mono);
     background: #e8dece;
   }

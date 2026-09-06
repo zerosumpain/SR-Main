@@ -1,26 +1,10 @@
 <script lang="ts">
+  import { loadMapbox, type MapView } from '$lib/maps/loader';
   import { onMount } from 'svelte';
   import type { Action } from 'svelte/action';
   import type { MapArtifact } from '$lib/workflows/site-tools/artifact-types';
 
-  // Loose global typing — Leaflet loaded via static script tag, not npm.
-  type LeafletMap = {
-    setView: (c: [number, number], z: number) => unknown;
-    fitBounds: (b: unknown, opts?: Record<string, unknown>) => unknown;
-    invalidateSize: () => unknown;
-    scrollWheelZoom: { enable: () => unknown; disable: () => unknown };
-    on: (ev: string, fn: () => void) => unknown;
-  };
-  type LeafletGlobal = {
-    map: (el: HTMLElement, opts?: Record<string, unknown>) => LeafletMap;
-    tileLayer: (url: string, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown };
-    marker: (latlng: [number, number], opts?: Record<string, unknown>) => { addTo: (m: unknown) => { bindTooltip: (t: string) => unknown } };
-    polyline: (coords: Array<[number, number]>, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown; getBounds: () => unknown };
-    circleMarker: (latlng: [number, number], opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown };
-    latLngBounds: (corners: Array<[number, number]>) => { extend: (p: [number, number]) => unknown };
-  };
-
-  // Leaflet paints into inline SVG attributes and cannot read a CSS custom
+  // Mapbox paints into WebGL and cannot read a CSS custom
   // property, so the tokens are mirrored here — the same arrangement, and the
   // same reason, as $lib/jkai/artifacts/vega-theme.ts.
   const MAP_TRACK = '#c4570a';      /* --accent */
@@ -33,24 +17,10 @@
   let error = $state<string | null>(null);
   let fullscreen = $state(false);
   let scrollZoomActive = $state(false);
-  let mapRef: LeafletMap | null = $state(null);
+  let mapRef: MapView | null = null;
 
-  /**
-   * Move the figure to <body> while it is fullscreen, and put it back after.
-   *
-   * `position: fixed` is NOT relative to the viewport when any ancestor carries
-   * a transform — that ancestor becomes the containing block instead. Every
-   * chat message sits inside `.msg-stack`, which runs `animation: thread-arrive
-   * … both`, and the `both` fill-mode leaves `transform: translateY(0)` applied
-   * for ever. So the "fullscreen" map was being sized against the message
-   * column: measured at 870×288 at (20, 89) on a 1280×800 viewport, with an
-   * 800px-tall Leaflet pane clipped inside it.
-   *
-   * No amount of z-index or inset fixes that from inside the subtree — the only
-   * cure is to leave it, which is the same portal the site's modals use. A
-   * local action, not `$lib/canvas/portal`: that one re-appends on destroy and
-   * would resurrect the overlay (see the sr-design skill).
-   */
+  /** Portal fullscreen maps past transformed chat ancestors, then restore their
+   * position. Remove the portal on destroy so it cannot orphan a fullscreen map. */
   const portalWhileFullscreen: Action<HTMLElement, boolean> = (node, active) => {
     // A comment node holds the figure's place in the thread, so it goes back
     // exactly where it was rather than at the end of its parent.
@@ -96,7 +66,7 @@
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeydown, true);
     // Two frames: the first applies the class, the second lets layout settle
-    // before Leaflet measures. One frame measured the old box on a cold map.
+    // before Mapbox measures. One frame measured the old box on a cold map.
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => mapRef?.invalidateSize()));
     return () => {
       cancelAnimationFrame(raf);
@@ -118,50 +88,17 @@
     mapRef?.scrollWheelZoom.disable();
   }
 
-  function ensureLeafletLoaded(): Promise<LeafletGlobal> {
-    const existing = (globalThis as unknown as { L?: LeafletGlobal }).L;
-    if (existing) return Promise.resolve(existing);
-
-    if (!document.querySelector('link[data-leaflet]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = '/vendor/leaflet.min.css';
-      link.dataset.leaflet = 'true';
-      document.head.appendChild(link);
-    }
-
-    return new Promise((resolve, reject) => {
-      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => {
-          const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-          L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-        });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = '/vendor/leaflet.min.js';
-      script.dataset.leaflet = 'true';
-      script.onload = () => {
-        const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-        L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-      };
-      script.onerror = () => reject(new Error('Failed to load /vendor/leaflet.min.js'));
-      document.head.appendChild(script);
-    });
-  }
-
   onMount(() => {
     let cancelled = false;
     (async () => {
       try {
-        const L = await ensureLeafletLoaded();
+        const M = await loadMapbox();
         if (cancelled || !container) return;
         // scrollWheelZoom starts disabled so page scroll works; user
         // activates it by clicking the map (and deactivates by clicking off).
         // touchZoom / pinch / +- controls / double-click / drag are all
         // default-enabled.
-        const map = L.map(container, {
+        const map = M.map(container, {
           scrollWheelZoom: false,
           zoomControl: true,
           touchZoom: true,
@@ -173,30 +110,25 @@
         map.on('focus', activateScrollZoom);
         map.on('blur', deactivateScrollZoom);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map);
-
         const allPoints: Array<[number, number]> = [];
         for (const layer of artifact.layers) {
           if (layer.kind === 'points') {
             for (const p of layer.points) {
-              const m = L.marker([p.lat, p.lng]).addTo(map);
+              const m = M.marker([p.lat, p.lng]).addTo(map);
               if (p.label) m.bindTooltip(p.label);
               allPoints.push([p.lat, p.lng]);
             }
           } else if (layer.kind === 'track') {
             const coords = layer.points.map((p) => [p.lat, p.lng] as [number, number]);
             // Burnt orange, the site's identity colour, and what a single
-            // series wears everywhere else on the site — not Leaflet's blue.
-            L.polyline(coords, { color: MAP_TRACK, weight: 3 }).addTo(map);
+            // series wears everywhere else on the site — with the site’s accent.
+            M.polyline(coords, { color: MAP_TRACK, weight: 3 }).addTo(map);
             allPoints.push(...coords);
           } else {
             // heatmap — fallback to weighted circle markers (no external plugin in v1)
             for (const p of layer.points) {
               const w = typeof p.weight === 'number' ? p.weight : 1;
-              L.circleMarker([p.lat, p.lng], {
+              M.circleMarker([p.lat, p.lng], {
                 radius: Math.min(Math.max(w * 4, 3), 20),
                 // Petrol, the counter-accent: heat has to read as a different
                 // measure from a track, and red is the site's error colour.
@@ -214,7 +146,7 @@
           map.setView(artifact.center, artifact.zoom);
         } else if (allPoints.length > 0) {
           const [head, ...rest] = allPoints;
-          const bounds = L.latLngBounds([head, head]);
+          const bounds = M.latLngBounds([head, head]);
           for (const p of rest) bounds.extend(p);
           map.fitBounds(bounds, { padding: [20, 20] });
         } else {
@@ -226,6 +158,7 @@
     })();
     return () => {
       cancelled = true;
+      mapRef?.remove();
       mapRef = null;
     };
   });
@@ -265,9 +198,7 @@
 <style>
   .map-artifact {
     position: relative;
-    /* Establish a new stacking context so Leaflet's internal tile/pane z-indexes
-       (which reach ~600–700) stay contained. Without this, map tiles bleed
-       above fixed/absolute overlays like the tool-call drawer. */
+    /* Keep map controls inside the figure’s stacking context. */
     z-index: 0;
     isolation: isolate;
     margin: 0.5rem 0;
@@ -306,7 +237,7 @@
     position: absolute;
     top: 0.5rem;
     right: 0.5rem;
-    z-index: 1000; /* above Leaflet layers */
+    z-index: 1000; /* above Mapbox layers */
     width: 32px;
     height: 32px;
     display: flex;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { loadMapbox, type MapLayer } from '$lib/maps/loader';
   import { onMount } from 'svelte';
   import { app } from '../lib/appState.svelte';
   import { bridgeVerdict, edgeVerdict } from '$lib/broads-pilot/passability';
@@ -11,19 +12,14 @@
   const HOME_ZOOM = 13;
 
   let mapEl: HTMLDivElement;
-  // Leaflet handles kept as plain refs (NOT $state) to avoid effect-update loops.
-  let L: any;
+  // Mapbox handles kept as plain refs (NOT $state) to avoid effect-update loops.
+  let M: any;
   let map: any;
-  let warmTiles: any, nauticalBase: any, seamark: any, schematicTiles: any;
+  let seamark: MapLayer;
+  let mapError = $state<string | null>(null);
   const groups: Record<string, any> = {};
-  let initialized = false;
-  // Canvas markers (preferCanvas) fire their click, but the native
-  // stopPropagation() we call does NOT set Leaflet's internal _stopped flag, so
-  // the map's own click (which drops a new origin pin) still fires. Guard it: a
-  // feature click sets this flag, and the map click handler skips one click.
-  let suppressOriginClick = false;
+  let initialized = $state(false);
   function featureClick(ev: any, sel: any) {
-    suppressOriginClick = true;
     ev?.originalEvent?.stopPropagation?.();
     app.select(sel);
   }
@@ -42,33 +38,34 @@
   }
 
   onMount(() => {
-    L = (window as any).L;
-    if (!L || !mapEl) return;
-    map = L.map(mapEl, { zoomControl: true, attributionControl: true, preferCanvas: true }).setView(HOME, HOME_ZOOM);
-    // keep the +/- control clear of the docked sheet: bottom-left on desktop,
-    // top-left on mobile (where the sheet is a bottom sheet).
-    const mq = window.matchMedia('(min-width: 760px)');
-    const setZoomPos = () => map.zoomControl?.setPosition(mq.matches ? 'bottomleft' : 'topleft');
-    setZoomPos();
-    mq.addEventListener?.('change', setZoomPos);
-    const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-    const ATTR = '&copy; OpenStreetMap contributors';
-    warmTiles = L.tileLayer(OSM, { maxZoom: 18, className: 'bp-warm-tiles', attribution: ATTR });
-    nauticalBase = L.tileLayer(OSM, { maxZoom: 18, attribution: ATTR });
-    seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18, opacity: 0.9 });
-    schematicTiles = L.tileLayer(OSM, { maxZoom: 18, opacity: 0.12, className: 'bp-schematic-tiles', attribution: ATTR });
-    // 'route' = static casing + markers; 'routeLive' = the coloured/dashed centre
-    // lines (redrawn on each GPS fix while cruising, so markers don't flicker).
-    for (const k of [...BASE, 'route', 'routeLive', 'user']) groups[k] = L.layerGroup().addTo(map);
-    map.on('click', (e: any) => {
-      if (suppressOriginClick) { suppressOriginClick = false; return; }
-      // Origin is set explicitly via the Set-start picker. A plain map tap only
-      // sets it when "pick a point" is armed — no surprise pin drops.
-      if (app.pickingStart) { app.setOrigin(e.latlng.lat, e.latlng.lng, 'Custom point'); app.pickingStart = false; }
-    });
-    initialized = true;
-    applyTheme();
-    applyLock();
+    let cancelled = false;
+    let cleanup = () => {};
+    (async () => {
+      try {
+        M = await loadMapbox();
+        if (cancelled || !mapEl) return;
+        map = M.map(mapEl, { zoomControl: true }).setView(HOME, HOME_ZOOM);
+        // keep the +/- control clear of the docked sheet: bottom-left on desktop,
+        // top-left on mobile (where the sheet is a bottom sheet).
+        const mq = window.matchMedia('(min-width: 760px)');
+        const setZoomPos = () => map.zoomControl?.setPosition(mq.matches ? 'bottomleft' : 'topleft');
+        setZoomPos();
+        mq.addEventListener?.('change', setZoomPos);
+        seamark = M.raster('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { opacity: 0.9, attribution: '© OpenSeaMap contributors' });
+        // 'route' = static casing + markers; 'routeLive' = the coloured/dashed centre
+        // lines (redrawn on each GPS fix while cruising, so markers don't flicker).
+        for (const k of [...BASE, 'route', 'routeLive', 'user']) groups[k] = M.layerGroup().addTo(map);
+        map.on('click', (e: any) => {
+          // Origin is set explicitly via the Set-start picker. A plain map tap only
+          // sets it when "pick a point" is armed — no surprise pin drops.
+          if (app.pickingStart) { app.setOrigin(e.latlng.lat, e.latlng.lng, 'Custom point'); app.pickingStart = false; }
+        });
+        initialized = true;
+        applyLock();
+        cleanup = () => mq.removeEventListener?.('change', setZoomPos);
+      } catch (err) { mapError = err instanceof Error ? err.message : 'Map unavailable'; }
+    })();
+    return () => { cancelled = true; initialized = false; cleanup(); map?.remove(); };
   });
 
   // Lock = pin the camera on the start and freeze pan/gesture-zoom (the +/-
@@ -87,10 +84,27 @@
 
   function applyTheme() {
     if (!map) return;
-    [warmTiles, nauticalBase, seamark, schematicTiles].forEach((t) => map.hasLayer(t) && map.removeLayer(t));
-    if (app.mapTheme === 'warm') warmTiles.addTo(map);
-    else if (app.mapTheme === 'nautical') { nauticalBase.addTo(map); seamark.addTo(map); }
-    else schematicTiles.addTo(map);
+    seamark?.remove();
+    map.setTheme(app.mapTheme);
+    if (app.mapTheme === 'nautical') seamark.addTo(map);
+  }
+
+  // Batch matching line styles so the waterway graph uses a handful of WebGL
+  // sources instead of one source for each of its hundreds of edges.
+  const lineBatches = new WeakMap<MapLayer, Map<string, { layer: MapLayer; lines: LatLng[][] }>>();
+  function drawLine(group: MapLayer, points: LatLng[], options: Record<string, unknown>) {
+    let batches = lineBatches.get(group);
+    if (!batches) { batches = new Map(); lineBatches.set(group, batches); }
+    const key = JSON.stringify(options);
+    let batch = batches.get(key);
+    if (!batch?.layer.map) {
+      const lines = [points];
+      batch = { layer: M.multiPolyline(lines, options).addTo(group), lines };
+      batches.set(key, batch);
+    } else {
+      batch.lines.push(points);
+      batch.layer.setLatLngs(batch.lines);
+    }
   }
 
   function timeBand(t: number) {
@@ -121,7 +135,7 @@
     if (!schematic) {
       for (const b of data.broads)
         for (const ring of b.rings)
-          L.polygon(ring, { color: waterStroke, weight: 2.5, opacity: 0.95, fillColor: waterFill, fillOpacity: 0.55, lineJoin: 'round', interactive: false })
+          M.polygon(ring, { color: waterStroke, weight: 2.5, opacity: 0.95, fillColor: waterFill, fillOpacity: 0.55, lineJoin: 'round', interactive: false })
             .addTo(groups.broads);
     }
 
@@ -132,21 +146,21 @@
       for (const e of data.graph.edges) {
         const v = boat ? edgeVerdict(e, data.restrictions, boat) : 'pass';
         if (v === 'blocked')
-          L.polyline(e.geometry, { color: '#9a4b00', weight: 1.5, opacity: 0.2, dashArray: '2 7' }).addTo(groups.network);
+          drawLine(groups.network, e.geometry, { color: '#9a4b00', weight: 1.5, opacity: 0.2, dashArray: '2 7' });
         else
-          L.polyline(e.geometry, { color: '#c4570a', weight: v === 'marginal' ? 2.5 : 3.6, opacity: 0.92 }).addTo(groups.network);
+          drawLine(groups.network, e.geometry, { color: '#c4570a', weight: v === 'marginal' ? 2.5 : 3.6, opacity: 0.92 });
       }
     } else if (app.showRangeRings && app.reachableActive) {
       const reach = app.reachableActive;
       for (const e of data.graph.edges) {
         const t = Math.min(reach.get(e.from)?.time_s ?? Infinity, reach.get(e.to)?.time_s ?? Infinity);
-        if (t === Infinity) L.polyline(e.geometry, { color: '#6d4c41', weight: 1, opacity: 0.15 }).addTo(groups.network);
-        else L.polyline(e.geometry, { color: timeBand(t), weight: 3.4, opacity: 0.85 }).addTo(groups.network);
+        if (t === Infinity) drawLine(groups.network, e.geometry, { color: '#6d4c41', weight: 1, opacity: 0.15 });
+        else drawLine(groups.network, e.geometry, { color: timeBand(t), weight: 3.4, opacity: 0.85 });
       }
     } else if (app.layers.speed) {
       // colour the channel by its posted speed limit; tap a stretch for the number.
       for (const e of data.graph.edges)
-        L.polyline(e.geometry, { color: limitColor(e.limit_mph), weight: 3.6, opacity: 0.9 })
+        M.polyline(e.geometry, { color: limitColor(e.limit_mph), weight: 3.6, opacity: 0.9 })
           .bindTooltip(`${e.limit_mph} mph`, { sticky: true }).addTo(groups.network);
     } else {
       // default (warm/nautical): the navigable channels as bold blue water
@@ -156,10 +170,10 @@
       for (const e of data.graph.edges) {
         const v = boat ? edgeVerdict(e, data.restrictions, boat) : 'pass';
         if (v === 'blocked') {
-          L.polyline(e.geometry, { color: '#6d4c41', weight: 1.6, opacity: 0.28 }).addTo(groups.network);
+          drawLine(groups.network, e.geometry, { color: '#6d4c41', weight: 1.6, opacity: 0.28 });
         } else {
-          L.polyline(e.geometry, { color: waterStroke, weight: 5.5, opacity: 0.5, lineCap: 'round', lineJoin: 'round' }).addTo(groups.network);
-          L.polyline(e.geometry, { color: waterFill, weight: 3.4, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(groups.network);
+          drawLine(groups.network, e.geometry, { color: waterStroke, weight: 5.5, opacity: 0.5, lineCap: 'round', lineJoin: 'round' });
+          drawLine(groups.network, e.geometry, { color: waterFill, weight: 3.4, opacity: 0.92, lineCap: 'round', lineJoin: 'round' });
         }
       }
     }
@@ -169,7 +183,7 @@
       const o = op(app.layers.restrictions);
       for (const z of data.restrictions.zones) {
         const col = z.type === 'conservation' ? '#c62828' : z.type === 'tidal' ? '#e69500' : '#8d6e63';
-        L.polygon(z.geometry, { color: col, weight: 1.5, opacity: 0.75 * o, fillColor: col, fillOpacity: 0.18 * o, dashArray: '5 4' })
+        M.polygon(z.geometry, { color: col, weight: 1.5, opacity: 0.75 * o, fillColor: col, fillOpacity: 0.18 * o, dashArray: '5 4' })
           .bindTooltip(z.notes.split(' — ')[0], { sticky: true }).addTo(groups.zones);
       }
     }
@@ -178,7 +192,7 @@
     if (shown(app.layers.moorings)) {
       const o = op(app.layers.moorings);
       for (const m of data.moorings)
-        L.circleMarker([m.lat, m.lng], { radius: 6, fillColor: TIER_COLOR[m.tier] ?? '#6d4c41', color: '#1a1008', weight: 1, fillOpacity: 0.95 * o, opacity: 0.9 * o })
+        M.circleMarker([m.lat, m.lng], { radius: 6, fillColor: TIER_COLOR[m.tier] ?? '#6d4c41', color: '#1a1008', weight: 1, fillOpacity: 0.95 * o, opacity: 0.9 * o })
           .bindTooltip(m.name, { direction: 'top' })
           .on('click', (ev: any) => featureClick(ev, { kind: 'mooring', id: m.id }))
           .addTo(groups.moorings);
@@ -192,7 +206,7 @@
       if (!shown(on)) continue;
       if (app.dogOnly && (p.kind === 'pub' || p.kind === 'walk') && p.dog_friendly === false) continue;
       const o = op(on);
-      L.circleMarker([p.lat, p.lng], { radius: 4, fillColor: POI_COLOR[p.kind] ?? '#555', color: POI_COLOR[p.kind] ?? '#555', weight: 0, fillOpacity: 0.92 * o, opacity: 0.92 * o })
+      M.circleMarker([p.lat, p.lng], { radius: 4, fillColor: POI_COLOR[p.kind] ?? '#555', color: POI_COLOR[p.kind] ?? '#555', weight: 0, fillOpacity: 0.92 * o, opacity: 0.92 * o })
         .bindTooltip(p.name, { direction: 'top' })
         .on('click', (ev: any) => featureClick(ev, { kind: 'poi', id: p.id }))
         .addTo(groups.pois);
@@ -203,7 +217,7 @@
     if (app.layers.services) {
       for (const p of data.pois) {
         if (p.kind !== 'fuel') continue;
-        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'bp-svc', html: '<span class="bp-svc-pin"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4" width="7" height="13" rx="1"/><line x1="4.5" y1="8.5" x2="11.5" y2="8.5"/><path d="M11.5 7h2a1.5 1.5 0 0 1 1.5 1.5V13a1.3 1.3 0 0 0 2.6 0V8l-1.6-2"/></svg></span>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
+        M.marker([p.lat, p.lng], { icon: M.divIcon({ className: 'bp-svc', html: '<span class="bp-svc-pin"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4" width="7" height="13" rx="1"/><line x1="4.5" y1="8.5" x2="11.5" y2="8.5"/><path d="M11.5 7h2a1.5 1.5 0 0 1 1.5 1.5V13a1.3 1.3 0 0 0 2.6 0V8l-1.6-2"/></svg></span>', iconSize: [22, 22], iconAnchor: [11, 11] }) })
           .bindTooltip(`${p.name} — fuel`, { direction: 'top' })
           .on('click', (ev: any) => featureClick(ev, { kind: 'poi', id: p.id }))
           .addTo(groups.pois);
@@ -215,7 +229,7 @@
         if (m.facilities.shore_power) svc.push('E');
         if (!svc.length) continue;
         const tip = [m.facilities.pump_out && 'pump-out', m.facilities.water && 'water', m.facilities.shore_power && 'shore power'].filter(Boolean).join(' · ');
-        L.marker([m.lat, m.lng], { icon: L.divIcon({ className: 'bp-svc', html: `<span class="bp-svc-badge">${svc.join('')}</span>`, iconSize: [0, 0], iconAnchor: [-7, 18] }) })
+        M.marker([m.lat, m.lng], { icon: M.divIcon({ className: 'bp-svc', html: `<span class="bp-svc-badge">${svc.join('')}</span>`, iconSize: [0, 0], iconAnchor: [-7, 18] }) })
           .bindTooltip(`${m.name} — ${tip}`, { direction: 'top' })
           .on('click', (ev: any) => featureClick(ev, { kind: 'mooring', id: m.id }))
           .addTo(groups.pois);
@@ -227,14 +241,14 @@
       const o = op(app.layers.restrictions);
       for (const b of data.restrictions.bridges) {
         const v = bridgeVerdict(b, boat);
-        const mk = L.marker([b.lat, b.lng], { icon: L.divIcon({ className: 'bp-bridge', html: `<span class="bp-bridge-pin" style="--c:${VERDICT_COLOR[v]}">▲</span>`, iconSize: [18, 18] }) })
+        const mk = M.marker([b.lat, b.lng], { icon: M.divIcon({ className: 'bp-bridge', html: `<span class="bp-bridge-pin" style="--c:${VERDICT_COLOR[v]}">▲</span>`, iconSize: [18, 18] }) })
           .bindTooltip(`${b.name} — ${v}`, { direction: 'top' })
           .on('click', (ev: any) => featureClick(ev, { kind: 'bridge', id: b.id }))
           .addTo(groups.restrictions);
         mk.setOpacity(o);
       }
       const lk = data.restrictions.lock;
-      const lm = L.marker([lk.lat, lk.lng], { icon: L.divIcon({ className: 'bp-lock', html: '<span class="bp-lock-pin">⚿</span>', iconSize: [18, 18] }) })
+      const lm = M.marker([lk.lat, lk.lng], { icon: M.divIcon({ className: 'bp-lock', html: '<span class="bp-lock-pin">⚿</span>', iconSize: [18, 18] }) })
         .bindTooltip(lk.name, { direction: 'top' })
         .on('click', (ev: any) => featureClick(ev, { kind: 'lock', id: lk.id }))
         .addTo(groups.restrictions);
@@ -244,8 +258,8 @@
     // --- origin (START) — deliberately prominent: pulsing bullseye + a
     // permanent label, so it never gets lost in the network/markers ---
     if (app.origin)
-      L.marker([app.origin.lat, app.origin.lng], {
-        icon: L.divIcon({ className: 'bp-start', html: '<div class="bp-start-ring"></div><div class="bp-start-core"></div>', iconSize: [34, 34], iconAnchor: [17, 17] }),
+      M.marker([app.origin.lat, app.origin.lng], {
+        icon: M.divIcon({ className: 'bp-start', html: '<div class="bp-start-ring"></div><div class="bp-start-core"></div>', iconSize: [34, 34], iconAnchor: [17, 17] }),
         zIndexOffset: 2000, interactive: false,
       })
         .bindTooltip(`Start · ${app.origin.label}`, { permanent: true, direction: 'top', offset: [0, -12], className: 'bp-start-tip' })
@@ -262,7 +276,7 @@
   // dark casing — static (doesn't depend on time/position), into groups.route.
   function drawCasing(legs: { edges: any[] }[]) {
     for (const leg of legs) for (const e of leg.edges)
-      L.polyline(e.geometry, { color: '#1a1008', weight: 7, opacity: 0.5, lineCap: 'round' }).addTo(groups.route);
+      drawLine(groups.route, e.geometry, { color: '#1a1008', weight: 7, opacity: 0.5, lineCap: 'round' });
   }
 
   // coloured + dashed centre line into groups.routeLive: COLOUR = cumulative
@@ -271,17 +285,17 @@
   function drawCenterlines(legs: { edges: any[] }[], from: LatLng | null) {
     for (const s of styleRoute(legs, { from })) {
       const color = s.passed ? PASSED_COLOR : bandColor(s.midT);
-      L.polyline(s.edge.geometry, {
+      drawLine(groups.routeLive, s.edge.geometry, {
         color, weight: 4, opacity: s.passed ? 0.5 : 0.98, lineCap: 'round', lineJoin: 'round',
         dashArray: speedDash(s.edge.limit_mph),
-      }).addTo(groups.routeLive);
+      });
     }
   }
 
   function warnMarker(lat: number, lng: number, cls: 'red' | 'amber', label: string) {
     const big = cls === 'red';
-    L.marker([lat, lng], {
-      icon: L.divIcon({ className: 'bp-warn', html: `<div class="bp-warn-pin ${cls}">!</div>`, iconSize: big ? [26, 26] : [24, 24], iconAnchor: big ? [13, 13] : [12, 12] }),
+    M.marker([lat, lng], {
+      icon: M.divIcon({ className: 'bp-warn', html: `<div class="bp-warn-pin ${cls}">!</div>`, iconSize: big ? [26, 26] : [24, 24], iconAnchor: big ? [13, 13] : [12, 12] }),
       zIndexOffset: big ? 2200 : 2100, interactive: false,
     }).bindTooltip(label, { permanent: true, direction: 'top', offset: [0, big ? -14 : -13], className: `bp-warn-tip ${cls}` }).addTo(groups.route);
   }
@@ -299,8 +313,8 @@
       app.itinerary.forEach((nid, i) => {
         const n = app.data?.graph.nodes.find((x) => x.id === nid);
         if (!n) return;
-        L.marker([n.lat, n.lng], {
-          icon: L.divIcon({ className: 'bp-stop', html: `<div class="bp-stop-pin">${i + 1}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
+        M.marker([n.lat, n.lng], {
+          icon: M.divIcon({ className: 'bp-stop', html: `<div class="bp-stop-pin">${i + 1}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
           zIndexOffset: 1800, interactive: false,
         }).bindTooltip(`${i + 1}. ${app.nodeLabel(nid)}`, { permanent: true, direction: 'top', offset: [0, -12], className: 'bp-dest-tip' }).addTo(groups.route);
       });
@@ -330,8 +344,8 @@
     const dnId = app.destinationNode;
     const dn = dnId ? app.data?.graph.nodes.find((n) => n.id === dnId) : null;
     if (dn)
-      L.marker([dn.lat, dn.lng], {
-        icon: L.divIcon({ className: 'bp-dest', html: '<div class="bp-dest-pin">⚑</div>', iconSize: [30, 30], iconAnchor: [6, 26] }),
+      M.marker([dn.lat, dn.lng], {
+        icon: M.divIcon({ className: 'bp-dest', html: '<div class="bp-dest-pin">⚑</div>', iconSize: [30, 30], iconAnchor: [6, 26] }),
         zIndexOffset: 1900, interactive: false,
       })
         .bindTooltip(`Destination · ${app.nodeLabel(dnId!)}`, { permanent: true, direction: 'top', offset: [6, -22], className: 'bp-dest-tip' })
@@ -367,10 +381,10 @@
     groups.user.clearLayers();
     if (!u) return;
     if (u.accuracy && u.accuracy < 300)
-      L.circle([u.lat, u.lng], { radius: u.accuracy, color: '#c4570a', weight: 1, opacity: 0.35, fillColor: '#c4570a', fillOpacity: 0.06 }).addTo(groups.user);
+      M.circle([u.lat, u.lng], { radius: u.accuracy, color: '#c4570a', weight: 1, opacity: 0.35, fillColor: '#c4570a', fillOpacity: 0.06 }).addTo(groups.user);
     const rot = u.heading == null ? 0 : u.heading;
-    L.marker([u.lat, u.lng], {
-      icon: L.divIcon({ className: 'bp-you', html: `<div class="bp-you-puck" style="transform:rotate(${rot}deg)"><span class="bp-you-arrow"></span></div>`, iconSize: [22, 22], iconAnchor: [11, 11] }),
+    M.marker([u.lat, u.lng], {
+      icon: M.divIcon({ className: 'bp-you', html: `<div class="bp-you-puck" style="transform:rotate(${rot}deg)"><span class="bp-you-arrow"></span></div>`, iconSize: [22, 22], iconAnchor: [11, 11] }),
       zIndexOffset: 3000, interactive: false,
     }).addTo(groups.user);
     if (app.followUser && app.cruiseActive) map.panTo([u.lat, u.lng], { animate: true, duration: 0.7 });
@@ -383,13 +397,10 @@
 </script>
 
 <div class="bp-map" bind:this={mapEl}></div>
+{#if mapError}<p class="sr-map-status" role="alert">{mapError}</p>{/if}
 
 <style>
   .bp-map { position: absolute; inset: 0; height: 100%; width: 100%; background: var(--bg); }
-  /* Warm-brutalist "chart" — push standard OSM tiles toward parchment, kill blues. */
-  :global(.bp-warm-tiles) { filter: sepia(0.5) saturate(0.72) hue-rotate(-12deg) brightness(1.06) contrast(0.92); }
-  /* Schematic: desaturated + very faint so the network + layers read on top. */
-  :global(.bp-schematic-tiles) { filter: grayscale(0.7) sepia(0.25) brightness(1.12) contrast(0.85); }
   :global(.bp-bridge-pin) { color: var(--c); font-size: var(--fs-body-sm); line-height: 1; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
   :global(.bp-lock-pin) { color: #4527a0; font-size: var(--fs-body-sm); text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
   /* practical services: fuel glyph + mooring service badge */
@@ -429,11 +440,11 @@
   :global(.bp-you-puck) { width: 18px; height: 18px; border-radius: var(--radius-pill); background: #c4570a; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(26, 16, 8, 0.6); position: relative; }
   :global(.bp-you-arrow) { position: absolute; top: -8px; left: 50%; margin-left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid #c4570a; }
   @media (prefers-reduced-motion: reduce) { :global(.bp-start-ring) { animation: none; opacity: 0.55; } }
-  :global(.leaflet-container) { font-family: var(--font-mono, monospace); background: #ece3d2; }
-  :global(.leaflet-tooltip) { font-family: var(--font-mono, monospace); font-size: var(--fs-label-xs); }
+  :global(.mapboxgl-map) { font-family: var(--font-mono, monospace); background: #ece3d2; }
+  :global(.mapboxgl-popup-content) { font-family: var(--font-mono, monospace); font-size: var(--fs-label-xs); }
   /* On mobile the +/- control sits top-left, where the search bar lives — push
      it clear of the bar so the two don't overlap. */
   @media (max-width: 759px) {
-    :global(.leaflet-top.leaflet-left) { margin-top: 3.4rem; }
+    :global(.mapboxgl-ctrl-top-left) { margin-top: 3.4rem; }
   }
 </style>

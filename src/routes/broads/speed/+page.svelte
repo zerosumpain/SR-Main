@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { loadMapbox, type MapTools } from '$lib/maps/loader';
   import { onMount } from 'svelte';
 
-  let data: any = null;
-  let loading = true;
-  let error = '';
+  let data: any = $state(null);
+  let loading = $state(true);
+  let error = $state('');
+  let mapError = $state('');
 
   // Broads bounding box
   const BBOX = { minLat: 52.45, maxLat: 52.79, minLng: 1.28, maxLng: 1.78 };
@@ -11,6 +13,8 @@
   const ZOOM = 12;
 
   let map: any = null;
+  let M: MapTools | null = null;
+  let disposed = false;
   let routeLine: any = null;
   let currentMarker: any = null;
   let mapContainer: HTMLDivElement;
@@ -31,9 +35,10 @@
   ];
 
   onMount(() => {
-    initMap();
+    void initMap().catch((err) => { mapError = err instanceof Error ? err.message : 'Map unavailable'; });
     fetchData();
-    setInterval(fetchData, 30_000);
+    const interval = setInterval(fetchData, 30_000);
+    return () => { disposed = true; clearInterval(interval); map?.remove(); };
   });
 
   async function fetchData() {
@@ -55,26 +60,20 @@
     }
   }
 
-  function initMap() {
+  async function initMap() {
     if (!mapContainer) return;
-    // @ts-ignore
-    const L = (window as any).L;
-    if (!L) return;
+    M = await loadMapbox();
+    if (disposed || !mapContainer) return;
 
-    map = L.map(mapContainer, {
+    map = M.map(mapContainer, {
       center: CENTER,
       zoom: ZOOM,
       zoomControl: true,
       attributionControl: false,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '© OpenStreetMap contributors',
-    }).addTo(map);
-
     // Draw geofence
-    L.rectangle(
+    M.rectangle(
       [[BBOX.minLat, BBOX.minLng], [BBOX.maxLat, BBOX.maxLng]],
       {
         color: '#c4570a',
@@ -86,14 +85,15 @@
     ).addTo(map);
 
     // Broads landmarks
+    const maps = M;
     BROADS_PLACES.forEach((p) => {
-      L.circleMarker([p.lat, p.lng], {
+      maps.circleMarker([p.lat, p.lng], {
         radius: 2,
         color: 'rgba(26,16,8,0.3)',
         weight: 1,
       }).addTo(map);
-      L.marker([p.lat, p.lng], {
-        icon: L.divIcon({
+      maps.marker([p.lat, p.lng], {
+        icon: maps.divIcon({
           className: 'place-label',
           html: p.name,
           iconSize: [0, 0],
@@ -102,27 +102,26 @@
     });
 
     // Initial route line (empty)
-    routeLine = L.polyline([], {
+    routeLine = M.polyline([], {
       color: '#c4570a',
       weight: 3,
       opacity: 0.8,
     }).addTo(map);
 
     // Current position marker
-    currentMarker = L.circleMarker([0, 0], {
+    currentMarker = M.circleMarker([0, 0], {
       radius: 7,
       color: '#c4570a',
       fillColor: '#c4570a',
       fillOpacity: 1,
       weight: 2,
     }).addTo(map);
+    updateMap();
   }
 
   function updateMap() {
     if (!map || !data) return;
-    // @ts-ignore
-    const L = (window as any).L;
-    if (!L) return;
+    if (!M) return;
 
     const active = data.activeJourney;
     const samples = active?.samples || [];
@@ -152,7 +151,7 @@
 
     // Fit bounds to route if there are points
     if (routePoints.length > 1) {
-      const bounds = L.latLngBounds(routePoints);
+      const bounds = M.latLngBounds(routePoints);
       map.fitBounds(bounds.pad(0.2));
     } else if (data.currentPosition) {
       map.setView([data.currentPosition.lat, data.currentPosition.lng], map.getZoom());
@@ -286,8 +285,6 @@
 </script>
 
 <svelte:head>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" />
   <title>Broads Speed — sr.</title>
 </svelte:head>
 
@@ -304,6 +301,7 @@
           <span class="live-badge">live</span>
         {/if}
       </div>
+      {#if mapError}<p class="error-text" role="alert">{mapError}</p>{/if}
       <div class="map-wrap" bind:this={mapContainer} />
     </div>
 
@@ -487,7 +485,7 @@
     width: 100%;
     background: #e8dfcf;
   }
-  :global(.map-wrap .leaflet-container) {
+  :global(.map-wrap .mapboxgl-map) {
     background: #e8dfcf;
   }
 

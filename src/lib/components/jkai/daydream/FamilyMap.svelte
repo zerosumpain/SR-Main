@@ -1,12 +1,6 @@
 <script lang="ts">
-  /**
-   * The household on one map. Same vendored-Leaflet pattern as
-   * PlaceMap.svelte — no CDN, shared window.L, scroll zoom off — with one
-   * labelled marker per person, fitted to whoever is currently placed.
-   * Positions arrive from the on-demand `family_now` action, never from the
-   * page payload: a lat/lon leaves the server for exactly one owner-gated
-   * render, which is the same discipline the naming map established.
-   */
+  import { loadMapbox, type MapView } from '$lib/maps/loader';
+  /** Owner-gated household positions, with labelled freshness markers. */
   import { onMount } from 'svelte';
 
   export interface FamilyPosition {
@@ -22,73 +16,24 @@
     height = '300px',
   }: { positions: FamilyPosition[]; height?: string } = $props();
 
-  type LeafletMap = {
-    fitBounds: (b: unknown, opts?: Record<string, unknown>) => unknown;
-    setView: (c: [number, number], z: number) => unknown;
-    remove: () => unknown;
-  };
-  type LeafletGlobal = {
-    map: (el: HTMLElement, opts?: Record<string, unknown>) => LeafletMap;
-    tileLayer: (url: string, opts?: Record<string, unknown>) => { addTo: (m: unknown) => unknown; on: (ev: string, fn: () => void) => unknown };
-    circleMarker: (
-      c: [number, number],
-      opts?: Record<string, unknown>,
-    ) => { addTo: (m: unknown) => unknown; bindTooltip: (t: string, o?: Record<string, unknown>) => unknown };
-    latLngBounds: (coords: Array<[number, number]>) => unknown;
-  };
-
   let container: HTMLDivElement | undefined = $state();
   let error = $state<string | null>(null);
 
   // Plain let — a handle, nothing reactive reads it.
-  let mapRef: LeafletMap | null = null;
-
-  function ensureLeaflet(): Promise<LeafletGlobal> {
-    const existing = (globalThis as unknown as { L?: LeafletGlobal }).L;
-    if (existing) return Promise.resolve(existing);
-    if (!document.querySelector('link[data-leaflet]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = '/vendor/leaflet.min.css';
-      link.dataset.leaflet = 'true';
-      document.head.appendChild(link);
-    }
-    return new Promise((resolve, reject) => {
-      const done = () => {
-        const L = (globalThis as unknown as { L?: LeafletGlobal }).L;
-        L ? resolve(L) : reject(new Error('Leaflet loaded but window.L missing'));
-      };
-      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet]');
-      if (existingScript) {
-        existingScript.addEventListener('load', done);
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = '/vendor/leaflet.min.js';
-      script.dataset.leaflet = 'true';
-      script.onload = done;
-      script.onerror = () => reject(new Error('Failed to load /vendor/leaflet.min.js'));
-      document.head.appendChild(script);
-    });
-  }
+  let mapRef: MapView | null = null;
 
   onMount(() => {
     let cancelled = false;
     (async () => {
       try {
-        const L = await ensureLeaflet();
+        const M = await loadMapbox();
         if (cancelled || !container || positions.length === 0) return;
-        const map = L.map(container, { scrollWheelZoom: false, zoomControl: true });
+        const map = M.map(container, { scrollWheelZoom: false, zoomControl: true });
         mapRef = map;
-
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '© OpenStreetMap',
-        }).addTo(map);
 
         for (const p of positions) {
           const stale = p.ageMins > 60;
-          const marker = L.circleMarker([p.lat, p.lon], {
+          const marker = M.circleMarker([p.lat, p.lon], {
             radius: 8,
             color: '#faf7f1',
             weight: 2,
@@ -105,7 +50,7 @@
         if (positions.length === 1) {
           map.setView([positions[0].lat, positions[0].lon], 15);
         } else {
-          map.fitBounds(L.latLngBounds(positions.map((p) => [p.lat, p.lon] as [number, number])), {
+          map.fitBounds(M.latLngBounds(positions.map((p) => [p.lat, p.lon] as [number, number])), {
             padding: [36, 36],
             maxZoom: 15,
           });
