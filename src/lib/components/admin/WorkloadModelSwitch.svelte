@@ -320,13 +320,15 @@
        edge of the scroller. Definite is what makes `flex-basis: 100%` and
        `max-width: Nch` below resolve against something instead of against the
        content they are meant to constrain. */
-    max-width: min(68rem, calc(100vw - 4rem));
+    max-width: min(100%, 68rem, calc(100vw - 4rem));
     /* Wider than the usual 0.5rem: the trailing controls are all uppercase
        tracked mono, and at 0.5rem "clear pin" and "cancel" read as one word. */
     gap: 0.75rem;
     padding: 0.4rem 0;
   }
   .sw-for {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
@@ -343,7 +345,7 @@
        makes the whole table wider than its scroller again and puts Save back
        off the right edge. The open dropdown is drawn by the browser at its own
        width, so nothing is lost by capping the closed one. */
-    min-width: 22rem;
+    min-width: min(22rem, 100%);
     width: 34rem;
     max-width: 100%;
     font-family: var(--font-mono);
@@ -357,7 +359,8 @@
        force-zoom the viewport (see scripts/check-font-sizes.mjs). */
     font-size: var(--fs-body);
     padding: 0.4rem 0.6rem;
-    min-width: 18rem;
+    min-width: 0;
+    max-width: 100%;
     background: var(--surface-sunken, var(--bg-section));
     color: var(--text-primary);
     border: 1px solid var(--card-border);

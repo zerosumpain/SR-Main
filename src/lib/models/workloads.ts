@@ -44,7 +44,6 @@ import {
   DEFAULT_AUDIO_MODEL_ID,
   DEFAULT_ART_DIRECTOR_MODEL_ID,
   DEFAULT_DESIGN_REVIEW_MODEL_ID,
-  DEFAULT_RESEARCH_FAST_MODEL_ID,
   DEFAULT_NOTE_REVIEW_MODEL_ID,
 } from '$lib/constants/default-models';
 
@@ -314,11 +313,11 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     blurb: 'The budgeted research tiers: Instant, Scan and Brief.',
     key: 'jkai.research.fast_model',
     envKey: 'RESEARCH_FAST_MODEL',
-    fallbackModelId: DEFAULT_RESEARCH_FAST_MODEL_ID,
+    fallbackModelId: null,
     requires: 'openrouter',
     catalogue: 'tools',
     reason:
-      'These tiers promise an answer inside a wall clock (30s / 90s / 110s), so they must NOT inherit the site default: a reasoning model spends the budget thinking before it emits a token, and a codex/ id costs ~10s on the first call and cannot stream at all. Pick something fast and non-reasoning here, or the tier stops meaning what its label says.',
+      'Choose an OpenRouter model for Instant, Scan and Brief. With no selection, these use the OpenRouter chat selection or site default. Faster models leave more of the 30s / 90s / 110s time limits for the answer. If the default is Codex, select an OpenRouter model here.',
   },
   {
     id: 'research-deep',

@@ -11,12 +11,8 @@
  * the existing phases already understand, plus three things they did not have:
  * a wall-clock budget, a phase list, and a pinned model.
  *
- * On the model: the fast tiers must NOT inherit the site default. It may be a
- * reasoning model (reasoning tokens eat `max_tokens` and add tens of seconds
- * before the first content token) or a `codex/` id (~10s on the first call, and
- * it cannot stream reasoning at all). Either would spend most of a 110-second
- * budget before saying anything. `investigation` has no clock to protect, so it
- * takes whatever quality the operator's pick buys.
+ * The fast tiers use a selectable OpenRouter model and retain their wall-clock
+ * budgets. Investigation can also use Codex and has no overall time limit.
  *
  * A tier names its ROLE here rather than a model id. Both roles are entries in
  * the workload registry (`$lib/models/workloads`), so the model behind either
@@ -132,25 +128,6 @@ export function coerceDepth(value: unknown): ResearchDepth {
   if (isDepth(key)) return key;
   return LEGACY_DEPTHS[key] ?? 'brief';
 }
-
-/**
- * The fast-tier model when nothing is pinned.
- *
- * Re-exported rather than restated — the literal lives beside the other
- * per-role defaults in `$lib/constants/default-models`, which is also what the
- * `research-fast` workload reads, so the picker and the runner cannot disagree.
- *
- * It was hardcoded rather than derived from `getFallbackModel()`, which was the
- * first attempt and was wrong: that setting is the RATE-LIMIT fallback, and this
- * install had it configured to `z-ai/glm-5-turbo` — a reasoning model. A brief
- * run on it spent its entire 110s budget and produced an empty answer, because
- * reasoning tokens consume `max_tokens` before any content is emitted. Pinning
- * to a field someone else tunes for a different purpose is not pinning.
- *
- * `RESEARCH_FAST_MODEL` still overrides it without a deploy, now read below the
- * `jkai.research.fast_model` pin rather than instead of it.
- */
-export { DEFAULT_RESEARCH_FAST_MODEL_ID as DEFAULT_FAST_MODEL } from '$lib/constants/default-models';
 
 export function depthPreset(depth: ResearchDepth): DepthPreset {
   const d = coerceDepth(depth);
