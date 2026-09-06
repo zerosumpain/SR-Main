@@ -11,6 +11,7 @@ import { getHealthSeries30d } from '$lib/health/series-30d-service';
 import { getReadiness } from '$lib/health/readiness-service';
 import { buildThreadGraph } from '$lib/jkai/thread-graph.server';
 import { classifyContext } from './classify';
+import { drillKey, entityDrillKey } from './drill';
 import {
   contextLensSchema,
   contextPanelSchema,
@@ -32,11 +33,12 @@ function graphCards(graph: Awaited<ReturnType<typeof buildThreadGraph>>): Contex
     title: 'Knowledge footprint',
     subtitle: 'What this thread has connected',
     href: '/jkai/intel',
+    drill: drillKey({ kind: 'entities', filter: 'all' }),
     metrics: [
-      { label: 'Entities', value: String(graph.conceptTotal), detail: `${concepts.length} in this view` },
-      { label: 'Relations', value: String(graph.edges.length) },
-      { label: 'Known', value: String(known), tone: known ? 'good' : 'default' },
-      { label: 'New here', value: String(fresh), tone: fresh ? 'warn' : 'default' },
+      { label: 'Entities', value: String(graph.conceptTotal), detail: `${concepts.length} in this view`, drill: drillKey({ kind: 'entities', filter: 'all' }) },
+      { label: 'Relations', value: String(graph.edges.length), drill: drillKey({ kind: 'relations' }) },
+      { label: 'Known', value: String(known), tone: known ? 'good' : 'default', drill: drillKey({ kind: 'entities', filter: 'known' }) },
+      { label: 'New here', value: String(fresh), tone: fresh ? 'warn' : 'default', drill: drillKey({ kind: 'entities', filter: 'new' }) },
     ],
   }];
   if (concepts.length) {
@@ -44,13 +46,15 @@ function graphCards(graph: Awaited<ReturnType<typeof buildThreadGraph>>): Contex
       id: 'intel-topics',
       type: 'bars',
       title: 'Topics in focus',
-      subtitle: 'Select one to focus the graph below',
+      subtitle: 'Double-click a topic for everything the graph holds on it',
+      drill: drillKey({ kind: 'entities', filter: 'all' }),
       rows: concepts.slice(0, 7).map((n) => ({
         id: n.id,
         label: n.name,
         value: n.mentions,
         display: `${n.mentions} mention${n.mentions === 1 ? '' : 's'}`,
         href: n.href ?? undefined,
+        drill: entityDrillKey(n.id) ?? undefined,
       })),
     });
   }
@@ -87,10 +91,11 @@ async function researchCards(threadText: string): Promise<ContextCard[]> {
       type: 'metrics',
       title: 'Research desk',
       href: '/research',
+      drill: drillKey({ kind: 'research-desk', filter: 'all' }),
       metrics: [
-        { label: 'Active', value: String(active), tone: active ? 'warn' : 'default' },
-        { label: 'Complete', value: String(complete), tone: complete ? 'good' : 'default' },
-        { label: 'Recent runs', value: String(runs.length) },
+        { label: 'Active', value: String(active), tone: active ? 'warn' : 'default', drill: drillKey({ kind: 'research-desk', filter: 'active' }) },
+        { label: 'Complete', value: String(complete), tone: complete ? 'good' : 'default', drill: drillKey({ kind: 'research-desk', filter: 'complete' }) },
+        { label: 'Recent runs', value: String(runs.length), drill: drillKey({ kind: 'research-desk', filter: 'all' }) },
       ],
     },
     {
@@ -99,12 +104,14 @@ async function researchCards(threadText: string): Promise<ContextCard[]> {
       title: 'Relevant runs',
       subtitle: ranked[0]?.relevance ? 'Matched to this conversation' : 'Most recent',
       href: '/research',
+      drill: drillKey({ kind: 'research-desk', filter: 'all' }),
       rows: ranked.slice(0, 6).map((r) => ({
         id: r.id,
         label: r.topic,
         meta: `${r.depth} · ${compactStatus(r.status)}`,
         note: r.durationMs ? `${Math.round(r.durationMs / 1000)}s` : undefined,
         href: `/research/${r.id}`,
+        drill: drillKey({ kind: 'research-run', id: r.id }),
       })),
     },
   ];
@@ -181,10 +188,11 @@ async function daydreamCards(): Promise<ContextCard[]> {
       type: 'metrics',
       title: 'Daydream loop',
       href: '/jkai/daydreams/feed',
+      drill: drillKey({ kind: 'thoughts', filter: 'all' }),
       metrics: [
-        { label: 'New thoughts', value: String(Number(counts?.newThoughts ?? 0)), tone: Number(counts?.newThoughts ?? 0) ? 'warn' : 'default' },
-        { label: 'Reviewed', value: String(Number(counts?.reviewed ?? 0)), tone: Number(counts?.reviewed ?? 0) ? 'good' : 'default' },
-        { label: 'Known places', value: String(places.filter((p) => p.label).length) },
+        { label: 'New thoughts', value: String(Number(counts?.newThoughts ?? 0)), tone: Number(counts?.newThoughts ?? 0) ? 'warn' : 'default', drill: drillKey({ kind: 'thoughts', filter: 'new' }) },
+        { label: 'Reviewed', value: String(Number(counts?.reviewed ?? 0)), tone: Number(counts?.reviewed ?? 0) ? 'good' : 'default', drill: drillKey({ kind: 'thoughts', filter: 'reviewed' }) },
+        { label: 'Known places', value: String(places.filter((p) => p.label).length), drill: drillKey({ kind: 'places', filter: 'named' }) },
       ],
     },
     {
@@ -192,15 +200,18 @@ async function daydreamCards(): Promise<ContextCard[]> {
       type: 'links',
       title: 'Emerging thoughts',
       href: '/jkai/daydreams/feed',
-      rows: thoughts.map((t) => ({ id: t.id, label: t.title, meta: `${t.kind} · ${compactStatus(t.status)}`, note: `${Math.round(t.score * 100)} score`, href: `/jkai/daydreams?thought=${t.id}` })),
+      drill: drillKey({ kind: 'thoughts', filter: 'all' }),
+      // The feed opens a thought with `?open=`; `?thought=` was never read.
+      rows: thoughts.map((t) => ({ id: t.id, label: t.title, meta: `${t.kind} · ${compactStatus(t.status)}`, note: `${Math.round(t.score * 100)} score`, href: `/jkai/daydreams/feed?open=${t.id}`, drill: drillKey({ kind: 'thought', id: t.id }) })),
     },
     {
       id: 'daydream-places',
       type: 'bars',
       title: 'Repeated places',
       subtitle: 'Separate days, not household visit count',
-      href: '/jkai/daydreams/feed',
-      rows: places.map((p) => ({ id: p.id, label: p.label ?? p.suggestedLabel ?? 'Unnamed place', value: p.distinctDays, display: `${p.distinctDays} days`, href: `/jkai/daydreams?place=${p.id}` })),
+      href: '/jkai/daydreams/places',
+      drill: drillKey({ kind: 'places', filter: 'all' }),
+      rows: places.map((p) => ({ id: p.id, label: p.label ?? p.suggestedLabel ?? 'Unnamed place', value: p.distinctDays, display: `${p.distinctDays} days`, href: '/jkai/daydreams/places', drill: drillKey({ kind: 'place', id: p.id }) })),
     },
   ];
 }

@@ -32,7 +32,7 @@ Return a JSON array (no markdown, no code fences):
 
 Return an empty array [] if nothing is worth remembering.`;
 
-async function reviewConversation(conversationId: string): Promise<number> {
+export async function reviewConversation(conversationId: string): Promise<number> {
   // Get the conversation
   const [conv] = await db.select()
     .from(conversations)

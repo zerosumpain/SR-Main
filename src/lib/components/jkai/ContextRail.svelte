@@ -9,6 +9,8 @@
    *                                           and the thread's knowledge graph
    *   ACTIVITY  what it is DOING            — workers, tool calls, builds
    *   LEDGER    what it has COST            — spend, context window, model
+   *   MEMORY    what it CARRIES IN          — what jkai was given, what the
+   *                                           thread wrote, what went stale
    *
    * Only the first was ever drawn here. The other two existed as numbers the
    * chat pane already owned and had nowhere to put: the ledger went to the hub
@@ -40,7 +42,10 @@
   import { shortModelLabel } from '$lib/jkai/model-label';
   import type { TraceStep } from '$lib/jkai/tool-trace';
   import ContextCard from './context/ContextCard.svelte';
+  import ContextDrillModal from './context/ContextDrillModal.svelte';
+  import MemoryMode from './context/MemoryMode.svelte';
   import ThreadGraphCard from './ThreadGraphCard.svelte';
+  import { bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
 
   let { conversationId, sheetDetent = 'closed', onCloseSheet }: {
     conversationId: string | null;
@@ -52,18 +57,19 @@
 
   // ── Mode ──────────────────────────────────────────────────────────────────
 
-  type Mode = 'context' | 'activity' | 'ledger';
+  type Mode = 'context' | 'activity' | 'ledger' | 'memory';
   const MODE_STORAGE_KEY = 'jkai.inspectorMode';
   const MODES: { key: Mode; label: string }[] = [
     { key: 'context', label: 'Context' },
     { key: 'activity', label: 'Activity' },
     { key: 'ledger', label: 'Ledger' },
+    { key: 'memory', label: 'Memory' },
   ];
 
   function storedMode(): Mode {
     try {
       const v = localStorage.getItem(MODE_STORAGE_KEY);
-      if (v === 'context' || v === 'activity' || v === 'ledger') return v;
+      if (v === 'context' || v === 'activity' || v === 'ledger' || v === 'memory') return v;
     } catch {
       // Private mode / storage disabled — the default is a fine answer.
     }
@@ -209,6 +215,31 @@
     window.dispatchEvent(new CustomEvent('jkai:context-prompt', {
       detail: { conversationId, text: `Use the selected context from the side panel:\n${detail}\n\n${label}` },
     }));
+  }
+
+  // ── Drill ─────────────────────────────────────────────────────────────────
+  // A double-click on any tile or row, or the card's title, opens ONE modal
+  // with a server-composed manifest for that target. The rail only holds the
+  // key; what it means is the drill composer's business.
+
+  let drillTarget = $state<string | null>(null);
+  /** Bumped after a memory action in the drill so the MEMORY mode re-reads. */
+  let memoryRevision = $state(0);
+
+  function openDrill(target: string): void {
+    drillTarget = target;
+  }
+
+  function refreshAfterDrill(what: 'panel' | 'graph' | 'memory'): void {
+    if (what === 'graph') {
+      bumpGraphRevision();
+      return;
+    }
+    if (what === 'memory') {
+      memoryRevision += 1;
+      return;
+    }
+    if (conversationId) void load(conversationId, manualLens);
   }
 
   /** The graph is a reading of the thread's entities, so it belongs to the two
@@ -542,7 +573,7 @@
         </p>
       {:else}
         {#each panel.cards as card (card.id)}
-          <ContextCard {card} onSelect={askAbout} />
+          <ContextCard {card} lens={panel.selectedLens} onSelect={askAbout} onDrill={openDrill} />
         {/each}
         {#if showGraph}
           <ThreadGraphCard {conversationId} />
@@ -751,6 +782,12 @@
       {/if}
     </div>
 
+  <!-- ══ MEMORY ══════════════════════════════════════════════════════════ -->
+  {:else if mode === 'memory'}
+    <div class="ins-scroll" id="ins-panel" role="tabpanel" tabindex="0" aria-labelledby="ins-tab-{mode}">
+      <MemoryMode {conversationId} revision={memoryRevision} onDrill={openDrill} onAsk={askAbout} />
+    </div>
+
   <!-- ══ LEDGER ══════════════════════════════════════════════════════════ -->
   {:else}
     <div class="ins-scroll" id="ins-panel" role="tabpanel" tabindex="0" aria-labelledby="ins-tab-{mode}">
@@ -861,6 +898,16 @@
     {/if}
   </footer>
 </aside>
+
+{#if drillTarget && conversationId}
+  <ContextDrillModal
+    {conversationId}
+    target={drillTarget}
+    onClose={() => (drillTarget = null)}
+    onAsk={askAbout}
+    onRefresh={refreshAfterDrill}
+  />
+{/if}
 
 <style>
   /* ══ Shell ════════════════════════════════════════════════════════════════
@@ -1010,7 +1057,7 @@
   .ins-modes {
     flex: none;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     /* 42, not 40: `.strip-row` is 40px and `.tab-strip` puts the 2px rule
        OUTSIDE it, so the band is 42 in total. Under border-box this height
        includes the rule, which leaves the keys the same 40px as the tabs and
