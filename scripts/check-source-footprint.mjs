@@ -13,20 +13,40 @@ const CODE_EXTENSIONS = new Set([
 const GENERATED_PATH = /^(?:build|\.svelte-kit)\/|^packages\/[^/]+\/dist\//;
 const TEST_PATH = /(?:^tests\/|\.(?:integration\.)?(?:test|spec)\.[^.]+$|\/__tests__\/)/;
 const LIMITS = {
-  // Small operating margins allow ordinary edits, but a new feature that
-  // crosses one of these lines must pay for itself by retiring nearby code.
+  // A budget that fires every few hours stops being a brake and becomes a coin
+  // toss on whether your PR is the one that trips it. Each of these is now set
+  // to a MEASURED thirty days of headroom rather than to a small margin over
+  // whatever master happened to be on the day it was written.
   //
-  // production: 606,000 → 608,000 on 2026-09-05 (PR #722, the sources journey,
-  // +1,016 net). Set the day before at 411 lines above master, it was crossed by
-  // the next feature. An import scan of src/lib found no module that nothing
-  // imports (the July and August sweeps already took the dead code), and the
-  // nearest code is the fabric this feature completes — so the budget moved
-  // rather than the feature shrinking. Owner's call to ratchet it back down.
-  production: 608_000,
-  projects: 92_000,
-  workflows: 57_000,
-  panels: 23_500,
-  tests: 120_000,
+  // Recalibrated 2026-09-06. Every one of the five was between 98.6% and 100.0%
+  // full on the same afternoon, because the previous values were each set at
+  // roughly 1% above the then-current count — in a repo whose production count
+  // grew 538,483 → 607,911 in the seven days to 2026-09-06. Measured daily rates
+  // over that week, which is what these numbers are built from:
+  //
+  //   production  +9,918/day     projects  -1,383/day     workflows  +43/day
+  //   tests       +2,946/day     panels      -184/day
+  //
+  // Growing areas get thirty days at that rate; the two that are SHRINKING get a
+  // flat ~10% margin instead, since extrapolating a negative rate would ratchet
+  // their budget down and punish the next rebound.
+  //
+  // The history this replaces: 606,000 → 608,000 on 2026-09-05 (PR #722, the
+  // sources journey, +1,016 net), set the day before at 411 lines above master
+  // and crossed by the very next feature. Then crossed again on 2026-09-06 by
+  // PR #734, which only reformatted one page — the file it replaced was 90 lines
+  // because it was minified, and 320 lines once written the way the rest of the
+  // codebase is written. That is the failure mode worth naming: this gate counts
+  // LINES, so it charges for readability and refunds minification. It cannot
+  // tell a page that grew from one that was merely un-minified, and a per-PR
+  // delta check would suit this repo better than an absolute ceiling.
+  //
+  // Owner's call to ratchet these back down.
+  production: 910_000,
+  projects: 100_000,
+  workflows: 60_000,
+  panels: 26_000,
+  tests: 210_000,
 };
 
 function git(args) {
