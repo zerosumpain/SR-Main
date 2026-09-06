@@ -1,3 +1,49 @@
+<script lang="ts">
+  // Writing — the journal index.
+  //
+  // Wears the /health editorial system, the same way /research, /news and
+  // /drive do: `HealthShell` with `unifiedNav`, an ink cover band carrying the
+  // count deck, then paper sections opened by `SectionHead`.
+  //
+  // The post list is the RANKED-MOVES row, not a card grid: a display numeral,
+  // then a column saying what the thing is, then the content, with the one
+  // hairline between rows drawn as the container's own ground showing through
+  // a `gap: 1px`. Safe here because it is a fixed single column — in an
+  // `auto-fit` grid the unfilled tracks would paint as blocks.
+  //
+  // The posts promise is still STREAMED, so the cover paints before the list
+  // resolves and the skeleton holds the rows' shape in the meantime. That is
+  // why the counts on the cover sit inside `{#await}` rather than at the top
+  // level, and why the deck reserves its space with an em dash rather than
+  // collapsing and reflowing the band when the numbers land.
+  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import { fade } from 'svelte/transition';
+  import { dur } from '$lib/motion';
+
+  let { data } = $props();
+
+  type Post = Awaited<typeof data.posts>[number];
+
+  function collectTags(posts: Post[]): string[] {
+    const seen = new Set<string>();
+    for (const p of posts) for (const t of p.tags ?? []) seen.add(t);
+    return [...seen].sort();
+  }
+
+  const fmtDate = (d: Date | string) =>
+    new Date(d)
+      .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      .toUpperCase();
+
+  function fmtLatest(posts: Post[]): string | null {
+    const d = posts[0]?.publishedAt;
+    return d ? fmtDate(d) : null;
+  }
+
+  const SKELETON_WIDTHS = [60, 45, 70, 38, 55];
+</script>
+
 <svelte:head>
   <title>Writing — Strange Ramblings</title>
   <meta name="description" content="Writing about code, design, and building things." />
@@ -7,398 +53,374 @@
   <meta property="og:url" content="https://strangeramblings.com/blog" />
 </svelte:head>
 
-<script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { fade } from 'svelte/transition';
-  import { dur } from '$lib/motion';
-  let { data } = $props();
-
-  // data.posts is streamed (a promise), so the hero meta derives from the
-  // resolved value inside {#await} rather than at the top level.
-  type Post = Awaited<typeof data.posts>[number];
-
-  function collectTags(posts: Post[]): string[] {
-    const seen = new Set<string>();
-    for (const p of posts) for (const t of p.tags ?? []) seen.add(t);
-    return [...seen].sort();
-  }
-
-  function fmtLatest(posts: Post[]): string | null {
-    const d = posts[0]?.publishedAt;
-    return d
-      ? new Date(d)
-          .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-          .toUpperCase()
-      : null;
-  }
-
-  const SKELETON_WIDTHS = [60, 45, 70, 38, 55];
-</script>
-
-<PageHeader title="WRITING" />
-
-<section class="b-hero">
-  <div class="b-hero-inner">
-    <div class="b-hero-left">
-      <p class="b-hero-num">01 / JOURNAL{#await data.posts then posts} · {posts.length} {posts.length === 1 ? 'POST' : 'POSTS'}{/await}</p>
-      <h1 class="b-hero-headline">
-        Words.<br /><span class="ghost">Read some here.</span>
-      </h1>
-      <p class="b-hero-strap">
-        The things I'm thinking about, working on, and shipping. Most recent first.
-      </p>
-    </div>
-  </div>
-
-  <div class="b-hero-foot">
-    <span class="b-foot-meta">
-      WRITING
-      {#await data.posts then posts}
-        {@const latestDate = fmtLatest(posts)}
-        {@const allTags = collectTags(posts)}
-        {#if latestDate}<span class="b-foot-sep">·</span>LATEST {latestDate}{/if}
-        {#if allTags.length}<span class="b-foot-sep">·</span>{allTags.length} {allTags.length === 1 ? 'TAG' : 'TAGS'}{/if}
-      {/await}
-    </span>
-    <a href="#posts" class="b-foot-jump">Browse →</a>
-  </div>
-</section>
-
-<section id="posts" class="px-6 sm:px-10 md:px-16 py-10 sm:py-12">
-  <div class="max-w-4xl mx-auto">
-    {#await data.posts}
-      <div class="post-skeleton" aria-hidden="true">
-        {#each SKELETON_WIDTHS as w, i (i)}
-          <div class="sk-row">
-            <span class="sk-num"></span>
-            <div class="sk-body">
-              <span class="sk-title" style="width: {w}%"></span>
-              <span class="sk-excerpt" style="width: {Math.min(w + 18, 85)}%"></span>
-            </div>
-          </div>
-        {/each}
+<HealthShell
+  path="/blog"
+  unifiedNav
+  footer={['strangeramblings.com/blog · journal', 'Most recent first', 'Written by hand']}
+>
+  <section class="lede">
+    <div class="lede-inner">
+      <div class="lede-copy">
+        <p class="eyebrow">01 / Journal</p>
+        <h1>WORDS.<br /><span>READ SOME HERE.</span></h1>
+        <p class="standfirst">
+          The things I'm thinking about, working on, and shipping. Most recent first.
+        </p>
       </div>
-    {:then posts}
-      {#if posts.length === 0}
-        <p class="text-sm py-8" style="color: var(--text-muted);">Nothing published yet.</p>
-      {:else}
-        <div in:fade={{ duration: dur(200) }}>
-        {#each posts as post, i}
-          <a
-            href="/blog/{post.slug}"
-            class="post-row group"
-            style="border-bottom: 1px solid var(--line-hair);"
-          >
-            <span class="post-num">{String(i + 1).padStart(2, '0')}</span>
 
-          <div class="flex-1 min-w-0">
-            <div class="flex justify-between items-baseline gap-4">
-              <div class="min-w-0">
-                <span class="post-title-text">{post.title}</span>
-                {#if post.excerpt}
-                  <p class="post-excerpt">{post.excerpt}</p>
-                {/if}
-                {#if post.tags && post.tags.length > 0}
-                  <p class="post-meta label">
-                    {#each post.tags as tag, ti}
-                      {#if ti > 0}<span class="meta-dot">·</span>{/if}<span>{tag}</span>
-                    {/each}
-                  </p>
-                {/if}
-              </div>
-              <span class="post-date label">
-                {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() : ''}
-              </span>
-            </div>
-          </div>
-
-          <span class="post-arrow" aria-hidden="true">→</span>
-        </a>
-        {/each}
+      <dl class="journal-summary" aria-label="Journal summary">
+        <div>
+          <dt>Posts</dt>
+          <dd>{#await data.posts}—{:then posts}{String(posts.length).padStart(2, '0')}{/await}</dd>
+          <small>Published to date</small>
         </div>
-      {/if}
-    {/await}
-  </div>
-</section>
+        <div>
+          <dt>Tags</dt>
+          <dd>
+            {#await data.posts}—{:then posts}{String(collectTags(posts).length).padStart(2, '0')}{/await}
+          </dd>
+          <small>Subjects covered</small>
+        </div>
+        <div>
+          <dt>Latest</dt>
+          <dd class="date">{#await data.posts}—{:then posts}{fmtLatest(posts) ?? '—'}{/await}</dd>
+          <small>Most recent post</small>
+        </div>
+      </dl>
+    </div>
+  </section>
 
-<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--line-strong);">
-  <a href="/" class="nav-link">← Home</a>
-  <a href="/admin" class="nav-link">Admin</a>
-</footer>
+  <section id="posts" class="ledger">
+    <div class="ledger-inner">
+      <SectionHead
+        kicker="02 / The ledger"
+        title={['EVERYTHING', 'WRITTEN DOWN']}
+        strap="Newest at the top. The number is its place in the run, not a ranking."
+      />
+
+      {#await data.posts}
+        <div class="rows" aria-hidden="true">
+          {#each SKELETON_WIDTHS as w, i (i)}
+            <div class="row">
+              <span class="sk-num"></span>
+              <div class="cell">
+                <span class="sk-line title" style="width: {w}%"></span>
+                <span class="sk-line" style="width: {Math.min(w + 18, 85)}%"></span>
+              </div>
+              <span class="sk-line date"></span>
+            </div>
+          {/each}
+        </div>
+      {:then posts}
+        {#if posts.length === 0}
+          <p class="empty">Nothing published yet.</p>
+        {:else}
+          <div class="rows" in:fade={{ duration: dur(200) }}>
+            {#each posts as post, i (post.slug)}
+              <a class="row" href="/blog/{post.slug}">
+                <span class="num">{String(i + 1).padStart(2, '0')}</span>
+
+                <span class="cell">
+                  <span class="title">{post.title}</span>
+                  {#if post.excerpt}<span class="excerpt">{post.excerpt}</span>{/if}
+                  {#if post.tags?.length}
+                    <span class="tags">
+                      {#each post.tags as tag, ti (tag)}
+                        {#if ti > 0}<span class="dot">·</span>{/if}<span>{tag}</span>
+                      {/each}
+                    </span>
+                  {/if}
+                </span>
+
+                <span class="date">
+                  {post.publishedAt ? fmtDate(post.publishedAt) : ''}
+                  <span class="arrow" aria-hidden="true">→</span>
+                </span>
+              </a>
+            {/each}
+          </div>
+        {/if}
+      {/await}
+    </div>
+  </section>
+</HealthShell>
 
 <style>
-  /* --- Hero (modelled on /health) --- */
-  .b-hero {
-    position: relative;
-    padding: 64px 32px 56px;
-    overflow: hidden;
-    border-bottom: 1px solid var(--line-hair);
-    min-height: 520px;
-    display: flex;
-    flex-direction: column;
+  /* --- Cover: the ink band --- */
+  .lede {
+    padding: clamp(28px, 3.5vw, 48px) clamp(20px, 3vw, 44px);
+    background: var(--text-primary);
+    color: var(--bg);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
   }
-  .b-hero-inner {
-    position: relative;
-    z-index: 5;
+  .lede-inner {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
-    max-width: 1480px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
+    align-items: end;
+    gap: clamp(32px, 5vw, 72px);
+    width: min(1400px, 100%);
     margin: 0 auto;
-    width: 100%;
-    flex: 1;
-    align-items: stretch;
   }
-  .b-hero-left {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding-bottom: 56px;
-    justify-content: flex-end;
-    max-width: 760px;
+  .lede-copy {
+    min-width: 0;
   }
-  .b-hero-num {
+  .eyebrow {
+    margin: 0 0 12px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.15em;
-    color: var(--text-ghost);
-    margin: 0 0 8px 0;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label-wide);
     text-transform: uppercase;
+    color: var(--accent-on-dark);
   }
-  .b-hero-headline {
-    font-family: var(--font-display);
-    font-weight: 900;
-    font-size: clamp(56px, 9vw, 132px);
-    line-height: 0.86;
-    letter-spacing: -0.03em;
-    text-transform: uppercase;
+  h1 {
     margin: 0;
-    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-size: clamp(2.7rem, 4.8vw, 4.5rem);
+    font-weight: 900;
+    line-height: 0.88;
+    letter-spacing: -0.04em;
+    color: var(--bg);
+    text-wrap: balance;
   }
-  .b-hero-headline .ghost {
-    color: var(--text-ghost);
+  h1 span {
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--bg);
   }
-  .b-hero-strap {
+  .standfirst {
+    max-width: 56ch;
+    margin: 18px 0 0;
     font-size: var(--fs-body);
     line-height: 1.5;
-    max-width: 480px;
-    margin: 0;
-    color: var(--text-secondary);
-    border-left: 3px solid var(--accent);
-    padding-left: 14px;
+    color: rgba(237, 228, 212, 0.7);
   }
-  .b-hero-foot {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 32px;
-    z-index: 4;
+
+  .journal-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    border-top: 1px solid rgba(237, 228, 212, 0.16);
+    border-left: 1px solid rgba(237, 228, 212, 0.16);
+  }
+  .journal-summary > div {
+    min-width: 0;
+    padding: 14px;
+    border-right: 1px solid rgba(237, 228, 212, 0.16);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+    background: rgba(237, 228, 212, 0.04);
+  }
+  .journal-summary dt {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.18em;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label-wide);
+    text-transform: uppercase;
+    color: rgba(237, 228, 212, 0.55);
+  }
+  .journal-summary dd {
+    margin: 8px 0 5px;
+    font-family: var(--font-display);
+    font-size: clamp(1.65rem, 2.4vw, 2.4rem);
+    font-weight: 900;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    color: var(--bg);
+    font-variant-numeric: tabular-nums;
+  }
+  .journal-summary dd.date {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-sm);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    padding-bottom: 4px;
+  }
+  .journal-summary small {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.3;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-on-dark);
+  }
+
+  /* --- The ledger: /health's ranked-moves row --- */
+  .ledger {
+    padding: clamp(44px, 5vw, 76px) clamp(20px, 3vw, 44px);
+    border-bottom: 2px solid rgba(26, 16, 8, 0.12);
+  }
+  /* The band rule separates one section from the NEXT. The last one is
+     followed by the ink footer, which separates itself — left in, it draws a
+     stray rule across the empty space a short page leaves above the foot. */
+  section:last-of-type {
+    border-bottom: none;
+  }
+  .ledger-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* One hairline between rows, drawn as the container's own background showing
+     through a 1px gap. Safe here — a fixed single column, not an `auto-fit`
+     grid where unfilled tracks would paint as blocks. */
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--card-border);
+    border: 1px solid var(--card-border);
+  }
+  .row {
+    background: var(--bg);
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) 128px;
+    gap: clamp(14px, 1.8vw, 28px);
+    padding: 22px 24px;
+    align-items: start;
+    text-decoration: none;
+    transition: background var(--t-base) var(--ease-out);
+  }
+  a.row:hover {
+    background: var(--surface-card);
+  }
+
+  .num {
+    font-family: var(--font-display);
+    font-size: 40px;
+    line-height: 0.8;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+  /* The explaining sentence sits in BODY font, the way the tripwire ledger's
+     does — a mono excerpt at this length reads as a log line, not as copy. */
+  .excerpt {
+    font-size: var(--fs-nav);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-wrap: pretty;
+  }
+  .tags {
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-muted);
-    border-top: 1px solid var(--line-hair);
-    background: color-mix(in srgb, var(--bg) 80%, transparent);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    flex-wrap: wrap;
-    gap: 12px;
   }
-  .b-foot-meta {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .dot {
+    margin: 0 6px;
+    color: var(--text-ghost);
+  }
+
+  .date {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: right;
     white-space: nowrap;
   }
-  .b-foot-sep {
-    margin: 0 0.6em;
-    color: var(--accent);
+  .arrow {
+    display: block;
+    margin-top: 10px;
+    font-size: var(--fs-nav);
+    color: var(--text-ghost);
+    transition: color var(--t-base) var(--ease-out);
   }
-  .b-foot-jump {
-    color: var(--text-muted);
-    transition: color 0.2s ease-out;
-  }
-  .b-foot-jump:hover {
+  a.row:hover .arrow {
     color: var(--accent);
   }
 
-  /* --- Tag filter strip (between hero and list) --- */
-  .b-tag-strip-wrap {
-    border-bottom: 1px solid var(--line-hair);
-    background: var(--surface-sunken);
-    padding: 14px 32px;
-  }
-  .b-tag-strip {
-    max-width: 1480px;
-    margin: 0 auto;
+  .empty {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.15em;
     text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
     color: var(--text-muted);
-    line-height: 1.8;
-  }
-  .b-tag-link {
-    transition: color 0.2s ease-out;
-  }
-  a.b-tag-link:hover {
-    color: var(--accent);
-  }
-  .b-tag-link.is-active {
-    color: var(--text-primary);
-  }
-  .b-tag-sep {
-    margin: 0 0.55em;
-    opacity: 0.4;
+    padding: 30px 2px;
   }
 
-  /* --- Posts list --- */
-  .post-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    padding: 1.5rem 0;
-    transition: background-color 0.2s ease-out;
-  }
-  .post-row:hover {
-    background-color: var(--accent-tint-04);
-  }
-  .post-num {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.15em;
-    color: var(--text-muted);
-    padding-top: 0.4rem;
-    width: 2.25rem;
-    flex-shrink: 0;
-    transition: color 0.2s ease-out;
-  }
-  .post-row:hover .post-num {
-    color: var(--accent);
-  }
-  .post-title-text {
-    font-size: 1.125rem;
-    font-weight: 500;
-    color: var(--text-primary);
-    transition: color 0.2s ease-out;
-  }
-  @media (min-width: 640px) {
-    .post-title-text {
-      font-size: 1.25rem;
-    }
-  }
-  .post-row:hover .post-title-text {
-    color: var(--accent);
-  }
-  .post-excerpt {
-    font-size: 0.9375rem;
-    margin-top: 0.4rem;
-    color: var(--text-muted);
-    line-height: 1.55;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .post-meta {
-    margin-top: 0.6rem;
-    font-size: var(--fs-label-xs) !important;
-  }
-  .meta-dot {
-    margin: 0 0.5em;
-    opacity: 0.5;
-  }
-  .post-date {
-    font-size: var(--fs-label-xs) !important;
-    flex-shrink: 0;
-    color: var(--text-muted);
-    padding-top: 0.25rem;
-  }
-  .post-arrow {
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    padding-top: 0.4rem;
-    width: 1.5rem;
-    flex-shrink: 0;
-    text-align: right;
-    opacity: 0;
-    transform: translateX(-4px);
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, color 0.2s ease-out;
-  }
-  .post-row:hover .post-arrow {
-    opacity: 1;
-    transform: translateX(0);
-    color: var(--accent);
-  }
-
-  @media (max-width: 720px) {
-    .b-hero {
-      padding: 48px 16px 80px;
-      min-height: 440px;
-    }
-    .b-hero-foot {
-      padding: 10px 16px;
-    }
-    .b-tag-strip-wrap {
-      padding: 12px 16px;
-    }
-  }
-
-  /* --- Streaming skeleton — shown while the post list loads in --- */
-  .post-skeleton {
-    display: flex;
-    flex-direction: column;
-  }
-  .sk-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    padding: 1.5rem 0;
-    border-bottom: 1px solid var(--line-hair);
-  }
-  .sk-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.7rem;
-    padding-top: 0.4rem;
-  }
+  /* Skeleton rows hold the ledger's shape while the streamed promise lands. */
   .sk-num,
-  .sk-title,
-  .sk-excerpt {
-    background: color-mix(in srgb, var(--text-primary) 9%, transparent);
-    border-radius: 4px;
+  .sk-line {
+    display: block;
+    height: 12px;
+    background: var(--bg-section);
   }
   .sk-num {
-    width: 2.25rem;
-    height: 0.7rem;
-    flex-shrink: 0;
-    margin-top: 0.4rem;
+    height: 32px;
   }
-  .sk-title {
-    height: 1rem;
+  .sk-line.title {
+    height: 18px;
+    margin-bottom: 12px;
   }
-  .sk-excerpt {
-    height: 0.7rem;
+  .sk-line.date {
+    width: 100%;
   }
+
   @media (prefers-reduced-motion: no-preference) {
     .sk-num,
-    .sk-title,
-    .sk-excerpt {
+    .sk-line {
       animation: sk-pulse 1.4s ease-in-out infinite;
     }
   }
   @keyframes sk-pulse {
     0%,
     100% {
-      opacity: 0.5;
+      opacity: 1;
     }
     50% {
-      opacity: 0.85;
+      opacity: 0.45;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .lede-inner {
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+    }
+  }
+  @media (max-width: 640px) {
+    .row {
+      grid-template-columns: 40px minmax(0, 1fr);
+      gap: 14px;
+      padding: 18px;
+    }
+    .num {
+      font-size: 28px;
+    }
+    /* The date leaves the third track and sits under the copy, still mono and
+       still right of the numeral gutter. */
+    .date {
+      grid-column: 2;
+      text-align: left;
+      margin-top: 12px;
+    }
+    .arrow {
+      display: inline;
+      margin: 0 0 0 10px;
+    }
+    .journal-summary {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

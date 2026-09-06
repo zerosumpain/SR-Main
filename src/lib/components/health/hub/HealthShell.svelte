@@ -207,12 +207,19 @@
     margin-top: 14px;
   }
 
+  /* A column that fills the viewport, so the ink footer sits ON the bottom of
+     a short page instead of halfway up it with cream below. /health never
+     showed this — nine sections always overflow — but /blog with one post,
+     and any of these pages before their data lands, did. */
   .hs {
     width: 100%;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
     background: var(--bg);
     color: var(--text-primary);
-    font-family: var(--font-body);
     overflow-x: hidden;
+    font-family: var(--font-body);
   }
 
   /* Fixed, inert, and z-70 so the sticky header at z-80 stays above it. */
@@ -365,6 +372,7 @@
   }
 
   .hs-main {
+    flex: 1;
     min-width: 0;
   }
 

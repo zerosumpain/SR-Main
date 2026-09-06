@@ -1,30 +1,37 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { STATIC_PROJECT_KEYS } from './registry';
+import { PROJECT_CARDS } from '../../routes/projects/cards';
 
-// Parity guard: every hardcoded card on /projects renders a `visToggle('<key>', …)`
-// public/private control. If that literal key is missing from STATIC_PROJECT_KEYS,
-// POST /api/projects/visibility rejects it (400) and the toggle silently fails —
-// exactly the bug where scs-earnings and broads-pilot wouldn't toggle. This test
-// fails the build if a new card ships without its key registered.
+// Parity guard: every hardcoded card on /projects renders a public/private
+// control keyed on `card.key`. If that key is missing from
+// STATIC_PROJECT_KEYS, POST /api/projects/visibility rejects it (400) and the
+// toggle silently fails — exactly the bug where scs-earnings and broads-pilot
+// wouldn't toggle. This test fails the build if a new card ships without its
+// key registered.
+//
+// It used to regex `visToggle('<key>'` out of the page's MARKUP, because the
+// cards were fifteen copies of one block and there was nowhere else to read
+// them from. The cards are data now, so the guard reads the manifest — the
+// same array the page renders — and can assert the relationship in both
+// directions instead of guessing at the regex's own health.
 describe('/projects card ↔ registry parity', () => {
-  const pagePath = fileURLToPath(new URL('../../routes/projects/+page.svelte', import.meta.url));
-  const source = readFileSync(pagePath, 'utf8');
+  const keys = PROJECT_CARDS.map((c) => c.key);
 
-  // Match only string-literal keys: `visToggle('some-key'`. The AI-built card uses
-  // `visToggle(project.publishedSlug!, …)` (dynamic) and is intentionally skipped —
-  // those keys are validated at runtime against published build slugs.
-  // Broad key charset (not just lowercase-kebab) so an uppercase/underscore key
-  // can't slip past the guard while the test stays green.
-  const literalKeys = [...source.matchAll(/visToggle\('([A-Za-z0-9_-]+)'/g)].map((m) => m[1]);
-
-  it('finds the hardcoded toggle keys in the page', () => {
-    // Guards the regex itself: if the card markup is refactored away, this catches it.
-    expect(literalKeys.length).toBeGreaterThanOrEqual(8);
+  it('has the hand-built cards', () => {
+    // Guards the manifest itself: if the cards are refactored away, this catches it.
+    expect(keys.length).toBeGreaterThanOrEqual(8);
   });
 
-  it.each([...new Set(literalKeys)])('registers card key "%s"', (key) => {
+  it('gives every card a distinct key', () => {
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it.each(keys)('registers card key "%s"', (key) => {
     expect(STATIC_PROJECT_KEYS).toContain(key);
   });
 });
+
+// NOT asserted in reverse: a registered key with no card is legitimate.
+// `pulse` is a relocated static bundle, reachable by URL only, and is listed in
+// STATIC_PROJECT_KEYS so the build default does not 404 it — see the note above
+// STATIC_PROJECT_KEYS in ./visibility.
