@@ -28,7 +28,6 @@ import { buildThreadGraph } from '$lib/jkai/thread-graph.server';
 import type { ThreadGraph, ThreadGraphNode } from '$lib/jkai/thread-graph';
 import { entityIdOf } from '$lib/jkai/graph-layout';
 import { commitState } from '$lib/deepdive/graph-commit';
-import { resolveEvidence } from '$lib/daydream/evidence';
 import { memoryLinks } from '$lib/jkai/memory/graph.server';
 import { MEMORY_STATE_LABEL, memoryState } from '$lib/jkai/memory/contracts';
 import { composeThreadMemory } from '$lib/jkai/memory/thread.server';
@@ -43,6 +42,19 @@ import {
   type DrillRow,
   type DrillSection,
 } from './types';
+
+/**
+ * What the ROUTE hands in. `resolveEvidence` lives in `$lib/daydream`, and
+ * daydream already imports jkai (notes → memory, cards → auto-extract), so
+ * importing it here would close a jkai ↔ daydream cycle the boundary gate
+ * refuses. The route layer may import both, so it passes the resolver down —
+ * the same inversion the daydream thoughts route uses for its own drill.
+ */
+export interface DrillDeps {
+  resolveEvidence?: (
+    refs: Array<{ kind: string; id: string; note?: string }>,
+  ) => Promise<Array<{ kind: string; id: string; note: string | null; title: string; lines: string[]; at: string | null; href: string | null }>>;
+}
 
 function compactStatus(status: string): string {
   return status.replaceAll('_', ' ').replace(/^phase/, 'phase ');
@@ -460,7 +472,7 @@ async function thoughtsManifest(filter: 'all' | 'new' | 'reviewed', target: stri
   });
 }
 
-async function thoughtManifest(id: string, target: string): Promise<DrillManifest | null> {
+async function thoughtManifest(id: string, target: string, deps: DrillDeps): Promise<DrillManifest | null> {
   const [t] = await db
     .select({
       id: daydreamThoughts.id,
@@ -484,7 +496,7 @@ async function thoughtManifest(id: string, target: string): Promise<DrillManifes
     .where(eq(daydreamThoughts.id, id))
     .limit(1);
   if (!t) return null;
-  const evidence = await resolveEvidence(t.evidence ?? []).catch(() => []);
+  const evidence = deps.resolveEvidence ? await deps.resolveEvidence(t.evidence ?? []).catch(() => []) : [];
   const api = '/api/daydream/thoughts';
   const sections: DrillSection[] = [
     { kind: 'prose', id: 'why', title: 'Why it said this', body: t.explanation },
@@ -505,7 +517,7 @@ async function thoughtManifest(id: string, target: string): Promise<DrillManifes
       drill: e.kind === 'memory' ? drillKey({ kind: 'memory', id: e.id }) : undefined,
       when: e.at ?? undefined,
     })),
-    empty: 'No citations were recorded for this thought.',
+    empty: deps.resolveEvidence ? 'No citations were recorded for this thought.' : 'Citations are not resolved on this surface.',
   });
   return finish({
     target,
@@ -836,7 +848,7 @@ async function cardManifest(conversationId: string, lens: string, cardId: string
 
 // ── Entry point ───────────────────────────────────────────────────────────
 
-export async function composeDrill(conversationId: string, target: DrillTarget): Promise<DrillManifest | null> {
+export async function composeDrill(conversationId: string, target: DrillTarget, deps: DrillDeps = {}): Promise<DrillManifest | null> {
   const key = drillKey(target);
   switch (target.kind) {
     case 'entities':
@@ -852,7 +864,7 @@ export async function composeDrill(conversationId: string, target: DrillTarget):
     case 'thoughts':
       return thoughtsManifest(target.filter, key);
     case 'thought':
-      return thoughtManifest(target.id, key);
+      return thoughtManifest(target.id, key, deps);
     case 'places':
       return placesManifest(target.filter, key);
     case 'place':
