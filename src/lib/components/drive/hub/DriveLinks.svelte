@@ -255,7 +255,7 @@
   .d-mono { color: rgba(237, 228, 212, 0.75); white-space: nowrap; }
   .d-uses { font-weight: 700; }
 
-  /* The global .nm-act is paper-accent and invisible here, so this band keeps
+  /* The global .nm-rowact is paper-accent and invisible here, so this band keeps
      its own lifted pair — the relighting rule from the health system. */
   .d-link {
     background: none;

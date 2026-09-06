@@ -99,7 +99,7 @@
           aria-label="Filter files in this folder by name"
         />
         {#if query}
-          <button type="button" class="nm-act cb-x" onclick={() => (query = '')} aria-label="Clear filter">✕</button>
+          <button type="button" class="nm-rowact cb-x" onclick={() => (query = '')} aria-label="Clear filter">✕</button>
         {/if}
       </div>
 
@@ -125,14 +125,14 @@
     {#if selectedCount > 0}
       <span class="cb-sel">{selectedCount} selected</span>
       <button type="button" class="nm-save-btn" onclick={onInteract}>Interact using model</button>
-      <button type="button" class="nm-act" onclick={onDownloadSelected} disabled={zipBusy}>
+      <button type="button" class="nm-rowact" onclick={onDownloadSelected} disabled={zipBusy}>
         {zipBusy ? 'Zipping' : selectedCount > 1 ? `Download ${selectedCount} as .zip` : 'Download'}
       </button>
 
       <!-- The keyboard-reachable equivalent of dragging onto a folder. Drag is a
            pointer gesture with no keyboard analogue, so this stays. -->
       <div class="cb-move">
-        <button type="button" class="nm-act" aria-expanded={moveOpen} onclick={() => (moveOpen = !moveOpen)}>Move to</button>
+        <button type="button" class="nm-rowact" aria-expanded={moveOpen} onclick={() => (moveOpen = !moveOpen)}>Move to</button>
         {#if moveOpen}
           <div class="cb-menu">
             <button type="button" class="cb-item" onclick={() => { moveOpen = false; onMoveTo(''); }}>Drive (root)</button>
@@ -143,7 +143,7 @@
         {/if}
       </div>
 
-      <button type="button" class="nm-act" onclick={onClearSelection}>Clear</button>
+      <button type="button" class="nm-rowact" onclick={onClearSelection}>Clear</button>
     {:else}
       <span class="cb-hint">
         Drag a file onto a folder to move it. Drop from your desktop to upload — max {uploadLimitLabel}.
@@ -160,14 +160,14 @@
         aria-label="New folder name"
         onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCreateFolder(); } }}
       />
-      <button type="button" class="nm-act" onclick={onCreateFolder} disabled={creatingFolder || !newFolderName.trim()}>
+      <button type="button" class="nm-rowact" onclick={onCreateFolder} disabled={creatingFolder || !newFolderName.trim()}>
         {creatingFolder ? 'Adding' : 'Add'}
       </button>
     </div>
 
     <button
       type="button"
-      class="nm-act"
+      class="nm-rowact"
       onclick={onErSettings}
       title="Whether files here feed the Intel knowledge graph, and under which categories"
     >Intel policy</button>

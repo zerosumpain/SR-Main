@@ -79,11 +79,11 @@
               <button type="button" class="nm-save-btn" onclick={() => onOpenChat(c)}>Open chat</button>
               <button
                 type="button"
-                class="nm-act c-muted"
+                class="nm-rowact c-muted"
                 disabled={c.status === 'indexing' || c.status === 'pending'}
                 onclick={() => onReindex(c)}
               >Reindex</button>
-              <button type="button" class="nm-act danger" onclick={() => onDelete(c)}>Delete</button>
+              <button type="button" class="nm-rowact danger" onclick={() => onDelete(c)}>Delete</button>
             </div>
           </div>
         {/each}

@@ -132,8 +132,3 @@ export function allFolders(files: DriveFileLike[]): string[] {
   }
   return [...set].sort();
 }
-
-/** Every row belonging to `folder` — the marker and the whole subtree. */
-export function descendantsOf<T extends DriveFileLike>(files: T[], folder: string): T[] {
-  return files.filter((f) => isWithin(f.name, folder));
-}

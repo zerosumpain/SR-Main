@@ -3,7 +3,6 @@ import {
   allFolders,
   baseName,
   crumbsFor,
-  descendantsOf,
   filesIn,
   folderOf,
   isMarker,
@@ -165,15 +164,5 @@ describe('allFolders', () => {
 
   it('is empty for a flat drive', () => {
     expect(allFolders([f('1', 'a.txt'), f('2', 'b.txt')])).toEqual([]);
-  });
-});
-
-describe('descendantsOf', () => {
-  it('takes the marker and the whole subtree', () => {
-    expect(descendantsOf(STORE, 'invoices').map((x) => x.id)).toEqual(['2', '3', '4', '5', '6']);
-  });
-
-  it('does not take a prefix lookalike', () => {
-    expect(descendantsOf(STORE, 'invoices').some((x) => x.name.startsWith('invoices-'))).toBe(false);
   });
 });

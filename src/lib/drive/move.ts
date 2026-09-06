@@ -102,8 +102,11 @@ function planFolder(files: DriveFileLike[], folder: string, target: string): Mov
   const to = joinPath(target, leaf);
   const moves: PlannedMove[] = [];
   const blocked: BlockedMove[] = [];
+  // Strictly what is INSIDE it: a FILE named `notes` can coexist with a folder
+  // `notes/`, and dragging the folder must not take that file along.
+  const inside = folder + '/';
   for (const f of files) {
-    if (!isWithin(f.name, folder)) continue;
+    if (!f.name.startsWith(inside)) continue;
     const next = to + f.name.slice(folder.length);
     if (next.length > MAX_NAME_LENGTH) {
       blocked.push({ name: baseName(f.name), reason: 'the new path would be too long' });

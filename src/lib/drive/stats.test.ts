@@ -5,7 +5,7 @@ const NOW = Date.parse('2026-09-06T12:00:00Z');
 
 const file = (over: Partial<DriveStatFile> & { id: string; name: string }): DriveStatFile => ({
   sizeBytes: 1000,
-  updatedAt: '2026-09-06T11:00:00Z',
+  createdAt: '2026-09-06T11:00:00Z',
   indexStatus: 'skipped',
   ...over,
 });
@@ -53,7 +53,7 @@ describe('computeVitals', () => {
     expect(v.indexed).toBe(2);
   });
 
-  it('measures age from the newest file', () => {
+  it('measures age from the newest UPLOAD, not the last edit', () => {
     expect(computeVitals(store, NOW).newestAgoSeconds).toBe(3600);
   });
 
@@ -69,13 +69,13 @@ describe('computeVitals', () => {
   });
 
   it('survives an unparseable timestamp rather than printing NaN', () => {
-    const v = computeVitals([file({ id: '1', name: 'a.txt', updatedAt: 'not a date' })], NOW);
+    const v = computeVitals([file({ id: '1', name: 'a.txt', createdAt: 'not a date' })], NOW);
     expect(v.newestAgoSeconds).toBeNull();
   });
 
   it('never reports a negative age for a clock-skewed future stamp', () => {
     const v = computeVitals(
-      [file({ id: '1', name: 'a.txt', updatedAt: '2026-09-06T13:00:00Z' })],
+      [file({ id: '1', name: 'a.txt', createdAt: '2026-09-06T13:00:00Z' })],
       NOW,
     );
     expect(v.newestAgoSeconds).toBe(0);

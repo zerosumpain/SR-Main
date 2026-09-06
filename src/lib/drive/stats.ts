@@ -9,7 +9,8 @@ import { allFolders, isMarker, type DriveFileLike } from './paths';
 
 export interface DriveStatFile extends DriveFileLike {
   sizeBytes: number;
-  updatedAt: string | Date;
+  /** The UPLOAD, not the last touch: `PATCH` bumps `updated_at` on any edit. */
+  createdAt: string | Date;
   indexStatus?: 'indexed' | 'pending' | 'no-text' | 'failed' | 'skipped';
 }
 
@@ -60,7 +61,7 @@ export function computeVitals(files: DriveStatFile[], now = Date.now()): DriveVi
     const status = f.indexStatus ?? 'skipped';
     if (status !== 'skipped') indexable += 1;
     if (status === 'indexed') indexed += 1;
-    const t = new Date(f.updatedAt).getTime();
+    const t = new Date(f.createdAt).getTime();
     if (Number.isFinite(t) && t > newest) newest = t;
   }
   return {

@@ -216,7 +216,10 @@
       onNotice(`Not moved — ${v.reason}.`);
       return;
     }
-    await applyMoves(v.plan.moves, path, v.plan.blocked.length);
+    // A folder lands in `target/<its own name>`, not in `target`, and the undo
+    // strip is judged on naming the place the rows actually went.
+    const dest = payload.kind === 'folder' ? joinPath(path, baseName(payload.path)) : path;
+    await applyMoves(v.plan.moves, dest, v.plan.blocked.length);
   }
 
   /** The Move-to menu lands here too, so both routes share one implementation. */
@@ -524,7 +527,7 @@
             onchange={() => { uploadFiles(folderInput?.files ?? null); if (folderInput) folderInput.value = ''; }}
             {...{ webkitdirectory: 'true', directory: 'true', mozdirectory: 'true' } as Record<string, string>} />
           <button type="button" class="nm-save-btn" onclick={() => fileInput?.click()}>Upload files</button>
-          <button type="button" class="nm-act b-muted" onclick={() => folderInput?.click()}>or a folder</button>
+          <button type="button" class="nm-rowact b-muted" onclick={() => folderInput?.click()}>or a folder</button>
           <span class="b-perms" role="group" aria-label="Access for newly uploaded files">
             {#each [['read', 'R'], ['write', 'W'], ['append', 'A'], ['delete', 'D']] as const as [key, code] (key)}
               <label class="b-perm" class:on={uploadPerm[key]} title="New files get {code}">

@@ -87,29 +87,24 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const before = new Map(existing.map((r) => [r.id, r.name]));
   const moving = new Set(ids);
-
-  // A destination is only free if nothing OUTSIDE this batch already holds it.
-  // Rows inside the batch may collide with each other's current names, because
-  // phase one clears every one of them before phase two writes any.
-  const collisions = await db
-    .select({ id: workflowFiles.id, name: workflowFiles.name })
-    .from(workflowFiles)
-    .where(inArray(workflowFiles.name, moves.map((m) => m.name)));
-  const blocking = collisions.filter((row) => !moving.has(row.id));
-  if (blocking.length > 0) {
-    return json(
-      {
-        error: `already taken: ${blocking.map((r) => r.name).slice(0, 5).join(', ')}`,
-        conflicts: blocking.map((r) => r.name),
-      },
-      { status: 409 },
-    );
-  }
-
   const changed = moves.filter((m) => before.get(m.id) !== m.name);
   if (changed.length === 0) return json({ moved: [], skipped: moves.length });
 
+  // The collision check runs INSIDE the transaction: read it outside and a
+  // concurrent upload claiming one of these names turns a designed 409 into a
+  // raw unique-index violation and a 500.
+  let blocking: string[] = [];
   await db.transaction(async (tx) => {
+    // A destination is only free if nothing OUTSIDE this batch already holds it.
+    // Rows inside the batch may collide with each other's current names, because
+    // phase one clears every one of them before phase two writes any.
+    const collisions = await tx
+      .select({ id: workflowFiles.id, name: workflowFiles.name })
+      .from(workflowFiles)
+      .where(inArray(workflowFiles.name, changed.map((m) => m.name)));
+    blocking = collisions.filter((row) => !moving.has(row.id)).map((row) => row.name);
+    if (blocking.length > 0) return;
+
     for (const m of changed) {
       await tx
         .update(workflowFiles)
@@ -120,6 +115,13 @@ export const POST: RequestHandler = async ({ request }) => {
       await tx.update(workflowFiles).set({ name: m.name }).where(eq(workflowFiles.id, m.id));
     }
   });
+
+  if (blocking.length > 0) {
+    return json(
+      { error: `already taken: ${blocking.slice(0, 5).join(', ')}`, conflicts: blocking },
+      { status: 409 },
+    );
+  }
 
   return json({
     moved: changed.map((m) => ({ id: m.id, from: before.get(m.id) ?? null, to: m.name })),

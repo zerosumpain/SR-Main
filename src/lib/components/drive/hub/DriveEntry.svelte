@@ -105,6 +105,9 @@
   onclick={() => isFolder && on.open()}
   ondblclick={() => !isFolder && on.open()}
   onkeydown={(e) => {
+    // keydown BUBBLES: without this the row steals Enter/Space from the select
+    // checkbox, the download link and every action button inside it.
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       on.open();
@@ -173,21 +176,21 @@
 
   <span class="e-acts">
     {#if isFolder}
-      <button type="button" class="nm-act" onclick={(e) => { e.stopPropagation(); on.policy(); }}>Policy</button>
-      <button type="button" class="nm-act danger" onclick={(e) => { e.stopPropagation(); on.remove(); }}>Delete</button>
+      <button type="button" class="nm-rowact" onclick={(e) => { e.stopPropagation(); on.policy(); }}>Policy</button>
+      <button type="button" class="nm-rowact danger" onclick={(e) => { e.stopPropagation(); on.remove(); }}>Delete</button>
     {:else if file}
-      <button type="button" class="nm-act" onclick={(e) => { e.stopPropagation(); on.open(); }}>Preview</button>
-      <a class="nm-act" href={`/api/files/${file.id}/download`} download={label} onclick={(e) => e.stopPropagation()}>Download</a>
+      <button type="button" class="nm-rowact" onclick={(e) => { e.stopPropagation(); on.open(); }}>Preview</button>
+      <a class="nm-rowact" href={`/api/files/${file.id}/download`} download={label} onclick={(e) => e.stopPropagation()}>Download</a>
       {#if flags.canExtract}
-        <button type="button" class="nm-act" disabled={flags.busy} onclick={(e) => { e.stopPropagation(); on.extract?.(); }}>
+        <button type="button" class="nm-rowact" disabled={flags.busy} onclick={(e) => { e.stopPropagation(); on.extract?.(); }}>
           {flags.busy ? 'Extracting' : 'Extract'}
         </button>
       {/if}
-      <button type="button" class="nm-act" disabled={flags.busy} onclick={(e) => { e.stopPropagation(); on.convert?.(); }}>Convert</button>
-      <button type="button" class="nm-act" onclick={(e) => { e.stopPropagation(); on.edit?.(); }}>Edit</button>
+      <button type="button" class="nm-rowact" disabled={flags.busy} onclick={(e) => { e.stopPropagation(); on.convert?.(); }}>Convert</button>
+      <button type="button" class="nm-rowact" onclick={(e) => { e.stopPropagation(); on.edit?.(); }}>Edit</button>
       <button
         type="button"
-        class="nm-act"
+        class="nm-rowact"
         class:shared={flags.shared}
         disabled={flags.shareBusy}
         title={flags.shared
@@ -195,7 +198,7 @@
           : `Anyone with the link can download this for ${shareTtlDays} days`}
         onclick={(e) => { e.stopPropagation(); on.share?.(); }}
       >{flags.shareBusy ? 'Linking' : 'Share'}</button>
-      <button type="button" class="nm-act danger" onclick={(e) => { e.stopPropagation(); on.remove(); }}>Delete</button>
+      <button type="button" class="nm-rowact danger" onclick={(e) => { e.stopPropagation(); on.remove(); }}>Delete</button>
     {/if}
   </span>
 </div>
@@ -396,7 +399,7 @@
     opacity: 0.4;
   }
   .perm.on { color: var(--accent-ink); opacity: 1; }
-  .nm-act.shared::after { content: '·'; margin-left: 2px; }
+  .nm-rowact.shared::after { content: '·'; margin-left: 2px; }
 
   @media (max-width: 1000px) {
     .ent.list { grid-template-columns: 24px 24px minmax(0, 1fr) auto; row-gap: 6px; }

@@ -225,7 +225,7 @@
  * mono, uppercase, accent, and it goes ink on hover. Promoted to a primitive
  * when /drive's four hub components would otherwise have carried a fourth,
  * fifth, sixth and seventh copy of it. `.danger` is the destructive variant. */
-.nm-act {
+.nm-rowact {
   background: none;
   border: none;
   padding: 0;
@@ -237,6 +237,6 @@
   color: var(--accent);
   cursor: pointer;
 }
-.nm-act:hover:not(:disabled) { color: var(--text-primary); }
-.nm-act:disabled { opacity: 0.45; cursor: default; }
-.nm-act.danger { color: var(--error); }
+.nm-rowact:hover:not(:disabled) { color: var(--text-primary); }
+.nm-rowact:disabled { opacity: 0.45; cursor: default; }
+.nm-rowact.danger { color: var(--error); }

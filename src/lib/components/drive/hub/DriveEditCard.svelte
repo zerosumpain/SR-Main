@@ -58,7 +58,7 @@
     <button type="button" class="nm-save-btn" onclick={onSave} disabled={busy}>
       {busy ? 'Saving' : 'Save'}
     </button>
-    <button type="button" class="nm-act b-muted" onclick={onCancel}>Cancel</button>
+    <button type="button" class="nm-rowact b-muted" onclick={onCancel}>Cancel</button>
   </div>
 </div>
 

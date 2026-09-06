@@ -164,6 +164,16 @@ describe('dropping a folder', () => {
     });
   });
 
+  it('leaves behind a FILE that happens to share the folder name', () => {
+    // `notes` and `notes/x.md` can coexist — nothing in the store or the rename
+    // endpoint forbids it — and the file is not part of the folder's contents.
+    const store = [f('a', 'notes'), f('b', 'notes/x.md'), f('c', 'notes/y.md')];
+    const v = dropVerdict(store, folder('notes'), 'archive');
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(v.plan.moves.map((m) => m.from)).toEqual(['notes/x.md', 'notes/y.md']);
+  });
+
   it('refuses the root', () => {
     expect(dropVerdict(STORE, folder(''), 'invoices')).toEqual({
       ok: false,

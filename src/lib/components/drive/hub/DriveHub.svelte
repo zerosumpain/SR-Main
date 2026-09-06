@@ -69,10 +69,19 @@
   }
 
   async function refresh() {
-    const res = await fetch('/api/files');
-    if (res.ok) {
+    // Every mutation ends here, so a silent failure is worse than an error: the
+    // shelf would go on showing paths that have already moved. A 200 that is not
+    // JSON is the auth-redirect case, and it used to reject out of an un-awaited
+    // drop handler, leaving no undo strip and nothing on screen at all.
+    try {
+      const res = await fetch('/api/files');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const body = await res.json();
+      if (!Array.isArray(body?.files)) throw new Error('unexpected response');
       files = body.files;
+    } catch (err) {
+      const why = err instanceof Error ? err.message : 'unknown';
+      notify(`Could not reload the file list (${why}). Reload the page.`);
     }
   }
 
@@ -413,7 +422,7 @@
         <button type="button" class="nm-save-btn" disabled={busyId === convertFor.id} onclick={runConvert}>
           {busyId === convertFor.id ? 'Converting' : 'Convert'}
         </button>
-        <button type="button" class="nm-act dh-muted" onclick={() => (convertFor = null)}>Cancel</button>
+        <button type="button" class="nm-rowact dh-muted" onclick={() => (convertFor = null)}>Cancel</button>
       </div>
     </div>
   </div>
