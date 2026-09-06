@@ -1,236 +1,810 @@
 <script lang="ts">
-  import { invalidateAll } from '$app/navigation';
-  import { postThought } from '$lib/daydream/feed-client';
-  import DrillPanel from '$lib/components/jkai/daydream/hub/DrillPanel.svelte';
+  // The queue, as work you can move.
+  //
+  // Two boards over one ledger: EPICS, where a card is a functional area, and
+  // DELIVERABLES, where a card is the row `pickWork` ranks when it chooses what
+  // to build tonight. The switch is the toolbar's first control because those
+  // are different questions — "what are we doing about calendars" and "what
+  // gets built tonight" — and the board that answered only the first could not
+  // change the second.
+  //
+  // Every rule lives in `$lib/selfimprove/backlog-board.ts`, which is pure and
+  // unit-tested: the two card shapes, the filter, the sort, and — the one that
+  // matters — what a drop would write, decided before anything is sent. This
+  // file is the surface. If a rule here needs a test, it is in the wrong file.
+  import EpicDrill from './EpicDrill.svelte';
   import BacklogEditor from './BacklogEditor.svelte';
-  import { STAGE_META, WORK_STAGES, kindLabel, type WorkItem } from '$lib/selfimprove/board';
+  import {
+    BOARD_LEVELS,
+    CARD_FLAGS,
+    CARD_SORTS,
+    FLAG_META,
+    LEVEL_META,
+    SORT_META,
+    countCards,
+    dropTargets,
+    filterCards,
+    planMove,
+    prioritySlugs,
+    sortCards,
+    stepPriority,
+    toCards,
+    type BoardCard,
+    type BoardLevel,
+    type CardFlag,
+    type CardSort,
+  } from '$lib/selfimprove/backlog-board';
+  import { BACKLOG_KINDS, KIND_META, STAGE_META, WORK_STAGES, kindLabel, type WorkStage } from '$lib/selfimprove/board';
   import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
+  import { ago } from '$lib/daydream/format';
 
-  let { epics, error }: { epics: BacklogEpic[]; error: string | null } = $props();
+  interface Props {
+    epics: BacklogEpic[];
+    busy: string | null;
+    act: (body: Record<string, unknown>, key: string) => Promise<boolean>;
+    /**
+     * Which epic is open, as a SLUG and never the object: `act()` awaits
+     * `invalidateAll()`, which replaces every epic in the array, and a captured
+     * one would keep rendering the values from before the write.
+     *
+     * Bindable because the review lane opens the panel too, and two components
+     * each holding their own idea of "the open epic" is two places to forget to
+     * close it.
+     */
+    openSlug?: string | null;
+  }
+
+  let { epics, busy, act, openSlug = $bindable(null) }: Props = $props();
+
+  // ── Controls ────────────────────────────────────────────────────────────
+  let level = $state<BoardLevel>('epic');
   let query = $state('');
-  let groomingOnly = $state(false);
-  let showHistory = $state(false);
-  let category = $state('all');
-  let status = $state('all');
-  let laneLimit = $state(20);
-  let openId = $state<string | null>(null);
-  let editing = $state<string | null>(null);
+  let sort = $state<CardSort>('queue');
+  let kinds = $state<string[]>([]);
+  let priorities = $state<number[]>([]);
+  let flags = $state<CardFlag[]>([]);
+  /** Three of six columns are usually empty, and an empty column still costs a
+   *  sixth of the width. Folded away unless asked for. */
+  let showEmpty = $state(false);
+  /** Cells expanded past `COLUMN_CAP`, keyed by stage. */
+  let expanded = $state<WorkStage[]>([]);
   let creating = $state(false);
-  let adding = $state(false);
-  let busy = $state(false);
-  let actionError = $state<string | null>(null);
-  let deliverableQuery = $state('');
-  let deliverableCategory = $state('all');
-  let title = $state('');
-  let summary = $state('');
-  const open = $derived(epics.find((e) => e.slug === openId));
-  const deliverables = $derived((open?.deliverables ?? []).filter((i) =>
-    (showHistory || i.stage !== 'parked') &&
-    (deliverableCategory === 'all' || i.kind === deliverableCategory) &&
-    [i.title, i.detail].join(' ').toLowerCase().includes(deliverableQuery.toLowerCase())));
-  const edited = $derived([...(open?.deliverables ?? []), ...(open?.combinedDeliveries ?? [])].find((i) => i.id === editing) ?? null);
-  const filtered = $derived(epics.filter((e) =>
-    (!groomingOnly || (e.suggestions?.length ?? 0) > 0) &&
-    (status === 'all' || (status === 'active' ? !['live', 'parked'].includes(e.stage) : e.stage === status)) &&
-    (category === 'all' || e.categories.includes(category)) &&
-    [e.title, e.summary, ...e.deliverables.flatMap((i) => [i.title, i.detail, i.kind])].join(' ').toLowerCase().includes(query.trim().toLowerCase())));
-  $effect(() => { query; status; category; groomingOnly; laneLimit = 20; });
+  const open = $derived(openSlug ? (epics.find((e) => e.slug === openSlug) ?? null) : null);
 
-  function show(epic: BacklogEpic) {
-    showHistory = false; deliverableQuery = ''; deliverableCategory = 'all';
-    openId = epic.slug; title = epic.title; summary = epic.summary; editing = null; adding = false; actionError = null;
+  /** Cards drawn in one column before it stops. 300 in a column is a scroll
+   *  nobody reads, and the counts above are over everything, so the numbers
+   *  never describe a smaller set than they name. */
+  const COLUMN_CAP = 40;
+  const PRIORITIES = [1, 2, 3, 4, 5];
+
+  /** Both boards, built once. The level switch prints the other one's size,
+   *  and recomputing 486 cards inside the button's `{#each}` did that work on
+   *  every keystroke in the search box. */
+  const boards = $derived({ epic: toCards(epics, 'epic'), deliverable: toCards(epics, 'deliverable') });
+  const all = $derived(boards[level]);
+  const filter = $derived({ query: query.trim(), kinds, priorities, flags });
+  const visible = $derived(sortCards(filterCards(all, filter), sort));
+  const counts = $derived(countCards(all, visible));
+  const stages = $derived(showEmpty ? [...WORK_STAGES] : WORK_STAGES.filter((s) => counts.all[s] > 0));
+  const hidden = $derived(WORK_STAGES.length - stages.length);
+
+  /** Every count on a chip is over the WHOLE board, never the filtered set — a
+   *  chip whose number shrank as you pressed its neighbour would be describing
+   *  a population it does not name. */
+  function countBy(pick: (c: BoardCard) => boolean): number {
+    return all.filter(pick).length;
   }
-  function close() { openId = null; editing = null; adding = false; }
-  async function act(body: Record<string, unknown>) {
-    busy = true; actionError = null;
-    try {
-      const result = await postThought(body);
-      if (!result.ok || result.out.ok === false) actionError = result.error ?? 'The update was not completed.';
-      await invalidateAll();
-    } finally { busy = false; }
+  const kindCounts = $derived(
+    Object.fromEntries(BACKLOG_KINDS.map((k) => [k, countBy((c) => c.kinds.includes(k))])),
+  );
+  const priorityCounts = $derived(
+    Object.fromEntries(PRIORITIES.map((p) => [p, countBy((c) => c.priority === p)])),
+  );
+  const flagCounts = $derived(
+    Object.fromEntries(CARD_FLAGS.map((f) => [f, countBy((c) => c.flags.includes(f))])),
+  );
+
+  function toggle<T>(list: T[], v: T): T[] {
+    return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
   }
-  function savedDeliverable() { editing = null; adding = false; }
-  function changePriority(item: WorkItem, priority: number) {
-    return act({ action: 'backlog_priority', slug: item.slug, priority });
+
+  const activeFilters = $derived(kinds.length + priorities.length + flags.length + (query.trim() ? 1 : 0));
+
+  function reset() {
+    kinds = [];
+    priorities = [];
+    flags = [];
+    query = '';
   }
+
+  // ── Moves ───────────────────────────────────────────────────────────────
+  /** What the last move did, in words. An epic move rewrites up to eleven rows
+   *  across six columns at once; leaving the owner to infer that from counts
+   *  that all changed together is how a board stops being trustworthy. */
+  let report = $state<string | null>(null);
+  let refused = $state<string | null>(null);
+
+  async function move(card: BoardCard, to: WorkStage) {
+    const plan = planMove(card, to);
+    if (!plan.ok) {
+      report = null;
+      refused = plan.reason || null;
+      return;
+    }
+    refused = null;
+    const ok = await act(
+      {
+        action: 'backlog_park',
+        slugs: plan.slugs,
+        parked: plan.action === 'park',
+        ...(plan.action === 'park' ? { reason: 'Parked from the backlog board' } : {}),
+      },
+      `move:${card.key}`,
+    );
+    report = ok ? plan.reason : null;
+  }
+
+  async function setPriority(card: BoardCard, priority: number) {
+    const slugs = prioritySlugs(card);
+    if (slugs.length === 0 || priority === card.priority) return;
+    refused = null;
+    const ok = await act({ action: 'backlog_priority', slugs, priority }, `pri:${card.key}`);
+    if (ok) {
+      report =
+        card.level === 'epic' && slugs.length > 1
+          ? `Set ${slugs.length} deliverables in “${card.title}” to P${priority}.`
+          : `“${card.title}” is now P${priority}.`;
+    }
+  }
+
+  // ── Drag and drop ───────────────────────────────────────────────────────
+  // `dragged` is a plain `let`: it is the handle a handler both reads and
+  // writes, which as `$state` is the documented effect-loop trap. Nothing in
+  // the template may read it — everything the markup needs is derived into
+  // `$state` alongside it: which columns will accept the card, which one is
+  // under the pointer, and which card is in flight.
+  let dragged: BoardCard | null = null;
+  let legal = $state<WorkStage[]>([]);
+  let hover = $state<WorkStage | null>(null);
+  let liftedKey = $state<string | null>(null);
+
+  function onDragStart(card: BoardCard, ev: DragEvent) {
+    const targets = dropTargets(card);
+    if (targets.length === 0) {
+      ev.preventDefault();
+      refused = planMove(card, card.stage === 'parked' ? 'accepted' : 'parked').reason || null;
+      return;
+    }
+    dragged = card;
+    legal = targets;
+    liftedKey = card.key;
+    if (ev.dataTransfer) {
+      ev.dataTransfer.effectAllowed = 'move';
+      // Firefox refuses to begin a drag with nothing on the transfer.
+      ev.dataTransfer.setData('text/plain', card.key);
+    }
+  }
+
+  function endDrag() {
+    dragged = null;
+    legal = [];
+    hover = null;
+    liftedKey = null;
+  }
+
+  function onDragOver(stage: WorkStage, ev: DragEvent) {
+    if (!dragged || !legal.includes(stage)) return;
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    hover = stage;
+  }
+
+  async function onDrop(stage: WorkStage, ev: DragEvent) {
+    ev.preventDefault();
+    const card = dragged;
+    endDrag();
+    if (card) await move(card, stage);
+  }
+
+  // ── Presentation ────────────────────────────────────────────────────────
+  function cardTone(card: BoardCard): string {
+    if (card.flags.includes('failed')) return 'urgent';
+    if (card.priority === 1) return 'action';
+    return STAGE_META[card.stage].tone;
+  }
+
 </script>
 
-<div class="epic-toolbar">
-  <input class="nm-text-input" aria-label="Search epics and deliverables" placeholder="Search epics and deliverables…" bind:value={query} />
-  <select class="nm-text-input" aria-label="Filter epics by status" bind:value={status}>
-    <option value="active">Active epics</option><option value="all">All epics</option>
-    {#each Object.entries(STAGE_META) as [value, meta]}<option {value}>{meta.label}</option>{/each}
-  </select>
-  <select class="nm-text-input" aria-label="Filter epics by category" bind:value={category}>
-    <option value="all">All categories</option>
-    {#each [...new Set(epics.flatMap((e) => e.categories))].sort() as value}<option {value}>{kindLabel(value)}</option>{/each}
-  </select>
-  <button class="nm-btn-ghost" aria-pressed={groomingOnly} onclick={() => groomingOnly = !groomingOnly}>Needs review ({epics.reduce((n, e) => n + (e.suggestions?.length ?? 0), 0)})</button>
-  <button class="nm-save-btn" onclick={() => creating = true}>Add epic</button>
+<div class="qb-bar">
+  <div class="seg" role="group" aria-label="What a card on the board is">
+    {#each BOARD_LEVELS as l (l)}
+      <button
+        type="button"
+        class="seg-btn"
+        class:on={level === l}
+        aria-pressed={level === l}
+        onclick={() => (level = l)}
+      >{LEVEL_META[l].label}<span class="n">{boards[l].length}</span></button>
+    {/each}
+  </div>
+
+  <input
+    class="text-input qb-search"
+    type="search"
+    bind:value={query}
+    placeholder="search titles and briefs…"
+    aria-label="Search the backlog"
+  />
+
+  <label class="qb-sort">
+    <span class="field-label">Order</span>
+    <select class="text-input select" bind:value={sort} aria-label="Order the columns">
+      {#each CARD_SORTS as m (m)}<option value={m}>{SORT_META[m]}</option>{/each}
+    </select>
+  </label>
+
+  <span class="qb-spacer"></span>
+
+  {#if hidden > 0 || showEmpty}
+    <button
+      type="button"
+      class="chip"
+      class:on={showEmpty}
+      aria-pressed={showEmpty}
+      onclick={() => (showEmpty = !showEmpty)}
+    >empty columns<span class="n">{hidden}</span></button>
+  {/if}
+  <button type="button" class="btn sm" disabled={activeFilters === 0} onclick={reset}>
+    Reset{#if activeFilters}&nbsp;({activeFilters}){/if}
+  </button>
+  <button type="button" class="cta sm" onclick={() => (creating = true)}>+ Add a deliverable</button>
 </div>
-<p class="ledger-count" role="status">{filtered.length} epics · automatic grouping and de-duplication on intake · {epics.reduce((n, e) => n + (e.groomingHistory?.filter((a) => a.state === 'applied').length ?? 0), 0)} consolidated · {epics.reduce((n, e) => n + (e.groomingOverrides?.length ?? 0), 0)} kept separate</p>
-{#if error}<p class="err" role="alert">The epic backlog could not be loaded: {error}</p>{/if}
-{#if actionError && !open}<p class="err" role="alert">{actionError}</p>{/if}
-<div class="kanban" role="region" aria-label="Epic kanban board" tabindex="0">
-  {#each WORK_STAGES.filter((stage) => status === 'all' || (status === 'active' ? !['live', 'parked'].includes(stage) : status === stage)) as stage}
-    {@const lane = filtered.filter((e) => e.stage === stage)}
-    <section class="kanban-lane" aria-label={STAGE_META[stage].label}>
-      <header class="lane-heading"><h2>{STAGE_META[stage].label}</h2><span>{lane.length}</span></header>
-      <div class="lane-cards">
-        {#each lane.slice(0, laneLimit) as epic (epic.slug)}
-          <button class="epic-row" onclick={() => show(epic)}>
-            <span class="card-meta"><span class="priority">P{epic.priority}</span><span>{epic.categories.map(kindLabel).join(' · ')}</span></span>
-            <strong>{epic.title}</strong>
-            <span class="epic-progress">{epic.deliverables.filter((i) => i.stage !== 'parked').length} active deliverables · {epic.completed} live</span>
-            {#if epic.suggestions?.length}<span class="card-review">{epic.suggestions.length} to review</span>{/if}
-            {#if epic.groomingHistory?.some((a) => a.state === 'applied')}<span class="card-history">{epic.groomingHistory.filter((a) => a.state === 'applied').length} consolidated · Review / undo →</span>{/if}
-          </button>
-        {:else}<p class="lane-empty">No epics</p>{/each}
-        {#if lane.length > laneLimit}<button class="nm-btn-ghost" onclick={() => laneLimit += 20}>Show more ({lane.length - laneLimit})</button>{/if}
-      </div>
-    </section>
-  {/each}
+
+<div class="facets">
+  <div class="facet">
+    <span class="field-label">Category</span>
+    <div class="chips">
+      {#each BACKLOG_KINDS as k (k)}
+        <button
+          type="button"
+          class="chip"
+          class:on={kinds.includes(k)}
+          aria-pressed={kinds.includes(k)}
+          title={KIND_META[k].cost}
+          onclick={() => (kinds = toggle(kinds, k))}
+        >{kindLabel(k)}<span class="n">{kindCounts[k]}</span></button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="facet">
+    <span class="field-label">Priority</span>
+    <div class="chips">
+      {#each PRIORITIES as p (p)}
+        <button
+          type="button"
+          class="chip"
+          class:on={priorities.includes(p)}
+          aria-pressed={priorities.includes(p)}
+          onclick={() => (priorities = toggle(priorities, p))}
+        >P{p}<span class="n">{priorityCounts[p]}</span></button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="facet">
+    <span class="field-label">Flag</span>
+    <div class="chips">
+      {#each CARD_FLAGS as f (f)}
+        <button
+          type="button"
+          class="chip"
+          class:on={flags.includes(f)}
+          aria-pressed={flags.includes(f)}
+          onclick={() => (flags = toggle(flags, f))}
+        >{FLAG_META[f]}<span class="n">{flagCounts[f]}</span></button>
+      {/each}
+    </div>
+  </div>
 </div>
+
+<p class="note">
+  Showing <b>{visible.length}</b> of {all.length}. {LEVEL_META[level].note}
+  Drag a card to <b>Accepted</b> or <b>Parked</b> — those are the only two moves a person
+  makes. In&nbsp;build, Verifying and Live are consequences of an attempt, and nothing may
+  leave Live, because parking a shipped row would erase the fact that it shipped.
+</p>
+
+{#if report}<p class="note good" role="status">{report}</p>{/if}
+{#if refused}<p class="note warn" role="status">{refused}</p>{/if}
+
+{#if all.length === 0}
+  <div class="card t-quiet">
+    <p class="card-body">
+      Nothing in the queue. Ideas arrive from the questions you ask, the faults daydreaming
+      raises, measurements nothing writes, and the appetite scan.
+    </p>
+  </div>
+{:else}
+  <div class="qb-scroll">
+    <div class="qb" style="--cols:{stages.length}">
+      {#each stages as stage (stage)}
+        {@const cards = visible.filter((c) => c.stage === stage)}
+        {@const cap = expanded.includes(stage) ? cards.length : COLUMN_CAP}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <section
+          class="col t-{STAGE_META[stage].tone}"
+          class:target={legal.includes(stage)}
+          class:over={hover === stage}
+          class:dimmed={legal.length > 0 && !legal.includes(stage)}
+          aria-label={STAGE_META[stage].label}
+          ondragover={(ev) => onDragOver(stage, ev)}
+          ondragleave={() => (hover = hover === stage ? null : hover)}
+          ondrop={(ev) => void onDrop(stage, ev)}
+        >
+          <header class="col-hd">
+            <span class="col-name">{STAGE_META[stage].label}</span>
+            <span class="col-n">
+              {counts.shown[stage]}{#if counts.shown[stage] !== counts.all[stage]}<span class="col-of"
+                  >/{counts.all[stage]}</span
+                >{/if}
+            </span>
+            <span class="col-q">{STAGE_META[stage].question}</span>
+          </header>
+
+          <div class="col-body">
+            {#each cards.slice(0, cap) as card (card.key)}
+              {@const moving = busy === `move:${card.key}` || busy === `pri:${card.key}`}
+              {@const toAccept = planMove(card, 'accepted')}
+              {@const toPark = planMove(card, 'parked')}
+              {@const stuck = !toAccept.ok && !toPark.ok}
+              {@const rankable = prioritySlugs(card).length > 0}
+              <article
+                class="wc t-{cardTone(card)}"
+                class:busy={moving}
+                class:lifted={liftedKey === card.key}
+                draggable={card.actionable && !stuck}
+                ondragstart={(ev) => onDragStart(card, ev)}
+                ondragend={endDrag}
+              >
+                <div class="wc-top">
+                  <span class="wc-pri" class:p1={card.priority === 1}>P{card.priority}</span>
+                  <span class="mark">{card.kinds.map(kindLabel).join(' · ')}</span>
+                </div>
+
+                <button type="button" class="wc-title" onclick={() => (openSlug = card.epicSlug)}>
+                  {card.title}
+                </button>
+
+                <p class="wc-counts">
+                  {#if card.level === 'epic'}
+                    <!-- The total first, because a shipped epic has neither
+                         open nor live deliverables and "0 active · 0 live" is
+                         then a card saying nothing about the four rows it
+                         holds. Open and live are added only when there are
+                         some. -->
+                    {card.total} deliverable{card.total === 1 ? '' : 's'}{#if card.active}
+                      · {card.active} open{/if}{#if card.live} · {card.live} live{/if}
+                  {:else}
+                    {STAGE_META[card.stage].label.toLowerCase()} · {ago(card.updatedAt)}
+                  {/if}
+                  {#if card.review}<span class="wc-review"> · {card.review} to review</span>{/if}
+                </p>
+
+                {#if card.note}<p class="wc-note">{card.note}</p>{/if}
+
+                <div class="wc-acts">
+                  <div class="step" role="group" aria-label="Priority for {card.title}">
+                    <button
+                      type="button"
+                      class="step-btn"
+                      disabled={moving || card.priority <= 1 || !rankable}
+                      title="Raise one step. This is the field pickWork ranks on, so it is the only control here that changes what gets built tonight."
+                      aria-label="Raise {card.title} to priority {card.priority - 1}"
+                      onclick={() => setPriority(card, stepPriority(card.priority, -1))}
+                    >▲</button>
+                    <button
+                      type="button"
+                      class="step-btn"
+                      disabled={moving || card.priority >= 5 || !rankable}
+                      title="Lower one step"
+                      aria-label="Lower {card.title} to priority {card.priority + 1}"
+                      onclick={() => setPriority(card, stepPriority(card.priority, 1))}
+                    >▼</button>
+                  </div>
+                  <span class="qb-spacer"></span>
+                  <!-- Drag is the fast path; these are the same two moves for
+                       anyone not using a mouse, decided by the same `planMove`,
+                       so the keyboard can never assert a transition the drop
+                       would refuse. -->
+                  {#if toAccept.ok}
+                    <button
+                      type="button"
+                      class="btn sm"
+                      disabled={moving}
+                      title={toAccept.reason}
+                      onclick={() => move(card, 'accepted')}
+                    >Accept</button>
+                  {/if}
+                  {#if toPark.ok}
+                    <button
+                      type="button"
+                      class="btn sm"
+                      disabled={moving}
+                      title={toPark.reason}
+                      onclick={() => move(card, 'parked')}
+                    >Park</button>
+                  {/if}
+                  {#if stuck}
+                    <span class="wc-fixed" title={(card.stage === 'live' || card.stage === 'verifying' ? toPark : toAccept).reason}>
+                      {card.stage === 'live' || card.stage === 'verifying' ? 'shipped' : 'no move'}
+                    </span>
+                  {/if}
+                </div>
+              </article>
+            {:else}
+              <p class="col-empty">—</p>
+            {/each}
+
+            {#if cards.length > cap}
+              <button type="button" class="col-more" onclick={() => (expanded = toggle(expanded, stage))}>
+                Show {cards.length - cap} more
+              </button>
+            {:else if cards.length > COLUMN_CAP}
+              <button type="button" class="col-more" onclick={() => (expanded = toggle(expanded, stage))}>
+                Show fewer
+              </button>
+            {/if}
+          </div>
+        </section>
+      {/each}
+    </div>
+  </div>
+{/if}
 
 {#if open}
-  <DrillPanel label={open.title} kicker="Epic / Deliverables" onclose={close} wide>
-    <div class="epic-modal">
-      <header class="epic-modal-head"><h2>{open.title}</h2><span class="pill t-{STAGE_META[open.stage].tone}">{STAGE_META[open.stage].label}</span></header>
-      {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
-      {#if open.groomingHistory?.length}
-        <details class="automation-history">
-          <summary>Automatic consolidation / overrides ({open.groomingHistory.length})</summary>
-          {#each [...open.groomingHistory].reverse() as entry (entry.id)}
-            <div class="automation-entry">
-              <strong>{entry.itemTitle}</strong>
-              <p>{entry.state === 'undone' ? 'Restored separately' : entry.state === 'pending' ? 'Consolidation pending' : entry.kind === 'merge' ? 'Requirements merged' : 'Already covered'} · {entry.targetTitle}</p>
-              {#if entry.state !== 'undone'}<button class="nm-btn-ghost" disabled={busy} onclick={() => act({ action: 'backlog_grooming_override', itemId: entry.itemId, keepSeparate: true })}>Restore separately</button>{/if}
-            </div>
-          {/each}
-        </details>
-      {/if}
-      {#if editing || adding}
-        <button class="nm-btn-ghost" onclick={savedDeliverable}>← All deliverables</button>
-        {#key editing ?? 'new'}<BacklogEditor item={edited} embedded epicSlug={open.slug} onclose={savedDeliverable} />{/key}
-      {:else}
-        <div class="epic-toolbar modal-toolbar">
-          <span class="sr-label-tight">{open.deliverables.length} deliverables</span>
-          <button class="nm-save-btn" onclick={() => adding = true}>Add deliverable</button>
-          <fieldset class="priority-controls"><legend>Set priority for open deliverables</legend>
-            {#each [1, 2, 3, 4, 5] as priority}<button class="nm-btn-ghost" disabled={busy} onclick={() => act({ action: 'epic_update', slug: open.slug, title, summary, priority })}>P{priority}</button>{/each}
-          </fieldset>
-        </div>
-        <div class="epic-toolbar">
-          <input class="nm-text-input" aria-label="Search deliverables in epic" placeholder="Find a deliverable…" bind:value={deliverableQuery} />
-          <select class="nm-text-input" aria-label="Filter deliverable category" bind:value={deliverableCategory}>
-            <option value="all">All deliverable categories</option>{#each open.categories as value}<option {value}>{kindLabel(value)}</option>{/each}
-          </select>
-        </div>
-        <label class="history-toggle"><input type="checkbox" bind:checked={showHistory} /> Show parked and merged history</label>
-        <details class="epic-definition"><summary>Edit epic definition</summary>
-          <label>Epic title<input class="nm-text-input" bind:value={title} maxlength="200" /></label>
-          <label>Outcome<textarea class="nm-text-input" bind:value={summary} rows="2" maxlength="2000"></textarea></label>
-          <button class="nm-save-btn" disabled={busy || !title.trim()} onclick={() => act({ action: 'epic_update', slug: open.slug, title, summary })}>Save definition</button>
-        </details>
-        {#if open.summary}<p class="epic-summary">{open.summary}</p>{/if}
-        <div class="deliverables">
-          {#each deliverables as item (item.id)}
-            <article class="deliverable">
-              <header><span class="sr-label-tight">{kindLabel(item.kind)}</span><strong>{item.title.replace(/^Epic:\s*/i, '')}</strong>
-                <span class="pill t-{STAGE_META[item.stage].tone}">{STAGE_META[item.stage].label}{item.foldedInto ? ' · combined delivery' : ''}</span>
-              </header>
-              {#if item.detail}<p>{item.detail}</p>{/if}
-              {#each (open.suggestions ?? []).filter((s) => s.itemId === item.id) as suggestion (suggestion.id)}
-                <div class="grooming-review">
-                  <strong>{suggestion.kind === 'covered' ? 'Possibly already covered' : 'Suggested merge'} · {suggestion.targetTitle}</strong>
-                  <p>{suggestion.reason}</p>
-                  <div class="deliverable-actions">
-                    {#if suggestion.targetHref}<a class="nm-btn-ghost" href={suggestion.targetHref}>Inspect existing feature →</a>{/if}
-                    {#if epics.some((e) => e.deliverables.some((d) => d.id === suggestion.targetId))}
-                      <button class="nm-btn-ghost" onclick={() => { const target = epics.find((e) => e.deliverables.some((d) => d.id === suggestion.targetId)); if (target) { show(target); deliverableQuery = suggestion.targetTitle; } }}>Inspect matching deliverable</button>
-                    {/if}
-                    <button class="nm-save-btn" disabled={busy} onclick={() => act({ action: 'backlog_grooming_decide', id: suggestion.id, decision: 'apply' })}>{suggestion.kind === 'covered' ? 'Remove from active backlog' : 'Merge requirements'}</button>
-                    <button class="nm-btn-ghost" disabled={busy} onclick={() => act({ action: 'backlog_grooming_decide', id: suggestion.id, decision: 'keep' })}>Keep separate</button>
-                  </div>
-                </div>
-              {/each}
-              <div class="deliverable-actions">
-                {#if item.stage === 'accepted' || item.stage === 'proposed'}
-                  <button class="nm-btn-ghost" aria-pressed={open.groomingOverrides?.includes(item.id) ?? false} disabled={busy} onclick={() => act({ action: 'backlog_grooming_override', itemId: item.id, keepSeparate: !open.groomingOverrides?.includes(item.id) })}>{open.groomingOverrides?.includes(item.id) ? 'Allow automatic merging' : 'Keep separate'}</button>
-                {/if}
-                {#if item.source === 'backlog' && !item.foldedInto}
-                  <button class="nm-btn-ghost" onclick={() => editing = item.id}>Define deliverable</button>
-                  {#each [1, 2, 3, 4, 5] as priority}<button class="nm-btn-ghost" data-active={item.priority === priority} aria-pressed={item.priority === priority} disabled={busy} onclick={() => changePriority(item, priority)}>P{priority}</button>{/each}
-                  {#if item.backlogStatus !== 'shipped'}<button class="nm-btn-ghost" disabled={busy} onclick={() => act({ action: 'backlog_park', slug: item.slug, parked: item.backlogStatus !== 'abandoned', reason: 'Parked from epic deliverables' })}>{item.backlogStatus === 'abandoned' ? 'Restore' : 'Park'}</button>{/if}
-                {:else if item.foldedInto && open.combinedDeliveries.some((d) => d.slug === item.foldedInto)}
-                  <button class="nm-btn-ghost" onclick={() => editing = `backlog:${item.foldedInto}`}>Define combined delivery</button>
-                {:else if item.source === 'capability' && item.stage === 'proposed'}
-                  <button class="nm-save-btn" disabled={busy} onclick={() => act({ action: 'capability_decide', slug: item.slug, decision: 'accept' })}>Accept deliverable</button>
-                  <button class="nm-btn-ghost" disabled={busy} onclick={() => act({ action: 'capability_decide', slug: item.slug, decision: 'decline' })}>Decline</button>
-                {/if}
-                {#if item.artifactHref}<a class="nm-btn-ghost" href={item.artifactHref}>Open result →</a>{/if}
-              </div>
-              {#if item.parkedReason}<p>{item.parkedReason}</p>{/if}
-              {#if item.absorbedRequirements}<details><summary>Merged requirements</summary>{#each Object.values(item.absorbedRequirements) as brief}<pre>{brief}</pre>{/each}</details>{/if}
-              {#if item.lastError}<p class="err">{item.lastError}</p>{/if}
-              {#if item.grooming?.acceptanceCriteria.length}<details><summary>Acceptance criteria ({item.grooming.acceptanceCriteria.length})</summary><ul>{#each item.grooming.acceptanceCriteria as criterion}<li>{criterion}</li>{/each}</ul></details>{/if}
-              {#if item.mergedBrief}<details><summary>Included requirements</summary><pre>{item.mergedBrief}</pre></details>{/if}
-            </article>
-          {:else}<p class="note">No deliverables match these filters.</p>{/each}
-        </div>
-      {/if}
-    </div>
-  </DrillPanel>
+  {#key open.slug}
+    <EpicDrill epic={open} {busy} {act} onclose={() => (openSlug = null)} />
+  {/key}
 {/if}
-{#if creating}<BacklogEditor item={null} onclose={() => creating = false} />{/if}
+{#if creating}
+  <BacklogEditor item={null} onclose={() => (creating = false)} />
+{/if}
 
 <style>
-  .grooming-review { border-left: 3px solid var(--accent-ink); background: var(--surface-sunken); padding: 10px 12px; margin: 10px 0; font-size: var(--fs-nav); }
-  .history-toggle { display: flex; gap: 8px; align-items: center; font-size: var(--fs-label); margin-bottom: 10px; }
-  .pill { font: var(--fs-label-xs) var(--font-mono); text-transform: uppercase; border: 1px solid var(--line-strong); padding: 3px 7px; color: var(--text-secondary); }
-  .pill.t-good { color: var(--good); border-color: var(--good); }
-  .pill.t-watch { color: var(--warn); border-color: var(--warn); }
-  .pill.t-action { color: var(--accent); border-color: var(--accent); }
-  .err { color: var(--error); background: var(--error-bg); padding: 8px; }
-  :is(.nm-save-btn, .nm-btn-ghost):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* ── controls ─────────────────────────────────────────────────────────── */
+  .qb-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 14px 0 12px;
+    border-top: 1px solid var(--line-hair);
+    border-bottom: 1px solid var(--line-hair);
+    margin: clamp(16px, 2.2vw, 24px) 0 12px;
+  }
+  .qb-spacer {
+    flex: 1 1 auto;
+  }
+  .qb-search {
+    flex: 1 1 240px;
+    min-width: 180px;
+    width: auto;
+  }
+  .qb-sort {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .qb-sort select {
+    width: auto;
+  }
 
-  .epic-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  .epic-toolbar input { flex: 1 1 260px; width: auto; }
-  .epic-toolbar select { width: auto; max-width: 100%; }
-  .ledger-count { font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 14px; min-width: 0; align-items: start; }
-  .kanban:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .kanban-lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-sunken); }
-  .lane-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--line-strong); padding: 12px; }
-  .lane-heading h2 { font: var(--fs-nav) var(--font-display); margin: 0; }
-  .lane-heading > span { font: var(--fs-label) var(--font-code); color: var(--text-muted); }
-  .lane-cards { display: grid; gap: 8px; padding: 8px; max-height: 65vh; overflow-y: auto; }
-  .epic-row { display: grid; width: 100%; gap: 10px; padding: 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent-ink); text-align: left; background: var(--surface-card); color: var(--text-primary); cursor: pointer; font: inherit; }
-  .epic-row:hover { background: var(--accent-tint-04); }
-  .epic-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .epic-row strong { font-size: var(--fs-nav); overflow-wrap: anywhere; }
-  .card-meta { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-label-xs); color: var(--text-secondary); }
-  .epic-progress, .card-history, .card-review, .lane-empty { font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .card-review { color: var(--accent); }
-  .card-history { color: var(--accent-ink); border-top: 1px solid var(--line); padding-top: 8px; }
-  .automation-history { border-block: 1px solid var(--line); padding: 12px 0; margin-top: 12px; }
-  .automation-entry { border-bottom: 1px solid var(--line); padding: 12px 0; font-size: var(--fs-nav); overflow-wrap: anywhere; }
-  .automation-entry p { font-size: var(--fs-label); color: var(--text-secondary); }
-  .epic-modal { min-width: 0; }
-  .epic-modal-head, .deliverable header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
-  .epic-modal-head h2 { font: 1.5rem var(--font-display); margin: 0; flex: 1; overflow-wrap: anywhere; }
-  .priority-controls { border: 0; padding: 0; margin: 0 0 0 auto; display: flex; gap: 4px; }
-  .priority-controls legend { font-size: var(--fs-label-xs); color: var(--text-muted); margin-bottom: 4px; }
-  .epic-definition { border-block: 1px solid var(--line); padding: 10px 0; }
-  summary { cursor: pointer; color: var(--accent-ink); font-size: var(--fs-label); }
-  summary:focus-visible { outline: 2px solid var(--accent); }
-  .epic-definition label { display: grid; gap: 4px; margin: 10px 0; font-size: var(--fs-label); }
-  .deliverable { padding: 14px 0; border-bottom: 1px solid var(--line); }
-  .deliverable header strong { flex: 1 1 240px; font-size: var(--fs-body); overflow-wrap: anywhere; }
-  .deliverable p, .epic-summary { font-size: var(--fs-nav); line-height: 1.5; color: var(--text-secondary); margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .deliverable-actions { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
-  .deliverable pre { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-label) var(--font-code); max-height: 240px; overflow: auto; }
-  @media (max-width: 640px) {
-    .priority-controls { margin-left: 0; }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line-strong);
+  }
+  .seg-btn {
+    background: none;
+    border: 0;
+    padding: 7px 14px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .seg-btn.on {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .seg-btn + .seg-btn {
+    border-left: 1px solid var(--line-strong);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 5px 9px;
+    border: 1px solid var(--line-hair);
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .chip:hover {
+    border-color: var(--line-strong);
+  }
+  .chip.on {
+    border-color: var(--accent);
+    background: var(--accent-tint-08);
+    color: var(--accent);
+  }
+  .chip .n,
+  .seg-btn .n {
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+  .chip.on .n {
+    color: var(--accent);
+  }
+  .seg-btn.on .n {
+    color: var(--bg);
+  }
+  .seg-btn .n {
+    margin-left: 6px;
+  }
+
+  .facets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px clamp(20px, 3vw, 40px);
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .facet {
+    min-width: 0;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .facet .field-label {
+    display: block;
+    margin-bottom: 7px;
+  }
+
+  /* ── the board ────────────────────────────────────────────────────────── */
+  .qb-scroll {
+    overflow-x: auto;
+    margin-top: 18px;
+    padding-bottom: 12px;
+  }
+  .qb {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(268px, 1fr));
+    gap: 12px;
+    align-items: start;
+    min-width: min-content;
+  }
+
+  .col {
+    min-width: 0;
+    border: 1px solid var(--card-border);
+    border-top: 3px solid var(--tone, var(--line-strong));
+    background: var(--bg-section);
+  }
+  /* A column that will accept the card in flight, and one that will not. Both
+     are said, because a board that only highlights the legal targets leaves
+     "why did nothing happen" to be guessed at. */
+  .col.target {
+    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-04);
+  }
+  .col.over {
+    border-color: var(--accent);
+    background: var(--accent-tint-08);
+  }
+  .col.dimmed {
+    opacity: 0.45;
+  }
+
+  .col-hd {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .col-name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--tone, var(--text-secondary));
+  }
+  .col-n {
+    font-family: var(--font-display);
+    font-size: var(--fs-body-lg);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-align: right;
+  }
+  .col-of {
+    font-size: var(--fs-label);
+    color: var(--text-ghost);
+  }
+  .col-q {
+    grid-column: 1 / -1;
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+  }
+
+  .col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    max-height: 68vh;
+    overflow-y: auto;
+  }
+  .col-empty {
+    margin: 6px 0;
+    text-align: center;
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+  .col-more {
+    border: 1px dashed var(--line-strong);
+    background: none;
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  /* ── a card ───────────────────────────────────────────────────────────── */
+  .wc {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 11px 12px;
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--tone, var(--line-strong));
+    background: var(--surface-card);
+    min-width: 0;
+  }
+  .wc[draggable='true'] {
+    cursor: grab;
+  }
+  .wc.lifted {
+    opacity: 0.4;
+  }
+  .wc.busy {
+    opacity: 0.55;
+  }
+
+  .wc-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .wc-pri {
+    font-family: var(--font-display);
+    font-size: var(--fs-body-sm);
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--text-muted);
+  }
+  .wc-pri.p1 {
+    color: var(--accent);
+  }
+
+  .wc-title {
+    border: 0;
+    background: none;
+    padding: 0;
+    text-align: left;
+    font-family: inherit;
+    font-size: var(--fs-body-sm);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-primary);
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+  .wc-title:hover {
+    color: var(--accent);
+  }
+  .wc-title:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .wc-counts {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+  .wc-review {
+    color: var(--accent);
+  }
+
+  /* The sentence saying why the card is where it is, in BODY font and on its
+     own line — /health's tripwire ledger sets the same sentence the same way.
+     Squeezed into the mono meta row it competed with the title. */
+  .wc-note {
+    margin: 0;
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-secondary);
+    text-wrap: pretty;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .wc-acts {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line-hair);
+  }
+  .step {
+    display: inline-flex;
+    border: 1px solid var(--line-hair);
+  }
+  .step-btn {
+    border: 0;
+    background: none;
+    padding: 2px 7px;
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .step-btn:hover:not(:disabled) {
+    background: var(--accent-tint-08);
+    color: var(--accent);
+  }
+  .step-btn:disabled {
+    color: var(--text-ghost);
+    cursor: not-allowed;
+  }
+  .step-btn + .step-btn {
+    border-left: 1px solid var(--line-hair);
+  }
+  .wc-fixed {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+
+  @media (max-width: 720px) {
+    .qb {
+      grid-template-columns: minmax(258px, 1fr);
+    }
+    .col-body {
+      max-height: none;
+    }
   }
 </style>

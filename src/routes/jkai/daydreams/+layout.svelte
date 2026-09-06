@@ -12,6 +12,16 @@
   // import from a route file breaks the vite-pwa build while svelte-check
   // passes clean. `DrillPanel` puts `ds-vocab` on its own portalled panel so
   // the vocabulary reaches it outside this wrapper.
+  //
+  // The wrapper class must be INSIDE the `:global()`, not in front of it.
+  // `.ds-vocab :global(.btn)` scopes the ancestor — it compiles to
+  // `.ds-vocab.svelte-HASH .btn`, and that hash exists only on the wrapper
+  // below, so nothing portalled to <body> ever matched. Every drill was
+  // therefore rendering unstyled buttons, inputs and tables (measured
+  // 2026-09-06: border-width 0, padding 0 on every one of them inside
+  // `DrillPanel`), which is why the epic panel had reached for the `.nm-*`
+  // admin classes instead. `:global(.ds-vocab .btn)` leaves the ancestor
+  // unscoped and still requires it, so nothing leaks past this hub.
   import type { Snippet } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
@@ -159,15 +169,15 @@
      colour. */
 
   /* ——— bands ——— */
-  .ds-vocab :global(.band) {
+  :global(.ds-vocab .band) {
     padding: clamp(28px, 3.4vw, 52px) clamp(18px, 3vw, 44px);
     border-top: 1px solid var(--line-hair);
     scroll-margin-top: 60px;
   }
-  .ds-vocab :global(.band.sunken) {
+  :global(.ds-vocab .band.sunken) {
     background: var(--bg-section);
   }
-  .ds-vocab :global(.band.flush) {
+  :global(.ds-vocab .band.flush) {
     padding-top: 0;
     border-top: 0;
   }
@@ -177,19 +187,19 @@
      for a card on cream, which reads as one more exhibit rather than a change
      of voice. Cream text is `--bg`, the accent moves to its on-dark partner
      and `--line-hair` is invisible here, so hairlines are cream at 14%. */
-  .ds-vocab :global(.band.ink) {
+  :global(.ds-vocab .band.ink) {
     background: var(--text-primary);
     color: var(--bg);
     border-top: 0;
   }
-  .ds-vocab :global(.inner) {
+  :global(.ds-vocab .inner) {
     max-width: 1500px;
     margin: 0 auto;
     min-width: 0;
   }
 
   /* ——— type ——— */
-  .ds-vocab :global(.lede) {
+  :global(.ds-vocab .lede) {
     font-size: var(--fs-body-sm);
     line-height: 1.6;
     color: var(--text-secondary);
@@ -197,7 +207,7 @@
     text-wrap: pretty;
     margin: 0 0 20px;
   }
-  .ds-vocab :global(.note) {
+  :global(.ds-vocab .note) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     line-height: 1.65;
@@ -206,13 +216,13 @@
     max-width: 96ch;
     margin: 12px 0 0;
   }
-  .ds-vocab :global(.note.warn) {
+  :global(.ds-vocab .note.warn) {
     color: var(--warn);
   }
-  .ds-vocab :global(.note.good) {
+  :global(.ds-vocab .note.good) {
     color: var(--good);
   }
-  .ds-vocab :global(.err) {
+  :global(.ds-vocab .err) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     line-height: 1.6;
@@ -220,7 +230,7 @@
     color: var(--error);
     margin: 12px 0 0;
   }
-  .ds-vocab :global(.field-label) {
+  :global(.ds-vocab .field-label) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -229,18 +239,18 @@
     color: var(--text-muted);
     margin: 0 0 10px;
   }
-  .ds-vocab :global(.dim) {
+  :global(.ds-vocab .dim) {
     color: var(--text-ghost);
   }
-  .ds-vocab :global(.link) {
+  :global(.ds-vocab .link) {
     color: var(--accent);
     text-decoration: none;
   }
-  .ds-vocab :global(.link:hover) {
+  :global(.ds-vocab .link:hover) {
     text-decoration: underline;
   }
   /* The family mark — a category is a WORD in the label face, not a colour. */
-  .ds-vocab :global(.mark) {
+  :global(.ds-vocab .mark) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -251,7 +261,7 @@
   }
 
   /* ——— controls ——— */
-  .ds-vocab :global(.controls) {
+  :global(.ds-vocab .controls) {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -260,8 +270,8 @@
     border-bottom: 1px solid var(--line-hair);
     margin-bottom: 22px;
   }
-  .ds-vocab :global(.cta),
-  .ds-vocab :global(.btn) {
+  :global(.ds-vocab .cta),
+  :global(.ds-vocab .btn) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -280,53 +290,53 @@
       border-color var(--t-fast) var(--ease-out),
       color var(--t-fast) var(--ease-out);
   }
-  .ds-vocab :global(.cta) {
+  :global(.ds-vocab .cta) {
     color: var(--bg);
     background: var(--accent);
     border: 1px solid var(--accent);
   }
-  .ds-vocab :global(.cta:hover:not(:disabled)) {
+  :global(.ds-vocab .cta:hover:not(:disabled)) {
     background: var(--accent-hover);
     border-color: var(--accent-hover);
   }
-  .ds-vocab :global(.btn) {
+  :global(.ds-vocab .btn) {
     color: var(--text-primary);
     background: transparent;
     border: 1px solid var(--line-strong);
   }
-  .ds-vocab :global(.btn:hover:not(:disabled)) {
+  :global(.ds-vocab .btn:hover:not(:disabled)) {
     border-color: var(--accent);
     color: var(--accent);
   }
-  .ds-vocab :global(.btn.danger:hover:not(:disabled)) {
+  :global(.ds-vocab .btn.danger:hover:not(:disabled)) {
     border-color: var(--error);
     color: var(--error);
   }
-  .ds-vocab :global(.btn.picked) {
+  :global(.ds-vocab .btn.picked) {
     background: var(--text-primary);
     border-color: var(--text-primary);
     color: var(--bg);
   }
-  .ds-vocab :global(.btn.danger.picked) {
+  :global(.ds-vocab .btn.danger.picked) {
     background: var(--error);
     border-color: var(--error);
     color: var(--bg);
   }
-  .ds-vocab :global(.btn.sm),
-  .ds-vocab :global(.cta.sm) {
+  :global(.ds-vocab .btn.sm),
+  :global(.ds-vocab .cta.sm) {
     padding: 5px 10px;
   }
-  .ds-vocab :global(.cta:disabled),
-  .ds-vocab :global(.btn:disabled) {
+  :global(.ds-vocab .cta:disabled),
+  :global(.ds-vocab .btn:disabled) {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .ds-vocab :global(.cta:focus-visible),
-  .ds-vocab :global(.btn:focus-visible) {
+  :global(.ds-vocab .cta:focus-visible),
+  :global(.ds-vocab .btn:focus-visible) {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .ds-vocab :global(.text-input) {
+  :global(.ds-vocab .text-input) {
     font-family: var(--font-body);
     /* 16px, not smaller: mobile Safari force-zooms the viewport on a sub-16px
        field and strands the rest of the form off-screen. */
@@ -339,21 +349,21 @@
     min-width: 0;
     flex: 1 1 220px;
   }
-  .ds-vocab :global(.text-input:focus) {
+  :global(.ds-vocab .text-input:focus) {
     outline: none;
     border-color: var(--accent);
   }
-  .ds-vocab :global(.text-input.area) {
+  :global(.ds-vocab .text-input.area) {
     width: 100%;
     resize: vertical;
     line-height: 1.5;
   }
-  .ds-vocab :global(.text-input.select) {
+  :global(.ds-vocab .text-input.select) {
     flex: 0 0 auto;
     font-family: var(--font-mono);
     text-transform: lowercase;
   }
-  .ds-vocab :global(.actions) {
+  :global(.ds-vocab .actions) {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -361,28 +371,28 @@
   }
 
   /* ——— layout ——— */
-  .ds-vocab :global(.grid) {
+  :global(.ds-vocab .grid) {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 14px;
   }
-  .ds-vocab :global(.stack) {
+  :global(.ds-vocab .stack) {
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
-  .ds-vocab :global(.stack.tight) {
+  :global(.ds-vocab .stack.tight) {
     gap: 8px;
   }
-  .ds-vocab :global(.section-gap) {
+  :global(.ds-vocab .section-gap) {
     margin-top: clamp(24px, 3vw, 40px);
   }
-  .ds-vocab :global(.anchored) {
+  :global(.ds-vocab .anchored) {
     scroll-margin-top: 72px;
   }
 
   /* ——— cards: one shape, six tones ——— */
-  .ds-vocab :global(.card) {
+  :global(.ds-vocab .card) {
     --tone: var(--accent-ink);
     position: relative;
     background: var(--surface-card);
@@ -392,41 +402,41 @@
     padding: 18px 20px;
     min-width: 0;
   }
-  .ds-vocab :global(.card.t-urgent) {
+  :global(.ds-vocab .card.t-urgent) {
     --tone: var(--error);
     background: var(--error-bg);
   }
-  .ds-vocab :global(.card.t-action) {
+  :global(.ds-vocab .card.t-action) {
     --tone: var(--accent);
     background: var(--accent-tint-04);
   }
-  .ds-vocab :global(.card.t-watch) {
+  :global(.ds-vocab .card.t-watch) {
     --tone: var(--warn);
   }
-  .ds-vocab :global(.card.t-good) {
+  :global(.ds-vocab .card.t-good) {
     --tone: var(--good);
   }
-  .ds-vocab :global(.card.t-steady) {
+  :global(.ds-vocab .card.t-steady) {
     --tone: var(--accent-ink);
   }
-  .ds-vocab :global(.card.t-quiet) {
+  :global(.ds-vocab .card.t-quiet) {
     --tone: var(--text-ghost);
     background: transparent;
   }
-  .ds-vocab :global(.card.open) {
+  :global(.ds-vocab .card.open) {
     border-color: var(--tone);
   }
-  .ds-vocab :global(.card.ruled) {
+  :global(.ds-vocab .card.ruled) {
     opacity: 0.72;
   }
-  .ds-vocab :global(.card.row) {
+  :global(.ds-vocab .card.row) {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
   }
-  .ds-vocab :global(.card-kicker) {
+  :global(.ds-vocab .card-kicker) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -435,7 +445,7 @@
     color: var(--tone, var(--text-muted));
     margin: 0 0 10px;
   }
-  .ds-vocab :global(.card-title) {
+  :global(.ds-vocab .card-title) {
     font-family: var(--font-display);
     font-size: var(--fs-body-lg);
     line-height: 1.15;
@@ -451,20 +461,20 @@
     min-width: 0;
     transition: color var(--t-fast) var(--ease-out);
   }
-  .ds-vocab :global(.card-title:hover) {
+  :global(.ds-vocab .card-title:hover) {
     color: var(--accent);
   }
-  .ds-vocab :global(.card-title:focus-visible) {
+  :global(.ds-vocab .card-title:focus-visible) {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .ds-vocab :global(.card-title.as-text) {
+  :global(.ds-vocab .card-title.as-text) {
     cursor: default;
   }
-  .ds-vocab :global(.card-title.as-text:hover) {
+  :global(.ds-vocab .card-title.as-text:hover) {
     color: var(--text-primary);
   }
-  .ds-vocab :global(.card-figure) {
+  :global(.ds-vocab .card-figure) {
     font-family: var(--font-display);
     font-size: 34px;
     line-height: 0.95;
@@ -473,33 +483,33 @@
     margin: 0 0 10px;
     overflow-wrap: anywhere;
   }
-  .ds-vocab :global(.card-figure.sm) {
+  :global(.ds-vocab .card-figure.sm) {
     font-size: 22px;
   }
-  .ds-vocab :global(.card-body) {
+  :global(.ds-vocab .card-body) {
     font-size: var(--fs-body-sm);
     line-height: 1.55;
     color: var(--text-secondary);
     text-wrap: pretty;
     margin: 0;
   }
-  .ds-vocab :global(.card-body.lead) {
+  :global(.ds-vocab .card-body.lead) {
     color: var(--text-primary);
   }
-  .ds-vocab :global(.card-body.sm) {
+  :global(.ds-vocab .card-body.sm) {
     font-size: var(--fs-nav);
   }
-  .ds-vocab :global(.card-body + .card-body) {
+  :global(.ds-vocab .card-body + .card-body) {
     margin-top: 10px;
   }
-  .ds-vocab :global(.card-body.clamp) {
+  :global(.ds-vocab .card-body.clamp) {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     overflow: hidden;
   }
-  .ds-vocab :global(.card-meta) {
+  :global(.ds-vocab .card-meta) {
     display: flex;
     align-items: center;
     gap: 8px 14px;
@@ -510,18 +520,18 @@
     color: var(--text-muted);
     margin-top: 14px;
   }
-  .ds-vocab :global(.meta-item.stamp) {
+  :global(.ds-vocab .meta-item.stamp) {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     color: var(--text-muted);
   }
-  .ds-vocab :global(.meta-item.warn) {
+  :global(.ds-vocab .meta-item.warn) {
     color: var(--warn);
   }
-  .ds-vocab :global(.meta-item.good) {
+  :global(.ds-vocab .meta-item.good) {
     color: var(--good);
   }
-  .ds-vocab :global(.card-actions) {
+  :global(.ds-vocab .card-actions) {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -530,7 +540,7 @@
   }
 
   /* ——— pills and tags ——— */
-  .ds-vocab :global(.pill) {
+  :global(.ds-vocab .pill) {
     display: inline-block;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -542,26 +552,26 @@
     border-radius: var(--radius-pill);
     color: var(--text-muted);
   }
-  .ds-vocab :global(.pill.t-urgent) {
+  :global(.ds-vocab .pill.t-urgent) {
     color: var(--error);
   }
-  .ds-vocab :global(.pill.t-action) {
+  :global(.ds-vocab .pill.t-action) {
     color: var(--accent);
     background: var(--accent-tint-08);
   }
-  .ds-vocab :global(.pill.t-watch) {
+  :global(.ds-vocab .pill.t-watch) {
     color: var(--warn);
   }
-  .ds-vocab :global(.pill.t-good) {
+  :global(.ds-vocab .pill.t-good) {
     color: var(--good);
   }
-  .ds-vocab :global(.pill.t-steady) {
+  :global(.ds-vocab .pill.t-steady) {
     color: var(--accent-ink);
   }
-  .ds-vocab :global(.pill.t-quiet) {
+  :global(.ds-vocab .pill.t-quiet) {
     color: var(--text-ghost);
   }
-  .ds-vocab :global(.tag) {
+  :global(.ds-vocab .tag) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
@@ -573,47 +583,47 @@
     white-space: nowrap;
     text-decoration: none;
   }
-  .ds-vocab :global(.tag.accent),
-  .ds-vocab :global(.tag.t-action) {
+  :global(.ds-vocab .tag.accent),
+  :global(.ds-vocab .tag.t-action) {
     border-color: var(--accent-tint-35);
     color: var(--accent);
   }
-  .ds-vocab :global(.tag.t-watch) {
+  :global(.ds-vocab .tag.t-watch) {
     border-color: var(--warn-border);
     color: var(--warn);
   }
-  .ds-vocab :global(.tag.t-good) {
+  :global(.ds-vocab .tag.t-good) {
     border-color: var(--good);
     color: var(--good);
   }
-  .ds-vocab :global(.tag.t-urgent) {
+  :global(.ds-vocab .tag.t-urgent) {
     border-color: var(--error);
     color: var(--error);
   }
-  .ds-vocab :global(.tag.t-steady) {
+  :global(.ds-vocab .tag.t-steady) {
     border-color: var(--accent-ink-tint-35);
     color: var(--accent-ink);
   }
-  .ds-vocab :global(.q-ext) {
+  :global(.ds-vocab .q-ext) {
     margin-left: 4px;
     opacity: 0.7;
   }
 
   /* ——— tables ——— */
-  .ds-vocab :global(.tbl-wrap) {
+  :global(.ds-vocab .tbl-wrap) {
     overflow-x: auto;
   }
-  .ds-vocab :global(.tbl) {
+  :global(.ds-vocab .tbl) {
     border-collapse: collapse;
     width: 100%;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
   }
-  .ds-vocab :global(.tbl thead tr) {
+  :global(.ds-vocab .tbl thead tr) {
     background: var(--card-bg);
     border-bottom: 2px solid rgba(26, 16, 8, 0.2);
   }
-  .ds-vocab :global(.tbl th) {
+  :global(.ds-vocab .tbl th) {
     padding: 11px 12px;
     text-align: left;
     white-space: nowrap;
@@ -622,52 +632,52 @@
     text-transform: uppercase;
     color: var(--text-muted);
   }
-  .ds-vocab :global(.tbl tbody tr) {
+  :global(.ds-vocab .tbl tbody tr) {
     border-bottom: 1px solid var(--line-hair);
     transition: background-color var(--t-fast) var(--ease-out);
   }
-  .ds-vocab :global(.tbl tbody tr:last-child) {
+  :global(.ds-vocab .tbl tbody tr:last-child) {
     border-bottom: none;
   }
-  .ds-vocab :global(.tbl tbody tr:hover) {
+  :global(.ds-vocab .tbl tbody tr:hover) {
     background: rgba(26, 16, 8, 0.05);
   }
-  .ds-vocab :global(.tbl tbody tr.dim) {
+  :global(.ds-vocab .tbl tbody tr.dim) {
     color: var(--text-ghost);
   }
-  .ds-vocab :global(.tbl td) {
+  :global(.ds-vocab .tbl td) {
     padding: 10px 12px;
     vertical-align: middle;
     color: var(--text-secondary);
   }
-  .ds-vocab :global(.tbl.compact th),
-  .ds-vocab :global(.tbl.compact td) {
+  :global(.ds-vocab .tbl.compact th),
+  :global(.ds-vocab .tbl.compact td) {
     padding: 7px 10px;
   }
-  .ds-vocab :global(.tbl th.right),
-  .ds-vocab :global(.tbl td.right) {
+  :global(.ds-vocab .tbl th.right),
+  :global(.ds-vocab .tbl td.right) {
     text-align: right;
     width: 1%;
     white-space: nowrap;
   }
-  .ds-vocab :global(.tbl td.num) {
+  :global(.ds-vocab .tbl td.num) {
     font-family: var(--font-code);
     font-variant-numeric: tabular-nums;
   }
-  .ds-vocab :global(.tbl td.nowrap) {
+  :global(.ds-vocab .tbl td.nowrap) {
     white-space: nowrap;
   }
-  .ds-vocab :global(.tbl td.cell-wrap) {
+  :global(.ds-vocab .tbl td.cell-wrap) {
     min-width: 22ch;
   }
-  .ds-vocab :global(.tbl td.bad) {
+  :global(.ds-vocab .tbl td.bad) {
     color: var(--error);
     font-weight: 700;
   }
-  .ds-vocab :global(.cell-lead) {
+  :global(.ds-vocab .cell-lead) {
     color: var(--text-primary);
   }
-  .ds-vocab :global(.cell-title) {
+  :global(.ds-vocab .cell-title) {
     display: block;
     font-family: var(--font-display);
     font-size: var(--fs-label);
@@ -675,7 +685,7 @@
   }
 
   /* ——— the detail, in a drill ——— */
-  .ds-vocab :global(.detail) {
+  :global(.ds-vocab .detail) {
     border-top: 1px solid var(--line-hair);
     margin-top: 16px;
     padding-top: 16px;
@@ -683,10 +693,10 @@
     flex-direction: column;
     gap: 20px;
   }
-  .ds-vocab :global(.detail-block) {
+  :global(.ds-vocab .detail-block) {
     min-width: 0;
   }
-  .ds-vocab :global(.detail-line) {
+  :global(.ds-vocab .detail-line) {
     font-size: var(--fs-nav);
     line-height: 1.6;
     color: var(--text-secondary);
@@ -694,7 +704,7 @@
     text-wrap: pretty;
     margin: 0 0 8px;
   }
-  .ds-vocab :global(.detail-line.said) {
+  :global(.ds-vocab .detail-line.said) {
     color: var(--text-primary);
     border-left: 2px solid var(--accent-tint-35);
     padding-left: 12px;

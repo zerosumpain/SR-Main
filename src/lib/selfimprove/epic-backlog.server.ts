@@ -1,5 +1,5 @@
 import { getRecordByKey, upsertRecord } from '$lib/datastore';
-import { buildBoard } from './board';
+import { buildBoard, type BoardView } from './board';
 import { listBacklog, MAX_ATTEMPTS, setPriority } from './backlog';
 import { listEpics } from './epics';
 import { buildEpicBacklog, type BacklogEpic } from './epic-backlog';
@@ -9,10 +9,23 @@ import { ensureSystemCollections } from './seed-apis';
 import { suggestBacklogGrooming } from './backlog-grooming';
 import { loadCustomToolHealth } from './context';
 
+export interface BacklogRoom {
+  epics: BacklogEpic[];
+  /**
+   * The board the epics were folded out of.
+   *
+   * Kept rather than discarded because the room draws three things off it that
+   * no epic carries: the instrument deck's totals, the burndown reconstruction,
+   * and the intake window. `buildBoard` computes all three on the way past, so
+   * returning it costs nothing and saves the page a second full read.
+   */
+  board: BoardView;
+}
+
 /** Reconcile from both intake ledgers. Every arrival is assigned automatically;
  * grouping never abandons deliverables, changes their status or starts a build.
  */
-export async function loadEpicBacklog(): Promise<BacklogEpic[]> {
+export async function loadBacklogRoom(): Promise<BacklogRoom> {
   await ensureSystemCollections();
   const [backlog, capabilities, tools, saved] = await Promise.all([
     listBacklog(undefined, { strict: true }), listCapabilities({ limit: null }), loadCustomToolHealth(), listEpics(),
@@ -42,7 +55,12 @@ export async function loadEpicBacklog(): Promise<BacklogEpic[]> {
     epic.groomingHistory = saved.flatMap((e) => e.groomingHistory ?? []).filter((a) => ids.has(a.itemId));
     epic.groomingOverrides = saved.flatMap((e) => e.groomingOverrides ?? []).filter((id) => ids.has(id));
   }
-  return epics;
+  return { epics, board };
+}
+
+/** The epics alone, for the callers that never wanted the board. */
+export async function loadEpicBacklog(): Promise<BacklogEpic[]> {
+  return (await loadBacklogRoom()).epics;
 }
 
 export async function updateEpic(slug: string, title: string, summary: string, priority?: number): Promise<void> {

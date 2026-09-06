@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
-import { loadEpicBacklog, decideBacklogGrooming, overrideBacklogGrooming } from '$lib/selfimprove/epic-backlog.server';
+import { loadBacklogRoom, decideBacklogGrooming, overrideBacklogGrooming } from '$lib/selfimprove/epic-backlog.server';
 
 // Coordinate intake from the web and background workers. The transaction holds
 // the advisory lock while the existing ledger APIs use their own connections.
@@ -18,7 +18,7 @@ async function exclusive<T>(work: () => Promise<T>): Promise<T> {
 
 export async function autoGroomBacklog() {
   return exclusive(async () => {
-    const epics = await loadEpicBacklog();
+    const { epics } = await loadBacklogRoom();
     for (const suggestion of epics.flatMap((e) => e.suggestions ?? []).filter((s) => s.automatic)) {
       // The locked pass shares one comparison snapshot; each write re-reads
       // source and target lifecycle state before retiring any work.
@@ -28,7 +28,35 @@ export async function autoGroomBacklog() {
         throw error;
       }
     }
-    return loadEpicBacklog();
+    return loadBacklogRoom();
+  });
+}
+
+/**
+ * Rule on several suggestions at once.
+ *
+ * The review lane offers "apply all merges" over a hundred-odd pending rows,
+ * and doing that one request at a time meant one `loadEpicBacklog()` — two
+ * ledger reads and a full board build — per decision, plus an `invalidateAll()`
+ * round trip. This takes the same advisory lock the automatic pass takes,
+ * reads once, and tolerates the same staleness it does: every write re-checks
+ * the live row, so a suggestion the previous decision invalidated is reported
+ * rather than forced.
+ */
+export function decideBacklogGroomingMany(ids: string[], decision: 'apply' | 'keep') {
+  return exclusive(async () => {
+    const { epics } = await loadBacklogRoom();
+    const failed: Array<{ id: string; error: string }> = [];
+    let decided = 0;
+    for (const id of ids) {
+      try {
+        await decideBacklogGrooming(id, decision, 'owner', epics);
+        decided += 1;
+      } catch (error) {
+        failed.push({ id, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { decided, failed };
   });
 }
 
