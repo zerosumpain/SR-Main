@@ -219,3 +219,24 @@
   border-color: var(--line-strong);
   background: var(--bg);
 }
+
+/* ——— Text action — the tertiary, in-row action ———
+ * The shape half the site already draws as a private `.row-link`: no chrome,
+ * mono, uppercase, accent, and it goes ink on hover. Promoted to a primitive
+ * when /drive's four hub components would otherwise have carried a fourth,
+ * fifth, sixth and seventh copy of it. `.danger` is the destructive variant. */
+.nm-act {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.nm-act:hover:not(:disabled) { color: var(--text-primary); }
+.nm-act:disabled { opacity: 0.45; cursor: default; }
+.nm-act.danger { color: var(--error); }
