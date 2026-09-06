@@ -118,6 +118,7 @@ export function verdictTone(verdict: string | null | undefined): Tone {
       return 'steady';
     case 'wrong_direction':
       return 'action';
+    case 'inconclusive':
     case 'underpowered':
       return 'watch';
     case null:

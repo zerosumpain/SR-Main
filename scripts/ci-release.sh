@@ -229,6 +229,37 @@ else
   echo "$SCHEMA_HASH" > "$STATE_DIR/schema.sha256"
 fi
 
+# Preserve legacy conclusions before the new investigation lifecycle starts.
+# Stamp only committed data; a failed migration leaves the current app running.
+DAYDREAM_MIGRATION="$(pwd)/scripts/migrations/2026-09-06-daydream-investigations.sql"
+DAYDREAM_MIGRATION_HASH="$(sha256sum "$DAYDREAM_MIGRATION" | awk '{print $1}')"
+if [ "$(cat "$STATE_DIR/daydream-investigations.sha256" 2>/dev/null || true)" != "$DAYDREAM_MIGRATION_HASH" ]; then
+  echo "==> Migrating daydream investigation history..."
+  (
+    cd "$VPS_DIR"
+    set -a; . ./.env; set +a
+    timeout 120s node --input-type=module - "$DAYDREAM_MIGRATION" <<'NODE'
+import pg from 'pg';
+import { readFile } from 'node:fs/promises';
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+try {
+  await client.connect();
+  await client.query('BEGIN');
+  await client.query("SET LOCAL lock_timeout = '10s'");
+  await client.query("SET LOCAL statement_timeout = '90s'");
+  await client.query(await readFile(process.argv[2], 'utf8'));
+  await client.query('COMMIT');
+} catch (error) {
+  await client.query('ROLLBACK').catch(() => {});
+  throw error;
+} finally {
+  await client.end();
+}
+NODE
+  )
+  echo "$DAYDREAM_MIGRATION_HASH" > "$STATE_DIR/daydream-investigations.sha256"
+fi
+
 echo "==> Ensuring service entrypoint + support dirs..."
 sudo sed -i "s|ExecStart=.*index.js|ExecStart=/usr/bin/node $VPS_DIR/scripts/server-with-ws.mjs|" \
   "/etc/systemd/system/$SERVICE.service"

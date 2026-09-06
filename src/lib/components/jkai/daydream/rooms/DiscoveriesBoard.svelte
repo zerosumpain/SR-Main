@@ -17,6 +17,7 @@
   import type { Facet } from '$lib/components/jkai/daydream/hub/types';
   import { TONE_RANK, verdictTone } from '$lib/daydream/priority';
   import { postThought, stamp } from '$lib/daydream/feed-client';
+  import { metricHeading } from '$lib/daydream/features/metrics';
   import { FAMILY_SUBJECTS } from '$lib/daydream/types';
   import { cap, verdictLabel, type BoardOrder, type BoardRow, type HypDetail } from './discoveries';
 
@@ -74,7 +75,8 @@
     return [
       { id: 'all', label: 'All', count: scope.length },
       { id: 'supported', label: 'Held up', count: n((q) => q.verdict === 'supported') },
-      { id: 'refuted', label: 'Nothing there', count: n((q) => q.verdict === 'refuted') },
+      { id: 'inconclusive', label: 'Not established', count: n((q) => q.verdict === 'inconclusive') },
+      { id: 'refuted', label: 'Legacy assessments', count: n((q) => q.verdict === 'refuted') },
       { id: 'wrong_direction', label: 'Backwards', count: n((q) => q.verdict === 'wrong_direction') },
       { id: 'underpowered', label: 'Thin data', count: n((q) => q.verdict === 'underpowered') },
       { id: 'unanswered', label: 'Unanswered', count: n((q) => q.verdict == null) },
@@ -140,6 +142,7 @@
     }
     hypOpen = id;
     if (hypDetail[id]) return;
+    hypDetailError = { ...hypDetailError, [id]: '' };
     const { ok, out, error } = await postThought<{ detail?: HypDetail }>({
       action: 'hypothesis_detail',
       id,
@@ -153,7 +156,7 @@
 </script>
 
 {#if board.length === 0}
-  <p class="lede">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
+  <p class="lede reading">Nothing asked yet. The first batch arrives on the next nightly cycle.</p>
 {:else}
   <div class="controls">
     {#if people.length > 1 || who !== 'all'}
@@ -167,7 +170,7 @@
 
   {#if visible.length === 0}
     <div class="card t-quiet">
-      <p class="card-body">No question matches that combination. The counts on the chips say where they all went.</p>
+      <p class="card-body reading">No question matches that combination. The counts on the chips say where they all went.</p>
     </div>
   {/if}
 
@@ -180,8 +183,8 @@
         </div>
         <p class="card-kicker">{cap(q.subject)}</p>
 
-        {#if q.summary}<p class="card-body lead">{q.summary}</p>{/if}
-        <p class="card-body">{q.rationale}</p>
+        {#if q.summary}<p class="card-body lead reading">{q.summary}</p>{/if}
+        <p class="card-body reading">{q.rationale}</p>
 
         <div class="card-meta">
           <span class="tag">{q.metricA}{q.lagDays ? ' → ' : ' ~ '}{q.metricB}</span>
@@ -217,49 +220,100 @@
             <button type="button" class="cta" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'useful')}>Yes</button>
             <button type="button" class="btn" disabled={busy === `q:${q.id}`} onclick={() => rateQ(q, 'not_useful')}>No</button>
           {/if}
-          <button type="button" class="btn" onclick={() => toggleHypDetail(q.id)}>
-            {hypOpen === q.id ? 'Hide the days' : 'Show the days behind this'}
+          <button type="button" class="btn" aria-expanded={hypOpen === q.id} aria-controls={`investigation-${q.id}`} onclick={() => toggleHypDetail(q.id)}>
+            {hypOpen === q.id ? 'Hide investigation' : 'Evidence and investigation'}
           </button>
         </div>
 
         {#if hypOpen === q.id}
           {@const d = hypDetail[q.id]}
-          <div class="detail">
+          <div class="detail investigation" id={`investigation-${q.id}`} role="region" aria-label={`Investigation: ${q.question}`} aria-busy={!d && !hypDetailError[q.id]}>
             {#if hypDetailError[q.id]}
-              <p class="err">{hypDetailError[q.id]}</p>
+              <p class="err" role="alert">{hypDetailError[q.id]}</p>
+              <button type="button" class="btn retry" onclick={() => { hypOpen = null; void toggleHypDetail(q.id); }}>Try again</button>
             {:else if !d}
-              <p class="detail-line">Reading the days…</p>
+              <p class="investigation-copy" role="status">Reading the evidence…</p>
             {:else}
-              <p class="detail-line">
-                {d.days.length} day{d.days.length === 1 ? '' : 's'} in the window,
-                <b>{d.days.length - d.unusedCount}</b> with both readings present — that count is
-                the n above. Pairwise deletion, never imputation: a day missing either half is
-                dropped rather than filled in.
-                {#if d.lagDays}<br />Lagged: {d.metricA} on a day is paired with {d.metricB} on the next.{/if}
-              </p>
-              <div class="tbl-wrap framed">
+              {#if d.plan}
+                <section aria-label="Investigation plan">
+                  <h3 class="investigation-heading">Investigation plan</h3>
+                  <dl class="investigation-plan">
+                    <div><dt>Why this matters</dt><dd>{d.plan.benefit}</dd></div>
+                    <div><dt>Other explanations</dt><dd><ul>{#each d.plan.alternatives as alternative}<li>{alternative}</li>{/each}</ul></dd></div>
+                    <div><dt>Would support it</dt><dd>{d.plan.support}</dd></div>
+                    <div><dt>Would contradict it</dt><dd>{d.plan.contradict}</dd></div>
+                  </dl>
+                </section>
+                {#if d.plan.missingEvidence.length}
+                  <section aria-label="Evidence needed">
+                    <h3 class="investigation-heading">Evidence needed</h3>
+                    <ul class="evidence-needs">
+                      {#each d.plan.missingEvidence as need}
+                        <li>
+                          <span class="investigation-label">{({ lookup: 'Check existing sources', observe: 'Gather more observations', ask: 'Ask a question', connect: 'Connect a source', build: 'Develop a capability' })[need.route]}</span>
+                          <p class="investigation-copy"><strong>{need.need}</strong></p>
+                          <p class="investigation-copy">{need.reason}</p>
+                          <p class="investigation-copy"><strong>Acceptance check:</strong> {need.acceptance}</p>
+                        </li>
+                      {/each}
+                    </ul>
+                  </section>
+                {/if}
+              {/if}
+              {#if d.history?.length}
+                <section aria-label="Assessment history">
+                  <h3 class="investigation-heading">How the assessment changed</h3>
+                  <ol class="assessment-history">
+                    {#each d.history as assessment}
+                      <li>
+                        <div class="assessment-meta">
+                          <time datetime={assessment.at}>{stamp(assessment.at)}</time>
+                          <span>{({ exploratory: 'Historical observations', prospective: 'Later observations', legacy: 'Legacy assessment' } as Record<string, string>)[assessment.phase] ?? assessment.phase}</span>
+                          <span class="pill t-{verdictTone(assessment.verdict)}">{verdictLabel(assessment.verdict)}</span>
+                        </div>
+                        <p class="investigation-copy">{assessment.summary}</p>
+                      </li>
+                    {/each}
+                  </ol>
+                </section>
+              {/if}
+              <section aria-label="Recorded evidence">
+                <h3 class="investigation-heading">Recorded evidence</h3>
+                <p class="investigation-copy">{d.evidenceAsOf ? `Saved evidence from ${stamp(d.evidenceAsOf)}.` : 'Legacy assessment: these readings are reconstructed; no original evidence snapshot was retained.'}</p>
+                <p class="investigation-copy">
+                  {d.days.length} day{d.days.length === 1 ? '' : 's'} in the window;
+                  <strong>{d.days.length - d.unusedCount}</strong> with both readings present.
+                  Days missing either reading are excluded, without estimating the missing value.
+                  {#if d.lagDays} The second reading comes from the next calendar day.{/if}
+                </p>
+              {#if d.days.some((day) => day.used)}
+              <div class="tbl-wrap framed" tabindex="0" role="region" aria-label="Evidence readings; scroll horizontally if needed">
                 <table class="tbl compact">
                   <thead>
                     <tr>
-                      <th>Day</th>
-                      <th class="right">{d.metricA}</th>
-                      <th class="right">{d.metricB}{d.lagDays ? ' (next day)' : ''}</th>
+                      <th scope="col">Day</th>
+                      <th scope="col" class="right" title={d.metricA}>{metricHeading(d.metricA)}</th>
+                      <th scope="col" class="right" title={d.metricB}>{metricHeading(d.metricB)}{d.lagDays ? ' (next day)' : ''}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {#each d.days.filter((x) => x.used).slice(-40).reverse() as row (row.day)}
                       <tr>
-                        <td>{row.day}</td>
-                        <td class="right">{row.a}</td>
-                        <td class="right">{row.b}</td>
+                        <td class="num">{row.day}</td>
+                        <td class="right num">{row.a}</td>
+                        <td class="right num">{row.b}</td>
                       </tr>
                     {/each}
                   </tbody>
                 </table>
               </div>
+              {:else}
+                <p class="investigation-copy">No paired readings are available for this assessment.</p>
+              {/if}
               {#if d.days.length - d.unusedCount > 40}
                 <p class="note">Most recent 40 of {d.days.length - d.unusedCount} shown.</p>
               {/if}
+              </section>
             {/if}
           </div>
         {/if}
@@ -293,6 +347,65 @@
     text-transform: uppercase;
     color: var(--text-muted);
     margin-right: 4px;
+  }
+
+  p.card-body.reading, p.lede.reading { font-size: var(--fs-body); line-height: 1.6; }
+
+  .investigation {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .investigation-heading {
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.75rem;
+  }
+  .investigation-copy, .investigation-plan dd {
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 72ch;
+    margin: 0;
+  }
+  .investigation-copy + .investigation-copy { margin-top: 0.5rem; }
+  .investigation-plan { margin: 0; }
+  .investigation-plan > div {
+    display: grid;
+    grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--line-hair);
+  }
+  .investigation-plan dt, .investigation-label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .investigation-label { display: block; margin-bottom: 0.25rem; }
+  .investigation-plan ul { margin: 0; padding-left: 1.25rem; list-style: disc; }
+  .assessment-history, .evidence-needs { list-style: none; padding: 0; margin: 0; }
+  .assessment-history > li, .evidence-needs > li {
+    border-top: 1px solid var(--line-hair);
+    padding: 0.75rem 0;
+  }
+  .assessment-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+  .retry { align-self: flex-start; }
+  .tbl-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  @media (max-width: 600px) {
+    .investigation-plan > div { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
   }
 
   /* The vocabulary's `.tbl-wrap` is the scroll box; the frame is this room's. */

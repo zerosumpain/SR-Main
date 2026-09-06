@@ -41,6 +41,10 @@ export interface BoardRow {
 
 /** The days behind one verdict — fetched on expand, never with the page. */
 export interface HypDetail {
+  plan?: import('$lib/daydream/hypotheses/plan').InvestigationPlan | null;
+  evidenceAsOf?: string | null;
+  history?: Array<{ at: string; phase: string; verdict: string; summary: string; pairs: number }>;
+
   metricA: string;
   metricB: string;
   lagDays: number;
@@ -105,7 +109,8 @@ export type BoardOrder = 'priority' | 'newest' | 'strength';
  *  question that has not been tested yet is one the board must be readable in. */
 export const VERDICT_LABEL: Record<string, string> = {
   supported: 'held up',
-  refuted: 'nothing there',
+  refuted: 'legacy assessment',
+  inconclusive: 'not established',
   wrong_direction: 'backwards',
   underpowered: 'not enough data',
 };

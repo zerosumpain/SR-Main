@@ -20,6 +20,7 @@
 // PURE — no database, no model, no clock.
 
 import { SWEEP_METRICS, isEntangled } from '../stats/sweep';
+import { parseInvestigationPlan, type InvestigationPlan } from './plan';
 
 export type HypothesisMetric = (typeof SWEEP_METRICS)[number];
 
@@ -27,6 +28,7 @@ export type HypothesisMetric = (typeof SWEEP_METRICS)[number];
 export type Direction = 'positive' | 'negative' | 'either';
 
 export interface HypothesisSpec {
+  plan?: InvestigationPlan;
   /** The metric doing the predicting. */
   a: HypothesisMetric;
   /** The metric being predicted. */
@@ -108,10 +110,14 @@ export function validateHypothesis(raw: unknown, allowed: ReadonlySet<string> = 
   if (!rationale) return fail('no rationale');
   if (rationale.length > 400) return fail('rationale too long');
 
+  const plan = o.plan == null ? undefined : parseInvestigationPlan(o.plan);
+  if (o.plan != null && !plan) return fail('invalid investigation plan');
+
   return {
     ok: true,
     reason: null,
     spec: {
+      ...(plan ? { plan } : {}),
       a: a as HypothesisMetric,
       b: b as HypothesisMetric,
       lagDays: lagDays as 0 | 1,
@@ -133,7 +139,7 @@ export function validateHypothesis(raw: unknown, allowed: ReadonlySet<string> = 
  * visits track poor sleep; they do not, r = 0.06" is a genuinely useful thing to
  * read and currently has nowhere in this codebase to live.
  */
-export type Verdict = 'supported' | 'refuted' | 'underpowered' | 'wrong_direction';
+export type Verdict = 'supported' | 'refuted' | 'inconclusive' | 'underpowered' | 'wrong_direction';
 
 export interface HypothesisOutcome {
   verdict: Verdict;
@@ -178,17 +184,17 @@ export function judge(
 
   if (qValue > fdr) {
     return {
-      verdict: 'refuted',
+      verdict: 'inconclusive',
       r, p, qValue, n,
-      summary: `No relationship worth reporting (${fmt}, q = ${qValue.toFixed(3)}).`,
+      summary: `A relationship has not been established (${fmt}, q = ${qValue.toFixed(3)}).`,
     };
   }
 
   if (Math.abs(r) < MIN_ABS_R_FOR_VERDICT) {
     return {
-      verdict: 'refuted',
+      verdict: 'inconclusive',
       r, p, qValue, n,
-      summary: `Statistically detectable but too small to be useful (${fmt}, minimum |r| = ${MIN_ABS_R_FOR_VERDICT.toFixed(2)}).`,
+      summary: `Observed effect below the practical threshold; practical benefit not established (${fmt}, minimum |r| = ${MIN_ABS_R_FOR_VERDICT.toFixed(2)}).`,
     };
   }
 
@@ -204,6 +210,6 @@ export function judge(
   return {
     verdict: 'supported',
     r, p, qValue, n,
-    summary: `Held up (${fmt}, q = ${qValue.toFixed(3)}).`,
+    summary: `Held up as an association (${fmt}, q = ${qValue.toFixed(3)}). Competing explanations and practical benefit still need checking.`,
   };
 }

@@ -57,7 +57,8 @@
 
   const VERDICT_LABEL: Record<string, string> = {
     supported: 'held up',
-    refuted: 'nothing there',
+    refuted: 'legacy assessment',
+    inconclusive: 'not established',
     wrong_direction: 'backwards',
     underpowered: 'not enough data',
   };

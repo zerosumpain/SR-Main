@@ -22,9 +22,6 @@ import { eq, inArray, and, isNull } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamMemoryThemes, daydreamPlaces, jkaiMemories } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
-import { coerceModelContext } from '$lib/constants/default-models';
-import { getSetting } from '$lib/server/models/settings';
-import { resolveDefaultModel } from '$lib/server/models/settings';
 import { describePlaceRhythm } from './places';
 import { errMsg } from './types';
 import type { EvidenceRef } from './snapshot-types';
@@ -33,7 +30,6 @@ import { withActivity } from '$lib/context/activity';
 
 /** app_settings key for the daydream model carve-out. Declared in
  *  $lib/models/workloads so the picker and the resolver cannot disagree. */
-export const DAYDREAM_MODEL_KEY = 'jkai.daydream.model';
 
 /** Short on purpose. A daydream is one or two sentences; a budget that allows
  *  an essay produces one. */
@@ -48,14 +44,8 @@ export interface ComposeResult {
   tokens: { prompt: number; completion: number };
 }
 
-/** The daydream model: its own pin, falling back to the site default. */
-export async function resolveDaydreamModel() {
-  const v = await getSetting<{ modelId?: string } | null>(DAYDREAM_MODEL_KEY);
-  if (v && typeof v === 'object' && typeof v.modelId === 'string' && v.modelId) {
-    return coerceModelContext({ modelId: v.modelId });
-  }
-  return resolveDefaultModel();
-}
+export { DAYDREAM_MODEL_KEY, resolveDaydreamModel } from './model';
+import { resolveDaydreamModel } from './model';
 
 /**
  * Turn the evidence refs a detector named into text the model may see.

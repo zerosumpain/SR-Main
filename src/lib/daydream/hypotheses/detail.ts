@@ -12,11 +12,13 @@
 // card shows and what the statistic was computed from cannot drift apart. It
 // is deliberately NOT a fresh query with its own filters.
 
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamHypotheses } from '$lib/db/schema';
+import { daydreamHypotheses, daydreamHypothesisAssessments } from '$lib/db/schema';
 import { column, loadSeries, loadSignalColumns } from '../stats/sweep';
 import { isSignalKey } from './spec';
+import { pairEvidence } from './evidence';
+import { parseInvestigationPlan, type InvestigationPlan } from './plan';
 
 export interface PairedDay {
   /** The day the X value came from. Under a lag, Y comes from the next day. */
@@ -29,6 +31,10 @@ export interface PairedDay {
 }
 
 export interface HypothesisDetail {
+  plan: InvestigationPlan | null;
+  evidenceAsOf: string | null;
+  history: Array<{ at: string; phase: string; verdict: string; summary: string; pairs: number }>;
+
   id: string;
   question: string;
   rationale: string | null;
@@ -62,34 +68,31 @@ export async function loadHypothesisDetail(
     .limit(1);
   if (!h) return null;
 
-  const rows = (await loadSeries({ windowDays, subject: h.subject })) as Array<
-    Record<string, unknown>
-  >;
-  const signalKeys = [h.metricA, h.metricB].filter(isSignalKey);
-  const signalCols = signalKeys.length
-    ? await loadSignalColumns(signalKeys, { windowDays, subject: h.subject })
-    : new Map<string, Map<string, number>>();
-  const colOf = (key: string) =>
-    isSignalKey(key) ? rows.map((r) => signalCols.get(key)?.get(String(r.day)) ?? null) : column(rows as never, key);
-  const xs = colOf(h.metricA);
-  const ys = colOf(h.metricB);
-
-  // Same alignment the tester uses: with a lag, X on day i is paired with Y on
-  // day i+1, so the last day has no partner and drops out.
-  const days: PairedDay[] = [];
-  const last = h.lagDays === 0 ? rows.length : rows.length - 1;
-  for (let i = 0; i < last; i++) {
-    const a = xs[i];
-    const b = h.lagDays === 0 ? ys[i] : ys[i + 1];
-    days.push({
-      day: String((rows[i] as { day?: unknown }).day ?? ''),
-      a,
-      b,
-      used: a != null && b != null,
-    });
+  const assessments = await db.select().from(daydreamHypothesisAssessments)
+    .where(eq(daydreamHypothesisAssessments.hypothesisId, id))
+    .orderBy(desc(daydreamHypothesisAssessments.assessedAt));
+  const latest = assessments.find((a) => a.phase !== 'legacy');
+  const asOf = latest?.assessedAt ?? h.lastRetestedAt ?? h.testedAt ?? new Date();
+  windowDays = latest?.windowDays ?? windowDays;
+  let days: PairedDay[];
+  if (latest) {
+    days = latest.evidence as PairedDay[];
+  } else {
+    const rows = (await loadSeries({ windowDays, subject: h.subject, now: asOf })) as Array<Record<string, unknown>>;
+    const signalKeys = [h.metricA, h.metricB].filter(isSignalKey);
+    const signalCols = signalKeys.length
+      ? await loadSignalColumns(signalKeys, { windowDays, subject: h.subject, now: asOf })
+      : new Map<string, Map<string, number>>();
+    const colOf = (key: string) => isSignalKey(key)
+      ? rows.map((r) => signalCols.get(key)?.get(String(r.day)) ?? null)
+      : column(rows as never, key);
+    days = pairEvidence(rows.map((r) => String(r.day)), colOf(h.metricA), colOf(h.metricB), h.lagDays);
   }
 
   return {
+    plan: parseInvestigationPlan(h.investigationPlan),
+    evidenceAsOf: latest?.assessedAt.toISOString() ?? null,
+    history: assessments.map((a) => ({ at: a.assessedAt.toISOString(), phase: a.phase, verdict: a.verdict, summary: a.summary, pairs: a.pairs })),
     id: h.id,
     question: h.question,
     rationale: h.rationale,

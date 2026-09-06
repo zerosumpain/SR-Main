@@ -78,16 +78,16 @@ describe('judge', () => {
     expect(o.summary).toContain('Held up');
   });
 
-  it('refutes a claim that found nothing', () => {
+  it('does not mistake failure to establish a claim for disproof', () => {
     const o = judge({ direction: 'positive' }, { r: 0.06, p: 0.6, qValue: 0.9, n: 60 }, fdr);
-    expect(o.verdict).toBe('refuted');
-    expect(o.summary).toContain('No relationship');
+    expect(o.verdict).toBe('inconclusive');
+    expect(o.summary).toContain('not been established');
   });
 
   it('does not promote a trivial effect merely because it is significant', () => {
     const o = judge({ direction: 'either' }, { r: 0.1, p: 0.001, qValue: 0.01, n: 500 }, fdr);
-    expect(o.verdict).toBe('refuted');
-    expect(o.summary).toContain('too small');
+    expect(o.verdict).toBe('inconclusive');
+    expect(o.summary).toContain('below the practical threshold');
   });
 
   // THE case this function exists for. A claim that predicted positive and

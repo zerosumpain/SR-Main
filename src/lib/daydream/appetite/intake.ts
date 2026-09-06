@@ -14,6 +14,7 @@
 import { bringsNewData, laneFor, type CapabilityKind } from './spec';
 import { listCapabilities, setCapabilityStatus } from './store';
 import { errMsg } from '../types';
+import { investigationRequirements } from '../hypotheses/gaps';
 
 /** The idea shape self-improve's backlog takes. Declared structurally rather
  *  than imported, for the boundary reason above. */
@@ -78,9 +79,10 @@ export async function collectCapabilityIdeas(limit = 6): Promise<CapabilityIdea[
   const out: CapabilityIdea[] = [];
   for (const r of ordered) {
     if (out.length >= limit) break;
+    const requirements = await investigationRequirements(r.cites);
     out.push({
       title: r.title.slice(0, 200),
-      detail: `${r.need} ${r.value} ${shapeSentence(r.kind)}`.slice(0, 2000),
+      detail: `${requirements ? requirements + "\n" : ""}${r.need} ${r.value} ${r.integrationHint ?? ""} ${shapeSentence(r.kind)}`.slice(0, 2000),
       kind: KIND_TO_BACKLOG[r.kind] ?? 'feature',
       // New data leads at 1; everything else at 2, which still puts a
       // capability lead ahead of the question-mined ideas at 2-3 only by

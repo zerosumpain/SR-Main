@@ -8,13 +8,14 @@
 // one every time, which is the same as no correction at all, and would quietly
 // void the guarantee the statistics module exists to provide.
 
-import { and, eq, inArray, isNull, or, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { daydreamHypotheses } from '$lib/db/schema';
+import { daydreamHypotheses, daydreamHypothesisAssessments } from '$lib/db/schema';
 import { benjaminiHochberg, correlate, DEFAULT_FDR } from '../stats/tests';
 import { loadSeries, loadSignalColumns } from '../stats/sweep';
-import { DEFAULT_SUBJECT, errMsg } from '../types';
-import { isSignalKey, judge, type Direction } from './spec';
+import { DEFAULT_SUBJECT, LOCAL_TZ, errMsg } from '../types';
+import { isSignalKey, judge, MIN_PAIRS_FOR_VERDICT, type Direction } from './spec';
+import { pairEvidence } from './evidence';
 
 /** How stale a verdict may get before the question is asked again. */
 export const RETEST_AFTER_DAYS = 14;
@@ -23,6 +24,7 @@ export interface TestRunResult {
   tested: number;
   supported: number;
   refuted: number;
+  inconclusive: number;
   wrongDirection: number;
   underpowered: number;
   familySize: number;
@@ -33,6 +35,7 @@ export const EMPTY_TEST_RUN: TestRunResult = {
   tested: 0,
   supported: 0,
   refuted: 0,
+  inconclusive: 0,
   wrongDirection: 0,
   underpowered: 0,
   familySize: 0,
@@ -48,8 +51,8 @@ export const EMPTY_TEST_RUN: TestRunResult = {
  * finding can stop holding. A board that never revisits its own conclusions is
  * a board of things that were true once.
  */
-export async function hypothesesDueTesting(subject = DEFAULT_SUBJECT) {
-  const staleBefore = new Date(Date.now() - RETEST_AFTER_DAYS * 86_400_000);
+export async function hypothesesDueTesting(subject = DEFAULT_SUBJECT, now = new Date()) {
+  const staleBefore = new Date(now.getTime() - RETEST_AFTER_DAYS * 86_400_000);
   return db
     .select()
     .from(daydreamHypotheses)
@@ -91,14 +94,10 @@ export async function testDueHypotheses(
   const now = opts.now ?? new Date();
   const result: TestRunResult = { ...EMPTY_TEST_RUN, errors: [] };
 
-  const due = await hypothesesDueTesting(subject);
+  const due = await hypothesesDueTesting(subject, now);
   if (due.length === 0) return result;
 
   const rows = (await loadSeries({ windowDays, subject, now })) as Array<Record<string, unknown>>;
-  if (rows.length === 0) {
-    result.errors.push('no day features to test against');
-    return result;
-  }
 
   // A hypothesis may name a registered SIGNAL as well as a day-feature column.
   // Signal series come from the observations table and are aligned to the
@@ -117,20 +116,28 @@ export async function testDueHypotheses(
     return c;
   };
 
-  const stats = due.map((h) => {
+  const stats = [];
+  for (const h of due) {
+    const days = rows.map((r) => String(r.day));
     const xs = colFor(h.metricA);
     const ys = colFor(h.metricB);
-    const res =
-      h.lagDays === 0
-        ? correlate(xs, ys)
-        : correlate(xs.slice(0, -1), ys.slice(1));
-    // Alpha spending across repeated looks. Without it, asking the same question
-    // every fortnight eventually manufactures a hit even when every individual
-    // test is valid. Bonferroni over this hypothesis's observed looks is simple,
-    // auditable, and conservative in the safe direction.
-    const looks = Math.max(1, h.retestCount + 1);
-    return { item: h, p: Math.min(1, res.p * looks), r: res.r, n: res.n };
-  });
+    const future = pairEvidence(days, xs, ys, h.lagDays, new Intl.DateTimeFormat('en-CA', { timeZone: LOCAL_TZ }).format(h.proposedAt));
+    const prospective = future.filter((d) => d.used).length >= MIN_PAIRS_FOR_VERDICT;
+    const evidence = prospective ? future : pairEvidence(days, xs, ys, h.lagDays);
+    const phase = prospective ? 'prospective' : 'exploratory';
+    const [previous] = await db.select().from(daydreamHypothesisAssessments)
+      .where(eq(daydreamHypothesisAssessments.hypothesisId, h.id))
+      .orderBy(desc(daydreamHypothesisAssessments.assessedAt)).limit(1);
+    // A heartbeat is not another piece of evidence. Do not spend a new look on
+    // unchanged observations or write a second copy of the same assessment.
+    if (previous?.phase === phase && JSON.stringify((previous.evidence as typeof evidence).map((d) => [d.day, d.a, d.b])) === JSON.stringify(evidence.map((d) => [d.day, d.a, d.b]))) continue;
+    const res = correlate(evidence.map((d) => d.a), evidence.map((d) => d.b));
+    const looks = h.testedAt ? h.retestCount + 2 : 1;
+    // Summable spending weights 1/(k*(k+1)); the previous 1/k allowance
+    // diverged over an unbounded sequence of looks. These remain exploratory
+    // associations, not causal proof or a calibrated probability of truth.
+    stats.push({ item: h, p: Math.min(1, res.p * looks * (looks + 1)), r: res.r, n: res.n, phase, evidence });
+  }
 
   // ONE correction across the whole batch.
   const corrected = benjaminiHochberg(
@@ -149,26 +156,37 @@ export async function testDueHypotheses(
         fdr,
       );
 
-      await db
-        .update(daydreamHypotheses)
-        .set({
-          verdict: outcome.verdict,
-          summary: outcome.summary,
-          r: outcome.r,
-          pValue: outcome.p,
-          qValue: outcome.qValue,
-          pairs: outcome.n,
-          familySize: corrected.length,
-          fdr,
-          testedAt: h.testedAt ?? now,
-          lastRetestedAt: now,
+      if (stat.phase === 'exploratory' && outcome.verdict !== 'underpowered') {
+        outcome.summary = `Exploratory only: ${outcome.summary} Waiting for ${MIN_PAIRS_FOR_VERDICT} overlapping days after the question was proposed.`;
+        outcome.verdict = 'inconclusive';
+      }
+      const saved = await db.transaction(async (tx) => {
+        // Optimistic concurrency prevents overlapping heartbeat workers from
+        // advancing the same investigation twice from one starting verdict.
+        const updated = await tx.update(daydreamHypotheses).set({
+          verdict: outcome.verdict, summary: outcome.summary, r: outcome.r,
+          pValue: outcome.p, qValue: outcome.qValue, pairs: outcome.n,
+          familySize: corrected.length, fdr,
+          testedAt: h.testedAt ?? now, lastRetestedAt: now,
           retestCount: h.testedAt ? h.retestCount + 1 : h.retestCount,
-        })
-        .where(eq(daydreamHypotheses.id, h.id));
+        }).where(and(eq(daydreamHypotheses.id, h.id),
+          h.lastRetestedAt ? eq(daydreamHypotheses.lastRetestedAt, h.lastRetestedAt) : isNull(daydreamHypotheses.lastRetestedAt),
+        )).returning({ id: daydreamHypotheses.id });
+        if (!updated.length) return false;
+        await tx.insert(daydreamHypothesisAssessments).values({
+          hypothesisId: h.id, assessedAt: now, phase: stat.phase,
+          verdict: outcome.verdict, summary: outcome.summary, windowDays,
+          r: outcome.r, pValue: outcome.p, qValue: outcome.qValue, pairs: outcome.n,
+          familySize: corrected.length, fdr, evidence: stat.evidence,
+        });
+        return true;
+      });
+      if (!saved) continue;
 
       result.tested++;
       if (outcome.verdict === 'supported') result.supported++;
       else if (outcome.verdict === 'refuted') result.refuted++;
+      else if (outcome.verdict === 'inconclusive') result.inconclusive++;
       else if (outcome.verdict === 'wrong_direction') result.wrongDirection++;
       else result.underpowered++;
     } catch (err) {

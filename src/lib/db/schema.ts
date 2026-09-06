@@ -5590,8 +5590,9 @@ export const daydreamHypotheses = pgTable(
     /** The model's words. Never rendered as fact, only as a question asked. */
     question: text('question').notNull(),
     rationale: text('rationale').notNull(),
+    investigationPlan: jsonb('investigation_plan'),
 
-    /** 'supported' | 'refuted' | 'wrong_direction' | 'underpowered' | null. */
+    /** 'inconclusive' | 'supported' | 'refuted' | 'wrong_direction' | 'underpowered' | null. */
     verdict: text('verdict'),
     /** Deterministic, from judge(). A model never writes this. */
     summary: text('summary'),
@@ -5625,6 +5626,28 @@ export const daydreamHypotheses = pgTable(
     index('daydream_hypotheses_verdict_idx').on(t.verdict),
     index('daydream_hypotheses_proposed_idx').on(t.proposedAt),
   ],
+);
+
+/** Immutable assessment snapshots; the hypothesis row holds only the latest result. */
+export const daydreamHypothesisAssessments = pgTable(
+  'daydream_hypothesis_assessments',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    hypothesisId: text('hypothesis_id').notNull().references(() => daydreamHypotheses.id, { onDelete: 'cascade' }),
+    assessedAt: timestamp('assessed_at', { withTimezone: true }).notNull(),
+    phase: text('phase').notNull(),
+    verdict: text('verdict').notNull(),
+    summary: text('summary').notNull(),
+    windowDays: integer('window_days').notNull(),
+    r: doublePrecision('r').notNull(),
+    pValue: doublePrecision('p_value').notNull(),
+    qValue: doublePrecision('q_value').notNull(),
+    pairs: integer('pairs').notNull(),
+    familySize: integer('family_size').notNull(),
+    fdr: doublePrecision('fdr').notNull(),
+    evidence: jsonb('evidence').notNull(),
+  },
+  (t) => [index('daydream_assessments_hypothesis_idx').on(t.hypothesisId, t.assessedAt)],
 );
 
 /**

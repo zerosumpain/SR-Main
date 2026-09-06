@@ -48,6 +48,7 @@ export async function saveProposals(
         direction: spec.direction,
         question: spec.question,
         rationale: spec.rationale,
+        investigationPlan: spec.plan ?? null,
         proposalTokens: perProposal,
       })
       .onConflictDoNothing({

@@ -148,7 +148,7 @@ export const daydreamHypothesise: ActivityHandler = {
       if (run.tested) {
         line.push(
           `tested ${run.tested} (family ${run.familySize}): ` +
-            `${run.supported} held, ${run.refuted} refuted, ` +
+            `${run.supported} held, ${run.inconclusive} inconclusive, ` +
             `${run.wrongDirection} backwards, ${run.underpowered} underpowered`,
         );
       }
