@@ -1,16 +1,5 @@
 <script lang="ts">
-  // The themes hiding in the queue.
-  //
-  // Measured on production: 455 backlog rows collapse to about **113 themes**,
-  // 380 of the rows falling into one. The biggest are ten ways of asking for
-  // the same tool — "Live OpenRouter balance", "Live OpenRouter balance query",
-  // "Live OpenRouter account balance API" — each one a slot the engine would
-  // spend rebuilding something it has already been asked for.
-  //
-  // Accepting a theme GROUPS its members, so the board below shows them in one
-  // swimlane. It does not fold them: "about the same subject" is a judgement a
-  // matcher may make, "says the same thing" abandons rows and stays the
-  // owner's, one item at a time, inside the lane.
+  // Detected themes can be grouped or consolidated into a retained epic brief.
   import StatDeck from '$lib/components/jkai/daydream/hub/StatDeck.svelte';
   import type { DeckTile } from '$lib/components/jkai/daydream/hub/types';
   import type { EpicData } from '$lib/selfimprove/types';
@@ -117,12 +106,7 @@
       </button>
     {/if}
   </div>
-  <p class="note">
-    No model is asked anything here. Two titles are the same subject when they share three
-    content words — the one definition of “related” in this engine, the same one the ledger
-    uses to say an idea already shipped. Each item is joined only to its single strongest
-    match, so a generic title cannot weld two themes together.
-  </p>
+  <p class="note">Find related ideas, then auto-merge a theme into one queued epic. Every source brief is retained. Only unstarted ideas in the same delivery category are eligible.</p>
 </div>
 
 {#if error}
@@ -183,8 +167,12 @@
       </ul>
     {/if}
 
-    {#if actionable}
+    {#if e.mergedInto}
+      <p class="card-body">Merged into <strong>{e.mergedInto}</strong> · original briefs retained</p>
+    {:else if actionable || e.status === 'accepted'}
       <div class="card-actions bar">
+        <button type="button" class="cta" disabled={busy != null}
+          onclick={() => act({ action: 'epic_merge', slug: e.slug }, `epic:${e.slug}`)}>Auto-merge into epic</button>
         <button type="button" class="cta" disabled={busy === `epic:${e.slug}`}
           onclick={() => act({ action: 'epic_decide', slug: e.slug, decision: 'accept' }, `epic:${e.slug}`)}>
           Group these
@@ -194,7 +182,8 @@
           Not one thing
         </button>
       </div>
-    {:else if e.status === 'accepted'}
+    {/if}
+    {#if e.status === 'accepted' && !e.mergedInto}
       <div class="card-actions bar">
         <button type="button" class="btn" disabled={busy === `epic:${e.slug}`}
           onclick={() => act({ action: 'epic_decide', slug: e.slug, decision: 'ungroup' }, `epic:${e.slug}`)}>
