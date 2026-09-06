@@ -45,6 +45,7 @@ export async function resolveWorkloadModel(def: WorkloadDef): Promise<ModelConte
   if (session) return session;
   const v = await getSetting<{ provider?: string; modelId?: string } | null>(def.key);
   if (v?.modelId) return coerceModelContext({ modelId: v.modelId });
+  if (def.id === 'daydream-review') return resolveChatTurnModel();
   if (def.fallbackModelId) return coerceModelContext({ modelId: def.fallbackModelId });
   return resolveDefaultModel();
 }
@@ -357,6 +358,7 @@ function sourceFor(def: WorkloadDef, set: string | null): WorkloadSource {
 /** Every site workload's set / effective model, for the picker and the audit. */
 export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
   const siteDefault = await resolveDefaultModel();
+  const chatDefault = await resolveChatTurnModel();
   const stored = await Promise.all(
     SITE_WORKLOADS.map((w) =>
       getSetting<{ modelId?: string } | null>(w.key).then((v) => v?.modelId ?? null),
@@ -369,7 +371,7 @@ export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
     // the code fallback. Reading them in different orders is how the page ends
     // up naming a model nothing is running.
     const effectiveModelId =
-      setModelId ?? envModelFor(def) ?? def.fallbackModelId ?? siteDefault.modelId;
+      setModelId ?? envModelFor(def) ?? (def.id === 'daydream-review' ? chatDefault.modelId : def.fallbackModelId ?? siteDefault.modelId);
     return {
       id: def.id,
       scope: def.scope,

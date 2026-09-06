@@ -18,6 +18,7 @@
 // what the model can and cannot see — is unit-testable with no database.
 
 import type { DaydreamSnapshot } from '../snapshot-types';
+import { parseInvestigationPlan } from '../hypotheses/plan';
 
 export interface FactCard {
   /** 'F1'.. — the citation handle, stable only within one pack. */
@@ -37,7 +38,7 @@ export interface FactPack {
 export interface PackInputs {
   snapshot: DaydreamSnapshot;
   /** Recent hypothesis verdicts, the engine's own discoveries + refutations. */
-  verdicts: Array<{ id: string; question: string; verdict: string; summary: string | null }>;
+  verdicts: Array<{ id: string; question: string; verdict: string; summary: string | null; subject?: string; investigationPlan?: unknown }>;
   /** Aggregates over the day-feature store, precomputed by the caller. */
   aggregates: Array<{ key: string; text: string }>;
   /** The 7-day diary, fetched separately from the snapshot's 1-day view. */
@@ -176,6 +177,11 @@ export function assemblePack(inputs: PackInputs): FactPack {
       `${p.label} (${p.kind}): ${p.visitCount} household visits, median stay ${p.medianDwellMins} min.`);
   }
   for (const v of inputs.verdicts.slice(0, PACK_LIMITS.verdicts)) {
+    const plan = parseInvestigationPlan(v.investigationPlan);
+    if (plan) {
+      add('past', { kind: 'hypothesis', id: v.id },
+        `Investigation (${v.subject ?? 'owner'}): ${plan.benefit} Alternatives (unproven): ${plan.alternatives.join('; ')}. Would contradict: ${plan.contradict}`, 1000);
+    }
     add('past', { kind: 'hypothesis', id: v.id },
       `Tested: "${v.question}" → ${v.verdict}${v.summary ? ` (${v.summary})` : ''}.`);
   }

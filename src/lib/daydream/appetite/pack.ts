@@ -36,6 +36,7 @@ import { openFaults } from '../faults';
 import { collectStarvation } from '../starvation';
 import { listCapabilities } from './store';
 import type { PackFact } from './spec';
+import { investigationGapFacts } from '../hypotheses/gaps';
 
 /**
  * Datastore collections read by literal slug rather than by importing
@@ -310,6 +311,11 @@ export async function assembleAppetitePack(): Promise<AppetitePack> {
   sizes.questions = await questionFacts(facts);
   sizes.inventory = await inventoryFacts(facts);
   sizes.gaps = await gapFacts(facts);
+  // Unlike short inventory lines, these retain the evidence need and acceptance check.
+  const investigationFacts = await investigationGapFacts();
+  facts.push(...investigationFacts);
+  sizes.gaps += investigationFacts.length;
+  sizes.investigations = investigationFacts.length;
   sizes.ledger = await ledgerFacts(facts);
   return { facts, keys: new Set(facts.map((f) => f.key)), sizes };
 }
@@ -320,7 +326,7 @@ export function renderAppetitePack(pack: AppetitePack): string {
   const block = (title: string, items: PackFact[]) =>
     items.length ? [`## ${title}`, ...items.map((f) => `[${f.key}] ${f.text}`), ''].join('\n') : '';
   const asked = pack.facts.filter((f) => /^(intent|unmet|q):/.test(f.key));
-  const gaps = pack.facts.filter((f) => /^(fault|starved):/.test(f.key));
+  const gaps = pack.facts.filter((f) => /^(fault|starved|investigation):/.test(f.key));
   const ledger = group('lead:');
   const askedSet = new Set([...asked, ...gaps, ...ledger].map((f) => f.key));
   const inventory = pack.facts.filter((f) => !askedSet.has(f.key));

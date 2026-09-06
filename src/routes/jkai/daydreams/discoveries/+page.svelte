@@ -69,7 +69,7 @@
     const n = (pred: (q: BoardRow) => boolean) => board.filter(pred).length;
     return {
       supported: n((q) => q.verdict === 'supported'),
-      refuted: n((q) => q.verdict === 'refuted'),
+      inconclusive: n((q) => q.verdict === 'inconclusive'),
       wrong_direction: n((q) => q.verdict === 'wrong_direction'),
       underpowered: n((q) => q.verdict === 'underpowered'),
       untested: n((q) => q.verdict == null),
@@ -154,14 +154,14 @@
       active: boardVerdict === 'supported',
     },
     {
-      key: 'v-refuted',
+      key: 'v-inconclusive',
       mark: 'QUESTIONS',
-      label: 'Nothing there',
-      value: String(verdictCounts.refuted),
-      tone: verdictTone('refuted'),
-      sub: shareOf(verdictCounts.refuted, board.length, 'asked'),
-      onclick: () => pickVerdict('refuted'),
-      active: boardVerdict === 'refuted',
+      label: 'Not established',
+      value: String(verdictCounts.inconclusive),
+      tone: verdictTone('inconclusive'),
+      sub: shareOf(verdictCounts.inconclusive, board.length, 'asked'),
+      onclick: () => pickVerdict('inconclusive'),
+      active: boardVerdict === 'inconclusive',
     },
     {
       key: 'v-backwards',

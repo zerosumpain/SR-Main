@@ -82,6 +82,8 @@ function systemPrompt(maxLeads: number): string {
     '- A "watch" is a recurring check that notifies when something changes; it is how triggers and workflows are',
     '  expressed here, so put them in that kind.',
     '- Prefer durable, authoritative, machine-readable sources over novelty APIs.',
+    '- For investigation evidence requests, cite the investigation key and preserve the acceptance check. An existing lookup, waiting for data, or asking a question does not require a build.',
+    '- Do not treat repeated proposals as additional evidence that a behavioural claim is true.',
     '- State the need (what is missing) and the value (what it unlocks, concretely) as separate sentences. "Would',
     '  be useful" is not a value.',
     '',

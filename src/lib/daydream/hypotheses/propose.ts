@@ -30,7 +30,7 @@ import { activeSteerNotes, renderSteers } from './steer';
 import { raiseFault, unknownMetricsIn } from '../faults';
 import { withActivity } from '$lib/context/activity';
 
-export const MAX_TOKENS = 1400;
+export const MAX_TOKENS = 3000;
 
 /** Plain-English descriptions. The model cannot read the schema. */
 const METRIC_NOTES: Record<string, string> = {
@@ -86,14 +86,14 @@ export async function gatherContext(subject = DEFAULT_SUBJECT): Promise<string> 
       from: sql<string>`min(${daydreamDayFeatures.day})::text`,
       to: sql<string>`max(${daydreamDayFeatures.day})::text`,
     })
-    .from(daydreamDayFeatures);
+    .from(daydreamDayFeatures).where(eq(daydreamDayFeatures.subject, subject));
 
   parts.push(`DATA: ${totals?.days ?? 0} days on record, ${totals?.from ?? '?'} to ${totals?.to ?? '?'}.`);
 
   // How many days each metric actually has. Counted in JS over one read rather
   // than nineteen COUNT queries — the table is one row per day, so the whole
   // thing is a few hundred rows even at a year's depth.
-  const rows = await db.select().from(daydreamDayFeatures);
+  const rows = await db.select().from(daydreamDayFeatures).where(eq(daydreamDayFeatures.subject, subject));
   const coverage = new Map<string, number>();
   for (const m of SWEEP_METRICS) coverage.set(m, 0);
   for (const r of rows) {
@@ -130,6 +130,8 @@ export async function gatherContext(subject = DEFAULT_SUBJECT): Promise<string> 
       feedback: daydreamHypotheses.feedback,
     })
     .from(daydreamHypotheses)
+    .where(eq(daydreamHypotheses.subject, subject))
+    .orderBy(desc(daydreamHypotheses.proposedAt))
     .limit(60);
 
   if (asked.length) {
@@ -202,7 +204,14 @@ Output ONLY a JSON array of objects, each exactly:
   "lagDays": 0 or 1,
   "direction": "positive" | "negative" | "either",
   "question": "one line, plain English, what you want to know",
-  "rationale": "why this might hold, and why it would matter to him"
+  "rationale": "why this might hold, and why it would matter to him",
+  "plan": {
+    "benefit": "the decision this could improve",
+    "alternatives": ["a plausible competing explanation"],
+    "support": "what future observation would support the claim",
+    "contradict": "what future observation would contradict it",
+    "missingEvidence": [{"need": "specific missing evidence", "reason": "which explanation it distinguishes", "route": "lookup" | "observe" | "ask" | "connect" | "build", "acceptance": "how to check that the evidence is usable"}]
+  }
 }
 
 lagDays 0 asks whether the two move together on the same day. lagDays 1 asks
@@ -222,6 +231,13 @@ Rules:
   data cannot be answered and wastes the slot.
 - A good question is one whose answer would change something, and that he could
   not have worked out by looking at his own phone.
+
+- Include a plan. Alternatives are hypotheses, not facts about the person.
+- Missing evidence is optional (use []); ask for it only when it could change a decision.
+- Prefer lookup of existing evidence, waiting for observations, or one focused question before a new connection or build.
+- A build request must specify the evidence needed and how to validate it; it grants no access.
+- Money-saving questions must distinguish prices from quantities, refunds and duplicate evidence of one payment.
+- Existing results are exploratory; future observations are needed for prospective validation.
 
 No prose, no code fence. If nothing is worth asking, output [].`;
 
@@ -288,8 +304,8 @@ export async function proposeHypotheses(
     const seen = new Set<string>();
     for (const item of parsed.slice(0, maxProposals)) {
       const v = validateHypothesis(item, allowed);
-      if (!v.ok || !v.spec) {
-        result.rejected.push({ reason: v.reason ?? 'invalid' });
+      if (!v.ok || !v.spec || !v.spec.plan) {
+        result.rejected.push({ reason: v.reason ?? 'investigation plan required' });
         // A metric the proposer keeps asking for that nothing writes is the
         // fault ledger's business — the toolsmith reads it first.
         for (const m of unknownMetricsIn(v.reason ?? '')) {

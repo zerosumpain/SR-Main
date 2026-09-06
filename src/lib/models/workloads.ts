@@ -45,7 +45,6 @@ import {
   DEFAULT_ART_DIRECTOR_MODEL_ID,
   DEFAULT_DESIGN_REVIEW_MODEL_ID,
   DEFAULT_RESEARCH_FAST_MODEL_ID,
-  DEFAULT_DAYDREAM_REVIEW_MODEL_ID,
   DEFAULT_NOTE_REVIEW_MODEL_ID,
 } from '$lib/constants/default-models';
 
@@ -579,11 +578,11 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     label: 'Daydream reviewer',
     blurb: 'The verifier that decides whether a daydream thought is true before it is sent.',
     key: 'jkai.daydream.review_model',
-    fallbackModelId: DEFAULT_DAYDREAM_REVIEW_MODEL_ID,
+    fallbackModelId: null,
     requires: 'tools',
     catalogue: 'tools',
     reason:
-      'Pinned off the daydream model: this pass is small and well-bounded, so the budget is better spent on reasoning effort (xhigh) than on a heavier model. It drives tools to go and read the cited sources, so a model without tool support cannot serve it. Worth knowing before changing it: on a Codex model the daydream caps in $lib/daydream/budget.ts apply, and the heartbeat records this id so those caps can be enforced — move it to an OpenRouter model and the spend becomes cash with nothing capping it.',
+      'Inherits the default JKAI chat model unless explicitly pinned. Reads cited sources with tools; source verification remains distinct from statistical support. Provider budgets still apply.',
   },
   {
     id: 'notebook-review',

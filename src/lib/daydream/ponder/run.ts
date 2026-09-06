@@ -88,7 +88,7 @@ async function featureAggregates(now: Date): Promise<PackInputs['aggregates']> {
         spend: sql<number | null>`sum(${daydreamDayFeatures.verifiedSpendMinor})::int`,
       })
       .from(daydreamDayFeatures)
-      .where(gte(daydreamDayFeatures.day, floor(7)));
+      .where(and(eq(daydreamDayFeatures.subject, DEFAULT_SUBJECT), gte(daydreamDayFeatures.day, floor(7))));
     if (w) {
       if (w.sleep != null) out.push({ key: 'sleep7', text: `Average sleep last 7 days: ${Math.round(w.sleep / 6) / 10}h a night.` });
       if (w.steps != null) out.push({ key: 'steps7', text: `Average steps last 7 days: ${w.steps} a day.` });
@@ -323,6 +323,8 @@ async function recentVerdicts(): Promise<PackInputs['verdicts']> {
         question: daydreamHypotheses.question,
         verdict: sql<string>`coalesce(${daydreamHypotheses.verdict}, 'untested')`,
         summary: daydreamHypotheses.summary,
+        subject: daydreamHypotheses.subject,
+        investigationPlan: daydreamHypotheses.investigationPlan,
       })
       .from(daydreamHypotheses)
       .orderBy(desc(daydreamHypotheses.proposedAt))
@@ -435,6 +437,7 @@ function systemPrompt(
     ...(refuted.length ? ['', ...refuted] : []),
     '',
     'HARD RULES:',
+    'Treat supported hypotheses as provisional associations, not causal proof. Question competing explanations and practical benefit. Inconclusive means not established, never disproved. A source-verified sentence is not a validated behavioural prediction.',
     '1. Reply with ONE JSON object only: {"musings": [], "leads": [], "actionRules": []}. No prose outside it. Empty arrays are a good answer — most cycles find nothing worth saying.',
     `2. A musing = {"slug","theme","title","text","salience","cites",["actions"]}. theme must be one of ${JSON.stringify(MUSING_THEMES)}. text ≤ 280 chars, plain, no greeting, no emoji. salience 0..1 = how much this deserves his attention.`,
     '3. CITE OR DIE: every musing must list the fact-card ids ("F12") it is built from. Any number, date, name or amount you mention must appear in a cited card. An uncited or wrongly-cited musing is deleted by the audit, not fixed.',
