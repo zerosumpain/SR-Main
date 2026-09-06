@@ -242,9 +242,9 @@ function section(label: string, values: string[]): string {
  * The canonical brief handed to toolsmith, repo builder and monitor author.
  * Older rows keep their original detail until they are groomed.
  */
-export function renderBacklogBrief(item: Pick<BacklogItemData, 'title' | 'detail' | 'grooming' | 'mergedBrief'>): string {
+export function renderBacklogBrief(item: Pick<BacklogItemData, 'title' | 'detail' | 'grooming' | 'mergedBrief' | 'absorbedRequirements'>): string {
   const g = item.grooming;
-  const merged = item.mergedBrief ? `\n\nConsolidated requirements\n${item.mergedBrief}` : '';
+  const merged = [item.mergedBrief, ...Object.values(item.absorbedRequirements ?? {})].filter(Boolean).map((brief) => `\n\nConsolidated requirements\n${brief}`).join('');
   if (!g) return `${item.title}\n\n${item.detail}${merged}`.trim();
   return [
     `Feature: ${item.title}`,

@@ -66,7 +66,7 @@ const PAGE = 500;
  *  items, which is far past anything sane and still bounded. */
 const MAX_PAGES = 20;
 
-export async function listBacklog(status?: BacklogStatus): Promise<BacklogItemData[]> {
+export async function listBacklog(status?: BacklogStatus, opts: { strict?: boolean } = {}): Promise<BacklogItemData[]> {
   try {
     if (!(await getCollectionBySlug(COLLECTIONS.backlog))) return [];
     const items: BacklogItemData[] = [];
@@ -81,6 +81,7 @@ export async function listBacklog(status?: BacklogStatus): Promise<BacklogItemDa
     }
     return status ? items.filter((i) => i.status === status) : items;
   } catch (err) {
+    if (opts.strict) throw err;
     console.error('[selfimprove] listBacklog failed:', errMsg(err));
     return [];
   }
@@ -383,6 +384,7 @@ export function hasOpenNewDataWork(items: BacklogItemData[]): boolean {
 // watching for it to happen, so they THROW and the route reports the failure.
 
 export interface OwnerBacklogInput {
+  epicSlug?: string;
   title: string;
   detail: string;
   /** Validated against BACKLOG_KINDS at the write boundary. */
@@ -430,6 +432,7 @@ export async function createBacklogItem(input: OwnerBacklogInput): Promise<Backl
     createdAt: now,
     updatedAt: now,
   };
+  if (input.epicSlug) item.epicSlug = input.epicSlug;
   if (input.grooming) item.grooming = acceptGrooming(input.grooming, now);
   await put(item);
   return item;

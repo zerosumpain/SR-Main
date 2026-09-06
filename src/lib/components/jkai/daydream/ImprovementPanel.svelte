@@ -36,14 +36,22 @@
   type StoryFilter = 'changes' | 'queued' | 'all';
   let storyFilter = $state<StoryFilter>('changes');
   let showTech = $state(false);
+  let storySearch = $state('');
+  let storyStatus = $state('all');
+  let storyPage = $state(1);
+  $effect(() => { storySearch; storyStatus; storyFilter; storyPage = 1; });
 
   const stories = $derived(data.stories ?? []);
   const storySummary = $derived(data.storySummary);
   const changeStories = $derived(stories.filter((s) => s.status !== 'queued'));
   const queuedStories = $derived(stories.filter((s) => s.status === 'queued'));
-  const visibleStories = $derived(
+  const selectedStories = $derived(
     storyFilter === 'changes' ? changeStories : storyFilter === 'queued' ? queuedStories : stories,
   );
+  const storyStatuses = $derived([...new Map(stories.map((s) => [s.status, s.statusLabel])).entries()]);
+  const visibleStories = $derived(selectedStories.filter((s) =>
+    (storyStatus === 'all' || s.status === storyStatus) &&
+    [s.title, s.subtitle, s.driver, s.solution, s.outcome, s.statusLabel].join(' ').toLowerCase().includes(storySearch.trim().toLowerCase())));
   // Ideas that a shipped tool appears to cover already. Surfaced on the default
   // view rather than left behind the "queued" filter, because it is a finding
   // about the ENGINE — it is not closing these out, so it may rebuild them.
@@ -502,20 +510,28 @@
       <span class="sr-label-tight">What changed and why</span>
       <div class="seg" role="group" aria-label="Filter improvements">
         <button type="button" class="seg-btn" class:on={storyFilter === 'changes'}
-          aria-pressed={storyFilter === 'changes'} onclick={() => (storyFilter = 'changes')}>
+          aria-pressed={storyFilter === 'changes'} onclick={() => { storyFilter = 'changes'; storyStatus = 'all'; }}>
           changes ({changeStories.length})
         </button>
         <button type="button" class="seg-btn" class:on={storyFilter === 'queued'}
-          aria-pressed={storyFilter === 'queued'} onclick={() => (storyFilter = 'queued')}>
+          aria-pressed={storyFilter === 'queued'} onclick={() => { storyFilter = 'queued'; storyStatus = 'all'; }}>
           queued ({queuedStories.length})
         </button>
         <button type="button" class="seg-btn" class:on={storyFilter === 'all'}
-          aria-pressed={storyFilter === 'all'} onclick={() => (storyFilter = 'all')}>
+          aria-pressed={storyFilter === 'all'} onclick={() => { storyFilter = 'all'; storyStatus = 'all'; }}>
           all ({stories.length})
         </button>
       </div>
     </div>
 
+    <div class="example-toolbar">
+      <input class="nm-text-input" aria-label="Search changes" bind:value={storySearch} placeholder="Search capabilities, changes and outcomes…" />
+      <select class="nm-text-input" aria-label="Filter change status" bind:value={storyStatus} onchange={() => { if (storyStatus !== 'all') storyFilter = 'all'; }}>
+        <option value="all">All statuses</option>
+        {#each storyStatuses as [value, label]}<option {value}>{label}</option>{/each}
+      </select>
+      <span class="block-meta" role="status">{visibleStories.length} matches</span>
+    </div>
     {#if storySummary && stories.length > 0}
       <p class="stories-lede">
         <strong>{storySummary.live}</strong> new {storySummary.live === 1 ? 'capability' : 'capabilities'} live ·
@@ -531,29 +547,25 @@
         <strong>{staleQueued}</strong> queued {staleQueued === 1 ? 'idea looks' : 'ideas look'} already
         served by a tool that has shipped, but {staleQueued === 1 ? 'it is' : 'they are'} still marked
         open — so the engine may build the same thing twice.
-        <button type="button" class="link-btn" onclick={() => (storyFilter = 'queued')}>Show them</button>
+        <button type="button" class="link-btn" onclick={() => { storyFilter = 'queued'; storyStatus = 'all'; }}>Show them</button>
       </p>
     {/if}
 
     {#if visibleStories.length === 0}
       <div class="empty">
-        {stories.length === 0
-          ? 'Nothing yet. After the first nightly run this is where each improvement is explained.'
-          : storyFilter === 'changes'
-            ? 'Nothing has changed yet — only queued ideas so far.'
-            : 'No queued ideas.'}
+        {stories.length === 0 ? 'No changes recorded yet.' : 'No changes match these filters.'}
       </div>
     {:else}
       <div class="story-grid">
-        {#each visibleStories as s (s.id)}
-          <article class="story st-{s.status}">
-            <header class="story-hd">
+        {#each visibleStories.slice((storyPage - 1) * 8, storyPage * 8) as s (s.id)}
+          <details class="story st-{s.status}">
+            <summary class="story-hd">
               <div class="story-id">
                 <span class="story-title mono">{s.title}</span>
                 {#if s.subtitle}<span class="story-sub">{s.subtitle}</span>{/if}
               </div>
               <span class="story-pill">{s.statusLabel}</span>
-            </header>
+            </summary>
 
             <dl class="story-body">
               <dt>Driver</dt>
@@ -598,8 +610,15 @@
                 <span class="arc-step">{fmtDay(e.at)} {e.label}</span>
               {/each}
             </footer>
-          </article>
+          </details>
         {/each}
+      </div>
+    {/if}
+    {#if visibleStories.length > 8}
+      <div class="example-toolbar">
+        <button class="measure-btn" disabled={storyPage === 1} onclick={() => storyPage--}>Previous changes</button>
+        <span class="block-meta">Page {storyPage} of {Math.ceil(visibleStories.length / 8)}</span>
+        <button class="measure-btn" disabled={storyPage * 8 >= visibleStories.length} onclick={() => storyPage++}>Next changes</button>
       </div>
     {/if}
   </section>
@@ -1125,4 +1144,13 @@
   .acceptance-grid { border-top: 1px solid var(--line); padding-top: 14px; }
   .args-editor { font-family: var(--font-code); }
   @media (max-width: 640px) { .prime-hd { flex-wrap: wrap; } .prime-hd > div { flex-basis: 100%; } .acceptance-hd { flex-wrap: wrap; } .acceptance-hd > div { flex-basis: 80%; } }
+  .story-grid { display: flex; flex-direction: column; gap: 0; }
+  .story-hd { cursor: pointer; margin-bottom: 0; }
+  .story-hd::before { content: '+'; color: var(--accent); }
+  details[open] > .story-hd::before { content: '−'; }
+  .story-id { flex: 1; }
+  .story-hd:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  details.story[open] .story-body { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+  details.story:not([open]) .story-sub { display: none; }
+  @media (max-width: 640px) { .story-hd { flex-wrap: wrap; } .story-id { flex-basis: 80%; } }
 </style>
