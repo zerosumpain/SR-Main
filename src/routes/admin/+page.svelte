@@ -81,7 +81,7 @@
         <a class="nm-tile" href={`/admin/content/hero${t}`}>
           <div class="nm-tile-eyebrow">Hero</div>
           <div class="nm-tile-title">Landing Hero</div>
-          <div class="nm-tile-sub">Generate + curate the homepage hero banner pool.</div>
+          <div class="nm-tile-sub">Animation playback, timing and transparency. Generate and curate hero copy.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
         <a class="nm-tile" href={`/admin/content/voice${t}`}>

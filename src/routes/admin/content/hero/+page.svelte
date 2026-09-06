@@ -1,14 +1,15 @@
-<svelte:head><title>Hero Titles — Admin</title></svelte:head>
+<svelte:head><title>Hero — Admin</title></svelte:head>
 
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import type { PageData } from './$types';
+  import HeroBackgroundControls from '$lib/components/admin/HeroBackgroundControls.svelte';
+  import type { ActionData, PageData } from './$types';
   import type { GeneratedRow } from '$lib/landing/hero-titles-service';
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 
   let style = $state('');
   let headlineWords = $state(3);
@@ -160,9 +161,11 @@
 <PageWrap width="wide">
   <PageHeader
     kicker="Landing page"
-    title="hero titles"
+    title="hero"
     sub="Generate the copy the landing hero snaps to. {data.count} entries saved; last generated {fmtDate(data.generatedAt)}."
   />
+
+  <HeroBackgroundControls settings={data.backgroundSettings} asset={data.backgroundAsset} result={form} />
 
   {#if error}
     <div class="banner banner-error">{error}</div>

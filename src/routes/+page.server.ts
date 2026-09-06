@@ -5,6 +5,8 @@ import { snapHeroTitle } from '$lib/landing/hero-titles-service';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { isOwnerRequest } from '$lib/server/owner';
 import type { PageServerLoad } from './$types';
+import { getHeroBackgroundSettings, heroBackgroundAsset } from '$lib/server/hero-background';
+import { HERO_BACKGROUND_DEFAULTS } from '$lib/constants/hero-background';
 
 export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) => {
   const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
@@ -88,5 +90,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
         .catch(() => null)
     : null;
 
-  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention, mergeablePrs };
+  const backgroundSettings = await getHeroBackgroundSettings().catch(() => ({ ...HERO_BACKGROUND_DEFAULTS, enabled: false }));
+  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention, mergeablePrs,
+    backgroundSettings, backgroundAsset: heroBackgroundAsset };
 };

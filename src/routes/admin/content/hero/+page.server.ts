@@ -1,6 +1,9 @@
 import { db } from '$lib/db';
 import { heroTitles } from '$lib/db/schema';
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import { heroBackgroundSchema } from '$lib/server/hero-background-schema';
+import { getHeroBackgroundSettings, heroBackgroundAsset, saveHeroBackgroundSettings } from '$lib/server/hero-background';
 
 export const load: PageServerLoad = async () => {
   const rows = await db
@@ -18,5 +21,24 @@ export const load: PageServerLoad = async () => {
     return t && (!latest || t > latest) ? t : latest;
   }, null);
 
-  return { rows, count: rows.length, generatedAt };
+  return { rows, count: rows.length, generatedAt,
+    backgroundSettings: await getHeroBackgroundSettings(), backgroundAsset: heroBackgroundAsset };
+};
+
+export const actions: Actions = {
+  background: async ({ request }) => {
+    const form = await request.formData();
+    const value: Record<string, unknown> = {};
+    for (const key of ['delayMs', 'playbackRate', 'holdMs', 'fadeMs', 'playingOpacity', 'finalTransparency', 'positionX', 'positionY']) {
+      const raw = form.get(key);
+      value[key] = typeof raw === 'string' && raw.trim() ? Number(raw) : NaN;
+    }
+    value.enabled = form.get('enabled') === 'on';
+    value.overlayTitle = form.get('overlayTitle') === 'on';
+    value.fit = form.get('fit');
+    const parsed = heroBackgroundSchema.safeParse(value);
+    if (!parsed.success) return fail(400, { backgroundError: 'Check the animation settings: ' + parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') });
+    await saveHeroBackgroundSettings(parsed.data);
+    return { backgroundSaved: true };
+  },
 };
