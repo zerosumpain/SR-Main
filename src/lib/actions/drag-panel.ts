@@ -4,18 +4,27 @@ export function dragPanel(node: HTMLElement, options: {
   move: (position: { left: number; top: number }) => void;
   reset: () => void;
 }) {
-  let drag: { id: number; x: number; y: number; left: number; top: number; handle: HTMLElement } | null = null;
+  let drag: { id: number; x: number; y: number; left: number; top: number } | null = null;
 
-  const handleFrom = (target: EventTarget | null) =>
-    target instanceof Element ? target.closest<HTMLElement>(options.handle) : null;
+  function handleFrom(target: EventTarget | null) {
+    if (!(target instanceof Element)) return null;
+    const handle = target.closest<HTMLElement>(options.handle);
+    if (!handle || !node.contains(handle)) return null;
+    // A header can contain Close, Back, links or editable fields. Those keep
+    // their normal behavior; only an explicitly marked move button can drag.
+    const control = target.closest('button, a, input, select, textarea, [contenteditable], [role="button"]');
+    if (control && !control.hasAttribute('data-drag-handle')) return null;
+    return handle;
+  }
 
   function down(event: PointerEvent) {
     const handle = handleFrom(event.target);
     if (!handle || event.button !== 0 || !event.isPrimary) return;
     const rect = node.getBoundingClientRect();
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, handle };
-    handle.setPointerCapture(event.pointerId);
-    handle.focus({ preventScroll: true });
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    node.setPointerCapture(event.pointerId);
+    const focus = node.querySelector<HTMLElement>('[data-drag-handle]');
+    (focus ?? handle).focus({ preventScroll: true });
     node.dataset.dragging = 'true';
     event.preventDefault();
     event.stopPropagation();
@@ -29,10 +38,10 @@ export function dragPanel(node: HTMLElement, options: {
 
   function end(event: PointerEvent) {
     if (!drag || drag.id !== event.pointerId) return;
-    const { handle, id } = drag;
+    const { id } = drag;
     drag = null;
     delete node.dataset.dragging;
-    if (handle.hasPointerCapture(id)) handle.releasePointerCapture(id);
+    if (node.hasPointerCapture(id)) node.releasePointerCapture(id);
   }
 
   function key(event: KeyboardEvent) {
@@ -60,7 +69,7 @@ export function dragPanel(node: HTMLElement, options: {
   return {
     update(next: typeof options) { options = next; },
     destroy() {
-      if (drag?.handle.hasPointerCapture(drag.id)) drag.handle.releasePointerCapture(drag.id);
+      if (drag && node.hasPointerCapture(drag.id)) node.releasePointerCapture(drag.id);
       node.removeEventListener('pointerdown', down);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', end);

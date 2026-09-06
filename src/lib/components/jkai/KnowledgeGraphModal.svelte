@@ -163,10 +163,10 @@
     class:moved={!!position}
     style:left={position ? `${position.left}px` : undefined}
     style:top={position ? `${position.top}px` : undefined}
-    use:dragPanel={{ handle: '.gm-hd-left', move, reset: () => (position = null) }}
+    use:dragPanel={{ handle: '.gm-hd, .entity-card > header', move, reset: () => (position = null) }}
     role="dialog" aria-label="Thread knowledge graph" onclick={(e) => e.stopPropagation()}>
     <header class="gm-hd">
-      <button type="button" class="gm-hd-left" aria-label="Move knowledge graph"
+      <button type="button" class="gm-hd-left" data-drag-handle aria-label="Move knowledge graph"
         title="Drag to move · Arrow keys move · Shift moves faster · Home resets position">
         <span class="gm-title">⠿ Knowledge graph</span>
         <span class="gm-count">
@@ -308,6 +308,12 @@
 </div>
 
 <style>
+  .gm-panel :global(.entity-card > header), .gm-hd {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
   .gm-backdrop {
     position: fixed;
     inset: 0;
@@ -342,7 +348,7 @@
     touch-action: none;
     user-select: none;
   }
-  .gm-panel[data-dragging] .gm-hd-left { cursor: grabbing; }
+  .gm-panel:global([data-dragging]) :global(.entity-card > header), .gm-panel:global([data-dragging]) .gm-hd, .gm-panel:global([data-dragging]) .gm-hd-left { cursor: grabbing; }
   .gm-hd-left:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .gm-hd {
     flex: none;

@@ -250,13 +250,13 @@
     class:moved={!!position}
     style:left={position ? `${position.left}px` : undefined}
     style:top={position ? `${position.top}px` : undefined}
-    use:dragPanel={{ handle: '.dm-drag', move, reset: () => (position = null) }} role="dialog" aria-modal="true" aria-label={manifest?.title ?? 'Detail'} onclick={(e) => e.stopPropagation()}>
+    use:dragPanel={{ handle: '.dm-hd, .dm-title-row, .entity-card > header', move, reset: () => (position = null) }} role="dialog" aria-modal="true" aria-label={manifest?.title ?? 'Detail'} onclick={(e) => e.stopPropagation()}>
     <header class="dm-hd">
       <div class="dm-hd-left">
         {#if stack.length}
           <button type="button" class="dm-chip" onclick={back} aria-label="Back">← back</button>
         {/if}
-        <button type="button" class="dm-drag dm-eyebrow" aria-label="Move details"
+        <button type="button" class="dm-drag dm-eyebrow" data-drag-handle aria-label="Move details"
           title="Drag to move · Arrow keys move · Shift moves faster · Home resets position">
           ⠿ {manifest?.eyebrow ?? (loading ? 'opening…' : 'detail')}
         </button>
@@ -448,6 +448,12 @@
 </div>
 
 <style>
+  .dm-panel :global(.entity-card > header), .dm-hd, .dm-title-row {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
   /* Same register as the graph modal: opaque elevated paper, a 2px ink rule,
      mono eyebrows, hairlines. No shadow, no radius. */
   .dm-backdrop {
@@ -486,7 +492,7 @@
     touch-action: none;
     user-select: none;
   }
-  .dm-panel[data-dragging] .dm-drag { cursor: grabbing; }
+  .dm-panel:global([data-dragging]) :global(.entity-card > header), .dm-panel:global([data-dragging]) .dm-hd, .dm-panel:global([data-dragging]) .dm-drag, .dm-panel:global([data-dragging]) .dm-title-row { cursor: grabbing; }
   .dm-drag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dm-hd {
     flex: none;
