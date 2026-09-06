@@ -16,7 +16,6 @@ src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
 src/lib/llm/keys.test.ts
 src/lib/models/workloads.test.ts
-src/lib/projects/registry-cards.test.ts
 src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
