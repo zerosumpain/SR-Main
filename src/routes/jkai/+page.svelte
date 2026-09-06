@@ -579,6 +579,7 @@
             initialHasOlderMessages={pane.hasOlderMessages}
             initialMessageCursor={pane.messageCursor}
             active={tab.id === activeId}
+            dailyAlerts={data.dailyAlerts}
             recentThreads={conversationList}
             onselectthread={selectConversation}
             onopenlibrary={() => (libraryOpen = true)}

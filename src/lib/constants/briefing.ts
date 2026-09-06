@@ -10,6 +10,7 @@ export type BriefingSourceKey =
   | 'readiness'
   | 'indoor'
   | 'email'
+  | 'alerts'
   | 'knowledge'
   | 'daydreams'
   | 'memories'
@@ -54,6 +55,7 @@ export const BRIEFING_SOURCE_CATALOG: BriefingSourceDefinition[] = [
   { key: 'sleep', label: 'Sleep', description: 'The latest sleep duration, performance and stages.', group: 'Personal', mode: 'workflow', nodeTypes: ['health-query'] },
   { key: 'readiness', label: 'Readiness', description: 'Recovery score and the current recommendation.', group: 'Personal', mode: 'workflow', nodeTypes: ['health-query'] },
   { key: 'email', label: 'Email', description: 'New mail selected by the briefing workflow.', group: 'Personal', mode: 'workflow', nodeTypes: ['gmail-search', 'gmail-fetch'] },
+  { key: 'alerts', label: 'Daily alerts', description: 'Undismissed intelligence alerts from the last 24 hours, highest significance first.', group: 'Knowledge', mode: 'native', nodeTypes: [] },
   { key: 'knowledge', label: 'Knowledge graph', description: 'Relevant context already connected across JKAI.', group: 'Knowledge', mode: 'workflow', nodeTypes: ['intel-query'] },
   { key: 'calendar', label: 'Calendar', description: 'Upcoming events supplied by a calendar node.', group: 'Personal', mode: 'extension', nodeTypes: ['apple-calendar'] },
   { key: 'research', label: 'Research', description: 'Fresh findings or completed research relevant today.', group: 'Knowledge', mode: 'extension', nodeTypes: ['research-search', 'deep-dive-list', 'deep-dive-report'] },

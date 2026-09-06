@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DailyAlertsSummary from '$lib/components/jkai/DailyAlertsSummary.svelte';
+  import type { DailyAlertsSummary as DailyAlertsData } from '$lib/jkai/intel/daily-alerts';
   import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
   import HeartbeatMarker, { type HeartbeatEntry } from '$lib/components/jkai/HeartbeatMarker.svelte';
   import { renderMarkdown } from '$lib/canvas/ChatMarkdown.svelte';
@@ -91,6 +93,7 @@
     initialMessageCursor = null,
     onbusychange,
     recentThreads = [],
+    dailyAlerts,
     onselectthread,
     onopenlibrary,
   }: {
@@ -151,6 +154,7 @@
      * a dot without polling. `ok` is false when the turn ended in an error.
      */
     onbusychange?: (busy: boolean, ok: boolean) => void;
+    dailyAlerts?: DailyAlertsData;
     /**
      * The thread list, for the empty-state's "pick up where you left off"
      * column. The hub keeps the library behind a rail that is collapsed by
@@ -2918,28 +2922,29 @@
       </div>
     {:else if messages.length === 0}
       <div class="new-thread-state">
-       <div class="hero-panel">
+       <div class="hero-panel" class:has-alerts={!!dailyAlerts?.items.length}>
         <div class="hero">
           <p class="hero-kicker"><span>Live workspace</span> jkai / start anywhere</p>
           <h1 class="hero-title">What are we making today?</h1>
           <p class="hero-sub">
             Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
           </p>
-          <div class="hero-body">
-           <div class="hero-main">
             <div class="direction-grid" aria-label="Workspace directions">
               {#each LANDING_DIRECTIONS as direction (direction.label)}
-                <a class="direction-card" href={direction.href}>
+                <a class="direction-card" href={direction.href} title={direction.note}>
                   <span class="direction-index">{direction.index}</span>
                   <span class="direction-copy">
                     <strong>{direction.label}</strong>
-                    <small>{direction.note}</small>
                   </span>
-                  <span class="direction-meta">{direction.metric}</span>
                   <span class="direction-arrow" aria-hidden="true">↗</span>
                 </a>
               {/each}
             </div>
+          {#if dailyAlerts}
+            <DailyAlertsSummary summary={dailyAlerts} />
+          {/if}
+          <div class="hero-body">
+           <div class="hero-main">
             <div class="hero-metrics" aria-label="Current workspace status">
               <span><small>Threads</small><strong>{startedThreads.length}</strong></span>
               <span><small>Model</small><strong>{shortModelLabel(currentModel.modelId)}</strong></span>
@@ -4357,20 +4362,20 @@
 
   .hero-rule { display:flex; align-items:center; gap:12px; margin-bottom:12px; color:rgba(237,228,212,.46); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:var(--tracking-label); }
   .hero-rule::after { content:''; flex:1; height:1px; background:rgba(237,228,212,.2); }
-  .direction-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-top:1px solid rgba(237,228,212,.25); border-left:1px solid rgba(237,228,212,.25); }
-  .direction-card { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:4px 11px; min-height:86px; padding:14px 42px 14px 14px; border-right:1px solid rgba(237,228,212,.25); border-bottom:1px solid rgba(237,228,212,.25); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
+  .direction-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
+  .direction-card { display:flex; align-items:center; gap:8px; min-height:44px; padding:8px 10px; border:1px solid var(--accent-on-dark); background:rgba(232,134,58,.08); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
   .direction-card:hover { background:var(--bg); color:var(--text-primary); }
-  .direction-index { padding-top:3px; color:var(--accent-on-dark); font-family:var(--font-mono); font-size:var(--fs-label-xs); font-variant-numeric:tabular-nums; }
+  .direction-index { color:var(--accent-on-dark); font-family:var(--font-mono); font-size:var(--fs-label-xs); font-variant-numeric:tabular-nums; }
   .direction-card:hover .direction-index { color:var(--accent); }
   .direction-copy { min-width:0; }
-  .direction-copy strong { display:block; font-family:var(--font-display); font-size:var(--fs-display-xs); font-weight:400; line-height:1; text-transform:uppercase; }
-  .direction-copy small { display:block; margin-top:6px; color:rgba(237,228,212,.62); font-size:var(--fs-label-xs); line-height:1.3; }
-  .direction-card:hover .direction-copy small { color:var(--text-muted); }
-  .direction-meta { grid-column:2; align-self:end; margin-top:2px; color:rgba(237,228,212,.48); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; white-space:nowrap; }
-  .direction-card:hover .direction-meta { color:var(--text-muted); }
-  .direction-arrow { position:absolute; top:12px; right:14px; color:var(--accent-on-dark); font-size:var(--fs-body-lg); transition:transform var(--t-fast) var(--ease-out); }
+  .direction-copy strong { display:block; font-family:var(--font-display); font-size:var(--fs-nav); font-weight:400; line-height:1.2; text-transform:uppercase; }
+  .direction-arrow { margin-left:auto; color:var(--accent-on-dark); font-size:var(--fs-body-lg); transition:transform var(--t-fast) var(--ease-out); }
   .direction-card:hover .direction-arrow { color:var(--accent); transform:translate(2px,-2px); }
-  .direction-card:focus-visible { z-index:1; outline:2px solid var(--accent-on-dark); outline-offset:-2px; }
+  .direction-card:focus-visible { outline:2px solid var(--accent-on-dark); outline-offset:2px; }
+  .hero-panel.has-alerts { align-items:flex-start; padding:20px; }
+  .has-alerts .hero-kicker { margin-bottom:8px; }
+  .has-alerts .hero-title { font-size:clamp(1.6rem, 2.4vw, 2.2rem); max-width:none; margin-bottom:8px; }
+  .has-alerts .hero-sub { margin-bottom:12px; max-width:none; line-height:1.4; }
   .hero-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:10px 0 0; border:1px solid rgba(237,228,212,.14); }
   .hero-metrics > span { min-width:0; padding:8px 10px; border-right:1px solid rgba(237,228,212,.14); }
   .hero-metrics > span:last-child { border-right:0; }
@@ -5106,8 +5111,7 @@
       max-width:none;
     }
     .hero-body { grid-template-columns:minmax(0,1fr); gap:26px; }
-    .direction-grid { grid-template-columns:1fr; }
-    .direction-card { min-height:74px; }
+    .direction-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .hero-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .hero-metrics > span:nth-child(2) { border-right:0; }
     .hero-metrics > span:nth-child(-n+2) { border-bottom:1px solid rgba(237,228,212,.14); }

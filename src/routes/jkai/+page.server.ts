@@ -1,3 +1,4 @@
+import { loadDailyAlerts } from '$lib/jkai/intel/daily-alerts.server';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
@@ -55,7 +56,7 @@ export const load: PageServerLoad = async ({ url }) => {
   // than in series. The load previously awaited the conversation list, then the
   // WhatsApp lookup, then its messages, before it even reached the Promise.all
   // below — four sequential round-trips to build one page.
-  const [conversationPage, [latestWaConv], defaultChatModel, chatAltOpenRouterModel, approvalUi, freshBriefing] =
+  const [conversationPage, [latestWaConv], defaultChatModel, chatAltOpenRouterModel, approvalUi, freshBriefing, dailyAlerts] =
     await Promise.all([
       getConversationList(),
       // Check for WhatsApp thread (now unified in jkai_conversations + orchestrator_chats)
@@ -69,6 +70,7 @@ export const load: PageServerLoad = async ({ url }) => {
       resolveChatAltOpenRouterModel(),
       getApprovalUiSettings(),
       loadFreshBriefing(),
+      loadDailyAlerts(),
     ]);
 
   let whatsappThread: { id: string; phoneNumber: string; messages: any[] } | null = null;
@@ -115,5 +117,6 @@ export const load: PageServerLoad = async ({ url }) => {
     chatAltOpenRouterModel,
     approvalUi,
     freshBriefing,
+    dailyAlerts,
   };
 };
