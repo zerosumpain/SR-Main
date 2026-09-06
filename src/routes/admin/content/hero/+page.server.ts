@@ -3,7 +3,8 @@ import { heroTitles } from '$lib/db/schema';
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { heroBackgroundSchema } from '$lib/server/hero-background-schema';
-import { getHeroBackgroundSettings, heroBackgroundAsset, saveHeroBackgroundSettings } from '$lib/server/hero-background';
+import { getHeroBackgroundSettings, getHeroBackgroundAsset, saveHeroBackgroundSettings } from '$lib/server/hero-background';
+import { heroSourceOptions, selectedHero, heroPreparation } from '$lib/server/hero-sources';
 
 export const load: PageServerLoad = async () => {
   const rows = await db
@@ -21,8 +22,11 @@ export const load: PageServerLoad = async () => {
     return t && (!latest || t > latest) ? t : latest;
   }, null);
 
-  return { rows, count: rows.length, generatedAt,
-    backgroundSettings: await getHeroBackgroundSettings(), backgroundAsset: heroBackgroundAsset };
+  const [backgroundSettings, backgroundAsset, backgroundSources, selected, backgroundJob] = await Promise.all([
+    getHeroBackgroundSettings(), getHeroBackgroundAsset(), heroSourceOptions(), selectedHero(), heroPreparation(),
+  ]);
+  return { rows, count: rows.length, generatedAt, backgroundSettings, backgroundAsset, backgroundSources, backgroundJob,
+    backgroundSource: selected ? { sourceId: selected.sourceId, sourceName: selected.sourceName } : null };
 };
 
 export const actions: Actions = {

@@ -26,3 +26,12 @@ export interface HeroBackgroundAsset {
   desktopBytes: number;
   mobileBytes: number;
 }
+
+export interface HeroSourceOption { id: string; name: string; sizeBytes: number }
+export interface HeroPreparationJob {
+  id: string;
+  phase: 'running' | 'succeeded' | 'failed';
+  sourceName: string;
+  expiresAt: number;
+  error?: string;
+}

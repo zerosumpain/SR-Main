@@ -83,6 +83,12 @@ rollback_web_release() {
 [ -d "$RELEASE_DIR" ] || { echo "no staged release at $RELEASE_DIR — prebuild did not run or did not finish" >&2; exit 1; }
 [ -f "$RELEASE_DIR/handler.js" ] || { echo "staged release has no handler.js" >&2; exit 1; }
 
+# Owner-triggered hero preparation requires the same tools as video extraction.
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends ffmpeg
+fi
+
 # Read what is serving now BEFORE the swap. This is the release log's "what did
 # this replace" boundary. Empty on the first run of this script.
 PREV_SHA="$(sed -n 's/^sha=//p' "$VPS_DIR/build/.deploy-sha" 2>/dev/null | head -1 || true)"

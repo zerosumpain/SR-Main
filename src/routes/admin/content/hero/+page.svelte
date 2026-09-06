@@ -6,6 +6,7 @@
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import HeroBackgroundControls from '$lib/components/admin/HeroBackgroundControls.svelte';
+  import HeroSourcePicker from '$lib/components/admin/HeroSourcePicker.svelte';
   import type { ActionData, PageData } from './$types';
   import type { GeneratedRow } from '$lib/landing/hero-titles-service';
 
@@ -165,6 +166,7 @@
     sub="Generate the copy the landing hero snaps to. {data.count} entries saved; last generated {fmtDate(data.generatedAt)}."
   />
 
+  <HeroSourcePicker sources={data.backgroundSources} activeSource={data.backgroundSource} initialJob={data.backgroundJob} />
   <HeroBackgroundControls settings={data.backgroundSettings} asset={data.backgroundAsset} result={form} />
 
   {#if error}
