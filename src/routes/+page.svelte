@@ -15,6 +15,7 @@
   import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
   import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
+  import HeroBackground from '$lib/components/landing/HeroBackground.svelte';
   import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
   import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
   import ShippedSeam from '$lib/components/landing/ShippedSeam.svelte';
@@ -184,7 +185,10 @@
   <div class="relative z-10 flex-1 flex items-stretch">
     <div class="hero-grid">
       <div class="hero-copy">
-        <LandingHero tag={heroTag} />
+        {#if data.backgroundSettings.enabled && data.backgroundAsset}
+          <HeroBackground settings={data.backgroundSettings} asset={data.backgroundAsset} />
+        {/if}
+        <div class="hero-title"><LandingHero tag={heroTag} /></div>
       </div>
       <div class="hero-divider" aria-hidden="true"></div>
       <aside class="hero-aside">
@@ -341,6 +345,8 @@
     align-items: stretch;
   }
   .hero-copy {
+    isolation: isolate;
+    overflow: hidden;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -358,8 +364,10 @@
       radial-gradient(80% 70% at 20% 30%, rgba(196, 87, 10, 0.16), transparent 62%),
       radial-gradient(70% 60% at 85% 85%, rgba(14, 91, 102, 0.14), transparent 60%);
   }
-  .hero-copy > :global(*) {
+  .hero-title {
     position: relative;
+    z-index: 1;
+    width: 100%;
   }
   /* The rail has no ground of its own any more, so there is no value change to
      divide the columns — the hairline does it again. */
