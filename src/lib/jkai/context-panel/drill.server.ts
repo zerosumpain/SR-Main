@@ -44,8 +44,6 @@ import {
   type DrillSection,
 } from './types';
 
-type DrillFactInput = DrillFact;
-
 function compactStatus(status: string): string {
   return status.replaceAll('_', ' ').replace(/^phase/, 'phase ');
 }
@@ -730,7 +728,7 @@ async function memoryManifest(conversationId: string, id: string, target: string
       : Promise.resolve([] as Array<{ id: string; title: string | null }>),
   ]);
   const api = '/api/jkai/memory';
-  const stateTone: DrillFactInput['tone'] = state === 'forgotten' || state === 'replaced' || state === 'expired' ? 'bad' : state === 'expiring' ? 'warn' : state === 'pinned' ? 'accent' : 'good';
+  const stateTone: DrillFact['tone'] = state === 'forgotten' || state === 'replaced' || state === 'expired' ? 'bad' : state === 'expiring' ? 'warn' : state === 'pinned' ? 'accent' : 'good';
   const sections: DrillSection[] = [
     { kind: 'prose', id: 'content', title: 'The memory', body: m.content },
   ];

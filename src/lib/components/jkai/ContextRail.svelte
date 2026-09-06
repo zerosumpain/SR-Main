@@ -929,7 +929,9 @@
   }
 
   /* ── Shared cell grammar ─────────────────────────────────────────────── */
-  .ins-eyebrow {
+  /* Reaches the child modes (MemoryMode) through :global under the column's
+     own root, so the grammar is declared ONCE rather than copied per mode. */
+  .inspector :global(.ins-eyebrow) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -938,38 +940,38 @@
     color: var(--text-ghost);
     line-height: 1.2;
   }
-  .ins-meta {
+  .inspector :global(.ins-meta) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
-  .ins-cell {
+  .inspector :global(.ins-cell) {
     flex: none;
     padding: 12px 15px 14px;
     border-bottom: 1px solid var(--line-hair);
   }
-  .ins-cell-hd {
+  .inspector :global(.ins-cell-hd) {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 10px;
   }
-  .ins-rows {
+  .inspector :global(.ins-rows) {
     display: flex;
     flex-direction: column;
     gap: 1px;
   }
-  .ins-note {
+  .inspector :global(.ins-note) {
     margin: 0;
     font-family: var(--font-body);
     font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
   }
-  .ins-empty {
+  .inspector :global(.ins-empty) {
     margin: 0;
     padding: 24px 18px;
     text-align: center;
@@ -978,11 +980,11 @@
     line-height: 1.55;
     color: var(--text-ghost);
   }
-  .ins-empty--left {
+  .inspector :global(.ins-empty--left) {
     text-align: left;
   }
   /* One "there is more of this elsewhere" affordance, shared by every list. */
-  .ins-more {
+  .inspector :global(.ins-more) {
     display: block;
     margin-top: 8px;
     padding: 0;
@@ -996,17 +998,21 @@
     text-transform: uppercase;
     color: var(--accent);
   }
-  .ins-more:hover {
+  .inspector :global(.ins-more:hover:not(:disabled)) {
     color: var(--accent-hover);
   }
-  .ins-alert {
+  .inspector :global(.ins-more:disabled) {
+    color: var(--text-ghost);
+    cursor: default;
+  }
+  .inspector :global(.ins-alert) {
     margin: 14px 15px;
     padding: 12px 13px;
     border: 1px solid var(--line-strong);
     border-left: 3px solid var(--error);
     background: var(--bg);
   }
-  .ins-alert .ins-note {
+  .inspector :global(.ins-alert .ins-note) {
     margin-top: 5px;
     color: var(--error);
   }
@@ -1028,7 +1034,7 @@
     50% { opacity: 0.25; }
   }
 
-  .ins-act {
+  .inspector :global(.ins-act) {
     padding: 0;
     border: none;
     background: none;
@@ -1041,10 +1047,10 @@
     text-decoration: none;
     transition: color 0.15s ease-out;
   }
-  .ins-act:hover:not(:disabled) {
+  .inspector :global(.ins-act:hover:not(:disabled)) {
     color: var(--accent-hover);
   }
-  .ins-act:disabled {
+  .inspector :global(.ins-act:disabled) {
     color: var(--text-ghost);
     cursor: default;
   }
