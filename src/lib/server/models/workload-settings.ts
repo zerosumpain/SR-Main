@@ -243,22 +243,22 @@ export const resolveAudioModel = () => resolveById('audio');
 /** Deck slide art direction. */
 export const resolveArtDirectorModel = () => resolveById('art-director');
 
-/**
- * The budgeted research tiers (instant / scan / brief).
- *
- * Reads the legacy `RESEARCH_FAST_MODEL` env var below the pin, the same
- * precedence `resolveImageToolModel` uses: setting the model from the page has
- * to beat a variable in a `.env` nobody has looked at since it was written.
- * Never falls through to the site default — the whole point of this role is
- * that a tier with a wall clock must not inherit a reasoning model.
- */
+/** Fast research uses an explicit role selection, then a compatible chat
+ * selection, the legacy environment setting, or the site default. There is no
+ * hidden model fallback. Grounded fast calls require OpenRouter's web plugin. */
 export async function resolveResearchFastModel(): Promise<ModelContext> {
   const def = SITE_WORKLOADS.find((w) => w.id === 'research-fast')!;
   const pinned = await getSetting<{ modelId?: string } | null>(def.key);
-  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
-  const fromEnv = envModelFor(def);
-  if (fromEnv) return coerceModelContext({ modelId: fromEnv });
-  return coerceModelContext({ modelId: def.fallbackModelId! });
+  const { currentSessionModel } = await import('$lib/context/chat');
+  const session = currentSessionModel();
+  const modelId = pinned?.modelId
+    ?? (session?.provider === 'openrouter' ? session.modelId : null)
+    ?? envModelFor(def);
+  const model = modelId ? coerceModelContext({ modelId }) : await resolveDefaultModel();
+  if (model.provider !== 'openrouter') {
+    throw new Error('Select an OpenRouter model for Research — fast tiers in /admin/ops/costs#research-models. Instant, Scan and Brief cannot use the Codex site default.');
+  }
+  return model;
 }
 
 /** The unbudgeted Investigation tier. Follows the site default until pinned. */

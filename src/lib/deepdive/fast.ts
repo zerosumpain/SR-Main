@@ -102,8 +102,7 @@ export async function runInstant(
   budget: ResearchBudget,
 ): Promise<void> {
   const preset = depthPreset('instant');
-  // The tier's role, resolved through the workload registry: a pin in
-  // `jkai.research.fast_model`, else RESEARCH_FAST_MODEL, else the constant.
+  // Resolve the saved research choice without a hidden provider fallback.
   const model = (await resolveResearchFastModel()).modelId;
   const goals = (session.goals ?? []) as string[];
   const grounding = coerceGrounding(session.grounding);

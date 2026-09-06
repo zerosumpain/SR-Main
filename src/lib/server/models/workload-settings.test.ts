@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /** One catalogue row per model id, for the image-output lookup. */
 const CATALOGUE: Record<string, string | null> = {
@@ -47,7 +47,9 @@ import {
   describeSiteWorkloads,
   setWorkloadModel,
   resolveVisionModel,
+  resolveResearchFastModel,
 } from './workload-settings';
+import { resolveDefaultModel } from './settings';
 import { getWorkload } from '$lib/models/workloads';
 import { withChatContext } from '$lib/context/chat';
 
@@ -269,5 +271,41 @@ describe('daydream reviewer inheritance', () => {
   it('honours an explicit reviewer override', async () => {
     getSetting.mockImplementation(async (key: string) => key === 'jkai.daydream.review_model' ? { modelId: 'codex/gpt-5.6-luna' } : null);
     expect((await resolveWorkloadModel(wl('daydream-review'))).modelId).toBe('codex/gpt-5.6-luna');
+  });
+});
+
+
+describe('fast research model selection', () => {
+  beforeEach(() => { vi.stubEnv('RESEARCH_FAST_MODEL', ''); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.mocked(resolveDefaultModel).mockResolvedValue({ provider: 'codex', modelId: 'codex/gpt-5.6-terra' }); });
+
+  it('uses the saved research model before an environment or chat choice', async () => {
+    getSetting.mockResolvedValue({ modelId: 'openai/gpt-4o' });
+    vi.stubEnv('RESEARCH_FAST_MODEL', 'google/gemini-3.5-flash');
+    const selected = await withChatContext({ sessionModel: { provider: 'openrouter', modelId: 'z-ai/glm-5.2' } }, resolveResearchFastModel);
+    expect(selected).toEqual({ provider: 'openrouter', modelId: 'openai/gpt-4o' });
+    const shown = (await describeSiteWorkloads()).find(w => w.id === 'research-fast');
+    expect(shown?.effectiveModelId).toBe(selected.modelId);
+  });
+
+  it('honours an OpenRouter chat selection when research has no saved choice', async () => {
+    const selected = { provider: 'openrouter' as const, modelId: 'openai/gpt-4o' };
+    expect(await withChatContext({ sessionModel: selected }, resolveResearchFastModel)).toEqual(selected);
+  });
+
+  it('inherits an OpenRouter site default rather than Gemini', async () => {
+    vi.mocked(resolveDefaultModel).mockResolvedValue({ provider: 'openrouter', modelId: 'openai/gpt-oss-120b' });
+    expect((await resolveResearchFastModel()).modelId).toBe('openai/gpt-oss-120b');
+  });
+
+  it('retains the explicit legacy environment choice', async () => {
+    vi.stubEnv('RESEARCH_FAST_MODEL', 'openai/gpt-4o');
+    expect((await resolveResearchFastModel()).modelId).toBe('openai/gpt-4o');
+  });
+
+  it('requests a compatible selection instead of silently switching providers', async () => {
+    await expect(resolveResearchFastModel()).rejects.toThrow('Select an OpenRouter model');
+    expect(await workloadBlockReason(wl('research-fast'), 'codex/gpt-5.6-terra')).toMatch(/OpenRouter/);
+    expect(await workloadBlockReason(wl('research-fast'), 'openai/gpt-4o')).toBeNull();
   });
 });

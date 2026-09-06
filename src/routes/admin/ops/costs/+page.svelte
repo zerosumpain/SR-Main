@@ -175,6 +175,8 @@
    *  beneath the activity rather than in the last cell — in the cell it pushed
    *  the table 775px wider than its own scroller and the Save button sat off
    *  the right edge. */
+  let researchSwitching = $state<string | null>(null);
+  const researchWorkloads = $derived(data.workloads.site.filter((w) => w.id === 'research-fast' || w.id === 'research-deep'));
   let switching = $state<string | null>(null);
   const toggleSwitch = (k: string) => (switching = switching === k ? null : k);
 
@@ -367,6 +369,35 @@
     {/if}
   </section>
 
+  <section class="nm-sec" id="research-models" aria-label="Research models">
+    <div class="nm-sec-hd"><span class="sr-label-tight">Research models</span></div>
+    <p class="sec-lede">Choose the model for each research tier. Saved choices apply to subsequent calls; past spend stays on the model that incurred it.</p>
+    {#each researchWorkloads as w (w.id)}
+      <div class="research-model-row">
+        <div>
+          <strong>{w.label}</strong>
+          <code>{w.effectiveModelId}</code>
+          <span class="research-note">{w.source === 'pinned' ? 'Selected for research' : w.source === 'env' ? 'Environment setting' : 'Follows site default'}</span>
+          {#if w.id === 'research-fast' && w.effectiveModelId.startsWith('codex/')}
+            <span class="research-note">Select an OpenRouter model to use Instant, Scan and Brief.</span>
+          {/if}
+        </div>
+        <button class="nm-link-btn" aria-label={`Change ${w.label} model`} aria-expanded={researchSwitching === w.id} onclick={() => researchSwitching = researchSwitching === w.id ? null : w.id}>Change model</button>
+      </div>
+      {#if researchSwitching === w.id}
+        <p class="sec-lede">{w.reason}</p>
+        <WorkloadModelSwitch
+          workload={w}
+          catalogue={data.catalogue}
+          currentModelId={w.effectiveModelId}
+          usage={modelUsage}
+          onchanged={() => { researchSwitching = null; void invalidateAll(); }}
+          onclose={() => researchSwitching = null}
+        />
+      {/if}
+    {/each}
+  </section>
+
   <!-- ── Trend ──────────────────────────────────────────────────────────── -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
@@ -452,6 +483,8 @@
                   >
                     {switching === r.key ? 'close' : 'change model'}
                   </button>
+                {:else if r.key === 'source:research'}
+                  <a class="nm-link-btn" href="#research-models">Research models</a>
                 {:else}
                   <span class="per-call">{r.source === 'unregistered' ? 'unregistered' : 'untagged'}</span>
                 {/if}
@@ -679,6 +712,14 @@
 </PageWrap>
 
 <style>
+  #research-models { scroll-margin-top: 7rem; }
+  .research-note { font-size: var(--fs-body-sm); color: var(--text-muted); }
+  .research-model-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--line-hair); }
+  .research-model-row > div { display: grid; gap: 0.25rem; min-width: 0; }
+  .research-model-row code { overflow-wrap: anywhere; }
+  .research-model-row button { flex-shrink: 0; }
+  @media (max-width: 600px) { .research-model-row { align-items: flex-start; flex-direction: column; } }
+
   .filter-row {
     display: flex;
     align-items: center;
