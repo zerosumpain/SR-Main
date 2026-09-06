@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeHoverLayout, CARD_W } from './entity-hover.svelte';
+import { computeHoverLayout, constrainPanel, CARD_W } from './entity-hover.svelte';
 
 // The file this tests has always claimed to be covered here. It was not — this
 // file did not exist, and the bug below shipped because of it: a card anchored
@@ -98,5 +98,29 @@ describe('computeHoverLayout', () => {
         }
       }
     }
+  });
+});
+
+// Tiny viewports and manual movement must preserve access to the whole panel.
+describe('small viewports and dragging', () => {
+  it('caps the card even when the viewport is shorter than the preferred minimum', () => {
+    const l = computeHoverLayout(point(300, 90), 800, { w: 320, h: 160 });
+    const { top, bottom } = edges(l, 800, 160);
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(bottom).toBeLessThanOrEqual(148);
+  });
+
+  it('keeps a responsive card inside a phone viewport', () => {
+    const l = computeHoverLayout(point(380, 300), 800, { w: 390, h: 844 });
+    expect(l.left + Math.min(CARD_W, 390 - 24)).toBeLessThanOrEqual(378);
+  });
+
+  it('bounds movement and recovers after content growth or window shrink', () => {
+    expect(constrainPanel({ left: -300, top: -100 }, { w: 380, h: 400 }, VIEW))
+      .toEqual({ left: 12, top: 12 });
+    expect(constrainPanel({ left: 1400, top: 880 }, { w: 380, h: 400 }, VIEW))
+      .toEqual({ left: 1048, top: 488 });
+    expect(constrainPanel({ left: 1048, top: 488 }, { w: 366, h: 436 }, { w: 390, h: 460 }))
+      .toEqual({ left: 12, top: 12 });
   });
 });
