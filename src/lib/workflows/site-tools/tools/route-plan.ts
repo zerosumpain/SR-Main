@@ -22,7 +22,7 @@ register({
   name: 'route_plan',
   destructive: false,
   description:
-    'Plan a real running, road-cycling, mountain-bike or hiking route with openrouteservice and rank the candidates on loop quality (retracing, out-and-back spurs, surface, climbing). Returns the top 3 with GPX. Use this instead of writing coordinates yourself. Omit targetDistanceKm to let recent training history choose the distance.',
+    'Plan a real running, road-cycling, mountain-bike or hiking route with openrouteservice and rank the candidates on loop quality (retracing, out-and-back spurs, surface, climbing). Returns the top 3 with GPX. Use this instead of writing coordinates yourself. Omit targetDistanceKm to let recent training history choose the distance. This is for TRAINING — a circular route scored on terrain. For simply getting from one place to another, with journey time and live traffic, use route_directions.',
   parameters: {
     type: 'object',
     properties: {

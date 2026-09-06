@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kindFromOsm, pickName } from './geocode';
+import { kindFromMapboxCategories, kindFromOsm, pickName } from './geocode';
 
 describe('pickName', () => {
   it('prefers the feature name — that is what a person calls it', () => {
@@ -56,5 +56,37 @@ describe('kindFromOsm', () => {
     // an empty field and accepts a filled one without reading it.
     expect(kindFromOsm('highway', 'bus_stop')).toBeNull();
     expect(kindFromOsm(null, null)).toBeNull();
+  });
+});
+
+describe('kindFromMapboxCategories', () => {
+  it('maps a POI category to a kind, trying every category not just the first', () => {
+    // Mapbox orders them broad-to-specific, so a gym arrives as
+    // ["fitness centre", "gym"] and reading only [0] would miss it.
+    expect(kindFromMapboxCategories(['fitness centre', 'gym'])).toBe('gym');
+    expect(kindFromMapboxCategories(['coffee shop'])).toBe('cafe');
+    expect(kindFromMapboxCategories(['supermarket'])).toBe('shop');
+    expect(kindFromMapboxCategories(['office'])).toBe('work');
+  });
+
+  it('does not read a compound category as its second word', () => {
+    // A wrong pre-selected kind is worse than an unset one: the owner accepts a
+    // filled field and corrects an empty one, and what they accept becomes a
+    // memory. Substring matching turned all four of these into confident,
+    // wrong answers.
+    expect(kindFromMapboxCategories(['post office'])).toBeNull();
+    expect(kindFromMapboxCategories(['funeral home'])).toBeNull();
+    expect(kindFromMapboxCategories(['nursing home'])).toBeNull();
+    expect(kindFromMapboxCategories(['driving school'])).toBeNull();
+  });
+
+  it('shrugs at an unknown or empty category rather than guessing', () => {
+    expect(kindFromMapboxCategories([])).toBeNull();
+    expect(kindFromMapboxCategories(['nightclub', 'lighthouse'])).toBeNull();
+  });
+
+  it('is insensitive to case and stray whitespace', () => {
+    expect(kindFromMapboxCategories(['  Coffee Shop '])).toBe('cafe');
+    expect(kindFromMapboxCategories(['GROCERY  STORE'])).toBe('shop');
   });
 });
