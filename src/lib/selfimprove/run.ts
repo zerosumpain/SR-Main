@@ -301,7 +301,7 @@ export async function runImprovementNow(
           state.signals = await gatherSignals();
           try {
             const { autoGroomBacklog } = await import('$lib/workflows/backlog-grooming.server');
-            const epics = await autoGroomBacklog();
+            const { epics } = await autoGroomBacklog();
             return [{ kind: 'themes_found' as const, detail: `${epics.length} epics automatically reconciled with their deliverables` }];
           } catch (err) {
             console.error('[selfimprove] epic reconciliation failed:', errMsg(err));

@@ -1172,12 +1172,29 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true });
       }
 
+      /**
+       * Rule on one suggestion, or on a batch of them.
+       *
+       * `ids` exists because the review lane offers "apply every merge", and a
+       * hundred single requests is a hundred board rebuilds. One request takes
+       * the grooming lock once; a suggestion invalidated by an earlier decision
+       * in the same batch comes back in `failed` rather than being forced.
+       */
       case 'backlog_grooming_decide': {
         const decision = str('decision');
         if (decision !== 'apply' && decision !== 'keep') return json({ error: 'decision must be apply or keep' }, { status: 400 });
-        const { decideBacklogGrooming } = await import('$lib/selfimprove/epic-backlog.server');
-        await decideBacklogGrooming(str('id'), decision);
-        return json({ ok: true });
+        const ids = strList('ids', 'id');
+        if (ids.length === 0) return json({ error: 'id or ids is required' }, { status: 400 });
+        const { decideBacklogGroomingMany } = await import('$lib/workflows/backlog-grooming.server');
+        const res = await decideBacklogGroomingMany(ids, decision);
+        if (res.failed.length === 0) return json({ ok: true, ...res });
+        const [first] = res.failed;
+        const more = res.failed.length - 1;
+        return json({
+          ok: false,
+          ...res,
+          error: more === 0 ? first.error : `${first.error} (and ${more} other${more === 1 ? '' : 's'})`,
+        });
       }
 
       case 'epic_update': {
