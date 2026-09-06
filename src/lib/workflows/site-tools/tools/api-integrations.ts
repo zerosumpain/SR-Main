@@ -1,3 +1,5 @@
+import { rankCapabilities } from '$lib/utils/capability-ranking';
+import { parameterSchema } from '$lib/apis/integration-contract';
 // src/lib/workflows/site-tools/tools/api-integrations.ts
 //
 // `apis` toolset, integration-authoring half. Where `api_search`/`api_call` let
@@ -20,6 +22,7 @@ import { register } from '../registry-internal';
 import type { ToolDefinition, ToolResult } from '../registry-internal';
 import { toToolError } from './_datastore-errors';
 import {
+  IntegrationError,
   callIntegration,
   deleteIntegration,
   getIntegration,
@@ -38,6 +41,8 @@ const PARAM_SCHEMA = {
     type: 'object',
     properties: {
       name: { type: 'string' },
+      type: { type: 'string', enum: ['string', 'number', 'integer', 'boolean', 'object', 'array'] },
+      enum: { type: 'array', items: { type: ['string', 'number', 'boolean'] } },
       in: { type: 'string', enum: ['path', 'query', 'body', 'header'] },
       required: { type: 'boolean' },
       description: { type: 'string' },
@@ -57,6 +62,9 @@ const OUTPUT_SCHEMA = {
     properties: {
       name: { type: 'string', description: 'Plain identifier, e.g. remaining' },
       expr: { type: 'string' },
+      type: { type: 'string', enum: ['string', 'number', 'boolean', 'object', 'array'] },
+      required: { type: 'boolean', description: 'Missing values are incomplete unless explicitly optional.' },
+      emptyWhenMissing: { type: 'boolean', description: 'For array outputs only: enable only when provider documentation says an absent list means zero records.' },
       unit: { type: 'string' },
       description: { type: 'string' },
     },
@@ -67,7 +75,8 @@ const OUTPUT_SCHEMA = {
 export async function handleIntegrationList(args: Record<string, unknown>): Promise<ToolResult> {
   try {
     const detail = args?.detail === true;
-    const rows = await listIntegrationsForPicker();
+    const all = await listIntegrationsForPicker();
+    const rows = args.query ? rankCapabilities(all.map(i => ({ ...i, name: `${i.key} ${i.name} ${i.api}`, original: i })), String(args.query), Number(args.limit) || 12).map(i => i.original) : all;
     return {
       success: true,
       data: {
@@ -85,8 +94,10 @@ export async function handleIntegrationList(args: Record<string, unknown>): Prom
           authKind: i.authKind,
           secretHandle: i.secretHandle,
           outputs: i.outputs.map((o) => o.name),
-          ...(detail ? { params: i.params, outputExprs: i.outputs } : {}),
-          ...(i.params.length && !detail ? { params: i.params.map((p) => `${p.name} (${p.in})`) } : {}),
+          inputSchema: parameterSchema(i.params),
+          call: { tool: 'api_integration_call', args: { key: i.key, params: {} } },
+          ...(detail || args.query ? { params: i.params, outputExprs: i.outputs } : {}),
+          ...(i.params.length && !detail && !args.query ? { params: i.params.map((p) => `${p.name} (${p.in})`) } : {}),
         })),
       },
     };
@@ -139,7 +150,7 @@ async function runIntegration(args: Record<string, unknown>, includeSample: bool
       return {
         success: false,
         error: result.error ?? 'the call failed',
-        data: { integration: result.integration, status: result.status, url: result.url, json: result.json },
+        data: { integration: result.integration, status: result.status, url: result.url, json: result.json, outcome: 'request_failed', interpretation: 'This request failed. It does not establish an outage of other operations. Use documented recovery, not guessed endpoints.' },
       };
     }
 
@@ -155,10 +166,12 @@ async function runIntegration(args: Record<string, unknown>, includeSample: bool
         status: result.status,
         url: result.url,
         values: result.values,
+        response: result.response,
         ...(sample !== undefined ? { sample } : { json: result.json }),
       },
     };
   } catch (err) {
+    if (err instanceof IntegrationError && err.inputSchema) return { success: false, error: err.message, data: { outcome: 'invalid_parameters', inputSchema: err.inputSchema } };
     return toToolError(err, 'integration error');
   }
 }
@@ -188,10 +201,10 @@ export const apiIntegrationTools: ToolDefinition[] = [
   {
     name: 'api_integration_list',
     description:
-      'List the recorded API integrations — the register of named, reusable API calls (each is one method + path + params + named outputs on a catalogued API). Check here FIRST when asked for external data: if an integration already answers the question, just call it with api_integration_call. Pass detail:true for full param/output specs.',
+      'List the recorded API integrations — the register of named, reusable API calls (each is one method + path + params + named outputs on a catalogued API). Use query to find a matching saved operation only when its key is not already known. If discovery already supplied a key and parameter schema, call api_integration_call directly. Pass detail:true for full param/output specs.',
     parameters: {
       type: 'object',
-      properties: { detail: { type: 'boolean', description: 'Include full param and output-expression specs.' } },
+      properties: { query: { type: 'string', description: 'Question, integration name or domain to match; returns matching callable contracts.' }, limit: { type: 'integer', minimum: 1, maximum: 100 }, detail: { type: 'boolean', description: 'Include full param and output-expression specs.' } },
     },
     category: 'APIs',
     toolset: 'apis',

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+vi.mock('$lib/apis/integration-discovery', () => ({ discoverIntegrations: async () => [] }));
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { JKAI_EXTENDED_TOOL, dispatchMetaTool } from './meta-tool';
 import { ESSENTIAL_TOOL_NAMES } from './essentials';
 import { listMcpTools } from './server';
