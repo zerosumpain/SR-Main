@@ -49,6 +49,7 @@ export function localDayOf(now = new Date()): string {
 export interface IntelStageResult {
   stage:
     | 'gmail'
+    | 'mail-relevance'
     | 'mail-rules'
     | 'embeddings'
     | 'resolve'

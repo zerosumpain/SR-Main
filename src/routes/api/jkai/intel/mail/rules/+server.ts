@@ -26,6 +26,7 @@ import {
   saveBacktest,
   seedMailRules,
   SEED_RULE,
+  RELEVANCE_SEED_RULE,
 } from '$lib/jkai/intel/mail-rules/store';
 import { backtestRule, judgeBacktest, type CorpusNote } from '$lib/jkai/intel/mail-rules/backtest';
 import { proposeMailRules } from '$lib/jkai/intel/mail-rules/propose';
@@ -55,7 +56,7 @@ export const GET: RequestHandler = async () => {
   const rules = await listMailRules();
   return json({
     rules: rules.map((r) => ({ ...r, explanation: describeCondition(r.condition) })),
-    seedAvailable: !rules.some((r) => r.key === SEED_RULE.key),
+    seedAvailable: ![SEED_RULE.key, RELEVANCE_SEED_RULE.key].every((k) => rules.some((r) => r.key === k)),
   });
 };
 
@@ -72,11 +73,13 @@ export const POST: RequestHandler = async ({ request }) => {
   if (action === 'seed') {
     const created = await seedMailRules();
     if (created) {
-      // Backtest it immediately — a proposal the owner cannot see the numbers
+      // Backtest them immediately — a proposal the owner cannot see the numbers
       // for is a proposal they cannot responsibly approve.
       const [corpus, decisions] = await Promise.all([loadCorpus(), ownerDecisions()]);
-      const backtest = backtestRule(SEED_RULE, corpus, decisions, { now: Date.now() });
-      await saveBacktest(SEED_RULE.key, backtest);
+      const now = Date.now();
+      for (const seed of [SEED_RULE, RELEVANCE_SEED_RULE]) {
+        await saveBacktest(seed.key, backtestRule(seed, corpus, decisions, { now }));
+      }
     }
     return json({ created, rules: await listMailRules() });
   }

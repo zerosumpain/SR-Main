@@ -54,7 +54,29 @@ export interface QueueRow {
   /** Why it scored — shown on the row so a suggestion is never a black box. */
   reasons: string[];
   gmailUrl: string | null;
+  /** Anchored entities this thread names, from ./mail-relevance. Empty until
+   *  the thread has been scored, and empty is also the honest answer for a
+   *  thread that names nothing the graph knows. */
+  graphNames: string[];
+  graphHits: number;
+  graphSimilarity: number;
 }
+
+/**
+ * Similarity at which a thread reads as being about the graph's own material.
+ *
+ * MEASURED, not chosen. Over 300 pending threads on production, nearest-entity
+ * similarity runs: min 0.343, p25 0.469, median 0.505, p75 0.554, p90 0.602,
+ * max 0.715 (2026-09-06). The first draft of this constant was 0.55 — which is
+ * the p75 mark, so it would have fired on a QUARTER of the entire queue while
+ * reading like a strong signal.
+ *
+ * 0.60 is the top decile. Note that the whole range is narrow: a note embeds
+ * prose and an entity embeds a name plus a short summary, so the comparison is
+ * compressed and carries far less signal than the lexical half. It is worth one
+ * point of nudge and no more, and no seed rule admits on it alone.
+ */
+export const STRONG_SIMILARITY = 0.6;
 
 /**
  * How much this thread looks like something worth having in the graph.
@@ -78,6 +100,19 @@ export function scoreThread(facts: MailFacts): { score: number; reasons: string[
   if (facts.ownerReplied) add(4, 'you replied');
   if (facts.twoWay) add(3, 'two-way conversation');
   if (facts.gmailImportant) add(3, 'Gmail marked it important');
+
+  // What it has to do with the graph. Weighted to sit alongside "you replied"
+  // rather than above it: naming something you watch is strong evidence, but a
+  // conversation you took part in is still the surest thing in the mailbox.
+  //
+  // The IMPORTANCE of the hit leads, not the count. Forty mentions of one
+  // passing entity is a mailshot; two mentions of something on the watchlist is
+  // the email this whole axis exists to find.
+  if (facts.graphTopHitWeight >= 3) add(4, 'names something you watch');
+  else if (facts.graphTopHitWeight === 2) add(2, 'names a well-corroborated entity');
+  else if (facts.graphTopHitWeight === 1) add(1, 'names something in the graph');
+  if (facts.graphEntityHits >= 3) add(2, `names ${facts.graphEntityHits} things in the graph`);
+  if (facts.graphSimilarity >= STRONG_SIMILARITY) add(1, 'reads like material already in the graph');
 
   if (facts.emailKind === 'correspondence') add(2, 'from an ordinary address');
   else if (facts.emailKind === 'bulk') add(-3, 'bulk sender');
@@ -121,6 +156,11 @@ export function toQueueRow(note: QueueNote, now: number): QueueRow {
     score,
     reasons,
     gmailUrl: threadId ? `https://mail.google.com/mail/u/0/#all/${threadId}` : null,
+    graphNames: Array.isArray((meta.graphRelevance as { names?: unknown } | undefined)?.names)
+      ? ((meta.graphRelevance as { names: unknown[] }).names.map((n) => String(n)))
+      : [],
+    graphHits: facts.graphEntityHits,
+    graphSimilarity: facts.graphSimilarity,
   };
 }
 
