@@ -71,7 +71,7 @@ export async function decideBacklogGrooming(id: string, decision: 'apply' | 'kee
     const old = record!.data as unknown as EpicData;
     await upsertRecord(COLLECTIONS.epics, { key: epic.slug, data: asData({ ...old,
       groomingOverrides: [...new Set([...(old.groomingOverrides ?? []), suggestion.itemId])],
-      groomingKept: [...new Set([...(old.groomingKept ?? []), id])], updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }) }, SYSTEM_ACTOR);
     return;
   }
@@ -149,7 +149,6 @@ export async function overrideBacklogGrooming(itemId: string, keepSeparate: bool
   for (const meta of saved.filter((e) => e.slug === epic.slug || e.groomingOverrides?.includes(itemId) || e.groomingHistory?.some((a) => a.itemId === itemId))) {
     await upsertRecord(COLLECTIONS.epics, { key: meta.slug, data: asData({ ...meta,
       groomingOverrides: [...new Set([...(meta.groomingOverrides ?? []).filter((id) => id !== itemId), ...(keepSeparate ? [itemId] : [])])],
-      groomingKept: keepSeparate ? meta.groomingKept : [],
     }) }, SYSTEM_ACTOR);
   }
   if (!keepSeparate || !actions.length) return;
