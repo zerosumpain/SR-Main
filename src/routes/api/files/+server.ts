@@ -1,22 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { db } from '$lib/db';
-import { workflowFiles } from '$lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { listFilesWithIndex } from '$lib/file-index/list';
 
+// `disk_path` is the one column that never leaves the server.
 export const GET: RequestHandler = async () => {
-  const rows = await db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt));
+  const files = await listFilesWithIndex();
   return json({
-    files: rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      description: r.description,
-      mimeType: r.mimeType,
-      sizeBytes: r.sizeBytes,
-      permissions: r.permissions,
-      uploadedBy: r.uploadedBy,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-    })),
+    files: files.map(({ diskPath: _diskPath, contentHash: _hash, ...rest }) => rest),
   });
 };
