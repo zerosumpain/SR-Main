@@ -41,7 +41,14 @@ interface Usage {
   events: number;
 }
 
-/** Stamps off the assistant rows, newest first. */
+/**
+ * Stamps off the assistant rows, newest first — and whether the NEWEST
+ * assistant row is one of them. "Given last turn" must describe the last
+ * reply, not the last reply that happened to carry a stamp: every
+ * `generalChat` caller now stamps, but a row written by an older build, or
+ * by a path that failed before persisting metadata, must read as
+ * "not recorded" rather than being silently skipped over.
+ */
 async function readStamps(conversationId: string) {
   const rows = await db
     .select({ id: orchestratorChats.id, createdAt: orchestratorChats.createdAt, metadata: orchestratorChats.metadata })
@@ -50,10 +57,12 @@ async function readStamps(conversationId: string) {
     .orderBy(desc(orchestratorChats.createdAt))
     .limit(200);
   const stamped: Array<{ at: Date; stamp: MemoryTurnStamp }> = [];
-  for (const r of rows) {
+  let newestIsStamped = false;
+  rows.forEach((r, i) => {
     const meta = (r.metadata ?? {}) as { memory?: Partial<MemoryTurnStamp> };
     const m = meta.memory;
-    if (!m || !Array.isArray(m.served)) continue;
+    if (!m || !Array.isArray(m.served)) return;
+    if (i === 0) newestIsStamped = true;
     stamped.push({
       at: r.createdAt,
       stamp: {
@@ -63,8 +72,31 @@ async function readStamps(conversationId: string) {
         ...(m.unavailable ? { unavailable: true } : {}),
       },
     });
+  });
+  return { stamped, newestIsStamped };
+}
+
+/**
+ * Retrieval is an embedding call — remote, uncached, paid. The mode re-reads
+ * on every thread switch, completed turn and drill action, so the reading
+ * for one conversation REVISION (its updatedAt + newest message) is kept for
+ * a few minutes rather than re-embedded each time the panel blinks.
+ */
+const RELEVANT_TTL_MS = 10 * 60 * 1000;
+const RELEVANT_CACHE_MAX = 100;
+type RelevantRows = Awaited<ReturnType<typeof retrieveMemories>>;
+const relevantCache = new Map<string, { at: number; rows: RelevantRows }>();
+
+async function relevantFor(key: string, query: string): Promise<RelevantRows> {
+  const hit = relevantCache.get(key);
+  if (hit && Date.now() - hit.at < RELEVANT_TTL_MS) return hit.rows;
+  const rows = await retrieveMemories(query, undefined, RELEVANT_LIMIT).catch(() => [] as RelevantRows);
+  if (relevantCache.size >= RELEVANT_CACHE_MAX) {
+    const oldest = [...relevantCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) relevantCache.delete(oldest[0]);
   }
-  return stamped;
+  relevantCache.set(key, { at: Date.now(), rows });
+  return rows;
 }
 
 /** Memory tool calls off the recorded traces, newest first. */
@@ -125,16 +157,21 @@ function toRow(
   };
 }
 
-export async function composeThreadMemory(conversationId: string): Promise<ThreadMemoryPayload | null> {
+export async function composeThreadMemory(
+  conversationId: string,
+  /** `relevant: false` skips retrieval — the drills for served / thread / changed do not need it. */
+  options: { relevant?: boolean } = {},
+): Promise<ThreadMemoryPayload | null> {
+  const wantRelevant = options.relevant !== false;
   const now = Date.now();
-  const [[conversation], recentDesc, stamps, events] = await Promise.all([
+  const [[conversation], recentDesc, { stamped: stamps, newestIsStamped }, events] = await Promise.all([
     db
-      .select({ id: conversations.id, title: conversations.title, lastMemoryReview: conversations.lastMemoryReview })
+      .select({ id: conversations.id, title: conversations.title, updatedAt: conversations.updatedAt, lastMemoryReview: conversations.lastMemoryReview })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .limit(1),
     db
-      .select({ role: orchestratorChats.role, content: orchestratorChats.content })
+      .select({ id: orchestratorChats.id, role: orchestratorChats.role, content: orchestratorChats.content })
       .from(orchestratorChats)
       .where(eq(orchestratorChats.conversationId, conversationId))
       .orderBy(desc(orchestratorChats.createdAt))
@@ -168,13 +205,23 @@ export async function composeThreadMemory(conversationId: string): Promise<Threa
     .filter((m) => m.role === 'user')
     .map((m) => m.content)
     .join('\n');
-  const relevantQuery = `${conversation.title ?? ''}\n${recentUser}`.trim().slice(-1200);
+  const relevantQuery = wantRelevant ? `${conversation.title ?? ''}\n${recentUser}`.trim().slice(-1200) : '';
 
-  const lastStamp = stamps[0] ?? null;
+  // The last turn is the newest assistant row — or nothing, if that row did
+  // not record what it was given.
+  const lastStamp = newestIsStamped ? (stamps[0] ?? null) : null;
   const servedIds = lastStamp?.stamp.served ?? [];
+  const revisionKey = `${conversationId}:${conversation.updatedAt.toISOString()}:${recentDesc[0]?.id ?? 'empty'}`;
+
+  // Validity: a memory past `validUntil` is not live, whatever `supersededBy`
+  // says — the same rule `retrieveMemories` applies, so the LIVE figure counts
+  // what the prompt can actually be given.
+  const validUntil = sql`(${jkaiMemories.provenance}->>'validUntil')::timestamptz`;
+  const stillValid = sql`(${jkaiMemories.provenance}->>'validUntil' is null or ${validUntil} > now())`;
+  const staleSince = new Date(now - STALE_WINDOW_MS);
 
   const [relevantRows, servedRows, threadRows, changedRows, counts] = await Promise.all([
-    relevantQuery ? retrieveMemories(relevantQuery, undefined, RELEVANT_LIMIT).catch(() => []) : Promise.resolve([]),
+    wantRelevant && relevantQuery ? relevantFor(revisionKey, relevantQuery) : Promise.resolve([] as RelevantRows),
     servedIds.length
       ? db.select().from(jkaiMemories).where(inArray(jkaiMemories.id, servedIds))
       : Promise.resolve([] as MemoryRow[]),
@@ -192,10 +239,12 @@ export async function composeThreadMemory(conversationId: string): Promise<Threa
       .limit(CHANGED_LIMIT),
     db
       .select({
-        live: sql<number>`count(*) filter (where ${jkaiMemories.supersededBy} is null)`,
-        pinned: sql<number>`count(*) filter (where ${jkaiMemories.supersededBy} is null and ${jkaiMemories.provenance}->>'pinned' = 'true')`,
+        live: sql<number>`count(*) filter (where ${jkaiMemories.supersededBy} is null and ${stillValid})`,
+        pinned: sql<number>`count(*) filter (where ${jkaiMemories.supersededBy} is null and ${stillValid} and ${jkaiMemories.provenance}->>'pinned' = 'true')`,
         writtenHere: sql<number>`count(*) filter (where ${jkaiMemories.sourceConversationId} = ${conversationId})`,
-        stale30d: sql<number>`count(*) filter (where ${jkaiMemories.supersededBy} is not null and ${jkaiMemories.updatedAt} >= ${new Date(now - STALE_WINDOW_MS)})`,
+        // Replaced or forgotten in the window, OR expired in the window.
+        stale30d: sql<number>`count(*) filter (where (${jkaiMemories.supersededBy} is not null and ${jkaiMemories.updatedAt} >= ${staleSince})
+          or (${jkaiMemories.supersededBy} is null and ${jkaiMemories.provenance}->>'validUntil' is not null and ${validUntil} <= now() and ${validUntil} >= ${staleSince}))`,
       })
       .from(jkaiMemories)
       .where(personalScope()),

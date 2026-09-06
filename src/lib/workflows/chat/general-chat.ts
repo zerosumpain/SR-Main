@@ -4,7 +4,7 @@ import { answerContract, renderAnswerContract, type AnswerAssessment } from '$li
 import { assessAnswer } from '$lib/jkai/grounding/answer.server';
 import { contextResult } from '$lib/jkai/grounding/evidence';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
-import { selectMemoryLines, type MemorySelection, type MemoryTurnStamp } from '$lib/jkai/memory/contracts';
+import { MEMORY_PROMPT_BUDGET, selectMemoryLines, type MemorySelection, type MemoryTurnStamp } from '$lib/jkai/memory/contracts';
 import { getActivePolicy, renderGlobalGuidance } from '$lib/toolpolicy/policy';
 import { applyCapabilityPolicy, resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // src/lib/workflows/chat/general-chat.ts — full replacement
@@ -271,7 +271,7 @@ interface ChatOptions {
   maxRounds?: number;
 }
 
-const MEMORY_BUDGET = 4000; // max chars for memory section
+const MEMORY_BUDGET = MEMORY_PROMPT_BUDGET; // max chars for memory section — one constant, shared with the rail's gauge
 
 /**
  * The memory evidence for this turn, AND the record of what it contained.

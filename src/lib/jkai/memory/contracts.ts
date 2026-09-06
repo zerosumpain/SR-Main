@@ -30,7 +30,7 @@ export interface MemorySelection {
   retrieved: number;
   chars: number;
 }
-export function selectMemoryLines(rows: RankedMemory[], query: string, budget = 4000): MemorySelection {
+export function selectMemoryLines(rows: RankedMemory[], query: string, budget = MEMORY_PROMPT_BUDGET): MemorySelection {
   const ranked = rows.map(row => ({ row, score: memoryScore(row, query) })).filter(r => Number.isFinite(r.score))
     .sort((a, b) => Number(Boolean(b.row.provenance?.pinned)) - Number(Boolean(a.row.provenance?.pinned)) || b.score - a.score || a.row.id.localeCompare(b.row.id));
   const lines: string[] = [];
@@ -52,7 +52,7 @@ export function selectMemoryLines(rows: RankedMemory[], query: string, budget = 
     chars: used,
   };
 }
-export function renderMemories(rows: RankedMemory[], query: string, budget = 4000): string {
+export function renderMemories(rows: RankedMemory[], query: string, budget = MEMORY_PROMPT_BUDGET): string {
   return selectMemoryLines(rows, query, budget).text;
 }
 
@@ -77,6 +77,9 @@ export interface MemoryTurnStamp {
 
 export type MemoryState = 'forgotten' | 'replaced' | 'expired' | 'expiring' | 'pinned' | 'current';
 export const EXPIRING_WINDOW_MS = 14 * 86400000;
+/** The prompt's memory budget in characters. ONE constant: the chat assembles
+ *  against it, the rail's gauge divides by it, `selectMemoryLines` defaults to it. */
+export const MEMORY_PROMPT_BUDGET = 4000;
 
 export function memoryState(
   row: { supersededBy?: string | null; provenance?: MemoryProvenance | null },
@@ -106,6 +109,15 @@ export const MEMORY_STATE_LABEL: Record<MemoryState, string> = {
 /** A stale memory is one the model should no longer be given as current. */
 export function isStaleMemoryState(state: MemoryState): boolean {
   return state === 'forgotten' || state === 'replaced' || state === 'expired';
+}
+
+/** The state as a tone, decided ONCE for the rail, the drill and the modal. */
+export type MemoryTone = 'default' | 'good' | 'warn' | 'bad' | 'accent';
+export function memoryStateTone(state: MemoryState): MemoryTone {
+  if (isStaleMemoryState(state)) return 'bad';
+  if (state === 'expiring') return 'warn';
+  if (state === 'pinned') return 'accent';
+  return 'default';
 }
 
 // ── Tool verbs ────────────────────────────────────────────────────────────

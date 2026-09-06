@@ -32,14 +32,24 @@ Return a JSON array (no markdown, no code fences):
 
 Return an empty array [] if nothing is worth remembering.`;
 
-export async function reviewConversation(conversationId: string): Promise<number> {
+/**
+ * `strict` is for the on-demand path (the inspector's "review now"): the
+ * background sweep wants a failure to score zero and move on to the next
+ * conversation, but a person who pressed the button must not be told
+ * "nothing new to remember" because the gateway was down.
+ */
+export async function reviewConversation(conversationId: string, opts: { strict?: boolean } = {}): Promise<number> {
+  const fail = (message: string): number => {
+    if (opts.strict) throw new Error(message);
+    return 0;
+  };
   // Get the conversation
   const [conv] = await db.select()
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1);
 
-  if (!conv) return 0;
+  if (!conv) return fail('No such conversation');
 
   // Get messages since last review
   const conditions = [eq(orchestratorChats.conversationId, conversationId)];
@@ -97,7 +107,7 @@ export async function reviewConversation(conversationId: string): Promise<number
     );
   } catch (err) {
     console.error(`[memory-review] LLM call failed for conversation ${conversationId}:`, err instanceof Error ? err.message : err);
-    return 0;
+    return fail(`The extraction model call failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   const raw = response.choices[0]?.message?.content?.trim() || '[]';
@@ -106,7 +116,7 @@ export async function reviewConversation(conversationId: string): Promise<number
     extractions = JSON.parse(raw);
   } catch {
     console.warn(`[memory-review] Failed to parse LLM output for conversation ${conversationId}:`, raw.slice(0, 200));
-    return 0;
+    return fail('The extraction model returned something that was not a list of facts');
   }
 
   if (!Array.isArray(extractions) || extractions.length === 0) {

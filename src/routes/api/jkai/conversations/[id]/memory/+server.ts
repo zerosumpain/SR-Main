@@ -18,7 +18,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const body = (await request.json().catch(() => ({}))) as { action?: unknown };
   if (body.action !== 'review') return json({ error: 'Unknown action' }, { status: 400 });
   try {
-    const saved = await reviewConversation(params.id);
+    const saved = await reviewConversation(params.id, { strict: true });
     return json({ ok: true, saved });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'Review failed' }, { status: 500 });

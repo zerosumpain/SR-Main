@@ -65,7 +65,12 @@ register({
     const query = args.query as string | undefined;
     const category = args.category as string | undefined;
 
-    const rows = await retrieveMemories(query, category, 50, { asOf: args.asOf as string | undefined });
+    const retrieved = await retrieveMemories(query, category, 50, { asOf: args.asOf as string | undefined });
+    // The 1,536-float embedding is retrieval's business, not the model's: it
+    // would cost ~2.5KB of context per row and push a 16-row recall past the
+    // trace's 40KB result cap, at which point the recorded step keeps no ids
+    // at all and the thread inspector cannot say which memories were recalled.
+    const rows = retrieved.map(({ embedding: _embedding, ...row }) => row);
 
     const { buildKnowledgeContext } = await import('$lib/jkai/intel/context');
     const intelligence = query ? await buildKnowledgeContext(query) : '';

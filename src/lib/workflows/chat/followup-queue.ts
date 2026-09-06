@@ -282,7 +282,7 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
       priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
     }
 
-    const { response } = await generalChat({ text: followUpMessage }, recentHistory, {
+    const { response, memory: turnMemory } = await generalChat({ text: followUpMessage }, recentHistory, {
       conversationId: item.conversationId,
       modelContext,
       sessionModel,
@@ -291,7 +291,13 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
     });
 
     // Save to DB
-    await db.insert(orchestratorChats).values({ conversationId: item.conversationId, role: 'assistant', content: response });
+    // Stamped like the web route, so the inspector's Memory mode can read this turn.
+    await db.insert(orchestratorChats).values({
+      conversationId: item.conversationId,
+      role: 'assistant',
+      content: response,
+      metadata: turnMemory ? { memory: turnMemory } : undefined,
+    });
     await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, item.conversationId));
 
     // Push via SSE to web UI

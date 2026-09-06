@@ -1,31 +1,18 @@
 <script lang="ts">
   /**
-   * The thread inspector's MEMORY mode.
-   *
-   * What jkai carries into this thread that the thread did not say — and,
-   * the half that was missing everywhere, whether any of it was USED. Four
-   * cells, each a different recorded fact rather than four views of one list:
-   *
-   *   GIVEN LAST TURN   the memories the last reply was handed at assembly,
-   *                     read from the stamp the chat route writes
-   *   RELEVANT NOW      what retrieval returns for the thread's recent words —
-   *                     what the next turn would most likely be given
-   *   THIS THREAD       what this thread wrote, recalled or forgot, from its
-   *                     recorded tool chains and the memory rows' provenance
-   *   RECENTLY CHANGED  what moved in the store, with the state vocabulary:
-   *                     current / pinned / replaced / forgotten / expiring
-   *
-   * "Used" is never inferred. A thread from before the stamp existed says
-   * "not recorded", and that is the honest reading.
-   *
-   * Same cell grammar as the rest of the column; same two gestures as the
-   * context cards: click selects and offers "ask about this", double-click
-   * drills. Actions live in the drill, not here — the column stays a reading.
+   * The thread inspector's MEMORY mode: what jkai carries into this thread,
+   * and — the half nothing recorded — whether it was USED. Four cells, each a
+   * different recorded fact: GIVEN LAST TURN (the stamp the chat route
+   * writes), RELEVANT NOW (retrieval over the recent words), THIS THREAD
+   * (its own memory tool calls and writes), RECENTLY CHANGED (the store, with
+   * the state vocabulary). "Used" is never inferred: a thread from before the
+   * stamp says "not recorded". Click selects → "ask about this"; double-click
+   * drills. Actions live in the drill — the column stays a reading.
    */
   import { untrack } from 'svelte';
   import { hub } from '$lib/jkai/hub-bus.svelte';
   import { threadMemoryPayloadSchema, type ThreadMemoryPayload, type ThreadMemoryRow } from '$lib/jkai/memory/thread';
-  import { MEMORY_STATE_LABEL } from '$lib/jkai/memory/contracts';
+  import { MEMORY_STATE_LABEL, memoryStateTone } from '$lib/jkai/memory/contracts';
   import { relativeStamp } from '$lib/jkai/context-panel/drill';
 
   let {
@@ -113,12 +100,7 @@
     selected = selected?.id === row.id ? null : row;
   }
 
-  function stateTone(row: ThreadMemoryRow): string {
-    if (row.state === 'forgotten' || row.state === 'replaced' || row.state === 'expired') return 'bad';
-    if (row.state === 'expiring') return 'warn';
-    if (row.state === 'pinned') return 'accent';
-    return 'default';
-  }
+  const stateTone = (row: ThreadMemoryRow) => memoryStateTone(row.state);
 
   const gaugePct = $derived(
     payload?.lastTurn ? Math.max(0, Math.min(100, Math.round((payload.lastTurn.chars / payload.lastTurn.budget) * 100))) : 0,
@@ -180,7 +162,7 @@
     {#if !payload.lastTurn}
       <p class="ins-note">
         {payload.recorded
-          ? 'The last turn recorded nothing.'
+          ? 'The latest reply did not record what it was given — it predates the stamp, or came through a path that failed to keep it. Earlier turns did.'
           : 'Not recorded. Turns before this reading existed carry no record of what they were given; the next reply will.'}
       </p>
     {:else if payload.lastTurn.unavailable}

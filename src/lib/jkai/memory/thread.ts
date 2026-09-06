@@ -97,6 +97,4 @@ export const threadMemoryPayloadSchema = z.object({
 });
 export type ThreadMemoryPayload = z.infer<typeof threadMemoryPayloadSchema>;
 
-/** The prompt budget the chat assembles against — mirrors `MEMORY_BUDGET` in
- *  general-chat. Exported here so the rail's gauge and the prompt agree. */
-export const MEMORY_PROMPT_BUDGET = 4000;
+export { MEMORY_PROMPT_BUDGET } from './contracts';

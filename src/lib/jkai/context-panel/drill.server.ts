@@ -10,7 +10,7 @@
 // `/api/jkai/memory`). Nothing becomes writable through a drill that was not
 // writable already; the drill is a shorter path to the same button.
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
   agentActions,
@@ -29,7 +29,7 @@ import type { ThreadGraph, ThreadGraphNode } from '$lib/jkai/thread-graph';
 import { entityIdOf } from '$lib/jkai/graph-layout';
 import { commitState } from '$lib/deepdive/graph-commit';
 import { memoryLinks } from '$lib/jkai/memory/graph.server';
-import { MEMORY_STATE_LABEL, memoryState } from '$lib/jkai/memory/contracts';
+import { MEMORY_STATE_LABEL, memoryState, memoryStateTone } from '$lib/jkai/memory/contracts';
 import { composeThreadMemory } from '$lib/jkai/memory/thread.server';
 import type { ThreadMemoryRow } from '$lib/jkai/memory/thread';
 import { composeContextPanel } from './compose.server';
@@ -248,6 +248,7 @@ async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId
           meta: `${m.category} · ${MEMORY_STATE_LABEL[memoryState(m)]}`,
           note: relativeStamp(m.updatedAt.toISOString()),
           drill: drillKey({ kind: 'memory', id: m.id }),
+          tone: memoryStateTone(memoryState(m)),
         })),
         empty: 'No memory is linked to this entity.',
       },
@@ -339,7 +340,15 @@ async function researchRunManifest(id: string, target: string): Promise<DrillMan
     db.select({ usd: sql<number>`coalesce(sum(${agentActions.costUsd}), 0)` }).from(agentActions).where(eq(agentActions.sessionId, id)),
     commitState(id).catch(() => null),
   ]);
-  const report = run.report as { executive_summary?: string; ranked_facts?: string[]; knowledge_gaps?: Array<{ question?: string; description?: string }> } | null;
+  const report = run.report as { executive_summary?: string; ranked_facts?: string[]; knowledge_gaps?: Array<{ gap?: string }> } | null;
+  // `ranked_facts` holds fact IDS (postprocess writes `factScores.map(f => f.id)`),
+  // so the text is looked up; the ids alone would render as ten UUIDs.
+  const topFactIds = (report?.ranked_facts ?? []).filter((x): x is string => typeof x === 'string').slice(0, 10);
+  const topFacts = topFactIds.length
+    ? await db.select({ id: facts.id, content: facts.content }).from(facts).where(inArray(facts.id, topFactIds))
+    : [];
+  const factText = new Map(topFacts.map((f) => [f.id, f.content]));
+  const rankedFactLines = topFactIds.map((id) => factText.get(id)).filter((t): t is string => Boolean(t));
   const goals = Array.isArray(run.goals) ? (run.goals as unknown[]).filter((g): g is string => typeof g === 'string') : [];
   const terminal = TERMINAL.has(run.status);
   const paused = run.status === 'paused';
@@ -375,15 +384,9 @@ async function researchRunManifest(id: string, target: string): Promise<DrillMan
   const sections: DrillSection[] = [];
   if (report?.executive_summary) sections.push({ kind: 'prose', id: 'summary', title: 'Executive summary', body: report.executive_summary });
   if (goals.length) sections.push({ kind: 'list', id: 'goals', title: 'Goals', items: goals.slice(0, 12) });
-  if (report?.ranked_facts?.length) sections.push({ kind: 'list', id: 'facts', title: 'Top facts', items: report.ranked_facts.slice(0, 10) });
-  if (report?.knowledge_gaps?.length) {
-    sections.push({
-      kind: 'list',
-      id: 'gaps',
-      title: 'Knowledge gaps',
-      items: report.knowledge_gaps.map((g) => g.question ?? g.description ?? '').filter(Boolean).slice(0, 8),
-    });
-  }
+  if (rankedFactLines.length) sections.push({ kind: 'list', id: 'facts', title: 'Top facts', items: rankedFactLines });
+  const gapLines = (report?.knowledge_gaps ?? []).map((g) => g.gap ?? '').filter(Boolean).slice(0, 8);
+  if (gapLines.length) sections.push({ kind: 'list', id: 'gaps', title: 'Knowledge gaps', items: gapLines });
 
   return finish({
     target,
@@ -657,8 +660,7 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
 // ── Memory ────────────────────────────────────────────────────────────────
 
 function memoryRowOf(r: ThreadMemoryRow): DrillRow {
-  const stateTone: DrillRow['tone'] =
-    r.state === 'forgotten' || r.state === 'replaced' || r.state === 'expired' ? 'bad' : r.state === 'expiring' ? 'warn' : r.state === 'pinned' ? 'accent' : 'default';
+  const stateTone: DrillRow['tone'] = memoryStateTone(r.state);
   return {
     id: r.id,
     label: r.content,
@@ -671,7 +673,8 @@ function memoryRowOf(r: ThreadMemoryRow): DrillRow {
 }
 
 async function memoriesManifest(conversationId: string, filter: 'served' | 'relevant' | 'thread' | 'changed', target: string): Promise<DrillManifest | null> {
-  const payload = await composeThreadMemory(conversationId);
+  // Retrieval (an embedding call) only for the list that is retrieval.
+  const payload = await composeThreadMemory(conversationId, { relevant: filter === 'relevant' });
   if (!payload) return null;
   const titles = {
     served: 'What the last turn was given',
@@ -679,16 +682,26 @@ async function memoriesManifest(conversationId: string, filter: 'served' | 'rele
     thread: 'What this thread wrote, recalled or forgot',
     changed: 'What moved in the store lately',
   } as const;
-  const list = filter === 'served' ? payload.served : filter === 'relevant' ? payload.relevant : filter === 'thread' ? payload.thread.rows : payload.changed;
+  const full = filter === 'served' ? payload.served : filter === 'relevant' ? payload.relevant : filter === 'thread' ? payload.thread.rows : payload.changed;
+  // The section schema caps rows at 60; THREAD can exceed that after a few
+  // wide recalls, and an over-cap manifest would fail to parse — a 500 for a
+  // list, which is worse than a truncated one that says so.
+  const list = full.slice(0, 60);
   const sections: DrillSection[] = [
-    { kind: 'rows', id: filter, title: `${list.length} memor${list.length === 1 ? 'y' : 'ies'}`, rows: list.map(memoryRowOf), empty: filter === 'served' && !payload.recorded ? 'No turn in this thread has recorded what it was given yet.' : 'Nothing here.' },
+    {
+      kind: 'rows',
+      id: filter,
+      title: full.length > list.length ? `${list.length} of ${full.length} memories` : `${list.length} memor${list.length === 1 ? 'y' : 'ies'}`,
+      rows: list.map(memoryRowOf),
+      empty: filter === 'served' && !payload.recorded ? 'No turn in this thread has recorded what it was given yet.' : 'Nothing here.',
+    },
   ];
   if (filter === 'thread' && payload.thread.events.length) {
     sections.push({
       kind: 'rows',
       id: 'events',
       title: 'Tool events in this thread',
-      rows: payload.thread.events.map((e) => ({
+      rows: payload.thread.events.slice(0, 60).map((e) => ({
         id: e.id,
         label: e.summary ?? `${e.verb} via ${e.tool}`,
         meta: e.verb,
@@ -740,7 +753,12 @@ async function memoryManifest(conversationId: string, id: string, target: string
       : Promise.resolve([] as Array<{ id: string; title: string | null }>),
   ]);
   const api = '/api/jkai/memory';
-  const stateTone: DrillFact['tone'] = state === 'forgotten' || state === 'replaced' || state === 'expired' ? 'bad' : state === 'expiring' ? 'warn' : state === 'pinned' ? 'accent' : 'good';
+  const stateTone: DrillFact['tone'] = state === 'current' ? 'good' : memoryStateTone(state);
+  // `memoryLinks` resolves each link to its CANONICAL entity, so two links to
+  // entities since merged into one arrive with the same id — and a keyed
+  // `{#each}` over duplicate ids throws. One row per canonical entity.
+  const seenEntity = new Set<string>();
+  const uniqueLinks = links.filter((l) => !seenEntity.has(l.id) && seenEntity.add(l.id));
   const sections: DrillSection[] = [
     { kind: 'prose', id: 'content', title: 'The memory', body: m.content },
   ];
@@ -755,7 +773,7 @@ async function memoryManifest(conversationId: string, id: string, target: string
     kind: 'rows',
     id: 'entities',
     title: 'Linked entities',
-    rows: links.map((l) => ({ id: l.id, label: l.name, meta: l.method, href: `/jkai/intel/entities/${l.id}`, drill: `entity:${l.id}` })),
+    rows: uniqueLinks.map((l) => ({ id: l.id, label: l.name, meta: l.method, href: `/jkai/intel/entities/${l.id}`, drill: `entity:${l.id}` })),
     empty: 'Not linked to any intelligence entity.',
   });
   sections.push({

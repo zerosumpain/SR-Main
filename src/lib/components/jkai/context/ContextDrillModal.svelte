@@ -3,26 +3,16 @@
    * The drill — what a double-click on the thread inspector opens.
    *
    * It draws a server-composed manifest (`drill.server.ts`) and knows nothing
-   * about research runs, daydream thoughts or memories beyond their shape:
-   * an eyebrow, a title, some facts, some sections, some actions. That is the
-   * whole point — one modal in one register for every segment of the column,
-   * where the alternative was a modal per lens that would drift the way the
-   * rail's three visual registers once did.
+   * about research runs, thoughts or memories beyond their shape: eyebrow,
+   * title, facts, sections, actions. One modal in one register for every
+   * segment of the column; a modal per lens would drift the way the rail's
+   * three visual registers once did. The one embed is the intel `EntityCard`
+   * for `entity` targets, as `KnowledgeGraphModal` does.
    *
-   * The one embed is the intel `EntityCard` for `entity` targets, exactly as
-   * `KnowledgeGraphModal` does: a concept in a thread IS an intel entity, and
-   * the card is the real thing rather than a summary of it.
-   *
-   * Navigation is in place: a row with its own drill key replaces the manifest
-   * and pushes the previous one onto a stack, so "topics → an entity → a
-   * memory about it → the memory's replacement" is four steps in one window
-   * and `← back` retraces them.
-   *
-   * Actions are declared by the server and EXECUTED here: `link`, `ask`
-   * (the context-prompt bridge), `post`, `prompt` (a post that first asks for
-   * one line), `confirm` (two clicks, for anything destructive). After a post
-   * the manifest is re-read, so the button's own effect is visible without
-   * closing the window.
+   * Navigation is in place — a row with its own drill key replaces the
+   * manifest and `← back` retraces the stack. Actions are declared by the
+   * server and EXECUTED here: `link`, `ask`, `post`, `prompt` (one line of
+   * text first), `confirm` (two clicks). After a post the manifest re-reads.
    */
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
@@ -72,8 +62,7 @@
   }
 
   // The prop is the entry point; in-modal navigation is local. `current` is
-  // written here and read by the template, so the read happens untracked —
-  // otherwise this effect would subscribe to its own write.
+  // written here, so the body runs untracked (an effect must not read its own write).
   $effect(() => {
     const key = target;
     untrack(() => {
@@ -200,9 +189,8 @@
     navigate(`entity:${entityId}`);
   }
 
-  // Portal to <body> — a modal inside the rail is clipped by its overflow and
-  // trapped under the hub header. A LOCAL action, not $lib/canvas/portal,
-  // which re-appends on destroy and resurrects the overlay.
+  // Portal to <body>: a LOCAL action, not $lib/canvas/portal, which re-appends
+  // on destroy and resurrects the overlay.
   function portal(node: HTMLElement) {
     document.body.appendChild(node);
     return {
@@ -727,9 +715,8 @@
     color: var(--accent);
   }
 
-  /* Actions: a chip row on the rail paper; the one primary is the bridge
-     back into the conversation, in the accent. Danger is burnt-orange only
-     when ARMED — a red row of buttons is a threat, not an instrument. */
+  /* Actions on the rail paper; the one primary is the bridge back into the
+     conversation. Danger colours only when ARMED — a red row is a threat. */
   .dm-actions {
     flex: none;
     display: flex;
