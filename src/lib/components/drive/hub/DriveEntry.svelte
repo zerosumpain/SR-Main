@@ -237,7 +237,11 @@
   /* ——— grid: a card ——— */
   .ent.grid {
     position: relative;
-    display: block;
+    /* A column, so the action row can sit on the tile's bottom edge. The grid
+       stretches every tile to the tallest in its row, and a folder with two
+       actions would otherwise leave a hole underneath them. */
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--line-strong);
     background: var(--surface-elevated);
     padding: 12px;
@@ -249,7 +253,8 @@
     top: 8px;
     left: 8px;
     z-index: 3;
-    opacity: 0;
+    opacity: 0.4;
+    transition: opacity 0.14s ease-out;
   }
   .ent.grid:hover .e-check,
   .ent.grid.sel .e-check,
@@ -257,6 +262,7 @@
   .ent.grid .e-icon {
     position: relative;
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     height: 84px;
@@ -283,16 +289,14 @@
   }
   .ent.grid .e-date { display: none; }
   .ent.grid .e-acts {
-    display: none;
+    display: flex;
     flex-wrap: wrap;
+    align-content: flex-end;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: auto;
     padding-top: 9px;
     border-top: 1px solid var(--line-hair);
   }
-  .ent.grid:hover .e-acts,
-  .ent.grid.sel .e-acts,
-  .ent.grid:focus-within .e-acts { display: flex; }
 
   /* ——— list: a row ——— */
   .ent.list {
@@ -322,18 +326,7 @@
   .ent.list.folder .e-icon { color: var(--accent); }
   .ent.list .e-icon svg { width: 18px; height: 20px; }
   .ent.list .e-ext { display: none; }
-  .ent.list .e-acts {
-    position: absolute;
-    right: 10px;
-    top: 1px;
-    bottom: 1px;
-    justify-content: flex-end;
-    padding-left: 18px;
-    background: var(--surface-elevated);
-    opacity: 0;
-    pointer-events: none;
-  }
-  .ent.list:hover .e-acts, .ent.list:focus-within .e-acts { opacity: 1; pointer-events: auto; }
+  .ent.list .e-acts { justify-content: flex-end; }
 
   /* ——— cells, shared ——— */
   .e-icon img { width: 100%; height: 100%; object-fit: cover; }
@@ -373,6 +366,21 @@
   }
   .e-check input { accent-color: var(--accent); }
 
+  /* NOTHING changes size on hover — only colour. Revealing the action row on
+     hover made every tile jump taller under the pointer, which reads as the
+     grid flinching away from you. The words are always there, grey, and they
+     take their colour when the entry is under the pointer; the one you are
+     actually on then goes ink. */
+  .e-acts .nm-rowact {
+    color: var(--text-ghost);
+    transition: color 0.14s ease-out;
+  }
+  .ent:hover .e-acts .nm-rowact,
+  .ent:focus-within .e-acts .nm-rowact { color: var(--accent); }
+  .ent:hover .e-acts .nm-rowact.danger,
+  .ent:focus-within .e-acts .nm-rowact.danger { color: var(--error); }
+  .ent:hover .e-acts .nm-rowact:hover { color: var(--text-primary); }
+
   .chip {
     display: inline-block;
     padding: 1px 5px;
@@ -404,15 +412,6 @@
   @media (max-width: 1000px) {
     .ent.list { grid-template-columns: 24px 24px minmax(0, 1fr) auto; row-gap: 6px; }
     .ent.list .e-date, .ent.list .e-access { display: none; }
-    /* The overlay becomes a wrapped row again: at this width there is no
-       spare gutter to float it over. */
-    .ent.list .e-acts {
-      position: static;
-      grid-column: 3 / -1;
-      justify-content: flex-start;
-      padding-left: 0;
-      opacity: 1;
-      pointer-events: auto;
-    }
+    .ent.list .e-acts { grid-column: 3 / -1; justify-content: flex-start; }
   }
 </style>
