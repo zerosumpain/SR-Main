@@ -8,7 +8,9 @@
   import { onMount, untrack } from 'svelte';
   import EntityCard from './EntityCard.svelte';
   import RelationshipModal from './RelationshipModal.svelte';
-  import { entityHover, computeHoverLayout, CARD_W } from './entity-hover.svelte';
+  import { portal } from '$lib/canvas/portal';
+  import { dragPanel } from '$lib/actions/drag-panel';
+  import { entityHover, computeHoverLayout, constrainPanel, CARD_W, type HoverAnchor } from './entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { goto } from '$app/navigation';
 
@@ -48,20 +50,39 @@
     // the measurement honest as the real content arrives.
     const measure = () =>
       untrack(() => {
-        const h = el.offsetHeight;
-        if (h && Math.abs(h - height) > 4) height = h;
+        const scroll = el.querySelector<HTMLElement>('.scroll');
+        // Measure the uncapped content, otherwise a short loading card can
+        // become trapped below its anchor after the real details arrive.
+        const h = scroll ? el.offsetHeight - scroll.clientHeight + scroll.scrollHeight : el.offsetHeight;
+        if (h && Math.abs(h - height) > 1) height = h;
       });
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    const content = el.querySelector('.entity-card');
+    if (content) ro.observe(content);
     return () => ro.disconnect();
   });
+
+  // A move belongs to this opening, so switching entities starts at its own anchor.
+  let moved = $state<{ anchor: HoverAnchor; left: number; top: number; maxHeight: number } | null>(null);
+  const manual = $derived(moved?.anchor === anchor ? moved : null);
+  const width = $derived(Math.min(CARD_W, Math.max(0, viewport.w - 24)));
+
+  function move(position: { left: number; top: number }) {
+    if (!anchor || !host) return;
+    const bounded = constrainPanel(position, { w: host.offsetWidth, h: host.offsetHeight }, viewport);
+    moved = { anchor, ...bounded, maxHeight: manual?.maxHeight ?? layout.maxHeight };
+  }
 
   // Pure maths, so it is unit-tested in entity-hover.layout.test.ts rather than
   // eyeballed against a live chat.
   const layout = $derived(
-    anchor
+    manual
+      ? { ...constrainPanel(manual, { w: width, h: Math.min(height, manual.maxHeight, viewport.h - 24) }, viewport),
+          maxHeight: Math.max(0, Math.min(manual.maxHeight, viewport.h - 24)), placement: 'overlay' as const, bottom: undefined }
+      : anchor
       ? computeHoverLayout(anchor.rect, height, viewport)
       : { top: 0, left: 0, maxHeight: 0, placement: 'below' as const },
   );
@@ -118,20 +139,28 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={host}
+    use:portal
+    use:dragPanel={{ handle: '.drag-handle', move, reset: () => (moved = null) }}
     class="hover-card"
     class:pinned={anchor.pinned}
-    style="{vStyle}; left: {layout.left}px; width: {CARD_W}px;"
+    style="{vStyle}; left: {layout.left}px; width: {width}px; max-height: {layout.maxHeight}px;"
     onmouseenter={() => entityHover.keepOpen()}
     onmouseleave={() => entityHover.release()}
     role="dialog"
     aria-label="Entity details"
   >
     {#if anchor.pinned}
-      <button class="close" type="button" onclick={() => entityHover.close()} aria-label="Close">×</button>
+      <div class="toolbar">
+        <button class="drag-handle" type="button" aria-label="Move entity details"
+          title="Drag to move · Arrow keys move · Shift moves faster · Home resets position">
+          <span aria-hidden="true">⠿</span> Entity details <span class="drag-hint">Drag to move</span>
+        </button>
+        <button class="close" type="button" onclick={() => entityHover.close()} aria-label="Close">×</button>
+      </div>
     {/if}
     <!-- The scroller is INSIDE the positioned host so the close button stays put
          while the content moves under it. -->
-    <div class="scroll" style="max-height: {layout.maxHeight}px;">
+    <div class="scroll">
       <EntityCard
         entityId={anchor.entityId}
         compact={!anchor.pinned}
@@ -155,34 +184,58 @@
   .hover-card {
     position: fixed;
     z-index: 90;
-    /* Positions only. The surface is on `.scroll` — see below. */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface-elevated);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--elev-pop);
     animation: card-in var(--t-fast) var(--ease-out);
   }
   .hover-card.pinned {
     z-index: 95;
   }
 
-  /*
-   * THE SCROLLER IS THE CARD.
-   *
-   * These were two elements: `.scroll` owned the overflow, and the opaque
-   * background, border and radius lived on EntityCard INSIDE it. So the
-   * scrollbar was painted on a transparent parent — it appeared in a gutter
-   * beside the card rather than within it, and the card's own border scrolled
-   * away with the content. It read as a scrollbar detached from the modal,
-   * because it was.
-   *
-   * Giving the surface to the element that actually scrolls puts the scrollbar
-   * inside the opaque, bordered box and pins the border in place. The inner
-   * card then drops its own surface, or there would be two nested frames.
-   */
+  .toolbar {
+    display: flex;
+    flex: none;
+    align-items: stretch;
+    background: var(--text-primary);
+    color: var(--bg);
+    border-bottom: 2px solid var(--accent);
+  }
+  .drag-handle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .hover-card[data-dragging] .drag-handle { cursor: grabbing; }
+  .drag-hint {
+    margin-left: auto;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--accent-on-dark);
+  }
+  .drag-handle:focus-visible, .close:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: -3px;
+  }
   .scroll {
+    min-height: 0;
     overflow-y: auto;
-    background: var(--surface-elevated);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-round);
-    /* Stop a flick at the end of the card scrolling the chat behind it — which
-       would then fire the page-scroll handler and dismiss the card. */
     overscroll-behavior: contain;
     scrollbar-width: thin;
     scrollbar-color: var(--card-border) transparent;
@@ -220,23 +273,16 @@
   }
 
   .close {
-    position: absolute;
-    top: 6px;
-    /* Clears the scroller's 6px gutter so the two never overlap. */
-    right: 12px;
-    z-index: 1;
-    width: 22px;
-    height: 22px;
+    flex: none;
+    width: 34px;
+    min-height: 34px;
     line-height: 1;
-    font-size: var(--fs-body);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sharp);
-    background: var(--surface-elevated);
-    color: var(--text-muted);
+    font-size: var(--fs-body-lg);
+    border: 0;
+    border-left: 1px solid color-mix(in srgb, var(--bg) 25%, transparent);
+    background: transparent;
+    color: var(--bg);
     cursor: pointer;
   }
-  .close:hover {
-    color: var(--accent);
-    border-color: var(--accent-tint-35);
-  }
+  .close:hover { color: var(--accent-on-dark); }
 </style>

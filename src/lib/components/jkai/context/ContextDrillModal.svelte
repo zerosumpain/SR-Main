@@ -14,8 +14,10 @@
    * server and EXECUTED here: `link`, `ask`, `post`, `prompt` (one line of
    * text first), `confirm` (two clicks). After a post the manifest re-reads.
    */
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { goto } from '$app/navigation';
+  import { dragPanel } from '$lib/actions/drag-panel';
+  import { constrainPanel } from '$lib/components/intel/entity-hover.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { drillManifestSchema, type DrillAction, type DrillManifest } from '$lib/jkai/context-panel/types';
@@ -35,6 +37,21 @@
     /** Something changed on the server; the rail decides what to reload. */
     onRefresh?: (what: 'panel' | 'graph' | 'memory') => void;
   } = $props();
+
+  let panel = $state<HTMLDivElement>();
+  let position = $state<{ left: number; top: number } | null>(null);
+  function move(next: { left: number; top: number }) {
+    if (!panel) return;
+    position = constrainPanel(next, { w: panel.offsetWidth, h: panel.offsetHeight },
+      { w: window.innerWidth, h: window.innerHeight });
+  }
+  onMount(() => {
+    const resize = () => { if (position) move(position); };
+    const observer = new ResizeObserver(resize);
+    if (panel) observer.observe(panel);
+    window.addEventListener('resize', resize);
+    return () => { observer.disconnect(); window.removeEventListener('resize', resize); };
+  });
 
   let manifest = $state<DrillManifest | null>(null);
   let loading = $state(false);
@@ -229,13 +246,20 @@
 <div class="dm-backdrop" use:portal onclick={onClose}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="dm-panel" class:wide={isWide} role="dialog" aria-modal="true" aria-label={manifest?.title ?? 'Detail'} onclick={(e) => e.stopPropagation()}>
+  <div class="dm-panel" class:wide={isWide} bind:this={panel}
+    class:moved={!!position}
+    style:left={position ? `${position.left}px` : undefined}
+    style:top={position ? `${position.top}px` : undefined}
+    use:dragPanel={{ handle: '.dm-drag', move, reset: () => (position = null) }} role="dialog" aria-modal="true" aria-label={manifest?.title ?? 'Detail'} onclick={(e) => e.stopPropagation()}>
     <header class="dm-hd">
       <div class="dm-hd-left">
         {#if stack.length}
           <button type="button" class="dm-chip" onclick={back} aria-label="Back">← back</button>
         {/if}
-        <span class="dm-eyebrow">{manifest?.eyebrow ?? (loading ? 'opening…' : 'detail')}</span>
+        <button type="button" class="dm-drag dm-eyebrow" aria-label="Move details"
+          title="Drag to move · Arrow keys move · Shift moves faster · Home resets position">
+          ⠿ {manifest?.eyebrow ?? (loading ? 'opening…' : 'detail')}
+        </button>
       </div>
       <div class="dm-hd-right">
         {#if manifest?.href}
@@ -256,10 +280,12 @@
     {:else if !manifest}
       <div class="dm-body"><p class="dm-empty">Opening…</p></div>
     {:else}
-      <div class="dm-title-row">
-        <h2 class="dm-title" title={manifest.title}>{manifest.title}</h2>
-        {#if manifest.subtitle}<p class="dm-sub">{manifest.subtitle}</p>{/if}
-      </div>
+      {#if !isEntity || manifest.subtitle}
+        <div class="dm-title-row">
+          {#if !isEntity}<h2 class="dm-title" title={manifest.title}>{manifest.title}</h2>{/if}
+          {#if manifest.subtitle}<p class="dm-sub">{manifest.subtitle}</p>{/if}
+        </div>
+      {/if}
 
       {#if manifest.facts.length}
         <div class="dm-facts" style="--n: {Math.min(4, manifest.facts.length)}">
@@ -438,7 +464,7 @@
     display: flex;
     flex-direction: column;
     width: min(760px, 100%);
-    max-height: 100%;
+    max-height: calc(100dvh - 48px);
     background: var(--surface-elevated);
     border: 2px solid rgba(26, 16, 8, 0.22);
     border-radius: 0;
@@ -447,6 +473,21 @@
     width: min(1180px, 100%);
   }
 
+  .dm-panel.moved { position: fixed; width: min(760px, calc(100vw - 48px)); }
+  .dm-panel.wide.moved { width: min(1180px, calc(100vw - 48px)); }
+  .dm-hd-left { flex: 1; }
+  .dm-drag {
+    flex: 1;
+    text-align: left;
+    padding: 5px 0;
+    border: 0;
+    background: transparent;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .dm-panel[data-dragging] .dm-drag { cursor: grabbing; }
+  .dm-drag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dm-hd {
     flex: none;
     display: flex;
@@ -605,9 +646,10 @@
   .dm-entity {
     flex: 1;
     min-width: 0;
-    padding: 16px 18px;
+    padding: 10px 12px;
     border-right: 1px solid var(--line-hair);
   }
+  .dm-entity :global(.entity-card) { border: 0; padding: 0; max-width: none; }
   .dm-body.split .dm-sections {
     flex: none;
     width: 400px;
@@ -857,19 +899,16 @@
   }
 
   @media (max-width: 899px) {
-    .dm-backdrop {
-      padding: 0;
-    }
-    .dm-panel,
-    .dm-panel.wide {
-      width: 100%;
-      height: 100%;
-      border-width: 0;
+    .dm-backdrop { padding: 12px; }
+    .dm-panel, .dm-panel.wide, .dm-panel.moved, .dm-panel.wide.moved {
+      width: calc(100vw - 24px);
+      max-height: calc(100dvh - 24px);
     }
     .dm-body.split {
       flex-direction: column;
     }
     .dm-entity {
+      flex: none;
       border-right: none;
       border-bottom: 1px solid var(--line-hair);
     }

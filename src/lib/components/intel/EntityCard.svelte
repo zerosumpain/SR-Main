@@ -235,11 +235,13 @@
       <span class="icon" style="color: {data.entity.type.color};">{data.entity.type.icon}</span>
       <div class="head-text">
         <h3>{data.entity.name}</h3>
-        <span class="type">{data.entity.type.name}</span>
+        <div class="identity-meta">
+          <span class="type">{data.entity.type.name}</span>
+          {#if !data.entity.confirmed}
+            <span class="chip unconfirmed" title="Awaiting review">unconfirmed</span>
+          {/if}
+        </div>
       </div>
-      {#if !data.entity.confirmed}
-        <span class="chip unconfirmed" title="Awaiting review">unconfirmed</span>
-      {/if}
     </header>
 
     {#if data.entity.summary}
@@ -488,7 +490,7 @@
   .pin-note {
     margin: 6px 0 0;
     font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
+    color: var(--text-muted);
   }
   .pin-note.done {
     color: var(--success);
@@ -501,10 +503,11 @@
     /* Opaque — this floats over content and must never show it through. */
     background: var(--surface-elevated);
     border: 1px solid var(--line-strong);
-    border-radius: var(--radius-round);
-    padding: 14px;
+    border-radius: 0;
+    padding: 10px 12px;
     font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
+    font-size: var(--fs-body);
+    overflow-wrap: anywhere;
     color: var(--text-primary);
     max-width: 420px;
   }
@@ -515,7 +518,7 @@
   }
 
   .state {
-    color: var(--text-ghost);
+    color: var(--text-muted);
     font-size: var(--fs-label);
     padding: 6px 0;
   }
@@ -525,6 +528,15 @@
     align-items: flex-start;
     gap: 8px;
     margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--line-strong);
+  }
+  .identity-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: 4px;
   }
   .icon {
     font-size: var(--fs-body-lg);
@@ -536,10 +548,10 @@
   }
   h3 {
     margin: 0;
-    font-family: var(--font-body);
-    font-size: var(--fs-body);
-    font-weight: 600;
-    line-height: 1.25;
+    font-family: var(--font-display);
+    font-size: var(--fs-body-lg);
+    font-weight: 400;
+    line-height: 1.2;
     word-break: break-word;
   }
   .type {
@@ -547,7 +559,7 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--text-ghost);
+    color: var(--text-muted);
   }
 
   .chip {
@@ -572,13 +584,13 @@
   .metrics {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 4px 12px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--line-hair);
-    margin-bottom: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 6px;
   }
   .metrics b {
     color: var(--accent-ink);
@@ -592,9 +604,9 @@
 
   /* ── Trust ─────────────────────────────────────────────────────────── */
   .trust {
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--line-hair);
-    margin-bottom: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 6px;
   }
 
   .t-head {
@@ -608,7 +620,7 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--text-ghost);
+    color: var(--text-muted);
     flex: 1;
   }
   .t-score {
@@ -639,7 +651,7 @@
   }
   .grade.unverified {
     background: transparent;
-    color: var(--text-ghost);
+    color: var(--text-muted);
     border-color: var(--line-strong);
   }
 
@@ -652,7 +664,7 @@
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
-    color: var(--text-ghost);
+    color: var(--text-muted);
     cursor: pointer;
     transition: color var(--t-fast) var(--ease-out);
   }
@@ -739,7 +751,7 @@
     font-size: var(--fs-label-xs);
   }
   .bd-label {
-    color: var(--text-ghost);
+    color: var(--text-muted);
   }
   .bd-value {
     color: var(--text-secondary);
@@ -775,11 +787,11 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--text-ghost);
+    color: var(--text-muted);
   }
   .grader select {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
     padding: 3px 4px;
     max-width: 100%;
     background: var(--card-bg);
@@ -819,7 +831,7 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--text-ghost);
+    color: var(--text-muted);
     font-weight: 500;
   }
 
@@ -832,13 +844,17 @@
   .props {
     margin: 0 0 10px;
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 0 10px;
     font-size: var(--fs-label);
+  }
+  dt, dd {
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line-hair);
   }
   dt {
     font-family: var(--font-mono);
-    color: var(--text-ghost);
+    color: var(--text-muted);
     text-transform: lowercase;
   }
   dd {
@@ -878,7 +894,7 @@
   .src {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
+    color: var(--text-muted);
     flex-shrink: 0;
   }
 
@@ -888,9 +904,9 @@
   footer {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
+    gap: 4px;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--line-hair);
   }
   footer button,
@@ -899,9 +915,9 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 4px 9px;
+    padding: 5px 7px;
     border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sharp);
+    border-radius: 0;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
@@ -915,4 +931,27 @@
     color: var(--accent);
     border-color: var(--accent-tint-35);
   }
+  footer button:first-child {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  footer button:first-child:hover { background: var(--accent-hover); }
+  .entity-card :is(button, a, select):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .metrics b, .t-score, .bd-value { font-family: var(--font-code); }
+  @media (pointer: coarse) {
+    footer button, .btn-link, .why { min-height: 36px; }
+  }
+  /* The floating shell owns scrolling; evidence stays in the same reading flow. */
+  .entity-card :global(.evidence ul) { max-height: none; overflow: visible; gap: 0; }
+  .entity-card :global(.evidence li) {
+    padding: 6px 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .entity-card :global(.evidence .head) { flex-wrap: wrap; gap: 3px 6px; }
+  .entity-card :global(.evidence .title) { flex-basis: 100%; white-space: normal; }
 </style>

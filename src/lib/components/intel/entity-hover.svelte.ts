@@ -159,12 +159,13 @@ export function computeHoverLayout(
   const anchorTop = clamp(rect.top, 0, viewport.h);
   const anchorBottom = clamp(rect.bottom, 0, viewport.h);
 
+  const width = Math.min(CARD_W, Math.max(0, viewport.w - MARGIN * 2));
   let left = rect.left;
-  if (left + CARD_W + MARGIN > viewport.w) left = viewport.w - CARD_W - MARGIN;
+  if (left + width + MARGIN > viewport.w) left = viewport.w - width - MARGIN;
   if (left < MARGIN) left = MARGIN;
 
   /** Nothing may ever be taller than the viewport less its margins. */
-  const ceiling = Math.max(MIN_H, viewport.h - MARGIN * 2);
+  const ceiling = Math.max(0, viewport.h - MARGIN * 2);
   const spaceBelow = viewport.h - anchorBottom - GAP - MARGIN;
   const spaceAbove = anchorTop - GAP - MARGIN;
 
@@ -192,6 +193,18 @@ export function computeHoverLayout(
     Math.max(MARGIN, viewport.h - MARGIN - drawn),
   );
   return { bottom, left, maxHeight, placement: 'above' };
+}
+
+/** Keep a manually moved panel entirely reachable as its content or viewport changes. */
+export function constrainPanel(
+  position: { left: number; top: number },
+  size: { w: number; h: number },
+  viewport: { w: number; h: number },
+) {
+  return {
+    left: clamp(position.left, MARGIN, Math.max(MARGIN, viewport.w - MARGIN - size.w)),
+    top: clamp(position.top, MARGIN, Math.max(MARGIN, viewport.h - MARGIN - size.h)),
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {

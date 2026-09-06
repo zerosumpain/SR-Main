@@ -2,6 +2,9 @@
   import type { ThreadGraph, ThreadGraphNode, ThreadNodeKind } from '$lib/jkai/thread-graph';
   import { MODAL_RADIAL, placeNodes, drawEdges, visibleEdges, entityIdOf } from '$lib/jkai/graph-layout';
   import { nodeStyle, edgeStyle, legendFor } from '$lib/jkai/graph-colors';
+  import { onMount } from 'svelte';
+  import { dragPanel } from '$lib/actions/drag-panel';
+  import { constrainPanel } from '$lib/components/intel/entity-hover.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { goto } from '$app/navigation';
@@ -17,6 +20,30 @@
     onSelect: (id: string) => void;
     onClose: () => void;
   } = $props();
+
+  let panel = $state<HTMLDivElement>();
+  let position = $state<{ left: number; top: number } | null>(null);
+  function move(next: { left: number; top: number }) {
+    if (!panel) return;
+    position = constrainPanel(next, { w: panel.offsetWidth, h: panel.offsetHeight },
+      { w: window.innerWidth, h: window.innerHeight });
+  }
+  onMount(() => {
+    const resize = () => {
+      if (position) move(position);
+      // Keep the graph's centre in view when the phone layout uses a pan area.
+      const canvas = panel?.querySelector<HTMLElement>('.gm-canvas-wrap');
+      if (canvas && window.innerWidth < 900) {
+        canvas.scrollLeft = (canvas.scrollWidth - canvas.clientWidth) / 2;
+        canvas.scrollTop = (MODAL_RADIAL.height - canvas.clientHeight) / 2;
+      }
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    if (panel) observer.observe(panel);
+    window.addEventListener('resize', resize);
+    return () => { observer.disconnect(); window.removeEventListener('resize', resize); };
+  });
 
   const selected = $derived<ThreadGraphNode | null>(
     graph.nodes.find((n) => n.id === selectedId) ?? graph.nodes[0] ?? null,
@@ -132,17 +159,23 @@
 <div class="gm-backdrop" use:portal onclick={onClose}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="gm-panel" role="dialog" aria-label="Thread knowledge graph" onclick={(e) => e.stopPropagation()}>
+  <div class="gm-panel" bind:this={panel}
+    class:moved={!!position}
+    style:left={position ? `${position.left}px` : undefined}
+    style:top={position ? `${position.top}px` : undefined}
+    use:dragPanel={{ handle: '.gm-hd-left', move, reset: () => (position = null) }}
+    role="dialog" aria-label="Thread knowledge graph" onclick={(e) => e.stopPropagation()}>
     <header class="gm-hd">
-      <div class="gm-hd-left">
-        <span class="gm-title">Knowledge graph</span>
+      <button type="button" class="gm-hd-left" aria-label="Move knowledge graph"
+        title="Drag to move · Arrow keys move · Shift moves faster · Home resets position">
+        <span class="gm-title">⠿ Knowledge graph</span>
         <span class="gm-count">
           {graph.nodes.length}
           {graph.nodes.length === 1 ? 'node' : 'nodes'} / {graph.edges.length}
           {graph.edges.length === 1 ? 'edge' : 'edges'}
           {#if undrawn > 0}<span class="gm-undrawn"> · {undrawn} not drawn</span>{/if}
         </span>
-      </div>
+      </button>
       <div class="gm-hd-right">
         <a class="gm-chip" href="/jkai/intel">intel ↗</a>
         <button type="button" class="gm-chip" onclick={onClose} aria-label="Close">✕</button>
@@ -289,13 +322,28 @@
     display: flex;
     flex-direction: column;
     width: min(1320px, 100%);
-    max-height: 100%;
+    max-height: calc(100dvh - 48px);
     /* Opaque — --card-bg is a 7% tint and would let the thread show through. */
     background: var(--surface-elevated);
     border: 2px solid rgba(26, 16, 8, 0.22);
     border-radius: 0;
   }
 
+  .gm-panel.moved { position: fixed; width: min(1320px, calc(100% - 48px)); }
+  .gm-hd-left {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 3px 0;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .gm-panel[data-dragging] .gm-hd-left { cursor: grabbing; }
+  .gm-hd-left:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .gm-hd {
     flex: none;
     display: flex;
@@ -489,10 +537,11 @@
   .gm-side {
     flex: none;
     width: 400px;
-    padding: 16px;
+    padding: 10px;
     border-left: 1px solid var(--line-hair);
     overflow-y: auto;
   }
+  .gm-side :global(.entity-card) { border: 0; padding: 0; max-width: none; }
   .gm-thread-rels {
     margin-top: 18px;
   }
@@ -619,17 +668,22 @@
   }
 
   @media (max-width: 899px) {
-    .gm-backdrop {
-      padding: 0;
+    .gm-backdrop { padding: 12px; }
+    .gm-panel, .gm-panel.moved {
+      width: calc(100vw - 24px);
+      max-height: calc(100dvh - 24px);
+      height: calc(100dvh - 24px);
     }
-    .gm-panel {
-      height: 100%;
-      border-width: 0;
-    }
+    .gm-hd { padding: 8px 10px; gap: 8px; }
+    .gm-hd-left, .gm-hd-right { gap: 5px; }
     .gm-body {
       flex-direction: column;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
+    .gm-canvas-wrap { flex: none; height: 220px; }
     .gm-side {
+      overflow: visible;
       width: auto;
       border-left: none;
       border-top: 1px solid var(--line-hair);
