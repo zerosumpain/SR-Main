@@ -3,7 +3,7 @@
   import { postThought } from '$lib/daydream/feed-client';
   import DrillPanel from '$lib/components/jkai/daydream/hub/DrillPanel.svelte';
   import BacklogEditor from './BacklogEditor.svelte';
-  import { STAGE_META, kindLabel, type WorkItem } from '$lib/selfimprove/board';
+  import { STAGE_META, WORK_STAGES, kindLabel, type WorkItem } from '$lib/selfimprove/board';
   import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
 
   let { epics, error }: { epics: BacklogEpic[]; error: string | null } = $props();
@@ -11,8 +11,8 @@
   let groomingOnly = $state(false);
   let showHistory = $state(false);
   let category = $state('all');
-  let status = $state('active');
-  let page = $state(1);
+  let status = $state('all');
+  let laneLimit = $state(20);
   let openId = $state<string | null>(null);
   let editing = $state<string | null>(null);
   let creating = $state(false);
@@ -34,7 +34,7 @@
     (status === 'all' || (status === 'active' ? !['live', 'parked'].includes(e.stage) : e.stage === status)) &&
     (category === 'all' || e.categories.includes(category)) &&
     [e.title, e.summary, ...e.deliverables.flatMap((i) => [i.title, i.detail, i.kind])].join(' ').toLowerCase().includes(query.trim().toLowerCase())));
-  $effect(() => { query; status; category; groomingOnly; page = 1; });
+  $effect(() => { query; status; category; groomingOnly; laneLimit = 20; });
 
   function show(epic: BacklogEpic) {
     showHistory = false; deliverableQuery = ''; deliverableCategory = 'all';
@@ -65,34 +65,50 @@
     <option value="all">All categories</option>
     {#each [...new Set(epics.flatMap((e) => e.categories))].sort() as value}<option {value}>{kindLabel(value)}</option>{/each}
   </select>
-  <button class="nm-btn-ghost" aria-pressed={groomingOnly} onclick={() => groomingOnly = !groomingOnly}>Grooming suggestions ({epics.reduce((n, e) => n + (e.suggestions?.length ?? 0), 0)})</button>
+  <button class="nm-btn-ghost" aria-pressed={groomingOnly} onclick={() => groomingOnly = !groomingOnly}>Needs review ({epics.reduce((n, e) => n + (e.suggestions?.length ?? 0), 0)})</button>
   <button class="nm-save-btn" onclick={() => creating = true}>Add epic</button>
 </div>
-<p class="ledger-count" role="status">{filtered.length} epics · {filtered.reduce((n, e) => n + e.deliverables.length, 0)} deliverables · automatic consolidation</p>
+<p class="ledger-count" role="status">{filtered.length} epics · automatic grouping and de-duplication on intake · {epics.reduce((n, e) => n + (e.groomingHistory?.filter((a) => a.state === 'applied').length ?? 0), 0)} consolidated · {epics.reduce((n, e) => n + (e.groomingOverrides?.length ?? 0), 0)} kept separate</p>
 {#if error}<p class="err" role="alert">The epic backlog could not be loaded: {error}</p>{/if}
 {#if actionError && !open}<p class="err" role="alert">{actionError}</p>{/if}
-<div class="epic-list">
-  {#each filtered.slice((page - 1) * 20, page * 20) as epic (epic.slug)}
-    <button class="epic-row" onclick={() => show(epic)}>
-      <span class="priority">P{epic.priority}</span>
-      <span class="epic-identity"><strong>{epic.title}</strong><span>{epic.categories.map(kindLabel).join(' · ')}{#if epic.suggestions?.length} · {epic.suggestions.length} grooming suggestions{/if}</span></span>
-      <span class="epic-progress">{epic.deliverables.length} deliverables <small>{epic.completed} verified live</small></span>
-      <span class="pill t-{STAGE_META[epic.stage].tone}">{STAGE_META[epic.stage].label}</span>
-      <span aria-hidden="true">→</span>
-    </button>
-  {:else}{#if !error}<p class="note">{epics.length ? 'No epics match these filters.' : 'No epics yet. Add the first deliverable to begin.'}</p>{/if}{/each}
+<div class="kanban" role="region" aria-label="Epic kanban board" tabindex="0">
+  {#each WORK_STAGES.filter((stage) => status === 'all' || (status === 'active' ? !['live', 'parked'].includes(stage) : status === stage)) as stage}
+    {@const lane = filtered.filter((e) => e.stage === stage)}
+    <section class="kanban-lane" aria-label={STAGE_META[stage].label}>
+      <header class="lane-heading"><h2>{STAGE_META[stage].label}</h2><span>{lane.length}</span></header>
+      <div class="lane-cards">
+        {#each lane.slice(0, laneLimit) as epic (epic.slug)}
+          <button class="epic-row" onclick={() => show(epic)}>
+            <span class="card-meta"><span class="priority">P{epic.priority}</span><span>{epic.categories.map(kindLabel).join(' · ')}</span></span>
+            <strong>{epic.title}</strong>
+            <span class="epic-progress">{epic.deliverables.filter((i) => i.stage !== 'parked').length} active deliverables · {epic.completed} live</span>
+            {#if epic.suggestions?.length}<span class="card-review">{epic.suggestions.length} to review</span>{/if}
+            {#if epic.groomingHistory?.some((a) => a.state === 'applied')}<span class="card-history">{epic.groomingHistory.filter((a) => a.state === 'applied').length} consolidated · Review / undo →</span>{/if}
+          </button>
+        {:else}<p class="lane-empty">No epics</p>{/each}
+        {#if lane.length > laneLimit}<button class="nm-btn-ghost" onclick={() => laneLimit += 20}>Show more ({lane.length - laneLimit})</button>{/if}
+      </div>
+    </section>
+  {/each}
 </div>
-{#if filtered.length > 20}<div class="epic-toolbar">
-  <button class="nm-btn-ghost" disabled={page === 1} onclick={() => page--}>Previous</button>
-  <span>Page {page} of {Math.ceil(filtered.length / 20)}</span>
-  <button class="nm-btn-ghost" disabled={page * 20 >= filtered.length} onclick={() => page++}>Next</button>
-</div>{/if}
 
 {#if open}
   <DrillPanel label={open.title} kicker="Epic / Deliverables" onclose={close} wide>
     <div class="epic-modal">
       <header class="epic-modal-head"><h2>{open.title}</h2><span class="pill t-{STAGE_META[open.stage].tone}">{STAGE_META[open.stage].label}</span></header>
       {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
+      {#if open.groomingHistory?.length}
+        <details class="automation-history">
+          <summary>Automatic consolidation / overrides ({open.groomingHistory.length})</summary>
+          {#each [...open.groomingHistory].reverse() as entry (entry.id)}
+            <div class="automation-entry">
+              <strong>{entry.itemTitle}</strong>
+              <p>{entry.state === 'undone' ? 'Restored separately' : entry.state === 'pending' ? 'Consolidation pending' : entry.kind === 'merge' ? 'Requirements merged' : 'Already covered'} · {entry.targetTitle}</p>
+              {#if entry.state !== 'undone'}<button class="nm-btn-ghost" disabled={busy} onclick={() => act({ action: 'backlog_grooming_override', itemId: entry.itemId, keepSeparate: true })}>Restore separately</button>{/if}
+            </div>
+          {/each}
+        </details>
+      {/if}
       {#if editing || adding}
         <button class="nm-btn-ghost" onclick={savedDeliverable}>← All deliverables</button>
         {#key editing ?? 'new'}<BacklogEditor item={edited} embedded epicSlug={open.slug} onclose={savedDeliverable} />{/key}
@@ -139,6 +155,9 @@
                 </div>
               {/each}
               <div class="deliverable-actions">
+                {#if item.stage === 'accepted' || item.stage === 'proposed'}
+                  <button class="nm-btn-ghost" aria-pressed={open.groomingOverrides?.includes(item.id) ?? false} disabled={busy} onclick={() => act({ action: 'backlog_grooming_override', itemId: item.id, keepSeparate: !open.groomingOverrides?.includes(item.id) })}>{open.groomingOverrides?.includes(item.id) ? 'Allow automatic merging' : 'Keep separate'}</button>
+                {/if}
                 {#if item.source === 'backlog' && !item.foldedInto}
                   <button class="nm-btn-ghost" onclick={() => editing = item.id}>Define deliverable</button>
                   {#each [1, 2, 3, 4, 5] as priority}<button class="nm-btn-ghost" data-active={item.priority === priority} aria-pressed={item.priority === priority} disabled={busy} onclick={() => changePriority(item, priority)}>P{priority}</button>{/each}
@@ -179,14 +198,24 @@
   .epic-toolbar input { flex: 1 1 260px; width: auto; }
   .epic-toolbar select { width: auto; max-width: 100%; }
   .ledger-count { font-size: var(--fs-label-xs); color: var(--text-muted); }
-  .epic-list { border-top: 2px solid var(--line-strong); }
-  .epic-row { width: 100%; display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) 9rem auto 1rem; gap: 14px; align-items: center; padding: 16px 8px; border: 0; border-bottom: 1px solid var(--line); text-align: left; background: var(--surface-card); color: var(--text-primary); cursor: pointer; font: inherit; }
+  .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 14px; min-width: 0; align-items: start; }
+  .kanban:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .kanban-lane { min-width: 0; border: 1px solid var(--line); background: var(--surface-sunken); }
+  .lane-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 2px solid var(--line-strong); padding: 12px; }
+  .lane-heading h2 { font: var(--fs-nav) var(--font-display); margin: 0; }
+  .lane-heading > span { font: var(--fs-label) var(--font-code); color: var(--text-muted); }
+  .lane-cards { display: grid; gap: 8px; padding: 8px; max-height: 65vh; overflow-y: auto; }
+  .epic-row { display: grid; width: 100%; gap: 10px; padding: 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent-ink); text-align: left; background: var(--surface-card); color: var(--text-primary); cursor: pointer; font: inherit; }
   .epic-row:hover { background: var(--accent-tint-04); }
   .epic-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .epic-identity { display: grid; gap: 5px; min-width: 0; }
-  .epic-identity strong { font-size: var(--fs-body); overflow-wrap: anywhere; }
-  .epic-identity > span, .epic-progress, .priority { font-size: var(--fs-label); color: var(--text-secondary); }
-  .epic-progress small { display: block; font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .epic-row strong { font-size: var(--fs-nav); overflow-wrap: anywhere; }
+  .card-meta { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .epic-progress, .card-history, .card-review, .lane-empty { font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .card-review { color: var(--accent); }
+  .card-history { color: var(--accent-ink); border-top: 1px solid var(--line); padding-top: 8px; }
+  .automation-history { border-block: 1px solid var(--line); padding: 12px 0; margin-top: 12px; }
+  .automation-entry { border-bottom: 1px solid var(--line); padding: 12px 0; font-size: var(--fs-nav); overflow-wrap: anywhere; }
+  .automation-entry p { font-size: var(--fs-label); color: var(--text-secondary); }
   .epic-modal { min-width: 0; }
   .epic-modal-head, .deliverable header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
   .epic-modal-head h2 { font: 1.5rem var(--font-display); margin: 0; flex: 1; overflow-wrap: anywhere; }
@@ -202,10 +231,6 @@
   .deliverable-actions { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
   .deliverable pre { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-label) var(--font-code); max-height: 240px; overflow: auto; }
   @media (max-width: 640px) {
-    .epic-row { grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 8px; }
-    .epic-progress { grid-column: 2; }
-    .epic-row > .pill { grid-row: 2; grid-column: 3; }
-    .epic-row > span:last-child { grid-column: 3; grid-row: 1; }
     .priority-controls { margin-left: 0; }
   }
 </style>

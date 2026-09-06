@@ -1,4 +1,4 @@
-import type { GroomingSuggestion } from './backlog-grooming';
+import type { GroomingSuggestion, GroomingAction } from './backlog-grooming';
 import type { WorkItem, WorkStage } from './board';
 import type { EpicData } from './types';
 import { clusterSlug, labelFor } from './cluster';
@@ -6,6 +6,8 @@ import { looksSameSubject, subjectOverlap } from './narrative';
 
 export interface BacklogEpic {
   suggestions?: GroomingSuggestion[];
+  groomingHistory?: GroomingAction[];
+  groomingOverrides?: string[];
   slug: string;
   title: string;
   summary: string;

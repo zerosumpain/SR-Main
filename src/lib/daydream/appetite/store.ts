@@ -151,6 +151,8 @@ export async function upsertCapability(p: CapabilityProposal): Promise<UpsertRes
       firstSeenAt: now,
       lastSeenAt: now,
     });
+    const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+    await groomAfterIntake();
     return { slug, created: true, score, recurrence };
   } catch (err) {
     console.warn(`[daydream] capability not recorded (${slug}): ${errMsg(err)}`);
@@ -248,4 +250,20 @@ export async function scannedToday(activityName: string, now = new Date()): Prom
     console.warn(`[daydream] could not check today's appetite scan: ${errMsg(err)}`);
     return true;
   }
+}
+
+/** Preserve merged lead requirements without accepting the surviving proposal. */
+export async function setMergedCapabilityRequirements(slug: string, source: string, brief: string | null): Promise<void> {
+  const target = await getCapability(slug);
+  if (!target || target.status !== 'proposed') throw new Error('Matching capability is no longer proposed');
+  const start = `\n\n[Merged capability: ${source}]\n`;
+  const end = `\n[/Merged capability: ${source}]`;
+  let need = target.need;
+  const from = need.indexOf(start), to = from < 0 ? -1 : need.indexOf(end, from + start.length);
+  if (from >= 0 && to >= 0) need = need.slice(0, from) + need.slice(to + end.length);
+  if (brief != null) need += start + brief + end;
+  const result = await db.update(daydreamCapabilities).set({ need })
+    .where(and(eq(daydreamCapabilities.slug, slug), eq(daydreamCapabilities.status, 'proposed'), eq(daydreamCapabilities.need, target.need)))
+    .returning({ id: daydreamCapabilities.id });
+  if (!result.length) throw new Error('Matching capability changed during consolidation');
 }

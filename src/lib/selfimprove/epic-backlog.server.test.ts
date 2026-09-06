@@ -4,7 +4,7 @@ const h = vi.hoisted(() => ({ backlog: [] as BacklogItemData[], epics: [] as Epi
 vi.mock('./backlog', () => ({ MAX_ATTEMPTS: 4,
   listBacklog: vi.fn(async () => h.backlog),
   getBacklogItem: vi.fn(async (slug: string) => h.backlog.find((i) => i.slug === slug) ?? null),
-  setParked: vi.fn(async (slug: string) => { h.backlog.find((i) => i.slug === slug)!.status = 'abandoned'; }),
+  setParked: vi.fn(async (slug: string, parked: boolean) => { const row = h.backlog.find((i) => i.slug === slug)!; row.status = parked ? 'abandoned' : 'open'; if (!parked) delete row.foldedInto; }),
   foldItems: vi.fn(async (slugs: string[], into: string) => { for (const row of h.backlog) if (slugs.includes(row.slug) && row.slug !== into) { row.status = 'abandoned'; row.foldedInto = into; } }),
   setPriority: vi.fn(async (slug: string, priority: number) => { h.backlog.find((i) => i.slug === slug)!.priority = priority; }),
 }));
@@ -19,7 +19,7 @@ vi.mock('$lib/datastore', () => ({
     h.writes++; h.epics = [...h.epics.filter((e) => e.slug !== record.data.slug), record.data as EpicData];
   }),
 }));
-import { loadEpicBacklog, updateEpic, decideBacklogGrooming } from './epic-backlog.server';
+import { loadEpicBacklog, updateEpic, decideBacklogGrooming, overrideBacklogGrooming } from './epic-backlog.server';
 import { listBacklog } from './backlog';
 function row(slug: string, title: string): BacklogItemData {
   return { slug, title, detail: 'Synthetic requirement', kind: 'feature', status: 'open', priority: 3, attempts: 0, createdAt: '2026-09-01', updatedAt: '2026-09-01' };
@@ -84,5 +84,32 @@ describe('grooming decisions', () => {
     h.backlog[1].attempts = 1;
     await expect(decideBacklogGrooming(epic.suggestions![0].id, 'apply')).rejects.toThrow('Suggestion changed');
     expect(h.backlog.every((i) => i.status === 'open')).toBe(true);
+  });
+});
+
+describe('automatic grooming and overrides', () => {
+  it('records an automatic merge and restores it without merging again', async () => {
+    h.backlog = [row('a', 'Apple calendar event reminders'), row('b', 'Apple calendar event reminders')];
+    const [epic] = await loadEpicBacklog();
+    await decideBacklogGrooming(epic.suggestions![0].id, 'apply', 'engine');
+    expect((await loadEpicBacklog())[0].groomingHistory![0]).toMatchObject({ by: 'engine', state: 'applied' });
+    await overrideBacklogGrooming('backlog:b', true);
+    const [restored] = await loadEpicBacklog();
+    expect(restored.groomingOverrides).toContain('backlog:b');
+    expect(restored.suggestions).toEqual([]);
+    expect(h.backlog.find((i) => i.slug === 'b')).toMatchObject({ status: 'open' });
+    expect(h.backlog.find((i) => i.slug === 'b')!.foldedInto).toBeUndefined();
+    expect(h.backlog.find((i) => i.slug === 'a')!.absorbedRequirements).toEqual({});
+    expect(restored.groomingHistory![0].state).toBe('undone');
+    await overrideBacklogGrooming('backlog:b', false);
+    expect((await loadEpicBacklog())[0].suggestions).toHaveLength(1);
+  });
+  it('retains the override when another similar idea arrives', async () => {
+    h.backlog = [row('a', 'Apple calendar event reminders'), row('b', 'Apple calendar event reminders')];
+    await overrideBacklogGrooming('backlog:b', true);
+    h.backlog.push(row('c', 'Apple calendar event reminders'));
+    const suggestions = (await loadEpicBacklog())[0].suggestions!;
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0]).toMatchObject({ itemId: 'backlog:c', targetId: 'backlog:a' });
   });
 });

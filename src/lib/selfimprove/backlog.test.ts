@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('$lib/workflows/backlog-grooming.server', () => ({ groomAfterIntake: vi.fn(async () => {}) }));
+import { groomAfterIntake } from '$lib/workflows/backlog-grooming.server';
+
 const h = vi.hoisted(() => ({
   records: [] as Array<{ key: string; data: unknown }>,
   /** Set to make getRecordByKey blow up, for the fail-closed test. */
@@ -857,4 +860,12 @@ describe('notes', () => {
     expect(notes[notes.length - 1].text).toBe('the newest thing');
     expect(notes[0].text).toBe('old 1');
   });
+});
+
+it('runs automatic grooming immediately after both owner and engine intake', async () => {
+  vi.mocked(groomAfterIntake).mockClear();
+  await addIdeas([{ title: 'Intake automatic engine example', detail: 'retain all requirements', kind: 'feature' }]);
+  expect(groomAfterIntake).toHaveBeenCalledTimes(1);
+  await createBacklogItem({ title: 'Intake automatic owner example', detail: 'retain all requirements', kind: 'feature', priority: 3 });
+  expect(groomAfterIntake).toHaveBeenCalledTimes(2);
 });

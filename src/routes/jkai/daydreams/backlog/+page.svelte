@@ -7,7 +7,7 @@
 <svelte:head><title>Daydream epic backlog — JKAI</title></svelte:head>
 <section class="band"><div class="inner">
   <header class="backlog-heading"><p class="mark">Daydream / Backlog</p><h1>Epic backlog</h1>
-    <p>Related work joins one epic automatically. Open an epic to define and manage its deliverables.</p>
+    <p>Ideas are grouped and de-duplicated as they arrive. Open an epic to manage deliverables or undo automatic consolidation.</p>
   </header>
   <QueueBoard epics={data.epics} error={data.error} />
 </div></section>
