@@ -1,1 +1,8 @@
-null
+{
+  "duration": 8.0,
+  "desktop": "/hero-background/hero-desktop-272c1424f692.mp4",
+  "desktopBytes": 1069969,
+  "mobile": "/hero-background/hero-mobile-d98c391a42b7.mp4",
+  "mobileBytes": 380718,
+  "poster": "/hero-background/hero-final-c474959798ad.webp"
+}

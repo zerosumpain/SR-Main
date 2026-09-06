@@ -41,4 +41,8 @@ desktop and phone playback, pause/resume, hold/fade/layer ordering, final-frame
 20% opacity, reduced motion, autoplay denial, disabled media and invalid inputs.
 It restores both the manifest and local database settings even on failure.
 
-The actual Drive artwork remains unverified until its source is available.
+The configured Drive animation is eight seconds long. Its 24,560,653-byte original
+was preserved; the prepared copies are 1,069,969 bytes at 960 × 550 (desktop),
+380,718 bytes at 480 × 274 (phone), and a 51,382-byte final-frame WebP. Both
+videos retain 24fps and have no audio. The source share capability is deliberately
+not stored in the repository.
