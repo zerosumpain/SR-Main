@@ -9,7 +9,7 @@
  * Findings are returned, never thrown. A study with a problem should still
  * render, with the problem visible in a test rather than a blank page.
  */
-import type { Study, Beat } from './study';
+import { say, hasPlain, type Study, type Beat, type Dual } from './study';
 
 export interface Finding {
   /** Where — a beat number, or 'study' for the whole thing. */
@@ -130,11 +130,16 @@ export function validateStudy(study: Study): Finding[] {
       if (!b.position.rejected.length) {
         add(at, 'no-alternatives', 'A position with no named alternatives is not defended, it is asserted.');
       }
-      if (!b.position.sinkers.length) {
+      if (!say(b.position.sinkers).length) {
         add(at, 'no-sinkers', 'A position must say what would sink it.');
       }
-      if (b.position.statement.length > 90) {
-        add(at, 'statement-long', `The call itself is ${b.position.statement.length} characters; the slot is 90.`);
+      // Both registers have to fit the slot — an ELI5 rewrite that overflows
+      // is the same bug as a research one that does.
+      for (const d of ['research', 'plain'] as const) {
+        const line = say(b.position.statement, d);
+        if (line.length > 90) {
+          add(at, 'statement-long', `The call itself is ${line.length} characters at ${d}; the slot is 90.`);
+        }
       }
     }
 
@@ -157,6 +162,72 @@ export function validateStudy(study: Study): Finding[] {
       }
       if (s.template === 'T7' && (s.threads?.length ?? 0) < 2) {
         add(at, 'one-thread', 'A chronicle runs two named threads. One undifferentiated thread is a Wikipedia table.');
+      }
+    }
+  }
+
+  // ——— Depth ———
+  // The shell ships a Research / ELI5 control on every page. A beat with no
+  // plain register anywhere hands a reader who asked for plain English exactly
+  // the page they already had. Reported rather than enforced: the rule arrived
+  // after both studies shipped, and failing a build over prose that has simply
+  // not been written yet is the wrong lever.
+  for (const b of arc) {
+    const carriers = [
+      b.standfirst, b.soWhat, b.claim?.text, b.openQuestion?.text,
+      ...(b.prose ?? []).map((p) => (p.plain ? { research: p.research, plain: p.plain } : p.research)),
+      ...(b.figures ?? []).map((f) => f.caption),
+      ...(b.ledger ? [b.ledger.balance, ...b.ledger.benefits.map((c) => c.text), ...b.ledger.risks.map((c) => c.text)] : []),
+      ...(b.position ? [b.position.statement, b.position.elaboration, b.position.sinkers] : []),
+    ];
+    if (!carriers.some(hasPlain)) {
+      add(`beat ${b.no}`, 'no-plain', `${b.name} has no plain-English register anywhere, so the ELI5 control does nothing on it.`);
+    }
+  }
+
+  // ——— The plain register echoing the research one ———
+  // A `plain` that merely reshuffles a few words of the research text is the
+  // ELI5 failure wearing a costume: the control moves, the reader learns
+  // nothing, and the study can claim a depth control it does not really have.
+  // Measured as shared-vocabulary overlap, ignoring markup, so a genuinely
+  // shorter rewrite passes and a light reword does not.
+  //
+  // The threshold is deliberately loose. Short factual lines legitimately
+  // repeat their nouns and numbers — "three suppliers cover four schools in
+  // five" cannot be said without them — and both shipped studies sit at or
+  // under 78%. Anything at 80% or above is a reword, not a translation.
+  const overlap = (a: string, b: string) => {
+    const words = (t: string) =>
+      new Set(t.toLowerCase().replace(/<[^>]*>/g, ' ').split(/\W+/).filter(Boolean));
+    const wa = words(a);
+    const wb = words(b);
+    if (!wa.size || !wb.size) return 0;
+    const shared = [...wa].filter((w) => wb.has(w)).length;
+    return shared / Math.max(wa.size, wb.size);
+  };
+  for (const b of arc) {
+    const fields: [string, Dual | undefined][] = [
+      ['claim', b.claim?.text], ['standfirst', b.standfirst], ['so-what', b.soWhat],
+      ['open question', b.openQuestion?.text],
+      ...(b.marginNotes ?? []).map((m, i) => [`margin note ${i + 1}`, m.text] as [string, Dual]),
+      ...(b.figures ?? []).map((f) => [`figure ${f.no}`, f.caption] as [string, Dual]),
+      ...(b.ledger
+        ? [['balance', b.ledger.balance] as [string, Dual],
+           ...b.ledger.benefits.map((c, i) => [`benefit ${i + 1}`, c.text] as [string, Dual]),
+           ...b.ledger.risks.map((c, i) => [`risk ${i + 1}`, c.text] as [string, Dual])]
+        : []),
+      ...(b.position
+        ? [['statement', b.position.statement] as [string, Dual],
+           ['elaboration', b.position.elaboration] as [string, Dual],
+           ['sinkers', b.position.sinkers] as [string, Dual]]
+        : []),
+    ];
+    for (const [name, v] of fields) {
+      if (!hasPlain(v)) continue;
+      const sim = overlap(say(v, 'research'), say(v, 'plain'));
+      if (sim >= 0.8) {
+        add(`beat ${b.no}`, 'plain-echo',
+          `The plain register of ${name} shares ${Math.round(sim * 100)}% of its words with the research one. That is a reword, not a translation.`);
       }
     }
   }
@@ -198,7 +269,7 @@ export function validateStudy(study: Study): Finding[] {
  * because the honest answer is that the arc and the rules disagree here and
  * that is a decision for the system's author, not for a validator.
  */
-export const NOTE_RULES = ['rhythm', 'position-twice'] as const;
+export const NOTE_RULES = ['rhythm', 'position-twice', 'no-plain'] as const;
 
 /** Findings that should fail a build — everything except the arc's own tensions. */
 export function errors(findings: Finding[]): Finding[] {
