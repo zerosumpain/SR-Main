@@ -11,7 +11,10 @@ import { encodeHero, requireHeroEncoder } from './hero-encode';
 import { isHeroSource } from './hero-source-policy';
 import type { HeroBackgroundAsset, HeroPreparationJob } from '$lib/constants/hero-background';
 
+import { HERO_SLOTS, type HeroSlot } from '$lib/constants/hero-slots';
+
 const ACTIVE = 'landing.hero.selected';
+const slotKey = (slot: HeroSlot) => slot === 'default' ? ACTIVE : `landing.hero.slot.${slot}`;
 const JOB = 'landing.hero.preparation';
 const ASSET = 'landing.hero.prepared.';
 interface PreparedHero {
@@ -26,7 +29,15 @@ async function readFresh<T>(key: string): Promise<T | null> {
   return (row?.value as T) ?? null;
 }
 
-export async function selectedHero() { return readFresh<PreparedHero>(ACTIVE); }
+export async function selectedHero(slot: HeroSlot = 'default') { return readFresh<PreparedHero>(slotKey(slot)); }
+
+export async function heroSlotAssignments() {
+  return Promise.all(HERO_SLOTS.map(async slot => {
+    const selected = await selectedHero(slot.id);
+    return { ...slot, source: selected ? { sourceId: selected.sourceId, sourceName: selected.sourceName } : null,
+      asset: selected?.asset ?? null };
+  }));
+}
 
 export async function heroPreparation() {
   const job = await readFresh<HeroPreparationJob>(JOB);
@@ -40,12 +51,12 @@ export async function heroSourceOptions() {
 }
 
 /** Claim a bounded database lease so separate web processes cannot start competing encodes. */
-export async function prepareHeroSource(sourceId: string) {
+export async function prepareHeroSource(sourceId: string, slot: HeroSlot = 'default') {
   const [source] = await db.select().from(workflowFiles).where(eq(workflowFiles.id, sourceId));
   if (!source || !isHeroSource(source)) throw new Error('Choose a readable MP4 directly in siteherobackground, no larger than 50 MB.');
   await requireHeroEncoder();
   const now = Date.now();
-  const job: HeroPreparationJob = { id: randomUUID(), phase: 'running', sourceName: source.name, expiresAt: now + 10 * 60_000 };
+  const job: HeroPreparationJob = { id: randomUUID(), phase: 'running', slot, sourceName: source.name, expiresAt: now + 10 * 60_000 };
   const claimed = await db.insert(appSettings).values({ key: JOB, value: job }).onConflictDoUpdate({
     target: appSettings.key,
     set: { value: job, updatedAt: new Date() },
@@ -103,7 +114,7 @@ async function prepare(job: HeroPreparationJob, source: typeof workflowFiles.$in
         permissions: { read: true, write: false, append: false, delete: false },
       })));
       await tx.insert(appSettings).values({ key: ASSET + job.id, value: record });
-      await tx.insert(appSettings).values({ key: ACTIVE, value: record }).onConflictDoUpdate({
+      await tx.insert(appSettings).values({ key: slotKey(job.slot ?? 'default'), value: record }).onConflictDoUpdate({
         target: appSettings.key, set: { value: record, updatedAt: new Date() },
       });
       await tx.update(appSettings).set({ value: { ...job, phase: 'succeeded' }, updatedAt: new Date() }).where(eq(appSettings.key, JOB));
@@ -120,12 +131,17 @@ async function prepare(job: HeroPreparationJob, source: typeof workflowFiles.$in
   }
 }
 
-export async function restoreBundledHero() {
+export async function restoreBundledHero(slot: HeroSlot = 'default') {
   await db.transaction(async tx => {
-    // Lock the same row as the publishing transaction; a finishing encode cannot undo this choice.
-    await tx.insert(appSettings).values({ key: JOB, value: { id: randomUUID(), phase: 'succeeded', sourceName: 'Included animation', expiresAt: 0 } })
-      .onConflictDoUpdate({ target: appSettings.key, set: { value: { id: randomUUID(), phase: 'succeeded', sourceName: 'Included animation', expiresAt: 0 }, updatedAt: new Date() } });
-    await tx.delete(appSettings).where(eq(appSettings.key, ACTIVE));
+    // Serialize with publication, but clearing another slot must not cancel its encode.
+    const replacement: HeroPreparationJob = { id: randomUUID(), phase: 'succeeded', slot, sourceName: 'Default animation', expiresAt: 0 };
+    await tx.insert(appSettings).values({ key: JOB, value: replacement }).onConflictDoNothing();
+    const [current] = await tx.select().from(appSettings).where(eq(appSettings.key, JOB)).for('update');
+    const job = current?.value as HeroPreparationJob;
+    if (job?.phase !== 'running' || (job.slot ?? 'default') === slot) {
+      await tx.update(appSettings).set({ value: replacement, updatedAt: new Date() }).where(eq(appSettings.key, JOB));
+    }
+    await tx.delete(appSettings).where(eq(appSettings.key, slotKey(slot)));
   });
 }
 

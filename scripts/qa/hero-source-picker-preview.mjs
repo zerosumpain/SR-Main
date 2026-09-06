@@ -47,7 +47,7 @@ try {
  await section.getByRole('status').filter({hasText:'Preparing'}).waitFor();
  const duplicate=await context.request.post(base+'/admin/content/hero/background',{data:{sourceId:source.id}});
  assert.equal(duplicate.status(),400);
- await section.getByText('Background updated.',{exact:false}).waitFor({timeout:120000});
+ await section.getByText('Default updated.',{exact:false}).waitFor({timeout:120000});
  const selected=(await db.query('select value from app_settings where key=$1',[keys[0]])).rows[0].value;
  assert.equal(selected.sourceId,source.id);
  assert(selected.asset.desktopBytes<=2_000_000&&selected.asset.mobileBytes<=1_000_000);

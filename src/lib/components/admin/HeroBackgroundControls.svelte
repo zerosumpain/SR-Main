@@ -73,7 +73,7 @@
     {#if result?.backgroundError}<p role="alert">{result.backgroundError}</p>{/if}
   </form>
   {#if preview && asset}
-    {#key replay}
+    {#key `${replay}:${asset.desktop}`}
       <div class="animation-preview">
         <HeroBackground settings={preview} {asset} />
         <div class="preview-title"><LandingHero tag="Animation preview" /></div>
