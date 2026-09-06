@@ -978,9 +978,15 @@ export const POST: RequestHandler = async ({ request }) => {
         if (!Number.isFinite(priority)) {
           return json({ error: 'priority must be a number 1-5' }, { status: 400 });
         }
+        const epicSlug = str('epicSlug');
+        if (epicSlug) {
+          const { loadEpicBacklog } = await import('$lib/selfimprove/epic-backlog.server');
+          if (!(await loadEpicBacklog()).some((e) => e.slug === epicSlug)) return json({ error: 'Epic not found' }, { status: 404 });
+        }
         const { createBacklogItem } = await import('$lib/selfimprove/backlog');
         const item = await createBacklogItem({
           title,
+          ...(epicSlug ? { epicSlug } : {}),
           detail: str('detail'),
           kind: str('kind'),
           priority,
@@ -1159,11 +1165,18 @@ export const POST: RequestHandler = async ({ request }) => {
        * first is one a matcher may make — the second abandons rows, and the
        * owner makes it per item inside the lane.
        */
-      case 'epic_merge': {
-        const slug = str('slug');
-        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
-        const { mergeEpic } = await import('$lib/selfimprove/epics');
-        return json({ ok: true, ...await mergeEpic(slug) });
+      case 'backlog_grooming_decide': {
+        const decision = str('decision');
+        if (decision !== 'apply' && decision !== 'keep') return json({ error: 'decision must be apply or keep' }, { status: 400 });
+        const { decideBacklogGrooming } = await import('$lib/selfimprove/epic-backlog.server');
+        await decideBacklogGrooming(str('id'), decision);
+        return json({ ok: true });
+      }
+
+      case 'epic_update': {
+        const { updateEpic } = await import('$lib/selfimprove/epic-backlog.server');
+        await updateEpic(str('slug'), str('title'), str('summary'), body.priority == null ? undefined : Number(body.priority));
+        return json({ ok: true });
       }
 
       case 'epic_decide': {

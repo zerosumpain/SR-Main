@@ -23,10 +23,12 @@
 
   interface Props {
     item: WorkItem | null;
+    embedded?: boolean;
+    epicSlug?: string;
     onclose: () => void;
   }
 
-  let { item, onclose }: Props = $props();
+  let { item, onclose, embedded = false, epicSlug }: Props = $props();
   const creating = $derived(item == null);
   const actionable = $derived(item == null || item.actionable);
   const tone = $derived<BoardTone>(item ? STAGE_META[item.stage].tone : 'action');
@@ -242,6 +244,7 @@
     saving = true;
     const result = await postThought({
       action: creating ? 'backlog_create' : 'backlog_update',
+      ...(creating && epicSlug ? { epicSlug } : {}),
       ...(item ? { slug: item.slug } : {}),
       title: title.trim(),
       detail: detail.trim(),
@@ -362,13 +365,6 @@
   );
 </script>
 
-<DrillPanel
-  label={creating ? 'Add a backlog feature' : (item?.title ?? 'Backlog feature')}
-  kicker={creating ? 'New feature' : `${item?.lane ?? ''} · ${item ? STAGE_META[item.stage].label : ''}`}
-  {tone}
-  {onclose}
-  wide
->
   {#snippet head()}
     {#if item?.grooming}
       <span class="pill t-{item.grooming.readiness.status === 'ready' ? 'good' : item.grooming.readiness.status === 'needs_input' ? 'watch' : 'quiet'}">
@@ -379,6 +375,7 @@
     {/if}
   {/snippet}
 
+{#snippet editorContent()}
   {#if !actionable && item}
     <div class="readonly">
       <p class="eyebrow">Capability lead</p>
@@ -396,7 +393,7 @@
   {:else}
     <nav class="journey" class:with-discuss={!creating} aria-label="Feature editor steps">
       <button type="button" class:active={step === 'brief'} onclick={() => go('brief')}>
-        <span>1</span><b>Brief</b><small>Frame the need</small>
+        <span>1</span><b>Definition</b><small>Frame the need</small>
       </button>
       <button type="button" class:active={step === 'groom'} onclick={() => go('groom')}>
         <span>2</span><b>AI groom</b><small>Question and refine</small>
@@ -418,7 +415,7 @@
 
     {#if step === 'brief'}
       <section class="step-pane brief-pane" aria-labelledby="brief-heading">
-        <h2 class="editor-heading" id="brief-heading">Define the work</h2>
+        <h2 class="editor-heading" id="brief-heading">{embedded ? 'Define deliverable' : 'Define the first deliverable'}</h2>
         <div class="classification">
           <fieldset><legend>Category</legend><div class="choices">
             {#each BACKLOG_KINDS as option}<button type="button" class="clean-button" class:chosen={kind === option} aria-pressed={kind === option} disabled={item?.backlogStatus === 'shipped'} onclick={() => kind = option}>{option}</button>{/each}
@@ -440,7 +437,7 @@
           <label class="c-row">
             <p class="c-num">01</p>
             <div class="c-say">
-              <span class="c-label">Feature title</span>
+              <span class="c-label">Deliverable title</span>
               <span class="c-help">
                 A short, outcome-led name.
                 {#if item}The durable identifier stays <code>{item.slug}</code> if this changes.{/if}
@@ -679,7 +676,7 @@
         </div>
 
         <div class="identity">
-          <label class="field item-title"><span>Feature title</span><input class="control" bind:value={title} maxlength="200" /></label>
+          <label class="field item-title"><span>Deliverable title</span><input class="control" bind:value={title} maxlength="200" /></label>
           <label class="field"><span>Delivery lane</span><select class="control" bind:value={kind} disabled={item?.backlogStatus === 'shipped'}>{#each BACKLOG_KINDS as option (option)}<option value={option}>{option}</option>{/each}</select></label>
           <label class="field"><span>Priority</span><select class="control" bind:value={priority}>{#each [1, 2, 3, 4, 5] as value (value)}<option value={value}>P{value}</option>{/each}</select></label>
         </div>
@@ -783,13 +780,15 @@
     {/if}
   {/if}
 
+{/snippet}
+
   {#snippet foot()}
     <div class="footer-actions">
       <button class="clean-button quiet" type="button" disabled={saving || groomingBusy || destructiveBusy} onclick={onclose}>Close</button>
       <span class="footer-spacer"></span>
       {#if actionable}
         {#if step === 'brief'}
-          <button class="clean-button" type="button" disabled={saving || groomingBusy} onclick={() => save()}>{saving ? 'Saving…' : creating ? 'Add to backlog' : 'Save changes'}</button>
+          <button class="clean-button" type="button" disabled={saving || groomingBusy} onclick={() => save()}>{saving ? 'Saving…' : creating ? (epicSlug ? 'Add deliverable' : 'Create epic') : 'Save deliverable'}</button>
           <button class="clean-button primary" type="button" disabled={saving || groomingBusy} onclick={() => groom()}>{groomingBusy ? 'Grooming…' : 'Groom with default model →'}</button>
         {:else if step === 'groom'}
           <button class="clean-button" type="button" disabled={groomingBusy} onclick={() => go('brief')}>← Back to brief</button>
@@ -804,7 +803,13 @@
       {/if}
     </div>
   {/snippet}
-</DrillPanel>
+{#if embedded}
+  <div class="embedded-editor">{@render editorContent()}{@render foot()}</div>
+{:else}
+  <DrillPanel label={creating ? 'Add an epic' : (item?.title ?? 'Deliverable')} kicker={creating ? 'New epic · first deliverable' : 'Deliverable'} {tone} {onclose} {head} {foot} wide>
+    {@render editorContent()}
+  </DrillPanel>
+{/if}
 
 <style>
   :global(.dp-panel.wide) {

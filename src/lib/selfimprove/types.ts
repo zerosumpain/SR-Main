@@ -517,6 +517,7 @@ export type { IdeaSource } from './board';
 /** Shape of an `improvement_backlog` record's `data`. */
 export interface BacklogItemData {
   /** Retained requirements from consolidated stories, appended to every build brief. */
+  absorbedRequirements?: Record<string, string>;
   mergedBrief?: string;
   /** Stable slug key, derived from the title. */
   slug: string;
@@ -641,6 +642,11 @@ export type EpicStatus = 'proposed' | 'accepted' | 'declined';
  * as recorded, so filler prose would stamp full confidence on a guess.
  */
 export interface EpicData {
+  groomingKept?: string[];
+  automatic?: boolean;
+  deliverableIds?: string[];
+  ownerTitle?: string;
+  summary?: string;
   /** Queued consolidated brief; source records remain linked and retained. */
   mergedInto?: string;
   /** Derived from the sorted member slugs — see `clusterSlug`. */

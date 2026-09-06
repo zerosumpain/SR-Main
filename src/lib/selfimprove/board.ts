@@ -282,6 +282,7 @@ export interface WorkItem {
   /** A shipped sibling looks to cover this already. */
   alreadyServed: boolean;
   servedBy: string | null;
+  absorbedRequirements?: Record<string, string>;
   mergedBrief?: string;
   foldedCount: number;
   foldedInto: string | null;
@@ -623,6 +624,7 @@ export function buildBoard(input: BoardInput): BoardView {
       newData: bringsNewData(b.kind),
       alreadyServed: served != null,
       servedBy: served,
+      absorbedRequirements: b.absorbedRequirements,
       mergedBrief: b.mergedBrief,
       foldedCount: b.foldedCount ?? 0,
       foldedInto: b.foldedInto ?? null,

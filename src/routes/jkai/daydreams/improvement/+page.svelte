@@ -6,7 +6,6 @@
   import type { PageData } from './$types';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import NightTimeline from '$lib/components/jkai/daydream/rooms/NightTimeline.svelte';
-  import DoctorBand from '$lib/components/jkai/daydream/rooms/DoctorBand.svelte';
   import LoopScoreboard from '$lib/components/jkai/daydream/LoopScoreboard.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
@@ -64,7 +63,7 @@
     {
       key: 'ideas',
       mark: '3',
-      label: 'Ideas queued',
+      label: 'Deliverables queued',
       value: String(story.backlog.open),
       sub: `${story.backlog.engine} about the engine itself · ${story.backlog.shipped} shipped all time`,
       tone: story.backlog.open ? 'steady' : 'quiet',
@@ -110,8 +109,12 @@
     },
   ]);
 
-  const doctor = $derived(data.doctor);
 </script>
+
+<nav class="improvement-actions" aria-label="Improvement actions">
+  <a class="cta" href="/jkai/daydreams/doctor">Open Doctor →</a>
+  <a class="btn" href="/jkai/daydreams/backlog">Epic backlog →</a>
+</nav>
 
 <!-- The night, before anything it produced. One window, one budget: a night
      that overruns is a night that stops rather than a night that spends, so
@@ -169,16 +172,9 @@
   </div>
 </section>
 
-<!-- Ink, because this is the system reporting on itself rather than another
-     exhibit on the page. The four rollup cells stay underneath: the band draws
-     the distinction (fixed itself / handed back), the grid keeps the totals. -->
-<section class="band ink" id="doctor">
-  <div class="inner">
-    <DoctorBand {doctor} kicker="E / The doctor" window={data.doctorWindow.window} active={data.doctorWindow.active} />
-  </div>
-</section>
-
 <style>
+  .improvement-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px clamp(20px, 3vw, 44px); border-bottom: 1px solid var(--line); background: var(--surface-rail); }
+
   .ledger {
     margin-top: clamp(28px, 4vw, 56px);
     padding-top: clamp(24px, 3vw, 40px);

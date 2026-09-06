@@ -77,19 +77,20 @@ function toRow(r: Raw): CapabilityRow {
 }
 
 export async function listCapabilities(
-  opts: { statuses?: ReadonlyArray<CapabilityStatus>; kinds?: ReadonlyArray<CapabilityKind>; limit?: number } = {},
+  opts: { statuses?: ReadonlyArray<CapabilityStatus>; kinds?: ReadonlyArray<CapabilityKind>; limit?: number | null } = {},
 ): Promise<CapabilityRow[]> {
   const where = [
     ...(opts.statuses?.length ? [inArray(daydreamCapabilities.status, [...opts.statuses])] : []),
     ...(opts.kinds?.length ? [inArray(daydreamCapabilities.kind, [...opts.kinds])] : []),
   ];
-  const rows = await db
+  const rows = db
     .select()
     .from(daydreamCapabilities)
     .where(where.length ? and(...where) : undefined)
     .orderBy(desc(daydreamCapabilities.score), desc(daydreamCapabilities.lastSeenAt))
-    .limit(opts.limit ?? 60);
-  return rows.map(toRow);
+    .$dynamic();
+  const selected = opts.limit === null ? await rows : await rows.limit(opts.limit ?? 60);
+  return selected.map(toRow);
 }
 
 export async function getCapability(slug: string): Promise<CapabilityRow | null> {
