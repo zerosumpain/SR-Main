@@ -11,7 +11,7 @@ import { tallyMailDecisions } from '$lib/jkai/intel/mail-decisions';
 import { mailIndexStats } from '$lib/mail-index/search';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { intelNotes } from '$lib/db/schema';
+import { intelNotes, intelEntities } from '$lib/db/schema';
 
 /**
  * How much of the queue has been scored against the graph.
@@ -25,6 +25,7 @@ async function relevanceCoverage() {
   const [row] = await db
     .select({
       withHits: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'hits')::int > 0)::int`,
+      foregroundHits: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'topWeight')::int >= 3)::int`,
       // coalesce, because `NULL ? key` is NULL, not false — without it a note
       // with no metadata at all falls out of BOTH counts and the coverage line
       // silently under-reports the very threads most likely to be unscored.
@@ -32,7 +33,19 @@ async function relevanceCoverage() {
     })
     .from(intelNotes)
     .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')));
-  return { withHits: Number(row?.withHits) || 0, unscored: Number(row?.unscored) || 0 };
+  // The owner's foreground, read straight from the graph: a topical rule keyed
+  // on it matches nothing while this is 0, and that must be visible on the page
+  // rather than inferred from a rule that never fires.
+  const [fg] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(intelEntities)
+    .where(sql`${intelEntities.mergedIntoId} IS NULL AND (${intelEntities.watched} OR ${intelEntities.lens} IS NOT NULL)`);
+  return {
+    withHits: Number(row?.withHits) || 0,
+    unscored: Number(row?.unscored) || 0,
+    foregroundHits: Number(row?.foregroundHits) || 0,
+    foreground: Number(fg?.n) || 0,
+  };
 }
 
 export const load: PageServerLoad = async () => {
@@ -41,7 +54,7 @@ export const load: PageServerLoad = async () => {
     listMailRules().catch(() => []),
     tallyMailDecisions().catch(() => ({ total: 0, admitted: 0, rejected: 0, byOwner: 0 })),
     mailIndexStats().catch(() => ({ threads: 0, chunks: 0 })),
-    relevanceCoverage().catch(() => ({ withHits: 0, unscored: 0 })),
+    relevanceCoverage().catch(() => ({ withHits: 0, unscored: 0, foregroundHits: 0, foreground: 0 })),
   ]);
 
   return {

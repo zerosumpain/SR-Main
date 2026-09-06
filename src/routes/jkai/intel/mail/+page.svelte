@@ -178,7 +178,8 @@
       }
       message = body.entities
         ? `${body.withHits} of ${body.scanned} threads name something the graph knows, ` +
-          `scored against ${body.entities} entities.` +
+          `scored against ${body.entities} entities (${body.foreground} in your foreground` +
+          `${body.blocked ? `, ${body.blocked} ignored as boilerplate` : ''}).` +
           (body.remaining ? ` ${body.remaining} past the limit — run it again.` : '') +
           (body.similarityFailed ? ' Similarity was unavailable — the name matching still ran.' : '')
         : 'Nothing in the graph is known from outside email yet, so there is nothing to score against.';
@@ -257,6 +258,20 @@
     <p class="hint warn">
       {data.relevance.unscored.toLocaleString()} held threads have never been scored against the graph, so every
       graph* fact reads 0 for them and no topical rule can match them. Re-score to fix it.
+    </p>
+  {/if}
+  {#if data.relevance.foreground === 0}
+    <p class="hint warn">
+      Nothing is watched, lensed or in a dossier, so no thread can score as naming something you track and the
+      topical admit rule matches nothing. That is the rule working, not failing. Measured on this mailbox, a rule
+      keyed on the graph at large instead matched 67% of the queue and offered marketing mail — the graph holds the
+      same brands and topics newsletters are about. Watch the twenty or thirty things that actually matter on
+      <a href="/jkai/intel/entities">the entities page</a> and the rule becomes both safe and useful.
+    </p>
+  {:else}
+    <p class="hint">
+      {data.relevance.foreground.toLocaleString()} entities in your foreground ·
+      {data.relevance.foregroundHits.toLocaleString()} held threads name one.
     </p>
   {/if}
 

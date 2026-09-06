@@ -68,14 +68,12 @@ export interface AnchoredEntity {
 /**
  * Single words too common to identify anything.
  *
- * A one-token surface is the dangerous case: the graph holds entities called
- * "Data", "Report" and "Security", and matching those would score every email
- * in the mailbox as relevant to everything. Multi-word surfaces need no such
- * guard — "Keystone Data Strategy" cannot appear by accident.
- *
- * Deliberately a stop-list of GENERIC words rather than a frequency cut-off: a
- * frequency rule would silently drop a genuinely common but meaningful name
- * once enough mail mentioned it, which is the opposite of what is wanted.
+ * A cheap first cut only. The real guard is the document-frequency pass in
+ * `scoreMailRelevance` — see DF_BLOCK_SHARE. A hand-written list cannot work on
+ * its own and the first production run proved it: with this list alone, 97.7% of
+ * the mailbox "named something the graph knows", because the graph holds
+ * entities called "time", "browser", "summer", "Privacy Policy" and — worst —
+ * the owner's own name, which is in every email he has ever received.
  */
 const GENERIC_SURFACES = new Set([
   'data', 'report', 'reports', 'security', 'team', 'teams', 'project', 'projects',
@@ -94,6 +92,26 @@ const MIN_SINGLE_TOKEN = 3;
 const MAX_SURFACE_TOKENS = 6;
 /** Text past this is not read. A pathological thread must not stall a sweep. */
 const MAX_MATCH_CHARS = 20_000;
+
+/**
+ * Share of the corpus above which an entity stops counting as a signal.
+ *
+ * This is IDF, and it is the guard that actually works. An entity naming 441 of
+ * 3,776 threads discriminates nothing — whatever it is, it is footer boilerplate,
+ * a platform every service emails about, or the owner himself. A hand-written
+ * stop-list cannot anticipate those; a frequency cut-off needs no list and
+ * re-tunes itself as the mailbox changes.
+ *
+ * Measured on the first production run, the names above this line were:
+ * "Johnkelly Main" (1,130 threads — the owner), "Email thread" (807), "time"
+ * (692), "Privacy Policy" (441), "browser" (418), "summer" (290), "Run" (278),
+ * "emails" (272), "Gmail" (257), "LinkedIn" (216), "credit" (209) and
+ * "Facebook" (193). Everything the owner would actually want — Darlington,
+ * Keystone, real correspondents — sits well below it.
+ */
+export const DF_BLOCK_SHARE = 0.05;
+/** Below this many threads the share is meaningless, so nothing is blocked. */
+const DF_MIN_CORPUS = 200;
 
 /**
  * The text a thread is scored on.
@@ -190,18 +208,25 @@ export interface LexicalMatch {
 }
 
 /**
- * Which anchored entities this text names. PURE.
+ * Every anchored entity this text names, by id. PURE.
  *
  * A sliding window over the normalised tokens. Deduplicated by entity id, so a
  * name repeated forty times in a quoted reply chain still counts once —
  * otherwise the longest thread would always be the most relevant one.
  *
- * Pruned twice, because the naive form is 3,300 tokens × 6 widths × 3,776
+ * Pruned twice, because the naive form is 3,300 tokens x 6 widths x 3,776
  * threads and that is 75 million map lookups a night for nothing: a position
  * whose first token starts no indexed name cannot begin a match, and a width no
  * stored name actually has is never worth slicing for.
+ *
+ * Separate from `matchEntities` so the document-frequency pass can count raw
+ * hits before anything has been blocked — the block list is derived FROM these
+ * counts, so it cannot also be an input to them.
  */
-export function matchEntities(text: string, index: SurfaceIndex, sampleLimit = 5): LexicalMatch {
+export function matchedEntities(
+  text: string,
+  index: SurfaceIndex,
+): Map<string, { name: string; weight: number }> {
   const tokens = normaliseName(text).split(' ').filter(Boolean);
   const found = new Map<string, { name: string; weight: number }>();
 
@@ -212,6 +237,22 @@ export function matchEntities(text: string, index: SurfaceIndex, sampleLimit = 5
       const hit = index.by.get(width === 1 ? tokens[i] : tokens.slice(i, i + width).join(' '));
       if (hit && !found.has(hit.id)) found.set(hit.id, { name: hit.name, weight: hit.weight });
     }
+  }
+  return found;
+}
+
+export interface MatchOptions {
+  /** Entity ids the document-frequency pass has ruled out. */
+  blocked?: ReadonlySet<string>;
+  sampleLimit?: number;
+}
+
+/** The summary a note is scored on: how many, how important, and which. PURE. */
+export function matchEntities(text: string, index: SurfaceIndex, opts: MatchOptions = {}): LexicalMatch {
+  const sampleLimit = opts.sampleLimit ?? 5;
+  const found = matchedEntities(text, index);
+  if (opts.blocked?.size) {
+    for (const id of found.keys()) if (opts.blocked.has(id)) found.delete(id);
   }
 
   const matches = [...found.values()].sort((a, b) => b.weight - a.weight);
@@ -347,8 +388,19 @@ export interface ScoreResult {
   /** Anchored entities the matcher was built from — 0 means the graph has
    *  nothing to score against and every thread will read as irrelevant. */
   entities: number;
+  /** Of those, how many are in the owner's foreground: watched, lensed or in a
+   *  dossier. 0 means no thread can ever reach topWeight 3, so a rule keyed on
+   *  the foreground matches nothing — which is correct, and needs saying out
+   *  loud rather than looking like a quiet mailbox. */
+  foreground: number;
   /** True when the vector half could not run. The lexical half still did. */
   similarityFailed: boolean;
+  /** Entities the document-frequency pass stopped counting, and the worst
+   *  offenders by name. Reported rather than silent: "this thread names
+   *  nothing" and "everything it names is boilerplate" are different answers
+   *  and the second one is the interesting one. */
+  blocked: number;
+  blockedNames: string[];
   /** Hit counts across the run, for the page and the run log. */
   distribution: Record<string, number>;
 }
@@ -379,12 +431,16 @@ export async function scoreMailRelevance(opts: ScoreOptions = {}): Promise<Score
     withHits: 0,
     remaining: 0,
     entities: 0,
+    foreground: 0,
+    blocked: 0,
+    blockedNames: [],
     similarityFailed: false,
     distribution: {},
   };
 
   const anchored = await loadAnchoredEntities();
   out.entities = anchored.length;
+  out.foreground = anchored.filter((e) => e.weight === 3).length;
   if (!anchored.length) {
     console.warn('[intel:mail-relevance] no anchored entities — nothing to score against');
     return out;
@@ -412,6 +468,38 @@ export async function scoreMailRelevance(opts: ScoreOptions = {}): Promise<Score
   out.remaining = Math.max(0, notes.length - limit);
   const inRange = notes.slice(0, limit);
 
+  // ── Pass one: document frequency ──
+  //
+  // Count how many threads each entity appears in, then stop counting the ones
+  // that appear nearly everywhere. Matching is in-memory and already indexed, so
+  // a second pass costs a fraction of a second and buys the only guard that
+  // actually holds: without it the first production run scored 97.7% of the
+  // mailbox as naming something, on the strength of "Privacy Policy", "browser"
+  // and the owner's own name.
+  const texts = inRange.map((n) => relevanceTextOf(n.title, n.rawContent));
+  const blocked = new Set<string>();
+  if (inRange.length >= DF_MIN_CORPUS) {
+    const df = new Map<string, { name: string; n: number }>();
+    for (const text of texts) {
+      for (const [id, hit] of matchedEntities(text, index)) {
+        const seen = df.get(id);
+        if (seen) seen.n++;
+        else df.set(id, { name: hit.name, n: 1 });
+      }
+    }
+    const ceiling = inRange.length * DF_BLOCK_SHARE;
+    const over = [...df.entries()].filter(([, v]) => v.n > ceiling).sort((a, b) => b[1].n - a[1].n);
+    for (const [id] of over) blocked.add(id);
+    out.blocked = over.length;
+    out.blockedNames = over.slice(0, 15).map(([, v]) => `${v.name} (${v.n})`);
+    if (over.length) {
+      console.log(
+        `[intel:mail-relevance] ${over.length} entities appear in more than ` +
+          `${Math.round(DF_BLOCK_SHARE * 100)}% of threads and no longer count: ${out.blockedNames.join(', ')}`,
+      );
+    }
+  }
+
   for (let start = 0; start < inRange.length; start += CHUNK) {
     const chunk = inRange.slice(start, start + CHUNK);
     let nearest = new Map<string, number>();
@@ -430,9 +518,12 @@ export async function scoreMailRelevance(opts: ScoreOptions = {}): Promise<Score
     }
 
     const writes: Array<{ id: string; relevance: GraphRelevance }> = [];
-    for (const note of chunk) {
+    for (let i = 0; i < chunk.length; i++) {
+      const note = chunk[i];
       out.scanned++;
-      const match = matchEntities(relevanceTextOf(note.title, note.rawContent), index);
+      // Reuses the text pass one already built, and applies the block list it
+      // derived. Pass two is the only one whose numbers are stored.
+      const match = matchEntities(texts[start + i], index, { blocked });
       const relevance: GraphRelevance = {
         hits: match.hits,
         topWeight: match.topWeight,
