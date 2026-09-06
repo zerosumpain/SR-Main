@@ -1,8 +1,23 @@
 <script lang="ts">
+  // Projects — the index of everything built on this site.
+  //
+  // Wears the /health editorial system, the same way /research, /news and
+  // /drive do: `HealthShell` with `unifiedNav`, an ink cover band carrying the
+  // count deck, then paper sections opened by `SectionHead`.
+  //
+  // Two sections, and the split is the one the page's own standfirst already
+  // made: what was built by hand, and what an agent built from a single
+  // prompt. The fifteen hand-built cards moved out to `./cards.ts` — they were
+  // fifteen copies of one 37-line block, each with its own inline font sizes,
+  // which is exactly how a page drifts out of the design system one card at a
+  // time. Both kinds now render through ONE snippet, so they cannot diverge.
   import type { PageData } from './$types';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
+  import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
   import ShareModal from './ShareModal.svelte';
+  import { PROJECT_CARDS, type ProjectCard } from './cards';
   import { resolveProjectCard } from '$lib/jkai/project-card';
+  import type { Snippet } from 'svelte';
 
   let { data }: { data: PageData } = $props();
   let projects = $state(data.projects);
@@ -17,6 +32,9 @@
 
   const isPub = (key: string) => vis[key] ?? true;
   const showCard = (key: string) => data.authenticated || isPub(key);
+
+  const shownCards = $derived(PROJECT_CARDS.filter((c) => showCard(c.key)));
+  const studyCount = $derived(shownCards.filter((c) => /^field study/i.test(c.kind)).length);
 
   async function toggleVisibility(key: string) {
     const next = !isPub(key);
@@ -43,6 +61,25 @@
       month: 'short',
       year: 'numeric',
     });
+  }
+
+  /**
+   * An AI-built project, in the same shape as a hand-written card. This is the
+   * join: `resolveProjectCard` already answers heading/blurb/tag, so the only
+   * thing left is to name the three fields the manifest adds.
+   */
+  function agentCard(project: PageData['projects'][number]): ProjectCard {
+    const meta = resolveProjectCard(project);
+    return {
+      key: project.slug!,
+      href: `/projects/${project.slug}/`,
+      label: `View ${project.title ?? 'project'}`,
+      kind: 'AI Built',
+      tag: meta.tag || formatDate(project.createdAt),
+      title: meta.heading,
+      blurb: meta.blurb,
+      chips: `${project.iterationsCompleted} iterations`,
+    };
   }
 
   // Two kinds of card, two meanings of "remove". An app build was COPIED to
@@ -83,32 +120,21 @@
   <meta property="og:url" content="https://strangeramblings.com/projects" />
 </svelte:head>
 
-<PageHeader title="PROJECTS" />
-
 {#snippet visToggle(key: string, href: string, title: string)}
   {#if data.authenticated}
-    <span class="flex items-center gap-2 relative z-10 ml-auto">
-      {#if !isPub(key)}
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--error-bg); color: var(--error);"
-        >
-          Private
-        </span>
-      {/if}
+    <span class="owner-controls">
+      {#if !isPub(key)}<span class="chip private">Private</span>{/if}
       <button
+        class="ctl"
         onclick={() => (shareModal = { key, href, title })}
-        class="px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
-        style="border-color: var(--card-border); color: var(--text-secondary);"
         title="Create a secure share link — opens this project for a recipient even while private"
       >
         Share
       </button>
       <button
+        class="ctl"
         onclick={() => toggleVisibility(key)}
         disabled={toggling === key}
-        class="px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
-        style="border-color: var(--card-border); color: var(--text-secondary); opacity: {toggling === key ? 0.5 : 1};"
         title={isPub(key)
           ? 'Visible to the public — click to make private'
           : 'Hidden from the public — click to make public'}
@@ -119,668 +145,123 @@
   {/if}
 {/snippet}
 
-<section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <div class="max-w-2xl mx-auto mb-12 text-center">
-    <p class="text-base leading-relaxed" style="color: var(--text-secondary);">
-      Things I've built — interactive field studies, strategy games and data tools, several of them
-      digging into how government and education data fits together. Some made by hand, some built
-      autonomously by an AI agent from a single prompt (those carry an "AI Built" mark).
-    </p>
-  </div>
-
-  <div class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-    {#if showCard('bathroom')}
-    <div class="project-card group">
-      <a href="/projects/bathroom" class="absolute inset-0 z-0" aria-label="Open Bathroom Planner"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Tool
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Home project
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Bathroom Planner — Refitting a Terrace Bathroom
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        Put your own measurements in and drag a bath, a walk-in shower and a wall-hung WC around a
-        to-scale floor plan that knows how much room you need to stand in front of each one, and how
-        far the toilet has drifted from the soil stack. Then a two-way cost model at 2026 rates —
-        set a budget and it picks the spec, or pick the spec and watch it climb — plus who does what,
-        the day-by-day programme, and a 47-item snag list to hold the last 5% against.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          to-scale planner · cost model · snag list
-        </span>
-        {@render visToggle('bathroom', '/projects/bathroom', 'Bathroom Planner')}
-      </div>
+<!-- One card, both kinds. `extra` is the AI-built card's remove button; the
+     hand-built cards pass nothing. -->
+{#snippet card(c: ProjectCard, extra?: Snippet)}
+  <li class="pc">
+    <a class="pc-hit" href={c.href} aria-label={c.label}></a>
+    <div class="pc-eyebrow">
+      <span class="pc-kind">{c.kind}</span>
+      <span class="pc-tag">{c.tag}</span>
     </div>
-    {/if}
-
-    {#if showCard('scs-earnings')}
-    <div class="project-card group">
-      <a href="/projects/scs-earnings/" class="absolute inset-0 z-0" aria-label="Open Senior Civil Servant Earnings"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №6
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Pay data
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Senior Civil Servant Earnings — Fifteen Years of Whitehall Pay
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        How many mandarins out-earn the Prime Minister? What is a digital director worth against a
-        policy one? Plot the pay of the 46,595 most senior posts across 25 government departments,
-        2010–2026 — by department, profession, grade and the DDaT-vs-policy split, in real terms or
-        nominal. Built entirely on gov.uk organogram transparency data, with a full glass-box method.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          gov.uk data · 46,595 posts · OGL
-        </span>
-        {@render visToggle('scs-earnings', '/projects/scs-earnings/', 'Senior Civil Servant Earnings')}
-      </div>
+    <h3 class="pc-title">{c.title}</h3>
+    <p class="pc-blurb">{c.blurb}</p>
+    <div class="pc-foot">
+      <span class="chip">{c.chips}</span>
+      {@render visToggle(c.key, c.href, c.title)}
+      {#if extra}{@render extra()}{/if}
     </div>
-    {/if}
+  </li>
+{/snippet}
 
-    {#if showCard('broads-pilot')}
-    <div class="project-card group">
-      <a href="/projects/broads-pilot" class="absolute inset-0 z-0" aria-label="Open Broads Pilot"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №5
+<HealthShell
+  path="/projects"
+  unifiedNav
+  footer={[
+    'strangeramblings.com/projects · the workbench',
+    `${shownCards.length + projects.length} projects · ${studyCount} field studies`,
+    'some by hand, some by an agent',
+  ]}
+>
+  <section class="lede">
+    <div class="lede-inner">
+      <div class="lede-copy">
+        <p class="eyebrow">Field studies · tools · games</p>
+        <h1>THINGS I'VE BUILT.<br /><span>SOME OF THEM WORK.</span></h1>
+        <p class="standfirst">
+          Interactive field studies, strategy games and data tools, several of them digging into how
+          government and education data fits together. Some made by hand, some built autonomously by
+          an AI agent from a single prompt — those carry an "AI Built" mark.
         </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Route planner
-        </span>
       </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Broads Pilot — Norfolk Broads Route Planner
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        Pick your hire boat, drop a pin, and see exactly where you can get to today — and safely.
-        True river-following routing over an OpenStreetMap waterway graph, honouring the 3–6 mph
-        speed zones, with travel times, fuel cost and range. Every bridge, the Mutford lock and the
-        Breydon tidal crossing are checked against <em>your</em> boat's air draft and beam, with
-        moorings, charges, dog-friendly walks and waterside pubs along the way.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          waterway routing · boat-aware · PWA
-        </span>
-        {@render visToggle('broads-pilot', '/projects/broads-pilot', 'Broads Pilot')}
-      </div>
-    </div>
-    {/if}
 
-    {#if showCard('terminal-descent')}
-    <div class="project-card group">
-      <a href="/projects/terminal-descent/" class="absolute inset-0 z-0" aria-label="Play Terminal Descent"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №5
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Playable · WebGL
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Terminal Descent — A Newtonian Landing Problem
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        A 3D landing game with real Newtonian physics. Gravity pulls; your single engine only
-        pushes the way the ship points — so to move, you tilt, burn, then tilt back and burn again
-        to kill the drift before you touch down. Manage fuel, thread a procedurally generated
-        hazard field, and set down gently, upright and dead-centre on the pad. Scored on touchdown,
-        fuel saved and centering, with a global leaderboard. Built autonomously from one prompt.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          Three.js · inertia · leaderboard
-        </span>
-        {@render visToggle('terminal-descent', '/projects/terminal-descent/', 'Terminal Descent')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('data-standard-designer')}
-    <div class="project-card group">
-      <a href="/projects/data-standard-designer" class="absolute inset-0 z-0" aria-label="Open the Data Standard Designer"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Tool
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Standards
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Data Standard Designer — Design &amp; Publish a Dataset Standard
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        A workbench for technical teams to design and publish a dataset standard, grounded in the data
-        standards government already runs — DfE, NHS, ONS, local-gov and W3C. Capture what the data is
-        for, get a schema proposed from established standards, see the live impact on interoperability,
-        assurance and adoption, then export a publication-grade standard with the evidence pack behind it.
-        Two modes: business analyst and data architect.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          interoperability · assurance · JSON Schema · DCAT-AP
-        </span>
-        {@render visToggle('data-standard-designer', '/projects/data-standard-designer', 'Data Standard Designer')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('engine-room')}
-    <div class="project-card group">
-      <a href="/projects/engine-room" class="absolute inset-0 z-0" aria-label="Open The Engine Room"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field study
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · This site, explained
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        The Engine Room — how this site works
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into
-        mail, files and home, a workflow engine with 88 node types, retrieval over documents, a knowledge graph that
-        resolves entities overnight, and a system that rewrites itself while nobody is watching. Four parts,
-        twenty-one pages, and twenty instruments you can operate rather than read: follow one message through six
-        stages and six layers with a live clock and a running bill, pick a model seller and watch what it costs you,
-        try to get machine-written code past the safety scan, or push a change down the deploy pipeline and watch it
-        stop. Mechanisms and mistakes, no secrets.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          models · caching · RAG · entity resolution · self-improvement · measured
-        </span>
-        {@render visToggle('engine-room', '/projects/engine-room', 'The Engine Room')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('data-spine')}
-    <div class="project-card group">
-      <a href="/projects/data-spine" class="absolute inset-0 z-0" aria-label="Open The Data Spine"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field study
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Data infrastructure
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        The Data Spine — Anatomy of a Promise
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        In one paragraph of a 2026 white paper, the government committed to build a "data spine" for English
-        education. This study takes the paragraph seriously: a five-layer anatomy, the international precedents
-        (NHS Spine, X-Road, ContactPoint), eight stakeholder lenses on its value, a deep information-governance
-        treatment — and a live 3D simulation of the federated design: 24,000 schools, 15 MIS suppliers, thirteen
-        runnable scenarios from census day to breach day. Companion to Keystone and the Policy Engine.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          precedents · personas · privacy · 3D federation sim · cited
-        </span>
-        {@render visToggle('data-spine', '/projects/data-spine', 'The Data Spine')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('spine-in-practice')}
-    <div class="project-card group">
-      <a href="/projects/spine-in-practice" class="absolute inset-0 z-0" aria-label="Open The Spine in Practice"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field study
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Appraisal · Data infrastructure
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        The Spine in Practice
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        While the department's data spine was still one paragraph of a white paper, somebody else built one. Open
-        Education AI's federated node access layer went live in July 2026, with a deck and a self-contained
-        clickthrough demo to prove it. This study reads both artefacts against my own — the technical structure,
-        how the argument is drawn, what it buys, and what it cannot yet do.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          node contract · consent gate · SDC · built vs designed · cited
-        </span>
-        {@render visToggle('spine-in-practice', '/projects/spine-in-practice', 'The Spine in Practice')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('dfe-data-strategy')}
-    <div class="project-card group">
-      <a href="/projects/dfe-data-strategy" class="absolute inset-0 z-0" aria-label="Open Keystone"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Tool
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Data strategy
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Keystone — An Education Strategy Workbench
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        Understand the pressures on an education department's use of data — from across government, from
-        its own policy agenda, and from a vast partner system — and shape a strategy that can deliver against
-        them. A research-grounded landscape of pressures, frameworks and the data-sharing legal stack, plus a
-        private workbench: set your posture and investment levers, and a transparent engine scores coverage,
-        maturity and the tensions you create. Upload your own strategy docs to synthesise them in. Companion to
-        the Policy Engine.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          pressures · trade-offs · maturity · cited
-        </span>
-        {@render visToggle('dfe-data-strategy', '/projects/dfe-data-strategy', 'Keystone')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('dfe-data-estate')}
-    <div class="project-card group">
-      <a href="/projects/dfe-data-estate" class="absolute inset-0 z-0" aria-label="Open The Data Estate"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Reference
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Live · DfE APIs
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        The Data Estate — DfE's Public Data Services
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        A fact-checked map of every public-facing service the Department for Education uses to share and
-        aggregate data — GIAS, Explore Education Statistics, performance tables, Teaching Vacancies, the
-        teacher-training APIs and the restricted pupil-data tier. Where each one's data comes from, how
-        often it refreshes, who owns it, and what's open — with six widgets calling the real DfE APIs live.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          live APIs · 16 services · OGL
-        </span>
-        {@render visToggle('dfe-data-estate', '/projects/dfe-data-estate', 'The Data Estate')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('policy-engine')}
-    <div class="project-card group">
-      <a href="/projects/policy-engine" class="absolute inset-0 z-0" aria-label="Open Education Policy Modelling"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №4
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Interactive · Policy sim
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Education Policy Modelling — England Schools Simulator
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        A research-backed, system-dynamics simulation of England's schools, 2025–2040. Pull the policy
-        levers — SEND &amp; EHCP reform, pupil premium, attendance, early years, the 6,500-teacher pledge,
-        curriculum reform — and watch the disadvantage gap, attainment, the SEND funding deficit and NEET
-        respond in real calculations. Every effect size is sourced or flagged as an assumption, with
-        Monte-Carlo uncertainty and sensitivity analysis.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          system dynamics · Monte-Carlo · cited
-        </span>
-        {@render visToggle('policy-engine', '/projects/policy-engine', 'Education Policy Modelling')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('whitehall')}
-    <div class="project-card group">
-      <a href="/projects/whitehall/" class="absolute inset-0 z-0" aria-label="Play Whitehall"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №3
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Playable · WebGL
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Whitehall — The Machinery of Government
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        A turn-based 4X set inside the UK civil service. Cities are government departments, units are
-        civil-service grades — Executive Officers, glass-cannon Fast Streamers, Permanent Secretaries —
-        and level-10 departments commission national Special Projects for empire-wide bonuses. Play
-        solo against an AI that learns from every defeat, or watch eight Whitehall blocs fight it out.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          Three.js · civil service · special projects
-        </span>
-        {@render visToggle('whitehall', '/projects/whitehall/', 'Whitehall')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('archetype')}
-    <div class="project-card group">
-      <a href="/projects/archetype/" class="absolute inset-0 z-0" aria-label="Open Archetype"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №7
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Playable · WebGL
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Archetype — an arms race you can watch
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        An isometric 4X board game whose real subject is the AI. Six named strategists — the Spear,
-        the Jackal, the Sprawl, the Ledger, the Concord, the Bulwark — build models of each other
-        from what they can see through the fog, bend their strategy to exploit what they infer, and
-        provoke each other into counter-adapting. A strategy observatory shows every drive vector,
-        belief and change of mind as it happens.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          Three.js · opponent modelling · co-evolution
-        </span>
-        {@render visToggle('archetype', '/projects/archetype/', 'Archetype')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('brass-and-rails')}
-    <div class="project-card group">
-      <a href="/projects/brass-and-rails/" class="absolute inset-0 z-0" aria-label="Play Brass & Rails"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №2
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          Playable · WebGL
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        Brass &amp; Rails — An Empire of the Skerne
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        A turn-based 4X empire on a tilt-shift diorama of old Darlington, birthplace of the
-        railway. Settle villages, harvest coal &amp; iron, research the Age of Steam — against an
-        AI that remembers every defeat and rewrites its strategy to beat you next time. Play solo,
-        or watch up to 8 AI houses fight it out autonomously.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          Three.js · tilt-shift · learning AI
-        </span>
-        {@render visToggle('brass-and-rails', '/projects/brass-and-rails/', 'Brass & Rails')}
-      </div>
-    </div>
-    {/if}
-
-    {#if showCard('data-convergence')}
-    <div class="project-card group">
-      <a href="/projects/data-convergence" class="absolute inset-0 z-0" aria-label="Open The Spine"></a>
-      <div class="flex items-start justify-between mb-3">
-        <p
-          class="text-[10px] uppercase tracking-[0.25em]"
-          style="color: var(--accent); font-family: var(--font-mono);"
-        >
-          Field Study №1
-        </p>
-        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-          One-shot prompt
-        </span>
-      </div>
-      <h2
-        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-        style="color: var(--text-primary);"
-      >
-        The Spine — Data Convergence Timeline
-      </h2>
-      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        Scattered data sources are tributaries. They enter as oscillating strands of twine,
-        wind together at confluences, and bind into a single horizontal spine — the source
-        of truth. Interactive: play, scrub, edit the sources.
-      </p>
-      <div class="flex items-center gap-3 flex-wrap relative z-10">
-        <span
-          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-        >
-          Canvas · DAG · braid render
-        </span>
-        {@render visToggle('data-convergence', '/projects/data-convergence', 'The Spine')}
-      </div>
-    </div>
-    {/if}
-
-    {#if projects.length === 0}
-      <div class="project-empty text-center py-16">
-        <p class="text-sm" style="color: var(--text-ghost);">No AI-built projects yet.</p>
-      </div>
-    {:else}
-      {#each projects as project (project.id)}
-        {@const card = resolveProjectCard(project)}
-        <div class="project-card group">
-          <a href="/projects/{project.slug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
-
-          <div class="flex items-start justify-between mb-3">
-            <p
-              class="text-[10px] uppercase tracking-[0.25em]"
-              style="color: var(--accent); font-family: var(--font-mono);"
-            >
-              AI Built
-            </p>
-            <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {card.tag || formatDate(project.createdAt)}
-            </span>
-          </div>
-
-          <h2
-            class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
-            style="color: var(--text-primary);"
-          >
-            {card.heading}
-          </h2>
-
-          <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-            {card.blurb}
-          </p>
-
-          <div class="flex items-center justify-between relative z-10">
-            <div class="flex gap-3 flex-wrap">
-              <span
-                class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
-                style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
-              >
-                {project.iterationsCompleted} iterations
-              </span>
-            </div>
-
-            {#if data.authenticated}
-              <div class="flex items-center gap-2">
-                {@render visToggle(project.slug!, `/projects/${project.slug}/`, project.title ?? 'Project')}
-                <button
-                  onclick={() => removeProject(project.id, project.slug!, project.source)}
-                  disabled={removing === project.id}
-                  class="remove-btn px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors"
-                  style="border-color: var(--error); color: var(--error); opacity: {removing === project.id ? 0.5 : 1};"
-                >
-                  {removing === project.id ? 'Removing...' : project.source === 'repo' ? 'Remove card' : 'Remove'}
-                </button>
-              </div>
-            {/if}
-          </div>
+      <dl class="bench-summary" aria-label="Projects summary">
+        <div>
+          <dt>On the bench</dt>
+          <dd>{String(shownCards.length + projects.length).padStart(2, '0')}</dd>
+          <small>Live and playable</small>
         </div>
-      {/each}
-    {/if}
-  </div>
-</section>
+        <div>
+          <dt>Field studies</dt>
+          <dd>{String(studyCount).padStart(2, '0')}</dd>
+          <small>Long-form, interactive</small>
+        </div>
+        <div>
+          <dt>Agent built</dt>
+          <dd>{String(projects.length).padStart(2, '0')}</dd>
+          <small>From a single prompt</small>
+        </div>
+      </dl>
+    </div>
+  </section>
 
-<footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
-  <p class="brand text-[14px]" style="color: var(--text-ghost);">strange ramblings</p>
-  <div class="flex gap-6">
-    <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
-    <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
-    <a href="/" class="nav-link">Home</a>
-  </div>
-</footer>
+  <section class="sec">
+    <div class="sec-inner">
+      <SectionHead
+        kicker="01 / Built by hand"
+        title={['THE FIELD', 'STUDIES & TOOLS']}
+        strap="Long-form arguments you can operate rather than read, and a few tools that had a job to do."
+      />
+
+      {#if shownCards.length === 0}
+        <p class="empty">Nothing published yet.</p>
+      {:else}
+        <ul class="grid">
+          {#each shownCards as c (c.key)}
+            {@render card(c)}
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  </section>
+
+  {#if projects.length || data.authenticated}
+    <section class="sec tinted">
+      <div class="sec-inner">
+        <SectionHead
+          kicker="02 / Built autonomously"
+          title={['WRITTEN BY', 'AN AGENT']}
+          strap="One prompt in, a working page out. The iteration count is how many passes it took."
+        />
+
+        {#if projects.length === 0}
+          <p class="empty">No AI-built projects yet.</p>
+        {:else}
+          <ul class="grid">
+            {#each projects as project (project.id)}
+              {#snippet removeBtn()}
+                {#if data.authenticated}
+                  <button
+                    class="ctl danger"
+                    onclick={() => removeProject(project.id, project.slug!, project.source)}
+                    disabled={removing === project.id}
+                  >
+                    {removing === project.id
+                      ? 'Removing…'
+                      : project.source === 'repo'
+                        ? 'Remove card'
+                        : 'Remove'}
+                  </button>
+                {/if}
+              {/snippet}
+              {@render card(agentCard(project), removeBtn)}
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    </section>
+  {/if}
+</HealthShell>
 
 {#if shareModal}
   <ShareModal
@@ -792,28 +273,282 @@
 {/if}
 
 <style>
-  /* Project cards adopt the /jkai/canvas card idiom: a sharp warm-brutalist
-     frame that sits flush on the page's warm-cream surface, defined by a thin
-     border that darkens to ink on hover (mirrors `.canvas-card`). */
-  .project-card {
-    position: relative;
-    padding: 1.5rem;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sharp);
-    transition: border-color 80ms ease;
+  /* --- Cover: the ink band --- */
+  .lede {
+    padding: clamp(28px, 3.5vw, 48px) clamp(20px, 3vw, 44px);
+    background: var(--text-primary);
+    color: var(--bg);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
   }
-  .project-card:hover {
+  .lede-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
+    align-items: end;
+    gap: clamp(32px, 5vw, 72px);
+    width: min(1400px, 100%);
+    margin: 0 auto;
+  }
+  .lede-copy {
+    min-width: 0;
+  }
+  .eyebrow {
+    margin: 0 0 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label-wide);
+    text-transform: uppercase;
+    color: var(--accent-on-dark);
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 4.4vw, 4.1rem);
+    font-weight: 900;
+    line-height: 0.88;
+    letter-spacing: -0.04em;
+    color: var(--bg);
+    text-wrap: balance;
+  }
+  h1 span {
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--bg);
+  }
+  .standfirst {
+    max-width: 56ch;
+    margin: 18px 0 0;
+    font-size: var(--fs-body);
+    line-height: 1.5;
+    color: rgba(237, 228, 212, 0.7);
+  }
+
+  .bench-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    border-top: 1px solid rgba(237, 228, 212, 0.16);
+    border-left: 1px solid rgba(237, 228, 212, 0.16);
+  }
+  .bench-summary > div {
+    min-width: 0;
+    padding: 14px;
+    border-right: 1px solid rgba(237, 228, 212, 0.16);
+    border-bottom: 1px solid rgba(237, 228, 212, 0.16);
+    background: rgba(237, 228, 212, 0.04);
+  }
+  .bench-summary dt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label-wide);
+    text-transform: uppercase;
+    color: rgba(237, 228, 212, 0.55);
+  }
+  .bench-summary dd {
+    margin: 8px 0 5px;
+    font-family: var(--font-display);
+    font-size: clamp(1.65rem, 2.4vw, 2.4rem);
+    font-weight: 900;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    color: var(--bg);
+    font-variant-numeric: tabular-nums;
+  }
+  .bench-summary small {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.3;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-on-dark);
+  }
+
+  /* --- Paper sections, on /health's band rhythm --- */
+  .sec {
+    padding: clamp(44px, 5vw, 76px) clamp(20px, 3vw, 44px);
+    border-bottom: 2px solid rgba(26, 16, 8, 0.12);
+  }
+  /* The band rule separates one section from the NEXT. The last one is
+     followed by the ink footer, which separates itself — left in, it draws a
+     stray rule across the empty space a short page leaves above the foot. */
+  section.sec:last-of-type {
+    border-bottom: none;
+  }
+  .sec.tinted {
+    background: var(--bg-section);
+  }
+  .sec-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .empty {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+    padding: 30px 2px;
+  }
+
+  .grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: clamp(12px, 1.4vw, 18px);
+  }
+
+  /* The card: square, shadowless, a hairline that goes to ink on hover — the
+     same object the deck shelf and the canvas cards are. */
+  .pc {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 22px;
+    background: var(--surface-card);
+    border: 1px solid var(--card-border);
+    transition: border-color var(--t-base) var(--ease-out);
+  }
+  .pc:hover {
     border-color: var(--text-primary);
   }
-
-  .project-empty {
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sharp);
+  /* Full-bleed hit area UNDER the controls, so the owner's buttons still get
+     their own clicks — everything interactive in the foot sits above it. */
+  .pc-hit {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
   }
 
-  .remove-btn:hover {
+  /* Two stacked lines, always. Side by side they fit on one line for a short
+     kind ("TOOL") and wrap onto two for a long one ("FIELD STUDY №6"), so
+     cards in the same row started their titles at different heights — the
+     grid's own alignment was being decided by the length of an eyebrow. */
+  .pc-eyebrow {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .pc-kind,
+  .pc-tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+  }
+  .pc-kind {
+    letter-spacing: var(--tracking-label-wide);
+    color: var(--accent);
+  }
+  .pc-tag {
+    letter-spacing: var(--tracking-label);
+    color: var(--text-ghost);
+  }
+
+  .pc-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin: 0 0 12px;
+    transition: color var(--t-base) var(--ease-out);
+  }
+  .pc:hover .pc-title {
+    color: var(--accent);
+  }
+  .pc-blurb {
+    font-size: var(--fs-nav);
+    line-height: 1.55;
+    color: var(--text-secondary);
+    margin: 0 0 18px;
+    text-wrap: pretty;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Pinned to the foot, so every card in a row ends on the same line. */
+  .pc-foot {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--bg-section);
+    padding: 3px 7px;
+  }
+  .chip.private {
+    color: var(--error);
     background: var(--error-bg);
+  }
+
+  .owner-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .ctl {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 0;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition:
+      border-color var(--t-base) var(--ease-out),
+      color var(--t-base) var(--ease-out);
+  }
+  .ctl:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .ctl:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .ctl.danger {
+    color: var(--error);
+    border-color: var(--error);
+  }
+  .ctl.danger:hover {
+    background: var(--error-bg);
+    color: var(--error);
+    border-color: var(--error);
+  }
+
+  @media (max-width: 900px) {
+    .lede-inner {
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+    }
+  }
+  @media (max-width: 520px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .bench-summary {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 </style>
