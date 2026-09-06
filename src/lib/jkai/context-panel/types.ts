@@ -124,6 +124,8 @@ export const drillRowSchema = z.object({
   meta: z.string().optional(),
   note: z.string().optional(),
   href: z.string().optional(),
+  /** `href` is off-site (a research source): open in a new tab, keep the modal. */
+  external: z.boolean().optional(),
   /** Another drill this row opens — the modal navigates in place. */
   drill: z.string().optional(),
   tone: drillToneSchema.optional(),
@@ -186,6 +188,51 @@ export const drillActionSchema = z.object({
 });
 export type DrillAction = z.infer<typeof drillActionSchema>;
 
+/**
+ * The thread's entities as a graph, for the 3D map. Every concept the thread
+ * produced (not the rail's twelve), each in one of four classes — the two the
+ * rail already distinguishes by hue (known / new here) crossed with whether it
+ * is one of the seven the rail is drawing right now.
+ */
+export const drillGraphClassSchema = z.enum(['view-known', 'view-new', 'thread-known', 'thread-new']);
+export type DrillGraphClass = z.infer<typeof drillGraphClassSchema>;
+export const drillGraphSchema = z.object({
+  nodes: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    note: z.string().nullable(),
+    mentions: z.number(),
+    cls: drillGraphClassSchema,
+    /** The entity drill this node opens. */
+    drill: z.string().optional(),
+  })).max(400),
+  edges: z.array(z.object({
+    source: z.string(),
+    target: z.string(),
+    verb: z.string(),
+    typed: z.boolean(),
+  })).max(4000),
+});
+export type DrillGraph = z.infer<typeof drillGraphSchema>;
+
+/** Points to put on a map: a daydream place with its cluster radius, or a
+ *  geocoded intel place. Lat/lon leave the server one drill at a time. */
+export const drillMapSchema = z.object({
+  points: z.array(z.object({
+    lat: z.number(),
+    lon: z.number(),
+    label: z.string(),
+    note: z.string().optional(),
+    radiusM: z.number().optional(),
+    tone: drillToneSchema.optional(),
+    drill: z.string().optional(),
+  })).min(1).max(60),
+  /** What produced the coordinates — a geocoder's own label, or "you named it". */
+  provenance: z.string().optional(),
+});
+export type DrillMap = z.infer<typeof drillMapSchema>;
+
 export const drillManifestSchema = z.object({
   target: z.string(),
   kind: z.enum([
@@ -201,6 +248,8 @@ export const drillManifestSchema = z.object({
   href: z.string().optional(),
   /** Set for `entity` manifests: the modal mounts the intel EntityCard. */
   entityId: z.string().optional(),
+  graph: drillGraphSchema.optional(),
+  map: drillMapSchema.optional(),
   facts: z.array(drillFactSchema).max(8).default([]),
   sections: z.array(drillSectionSchema).max(8).default([]),
   actions: z.array(drillActionSchema).max(8).default([]),

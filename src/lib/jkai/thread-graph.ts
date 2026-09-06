@@ -230,6 +230,9 @@ const STRUCTURAL_SLOTS = 3;
 export function rankAndTrim(
   nodes: ThreadGraphNode[],
   edges: ThreadGraphEdge[],
+  /** Node ceiling. `Infinity` ranks without trimming — the 3D entity map wants
+   *  every concept the thread produced, in the same order the rail ranks them. */
+  limit: number = MAX_NODES,
 ): { nodes: ThreadGraphNode[]; edges: ThreadGraphEdge[] } {
   const typedDegree = new Map<string, number>();
   for (const e of edges) {
@@ -245,12 +248,15 @@ export function rankAndTrim(
   const concepts = nodes.filter((n) => n.kind === 'concept').sort(byImportance);
   const structural = nodes.filter((n) => n.kind !== 'concept').sort(byImportance);
 
+  if (!Number.isFinite(limit)) {
+    return { nodes: [...concepts, ...structural], edges };
+  }
   const structuralRoom = Math.min(
     structural.length,
-    Math.max(STRUCTURAL_SLOTS, MAX_NODES - concepts.length),
+    Math.max(STRUCTURAL_SLOTS, limit - concepts.length),
   );
   const kept = [
-    ...concepts.slice(0, MAX_NODES - structuralRoom),
+    ...concepts.slice(0, limit - structuralRoom),
     ...structural.slice(0, structuralRoom),
   ];
   const keptIds = new Set(kept.map((n) => n.id));
