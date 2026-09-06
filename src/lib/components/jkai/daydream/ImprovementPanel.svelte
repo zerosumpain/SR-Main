@@ -15,6 +15,15 @@
     test?: { testedAt: string; success: boolean; ms: number; error?: string };
   }
 
+  const deployed = $derived(data.deployedCapabilities ?? []);
+  let capabilitySearch = $state('');
+  let capabilityFilter = $state('all');
+  let capabilityPage = $state(1);
+  const filteredCapabilities = $derived(deployed.filter((c) =>
+    `${c.name} ${c.description} ${c.jkaiTestPrompt}`.toLowerCase().includes(capabilitySearch.trim().toLowerCase()) &&
+    (capabilityFilter === 'all' || (capabilityFilter === 'untested' ? !hasPassedLiveTest(c) : hasPassedLiveTest(c)))));
+  $effect(() => { capabilitySearch; capabilityFilter; capabilityPage = 1; });
+
   let expandedRun = $state<string | null>(null);
   let expandedAttempt = $state<string | null>(null);
   let attemptFilter = $state<'all' | 'created' | 'rejected'>('all');
@@ -24,10 +33,6 @@
   let promotingTool = $state<string | null>(null);
   let promotionErrors = $state<Record<string, string>>({});
 
-  // ── Plain-English narrative ───────────────────────────────────────────────
-  // `changes` leads because it answers the question the page is for: what is
-  // different now, and why. Queued ideas are real but they are intentions, not
-  // changes, and there are usually many more of them.
   type StoryFilter = 'changes' | 'queued' | 'all';
   let storyFilter = $state<StoryFilter>('changes');
   let showTech = $state(false);
@@ -55,7 +60,6 @@
   const stats = $derived(data.stats);
   const insights = $derived(data.insights);
   const opportunities = $derived(insights?.opportunities ?? []);
-  const deployed = $derived(data.deployedCapabilities ?? []);
 
   // ── Prime outcome: tool calls per answered question ──────────────────────
   const eff = $derived(data.efficiency?.latest ?? null);
@@ -255,24 +259,13 @@
     </div>
   </header>{/if}
 
-  <!-- ── CALL EFFICIENCY ────────────────────────────────────────────────
-       This used to lead the page as the PRIME OUTCOME, and said so: "the
-       metric the engine is graded on". It was demoted on 2026-09-04 — new
-       capability outranks efficiency now, `propose` runs before `optimise`,
-       and optimise may not start a fresh experiment while new-data work is
-       open. The heading had to move with it, or the page keeps teaching the
-       priority the engine no longer holds. -->
   <section class="prime">
     <div class="prime-hd">
       <div>
         <div class="sr-label-tight">Call efficiency · tool calls per answered question</div>
         <p class="prime-sub">
-          What an answer costs in tool calls. It led this page as the prime outcome until
-          <strong>new capability took that place</strong> — the engine still measures every night and
-          still judges any live experiment, but it will not start a fresh one while a source or a
-          watch is waiting to be built. The headline is <strong>ordinary chat turns</strong>; agentic
-          work (browser, terminal, delegation) is tracked beside it but never optimised against —
-          its step count belongs to the task.
+          Tool calls per ordinary chat answer, measured nightly. New capabilities take priority
+          over efficiency experiments. Agentic work is tracked separately.
         </p>
       </div>
       <button class="measure-btn" onclick={measureNow} disabled={measuring}>
@@ -358,20 +351,22 @@
       <span class="sr-label-tight">Prove what shipped</span>
       <span class="block-meta">{deployed.length} deployed {deployed.length === 1 ? 'capability' : 'capabilities'}</span>
     </div>
-    <p class="acceptance-lede">
-      A build-time smoke test is not live evidence. Run the deployed handler here, then open its
-      outcome-led prompt in a <strong>fresh JKAI chat</strong>. Do not add the tool name: JKAI finding it is
-      part of the test. Successful, repeated JKAI use makes a capability eligible for an automatic
-      direct-access promotion trial; you can also start that measured trial here after acceptance.
-    </p>
+    <p class="acceptance-lede">Find a shipped example, expand it, then test the handler or try its prompt in JKAI.</p>
+    <div class="example-toolbar">
+      <input class="nm-text-input" aria-label="Search shipped examples" placeholder="Search names, descriptions or example prompts…" bind:value={capabilitySearch} />
+      <select class="nm-text-input" aria-label="Filter live test status" bind:value={capabilityFilter}>
+        <option value="all">All examples</option><option value="untested">Needs live test</option><option value="tested">Live-tested</option>
+      </select>
+      <span class="block-meta" role="status">{filteredCapabilities.length} matches</span>
+    </div>
 
     {#if deployed.length === 0}
       <div class="empty">No self-improvement tools are currently deployed.</div>
     {:else}
       <div class="acceptance-list">
-        {#each deployed as capability (capability.name)}
-          <article class="acceptance-card" class:accepted={hasPassedLiveTest(capability)}>
-            <header class="acceptance-hd">
+        {#each filteredCapabilities.slice((capabilityPage - 1) * 8, capabilityPage * 8) as capability (capability.name)}
+          <details class="acceptance-card" class:accepted={hasPassedLiveTest(capability)}>
+            <summary class="acceptance-hd">
               <div>
                 <span class="story-title mono">{capability.name}</span>
                 <span class="story-sub">{capability.description}</span>
@@ -385,7 +380,7 @@
                       ? 'live-tested'
                       : 'needs live test'}
               </span>
-            </header>
+            </summary>
 
             <div class="acceptance-grid">
               <div class="acceptance-step">
@@ -462,9 +457,16 @@
                 {/if}
               </div>
             </div>
-          </article>
-        {/each}
+          </details>
+        {:else}<p class="empty">No examples match these filters.</p>{/each}
       </div>
+      {#if filteredCapabilities.length > 8}
+        <div class="example-toolbar">
+          <button class="measure-btn" disabled={capabilityPage === 1} onclick={() => capabilityPage--}>Previous</button>
+          <span class="block-meta">Page {capabilityPage} of {Math.ceil(filteredCapabilities.length / 8)}</span>
+          <button class="measure-btn" disabled={capabilityPage * 8 >= filteredCapabilities.length} onclick={() => capabilityPage++}>Next</button>
+        </div>
+      {/if}
     {/if}
   </section>
 
@@ -1111,4 +1113,16 @@
     .page-hdr { flex-direction: column; align-items: flex-start; }
     .hdr-links { flex-direction: row; align-items: flex-start; }
   }
+  .example-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .example-toolbar input { flex: 1 1 260px; width: auto; }
+  .example-toolbar select { width: auto; }
+  .acceptance-hd { cursor: pointer; }
+  .acceptance-hd:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .acceptance-hd::before { content: '+'; color: var(--accent); font-weight: bold; }
+  details[open] > .acceptance-hd::before { content: '−'; }
+  .acceptance-hd > div { flex: 1; min-width: 0; }
+  .acceptance-card:not([open]) .story-sub { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .acceptance-grid { border-top: 1px solid var(--line); padding-top: 14px; }
+  .args-editor { font-family: var(--font-code); }
+  @media (max-width: 640px) { .prime-hd { flex-wrap: wrap; } .prime-hd > div { flex-basis: 100%; } .acceptance-hd { flex-wrap: wrap; } .acceptance-hd > div { flex-basis: 80%; } }
 </style>

@@ -242,9 +242,10 @@ function section(label: string, values: string[]): string {
  * The canonical brief handed to toolsmith, repo builder and monitor author.
  * Older rows keep their original detail until they are groomed.
  */
-export function renderBacklogBrief(item: Pick<BacklogItemData, 'title' | 'detail' | 'grooming'>): string {
+export function renderBacklogBrief(item: Pick<BacklogItemData, 'title' | 'detail' | 'grooming' | 'mergedBrief'>): string {
   const g = item.grooming;
-  if (!g) return `${item.title}\n\n${item.detail}`.trim();
+  const merged = item.mergedBrief ? `\n\nConsolidated requirements\n${item.mergedBrief}` : '';
+  if (!g) return `${item.title}\n\n${item.detail}${merged}`.trim();
   return [
     `Feature: ${item.title}`,
     `Problem: ${g.problem || item.detail || 'Not recorded'}`,
@@ -259,7 +260,7 @@ export function renderBacklogBrief(item: Pick<BacklogItemData, 'title' | 'detail
     section('Decisions already made', g.decisions),
     section('Assumptions to verify', g.assumptions),
     section('Remaining open questions', g.openQuestions),
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean).join('\n') + merged;
 }
 
 export interface GroomingModelResult {

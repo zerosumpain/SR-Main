@@ -232,7 +232,7 @@
     step = 'review';
   }
 
-  async function save(includeGrooming: boolean) {
+  async function save() {
     if (!title.trim()) {
       error = 'A feature needs a title.';
       step = 'brief';
@@ -251,7 +251,7 @@
       // `updateBacklogItem` only writes `grooming` when it is given one, so a
       // "save brief only" cannot silently drop a conversation, and the
       // normaliser bounds the length in exactly one place.
-      ...(includeGrooming && draft ? { grooming: { ...draft, conversation } } : {}),
+      ...(draft ? { grooming: { ...draft, conversation } } : {}),
     });
     if (result.ok) {
       await invalidateAll();
@@ -339,19 +339,11 @@
     },
   ];
 
-  /**
-   * Grow a textarea to its content.
-   *
-   * A plain `rows="4"` clipped a paragraph of problem statement mid-word and
-   * hid the rest behind an inner scrollbar — the single worst thing about the
-   * old review step. An ACTION rather than an effect: it reads and writes the
-   * node's own style, and an `$effect` doing that would be reading what it just
-   * wrote. The `rows` attribute stays as the minimum height.
-   */
+  /** Grow short fields, keeping long contracts scrollable inside the editor. */
   function autogrow(node: HTMLTextAreaElement) {
     const fit = () => {
       node.style.height = 'auto';
-      node.style.height = `${node.scrollHeight}px`;
+      node.style.height = `${Math.min(node.scrollHeight, 180)}px`;
     };
     node.addEventListener('input', fit);
     // After layout, so `scrollHeight` is measured against the real width
@@ -366,7 +358,7 @@
   }
 
   const builderPreview = $derived(
-    draft ? renderBacklogBrief({ title, detail, grooming: draft }) : `${title}\n\n${detail}`.trim(),
+    draft ? renderBacklogBrief({ title, detail, grooming: draft, mergedBrief: item?.mergedBrief }) : renderBacklogBrief({ title, detail, mergedBrief: item?.mergedBrief }),
   );
 </script>
 
@@ -426,17 +418,22 @@
 
     {#if step === 'brief'}
       <section class="step-pane brief-pane" aria-labelledby="brief-heading">
-        <div class="hd">
-          <div class="hd-left">
-            <p class="hd-kicker">Step 1 · your intent</p>
-            <h2 class="hd-title" id="brief-heading">What should<br />be better?</h2>
-          </div>
-          <p class="hd-strap">
-            Give the model enough to understand the outcome. It will propose the structure; you
-            stay in control of what is saved.
-          </p>
+        <h2 class="editor-heading" id="brief-heading">Define the work</h2>
+        <div class="classification">
+          <fieldset><legend>Category</legend><div class="choices">
+            {#each BACKLOG_KINDS as option}<button type="button" class="clean-button" class:chosen={kind === option} aria-pressed={kind === option} disabled={item?.backlogStatus === 'shipped'} onclick={() => kind = option}>{option}</button>{/each}
+          </div></fieldset>
+          <fieldset><legend>Priority · 1 highest</legend><div class="choices">
+            {#each [1, 2, 3, 4, 5] as value}<button type="button" class="clean-button" class:chosen={priority === value} aria-pressed={priority === value} onclick={() => priority = value}>P{value}</button>{/each}
+          </div></fieldset>
+          <fieldset><legend>Effort</legend><div class="choices">
+            {#each BACKLOG_EFFORTS as value}<button type="button" class="clean-button" class:chosen={draft?.effort === value} aria-pressed={draft?.effort === value} onclick={() => updateDraft('effort', value)}>{value}</button>{/each}
+          </div></fieldset>
+          <fieldset><legend>Risk</legend><div class="choices">
+            {#each BACKLOG_RISKS as value}<button type="button" class="clean-button" class:chosen={draft?.risk === value} aria-pressed={draft?.risk === value} onclick={() => updateDraft('risk', value)}>{value}</button>{/each}
+          </div></fieldset>
         </div>
-
+        <p class="category-help">{KIND_HELP[kind]}</p>
         <!-- Same numbered rows as the contract on step 4, so the journey is one
              object rather than four differently-shaped forms. -->
         <div class="contract">
@@ -457,49 +454,23 @@
             <div class="c-say">
               <span class="c-label">Rough brief</span>
               <span class="c-help">
-                Who needs this, what is difficult today, and what a good outcome looks like.
-                Rough notes are fine — the model turns this into acceptance criteria and
-                validation. {detail.length}/2000.
+                The problem and desired outcome. {detail.length}/2000.
               </span>
             </div>
             <textarea
               class="control"
               bind:value={detail}
               maxlength="2000"
-              rows="5"
-              use:autogrow
+              rows="3"
               placeholder="Describe who needs this, what is difficult today, and what a good outcome looks like."
             ></textarea>
           </label>
 
-          <div class="c-row">
-            <p class="c-num">03</p>
-            <div class="c-say">
-              <span class="c-label">Where it goes</span>
-              <span class="c-help">
-                {item?.backlogStatus === 'shipped' ? 'The lane is locked because this has shipped.' : KIND_HELP[kind]}
-                The nightly picker ranks priority before age and attempt count.
-              </span>
-            </div>
-            <div class="c-pair">
-              <label class="field">
-                <span>Delivery lane</span>
-                <select class="control" bind:value={kind} disabled={item?.backlogStatus === 'shipped'}>
-                  {#each BACKLOG_KINDS as option (option)}<option value={option}>{option}</option>{/each}
-                </select>
-              </label>
-              <label class="field">
-                <span>Priority</span>
-                <select class="control" bind:value={priority}>
-                  {#each [1, 2, 3, 4, 5] as value (value)}
-                    <option value={value}>P{value}{value === 1 ? ' — highest' : value === 5 ? ' — lowest' : ''}</option>
-                  {/each}
-                </select>
-              </label>
-            </div>
-          </div>
         </div>
 
+        {#if item?.mergedBrief}
+          <details class="handover"><summary>Included story requirements</summary><pre>{item.mergedBrief}</pre></details>
+        {/if}
         <aside class="model-callout">
           <span class="spark" aria-hidden="true">✦</span>
           <div><strong>Groom with your default model</strong><p>It will draft scope, testable outcomes, risks, dependencies and likely duplicate links. Nothing is saved until you approve it.</p></div>
@@ -818,7 +789,7 @@
       <span class="footer-spacer"></span>
       {#if actionable}
         {#if step === 'brief'}
-          <button class="clean-button" type="button" disabled={saving || groomingBusy} onclick={() => save(false)}>{saving ? 'Saving…' : creating ? 'Add without grooming' : 'Save brief only'}</button>
+          <button class="clean-button" type="button" disabled={saving || groomingBusy} onclick={() => save()}>{saving ? 'Saving…' : creating ? 'Add to backlog' : 'Save changes'}</button>
           <button class="clean-button primary" type="button" disabled={saving || groomingBusy} onclick={() => groom()}>{groomingBusy ? 'Grooming…' : 'Groom with default model →'}</button>
         {:else if step === 'groom'}
           <button class="clean-button" type="button" disabled={groomingBusy} onclick={() => go('brief')}>← Back to brief</button>
@@ -828,7 +799,7 @@
           <button class="clean-button primary" type="button" disabled={notesBusy} onclick={() => go('review')}>Review the contract →</button>
         {:else}
           <button class="clean-button" type="button" disabled={saving} onclick={() => go(draft?.modelId === 'manual' ? 'brief' : 'groom')}>← Back</button>
-          <button class="clean-button primary" type="button" disabled={saving} onclick={() => save(true)}>{saving ? 'Saving contract…' : creating ? 'Approve and add to backlog' : 'Approve and save contract'}</button>
+          <button class="clean-button primary" type="button" disabled={saving} onclick={() => save()}>{saving ? 'Saving contract…' : creating ? 'Approve and add to backlog' : 'Approve and save contract'}</button>
         {/if}
       {/if}
     </div>
@@ -1004,11 +975,6 @@
   .relations article strong, .relations article code { display: block; margin-top: 3px; }
   .relations article code { color: var(--text-ghost); font-size: var(--fs-label-xs); overflow-wrap: anywhere; }
 
-  /* ── the /health masthead, borrowed verbatim ───────────────────────────
-     Kicker, a display headline broken where the copy wants it broken, and one
-     standfirst pushed to the right edge. Same shape as `hub/SectionHead`; it
-     is not that component because a step head is not a page section and does
-     not want its section padding. */
   .hd { display: flex; align-items: end; justify-content: space-between; gap: 28px; flex-wrap: wrap; margin-bottom: clamp(20px, 2.4vw, 30px); }
   .hd-left { min-width: 0; }
   .hd-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 12px; }
@@ -1031,11 +997,6 @@
   /* ── identity row ─────────────────────────────────────────────────────── */
   .identity { display: grid; grid-template-columns: minmax(0, 1fr) 200px 130px; gap: 16px; margin-bottom: clamp(20px, 2.4vw, 30px); padding-bottom: clamp(20px, 2.4vw, 30px); border-bottom: 2px solid var(--line-strong); }
 
-  /* ── the contract, as numbered rows ───────────────────────────────────
-     /health's ranked-moves grid: a numeral, a column that says what the field
-     is FOR, and the field itself with the rest of the width. One hairline
-     between rows, drawn as the container's ground through a 1px gap — safe in
-     a fixed single column, the trap only bites an `auto-fit` grid. */
   .contract { display: flex; flex-direction: column; gap: 1px; background: var(--card-border); border: 1px solid var(--card-border); margin-bottom: clamp(20px, 2.4vw, 30px); }
   .c-row { display: grid; grid-template-columns: 44px minmax(0, 260px) minmax(0, 2.2fr); gap: clamp(14px, 1.8vw, 26px); align-items: start; padding: 20px; background: var(--surface-elevated); }
   .c-num { font-family: var(--font-display); font-size: 30px; line-height: .8; letter-spacing: -.03em; color: var(--accent); margin: 2px 0 0; }
@@ -1088,9 +1049,6 @@
   .context-card p { margin: 5px 0 0; color: var(--text-secondary); }
   .helper { padding-top: 14px; border-top: 1px solid var(--line-hair); }
 
-  /* The contract row folds the same way /health's ranked-moves row does: the
-     numeral takes the full column height and the label sits over its field
-     rather than beside it. */
   @media (max-width: 1080px) {
     .c-row { grid-template-columns: 44px minmax(0, 1fr); row-gap: 14px; }
     .c-num { grid-row: span 2; }
@@ -1114,4 +1072,24 @@
     .footer-spacer { display: none; }
     .footer-actions .clean-button { flex: 1 1 auto; }
   }
+  .editor-heading { margin: 0 0 12px; font-family: var(--font-display); font-size: 1.35rem; }
+  .classification { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .classification fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .classification legend { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; color: var(--text-muted); }
+  .choices { display: flex; gap: 4px; flex-wrap: wrap; }
+  .clean-button.chosen, .clean-button.chosen:hover:not(:disabled) { background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); }
+  .clean-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .category-help { font-size: var(--fs-label); color: var(--text-muted); margin: 10px 0; }
+  .step-pane { gap: 12px; }
+  .hd { margin-bottom: 14px; gap: 14px; }
+  .hd-title { font-size: 1.5rem; line-height: 1.1; }
+  .hd-kicker { margin-bottom: 6px; }
+  .contract { margin-bottom: 12px; }
+  .c-row { grid-template-columns: minmax(100px, 150px) minmax(0, 1fr); padding: 12px; gap: 12px; }
+  .c-num { display: none; }
+  .c-help { font-size: var(--fs-label-xs); }
+  .control { font-size: var(--fs-body); padding: 7px 9px; background: var(--surface-card); }
+  .c-row textarea.control { overflow: auto; max-height: 180px; }
+  .model-callout { padding: 10px 12px; }
+  @media (max-width: 640px) { .classification, .c-row { grid-template-columns: 1fr; } }
 </style>

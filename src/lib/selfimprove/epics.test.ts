@@ -42,7 +42,9 @@ vi.mock('$lib/datastore', () => {
   };
 });
 
-import { decideEpic, findThemes, listEpics, toEpic, ungroupEpic } from './epics';
+import { mergeEpic, decideEpic, findThemes, listEpics, toEpic, ungroupEpic } from './epics';
+import { renderBacklogBrief } from './grooming';
+import { updateBacklogItem } from './backlog';
 import { clusterSlug } from './cluster';
 import type { BacklogItemData, EpicData } from './types';
 
@@ -74,7 +76,7 @@ const QUEUE = [
 function seedBacklog(items: BacklogItemData[]) {
   h.records.set(
     'improvement_backlog',
-    items.map((i) => ({ key: i.slug, data: i })),
+    items.map((i) => ({ key: i.slug, data: structuredClone(i) })),
   );
 }
 const backlogRow = (slug: string) =>
@@ -296,4 +298,60 @@ describe('toEpic', () => {
     expect(Object.keys(epic.components).sort()).toEqual(['served', 'shipped', 'size']);
     expect(epic.createdAt).toBe('2026-09-04T00:00:00.000Z');
   });
+});
+
+
+describe('mergeEpic', () => {
+  it('consolidates related requirements, retains originals and is idempotent', async () => {
+    seedBacklog(QUEUE.map((i) => ({ ...i, detail: `Requirement for ${i.slug}` })));
+    const theme = (await findThemes()).proposed[0];
+    const result = await mergeEpic(theme.slug);
+    const merged = backlogRow(result.slug);
+    expect(merged.status).toBe('open');
+    expect(merged.title).toMatch(/^Epic:/);
+    for (const slug of result.merged) {
+      expect(merged.mergedBrief).toContain(`Requirement for ${slug}`);
+      expect(backlogRow(slug).foldedInto).toBe(result.slug);
+      expect(backlogRow(slug).detail).toBe(`Requirement for ${slug}`);
+    }
+    const edited = await updateBacklogItem(result.slug, { title: merged.title, detail: 'Revised summary', kind: merged.kind, priority: 1 });
+    expect(renderBacklogBrief(edited)).toContain('Requirement for');
+    expect(backlogRow('z').status).toBe('open');
+    expect(await mergeEpic(theme.slug)).toEqual(result);
+    await expect(ungroupEpic(theme.slug)).rejects.toThrow('cannot be ungrouped');
+  });
+  it('refuses started work without writing a merged brief', async () => {
+    seedBacklog(QUEUE);
+    const theme = (await findThemes()).proposed[0];
+    backlogRow(theme.openSlugs[0]).attempts = 1;
+    await expect(mergeEpic(theme.slug)).rejects.toThrow('unstarted');
+    expect(backlogRow(`epic-${theme.slug}`)).toBeUndefined();
+  });
+  it('refuses cross-category consolidation', async () => {
+    seedBacklog(QUEUE);
+    const theme = (await findThemes()).proposed[0];
+    backlogRow(theme.openSlugs[0]).kind = 'engine';
+    await expect(mergeEpic(theme.slug)).rejects.toThrow('same delivery category');
+  });
+});
+
+
+it('finishes a partial epic merge without losing source requirements', async () => {
+  seedBacklog(QUEUE);
+  const theme = (await findThemes()).proposed[0];
+  const { upsertRecord } = await import('$lib/datastore');
+  const original = vi.mocked(upsertRecord).getMockImplementation()!;
+  let sourceWrites = 0;
+  vi.mocked(upsertRecord).mockImplementation(async (...args) => {
+    if (args[0] === 'improvement_backlog' && !args[1].key?.startsWith('epic-') && ++sourceWrites === 2) {
+      throw new Error('temporary write failure');
+    }
+    return original(...args);
+  });
+  await expect(mergeEpic(theme.slug)).rejects.toThrow('temporary write failure');
+  const snapshot = backlogRow(`epic-${theme.slug}`).mergedBrief;
+  vi.mocked(upsertRecord).mockImplementation(original);
+  const result = await mergeEpic(theme.slug);
+  expect(backlogRow(result.slug).mergedBrief).toBe(snapshot);
+  expect(result.merged.every((slug) => backlogRow(slug).foldedInto === result.slug)).toBe(true);
 });

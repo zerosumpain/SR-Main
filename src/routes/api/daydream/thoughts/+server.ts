@@ -1159,6 +1159,13 @@ export const POST: RequestHandler = async ({ request }) => {
        * first is one a matcher may make — the second abandons rows, and the
        * owner makes it per item inside the lane.
        */
+      case 'epic_merge': {
+        const slug = str('slug');
+        if (!slug) return json({ error: 'slug is required' }, { status: 400 });
+        const { mergeEpic } = await import('$lib/selfimprove/epics');
+        return json({ ok: true, ...await mergeEpic(slug) });
+      }
+
       case 'epic_decide': {
         const slug = str('slug');
         const decision = str('decision');

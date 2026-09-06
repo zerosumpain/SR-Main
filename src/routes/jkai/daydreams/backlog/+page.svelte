@@ -63,7 +63,7 @@
     <SectionHead
       kicker="C / Themes"
       title={['The same idea,', 'asked ten ways']}
-      strap="The queue restates itself. Ideas arrive from different questions, and the same want turns up under several phrasings. Grouping a theme puts its members in one swimlane; it never abandons them, because “about the same subject” and “says the same thing” are different judgements."
+      strap="The queue restates itself. Ideas arrive from different questions, and the same want turns up under several phrasings. Auto-merge related, unstarted ideas into one epic with all their requirements, or group them into a swimlane to keep individual stories."
     />
     {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
     <ThemeProposals epics={data.epics.epics} error={data.epics.error} items={data.board.items} {busy} {act} />

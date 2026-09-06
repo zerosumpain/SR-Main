@@ -191,6 +191,8 @@ export async function decideEpic(
   const epic = await getEpic(slug);
   if (!epic) throw new Error(`no such theme “${slug}”`);
 
+  if (epic.mergedInto) throw new Error('This theme has already been merged');
+
   const now = new Date().toISOString();
   const next: EpicData = {
     ...epic,
@@ -222,6 +224,7 @@ export async function decideEpic(
 export async function ungroupEpic(slug: string): Promise<DecideResult> {
   const epic = await getEpic(slug);
   if (!epic) throw new Error(`no such theme “${slug}”`);
+  if (epic.mergedInto) throw new Error('A merged epic cannot be ungrouped');
   const grouped: string[] = [];
   const failed: Array<{ slug: string; error: string }> = [];
   for (const member of epic.memberSlugs) {
@@ -242,4 +245,44 @@ export async function ungroupEpic(slug: string): Promise<DecideResult> {
   const now = new Date().toISOString();
   await put({ ...epic, status: 'proposed', decidedBy: undefined, decidedAt: undefined, updatedAt: now });
   return { slug, status: 'proposed', grouped, failed };
+}
+
+/** Consolidate a detected theme into one queued build brief, retaining source rows.
+ * Write the complete brief before retiring any source; retries finish partial writes.
+ */
+export async function mergeEpic(slug: string): Promise<{ slug: string; merged: string[] }> {
+  const epic = await getEpic(slug);
+  if (!epic || epic.status === 'declined') throw new Error('Theme is unavailable or declined');
+  const target = `epic-${slug}`;
+  const existing = await getBacklogItem(target);
+  if (existing && existing.status !== 'open') throw new Error('The merged epic is already being delivered');
+  const members = (await Promise.all(epic.memberSlugs.map(getBacklogItem)))
+    .filter((i): i is BacklogItemData => i != null && (i.status === 'open' || i.foldedInto === target));
+  if (members.length < 2) throw new Error('At least two open ideas are needed');
+  if (members.some((i) => i.attempts > 0 || i.prUrl || (i.foldedInto && i.foldedInto !== target) || (i.epicSlug && i.epicSlug !== slug))) {
+    throw new Error('Only unstarted ideas in this theme can be auto-merged');
+  }
+  if (new Set(members.map((i) => i.kind)).size !== 1) throw new Error('Choose ideas in the same delivery category');
+  const { renderBacklogBrief } = await import('./grooming');
+  const now = new Date().toISOString();
+  const detail = members.map((i) => `## ${i.title}\nSource: ${i.slug}\n${renderBacklogBrief(i)}`).join('\n\n');
+  const merged: BacklogItemData = existing ?? {
+    slug: target, title: `Epic: ${epic.label}`.slice(0, 200),
+    detail: `Deliver ${epic.label}. Includes ${members.length} related stories; their complete requirements are retained in the build brief.`,
+    mergedBrief: detail,
+    kind: members[0].kind, priority: Math.min(...members.map((i) => i.priority)),
+    status: 'open', attempts: 0, source: 'owner', epicSlug: slug,
+    foldedCount: members.length, createdAt: now, updatedAt: now,
+  };
+  await upsertRecord(COLLECTIONS.backlog, { key: target, data: asData(merged) }, SYSTEM_ACTOR);
+  for (const member of members) {
+    if (member.foldedInto === target) continue;
+    await upsertRecord(COLLECTIONS.backlog, { key: member.slug, data: asData({
+      ...member, status: 'abandoned', foldedInto: target, epicSlug: slug,
+      parkedReason: `Merged into ${merged.title}`, settledAt: now, updatedAt: now,
+    }) }, SYSTEM_ACTOR);
+  }
+  await put({ ...epic, status: 'accepted', decidedBy: 'owner', decidedAt: now,
+    updatedAt: now, mergedInto: target });
+  return { slug: target, merged: members.map((i) => i.slug) };
 }

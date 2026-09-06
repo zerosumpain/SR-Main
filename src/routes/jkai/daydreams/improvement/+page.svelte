@@ -110,20 +110,13 @@
     },
   ]);
 
-  // ── The doctor, folded in ────────────────────────────────────────────────
-  //
-  // The full report is 800 lines of symptom, cause and fix and stays at its
-  // own route; what belongs in the unified room is the answer. `DoctorBand`
-  // draws it as three strips — two the loop repairing itself inside its
-  // whitelist, one it could not and handed back — which is the distinction the
-  // four rollup cells that used to sit here flattened into four totals.
   const doctor = $derived(data.doctor);
 </script>
 
 <!-- The night, before anything it produced. One window, one budget: a night
      that overruns is a night that stops rather than a night that spends, so
      what ran and what it cost is the frame for every count below. -->
-<section class="band" id="overnight">
+<section class="band improvement-room" id="overnight">
   <div class="inner">
     <SectionHead
       kicker="A / The overnight"
@@ -134,7 +127,7 @@
   </div>
 </section>
 
-<section class="band">
+<section class="band improvement-room">
   <div class="inner">
     <SectionHead
       kicker="B / Is the loop closing?"
@@ -145,7 +138,7 @@
   </div>
 </section>
 
-<section class="band" id="appetite">
+<section class="band improvement-room" id="appetite">
   <div class="inner">
     <SectionHead
       kicker="C / Appetite"
@@ -157,7 +150,7 @@
   </div>
 </section>
 
-<section class="band">
+<section class="band improvement-room">
   <div class="inner">
     <SectionHead
       kicker="D / The loop, end to end"
@@ -191,4 +184,10 @@
     padding-top: clamp(24px, 3vw, 40px);
     border-top: 2px solid var(--text-primary);
   }
+  .improvement-room { padding-block: clamp(20px, 2.5vw, 32px); }
+  .improvement-room :global(.sh) { align-items: start; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--line-strong); margin-bottom: 20px; }
+  .improvement-room :global(.sh-title) { font-size: clamp(22px, 2.2vw, 30px); line-height: 1.05; }
+  .improvement-room :global(.sh-kicker) { color: var(--accent-ink); margin-bottom: 8px; }
+  .improvement-room :global(.sh-strap) { font-size: var(--fs-nav); }
+  @media (max-width: 640px) { .improvement-room :global(.sh) { grid-template-columns: 1fr; gap: 12px; } }
 </style>
