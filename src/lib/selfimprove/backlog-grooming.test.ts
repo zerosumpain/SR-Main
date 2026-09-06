@@ -48,3 +48,14 @@ describe('automatic grooming suggestions', () => {
     expect(renderBacklogBrief({ title: 'Reminders', detail: 'Daily', absorbedRequirements: { original: 'Acceptance: handle leap days' } })).toContain('Acceptance: handle leap days');
   });
 });
+
+it('automates requirement-preserving merges but leaves uncertain coverage for review', () => {
+  const items = board([row('a', 'Apple calendar event reminders', { status: 'shipped' }),
+    row('b', 'Apple calendar event reminders', { detail: 'Support recurring leap-day exceptions' })]);
+  expect(suggestBacklogGrooming(items)[0]).toMatchObject({ kind: 'covered', automatic: false });
+  items.find((i) => i.slug === 'a')!.detail = 'Support recurring leap-day exceptions';
+  expect(suggestBacklogGrooming(items)[0].automatic).toBe(true);
+});
+it('never automatically merges different delivery categories', () => {
+  expect(suggestBacklogGrooming(board([row('a', 'Apple calendar event reminders', { kind: 'watch' }), row('b', 'Apple calendar event reminders')]))).toEqual([]);
+});

@@ -1165,6 +1165,13 @@ export const POST: RequestHandler = async ({ request }) => {
        * first is one a matcher may make — the second abandons rows, and the
        * owner makes it per item inside the lane.
        */
+      case 'backlog_grooming_override': {
+        if (typeof body.keepSeparate !== 'boolean' || !str('itemId')) return json({ error: 'itemId and keepSeparate are required' }, { status: 400 });
+        const { setGroomingOverride } = await import('$lib/workflows/backlog-grooming.server');
+        await setGroomingOverride(str('itemId'), body.keepSeparate);
+        return json({ ok: true });
+      }
+
       case 'backlog_grooming_decide': {
         const decision = str('decision');
         if (decision !== 'apply' && decision !== 'keep') return json({ error: 'decision must be apply or keep' }, { status: 400 });

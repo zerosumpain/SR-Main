@@ -222,6 +222,10 @@ export async function addIdeas(ideas: IdeaInput[]): Promise<string[]> {
       console.error('[selfimprove] addIdeas upsert failed:', errMsg(err));
     }
   }
+  if (added.length) {
+    const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+    await groomAfterIntake();
+  }
   return added;
 }
 
@@ -435,7 +439,9 @@ export async function createBacklogItem(input: OwnerBacklogInput): Promise<Backl
   if (input.epicSlug) item.epicSlug = input.epicSlug;
   if (input.grooming) item.grooming = acceptGrooming(input.grooming, now);
   await put(item);
-  return item;
+  const { groomAfterIntake } = await import('$lib/workflows/backlog-grooming.server');
+  await groomAfterIntake();
+  return (await getBacklogItem(item.slug)) ?? item;
 }
 
 /**
