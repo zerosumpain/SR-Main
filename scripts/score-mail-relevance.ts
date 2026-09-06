@@ -21,9 +21,11 @@ import { intelNotes } from '$lib/db/schema';
 import {
   loadAnchoredEntities,
   buildSurfaceIndex,
+  matchedEntities,
   matchEntities,
   relevanceTextOf,
   scoreMailRelevance,
+  DF_BLOCK_SHARE,
 } from '$lib/jkai/intel/mail-relevance';
 import { backtestRule } from '$lib/jkai/intel/mail-rules/backtest';
 import { SEED_RULE, RELEVANCE_SEED_RULE } from '$lib/jkai/intel/mail-rules/store';
@@ -78,13 +80,32 @@ async function main() {
       .where(and(eq(intelNotes.source, 'email'), inArray(intelNotes.graphState, ['pending'])))
       .limit(LIMIT);
 
+    // Same two passes the scorer runs, so a dry run reports what a real one
+    // would store rather than a rosier number computed a different way.
+    const texts = notes.map((n) => relevanceTextOf(n.title, n.rawContent));
+    const df = new Map<string, { name: string; n: number }>();
+    for (const text of texts) {
+      for (const [id, hit] of matchedEntities(text, index)) {
+        const seen = df.get(id);
+        if (seen) seen.n++;
+        else df.set(id, { name: hit.name, n: 1 });
+      }
+    }
+    const ceiling = notes.length * DF_BLOCK_SHARE;
+    const over = [...df.entries()].filter(([, v]) => v.n > ceiling).sort((a, b) => b[1].n - a[1].n);
+    const blocked = new Set(over.map(([id]) => id));
+    console.log(`blocked as boilerplate (>${Math.round(DF_BLOCK_SHARE * 100)}% of threads): ${over.length}`);
+    for (const [, v] of over.slice(0, 15)) console.log(`  ${v.name} — ${v.n} threads`);
+    console.log('');
+
     const buckets = new Map<string, number>();
     let anyHit = 0;
     let twoPlus = 0;
     let watchedHit = 0;
     const examples: string[] = [];
-    for (const note of notes) {
-      const m = matchEntities(relevanceTextOf(note.title, note.rawContent), index);
+    for (let i = 0; i < notes.length; i++) {
+      const note = notes[i];
+      const m = matchEntities(texts[i], index, { blocked });
       const bucket = m.hits === 0 ? '0' : m.hits === 1 ? '1' : m.hits <= 3 ? '2-3' : m.hits <= 7 ? '4-7' : '8+';
       buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1);
       if (m.hits > 0) anyHit++;

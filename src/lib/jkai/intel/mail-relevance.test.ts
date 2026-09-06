@@ -8,7 +8,13 @@
 // filter. An entity called "Data" matching every email in the mailbox is the
 // difference between a scorer and a firehose.
 import { describe, it, expect } from 'vitest';
-import { buildSurfaceIndex, matchEntities, relevanceTextOf, type AnchoredEntity } from './mail-relevance';
+import {
+  buildSurfaceIndex,
+  matchedEntities,
+  matchEntities,
+  relevanceTextOf,
+  type AnchoredEntity,
+} from './mail-relevance';
 import { factsFor } from './mail-facts';
 
 function entity(name: string, weight: 1 | 2 | 3, aliases: string[] = []): AnchoredEntity {
@@ -123,6 +129,45 @@ describe('matchEntities', () => {
 
   it('is case and punctuation insensitive', () => {
     expect(matchEntities("KEYSTONE's roadmap", index).hits).toBe(1);
+  });
+});
+
+describe('the document-frequency block list', () => {
+  const index = buildSurfaceIndex([
+    entity('Johnkelly Main', 2),
+    entity('Privacy Policy', 2),
+    entity('Keystone', 2),
+  ]);
+
+  it('counts raw hits before anything is blocked', () => {
+    // The block list is derived FROM these counts, so it cannot also be an
+    // input to them — that is why matchedEntities exists separately.
+    const raw = matchedEntities('Johnkelly Main wrote about Keystone', index);
+    expect(raw.size).toBe(2);
+  });
+
+  it('stops counting an entity the pass ruled out', () => {
+    const blocked = new Set([...matchedEntities('Johnkelly Main', index).keys()]);
+    const match = matchEntities('Johnkelly Main wrote about Keystone', index, { blocked });
+    expect(match.hits).toBe(1);
+    expect(match.names).toEqual(['Keystone']);
+  });
+
+  it('drops topWeight with the blocked entity, not just the count', () => {
+    // The failure this prevents: "Johnkelly Main" carries corroboration 98, so
+    // it alone pushed 1,130 threads to topWeight 2 and the seed rule matched
+    // 67% of the mailbox. Blocking must remove its WEIGHT as well as its tally.
+    const heavy = buildSurfaceIndex([entity('Johnkelly Main', 3), entity('Darlington', 1)]);
+    const blocked = new Set([...matchedEntities('Johnkelly Main', heavy).keys()]);
+    const match = matchEntities('Johnkelly Main on Darlington', heavy, { blocked });
+    expect(match.topWeight).toBe(1);
+  });
+
+  it('leaves a thread naming only boilerplate with nothing at all', () => {
+    const blocked = new Set([...matchedEntities('Johnkelly Main Privacy Policy', index).keys()]);
+    const match = matchEntities('Privacy Policy — Johnkelly Main', index, { blocked });
+    expect(match.hits).toBe(0);
+    expect(match.topWeight).toBe(0);
   });
 });
 

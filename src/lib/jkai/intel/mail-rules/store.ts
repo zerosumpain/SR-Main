@@ -70,18 +70,25 @@ export const SEED_RULE: Omit<MailRule, 'proposedAt'> = {
  * Narrow on three counts at once, because a topical rule is the one with the
  * most room to be wrong:
  *
- *   - `graphTopHitWeight >= 2` — at least one entity is WELL CORROBORATED
- *     (asserted by three or more notes, or scored above 0.7). Naming something
- *     the graph merely holds once is not enough; a mailshot saying "Google"
- *     would clear a weaker bar. On production 589 of the 4,085 anchored
- *     entities qualify.
+ *   - `graphTopHitWeight >= 3` — at least one entity is in the owner's own
+ *     FOREGROUND: watched, lensed, or in a dossier.
  *
- *     Not `>= 3`, which is the owner's foreground — watched, lensed or in a
- *     dossier — because production currently has ZERO of all three. A rule
- *     written against the stronger signal would match nothing at all and look
- *     exactly like a working rule on a quiet mailbox. It tightens on its own
- *     the day something is watched, because a foreground hit also satisfies
- *     this condition.
+ *     This was briefly relaxed to `>= 2` (merely well-corroborated) on the
+ *     grounds that the foreground is empty and a rule matching nothing is a
+ *     silent no-op. Measuring it on the live mailbox settled the argument the
+ *     other way: at `>= 2` the rule matched 2,527 of 3,776 threads — 67%, twice
+ *     the auto-refusal ceiling — and its samples were "play our latest trivia
+ *     to win a cruise to Alaska" and "Simplify finances with a homeowner loan".
+ *     Tightening the frequency cut-off to 0.5% and demanding multi-word names
+ *     still left newsletters and receipts, because the graph holds the same
+ *     brands, places and technologies that marketing mail is about. Naming a
+ *     graph entity is simply not evidence that a thread matters.
+ *
+ *     A watchlist IS that evidence. Simulated against four plausible watched
+ *     entities, this rule matched 9 threads in 3,764 and every one was on
+ *     topic. So the empty foreground is not a reason to weaken the rule; it is
+ *     the thing to fix, and the label, the rationale and the queue page all say
+ *     so rather than leaving a rule that quietly does nothing.
  *   - `graphEntityHits >= 2` — one hit is a coincidence. Two anchored entities
  *     in the same thread is a subject.
  *   - `bodyChars >= 400` — twice the extractor's floor. A notification naming a
@@ -92,17 +99,19 @@ export const SEED_RULE: Omit<MailRule, 'proposedAt'> = {
  */
 export const RELEVANCE_SEED_RULE: Omit<MailRule, 'proposedAt'> = {
   key: 'names-what-you-track',
-  label: 'Admit threads naming two or more well-corroborated things in the graph',
+  label: 'Admit threads naming something on your watchlist (needs a watchlist)',
   action: 'admit',
   origin: 'seed',
   status: 'proposed',
   rationale:
-    'A thread naming two or more entities from the graph, at least one of them well corroborated, is about your ' +
-    'work whether or not you replied to it. Relevance is measured only against entities the graph knows from ' +
-    'somewhere other than email, so admitted mail can never make more mail look relevant.',
+    'REQUIRES A WATCHLIST: it matches nothing until you watch, lens or dossier some entities, and the graph ' +
+    'currently has none. Measured on the live mailbox, a rule keyed on merely well-corroborated entities matched ' +
+    '67% of the queue and offered marketing mail, because the graph holds the same brands and topics newsletters ' +
+    'are about. Keyed on your foreground instead, a simulated four-entity watchlist matched 9 threads in 3,764 ' +
+    'and every one was on topic. The signal is the watchlist, not the graph at large.',
   condition: {
     all: [
-      { fact: 'graphTopHitWeight', op: 'gte', value: 2 },
+      { fact: 'graphTopHitWeight', op: 'gte', value: 3 },
       { fact: 'graphEntityHits', op: 'gte', value: 2 },
       { fact: 'bodyChars', op: 'gte', value: 400 },
     ],

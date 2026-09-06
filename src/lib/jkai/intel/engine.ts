@@ -230,6 +230,11 @@ export async function runIntelSweep(
         // every thread scores 0 and a topical rule admits nothing — which is
         // correct, and indistinguishable from a broken stage without this line.
         entities: scored.entities,
+        // 0 here means no topical rule can match tonight or any night until
+        // something is watched. It is the difference between "nothing relevant
+        // arrived" and "the signal is not armed".
+        foreground: scored.foreground,
+        blocked: scored.blocked,
         similarityFailed: scored.similarityFailed ? 1 : 0,
       };
     }, batch),
