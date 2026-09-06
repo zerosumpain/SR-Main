@@ -33,7 +33,11 @@ import {
   type ThreadGraphNode,
 } from './thread-graph';
 
-export async function buildThreadGraph(conversationId: string): Promise<ThreadGraph> {
+export async function buildThreadGraph(
+  conversationId: string,
+  /** `full` returns every concept ranked rather than the twelve the rail draws. */
+  opts: { full?: boolean } = {},
+): Promise<ThreadGraph> {
   const [conv] = await db
     .select({
       modelId: conversations.modelId,
@@ -328,7 +332,7 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
   );
 
   return {
-    ...rankAndTrim(nodes, edges),
+    ...rankAndTrim(nodes, edges, opts.full ? Number.POSITIVE_INFINITY : undefined),
     conceptsReady: !!derivedNote,
     intelEnabled,
     conceptTotal,

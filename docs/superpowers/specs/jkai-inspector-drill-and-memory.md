@@ -145,3 +145,34 @@ entities, lineage, use in this thread; pin/unpin, correct, forget).
    `/to-intel`, `/to-drive`, `/api/daydream/thoughts`, `/api/jkai/memory`) —
    nothing new is writable except the on-demand memory review, which is the
    existing extraction pass exported.
+
+## Follow-up (same day): sources, a 3D entity map, places on a map
+
+John's three asks after the first ship, built on the same manifest:
+
+- **Research sources.** The run drill lists the run's sources (most credible
+  first, capped at 24) as rows that open the source in a NEW tab and leave
+  the modal where it is. `DrillRow.external` is the flag; the modal renders
+  such rows as `<a target="_blank" rel="noopener noreferrer">`.
+- **A 3D entity map on the entities drill.** The manifest carries `graph`:
+  every concept the thread produced (`buildThreadGraph(id, { full: true })`
+  — a new option that ranks without trimming) with the edges between them,
+  each node in one of four classes: the rail's known/new provenance crossed
+  with whether it is one of the seven chips the rail is drawing. The modal
+  lazy-loads `DrillGraph3D`, which is the intel page's `NetworkGraph3D` fed
+  through `toNetGraph` and told to colour by category — one 3D view, two
+  feeds, no second physics. Colours are the site's CVD-validated categorical
+  ramp. A point-to-point relationship table sits underneath, typed verbs
+  first.
+- **Places on a map.** The manifest carries `map` (points with lat/lon, a
+  label, an optional cluster radius): a daydream place with its radius, the
+  places list with every point, the places a thought cites, and an intel
+  entity whose TYPE names a place (a `location`-style type), geocoded from
+  its name through `geocodePlace` injected by the route (Nominatim,
+  rate-limited, cached; null rather than a guessed coordinate). The modal
+  lazy-loads `DrillMap` (the shared Mapbox loader, as `FamilyMap` does).
+
+Decisions: reuse `NetworkGraph3D` over a bespoke 3D view (one physics, one
+interaction model); geocode the entity NAME rather than trust a model-written
+coordinate (the geocoder module's own rule); lazy-load three.js and Mapbox so
+no other drill pays for them.
