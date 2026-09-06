@@ -188,6 +188,54 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
     },
   },
 
+  // Mapbox's SERVER-side APIs. Deliberately not the same credential as the map
+  // token in Admin → Connections: that one is public, URL-restricted and shipped
+  // to browsers, and Mapbox enforces those restrictions on the Referer, so it
+  // returns 403 to anything the server sends (verified 2026-09-06 against the
+  // live token, on both Search Box and Directions). Widening it to fix that
+  // would publish an unrestricted token to every visitor. Two tokens, two jobs.
+  'mapbox-api': {
+    provider: 'mapbox-api',
+    title: 'Mapbox (geocoding, directions, isochrones)',
+    helpUrl: 'https://account.mapbox.com/access-tokens/',
+    assemble: 'single',
+    fields: [
+      {
+        key: 'value',
+        label: 'Mapbox access token',
+        type: 'password',
+        required: true,
+        placeholder: 'pk.… or sk.…',
+        help:
+          'Create a NEW token at account.mapbox.com/access-tokens with NO URL restriction — this one is ' +
+          'used server-side and never reaches a browser, so the map token already in Admin → Connections ' +
+          'will not work here. Default public scopes are enough. The free tier covers 50,000 searches and ' +
+          '100,000 directions, isochrone and matrix requests a month.',
+      },
+    ],
+    binding: {
+      handle: 'mapbox-api',
+      source: 'vault',
+      // Mapbox takes the token as a query parameter, not a header. A bearer
+      // binding here would authenticate nothing and 401 on every call.
+      injection: { kind: 'query', name: 'access_token' },
+      allowedHosts: ['api.mapbox.com'],
+      // Every endpoint used is a GET, so the default read-only binding is
+      // already right — stated rather than left implicit so widening it later
+      // is a deliberate act.
+      allowedMethods: ['GET', 'HEAD'],
+      allowedPathPrefixes: [
+        '/search/searchbox/v1/',
+        '/directions/v5/',
+        '/directions-matrix/v1/',
+        '/isochrone/v1/',
+      ],
+      notes:
+        'Server-side Mapbox: place-name geocoding for maps and the travel toolset ' +
+        '(route_directions, travel_time_matrix, reachable_area). Never sent to a browser.',
+    },
+  },
+
   // National Rail Darwin, via the Rail Data Marketplace (raildata.org.uk). The
   // old self-service portal at realtime.nationalrail.co.uk was retired in early
   // 2026; everything is now issued as an RDM product subscription.

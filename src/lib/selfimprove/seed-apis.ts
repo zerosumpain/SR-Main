@@ -179,6 +179,64 @@ export const SEEDED_APIS: SeedApiEntry[] = [
     ],
   },
   {
+    // The site's PRIMARY geocoder and route planner. Prefer the tools over a raw
+    // api_call: `geocode_place` and `render_map` resolve names for you, and
+    // `route_directions` / `travel_time_matrix` / `reachable_area` take place
+    // NAMES and hand back a drawn map rather than a wall of coordinates.
+    //
+    // Note the endpoint below is Search Box, NOT the Geocoding API — v6
+    // geocoding has no points of interest, so a landmark or a business resolves
+    // to nothing there. See $lib/maps/mapbox-api for the full reasoning.
+    name: 'Mapbox',
+    baseUrl: 'https://api.mapbox.com',
+    docsUrl: 'https://docs.mapbox.com/api/',
+    description:
+      'Geocoding, routing and travel-time APIs. Search Box resolves place names, addresses and points of interest; Directions returns driving routes with LIVE TRAFFIC, plus walking and cycling; Isochrone returns the area reachable in N minutes; Matrix returns travel time from every origin to every destination in one call. Free tier: 50,000 searches/month, and 100,000 each of directions, isochrone and matrix requests. Results may be displayed but NOT stored — temporary geocoding forbids caching.',
+    capabilities: [
+      'geocoding',
+      'reverse geocoding',
+      'place search',
+      'points of interest',
+      'addresses',
+      'directions',
+      'route planning',
+      'journey time',
+      'live traffic',
+      'isochrones',
+      'travel time matrix',
+      'distance matrix',
+    ],
+    tags: ['maps', 'geocoding', 'routing', 'traffic', 'navigation', 'travel'],
+    // The token lives in the secret registry under the handle "mapbox-api" —
+    // query injection on `access_token`, bound to api.mapbox.com, GET only. The
+    // registry kind rather than an env one on purpose: it is host-bound, the
+    // value never reaches the model, and `resolveApiAuth` already implements it,
+    // where a new `*-env` kind would need wiring in three more places to work at
+    // all. A missing registration surfaces as "no secret registered under the
+    // handle", which is a real diagnostic.
+    //
+    // It is a SEPARATE token from the browser map credential in Admin →
+    // Connections, which is URL-restricted and 403s server-side.
+    auth: { kind: 'secret', handle: 'mapbox-api' },
+    exampleRequests: [
+      {
+        label: 'Find a place by name, including landmarks and businesses',
+        method: 'GET',
+        url: 'https://api.mapbox.com/search/searchbox/v1/forward?q=Norwich%20Cathedral&limit=1',
+      },
+      {
+        label: 'Drive time between two points, with live traffic',
+        method: 'GET',
+        url: 'https://api.mapbox.com/directions/v5/mapbox/driving-traffic/-1.5023,53.4012;-1.4712,53.3688?geometries=geojson&overview=full',
+      },
+      {
+        label: 'Area reachable within 15 and 30 minutes on foot',
+        method: 'GET',
+        url: 'https://api.mapbox.com/isochrone/v1/mapbox/walking/-1.5023,53.4012?contours_minutes=15,30&polygons=true',
+      },
+    ],
+  },
+  {
     // Not to be confused with OpenRouter above — openrouteservice is a routing
     // engine, nothing to do with LLMs. Prefer the `route_plan` tool over a raw
     // api_call: the tool adds the loop-quality scoring that turns a raw ORS
@@ -187,7 +245,7 @@ export const SEEDED_APIS: SeedApiEntry[] = [
     baseUrl: 'https://api.openrouteservice.org',
     docsUrl: 'https://openrouteservice.org/dev/#/api-docs',
     description:
-      'OpenStreetMap routing engine — directions, round trips, isochrones and elevation for running, road cycling, mountain biking and hiking. Returns surface, waytype and steepness breakdowns alongside the geometry. Free tier: 2,500 requests/day, 40/minute; round-trip and alternative routes are capped at 100 km.',
+      'OpenStreetMap routing engine — directions, round trips, isochrones and elevation for running, road cycling, mountain biking and hiking. Returns surface, waytype and steepness breakdowns alongside the geometry, which Mapbox does not, and generates CIRCULAR routes, which Mapbox cannot. That is what it stays primary for: sport route planning via route_plan. For ordinary travel between places, and for geocoding, Mapbox is the primary route. Free tier: 2,500 requests/day, 40/minute; round-trip and alternative routes are capped at 100 km.',
     capabilities: [
       'route planning',
       'running routes',

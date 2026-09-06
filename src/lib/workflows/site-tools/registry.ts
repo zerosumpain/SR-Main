@@ -39,6 +39,7 @@ import './tools/file-share';
 import './tools/files';
 import './tools/route-export';
 import './tools/route-plan';
+import './tools/travel';
 import './tools/knowledge';
 import './tools/intel-graph';
 import './tools/mail';
@@ -138,7 +139,8 @@ export function getToolsetManifest(): Array<{
     heartbeat: 'Heartbeat actions — register periodic agent check-ins on a long-running task and mark them complete',
     schedule: 'Scheduled callbacks — one-shot time-based fires (a fixed reply, a direct tool call, or a re-engagement) at a specific time',
     memory: 'Persistent memory — save, recall, and forget facts about the user',
-    visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Mapbox), diagrams (Mermaid), and tables directly in the chat, plus place-name geocoding (OpenStreetMap) so map points land where they are meant to',
+    visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Mapbox), diagrams (Mermaid), and tables directly in the chat, plus place-name geocoding (Mapbox, falling back to OpenStreetMap) so map points land where they are meant to',
+    travel: 'Travel and navigation (Mapbox) — a real route between named places with live-traffic journey times and turn-by-turn steps (route_directions), travel time from every origin to every destination in one call (travel_time_matrix), and the area reachable in N minutes (reachable_area). All take place NAMES, not coordinates. For a circular training run or ride scored on terrain, the health toolset\'s route_plan is the one that does that.',
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
     files: 'Workflow file store — list, read, and semantically SEARCH files uploaded via /drive (file_search finds files by their content, including image visuals/OCR and audio transcripts). PDFs, DOCX, audio, and video are auto-extracted to text on read.',

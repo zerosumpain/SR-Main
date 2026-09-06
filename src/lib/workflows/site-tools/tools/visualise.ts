@@ -212,7 +212,7 @@ register({
               items: {
                 type: 'object',
                 description:
-                  'Either coordinates (`lat` + `lng`) or a `place` name to look up. PREFER `place` — a name is looked up against OpenStreetMap and plotted exactly, where a coordinate written from memory is usually wrong by a street or more.',
+                  'Either coordinates (`lat` + `lng`) or a `place` name to look up. PREFER `place` — a name is looked up against Mapbox (falling back to OpenStreetMap) and plotted exactly, where a coordinate written from memory is usually wrong by a street or more.',
                 properties: {
                   lat: { type: 'number' },
                   lng: { type: 'number' },
@@ -279,8 +279,8 @@ register({
     }
 
     // Resolve every `place` in one pass. Batched deliberately: geocodePlaces
-    // de-duplicates and paces itself against Nominatim's one-per-second policy,
-    // which a per-point lookup inside the loop below would not.
+    // de-duplicates, and on the Nominatim fallback path it paces itself against
+    // that one-per-second policy, which a per-point lookup here would not.
     const wanted: string[] = [];
     for (const l of layers) {
       for (const p of l.points) {
@@ -311,7 +311,7 @@ register({
           unresolved.push(p.place ?? '(unnamed)');
           return { lat: 0, lng: 0 };
         }
-        // Nominatim's label is kept when the caller supplied none, so the
+        // The geocoder's label is kept when the caller supplied none, so the
         // tooltip says which "Newcastle" it actually plotted.
         return { lat: hit.lat, lng: hit.lng, label: p.label ?? hit.label, weight: p.weight };
       }),
@@ -409,7 +409,7 @@ register({
 register({
   name: 'geocode_place',
   description:
-    'Look up the coordinates of a place by name, against OpenStreetMap. Use it whenever you need a lat/lng and do not have one from a tool — never write coordinates from memory, which are routinely wrong by a street or a country. render_map can take a `place` directly, so this is for the other cases: a distance calculation, a weather lookup, a trail start.',
+    'Look up the coordinates of a place by name — a landmark, a business, an address or a town — against Mapbox, falling back to OpenStreetMap. Use it whenever you need a lat/lng and do not have one from a tool: never write coordinates from memory, which are routinely wrong by a street or a country. render_map can take a `place` directly, so this is for the other cases: a distance calculation, a weather lookup, a trail start. For a JOURNEY between places, use route_directions instead — it resolves the names itself.',
   toolset: 'visualise',
   category: 'Visualise',
   parameters: {

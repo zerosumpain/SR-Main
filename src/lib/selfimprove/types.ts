@@ -705,7 +705,21 @@ export interface BuildLanes {
 export type ApiAuth =
   | { kind: 'none' }
   | { kind: 'bearer-env'; envVar: string }
-  | { kind: 'header-env'; envVar: string; header: string };
+  | { kind: 'header-env'; envVar: string; header: string }
+  /**
+   * The preferred kind, and the only one a seed should reach for now: a handle
+   * in the owner-managed secret registry. Resolved at call time, only if the
+   * request's host and path are on that secret's owner-set allow-list, and
+   * scrubbed from the response. The `*-env` kinds above are legacy and need an
+   * allowlisted env var on the server; this needs no code change per credential.
+   *
+   * This union is NOT the one `resolveApiAuth` in
+   * `$lib/workflows/site-tools/tools/apis.ts` switches on — that is a separate
+   * declaration of the same shape. Adding a kind here that it does not
+   * implement produces an entry whose credential is silently never attached, so
+   * anything new must be added in BOTH places.
+   */
+  | { kind: 'secret'; handle: string };
 
 /** A seed api_catalog entry (status/source stamped at seed time). */
 export interface SeedApiEntry {
