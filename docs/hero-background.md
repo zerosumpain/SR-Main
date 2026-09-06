@@ -6,14 +6,40 @@ The default is muted, single playback behind the title, a one-second final-frame
 hold, then a four-second fade to 80% transparency. Only after the fade does the
 frame layer over the title. The vitals rail is outside the animation.
 
-Download the intended animation from the site's `/drive/siteherobackground`
-folder, then prepare public presentation assets locally (requires ffmpeg):
+To change the animation without a deployment:
+
+1. Upload an MP4 directly into `siteherobackground` in `/drive`.
+2. Open `/admin/content/hero`, refresh the folder, and select the MP4.
+3. Click **Prepare & apply**. Progress survives navigation; the current animation
+   stays active until preparation succeeds.
+
+Preparation runs on the server and preserves the original. It creates desktop
+and phone MP4s plus a final-frame WebP, saved in
+`siteherobackground/web-ready/<source>-<job ID>/` for download and reuse.
+Inputs must be readable MP4s up to 50 MiB, 60 seconds, and 4096px per dimension.
+Only direct children of the source folder appear in the picker. Prepared copies
+are read-only so editing a Drive file cannot silently change a published hero.
+Choose **Included animation** to restore the bundled asset.
+
+The server requires `ffmpeg` and `ffprobe`; the release script installs them
+when missing, and the local preview image includes them. A database lease allows
+one preparation at a time. An interrupted job becomes retryable after ten
+minutes. Failed conversions leave the current animation intact. The selected
+asset and job state use `app_settings`; no schema migration is needed.
+
+Only explicitly prepared copies are published by `/api/landing/hero-media`.
+Their immutable URLs support byte ranges and long-lived browser caching.
+Previously published copies remain available to visitors who loaded before a
+switch. Original Drive IDs and private files are never resolved by this route.
+
+For preparing a bundled asset during development, use the local script
+(requires ffmpeg):
 
 ```sh
 python3 scripts/prepare-hero-background.py /path/to/downloaded-animation.mp4
 ```
 
-This preserves the original and writes only the optimised assets to
+This alternative preserves the original and writes only the optimised assets to
 `static/hero-background` and their manifest to
 `src/lib/constants/hero-background-asset.json`. Include those outputs with the change.
 The original Drive file and other private files are never served by a public API.
@@ -40,6 +66,13 @@ through the LAN preview. It checks encoding ceilings, saved/reloaded controls,
 desktop and phone playback, pause/resume, hold/fade/layer ordering, final-frame
 20% opacity, reduced motion, autoplay denial, disabled media and invalid inputs.
 It restores both the manifest and local database settings even on failure.
+
+`node scripts/qa/hero-source-picker-preview.mjs` checks the real local Drive
+upload, folder and permission filtering, server conversion, generated Drive
+copies, persistent selection, unchanged original, concurrency rejection, public
+byte ranges, private-ID rejection, failed-conversion recovery and restoring the
+bundled animation. It checks desktop/phone admin layouts and homepage playback,
+then removes its fixtures and restores the previous selection.
 
 The configured Drive animation is eight seconds long. Its 24,560,653-byte original
 was preserved; the prepared copies are 1,069,969 bytes at 960 × 550 (desktop),

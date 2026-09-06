@@ -54,6 +54,7 @@
 /api/jkai/tools/invoke
 /api/jkai/tools/manifest
 /api/landing/ecg-telemetry
+/api/landing/hero-media
 /api/landing/vitals
 /api/live-walk
 /api/maps/config

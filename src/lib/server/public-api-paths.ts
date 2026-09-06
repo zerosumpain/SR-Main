@@ -45,6 +45,8 @@
 export const PUBLIC_API_PATHS = [
   '/api/biome/state',
   '/api/landing/ecg-telemetry',
+  // Only prepared, explicitly published hero derivatives; original Drive files remain private.
+  '/api/landing/hero-media',
   // Public repository commit/tree ids only. Used to distinguish a stale PWA
   // from a release that genuinely did not reach production.
   '/api/version',
