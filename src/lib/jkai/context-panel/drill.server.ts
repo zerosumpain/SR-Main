@@ -18,6 +18,8 @@ import {
   daydreamPlaces,
   daydreamThoughts,
   facts,
+  intelEntities,
+  intelEntityTypes,
   jkaiMemories,
   jkaiMemoryEntities,
   orchestratorChats,
@@ -26,7 +28,8 @@ import {
 } from '$lib/db/schema';
 import { buildThreadGraph } from '$lib/jkai/thread-graph.server';
 import type { ThreadGraph, ThreadGraphNode } from '$lib/jkai/thread-graph';
-import { entityIdOf } from '$lib/jkai/graph-layout';
+import { entityIdOf, RAIL_DRAW_LIMIT } from '$lib/jkai/graph-layout';
+import { threadNodeClass } from './graph3d';
 import { commitState } from '$lib/deepdive/graph-commit';
 import { memoryLinks } from '$lib/jkai/memory/graph.server';
 import { MEMORY_STATE_LABEL, memoryState, memoryStateTone } from '$lib/jkai/memory/contracts';
@@ -38,7 +41,9 @@ import {
   drillManifestSchema,
   type DrillAction,
   type DrillFact,
+  type DrillGraph,
   type DrillManifest,
+  type DrillMap,
   type DrillRow,
   type DrillSection,
 } from './types';
@@ -54,6 +59,31 @@ export interface DrillDeps {
   resolveEvidence?: (
     refs: Array<{ kind: string; id: string; note?: string }>,
   ) => Promise<Array<{ kind: string; id: string; note: string | null; title: string; lines: string[]; at: string | null; href: string | null }>>;
+  /**
+   * Forward geocoding for an intel entity that names a place. Lives in
+   * `$lib/workflows/site-tools/geocode` (Nominatim, rate-limited, cached);
+   * injected for the same layering reason as the evidence resolver. Returns
+   * null for anything it cannot resolve — a map that plots a guess is worse
+   * than no map, so no fallback coordinate is ever invented.
+   */
+  geocodePlace?: (query: string) => Promise<{ lat: number; lng: number; label: string } | null>;
+}
+
+/** Entity types that name somewhere on the ground. Matched on the type's
+ *  name, lower-cased, so a taxonomy that spells it "Location" or "place" works. */
+const PLACE_TYPES = new Set([
+  'location', 'place', 'city', 'town', 'village', 'country', 'region', 'county', 'venue',
+  'address', 'site', 'area', 'geography', 'landmark', 'building', 'district',
+  'neighbourhood', 'neighborhood', 'borough', 'station', 'road', 'street', 'postcode',
+]);
+
+function numberIn(props: Record<string, unknown> | null | undefined, ...keys: string[]): number | null {
+  for (const k of keys) {
+    const v = props?.[k];
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
 }
 
 function compactStatus(status: string): string {
@@ -92,12 +122,63 @@ function conceptRow(n: ThreadGraphNode): DrillRow {
   };
 }
 
-function entitiesManifest(graph: ThreadGraph, filter: 'all' | 'known' | 'new', target: string): DrillManifest {
-  const concepts = graph.nodes.filter((n) => n.kind === 'concept');
+/**
+ * Every concept the thread produced, as the graph the 3D map draws, each in
+ * one of four classes: the rail's known/new hue crossed with whether it is
+ * one of the seven chips the rail is drawing right now (the first seven of
+ * the ranked, trimmed graph — the rail's own rule).
+ */
+function threadDrillGraph(trimmed: ThreadGraph, full: ThreadGraph): DrillGraph {
+  const viewIds = new Set(trimmed.nodes.slice(0, RAIL_DRAW_LIMIT).map((n) => n.id));
+  const nodes: DrillGraph['nodes'] = [];
+  for (const n of full.nodes) {
+    const cls = threadNodeClass(n, viewIds);
+    if (!cls) continue;
+    nodes.push({ id: n.id, name: n.name, type: n.type, note: n.note, mentions: n.mentions, cls, drill: entityIdOf(n) ? n.id : undefined });
+  }
+  const ids = new Set(nodes.map((n) => n.id));
+  const among = full.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+  // Typed relations are the picture. Co-occurrence forms a clique per turn —
+  // thirty entities from one reply are 435 lines that assert nothing and pull
+  // the layout into a ball — so it is kept only where a node would otherwise
+  // float free: up to two per node with no typed relation. The rail applies
+  // the same judgement (co-occurrence only around the selected chip).
+  const typed = among.filter((e) => e.verb !== 'MENTIONED WITH');
+  const hasTyped = new Set(typed.flatMap((e) => [e.source, e.target]));
+  const tether = new Map<string, number>();
+  const kept: typeof among = [];
+  for (const e of among) {
+    if (e.verb !== 'MENTIONED WITH') continue;
+    const loose = [e.source, e.target].filter((id) => !hasTyped.has(id) && (tether.get(id) ?? 0) < 2);
+    if (!loose.length) continue;
+    for (const id of loose) tether.set(id, (tether.get(id) ?? 0) + 1);
+    kept.push(e);
+  }
+  const edges = [...typed, ...kept].map((e) => ({ source: e.source, target: e.target, verb: e.verb, typed: e.verb !== 'MENTIONED WITH' }));
+  return { nodes: nodes.slice(0, 400), edges: edges.slice(0, 4000) };
+}
+
+function entitiesManifest(graph: ThreadGraph, full: ThreadGraph, filter: 'all' | 'known' | 'new', target: string): DrillManifest {
+  const concepts = full.nodes.filter((n) => n.kind === 'concept');
   const rows = filter === 'all' ? concepts : concepts.filter((n) => n.provenance === filter);
   const known = concepts.filter((n) => n.provenance === 'known').length;
   const fresh = concepts.filter((n) => n.provenance === 'new').length;
   const title = filter === 'known' ? 'Entities the graph already knew' : filter === 'new' ? 'Entities first seen here' : 'Entities in this thread';
+  const drillGraph = threadDrillGraph(graph, full);
+  const byId = new Map(full.nodes.map((n) => [n.id, n]));
+  // Point to point, typed relations first — the verb is the information.
+  const relationRows: DrillRow[] = drillGraph.edges
+    .slice()
+    .sort((a, b) => Number(b.typed) - Number(a.typed))
+    .slice(0, 60)
+    .map((e, i) => ({
+      id: `${i}:${e.source}:${e.target}`,
+      label: `${byId.get(e.source)?.name ?? e.source} → ${byId.get(e.target)?.name ?? e.target}`,
+      meta: e.verb,
+      note: e.typed ? undefined : 'shared a turn',
+      drill: entityIdOf({ kind: 'concept', id: e.source }) ? e.source : undefined,
+      tone: e.typed ? 'accent' : 'default',
+    }));
   return finish({
     target,
     kind: 'entities',
@@ -107,15 +188,23 @@ function entitiesManifest(graph: ThreadGraph, filter: 'all' | 'known' | 'new', t
       ? 'This thread is not feeding intelligence.'
       : !graph.conceptsReady
         ? 'Extraction is still catching up with the latest turn.'
-        : `${graph.conceptTotal} in the record, ${concepts.length} drawn here.`,
+        : `${concepts.length} entities, ${drillGraph.edges.filter((e) => e.typed).length} named relations. The rail draws ${Math.min(RAIL_DRAW_LIMIT, concepts.length)}.`,
     href: '/jkai/intel',
+    graph: drillGraph.nodes.length ? drillGraph : undefined,
     facts: [
       { label: 'Entities', value: String(graph.conceptTotal) },
-      { label: 'Relations', value: String(graph.edges.length) },
+      { label: 'Relations', value: String(drillGraph.edges.length) },
       { label: 'Known', value: String(known), tone: known ? 'good' : 'default' },
       { label: 'New here', value: String(fresh), tone: fresh ? 'warn' : 'default' },
     ],
     sections: [
+      {
+        kind: 'rows',
+        id: 'relations',
+        title: 'Relationships, point to point',
+        rows: relationRows,
+        empty: 'No relation between this thread’s entities yet.',
+      },
       {
         kind: 'rows',
         id: 'entities',
@@ -179,10 +268,34 @@ function relationsManifest(graph: ThreadGraph, target: string): DrillManifest {
   });
 }
 
-async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId: string): Promise<DrillManifest | null> {
+async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId: string, deps: DrillDeps): Promise<DrillManifest | null> {
   const node = graph.nodes.find((n) => n.id === nodeId);
   const entityId = node ? entityIdOf(node) : nodeId.slice('entity:'.length);
   if (!entityId) return null;
+  // The record itself — the node is this thread's slice of it, and an entity
+  // reached from a memory or a neighbour may not be in this thread at all.
+  const [entity] = await db
+    .select({ name: intelEntities.name, summary: intelEntities.summary, properties: intelEntities.properties, typeName: intelEntityTypes.name })
+    .from(intelEntities)
+    .innerJoin(intelEntityTypes, eq(intelEntityTypes.id, intelEntities.typeId))
+    .where(eq(intelEntities.id, entityId))
+    .limit(1);
+  if (!node && !entity) return null;
+
+  // A place goes on a map. Coordinates the record carries win; otherwise the
+  // NAME is geocoded, never guessed — see DrillDeps.geocodePlace.
+  let map: DrillMap | undefined;
+  const isPlace = entity ? PLACE_TYPES.has(entity.typeName.toLowerCase()) : false;
+  if (entity && isPlace) {
+    const lat = numberIn(entity.properties, 'lat', 'latitude');
+    const lon = numberIn(entity.properties, 'lon', 'lng', 'longitude');
+    if (lat !== null && lon !== null) {
+      map = { points: [{ lat, lon, label: entity.name, tone: 'accent' }], provenance: 'coordinates on the record' };
+    } else if (deps.geocodePlace) {
+      const hit = await deps.geocodePlace(entity.name).catch(() => null);
+      if (hit) map = { points: [{ lat: hit.lat, lon: hit.lng, label: entity.name, note: hit.label, tone: 'accent' }], provenance: `geocoded from the name: ${hit.label}` };
+    }
+  }
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const relations: DrillRow[] = node
     ? graph.edges
@@ -214,15 +327,16 @@ async function entityManifest(conversationId: string, graph: ThreadGraph, nodeId
     .orderBy(desc(jkaiMemories.updatedAt))
     .limit(12);
 
-  const name = node?.name ?? 'Entity';
+  const name = node?.name ?? entity?.name ?? 'Entity';
   return finish({
     target: `entity:${entityId}`,
     kind: 'entity',
-    eyebrow: node ? `Intelligence · ${node.type}` : 'Intelligence · entity',
+    eyebrow: `Intelligence · ${node?.type ?? entity?.typeName ?? 'entity'}`,
     title: name,
-    subtitle: node ? PROVENANCE_WORD[node.provenance] : undefined,
+    subtitle: node ? PROVENANCE_WORD[node.provenance] : isPlace ? 'A place the graph knows; not in this thread.' : 'Not in this thread.',
     href: `/jkai/intel/entities/${entityId}`,
     entityId,
+    map,
     facts: node
       ? [
           { label: 'Mentions here', value: String(node.mentions) },
@@ -334,11 +448,18 @@ async function researchRunManifest(id: string, target: string): Promise<DrillMan
     .where(eq(researchSessions.id, id))
     .limit(1);
   if (!run) return null;
-  const [[srcCount], [factCount], [spend], commit] = await Promise.all([
+  const [[srcCount], [factCount], [spend], commit, sourceRows] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(sources).where(eq(sources.sessionId, id)),
     db.select({ n: sql<number>`count(*)::int` }).from(facts).where(eq(facts.sessionId, id)),
     db.select({ usd: sql<number>`coalesce(sum(${agentActions.costUsd}), 0)` }).from(agentActions).where(eq(agentActions.sessionId, id)),
     commitState(id).catch(() => null),
+    // Most credible first; the unscored ones after, newest first.
+    db
+      .select({ id: sources.id, url: sources.url, title: sources.title, snippet: sources.snippet, domain: sources.domain, category: sources.category, credibilityScore: sources.credibilityScore, credibilityType: sources.credibilityType, fetchedAt: sources.fetchedAt })
+      .from(sources)
+      .where(eq(sources.sessionId, id))
+      .orderBy(sql`${sources.credibilityScore} desc nulls last`, desc(sources.fetchedAt))
+      .limit(24),
   ]);
   const report = run.report as { executive_summary?: string; ranked_facts?: string[]; knowledge_gaps?: Array<{ gap?: string }> } | null;
   // `ranked_facts` holds fact IDS (postprocess writes `factScores.map(f => f.id)`),
@@ -385,6 +506,22 @@ async function researchRunManifest(id: string, target: string): Promise<DrillMan
   if (report?.executive_summary) sections.push({ kind: 'prose', id: 'summary', title: 'Executive summary', body: report.executive_summary });
   if (goals.length) sections.push({ kind: 'list', id: 'goals', title: 'Goals', items: goals.slice(0, 12) });
   if (rankedFactLines.length) sections.push({ kind: 'list', id: 'facts', title: 'Top facts', items: rankedFactLines });
+  sections.push({
+    kind: 'rows',
+    id: 'sources',
+    title: `Sources${(srcCount?.n ?? 0) > sourceRows.length ? ` · ${sourceRows.length} of ${srcCount?.n}` : ''}`,
+    rows: sourceRows.map((src) => ({
+      id: src.id,
+      label: src.title?.trim() || src.url,
+      meta: [src.domain, src.credibilityType ?? src.category, src.credibilityScore !== null ? `${Math.round(src.credibilityScore * 100)}% credible` : null].filter(Boolean).join(' · '),
+      note: src.snippet ? (src.snippet.length > 140 ? `${src.snippet.slice(0, 138)}…` : src.snippet) : undefined,
+      href: src.url,
+      external: true,
+      when: src.fetchedAt.toISOString(),
+      tone: src.credibilityScore !== null && src.credibilityScore >= 0.7 ? 'good' : 'default',
+    })),
+    empty: 'No sources were kept for this run.',
+  });
   const gapLines = (report?.knowledge_gaps ?? []).map((g) => g.gap ?? '').filter(Boolean).slice(0, 8);
   if (gapLines.length) sections.push({ kind: 'list', id: 'gaps', title: 'Knowledge gaps', items: gapLines });
 
@@ -501,6 +638,20 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
   if (!t) return null;
   const evidence = deps.resolveEvidence ? await deps.resolveEvidence(t.evidence ?? []).catch(() => []) : [];
   const api = '/api/daydream/thoughts';
+  // The places this thought rests on, on one map — a citation you can see.
+  const placeIds = [...new Set((t.evidence ?? []).filter((e) => e.kind === 'place').map((e) => e.id))].slice(0, 30);
+  const placeRows = placeIds.length
+    ? await db
+        .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, lat: daydreamPlaces.lat, lon: daydreamPlaces.lon, radiusM: daydreamPlaces.radiusM })
+        .from(daydreamPlaces)
+        .where(inArray(daydreamPlaces.id, placeIds))
+    : [];
+  const map: DrillMap | undefined = placeRows.length
+    ? {
+        points: placeRows.map((p) => ({ lat: p.lat, lon: p.lon, label: p.label ?? p.suggestedLabel ?? 'Unnamed', radiusM: p.radiusM, tone: p.label ? 'accent' : 'warn', drill: drillKey({ kind: 'place', id: p.id }) })),
+        provenance: `${placeRows.length === 1 ? 'the place' : 'the places'} this thought cites`,
+      }
+    : undefined;
   const sections: DrillSection[] = [
     { kind: 'prose', id: 'why', title: 'Why it said this', body: t.explanation },
   ];
@@ -527,6 +678,7 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
     kind: 'thought',
     eyebrow: `Daydream · ${t.kind.replaceAll('_', ' ')}`,
     title: t.title,
+    map,
     subtitle: `${compactStatus(t.status)} · ${relativeStamp(t.createdAt.toISOString())}${t.feedback ? ` · you said ${t.feedback.replaceAll('_', ' ')}` : ''}`,
     href: `/jkai/daydreams/feed?open=${id}`,
     facts: [
@@ -551,16 +703,31 @@ async function thoughtManifest(id: string, target: string, deps: DrillDeps): Pro
 
 async function placesManifest(filter: 'all' | 'named', target: string): Promise<DrillManifest> {
   const rows = await db
-    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, kind: daydreamPlaces.kind, source: daydreamPlaces.source, visitCount: daydreamPlaces.visitCount, distinctDays: daydreamPlaces.distinctDays })
+    .select({ id: daydreamPlaces.id, label: daydreamPlaces.label, suggestedLabel: daydreamPlaces.suggestedLabel, kind: daydreamPlaces.kind, source: daydreamPlaces.source, visitCount: daydreamPlaces.visitCount, distinctDays: daydreamPlaces.distinctDays, lat: daydreamPlaces.lat, lon: daydreamPlaces.lon, radiusM: daydreamPlaces.radiusM })
     .from(daydreamPlaces)
     .where(eq(daydreamPlaces.status, 'active'))
     .orderBy(desc(daydreamPlaces.distinctDays))
     .limit(30);
   const named = rows.filter((p) => p.label);
   const list = filter === 'named' ? named : rows;
+  // Lat/lon leave the server for one owner-gated render, as the naming map's do.
+  const map: DrillMap | undefined = list.length
+    ? {
+        points: list.slice(0, 60).map((p) => ({
+          lat: p.lat,
+          lon: p.lon,
+          label: p.label ?? p.suggestedLabel ?? 'Unnamed',
+          note: `${p.distinctDays} days`,
+          tone: p.label ? 'accent' : 'warn',
+          drill: drillKey({ kind: 'place', id: p.id }),
+        })),
+        provenance: 'clustered from the household trail',
+      }
+    : undefined;
   return finish({
     target,
     kind: 'places',
+    map,
     eyebrow: 'Daydream · places',
     title: filter === 'named' ? 'Places you have named' : 'Repeated places',
     subtitle: 'Ranked by separate days anyone stayed there, not by household visit count.',
@@ -604,6 +771,8 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
       visitCount: daydreamPlaces.visitCount,
       distinctDays: daydreamPlaces.distinctDays,
       radiusM: daydreamPlaces.radiusM,
+      lat: daydreamPlaces.lat,
+      lon: daydreamPlaces.lon,
     })
     .from(daydreamPlaces)
     .where(eq(daydreamPlaces.id, id))
@@ -611,6 +780,10 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
   if (!p) return null;
   const api = '/api/daydream/thoughts';
   const name = p.label ?? p.suggestedLabel ?? 'Unnamed place';
+  const map: DrillMap = {
+    points: [{ lat: p.lat, lon: p.lon, label: name, radiusM: p.radiusM, tone: p.label ? 'accent' : 'warn' }],
+    provenance: p.source === 'confirmed' ? 'you named it' : p.source === 'geocoded' ? 'a reverse lookup of the cluster centre' : 'the centre of a cluster of stays',
+  };
   const sections: DrillSection[] = [];
   if (!p.label && (p.suggestedLabel || p.suggestedAddress)) {
     sections.push({ kind: 'prose', id: 'suggestion', title: 'The geocoder thinks', body: [p.suggestedLabel, p.suggestedAddress].filter(Boolean).join(' — '), tone: 'warn' });
@@ -644,6 +817,7 @@ async function placeManifest(id: string, target: string): Promise<DrillManifest 
     kind: 'place',
     eyebrow: `Daydream · ${p.kind === 'unknown' ? 'place' : p.kind}`,
     title: name,
+    map,
     subtitle: p.source === 'confirmed' ? 'You named it — quotable as fact.' : p.source === 'geocoded' ? 'A reverse lookup, not your word.' : 'Inferred from a pattern — only ever a question.',
     href: '/jkai/daydreams/places',
     facts: [
@@ -869,12 +1043,14 @@ async function cardManifest(conversationId: string, lens: string, cardId: string
 export async function composeDrill(conversationId: string, target: DrillTarget, deps: DrillDeps = {}): Promise<DrillManifest | null> {
   const key = drillKey(target);
   switch (target.kind) {
-    case 'entities':
-      return entitiesManifest(await buildThreadGraph(conversationId), target.filter, key);
+    case 'entities': {
+      const [trimmed, full] = await Promise.all([buildThreadGraph(conversationId), buildThreadGraph(conversationId, { full: true })]);
+      return entitiesManifest(trimmed, full, target.filter, key);
+    }
     case 'relations':
       return relationsManifest(await buildThreadGraph(conversationId), key);
     case 'entity':
-      return entityManifest(conversationId, await buildThreadGraph(conversationId), key);
+      return entityManifest(conversationId, await buildThreadGraph(conversationId), key, deps);
     case 'research-desk':
       return researchDeskManifest(target.filter, key);
     case 'research-run':

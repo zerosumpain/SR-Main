@@ -216,6 +216,12 @@
   });
 
   const isEntity = $derived(manifest?.kind === 'entity' && Boolean(manifest?.entityId));
+  /** A 3D graph wants the room an entity does. */
+  const isWide = $derived(isEntity || Boolean(manifest?.graph));
+
+  // Three.js and Mapbox are loaded only by the drills that draw with them.
+  const graphView = () => import('./DrillGraph3D.svelte');
+  const mapView = () => import('./DrillMap.svelte');
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -223,7 +229,7 @@
 <div class="dm-backdrop" use:portal onclick={onClose}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="dm-panel" class:wide={isEntity} role="dialog" aria-modal="true" aria-label={manifest?.title ?? 'Detail'} onclick={(e) => e.stopPropagation()}>
+  <div class="dm-panel" class:wide={isWide} role="dialog" aria-modal="true" aria-label={manifest?.title ?? 'Detail'} onclick={(e) => e.stopPropagation()}>
     <header class="dm-hd">
       <div class="dm-hd-left">
         {#if stack.length}
@@ -267,6 +273,27 @@
         </div>
       {/if}
 
+      {#if manifest.graph}
+        <!-- The thread's entities in three dimensions — the intel page's own
+             3D view, fed this thread and coloured by the rail's four classes. -->
+        {#await graphView() then Graph}
+          {#key manifest.target}
+            <Graph.default graph={manifest.graph} onOpen={navigate} />
+          {/key}
+        {:catch err}
+          <p class="dm-note dm-err">The 3D view could not load: {err instanceof Error ? err.message : String(err)}</p>
+        {/await}
+      {/if}
+      {#if manifest.map && !isEntity}
+        {#await mapView() then Map}
+          {#key manifest.target}
+            <Map.default map={manifest.map} onOpen={navigate} />
+          {/key}
+        {:catch err}
+          <p class="dm-note dm-err">The map could not load: {err instanceof Error ? err.message : String(err)}</p>
+        {/await}
+      {/if}
+
       <div class="dm-body" class:split={isEntity}>
         {#if isEntity && manifest.entityId}
           <div class="dm-entity">
@@ -279,6 +306,15 @@
         {/if}
 
         <div class="dm-sections" class:dimmed={loading}>
+          {#if manifest.map && isEntity}
+            <!-- An entity that names a place: the map sits at the head of its
+                 column, beside the card rather than above both. -->
+            {#await mapView() then Map}
+              {#key manifest.target}
+                <Map.default map={manifest.map} height="240px" onOpen={navigate} />
+              {/key}
+            {/await}
+          {/if}
           {#each manifest.sections as s (s.id)}
             <section class="dm-sec">
               <div class="dm-sec-hd">
@@ -297,7 +333,17 @@
                 <div class="dm-rows">
                   {#each s.rows as r (r.id)}
                     <div class="dm-row" data-tone={r.tone ?? 'default'}>
-                      {#if r.drill}
+                      {#if r.external && r.href}
+                        <!-- Off-site (a research source): a new tab, and the
+                             modal stays where it is. -->
+                        <a class="dm-row-main dm-row-link" href={r.href} target="_blank" rel="noopener noreferrer" title="Open the source in a new tab">
+                          <span class="dm-row-label">{r.label}</span>
+                          {#if r.meta || r.when}
+                            <span class="dm-row-meta">{r.meta ?? ''}{r.meta && r.when ? ' · ' : ''}{r.when ? relativeStamp(r.when) : ''}</span>
+                          {/if}
+                          {#if r.note}<span class="dm-row-note">{r.note}</span>{/if}
+                        </a>
+                      {:else if r.drill}
                         <button type="button" class="dm-row-main dm-row-btn" onclick={() => navigate(r.drill!)} title="Open">
                           <span class="dm-row-label">{r.label}</span>
                           {#if r.meta || r.when}
@@ -314,7 +360,9 @@
                           {#if r.note}<span class="dm-row-note">{r.note}</span>{/if}
                         </div>
                       {/if}
-                      {#if r.href}
+                      {#if r.href && r.external}
+                        <a class="dm-row-go" href={r.href} target="_blank" rel="noopener noreferrer" aria-label="Open {r.label} in a new tab">↗</a>
+                      {:else if r.href}
                         <a class="dm-row-go" href={r.href} onclick={onClose} aria-label="Open {r.label}">↗</a>
                       {/if}
                     </div>
@@ -680,8 +728,13 @@
     cursor: pointer;
     font: inherit;
   }
-  .dm-row-btn:hover .dm-row-label {
+  .dm-row-btn:hover .dm-row-label,
+  .dm-row-link:hover .dm-row-label {
     color: var(--accent);
+  }
+  .dm-row-link {
+    text-decoration: none;
+    color: inherit;
   }
   .dm-row-label {
     font-family: var(--font-body);
