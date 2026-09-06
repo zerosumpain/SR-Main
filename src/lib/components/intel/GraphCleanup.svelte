@@ -23,7 +23,7 @@
 </script>
 
 <section aria-labelledby="cleanup-heading">
-  <div class="heading"><h2 id="cleanup-heading">Source cleanup</h2><a href="/jkai/intel/review">Open entity review →</a></div>
+  <div class="heading"><h2 id="cleanup-heading"><span class="section-number" aria-hidden="true">02</span> Source cleanup</h2><a href="/jkai/intel/review">Open entity review →</a></div>
   <p>Remove intelligence from excluded folders and deleted Drive files. Shared entities keep their remaining evidence; confirmed, watched, dossier and memory-linked entities are retained.</p>
   <div class="actions">
     <button disabled={busy} onclick={() => inspect()}>{busy ? 'Checking…' : 'Preview cleanup'}</button>
