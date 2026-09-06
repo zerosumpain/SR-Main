@@ -11,77 +11,26 @@
 </svelte:head>
 
 <script lang="ts">
-  import { getContext, onMount, type Component } from 'svelte';
+  import { getContext, onMount } from 'svelte';
   import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
-  import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
   import HeroBackground from '$lib/components/landing/HeroBackground.svelte';
   import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
   import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
   import ShippedSeam from '$lib/components/landing/ShippedSeam.svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
-  import EcgAscii from '$lib/components/shared/EcgAscii.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import { roundPulse } from '$lib/biome/state';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
+  import { roundPulse } from '$lib/vitals/state';
+  import type { VitalsStore } from '$lib/vitals/store.svelte';
 
-  const store = getContext<BiomeStore>('biome');
+  const store = getContext<VitalsStore>('vitals');
 
   let { data } = $props();
 
   let mounted = $state(false);
-  let bgMode = $state<'ecg' | 'biome'>('ecg');
-  let BiomeBackground = $state<Component<{
-    store: BiomeStore;
-    position?: 'fixed' | 'absolute';
-    transparent?: boolean;
-  }> | null>(null);
-  let biomeBackgroundLoading = false;
-  let biomeBackgroundFailed = false;
-  // Render the live heartbeat as the glowing line ('line') or as a sweeping
-  // ASCII trace ('ascii'). Toggled from the footer, persisted in localStorage.
-  let ecgStyle = $state<'line' | 'ascii'>('line');
 
-  function setBgMode(mode: 'ecg' | 'biome') {
-    bgMode = mode;
-    localStorage.setItem('landing-bg', mode);
-    window.dispatchEvent(new CustomEvent('landing-bg-change', { detail: { mode } }));
-  }
-
-  async function loadBiomeBackground() {
-    if (BiomeBackground || biomeBackgroundLoading || biomeBackgroundFailed) return;
-    biomeBackgroundLoading = true;
-    try {
-      const [component] = await Promise.all([
-        import('$lib/components/BiomeBackground.svelte'),
-        // Settings belong to this optional renderer, not to every route that
-        // happens to inherit the root biome state for its header reading.
-        store.fetchSettings(),
-      ]);
-      BiomeBackground = component.default;
-    } catch {
-      biomeBackgroundFailed = true;
-    } finally {
-      biomeBackgroundLoading = false;
-    }
-  }
-
-  // Three.js and Threlte are only needed for the optional biome view. Keep the
-  // default ECG landing page free of that dependency graph.
-  $effect(() => {
-    if (mounted && bgMode === 'biome') void loadBiomeBackground();
-  });
-
-  function toggleEcgStyle() {
-    ecgStyle = ecgStyle === 'ascii' ? 'line' : 'ascii';
-    localStorage.setItem('ecg-style', ecgStyle);
-    // Switching to ASCII implies wanting to see the pulse — bring the ECG
-    // forward if the biome background is currently up.
-    if (ecgStyle === 'ascii' && bgMode !== 'ecg') setBgMode('ecg');
-  }
-
-  // initialBiome is streamed, so it isn't in the SSR HTML — pre-mount uses
+  // initialVitals is streamed, so it isn't in the SSR HTML — pre-mount uses
   // sensible defaults and the live store takes over once mounted (onMount seeds
   // it from the resolved stream, then its own polling keeps it current).
   let pulse = $derived(mounted ? store.state.pulse : 60);
@@ -134,30 +83,16 @@
   });
 
   onMount(() => {
-    // initialBiome is streamed from the server load, so seed the store once it
+    // initialVitals is streamed from the server load, so seed the store once it
     // resolves; the store's own polling takes over from there.
-    Promise.resolve(data.initialBiome).then((b) => {
+    Promise.resolve(data.initialVitals).then((b) => {
       if (b) store.setState(b);
     });
     mounted = true;
 
-    const stored = localStorage.getItem('landing-bg');
-    if (stored === 'biome' || stored === 'ecg') bgMode = stored;
-
-    const storedStyle = localStorage.getItem('ecg-style');
-    if (storedStyle === 'ascii' || storedStyle === 'line') ecgStyle = storedStyle;
-
-    function handleBgChange(e: Event) {
-      bgMode = (e as CustomEvent<{ mode: 'ecg' | 'biome' }>).detail.mode;
-    }
-    window.addEventListener('landing-bg-change', handleBgChange);
-
     const tick = setInterval(() => (now = Date.now()), 30_000);
 
-    return () => {
-      window.removeEventListener('landing-bg-change', handleBgChange);
-      clearInterval(tick);
-    };
+    return () => clearInterval(tick);
   });
 </script>
 
@@ -174,10 +109,6 @@
   class="hero-sec relative flex flex-col justify-between overflow-hidden"
   style="min-height: calc(100vh - var(--site-nav-height));"
 >
-  {#if bgMode === 'biome' && BiomeBackground}
-    <BiomeBackground {store} position="absolute" transparent />
-  {/if}
-
   <!-- Center — hero copy (left) + live "Vital Signs" tiles (right). heroTitle is
        streamed; render fallback copy until it lands so the hero paints without
        waiting on the external weather fetch. The tiles sit at z-10 over the background
@@ -199,13 +130,7 @@
           steps={data.steps}
         >
           {#snippet statusBackground()}
-            {#if bgMode !== 'biome' || !BiomeBackground}
-              {#if ecgStyle === 'ascii'}
-                <EcgAscii rhr={roundPulse(pulse)} steps={data.steps} />
-              {:else}
-                <Ecg rhr={roundPulse(pulse)} showGrid={false} />
-              {/if}
-            {/if}
+            <Ecg rhr={roundPulse(pulse)} showGrid={false} />
           {/snippet}
         </VitalSigns>
       </aside>
@@ -217,19 +142,9 @@
     <LiveWalkBanner />
   </div>
 
-  <!-- Signature bar: what the background is, the control that changes it, and
-       when the readings last landed. -->
+  <!-- Signature bar: what the background is, and when the readings last landed. -->
   <div class="relative z-10 flex justify-between items-center gap-4 hero-pad hero-sig">
-    <div class="flex items-center gap-4 min-w-0">
-      <BackgroundToggle />
-      <span class="truncate"
-        >Signature · {bgMode === 'biome'
-          ? 'Biome'
-          : ecgStyle === 'ascii'
-            ? 'Pulse · ASCII'
-            : 'Pulse'} · Live</span
-      >
-    </div>
+    <span class="truncate">Signature · Pulse · Live</span>
     {#if syncedText}<span class="flex-none">Synced {syncedText}</span>{/if}
   </div>
 </section>
@@ -245,19 +160,6 @@
 <footer class="site-foot flex flex-wrap justify-between items-center gap-4">
   <p class="brand text-[14px]" style="color: var(--text-muted);">strange ramblings</p>
   <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-    <button
-      type="button"
-      class="ecg-toggle"
-      onclick={toggleEcgStyle}
-      aria-pressed={ecgStyle === 'ascii'}
-      title="Render the live heartbeat as a line or as sweeping ASCII characters"
-      aria-label="Toggle heartbeat ASCII rendering"
-    >
-      <span class="ecg-toggle-key">Pulse</span>
-      <span class="ecg-toggle-val" class:on={ecgStyle === 'ascii'}>
-        {ecgStyle === 'ascii' ? 'ASCII' : 'Line'}
-      </span>
-    </button>
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
     <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
     <a href="/health" class="nav-link">Health</a>
@@ -275,50 +177,6 @@
     background: var(--surface-rail);
   }
 
-  /* Footer toggle for the heartbeat render mode (orange line ⇄ ASCII). */
-  .ecg-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 6px 4px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-pill);
-    background: var(--card-bg);
-    cursor: pointer;
-    line-height: 1;
-    transition:
-      border-color 0.15s ease,
-      background 0.15s ease;
-  }
-  .ecg-toggle:hover {
-    border-color: var(--accent);
-  }
-  .ecg-toggle-key {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--text-ghost);
-  }
-  .ecg-toggle-val {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--text-muted);
-    min-width: 42px;
-    text-align: center;
-    padding: 3px 8px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-sunken);
-    transition:
-      color 0.15s ease,
-      background 0.15s ease;
-  }
-  .ecg-toggle-val.on {
-    color: var(--accent);
-    background: var(--accent-tint-14);
-  }
 
   /* The section owns no horizontal padding of its own: the rail has to reach the
      right edge, so the padding lives on the columns that need it. */

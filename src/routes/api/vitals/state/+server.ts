@@ -3,15 +3,15 @@ import { db } from '$lib/db';
 import { appleHealthMetrics, whoopRecovery, whoopCycles } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import {
-  BIOME_DEFAULTS,
+  VITALS_DEFAULTS,
   roundPulse,
   normalizeStrain,
   clamp100,
   isStale,
-  type BiomeState,
+  type VitalsState,
   type WeatherCondition,
-} from '$lib/biome/state';
-import { getBiomeLocation } from '$lib/biome/location';
+} from '$lib/vitals/state';
+import { getVitalsLocation } from '$lib/vitals/location';
 import type { RequestHandler } from './$types';
 
 const WEATHER_CODES: Record<number, WeatherCondition> = {
@@ -25,7 +25,7 @@ const WEATHER_CODES: Record<number, WeatherCondition> = {
   95: 'thunderstorm', 96: 'thunderstorm', 99: 'thunderstorm',
 };
 
-function getDayPhase(isDay?: boolean): BiomeState['dayPhase'] {
+function getDayPhase(isDay?: boolean): VitalsState['dayPhase'] {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 7) return 'dawn';
   if (hour >= 17 && hour < 19) return 'dusk';
@@ -36,16 +36,16 @@ function getDayPhase(isDay?: boolean): BiomeState['dayPhase'] {
 }
 
 const CACHE_MS = 60_000;
-let cached: { at: number; state: BiomeState } | null = null;
-let pending: Promise<BiomeState> | null = null;
+let cached: { at: number; state: VitalsState } | null = null;
+let pending: Promise<VitalsState> | null = null;
 
-async function computeBiomeState(): Promise<BiomeState> {
+async function computeVitalsState(): Promise<VitalsState> {
   // The nested objects are mutated below; clone them as well so a successful
   // request cannot rewrite the module-level fallback used by later failures.
-  const state: BiomeState = {
-    ...BIOME_DEFAULTS,
-    weather: { ...BIOME_DEFAULTS.weather },
-    sources: { ...BIOME_DEFAULTS.sources },
+  const state: VitalsState = {
+    ...VITALS_DEFAULTS,
+    weather: { ...VITALS_DEFAULTS.weather },
+    sources: { ...VITALS_DEFAULTS.sources },
   };
   let latestDataTime: number | null = null;
 
@@ -87,10 +87,10 @@ async function computeBiomeState(): Promise<BiomeState> {
       state.strain = normalizeStrain(latestCycle.strain);
     }
   } catch (error) {
-    console.error('[biome] DB fetch failed:', error);
+    console.error('[vitals] DB fetch failed:', error);
   }
 
-  const loc = await getBiomeLocation();
+  const loc = await getVitalsLocation();
   state.town = loc.town ?? undefined;
 
   try {
@@ -113,7 +113,7 @@ async function computeBiomeState(): Promise<BiomeState> {
       state.sources.weather = true;
     }
   } catch (error) {
-    console.error('[biome] Weather fetch failed:', error);
+    console.error('[vitals] Weather fetch failed:', error);
     state.dayPhase = getDayPhase();
   }
 
@@ -133,7 +133,7 @@ export const GET: RequestHandler = async () => {
     // The homepage server load and the browser store commonly arrive together.
     // Coalesce them so one navigation cannot duplicate three DB reads plus the
     // Open-Meteo request.
-    pending ??= computeBiomeState()
+    pending ??= computeVitalsState()
       .then((state) => {
         cached = { at: Date.now(), state };
         return state;
@@ -144,7 +144,7 @@ export const GET: RequestHandler = async () => {
     await pending;
   }
 
-  return json(cached?.state ?? BIOME_DEFAULTS, {
+  return json(cached?.state ?? VITALS_DEFAULTS, {
     headers: {
       'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
     },

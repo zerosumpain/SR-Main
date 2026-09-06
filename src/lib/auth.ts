@@ -10,8 +10,7 @@ const PUBLIC_PATHS = [
   '/login',
   '/auth-error',
   '/auth',
-  '/api/biome/state',
-  '/api/biome/config',
+  '/api/vitals/state',
   '/api/health/apple',
   '/api/agent',
   '/api/jkai/proxy',
@@ -37,9 +36,6 @@ const PUBLIC_PATHS = [
   // live-walk + published-project data — never prompts, conversation ids, or
   // canvas slugs. See src/routes/api/landing/vitals/+server.ts.
   '/api/landing/vitals',
-  // Write-only frame-rate telemetry beacon from the landing heartbeat — logs a
-  // single line to stdout, stores nothing. See its +server.ts for rationale.
-  '/api/landing/ecg-telemetry',
   // Public release history — the showcase behind the Shipped section on the
   // landing page. Read-only, and every item it renders has passed
   // (NB: no apostrophes in this block. check-public-routes.mjs extracts the

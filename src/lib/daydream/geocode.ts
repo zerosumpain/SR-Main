@@ -3,7 +3,7 @@
 // Guessing what a place is called, so naming one is a confirmation rather than
 // a memory test.
 //
-// Distinct from `$lib/biome/location.ts`, which reverse-geocodes at zoom 12 to
+// Distinct from `$lib/vitals/location.ts`, which reverse-geocodes at zoom 12 to
 // get a TOWN for the hero copy. That is the wrong granularity here by about
 // three orders of magnitude: "Darlington" is not a useful suggestion for a spot
 // the owner sat in for an hour. This asks at zoom 18, which is where Nominatim
@@ -143,7 +143,7 @@ export async function suggestPlaceName(lat: number, lon: number): Promise<PlaceS
       lat: String(lat),
       lon: String(lon),
       format: 'jsonv2',
-      // Building / POI granularity. The biome's zoom 12 gives a town, which is
+      // Building / POI granularity. The vitals feed's zoom 12 gives a town, which is
       // useless for naming a spot you sat in.
       zoom: '18',
       addressdetails: '1',

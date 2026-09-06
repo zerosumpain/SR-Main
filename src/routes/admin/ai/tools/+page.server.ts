@@ -36,7 +36,7 @@ const SITE_NODE_FAMILIES: Array<{ family: string; description: string; types: st
     types: ['gmail-trigger', 'gmail-fetch', 'gmail-send', 'gmail-reply', 'gmail-label', 'gmail-search'],
   },
   {
-    family: 'Biome / Health',
+    family: 'Vitals / Health',
     description: 'Personal HR / fitness data.',
     types: ['health-query'],
   },

@@ -110,7 +110,7 @@ For substantive rewrites (not just a typo), confirm the new draft with the user 
 Yield back to `jkai-general` (which will route, or answer directly) when the user:
 
 - Asks about **email, threads, attachments** → `jkai-gmail`.
-- Asks about **sleep, training, readiness, biome, HR** → `jkai-health`.
+- Asks about **sleep, training, readiness, vitals, HR** → `jkai-health`.
 - Asks about **stealth scraping, scraper scripts, selectors** → `jkai-scraper`.
 - Asks about **scheduled jobs / cron** for a recurring blog action ("publish drafts every Monday") → `jkai-scheduled` orchestrates the schedule, then it'd call blog tools; but the workflow lives on a canvas.
 - Asks to **render a chart, generate an image, send to WhatsApp, save a memory, follow up later** → `jkai-utility`.

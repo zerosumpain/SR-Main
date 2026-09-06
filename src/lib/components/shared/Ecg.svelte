@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
   import { prefersReducedMotion } from '$lib/components/health/v2/utils';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
+  import type { VitalsStore } from '$lib/vitals/store.svelte';
   import {
     SWEEP_SEC,
     LIFETIME,
@@ -29,17 +29,17 @@
   const baseline = H * 0.56;
 
   // Paper speed, phosphor lifetime, PQRST morphology and beat-to-beat
-  // variability all live in the shared signal model (./ecg-signal) so the ASCII
-  // pen renders an identical trace.
+  // variability all live in the shared signal model (./ecg-signal), so the
+  // signal can be reasoned about and tested apart from this canvas.
 
   // svelte-ignore state_referenced_locally
   let bpm = $state(rhr);
-  const biome = getContext<BiomeStore>('biome');
+  const vitals = getContext<VitalsStore>('vitals');
 
   // The root store owns the network read. Keeping the trace subscribed to it
-  // avoids a second /api/biome/state poll for the same number.
+  // avoids a second /api/vitals/state poll for the same number.
   $effect(() => {
-    const live = biome?.state;
+    const live = vitals?.state;
     const next = live?.sources?.heartRate && live.pulse > 0 ? live.pulse : rhr;
     bpm = Math.max(40, Math.min(220, Math.round(next)));
   });

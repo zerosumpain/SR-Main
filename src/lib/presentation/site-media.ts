@@ -33,7 +33,7 @@ export interface MediaCatalogue {
 /** Curated public pages that frame well inside a slide. The browse tab lets
  *  the owner navigate to anything else; these are the good defaults. */
 const CURATED_PAGES: MediaPage[] = [
-  { path: '/', title: 'Landing — vital signs', note: 'Live tiles: biome, GPS, workflows' },
+  { path: '/', title: 'Landing — vital signs', note: 'Live tiles: vitals, GPS, workflows' },
   { path: '/projects', title: 'Projects index', note: 'The public field-study shelf' },
   { path: '/decks', title: 'Decks gallery', note: 'Published presentations' },
   { path: '/blog', title: 'Blog', note: 'Posts index' },

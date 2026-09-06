@@ -2,7 +2,7 @@
   import { getContext, onMount, type Snippet } from 'svelte';
   import VitalTile from './VitalTile.svelte';
   import { fillStrap } from '$lib/landing/hero-titles-buckets';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
+  import type { VitalsStore } from '$lib/vitals/store.svelte';
 
   interface HeroCopy {
     primary: string;
@@ -24,10 +24,10 @@
     generatedAt: string;
   }
 
-  // Health BPM rides the shared biome store (already public + lerped), exactly
+  // Health BPM rides the shared vitals store (already public + lerped), exactly
   // like the hero/ECG — no extra fetch. Everything else comes from one public
   // aggregator poll.
-  const store = getContext<BiomeStore>('biome');
+  const store = getContext<VitalsStore>('vitals');
 
   let {
     deploys = null,

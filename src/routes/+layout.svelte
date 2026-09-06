@@ -3,14 +3,13 @@
   import '$lib/styles/nm-tokens.css';
   import { onMount, setContext } from 'svelte';
   import { onNavigate } from '$app/navigation';
-  import { createBiomeStore } from '$lib/biome/store.svelte';
+  import { createVitalsStore } from '$lib/vitals/store.svelte';
   import { healStaleJkaiSW } from '$lib/jkai/pwa/register';
 
-  const store = createBiomeStore();
-  setContext('biome', store);
+  const store = createVitalsStore();
+  setContext('vitals', store);
 
   onMount(() => {
-    store.initTier();
     store.startPolling();
 
     // Statically imported, and deliberately not behind a dynamic import: the

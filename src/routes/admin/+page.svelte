@@ -90,12 +90,6 @@
           <div class="nm-tile-sub">What every automated writer is told about how you write.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
-        <a class="nm-tile" href={`/admin/content/effects${t}`}>
-          <div class="nm-tile-eyebrow">Effects</div>
-          <div class="nm-tile-title">Visual Effects</div>
-          <div class="nm-tile-sub">Particle density, fog, weather, blood vessels, shudder, dream mode.</div>
-          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
-        </a>
       </div>
     </div>
 

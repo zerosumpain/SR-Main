@@ -132,7 +132,7 @@ redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is
 ## Key areas
 
 - `src/lib/workflows/` — workflow engine nodes and runners
-- `src/routes/admin/` — admin UIs (blog, biome, scraper, gmail, jkai)
+- `src/routes/admin/` — admin UIs (blog, scraper, gmail, jkai)
 - `src/routes/jkai/` — jkai chat hub + autonomous builder
 - `src/lib/datastore/` — permanent flexible datastore (collections + jsonb records, row-level permissions, query DSL, audit, TTL). Surfaces: `database` workflow node, `datastore` toolset, `/admin/ai/datastore`. Spec: `docs/superpowers/specs/2026-07-18-datastore-and-self-improvement-design.md`
 - `src/lib/codegraph/` — the **build-history knowledge graph**. Nodes are files and gates;

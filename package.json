@@ -116,7 +116,6 @@
     "@mozilla/readability": "^0.6.0",
     "@openai/codex-sdk": "^0.147.0",
     "@sveltejs/adapter-node": "^5.5.4",
-    "@threlte/core": "^8.5.0",
     "@tiptap/core": "^3.30.5",
     "@tiptap/extension-image": "^3.30.5",
     "@tiptap/extension-link": "^3.30.5",

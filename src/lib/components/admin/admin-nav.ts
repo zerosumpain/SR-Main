@@ -39,7 +39,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Responses', href: '/admin/content/comments' },
       { label: 'Hero', href: '/admin/content/hero' },
       { label: 'Voice', href: '/admin/content/voice' },
-      { label: 'Effects', href: '/admin/content/effects' },
     ],
   },
   {
@@ -132,7 +131,6 @@ export function isItemActive(item: AdminNavItem, path: string): boolean {
 export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/blog': '/admin/content/blog',
   '/admin/hero': '/admin/content/hero',
-  '/admin/biome': '/admin/content/effects',
   '/admin/health': '/admin/connections/health',
   '/admin/files': '/drive',
   '/admin/connections/files': '/drive',

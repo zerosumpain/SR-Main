@@ -19,15 +19,15 @@
    *  * `meta` / `before` — unchanged, passed straight through.
    *
    * The live bpm/°C cell moves into SiteHeader's `right` slot; it is the same
-   * biome context read, on the same terms (null until mounted, null when the
+   * vitals context read, on the same terms (null until mounted, null when the
    * health source is not reporting, so the strip never carries a stale number).
    */
   import type { Snippet } from 'svelte';
   import { getContext, onMount } from 'svelte';
   import { currentIsOwner } from '$lib/nav/page-path';
   import SiteHeader from './SiteHeader.svelte';
-  import { roundPulse } from '$lib/biome/state';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
+  import { roundPulse } from '$lib/vitals/state';
+  import type { VitalsStore } from '$lib/vitals/store.svelte';
   import type { NavItem } from '$lib/nav/site-nav';
 
   let {
@@ -52,7 +52,7 @@
 
   const isOwner = $derived(currentIsOwner());
 
-  const store = getContext<BiomeStore>('biome');
+  const store = getContext<VitalsStore>('vitals');
   let mounted = $state(false);
   onMount(() => {
     mounted = true;

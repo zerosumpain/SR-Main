@@ -24,7 +24,7 @@ describe('pickName', () => {
   });
 
   it('returns null rather than suggesting a county', () => {
-    // Anything vaguer than a road is not a suggestion, it is noise. The biome's
+    // Anything vaguer than a road is not a suggestion, it is noise. The vitals feed's
     // town-level geocode exists for a different job.
     expect(pickName({ address: { county: 'County Durham', country: 'England' } }).name).toBeNull();
   });

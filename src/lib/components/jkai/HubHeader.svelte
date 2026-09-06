@@ -7,7 +7,7 @@
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
   import { SECTIONS, activeSection, parentHref, parentLabel } from '$lib/nav/site-nav';
-  import type { BiomeStore } from '$lib/biome/store.svelte';
+  import type { VitalsStore } from '$lib/vitals/store.svelte';
 
   let {
     tokensToday,
@@ -194,11 +194,11 @@
   // Live heart rate — the root layout already owns this public state request.
   // Subscribing to it prevents the JKAI header from creating another minute
   // poll for data that is already in memory.
-  const biome = getContext<BiomeStore>('biome');
+  const vitals = getContext<VitalsStore>('vitals');
   $effect(() => {
     // The compact number does not need the five-second visual interpolation;
     // observing the target avoids propagating a global hub update every frame.
-    const state = biome?.targetState;
+    const state = vitals?.targetState;
     setBpm(
       state?.sources?.heartRate && typeof state.pulse === 'number' && state.pulse > 0
         ? Math.round(state.pulse)

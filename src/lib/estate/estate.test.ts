@@ -149,7 +149,7 @@ describe('site surface', () => {
     const by = (p: string) => surface.routes.find((r) => r.path === p && r.kind === 'api');
 
     // Genuinely world-readable.
-    expect(by('/api/biome/state')?.gate).toBe('open');
+    expect(by('/api/vitals/state')?.gate).toBe('open');
     // Past the gate, but the handler enforces a bridge token.
     expect(by('/api/jkai/tools/invoke')?.gate).toBe('self-gated');
     expect(by('/api/jkai/tools/invoke')?.guard).toContain('JKAI_BRIDGE_TOKEN');

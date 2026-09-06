@@ -2,13 +2,11 @@
 //
 // This is the *pure maths* of the heartbeat trace — the PQRST morphology, the
 // breathing-driven baseline wobble, the heart-rate → amplitude relationship and
-// the beat-to-beat variability. Both renderers consume it:
-//   - Ecg.svelte       draws it as a glowing orange phosphor line on canvas.
-//   - EcgAscii.svelte  draws the exact same signal as sweeping ASCII characters.
+// the beat-to-beat variability. Ecg.svelte draws it as a glowing orange
+// phosphor line on canvas.
 //
-// Keeping the model in one place is what guarantees the two modes share an
-// identical pattern, wobble and relationship to the live heart rate — the ASCII
-// view is the same signal, only the pen changed.
+// It stays separate from the renderer so the signal can be reasoned about and
+// tested without a canvas.
 
 import { clamp } from '$lib/components/health/v2/utils';
 

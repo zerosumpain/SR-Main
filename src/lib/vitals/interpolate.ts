@@ -1,4 +1,4 @@
-import type { BiomeState } from './state';
+import type { VitalsState } from './state';
 
 export function easeOut(t: number): number {
   const clamped = Math.max(0, Math.min(1, t));
@@ -9,11 +9,11 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-export function interpolateBiomeState(
-  from: BiomeState,
-  to: BiomeState,
+export function interpolateVitalsState(
+  from: VitalsState,
+  to: VitalsState,
   rawT: number,
-): BiomeState {
+): VitalsState {
   const t = Math.max(0, Math.min(1, rawT));
 
   return {

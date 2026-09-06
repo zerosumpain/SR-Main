@@ -15,19 +15,19 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
     .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: HEALTH_TIMEZONE })
     .toUpperCase();
 
-  // Streamed (un-awaited) — /api/biome/state hits an external weather API
+  // Streamed (un-awaited) — /api/vitals/state hits an external weather API
   // (Open-Meteo) on every render, so blocking first paint on it stalls the whole
   // hero. Instead let the shell + a deterministic fallback headline render
   // immediately; the live vitals and the snapped title stream in a beat later.
   // The `.catch` keeps the promise from rejecting so the {#await} needs no
   // {:catch} branch.
-  const initialBiome = fetch('/api/biome/state')
+  const initialVitals = fetch('/api/vitals/state')
     .then((r) => r.json())
     .catch(() => null);
 
   // heroTitle is cheap to compute (cached DB read) but depends on live vitals,
-  // so it rides the same stream as the biome it's snapped from.
-  const heroTitle = initialBiome.then((b) =>
+  // so it rides the same stream as the vitals it's snapped from.
+  const heroTitle = initialVitals.then((b) =>
     snapHeroTitle({
       hr: b?.pulse ?? 60,
       steps,
@@ -35,7 +35,7 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
     }),
   );
 
-  // Awaited, NOT streamed. The streaming above exists because /api/biome/state
+  // Awaited, NOT streamed. The streaming above exists because /api/vitals/state
   // calls an external weather API on every render; this is a local Postgres read
   // behind a 5-minute memo. More to the point, SvelteKit serialises streamed
   // promises at the end of the body, so streamed data never lands in the SSR
@@ -76,6 +76,6 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
 
   const backgroundSettings = await getHeroBackgroundSettings().catch(() => ({ ...HERO_BACKGROUND_DEFAULTS, enabled: false }));
   const backgroundAsset = await getHeroBackgroundAsset(activity.slot).catch(() => heroBackgroundAsset);
-  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention, mergeablePrs,
+  return { steps, dateStr, initialVitals, heroTitle, releases, isOwner, syncAttention, mergeablePrs,
     backgroundSettings, backgroundAsset };
 };

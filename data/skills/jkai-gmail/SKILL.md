@@ -133,7 +133,7 @@ If the user says "personal", run one call with `email: "john@personal.com"` and 
 Yield back to `jkai-general` when the user:
 
 - Asks about **blog posts** → `jkai-blog`.
-- Asks about **sleep, training, readiness, biome, HR** → `jkai-health`.
+- Asks about **sleep, training, readiness, vitals, HR** → `jkai-health`.
 - Asks about **stealth scraping** → `jkai-scraper`.
 - Asks about **scheduled / recurring** Gmail actions ("every morning at 9, list my unread") → `jkai-scheduled` for the schedule wrapper, or a workflow on `/jkai/canvas/<id>` if it's a multi-step graph. Don't try to schedule from inside this skill — `gmail_*` tools are one-shot.
 - Asks to **render a chart of email counts, save a memory about a contact, fetch a URL, send to WhatsApp** → `jkai-utility`.
