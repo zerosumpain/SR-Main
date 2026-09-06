@@ -250,6 +250,7 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
       id: intelEntities.id,
       name: intelEntities.name,
       typeName: intelEntityTypes.name,
+      version: sql<string>`${intelEntities.updatedAt}::text`,
       properties: intelEntities.properties,
     })
     .from(intelEntities)
@@ -355,7 +356,7 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
       await db
         .update(intelEntities)
         .set({ summary: item.summary, updatedAt: new Date() })
-        .where(eq(intelEntities.id, item.id));
+        .where(and(eq(intelEntities.id, item.id), sql`${intelEntities.updatedAt}::text = ${batch.find(e => e.id === item.id)!.version}`));
       await embedEntity(item.id);
     }
   } catch (err) {

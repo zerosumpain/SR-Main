@@ -22,7 +22,7 @@
 // Derived notes are tagged `metadata.autoKind`, which unified recall uses to
 // suppress them (the file/research branches already return that text — the
 // entities are the new part). Kill switch: INTEL_AUTO_EXTRACT=0.
-import { db } from '$lib/db';
+import { db, type DbExecutor } from '$lib/db';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { intelNotes, researchSessions } from '$lib/db/schema';
 import { extractFromNote, type ExtractionResult } from './extract';
@@ -225,6 +225,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
   if (!input.extraction && text.length < MIN_EXTRACT_CHARS) return { status: 'too-short' };
 
   try {
+    if (!(await admitDriveSource(input))) return { status: 'skipped' };
     const existing = await findDerivedNote(input.kind, input.refId);
     if (existing && !input.force) {
       const prevHash = (existing.metadata as Record<string, unknown> | null)?.contentHash;
@@ -271,44 +272,48 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
     // invent detail, and every entity was left summary-less — which also left
     // entity embeddings weaker, since they embed name + summary + properties.
     const categories = input.categories ?? [];
-    let noteId: string;
-    if (existing) {
-      noteId = existing.id;
-      await db
-        .update(intelNotes)
-        .set({
-          title: input.title,
-          rawContent: clipped,
-          processedContent: clipped,
-          status: held ? 'held' : 'processing',
-          ...(held ? { graphState: 'pending' as const } : {}),
-          metadata,
-          categories,
-          // Also set on update, so notes written before a source override
-          // existed are corrected the next time their thread is swept.
-          ...(input.source ? { source: input.source } : {}),
-          ...(input.observedAt ? { observedAt: input.observedAt } : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(intelNotes.id, noteId));
-    } else {
-      const [created] = await db
-        .insert(intelNotes)
-        .values({
-          title: input.title,
-          rawContent: clipped,
-          processedContent: clipped,
-          source: input.source ?? input.kind,
-          format: 'summary',
-          status: held ? 'held' : 'processing',
-          graphState: held ? 'pending' : 'admitted',
-          metadata,
-          categories,
-          observedAt: input.observedAt,
-        })
-        .returning({ id: intelNotes.id });
-      noteId = created.id;
-    }
+    const noteId = await writeWithDriveAdmission(input, async (writer) => {
+      let noteId: string;
+      if (existing) {
+        noteId = existing.id;
+        await writer
+          .update(intelNotes)
+          .set({
+            title: input.title,
+            rawContent: clipped,
+            processedContent: clipped,
+            status: held ? 'held' : 'processing',
+            ...(held ? { graphState: 'pending' as const } : {}),
+            metadata,
+            categories,
+            // Also set on update, so notes written before a source override
+            // existed are corrected the next time their thread is swept.
+            ...(input.source ? { source: input.source } : {}),
+            ...(input.observedAt ? { observedAt: input.observedAt } : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(intelNotes.id, noteId));
+      } else {
+        const [created] = await writer
+          .insert(intelNotes)
+          .values({
+            title: input.title,
+            rawContent: clipped,
+            processedContent: clipped,
+            source: input.source ?? input.kind,
+            format: 'summary',
+            status: held ? 'held' : 'processing',
+            graphState: held ? 'pending' : 'admitted',
+            metadata,
+            categories,
+            observedAt: input.observedAt,
+          })
+          .returning({ id: intelNotes.id });
+        noteId = created.id;
+      }
+      return noteId;
+    });
+    if (!noteId) return { status: 'skipped' };
 
     // Held: the note is stored, and that is the whole job.
     //
@@ -345,7 +350,11 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
       );
       return { status: 'failed', noteId };
     }
+    // The model may have taken minutes; the file can have moved or been
+    // excluded while it was reading. Recheck before and after persistence.
+    if (!(await admitDriveSource(input))) return { status: 'skipped' };
     const stats = await persistExtraction(noteId, extraction);
+    if (!(await admitDriveSource(input))) return { status: 'skipped' };
 
     await db
       .update(intelNotes)
@@ -407,6 +416,40 @@ export function queueIntelExtraction(input: AutoExtractInput): void {
   void extractIntoIntel(input).catch(() => {});
 }
 
+/** Gmail deliberately shares AutoKind=file; only real Drive sources use folder policy. */
+function isDriveSource(input: AutoExtractInput): boolean {
+  return input.kind === 'file' && input.source !== 'email' && input.metadata?.channel !== 'gmail' && !input.refId.startsWith('gmail:');
+}
+
+/** Serialize source admission with folder edits without holding locks across model calls. */
+async function writeWithDriveAdmission(
+  input: AutoExtractInput,
+  write: (writer: DbExecutor) => Promise<string>,
+): Promise<string | null> {
+  if (!isDriveSource(input)) return write(db);
+  return db.transaction(async tx => {
+    await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+    await tx.execute(sql`LOCK TABLE workflow_files, drive_folder_settings, intel_notes IN SHARE ROW EXCLUSIVE MODE`);
+    const { workflowFiles, driveFolderSettings } = await import('$lib/db/schema');
+    const { resolveFilePolicy, isIntelMode } = await import('./source-policy');
+    const [file] = await tx.select({ name: workflowFiles.name }).from(workflowFiles).where(eq(workflowFiles.id, input.refId)).limit(1);
+    const settings = await tx.select().from(driveFolderSettings);
+    if (!file || !resolveFilePolicy(file.name, settings.map(row => ({ ...row, intelMode: isIntelMode(row.intelMode) ? row.intelMode : 'inherit' }))).included) return null;
+    return write(tx);
+  });
+}
+
+async function admitDriveSource(input: AutoExtractInput): Promise<boolean> {
+  if (!isDriveSource(input)) return true;
+  const { workflowFiles } = await import('$lib/db/schema');
+  const [file] = await db.select({ name: workflowFiles.name }).from(workflowFiles).where(eq(workflowFiles.id, input.refId)).limit(1);
+  const { policyForFileName } = await import('./source-policy.server');
+  if (file && (await policyForFileName(file.name)).included) return true;
+  const { cleanupIntelligence } = await import('./cleanup.server');
+  await cleanupIntelligence({ apply: true, fileIds: [input.refId], scanOrphans: false });
+  return false;
+}
+
 export interface DerivedDeleteResult {
   notesDeleted: number;
   entitiesRemoved: number;
@@ -436,6 +479,24 @@ export async function deleteDerivedIntel(
     relationshipsRemoved: 0,
   };
   if (!refId) return result;
+
+  // Drive exclusions must be atomic and report failures. The cleanup planner
+  // also protects owner-kept entities and refreshes shared-source evidence.
+  if (kind === 'file') {
+    const notes = await db.select({ id: intelNotes.id }).from(intelNotes).where(and(
+      sql`${intelNotes.metadata}->>'autoKind' = ${kind}`,
+      sql`${intelNotes.metadata}->>'refId' = ${refId}`,
+    ));
+    if (!notes.length) return result;
+    const { cleanupIntelligence } = await import('./cleanup.server');
+    for (let offset = 0; offset < notes.length; offset += 250) {
+      const cleanup = await cleanupIntelligence({ apply: true, noteIds: notes.slice(offset, offset + 250).map(n => n.id), scanOrphans: false });
+      result.notesDeleted += cleanup.counts.notesRemoved;
+      result.entitiesRemoved += cleanup.counts.entitiesRemoved;
+      result.relationshipsRemoved += cleanup.counts.relationshipsRemoved;
+    }
+    return result;
+  }
 
   try {
     const notes = await db

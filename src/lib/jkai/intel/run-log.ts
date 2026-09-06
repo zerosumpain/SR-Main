@@ -48,6 +48,7 @@ export function localDayOf(now = new Date()): string {
 /** One stage of the sweep, and what became of it. */
 export interface IntelStageResult {
   stage:
+    | 'cleanup'
     | 'gmail'
     | 'mail-relevance'
     | 'mail-rules'
@@ -68,6 +69,8 @@ export interface IntelStageResult {
 }
 
 export interface IntelRunData {
+  /** Separate manual cleanup runs retain their own audit record. */
+  id?: string;
   /** ISO instant the sweep started. */
   startedAt: string;
   finishedAt?: string;
@@ -125,7 +128,7 @@ export async function recordIntelRun(data: IntelRunData): Promise<void> {
   };
   await upsertRecord(
     INTEL_RUNS_COLLECTION,
-    { key: `${data.day}:${data.trigger}`, data: safe as Record<string, unknown> },
+    { key: data.id ?? `${data.day}:${data.trigger}`, data: safe as Record<string, unknown> },
     SYSTEM_ACTOR,
   );
 }
@@ -160,7 +163,7 @@ export async function hasScheduledRunFor(day: string): Promise<boolean> {
   try {
     const { records } = await queryRecords(
       INTEL_RUNS_COLLECTION,
-      { filters: [{ path: 'day', op: 'eq', value: day }], limit: 5 },
+      { filters: [{ path: 'day', op: 'eq', value: day }, { path: 'trigger', op: 'eq', value: 'scheduled' }], limit: 1 },
       SYSTEM_ACTOR,
     );
     return records.some((r) => (r.data as { trigger?: string })?.trigger === 'scheduled');

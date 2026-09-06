@@ -95,6 +95,8 @@ describe('hasScheduledRunFor', () => {
       records: [{ data: { trigger: 'scheduled' } }],
     } as never);
     expect(await hasScheduledRunFor('2026-08-04')).toBe(true);
+    // Manual cleanup runs must not crowd the scheduled run out of the limit.
+    expect(vi.mocked(queryRecords).mock.calls[0][1].filters).toContainEqual({ path: 'trigger', op: 'eq', value: 'scheduled' });
   });
 
   // A hand-run sweep must not convince the engine the night is done.
