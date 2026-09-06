@@ -612,7 +612,7 @@
                  `--dl-cols` with every row, which is the only reason the two
                  cannot drift out of alignment. -->
             <div class="dl-head" aria-hidden="true">
-              <span></span><span></span><span>Name</span><span>Size</span><span>Updated</span><span>Status</span><span>Access</span>
+              <span></span><span></span><span>Name</span><span>Size</span><span>Updated</span><span>Status</span><span>Access</span><span></span>
             </div>
           {/if}
           {#each subfolders as fol (fol.name)}
@@ -816,7 +816,7 @@
     display: flex;
     flex-direction: column;
     /* The one track definition. Every row reads it through `var(--dl-cols)`. */
-    --dl-cols: 24px 24px minmax(0, 1fr) 76px 104px 96px 108px;
+    --dl-cols: 24px 24px minmax(0, 1fr) 76px 104px 96px 100px 432px;
   }
   .dl-head {
     display: grid;
