@@ -1,6 +1,7 @@
 // Briefing pipeline: gather → synthesise (LLM) → store → deliver. Simpler than
 // the self-improve run loop (one synthesis, no budget phases) but shares the
 // gates/dogfooding pattern. Single-flight guard prevents overlap.
+import { dailyAlertsText, DAILY_ALERTS_HREF } from '$lib/jkai/intel/daily-alerts';
 import { ownerPhone } from '$lib/config/owner';
 import { randomUUID } from 'crypto';
 import { ensureCollection, updateCollection, upsertRecord } from '$lib/datastore';
@@ -68,6 +69,12 @@ function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = 
       'Key new shared memories — include a short “What I learned” section:\n' +
         signals.recentMemories.map((memory) => `- [${memory.category}] ${memory.content}`).join('\n'),
     );
+  }
+  if (signals.dailyAlerts) {
+    parts.push('Include a Daily alerts section (recorded alerts, not independently verified facts):\n' +
+      dailyAlertsText(signals.dailyAlerts) + '\n' +
+      signals.dailyAlerts.items.map((a) => `- [${a.significance}] ${a.title}: ${a.content.slice(0, 1000)}`).join('\n') +
+      `\nLink to ${DAILY_ALERTS_HREF}.`);
   }
   const walk = (signals.siteSignals.walk as { active?: boolean } | null) ?? null;
   if (walk?.active) parts.push('They are currently out on a walk/ride.');
