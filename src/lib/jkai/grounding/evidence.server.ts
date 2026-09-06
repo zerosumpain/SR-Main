@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import type { ToolResult, ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
 import { sourceReferences, type EvidenceEnvelope } from './evidence';
 export async function retainEvidence(tool: string, result: ToolResult, ctx?: ToolExecContext): Promise<ToolResult> {
-  if (!ctx?.conversationId || !result.success) return result;
+  if (tool === 'evidence_read' || !ctx?.conversationId || !result.success) return result;
   const id = crypto.randomUUID();
   const data = result.data as Record<string, unknown> | undefined;
   const evidence: EvidenceEnvelope = { id, tool, retrievedAt: new Date().toISOString(),

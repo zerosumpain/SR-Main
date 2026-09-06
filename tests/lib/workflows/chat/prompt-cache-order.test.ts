@@ -70,7 +70,7 @@ describe('system prompt is assembled stable-first, for the cache', () => {
   it('keeps retrieved memory, pages and graph outside the system instructions', () => {
     const { prefix, suffix } = promptHalves();
     for (const name of ['memorySection', 'pastedUrlsSection', 'graphSection']) expect(prefix + suffix).not.toContain(slot(name));
-    expect(SRC).toContain('JSON.stringify({ memory: memorySection, graph: graphSection, pages: pastedUrlsSection })');
+    expect(SRC).toContain('JSON.stringify({ memory: memorySection, graph: graphSection, pages: pastedUrlsSection, savedIntegrations: integrationContext })');
   });
 });
 

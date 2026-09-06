@@ -8,3 +8,7 @@ it('never treats verifier errors as a quality pass', () => {
  expect(parseAssessment('invalid').supported).toBe(null);
  expect(parseAssessment('{"supported":true,"complete":false,"issues":["missing part"]}').complete).toBe(false);
 });
+
+it.each(['What’s the next train leaving Darlington?', 'Current billing balance', 'What about the Darwin integration'])('checks evidence for brief live/integration questions: %s', request => {
+ expect(answerContract(request)).toMatchObject({ depth: 'brief', needsReview: true });
+});

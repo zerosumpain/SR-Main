@@ -1,3 +1,4 @@
+import { discoverIntegrations } from '$lib/apis/integration-discovery';
 import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // jkai_extended — single dispatcher tool that collapses ~128 extended tools
 // behind list / schema / invoke operations. Surfaced in `tools/list` only
@@ -239,25 +240,32 @@ export async function dispatchMetaTool(
 
   if (operation === 'list') {
     const filtered = query ? searchTools(extended, query) : extended;
+    let lookupFailed = false;
+    const saved = query ? await discoverIntegrations(query, 3).catch(() => { lookupFailed = true; return []; }) : [];
+    const operations = saved.map(integration => ({ name: 'api_integration_call', description: integration.name + ': ' + (integration.description ?? ''),
+      destructive: integration.writes, required: integration.inputSchema.required.length ? ['key', 'params'] : ['key'], integration,
+      inputSchema: { type: 'object', properties: { key: { type: 'string', const: integration.key }, params: integration.inputSchema, confirmWrite: { type: 'boolean' } }, required: integration.inputSchema.required.length ? ['key', 'params'] : ['key'] },
+    }));
+    const unavailable = lookupFailed ? [{ name: 'api_integration_list', description: 'Saved-integration lookup is currently unavailable. This does not mean no integration exists. Retry discovery only if needed.', integrationLookup: 'unavailable' }] : [];
     if (compact) {
       // `required` rides even the compact survey. It is the one field that can
       // replace a whole round trip, and a handful of argument names is cheaper
       // than the description already being returned beside it.
-      return filtered.map((t, index) => ({
+      return [...unavailable, ...operations, ...filtered.map((t, index) => ({
         name: t.name,
         description: truncateDescription(describeWithPolicy(policy, t.name, t.description ?? '')),
         ...withRequired(t.parameters),
         ...(query && index < 3 ? { inputSchema: t.parameters } : {}),
         destructive: t.destructive ?? false,
-      }));
+      }))];
     }
-    return filtered.map((t, index) => ({
+    return [...unavailable, ...operations, ...filtered.map((t, index) => ({
       name: t.name,
       description: describeWithPolicy(policy, t.name, t.description ?? ''),
       ...withRequired(t.parameters),
       ...(query && index < 3 ? { inputSchema: t.parameters } : {}),
       ...(t.destructive ? { destructive: true } : {}),
-    }));
+    }))];
   }
 
   if (operation === 'schema') {

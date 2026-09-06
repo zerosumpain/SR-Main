@@ -1,3 +1,4 @@
+import { discoverIntegrations } from '$lib/apis/integration-discovery';
 import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 import { getActivePolicy, describeWithPolicy } from '$lib/toolpolicy/policy';
 // `discovery` toolset — how the model finds capability it was not handed.
@@ -119,12 +120,15 @@ register({
       const terms = String(args?.query ?? '').toLowerCase().split(/\s+/).filter((t) => t.length > 1);
       if (terms.length === 0) return { success: false, error: 'query is required' };
       const policy = await getActivePolicy();
+      let integrations: Awaited<ReturnType<typeof discoverIntegrations>> = []; let integrationLookup: 'ok' | 'unavailable' = 'ok';
+      try { integrations = await discoverIntegrations(String(args.query), args.limit ?? 12); } catch { integrationLookup = 'unavailable'; }
       const hits = resolveCapabilities(allTools, String(args.query), args.limit ?? 12).map(t => ({ t }));
       return {
         success: true,
         data: {
           count: hits.length,
           searched: allTools.length,
+          integrations, integrationLookup,
           tools: hits.map((r) => ({
             name: r.t.name,
             toolset: r.t.toolset,

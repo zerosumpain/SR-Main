@@ -19,3 +19,8 @@ it('recovers omitted evidence with conversation isolation and explicit paginatio
   } while (offset >= 0);
   expect(JSON.parse(result).data.conclusion).toBe('end of result');
 });
+
+it('does not retain a second evidence handle for an evidence recovery call', async () => {
+  const result = { success: true, data: { text: 'already retained', resultHandle: crypto.randomUUID() } };
+  expect(await retainEvidence('evidence_read', result, { emit: () => {}, conversationId })).toBe(result);
+});

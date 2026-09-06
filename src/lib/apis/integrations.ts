@@ -1,3 +1,4 @@
+import { resolveParameters, assessOutputs, parameterSchema, type ParamContract, type OutputContract } from './integration-contract';
 // src/lib/apis/integrations.ts
 //
 // The API INTEGRATION register — named, callable operations on top of the
@@ -38,7 +39,7 @@ const SYSTEM_ACTOR = 'system';
 /** Methods that change remote state — gated behind an explicit confirmation. */
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-export interface IntegrationParam {
+export interface IntegrationParam extends ParamContract {
   name: string;
   /** Where the value goes. `path` substitutes a {name} placeholder in `path`. */
   in: 'path' | 'query' | 'body' | 'header';
@@ -48,7 +49,7 @@ export interface IntegrationParam {
   default?: string;
 }
 
-export interface IntegrationOutput {
+export interface IntegrationOutput extends OutputContract {
   /** Name exposed downstream, e.g. `remaining`. */
   name: string;
   /**
@@ -83,7 +84,7 @@ export interface ApiIntegration {
 }
 
 export class IntegrationError extends Error {
-  constructor(message: string) {
+  constructor(message: string, public inputSchema?: ReturnType<typeof parameterSchema>) {
     super(message);
     this.name = 'IntegrationError';
   }
@@ -232,13 +233,15 @@ export async function saveIntegration(
   const params = (input.params ?? []).map((p) => {
     const pname = String(p?.name ?? '').trim();
     if (!pname) throw new IntegrationError('every param needs a name');
-    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(pname)) {
+    if (['__proto__', 'constructor', 'prototype'].includes(pname) || !/^[A-Za-z0-9_.-]{1,64}$/.test(pname)) {
       throw new IntegrationError(`invalid param name "${pname}" — letters, digits, dot, dash, underscore only`);
     }
     const where = String(p?.in ?? 'query') as IntegrationParam['in'];
     if (!['path', 'query', 'body', 'header'].includes(where)) {
       throw new IntegrationError(`param "${pname}" has invalid "in": ${where}`);
     }
+    if (p.type && !['string', 'number', 'integer', 'boolean', 'object', 'array'].includes(p.type)) throw new IntegrationError(`invalid parameter type for ${pname}`);
+    if (p.enum && (!Array.isArray(p.enum) || !p.enum.length || p.enum.some(v => !['string', 'number', 'boolean'].includes(typeof v)))) throw new IntegrationError(`invalid enum for ${pname}`);
     return {
       name: pname,
       in: where,
@@ -246,15 +249,18 @@ export async function saveIntegration(
       description: p.description ?? '',
       example: p.example ?? '',
       default: p.default ?? '',
+      ...(p.type ? { type: p.type } : {}), ...(p.enum ? { enum: p.enum } : {}),
     } satisfies IntegrationParam;
   });
+
+  if (new Set(params.map(p => p.name)).size !== params.length) throw new IntegrationError('parameter names must be unique');
 
   // Validate every output expression NOW so a broken one is a save error rather
   // than a mystery at run time. safeFunction throws on unsafe constructs.
   const outputs = (input.outputs ?? []).map((o) => {
     const oname = String(o?.name ?? '').trim();
     if (!oname) throw new IntegrationError('every output needs a name');
-    if (!/^[A-Za-z_][A-Za-z0-9_]{0,48}$/.test(oname)) {
+    if (['__proto__', 'constructor', 'prototype'].includes(oname) || !/^[A-Za-z_][A-Za-z0-9_]{0,48}$/.test(oname)) {
       throw new IntegrationError(`invalid output name "${oname}" — must be a plain identifier`);
     }
     const expr = String(o?.expr ?? '').trim();
@@ -279,7 +285,11 @@ export async function saveIntegration(
     } catch (err) {
       throw new IntegrationError(`output "${oname}" has an invalid expression: ${(err as Error).message}`);
     }
-    return { name: oname, expr, unit: o.unit ?? '', description: o.description ?? '' } satisfies IntegrationOutput;
+    if (o.type && !['string', 'number', 'boolean', 'object', 'array'].includes(o.type)) throw new IntegrationError(`invalid output type for ${oname}`);
+    if (o.emptyWhenMissing && o.type !== 'array') throw new IntegrationError('emptyWhenMissing requires array type');
+    return { name: oname, expr, unit: o.unit ?? '', description: o.description ?? '',
+      ...(o.type ? { type: o.type } : {}), ...(o.required != null ? { required: o.required } : {}), ...(o.emptyWhenMissing ? { emptyWhenMissing: true } : {}),
+    } satisfies IntegrationOutput;
   });
 
   const existing = await getIntegration(key);
@@ -357,6 +367,7 @@ export interface CallIntegrationResult {
   /** Named outputs from the integration's `outputs` expressions. */
   values: Record<string, unknown>;
   dryRun?: boolean;
+  response?: ReturnType<typeof assessOutputs> & { retrievedAt: string; scope: Record<string, unknown>; defaultsApplied: string[] };
 }
 
 /**
@@ -379,14 +390,17 @@ export async function callIntegration(opts: {
     );
   }
 
-  const supplied = opts.params ?? {};
+  let resolved: ReturnType<typeof resolveParameters>;
+  try { resolved = resolveParameters(integration.params, opts.params ?? {}); }
+  catch (err) { throw new IntegrationError(`${integration.key}: ${err instanceof Error ? err.message : String(err)}`, parameterSchema(integration.params)); }
+  const supplied = resolved.values;
   const pathValues: Record<string, string> = {};
   const query: Record<string, unknown> = {};
   const headers: Record<string, string> = {};
   const bodyObj: Record<string, unknown> = {};
 
   for (const p of integration.params) {
-    const raw = supplied[p.name] ?? (p.default !== '' ? p.default : undefined);
+    const raw = supplied[p.name];
     if (raw === undefined || raw === null || raw === '') {
       if (p.required) {
         throw new IntegrationError(
@@ -460,7 +474,9 @@ export async function callIntegration(opts: {
   }
 
   const values = computeOutputs(integration.outputs, data.json);
-  void noteTest(integration.key, 'ok', summariseValues(values, data.status));
+  const response = { ...assessOutputs(integration.outputs, values, data.json), retrievedAt: new Date().toISOString(), scope: resolved.scope, defaultsApplied: resolved.defaultsApplied };
+  // Missing semantic outputs do not prove a transport fault or earn verification.
+  if (response.outcome !== 'incomplete') void noteTest(integration.key, 'ok', summariseValues(values, data.status));
 
   return {
     success: true,
@@ -471,7 +487,7 @@ export async function callIntegration(opts: {
     url: data.url,
     json: data.json,
     text: data.text,
-    values,
+    values, response,
   };
 }
 

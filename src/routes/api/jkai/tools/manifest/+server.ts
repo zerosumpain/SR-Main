@@ -1,3 +1,4 @@
+import { discoverIntegrations } from '$lib/apis/integration-discovery';
 import { getActivePolicy } from '$lib/toolpolicy/policy';
 import { applyCapabilityPolicy } from '$lib/jkai/grounding/capabilities';
 import { json, error } from '@sveltejs/kit';
@@ -11,7 +12,7 @@ import {
 } from '$lib/jkai/tool-bridge';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
   const auth = request.headers.get('authorization') ?? '';
   const token = auth.replace(/^Bearer\s+/i, '');
   const buildId = verifyBridgeToken(token);
@@ -22,9 +23,13 @@ export const GET: RequestHandler = async ({ request }) => {
   const manifest = manifestForBuild(enabled);
   const policy = await getActivePolicy();
   const definitions = applyCapabilityPolicy(definitionsForBuild(enabled), policy);
+  const integrations = definitions.some(d => d.function.name === 'api_integration_call')
+    ? await discoverIntegrations(url?.searchParams.get('query') ?? '', 20).then(rows => ({ status: 'ok', operations: rows.filter(i => !i.writes) })).catch(() => ({ status: 'unavailable', operations: [] }))
+    : { status: 'not_enabled', operations: [] };
   return json({
     buildId,
     policyVersion: policy.version,
+    integrations,
     manifest,
     tools: definitions.map((d) => ({
       name: d.function.name,
