@@ -20,8 +20,8 @@ import { publicWalkState } from '$lib/landing/public-walk';
  * a public /projects/<slug> URL. It deliberately never leaks in-progress build
  * prompts/titles, conversation ids, or canvas slugs/titles.
  *
- * Health/BPM is NOT here — the Health tile reads the shared biome store
- * (already public via /api/biome/state) client-side, with its 5s lerp.
+ * Health/BPM is NOT here — the Health tile reads the shared vitals store
+ * (already public via /api/vitals/state) client-side, with its 5s lerp.
  */
 
 const LIVE_STATE_PATH = '/tmp/live-walk-state.json';

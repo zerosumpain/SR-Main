@@ -19,7 +19,7 @@ around.
 
 ```ts
 // src/lib/server/public-api-paths.ts
-'/api/biome/state',
+'/api/vitals/state',
 ```
 
 `/api/family-presence/stats` used to be the worked example here. It was removed from that

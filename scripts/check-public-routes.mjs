@@ -71,14 +71,13 @@ function publicPathsFromAuth() {
  * array serving five people's clustered GPS history and current positions by
  * first name, three of them children, and nothing flagged it. It happened to be
  * the only entry not ALSO covered by a PUBLIC_PATHS prefix, so removing it
- * emptied the blind spot without sealing it — today's two survivors,
- * /api/biome/state and /api/landing/ecg-telemetry, are already in the snapshot
- * via the /api/biome and /api/landing prefixes, which is why closing this gap
- * changes the route count by zero. The point is the NEXT entry.
+ * emptied the blind spot without sealing it — today's survivors are already in
+ * the snapshot via the /api/vitals and /api/landing prefixes, which is why
+ * closing this gap changes the route count by zero. The point is the NEXT entry.
  *
  * These are EXACT paths, never prefixes: isPublicApiPath compares with ===.
  * Treating them as prefixes would over-report the surface and, worse, would
- * hand every route under /api/biome/state/* to the snapshot as anonymous when
+ * hand every route under /api/vitals/state/* to the snapshot as anonymous when
  * the hook would 401 them.
  *
  * Same technique as publicPathsFromAuth: strip prose first, then take the
@@ -230,13 +229,13 @@ const PUBLIC_API_PATHS = publicApiPathsFrom();
 
 // Same failure mode as the four bypass arrays: a regex over another file can
 // silently return [] after a refactor, and an empty list makes the surface look
-// SMALLER — a green gate for the worst possible reason. /api/biome/state is the
+// SMALLER — a green gate for the worst possible reason. /api/vitals/state is the
 // canary because it is the oldest entry and the least likely to move.
-if (PUBLIC_API_PATHS.length < 2 || !PUBLIC_API_PATHS.includes('/api/biome/state')) {
+if (PUBLIC_API_PATHS.length < 2 || !PUBLIC_API_PATHS.includes('/api/vitals/state')) {
   console.error(
     'check-public-routes: could not read PUBLIC_API_PATHS from ' +
       `src/lib/server/public-api-paths.ts (got ${PUBLIC_API_PATHS.length} entries, ` +
-      `canary /api/biome/state ${PUBLIC_API_PATHS.includes('/api/biome/state') ? 'present' : 'MISSING'}).\n` +
+      `canary /api/vitals/state ${PUBLIC_API_PATHS.includes('/api/vitals/state') ? 'present' : 'MISSING'}).\n` +
       'Fix the extraction in this script rather than regenerating the snapshot, or a\n' +
       'route added to that array is world-readable with nothing to review.',
   );

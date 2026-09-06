@@ -21,8 +21,6 @@
 /api/agent/settings
 /api/agent/tasks
 /api/agent/tasks/[id]
-/api/biome/config
-/api/biome/state
 /api/blog/images/[postId]/[filename]
 /api/broads-pilot/guide
 /api/broads-pilot/ratings
@@ -53,7 +51,6 @@
 /api/jkai/studio/research
 /api/jkai/tools/invoke
 /api/jkai/tools/manifest
-/api/landing/ecg-telemetry
 /api/landing/hero-media
 /api/landing/vitals
 /api/live-walk
@@ -73,6 +70,7 @@
 /api/space-lander/session
 /api/trails/segments
 /api/version
+/api/vitals/state
 /api/whatsapp/inbound
 /auth-error
 /blog

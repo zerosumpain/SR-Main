@@ -684,7 +684,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
     // Authed APIs are owner-only by default. A guest on the login allow-list has
     // a valid session but may only reach the guest-allowed surface (none, by
-    // default). The genuinely public / service-to-service APIs (biome, agent,
+    // default). The genuinely public / service-to-service APIs (vitals, agent,
     // jkai proxy, space-lander, scraper, mcp, policy-engine, …)
     // already returned earlier via isPublicPath and the explicit bypasses above,
     // so they never reach here. This subsumes the old /api/admin/* gate. Before

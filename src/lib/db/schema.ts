@@ -874,16 +874,6 @@ export type RouteWaypointRecord = typeof routeWaypoints.$inferSelect;
 export type NewRouteWaypoint = typeof routeWaypoints.$inferInsert;
 
 // ==========================================
-// Biome Config
-// ==========================================
-
-export const biomeConfig = pgTable('biome_config', {
-  id: serial('id').primaryKey(),
-  settings: text('settings').notNull(), // JSON blob
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-// ==========================================
 // Hero Titles — Cached landing-page hero copy
 // ==========================================
 

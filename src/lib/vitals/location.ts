@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { homeAssistantConfig } from '$lib/db/schema';
 
-export interface BiomeLocation {
+export interface VitalsLocation {
   lat: number;
   lon: number;
   /** Town-level label, or null when it could not be resolved. */
@@ -11,7 +11,7 @@ export interface BiomeLocation {
 
 // Cold-start fallback only — used before the first successful Home Assistant
 // query. `town` stays null so the hero never displays a wrong place name.
-const FALLBACK: BiomeLocation = { lat: 51.5, lon: -0.1, town: null };
+const FALLBACK: VitalsLocation = { lat: 51.5, lon: -0.1, town: null };
 
 const HA_ENTITY = 'person.john';
 const LOCATION_TTL_MS = 10 * 60 * 1000; // HA position re-query cadence
@@ -19,8 +19,8 @@ const COLD_TTL_MS = 60 * 1000; // brief cache when HA is unreachable
 const GEOCODE_TTL_MS = 6 * 60 * 60 * 1000; // town name barely changes
 const HTTP_TIMEOUT_MS = 8000;
 
-let cached: { value: BiomeLocation; expires: number } | null = null;
-let lastGood: BiomeLocation | null = null;
+let cached: { value: VitalsLocation; expires: number } | null = null;
+let lastGood: VitalsLocation | null = null;
 const geocodeCache = new Map<string, { town: string | null; expires: number }>();
 
 async function getHaConfig(): Promise<{ url: string; token: string } | null> {
@@ -34,7 +34,7 @@ async function getHaConfig(): Promise<{ url: string; token: string } | null> {
       return { url: cfg.url.replace(/\/$/, ''), token: cfg.token };
     }
   } catch (err) {
-    console.warn('[biome-location] HA config read failed:', err);
+    console.warn('[vitals-location] HA config read failed:', err);
   }
   return null;
 }
@@ -53,7 +53,7 @@ async function queryHaCoords(): Promise<{ lat: number; lon: number } | null> {
     const lon = data?.attributes?.longitude;
     if (typeof lat === 'number' && typeof lon === 'number') return { lat, lon };
   } catch (err) {
-    console.warn('[biome-location] HA query failed:', err);
+    console.warn('[vitals-location] HA query failed:', err);
   }
   return null;
 }
@@ -74,7 +74,7 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
       zoom: '12', // town / city granularity
     });
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-      headers: { 'User-Agent': 'strangeramblings.com biome (john@strangeramblings.com)' },
+      headers: { 'User-Agent': 'strangeramblings.com vitals (john@strangeramblings.com)' },
       signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
     if (res.ok) {
@@ -93,18 +93,18 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
       return town;
     }
   } catch (err) {
-    console.warn('[biome-location] reverse geocode failed:', err);
+    console.warn('[vitals-location] reverse geocode failed:', err);
   }
   return hit?.town ?? null;
 }
 
 /**
- * Resolve the current biome location from Home Assistant's `person.john`
+ * Resolve the current location from Home Assistant's `person.john`
  * entity, reverse-geocoded to a town. Coordinates are for server-side weather
  * lookup only; never expose them to clients. Falls back to the last known
  * location, then a neutral default, and never throws.
  */
-export async function getBiomeLocation(): Promise<BiomeLocation> {
+export async function getVitalsLocation(): Promise<VitalsLocation> {
   const now = Date.now();
   if (cached && cached.expires > now) return cached.value;
 
@@ -116,7 +116,7 @@ export async function getBiomeLocation(): Promise<BiomeLocation> {
   }
 
   const town = await reverseGeocode(coords.lat, coords.lon);
-  const value: BiomeLocation = { lat: coords.lat, lon: coords.lon, town };
+  const value: VitalsLocation = { lat: coords.lat, lon: coords.lon, town };
   lastGood = value;
   cached = { value, expires: now + LOCATION_TTL_MS };
   return value;

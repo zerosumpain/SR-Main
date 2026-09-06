@@ -54,7 +54,7 @@ For a narrowly scoped, deterministic capability that belongs in the agent toolki
 | Health data 100× too big/small | storage scaling (×100 seen on steps/strain) + SUM vs MAX aggregation — not display logic |
 | LLM slow → "prompt too long" | model reasoning latency; also max_tokens vs cache-key churn |
 | Scraper/homeserv proxy 500s after a build | always-on `strange-rambling-svelte` service holding old chunk hashes — `systemctl --user restart strange-rambling-svelte` |
-| HR/biome data missing → "Whoop is down" | data comes from the Apple device webhook, not Whoop — don't gate on `sources.whoop` |
+| HR/vitals data missing → "Whoop is down" | data comes from the Apple device webhook, not Whoop — don't gate on `sources.whoop` |
 
 ## Red flags — stop and restart the procedure
 

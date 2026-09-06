@@ -9,7 +9,7 @@
 // to stop asking it for numbers at all: it names the place, this resolves it.
 //
 // Nominatim (OpenStreetMap) is the service. Free, no key, no account, and
-// already the geocoder this repo uses in two other places — `$lib/biome/location`
+// already the geocoder this repo uses in two other places — `$lib/vitals/location`
 // reverse-geocodes at zoom 12 for a town, `$lib/daydream/geocode` at zoom 18 for
 // a building. This is the forward direction, and the third caller, so it keeps
 // their conventions: the same identifying User-Agent, the same long cache, and
@@ -17,7 +17,7 @@
 //
 // THE USAGE POLICY IS A HARD CONSTRAINT, not advice. Nominatim asks for at most
 // one request a second from a single source, a real User-Agent, and heavy
-// caching. Break it and the IP is blocked — which would take the biome hero
+// caching. Break it and the IP is blocked — which would take the landing hero
 // copy and the daydream place names down with it, not just this. Hence the
 // serialised queue below, and hence the cache being the first thing consulted.
 

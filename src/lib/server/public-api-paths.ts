@@ -25,14 +25,14 @@
  * PUBLIC_PATHS and the hook bypasses and had never read this array — so nothing
  * would have flagged it. That blind spot is CLOSED as of the same change:
  * scripts/check-public-routes.mjs now extracts these entries and folds them
- * into .github/public-routes.txt as exact paths, with /api/biome/state as the
+ * into .github/public-routes.txt as exact paths, with /api/vitals/state as the
  * canary so the extraction cannot silently stop working. Adding a line here is
  * a reviewable diff in that snapshot. Verified by adding a throwaway route and
  * watching the gate go red.
  *
  * The route count did not move when that landed, and that is expected rather
  * than a sign it did nothing: both surviving entries are ALSO covered by a
- * PUBLIC_PATHS prefix (/api/biome, /api/landing) and were already listed.
+ * PUBLIC_PATHS prefix (/api/vitals, /api/landing) and were already listed.
  * family-presence was the only entry this array opened on its own. The gate is
  * for the next one.
  *
@@ -43,8 +43,7 @@
  * bypass requires an owner session.
  */
 export const PUBLIC_API_PATHS = [
-  '/api/biome/state',
-  '/api/landing/ecg-telemetry',
+  '/api/vitals/state',
   // Only prepared, explicitly published hero derivatives; original Drive files remain private.
   '/api/landing/hero-media',
   // Public repository commit/tree ids only. Used to distinguish a stale PWA

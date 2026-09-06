@@ -92,7 +92,6 @@ const MODULE_LAYER = {
   // module that reaches for a Svelte component has put rendering in the wrong
   // place, and it is how `$lib/components` ends up unable to move.
   components: 'ui',
-  threlte: 'ui',
   landing: 'ui',
 
   // everything else defaults to `domain`.
