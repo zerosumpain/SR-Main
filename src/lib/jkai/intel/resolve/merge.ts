@@ -1,3 +1,4 @@
+import { assessIdentity } from './policy';
 // Applying a merge — the DB half of entity resolution.
 //
 // `intel_entities.merged_into_id` already existed but nothing ever wrote to it,
@@ -29,6 +30,7 @@ import {
   countIdentitiesByAddress,
   pickSurvivor,
   normaliseName,
+  scorePair,
   AUTO_MERGE_THRESHOLD,
   type MatchCandidate,
   type ResolvableEntity,
@@ -88,6 +90,17 @@ export async function mergeEntities(
   // so without it a failure part-way through would leave edges destroyed and no
   // merge recorded — the one way this operation could lose data irrecoverably.
   const outcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('intel-identity-write'))`);
+    const current = await tx.execute(sql`SELECT id,merged_into_id,properties,aliases FROM intel_entities WHERE id IN (${keepId},${mergeId}) FOR UPDATE`);
+    if (current.rows.length !== 2 || current.rows.some(r => r.merged_into_id)) throw new Error('Identity changed while merge was being prepared');
+    for (const row of current.rows) {
+      const before = row.id === keepId ? keep : merge;
+      if (JSON.stringify(row.properties) !== JSON.stringify(before.properties) || JSON.stringify(row.aliases) !== JSON.stringify(before.aliases)) throw new Error('Entity evidence changed; refresh the merge preview');
+    }
+    if (opts.method === 'auto') {
+      const veto = await tx.execute(sql`SELECT id FROM intel_match_decisions WHERE pair_key=${pairKey(keepId,mergeId)} AND decided_by='human' AND verdict='different'`);
+      if (veto.rows.length) throw new Error('A human has ruled out this merge');
+    }
     // Repoint relationships. Anything that would become a self-loop, or that
     // duplicates an edge the survivor already has, is deleted rather than moved.
     //
@@ -251,6 +264,7 @@ export async function mergeEntities(
       .set({ mergedIntoId: keepId, updatedAt: new Date() })
       .where(eq(intelEntities.mergedIntoId, mergeId));
 
+    await repointDecisions(keepId, mergeId, tx);
     return {
       keptId: keepId,
       mergedId: mergeId,
@@ -261,14 +275,6 @@ export async function mergeEntities(
     };
   });
 
-  // Carry the pair verdicts over. Without this, merging B into A orphans every
-  // "B is not C" a person ever recorded: the pair B|C can no longer be proposed,
-  // A|C has no verdict, and the same question comes back wearing a new name.
-  // Outside the transaction and best-effort — bookkeeping must not be able to
-  // fail a merge that has already been applied.
-  await repointDecisions(keepId, mergeId).catch((err) =>
-    console.error('[intel:resolve] could not repoint pair decisions:', err instanceof Error ? err.message : err),
-  );
 
   invalidateGraphAnalysis();
   // Both memos name entities, and one of them is now a tombstone. Stale entries
@@ -313,6 +319,7 @@ export async function unmergeEntity(entityId: string): Promise<{ restored: numbe
   let restored = 0;
 
   await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('intel-identity-write'))`);
     await tx
       .update(intelEntities)
       .set({ mergedIntoId: null, updatedAt: new Date() })
@@ -916,7 +923,7 @@ export async function sweepDuplicates(
         }
       }
 
-      if (decision) {
+      if (decision && !decision.stale) {
         if (decision.verdict === 'different') {
           // A person's answer is final; the model's only moves the score.
           if (decision.decidedBy === 'human') {
@@ -946,6 +953,8 @@ export async function sweepDuplicates(
       }
 
       // The final score is what `minConfidence` is about.
+      const assessment = assessIdentity(a, b, { addressIdentities, neighbours }, decision?.stale ? null : decision);
+      scored = { ...scored, confidence: assessment.score, reason: assessment.reason };
       if (scored.confidence < minConfidence && !opts.includeRuledOut) return null;
 
       const { keep, merge } = pickSurvivor(a, b);
@@ -953,7 +962,7 @@ export async function sweepDuplicates(
         candidate: scored,
         keep,
         merge,
-        autoMergeable: scored.confidence >= AUTO_MERGE_THRESHOLD,
+        autoMergeable: assessment.canLink && scored.confidence >= AUTO_MERGE_THRESHOLD,
         decision: decision ?? null,
       };
     })
@@ -1018,7 +1027,9 @@ export async function autoMergeDuplicates(
   threshold = AUTO_MERGE_THRESHOLD,
   opts: { dryRun?: boolean; limit?: number } = {},
 ): Promise<SweepResult> {
-  const reports = (await findDuplicates(threshold)).filter((r) => r.candidate.confidence >= threshold);
+  const reports = (await findDuplicates(threshold)).filter((r) => r.autoMergeable && r.candidate.confidence >= threshold);
+  const historical = await loadHistoricalMembers();
+  const addressIdentities = await loadAddressIdentities();
   const limit = opts.limit ?? 200;
   const result: SweepResult = { candidates: reports.length, merged: 0, skipped: 0, chainsBroken: 0, details: [] };
   const gone = new Set<string>();
@@ -1033,6 +1044,12 @@ export async function autoMergeDuplicates(
       continue;
     }
 
+    if (r.keep.noteCount + r.merge.noteCount > 100 || r.keep.degree + r.merge.degree > 200) { result.skipped++; continue; }
+    const keepMembers = [r.keep, ...(historical.get(r.keep.id) ?? [])];
+    const mergeMembers = [r.merge, ...(historical.get(r.merge.id) ?? [])];
+    if (keepMembers.some(a => mergeMembers.some(b => a.id !== r.keep.id || b.id !== r.merge.id ? !assessIdentity(a, b, { addressIdentities }).canLink : false))) {
+      result.chainsBroken++; continue;
+    }
     const already = absorbed.get(r.keep.id) ?? [];
     const unmatched = chainedInto(r.keep.id, r.merge.id, absorbed, proposed);
     if (unmatched) {
@@ -1167,14 +1184,18 @@ export async function listProposedTypes() {
 
 /** Move every entity of one type onto another, then retire the empty type. */
 export async function mergeEntityTypes(fromTypeId: string, intoTypeId: string): Promise<number> {
-  if (fromTypeId === intoTypeId) return 0;
-  const moved = await db
-    .update(intelEntities)
-    .set({ typeId: intoTypeId, updatedAt: new Date() })
-    .where(eq(intelEntities.typeId, fromTypeId));
-  await db
-    .delete(intelEntityTypes)
-    .where(and(eq(intelEntityTypes.id, fromTypeId), ne(intelEntityTypes.id, intoTypeId)));
-  invalidateGraphAnalysis();
-  return rowCount(moved);
+  const { changeTaxonomy } = await import('../taxonomy-governance.server');
+  return (await changeTaxonomy('type', 'merge', fromTypeId, intoTypeId)).moved;
+}
+
+/** Tombstones retain original names and properties for checks across separate nightly runs. */
+async function loadHistoricalMembers(): Promise<Map<string, ResolvableEntity[]>> {
+  const rows = await db.execute(sql`SELECT e.*, t.name AS type_name FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.merged_into_id IS NOT NULL`);
+  const groups = new Map<string, ResolvableEntity[]>();
+  for (const r of rows.rows as Record<string, unknown>[]) {
+    const key = String(r.merged_into_id);
+    const member: ResolvableEntity = { id: String(r.id), name: String(r.name), typeId: String(r.type_id), typeName: String(r.type_name), properties: asProperties(r.properties), aliases: [], embedding: null, degree: 0, noteCount: 0 };
+    groups.set(key, [...(groups.get(key) ?? []), member]);
+  }
+  return groups;
 }

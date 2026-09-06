@@ -53,6 +53,7 @@ export interface IntelStageResult {
     | 'embeddings'
     | 'resolve'
     | 'adjudicate'
+    | 'taxonomy'
     | 'confidence'
     | 'watchlist'
     | 'conflation'

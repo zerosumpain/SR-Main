@@ -786,7 +786,7 @@ async function runGeneralChat(
   let answerAssessment: AnswerAssessment | undefined;
   let reviewAttempts = 0;
   // Check if user wants to capture knowledge
-  maybeIngestAsNote(userMessage);
+  // Explicit remember requests are persisted by save_memory; do not create a second, independently recalled intel copy.
 
   // Is Home Assistant available, and how many entities does it know about?
   //

@@ -6,7 +6,11 @@ export interface MemoryProvenance {
   subject?: string;
   predicate?: string;
   assertion?: 'stated' | 'observed' | 'inferred';
+  validFrom?: string;
   validUntil?: string;
+  kind?: 'fact' | 'preference' | 'procedure' | 'episode';
+  scope?: 'personal' | 'daydream' | 'agent';
+  linkedAt?: string;
   pinned?: boolean;
 }
 

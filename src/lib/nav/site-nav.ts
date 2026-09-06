@@ -160,6 +160,7 @@ export const SECTIONS: NavSection[] = [
       { label: 'Mail', href: '/jkai/intel/mail' },
       { label: 'Review', href: '/jkai/intel/review' },
       { label: 'Quality', href: '/jkai/intel/quality' },
+      { label: 'Memory', href: '/jkai/intel/memory' },
       { label: 'Entities', href: '/jkai/intel/entities' },
       { label: 'Clusters', href: '/jkai/intel/clusters' },
       { label: 'Dossiers', href: '/jkai/intel/dossiers' },

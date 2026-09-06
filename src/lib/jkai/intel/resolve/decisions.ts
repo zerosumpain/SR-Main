@@ -1,3 +1,4 @@
+import { loadEvidenceVersions, pairEvidenceVersion } from './evidence-version.server';
 // Durable verdicts on entity pairs.
 //
 // The review queue used to be stateless: `findDuplicates` recomputed every pair
@@ -10,7 +11,7 @@
 // One row per unordered pair, keyed on `pairKey`. Recording a verdict is an
 // upsert, so a human can overrule an earlier machine verdict and the pair still
 // holds exactly one answer.
-import { db } from '$lib/db';
+import { db, type DbExecutor } from '$lib/db';
 import { intelMatchDecisions } from '$lib/db/schema';
 import { eq, inArray, or, sql } from 'drizzle-orm';
 import { pairKeyOf } from './pair-key';
@@ -24,6 +25,9 @@ export interface MatchDecision {
   bEntityId: string;
   verdict: Verdict;
   decidedBy: DecidedBy;
+  evidenceVersion?: string | null;
+  citations?: string[];
+  stale?: boolean;
   verdictConfidence: number | null;
   rationale: string | null;
   model: string | null;
@@ -38,6 +42,8 @@ export interface RecordDecisionInput {
   verdict: Verdict;
   decidedBy: DecidedBy;
   /** The matcher's score at the time, for later calibration. */
+  evidenceVersion?: string | null;
+  citations?: string[];
   confidence?: number | null;
   /** How sure the decider was — a different question from the matcher's score. */
   verdictConfidence?: number | null;
@@ -58,6 +64,13 @@ export interface RecordDecisionInput {
  * dismiss it replaces — a decision that does not survive.
  */
 export async function recordDecision(input: RecordDecisionInput): Promise<void> {
+  // Capture pre-decision records and graph features. Only human labels are evaluation truth.
+  const evidence = await db.execute(sql`SELECT e.id,e.name,e.type_id,t.name AS type_name,e.properties,e.aliases,e.summary,e.embedding::text,
+    (SELECT coalesce(jsonb_agg(DISTINCT CASE WHEN r.source_entity_id=e.id THEN r.target_entity_id ELSE r.source_entity_id END),'[]') FROM intel_relationships r WHERE r.source_entity_id=e.id OR r.target_entity_id=e.id) AS neighbours,
+    (SELECT count(DISTINCT ne.note_id)::int FROM intel_note_entities ne WHERE ne.entity_id=e.id) AS note_count
+    FROM intel_entities e JOIN intel_entity_types t ON t.id=e.type_id WHERE e.id IN (${input.aId},${input.bId})`);
+  await db.execute(sql`INSERT INTO intel_resolution_labels(pair_key,verdict,decided_by,features) VALUES (${pairKeyOf(input.aId,input.bId)},${input.verdict},${input.decidedBy},${JSON.stringify({ entities: evidence.rows, score: input.confidence, signals: input.signals ?? [], evidenceVersion: input.evidenceVersion, citations: input.citations ?? [] })}::jsonb)`);
+
   const key = pairKeyOf(input.aId, input.bId);
   const [a, b] = input.aId < input.bId ? [input.aId, input.bId] : [input.bId, input.aId];
   const swapped = a !== input.aId;
@@ -65,6 +78,8 @@ export async function recordDecision(input: RecordDecisionInput): Promise<void> 
   await db
     .insert(intelMatchDecisions)
     .values({
+      evidenceVersion: input.evidenceVersion,
+      citations: input.citations ?? [],
       pairKey: key,
       aEntityId: a,
       bEntityId: b,
@@ -81,6 +96,8 @@ export async function recordDecision(input: RecordDecisionInput): Promise<void> 
     .onConflictDoUpdate({
       target: intelMatchDecisions.pairKey,
       set: {
+        evidenceVersion: sql`excluded.evidence_version`,
+        citations: sql`excluded.citations`,
         verdict: sql`excluded.verdict`,
         decidedBy: sql`excluded.decided_by`,
         confidence: sql`excluded.confidence`,
@@ -103,11 +120,14 @@ export async function recordDecision(input: RecordDecisionInput): Promise<void> 
 
 /** Every decision on record, keyed by pair. */
 export async function loadDecisions(): Promise<Map<string, MatchDecision>> {
-  const rows = await db.select().from(intelMatchDecisions);
+  const [rows, versions] = await Promise.all([db.select().from(intelMatchDecisions), loadEvidenceVersions()]);
   return new Map(
     rows.map((r) => [
       r.pairKey,
       {
+        evidenceVersion: r.evidenceVersion,
+        citations: r.citations,
+        stale: r.decidedBy !== 'human' && r.evidenceVersion !== pairEvidenceVersion(r.aEntityId, r.bEntityId, versions),
         pairKey: r.pairKey,
         aEntityId: r.aEntityId,
         bEntityId: r.bEntityId,
@@ -141,8 +161,8 @@ export async function clearDecision(aId: string, bId: string): Promise<void> {
  * the same pair after a rewrite is a contradiction, and the safest reading of a
  * contradiction is to ask again.
  */
-export async function repointDecisions(survivorId: string, mergedId: string): Promise<number> {
-  const affected = await db
+export async function repointDecisions(survivorId: string, mergedId: string, executor: DbExecutor = db): Promise<number> {
+  const affected = await executor
     .select()
     .from(intelMatchDecisions)
     .where(
@@ -150,7 +170,7 @@ export async function repointDecisions(survivorId: string, mergedId: string): Pr
     );
   if (!affected.length) return 0;
 
-  const taken = new Set((await db.select({ k: intelMatchDecisions.pairKey }).from(intelMatchDecisions)).map((r) => r.k));
+  const taken = new Set((await executor.select({ k: intelMatchDecisions.pairKey }).from(intelMatchDecisions)).map((r) => r.k));
 
   const doomed: string[] = [];
   const moves: Array<{ id: string; a: string; b: string; key: string }> = [];
@@ -165,6 +185,11 @@ export async function repointDecisions(survivorId: string, mergedId: string): Pr
     // Another row already answers this question. Two verdicts about one pair is
     // a contradiction, and the safest reading of a contradiction is to ask again.
     if (taken.has(key)) {
+      // Preserve a cannot-link constraint when two histories converge.
+      if (row.decidedBy === 'human' && row.verdict === 'different') {
+        await executor.update(intelMatchDecisions).set({ verdict: 'different', decidedBy: 'human', rationale: row.rationale,
+          citations: row.citations, evidenceVersion: null, updatedAt: new Date() }).where(eq(intelMatchDecisions.pairKey,key));
+      }
       doomed.push(row.id);
       continue;
     }
@@ -174,7 +199,7 @@ export async function repointDecisions(survivorId: string, mergedId: string): Pr
     moves.push({ id: row.id, a, b, key });
   }
 
-  await db.transaction(async (tx) => {
+  const apply = async (tx: DbExecutor) => {
     if (doomed.length) {
       await tx.delete(intelMatchDecisions).where(inArray(intelMatchDecisions.id, doomed));
     }
@@ -184,7 +209,8 @@ export async function repointDecisions(survivorId: string, mergedId: string): Pr
         .set({ aEntityId: m.a, bEntityId: m.b, pairKey: m.key, updatedAt: new Date() })
         .where(eq(intelMatchDecisions.id, m.id));
     }
-  });
+  };
+  if (executor === db) await db.transaction(apply); else await apply(executor);
 
   return moves.length;
 }

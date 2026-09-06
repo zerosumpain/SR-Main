@@ -39,6 +39,7 @@ export interface TypeMergeSuggestion {
   intoId: string | null;
   intoName: string | null;
   intoCount: number;
+  suggestedAction?: 'merge' | 'broader' | 'related' | 'defer';
   kind: 'plural' | 'contained' | 'overlap' | 'relation' | 'empty-proposal';
   /** 0..1 — how sure the rule is. Ordering only; nothing acts on it. */
   confidence: number;
@@ -138,7 +139,7 @@ export function suggestTypeMerges(
       intoCount: 0,
       kind: 'empty-proposal',
       confidence: 0.7,
-      reason: 'Proposed but never used. It still re-enters the extraction prompt as an option.',
+      reason: 'Proposed but unused. Retire only if the definition adds no useful distinction.',
     });
   }
 
@@ -155,6 +156,7 @@ export function suggestTypeMerges(
       if (isPluralPair(a.name, b.name)) {
         push({
           ...frame(from, into),
+          suggestedAction: 'merge',
           kind: 'plural',
           confidence: 0.9,
           reason: `"${from.name}" is the plural of "${into.name}" — the same type written twice.`,
@@ -174,11 +176,12 @@ export function suggestTypeMerges(
       if (containment) {
         push({
           ...frame(from, into),
+          suggestedAction: 'broader',
           kind: 'contained',
           confidence: 0.6,
           reason: `Every word of "${
             wa.length < wb.length ? a.name : b.name
-          }" is in "${wa.length < wb.length ? b.name : a.name}" — usually a narrower name for the same kind of thing.`,
+          }" is in "${wa.length < wb.length ? b.name : a.name}" — review a broader/narrower relationship; containment does not prove equivalence.`,
         });
         continue;
       }
@@ -187,6 +190,7 @@ export function suggestTypeMerges(
       if (overlap >= 0.5) {
         push({
           ...frame(from, into),
+          suggestedAction: 'related',
           kind: 'overlap',
           confidence: 0.4 + (overlap - 0.5) * 0.4,
           reason: `"${a.name}" and "${b.name}" share most of their words.`,
@@ -361,48 +365,6 @@ export async function mergeCategories(fromId: string, intoId: string): Promise<{
   notesRetagged: number;
   foldersRetagged: number;
 }> {
-  if (fromId === intoId) throw new Error('cannot merge a category into itself');
-
-  const rows = await db.execute(sql`
-    SELECT id, slug FROM intel_categories WHERE id IN (${fromId}, ${intoId})
-  `);
-  const byId = new Map(
-    (rows.rows as Array<Record<string, unknown>>).map((r) => [String(r.id), String(r.slug)]),
-  );
-  const fromSlug = byId.get(fromId);
-  const intoSlug = byId.get(intoId);
-  if (!fromSlug) throw new Error(`category ${fromId} not found`);
-  if (!intoSlug) throw new Error(`category ${intoId} not found`);
-
-  return db.transaction(async (tx) => {
-    // Notes: swap the slug, then de-duplicate. A note already carrying both
-    // would otherwise end up with the survivor's slug twice.
-    const notes = await tx.execute(sql`
-      UPDATE intel_notes
-      SET categories = (
-        SELECT COALESCE(jsonb_agg(DISTINCT v), '[]'::jsonb)
-        FROM jsonb_array_elements_text(categories) AS t(v0),
-             LATERAL (SELECT CASE WHEN t.v0 = ${fromSlug} THEN ${intoSlug} ELSE t.v0 END) AS s(v)
-      )
-      WHERE categories ? ${fromSlug}
-    `);
-
-    const folders = await tx.execute(sql`
-      UPDATE drive_folder_settings
-      SET category_ids = (
-        SELECT COALESCE(jsonb_agg(DISTINCT v), '[]'::jsonb)
-        FROM jsonb_array_elements_text(category_ids) AS t(v0),
-             LATERAL (SELECT CASE WHEN t.v0 = ${fromId} THEN ${intoId} ELSE t.v0 END) AS s(v)
-      ),
-      updated_at = now()
-      WHERE category_ids ? ${fromId}
-    `);
-
-    await tx.execute(sql`DELETE FROM intel_categories WHERE id = ${fromId}`);
-
-    return {
-      notesRetagged: Number((notes as { rowCount?: number }).rowCount ?? 0),
-      foldersRetagged: Number((folders as { rowCount?: number }).rowCount ?? 0),
-    };
-  });
+  const { changeTaxonomy } = await import('./taxonomy-governance.server');
+  return changeTaxonomy('category', 'merge', fromId, intoId);
 }

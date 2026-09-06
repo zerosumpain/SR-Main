@@ -141,6 +141,8 @@ async function reviewConversation(conversationId: string): Promise<number> {
 }
 
 async function runMemoryReview(): Promise<void> {
+  const { backfillMemoryLinks } = await import('$lib/jkai/memory/graph.server');
+  await backfillMemoryLinks().catch(err => console.warn('[memory] link backfill failed', err instanceof Error ? err.message : err));
   await backfillMemoryEmbeddings().catch(() => {});
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
 

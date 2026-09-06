@@ -18,7 +18,7 @@
 // `diffAgainstGraph` is PURE — the graph is reached only through the injected
 // `GraphLookup`, so the classification rules are unit-tested without a database
 // and can never drift from what the API route reports.
-import type { ExtractionResult } from './extract';
+import type { ExtractedEntity, ExtractionResult } from './extract';
 import { pgTextArray } from '$lib/db/sql-array';
 
 // ---------------------------------------------------------------------------
@@ -59,6 +59,7 @@ export interface GraphTypeRef {
  * a test can supply a Map and the route can supply Postgres.
  */
 export interface GraphLookup {
+  resolveEntity?(entity: ExtractedEntity): { outcome: 'link' | 'new' | 'unresolved'; entity: GraphEntityRef | null; reason: string };
   /** Live entity matching this name (or one of its aliases), or null. */
   findEntity(name: string): GraphEntityRef | null;
   /** Live entity by id — used to check the extractor's own `possibleMatchId`. */
@@ -180,6 +181,13 @@ function diffEntities(extraction: ExtractionResult, lookup: GraphLookup): Entity
     }
     seenNames.set(key, type);
 
+    if (lookup.resolveEntity) {
+      const resolution = lookup.resolveEntity(entity);
+      out.push({ ...base, status: resolution.outcome === 'link' ? 'existing' : resolution.outcome === 'unresolved' ? 'conflict' : 'new',
+        matchedId: resolution.entity?.id ?? null, matchedName: resolution.entity?.name ?? null, matchedType: resolution.entity?.typeName ?? null, reason: resolution.reason });
+      continue;
+    }
+    // Legacy in-memory lookup adapters; production supplies the shared resolver above.
     // The extractor's own claim first — it saw the candidate list.
     const claimed = entity.possibleMatchId ? lookup.findEntityById(entity.possibleMatchId) : null;
     const match = claimed ?? lookup.findEntity(name);
@@ -233,7 +241,10 @@ function diffRelationships(
   // is not in `entities` is dropped without comment. That silent loss is one of
   // the things a preview exists to show.
   const byName = new Map<string, EntityDiff>();
-  for (const e of entityDiffs) if (e.name) byName.set(e.name.toLowerCase(), e);
+  for (const [index,e] of entityDiffs.entries()) {
+    if (e.name) byName.set(e.name.toLowerCase(),e);
+    const id=extraction.entities[index]?.mentionId;if(id)byName.set(id.toLowerCase(),e);
+  }
 
   const out: RelationshipDiff[] = [];
   const seen = new Set<string>();
@@ -258,6 +269,10 @@ function diffRelationships(
         reason: `${missing} is not among the extracted entities, so this edge would be dropped.`,
       });
       continue;
+    }
+
+    if ((from.status === 'conflict' && !from.matchedId) || (to.status === 'conflict' && !to.matchedId)) {
+      out.push({ ...base, status: 'conflict', willApply: false, reason: 'An endpoint identity is unresolved; the saved extraction can be replayed after review.' }); continue;
     }
 
     if (sameText(source, target) || (from.matchedId && from.matchedId === to.matchedId)) {
@@ -447,7 +462,7 @@ export interface PreviewResult extends GraphDiff {
  * Aliases are searched too, because that is how the writer resolves names — a
  * preview that missed an alias would report a new entity the write would merge.
  */
-async function buildGraphLookup(extraction: ExtractionResult): Promise<GraphLookup> {
+async function buildGraphLookup(extraction: ExtractionResult, text: string): Promise<GraphLookup> {
   const { db } = await import('$lib/db');
   const { sql } = await import('drizzle-orm');
   const { normaliseTypeName } = await import('./graph');
@@ -455,6 +470,17 @@ async function buildGraphLookup(extraction: ExtractionResult): Promise<GraphLook
   const names = [...new Set((extraction.entities ?? []).map((e) => (e.name ?? '').trim().toLowerCase()).filter(Boolean))];
   const ids = [...new Set((extraction.entities ?? []).map((e) => e.possibleMatchId).filter((v): v is string => Boolean(v)))];
 
+  const { resolveMention } = await import('./resolve/ingestion.server');
+  const { groundMention } = await import('./resolve/policy');
+  const resolutions = new Map<ExtractedEntity, Awaited<ReturnType<typeof resolveMention>>>();
+  for (const entity of extraction.entities) {
+    const type = await db.execute(sql`SELECT id FROM intel_entity_types WHERE name=${entity.type} AND status='active' LIMIT 1`);
+    const span = groundMention(text, entity.name, entity.mention);
+    if (!span) { resolutions.set(entity, {outcome:'unresolved',entity:null,reason:'No verifiable mention in source',ranked:[]}); continue; }
+    const properties = {...entity.properties};
+    if (typeof properties.email === 'string' && !span.excerpt.toLowerCase().includes(properties.email.toLowerCase())) delete properties.email;
+    resolutions.set(entity, await resolveMention({...entity,properties,mention:{text:span.surface,context:span.excerpt}}, String(type.rows[0]?.id ?? 'unrecognised-type')));
+  }
   const byName = new Map<string, GraphEntityRef>();
   const byId = new Map<string, GraphEntityRef>();
 
@@ -538,6 +564,7 @@ async function buildGraphLookup(extraction: ExtractionResult): Promise<GraphLook
   }
 
   return {
+    resolveEntity: entity => resolutions.get(entity)!,
     findEntity: (name) => byName.get(name.trim().toLowerCase()) ?? null,
     findEntityById: (id) => byId.get(id) ?? null,
     findRelationship: (sourceId, targetId, type) =>
@@ -564,7 +591,7 @@ export async function previewExtraction(text: string, format = 'text'): Promise<
 
   const { extractFromNote } = await import('./extract');
   const extraction = await extractFromNote(clipped, format);
-  const lookup = await buildGraphLookup(extraction);
+  const lookup = await buildGraphLookup(extraction, clipped);
 
   return {
     ...diffAgainstGraph(extraction, lookup),

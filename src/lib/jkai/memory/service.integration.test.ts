@@ -24,7 +24,7 @@ it('keeps distinct subjects and only replaces an explicit current ID', async () 
 it('rolls back both insertion and replacement when the transaction fails', async () => {
   const original = await write('Original transactional fact');
   await expect(db.transaction(async tx => {
-    await writeMemory({ category: 'people', content: 'Must roll back', replacesId: original.id, provenance: { origin: 'user', sourceId: source } }, tx);
+    await writeMemory({ category: 'people', content: 'Must roll back', replacesId: original.id, provenance: { origin: 'user', sourceId: source, assertion: 'stated' } }, tx);
     throw new Error('rollback fixture');
   })).rejects.toThrow('rollback fixture');
   const [row] = await db.select().from(jkaiMemories).where(eq(jkaiMemories.id, original.id));

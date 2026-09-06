@@ -1,0 +1,58 @@
+import { chromium } from 'playwright';
+import { encode } from '@auth/core/jwt';
+const base='http://127.0.0.1:5275';
+const token=await encode({secret:'jkai-preview-local-only',salt:'authjs.session-token',token:{email:'preview@example.test',name:'Local preview',sub:'local-preview'}});
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+await page.context().addCookies([{name:'authjs.session-token',value:token,url:base}]);
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const check=async(path,title)=>{await page.goto(base+path,{waitUntil:'networkidle',timeout:120000});if(!page.url().includes(path))throw new Error('Unexpected redirect '+page.url());console.log(title,await page.title());};
+try{
+ await check('/jkai/intel/memory','memory');
+ await page.getByRole('heading',{name:'Memory',exact:true}).waitFor();
+ const response=await page.request.post(base+'/api/jkai/memory',{data:{action:'save',category:'preferences',content:'Synthetic preview: prefer quiet working spaces.',validFrom:'2020-01-01'}});
+ if(!response.ok())throw new Error(await response.text());const saved=await response.json();
+ await page.reload({waitUntil:'networkidle'});
+ await page.getByText('Synthetic preview: prefer quiet working spaces.',{exact:true}).waitFor();
+ const article=page.locator('article').filter({hasText:'Synthetic preview: prefer quiet working spaces.'});
+ await article.getByText('Source and controls',{exact:true}).click();
+ await article.getByRole('button',{name:'Pin',exact:true}).click();
+ await article.getByRole('button',{name:'Unpin',exact:true}).waitFor();
+ await page.screenshot({path:'/tmp/jkai-memory-wide.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:'/tmp/jkai-memory-narrow.png',fullPage:true});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Memory viewport overflow');
+ const exported=await page.request.get(base+'/api/jkai/memory?format=md');if(!exported.ok()||!(await exported.text()).includes(saved.content))throw new Error('Missing export');
+ const linked=await page.request.post(base+'/api/jkai/memory',{data:{action:'link',id:saved.id,entityIds:['local-preview-intel-north']}});
+ if(!linked.ok())throw new Error(await linked.text());
+ const related=await page.request.get(base+'/api/jkai/memory?q=Sample%20North');
+ if(!(await related.json()).memories.some(m=>m.id===saved.id&&m.entities.some(e=>e.id==='local-preview-intel-north')))throw new Error('Graph link missing');
+ const corrected=await page.request.post(base+'/api/jkai/memory',{data:{action:'correct',id:saved.id,content:'Synthetic preview: prefer quiet studios.',validFrom:'2026-01-01'}});
+ if(!corrected.ok())throw new Error(await corrected.text());
+ const historical=await page.request.get(base+'/api/jkai/memory?q=quiet&asOf=2025-01-01');
+ if(!(await historical.json()).memories.some(m=>m.id===saved.id))throw new Error('Correction lost historical evidence');
+ await page.reload({waitUntil:'networkidle'});
+ const revised=page.locator('article').filter({hasText:'Synthetic preview: prefer quiet studios.'});
+ await revised.getByText('Source and controls',{exact:true}).click();
+ await revised.getByRole('button',{name:'Forget',exact:true}).click();
+ await page.getByText('Synthetic preview: prefer quiet working spaces.',{exact:true}).waitFor({state:'hidden'});
+ const gone=await page.request.get(base+'/api/jkai/memory?q=quiet');if((await gone.json()).memories.some(m=>m.id===saved.id))throw new Error('Forgotten memory recalled');
+ await page.setViewportSize({width:1440,height:1000});
+ await check('/jkai/intel/categories','taxonomy');await page.getByRole('heading',{name:'Relationships and change history'}).waitFor();
+ await page.screenshot({path:'/tmp/jkai-taxonomy-wide.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/jkai-taxonomy-narrow.png',fullPage:true});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Taxonomy viewport overflow');
+ await check('/jkai/intel/quality','quality');await page.getByRole('heading',{name:/Unresolved mentions/}).waitFor();
+ const pending=await page.request.get(base+'/api/jkai/intel/mentions');
+ if((await pending.json()).mentions.some(m=>m.id==='local-preview-intel-mention')) {
+   const reviewed=await page.request.post(base+'/api/jkai/intel/mentions',{data:{action:'link',id:'local-preview-intel-mention',entityId:'local-preview-intel-alex-a'}});
+   if(!reviewed.ok())throw new Error(await reviewed.text());
+ }
+ const unauthenticated=await browser.newContext();
+ const denied=await unauthenticated.request.get(base+'/api/jkai/memory',{maxRedirects:0});
+ if(denied.status()===200)console.log('Authentication parity gap: existing development-only private-address bypass is active.');
+ else if(denied.status()!==401)throw new Error('Unexpected unauthenticated status '+denied.status());
+ await unauthenticated.close();
+ console.log('memory save/pin/export/link/correct/historical recall/forget, mention replay, taxonomy and quality pages passed');
+ if(errors.length)throw new Error(errors.join('\n'));
+}finally{await browser.close();}

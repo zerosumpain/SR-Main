@@ -148,7 +148,7 @@ describe('match decisions', () => {
     expect((await loadDecisions()).get(pairKeyOf(ids.a, ids.b))).toBeUndefined();
   });
 
-  it('drops a rewrite that contradicts a verdict already on the target pair', async () => {
+  it('preserves a human cannot-link when histories collide', async () => {
     if (!dbReady) return;
     // A~C is answered one way and B~C the other. Merge B into A and the two
     // answers land on one pair; asking again is the only honest resolution.
@@ -159,7 +159,7 @@ describe('match decisions', () => {
 
     const all = await loadDecisions();
     expect(all.get(pairKeyOf(ids.b, ids.c))).toBeUndefined();
-    // The pre-existing verdict on A~C is left exactly as it was.
-    expect(all.get(pairKeyOf(ids.a, ids.c))?.verdict).toBe('same');
+    // A human cannot-link survives consolidation, even against a prior same verdict.
+    expect(all.get(pairKeyOf(ids.a, ids.c))?.verdict).toBe('different');
   });
 });

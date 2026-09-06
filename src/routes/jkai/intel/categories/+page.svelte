@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaxonomyGovernance from '$lib/components/intel/TaxonomyGovernance.svelte';
   // The taxonomy: what a node IS, and where the knowledge CAME FROM.
   //
   // Both used to live in one panel at the bottom of /jkai/intel/quality — a
@@ -133,7 +134,12 @@
     if (busy) return;
     busy = key;
     try {
-      if (s.intoId) {
+      if (s.intoId && (s.suggestedAction === 'broader' || s.suggestedAction === 'related')) {
+        const fromId = s.suggestedAction === 'broader' && s.fromName.length < (s.intoName?.length ?? 0) ? s.intoId : s.fromId;
+        const intoId = fromId === s.fromId ? s.intoId : s.fromId;
+        await post({ action: 'relate', kind: 'type', relation: s.suggestedAction, fromId, intoId });
+        notify('Taxonomy relationship recorded');
+      } else if (s.intoId) {
         const out = await post({ action: 'merge-types', fromTypeId: s.fromId, intoTypeId: s.intoId });
         notify(`Moved ${out.moved ?? 0} entities from "${s.fromName}" into "${s.intoName}"`);
       } else {
@@ -372,7 +378,7 @@
                   class="primary"
                   disabled={busy === suggestionKey(s)}
                   onclick={() => applySuggestion(s)}
-                >Merge</button>
+                >{s.suggestedAction === 'broader' ? 'Link hierarchy' : s.suggestedAction === 'related' ? 'Link related' : 'Merge'}</button>
                 <button type="button" class="ghost" onclick={() => dismiss(s)}>Not the same</button>
               </div>
             </li>
@@ -381,6 +387,8 @@
       {/if}
     {/if}
   </section>
+
+  <TaxonomyGovernance onchanged={load} />
 
   <!-- ── The list itself, now navigable. ─────────────────────────────── -->
   <section class="panel" id="types">
