@@ -1,14 +1,16 @@
+import { z } from 'zod';
 import type OpenAI from 'openai';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
 import { db } from '$lib/db';
-import { intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { eq, isNull, sql } from 'drizzle-orm';
-import { generateEmbedding } from './embed';
+import { intelEntityTypes } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export interface ExtractedEntity {
   name: string;
+  mentionId?: string;
+  mention?: { text: string; start?: number; end?: number; context?: string };
   type: string;
   confidence: 'high' | 'medium' | 'low';
   properties: Record<string, unknown>;
@@ -46,82 +48,11 @@ export interface ExtractionResult {
   proposedNewTypes: ProposedNewType[];
 }
 
-/**
- * Above this many entities, stop dumping the whole graph into every extraction
- * prompt and retrieve candidates by vector similarity instead. Below it the
- * full list is both cheap and strictly better for resolution.
- */
-const FULL_LIST_CEILING = 60;
-/** How many nearest entities to offer as match candidates once past the ceiling. */
-const CANDIDATE_K = 40;
-
-/**
- * The resolution candidates the extractor is asked to match against.
- *
- * Originally this dumped every non-merged entity into every call, which is fine
- * at tens of entities and untenable at thousands: the prompt grows without
- * bound, and — because the list changes whenever anything is added — the prompt
- * prefix churns on every call and defeats caching entirely.
- *
- * Past FULL_LIST_CEILING we do what deepdive's cross-session linker already
- * does: embed the note once and take the nearest entities from pgvector.
- */
-async function buildExtractionContext(noteText: string): Promise<string> {
-  // ACTIVE only. Offering a proposed type here would defeat the review gate —
-  // the model would use it, entities would accumulate under it, and admitting
-  // it later would be a formality rather than a decision.
-  const types = await db
-    .select({ name: intelEntityTypes.name })
-    .from(intelEntityTypes)
-    .where(eq(intelEntityTypes.status, 'active'));
-  const typeNames = types.map((t) => t.name).join(', ');
-
-  const [{ count: total } = { count: 0 }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(intelEntities)
-    .where(isNull(intelEntities.mergedIntoId));
-
-  let rows: Array<{ id: string; name: string }> = [];
-  let scoped = false;
-
-  if (total > FULL_LIST_CEILING) {
-    try {
-      const embedding = await generateEmbedding(noteText.slice(0, 8000));
-      const vec = `[${embedding.join(',')}]`;
-      const res = await db.execute(sql`
-        SELECT id, name
-        FROM intel_entities
-        WHERE merged_into_id IS NULL AND embedding IS NOT NULL
-        ORDER BY embedding <=> ${vec}::vector
-        LIMIT ${CANDIDATE_K}
-      `);
-      rows = (res.rows as Array<Record<string, unknown>>).map((r) => ({
-        id: String(r.id),
-        name: String(r.name),
-      }));
-      scoped = true;
-    } catch (err) {
-      // Vector recall is an optimisation; a failure must not stop extraction.
-      console.warn('[intel] candidate recall failed, falling back to full list:', err instanceof Error ? err.message : err);
-    }
-  }
-
-  if (!scoped) {
-    rows = await db
-      .select({ id: intelEntities.id, name: intelEntities.name })
-      .from(intelEntities)
-      .where(isNull(intelEntities.mergedIntoId));
-  }
-
-  const entityList = rows.map((e) => `- ${e.name} (id: ${e.id})`).join('\n');
-  const heading = scoped
-    ? `Existing entities most similar to this note (${rows.length} of ${total} — match against these; if none fit, it is a new entity):`
-    : 'Known entities:';
-
-  return `Known entity types: ${typeNames}
-
-${heading}
-${entityList || '(none yet)'}`;
+/** Type definitions guide extraction; identities are resolved per grounded mention. */
+async function buildExtractionContext(_noteText: string): Promise<string> {
+  const types = await db.select({ name: intelEntityTypes.name, description: intelEntityTypes.description })
+    .from(intelEntityTypes).where(eq(intelEntityTypes.status, 'active'));
+  return `Allowed entity types and definitions:\n${types.map(t => `- ${t.name}: ${t.description}`).join('\n')}\nExtract mentions only. Identity is resolved separately; possibleMatchId must be null.`;
 }
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a knowledge extraction assistant. Given a note, extract structured information.
@@ -131,7 +62,9 @@ Return ONLY valid JSON matching this schema:
   "summary": "A cleaned, structured summary of the note (1-3 sentences)",
   "entities": [
     {
+      "mentionId": "m1 (unique within this extraction)",
       "name": "Display name",
+      "mention": {"text": "exact text copied from this source", "start": 0, "end": 12},
       "type": "entity type (must be from known types or propose a new one)",
       "confidence": "high | medium | low",
       "properties": { "key": "value" },
@@ -140,8 +73,8 @@ Return ONLY valid JSON matching this schema:
   ],
   "relationships": [
     {
-      "source": "Entity name (must match an entity in the entities array)",
-      "target": "Entity name",
+      "source": "mentionId of the source entity",
+      "target": "mentionId of the target entity",
       "type": "relationship_type (e.g. reports_to, works_on, owns, blocks, stakeholder_in, collaborates_with, flagged_risk)",
       "label": "Human-readable description",
       "confidence": "high | medium | low"
@@ -183,7 +116,10 @@ Rules:
   "India" is a location and "the National Health Authority" is an organisation.
 - It also includes standards, products, policies, programmes, datasets and
   named documents, reports or surveys.
-- For each entity, check if it matches a known entity (by name similarity) and set possibleMatchId
+- Assign a unique mentionId to each distinct entity and use those IDs for relationship endpoints. Two people with the same name must have different IDs and source spans.
+- Copy the exact source mention into mention.text, with character offsets when possible. Never invent an entity absent from the source.
+- Set possibleMatchId to null; a separate resolver handles identity.
+- Entity types describe things, relationship types describe connections. A visit to a city does not prove residence.
 - Only propose new types if an entity genuinely doesn't fit any known type
 - Be generous with extraction — capture everything mentioned, even briefly
 - Set confidence to "low" if the entity is ambiguous or only vaguely referenced
@@ -226,16 +162,23 @@ export function parseExtractionJson(raw: string): ExtractionResult | null {
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate) as ExtractionResult;
-      // A JSON scalar is valid JSON and useless here — require an object.
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-      return {
-        summary: parsed.summary ?? '',
-        entities: parsed.entities ?? [],
-        relationships: parsed.relationships ?? [],
-        timelineEvents: parsed.timelineEvents ?? [],
-        proposedNewTypes: parsed.proposedNewTypes ?? [],
-      };
+      const confidence = z.enum(['high', 'medium', 'low']);
+      const schema = z.object({
+        summary: z.string().default(''),
+        entities: z.array(z.object({ name: z.string().trim().min(1), mentionId: z.string().min(1).optional(), type: z.string().min(1), confidence,
+          properties: z.record(z.string(), z.unknown()).default({}), possibleMatchId: z.string().nullable().default(null),
+          mention: z.object({ text: z.string().min(1), start: z.number().int().nonnegative().optional(), end: z.number().int().nonnegative().optional() }).optional(),
+        })).max(300).default([]),
+        relationships: z.array(z.object({ source: z.string(), target: z.string(), type: z.string(), label: z.string(), confidence })).default([]),
+        timelineEvents: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), dateEnd: z.string().optional(), type: z.enum(['deadline', 'milestone', 'event', 'decision']), title: z.string(), description: z.string().optional(), linkedEntity: z.string().optional() })).default([]),
+        proposedNewTypes: z.array(z.object({ name: z.string(), description: z.string(), icon: z.string() })).default([]),
+      });
+      const parsed = schema.parse(JSON.parse(candidate));
+      const ids = parsed.entities.map(e=>e.mentionId).filter(Boolean);
+      if (new Set(ids).size !== ids.length) continue;
+      const names = new Set(parsed.entities.flatMap(e => [e.name,...(e.mentionId?[e.mentionId]:[])]));
+      if (parsed.relationships.some(r => !names.has(r.source) || !names.has(r.target))) continue;
+      return parsed;
     } catch {
       // try the next shape
     }

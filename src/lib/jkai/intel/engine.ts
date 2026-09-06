@@ -308,6 +308,13 @@ export async function runIntelSweep(
     );
   }
 
+  if (isAutoResolveEnabled()) {
+    stages.push(await runStage('taxonomy', async () => {
+      const { runTaxonomyQuality } = await import('./taxonomy-governance.server');
+      return runTaxonomyQuality();
+    }, batch));
+  }
+
   // Adjudication AFTER the auto-merge, on what the rules could not settle.
   //
   // Ordered this way on purpose: running it first would spend a model call on

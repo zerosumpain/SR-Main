@@ -1,0 +1,27 @@
+{
+  "description": "Synthetic, explicitly labelled regression corpus; not a production accuracy estimate.",
+  "pairs": [
+    {"name":"Same person name is ambiguous","a":{"name":"Alex Smith","type":"person"},"b":{"name":"Alex Smith","type":"person"},"same":false},
+    {"name":"Trusted email identifies a person","a":{"name":"Alex Smith","type":"person","email":"alex@example.test"},"b":{"name":"A. Smith","type":"person","email":"alex@example.test"},"same":true},
+    {"name":"Homonyms with conflicting identifiers","a":{"name":"Alex Smith","type":"person","email":"one@example.test"},"b":{"name":"Alex Smith","type":"person","email":"two@example.test"},"same":false},
+    {"name":"Person and organisation homonyms","a":{"name":"Morgan","type":"person"},"b":{"name":"Morgan","type":"organisation"},"same":false},
+    {"name":"Legal suffix packaging","a":{"name":"Acme LLC","type":"organisation"},"b":{"name":"Acme","type":"organisation"},"same":true},
+    {"name":"Source document extension","a":{"name":"North Strategy.docx","type":"document"},"b":{"name":"North Strategy","type":"document"},"same":true},
+    {"name":"Product versions","a":{"name":"Battery 600","type":"product"},"b":{"name":"Battery 700","type":"product"},"same":false},
+    {"name":"Parent and committee","a":{"name":"Research Board","type":"organisation"},"b":{"name":"Research Board Committee","type":"organisation"},"same":false},
+    {"name":"Initial expansion without evidence","a":{"name":"J. Smith","type":"person"},"b":{"name":"Jane Smith","type":"person"},"same":false},
+    {"name":"Document exact identity","a":{"name":"Sample North Strategy","type":"document"},"b":{"name":"Sample North Strategy","type":"document"},"same":true},
+    {"name":"System and its standard","a":{"name":"North Exchange","type":"system"},"b":{"name":"North Exchange","type":"standard"},"same":false},
+    {"name":"Acronym ambiguity","a":{"name":"DSA","type":"organisation"},"b":{"name":"Data Standards Authority","type":"organisation"},"same":false},
+    {"name":"Successor is distinct","a":{"name":"Data Standards Board","type":"organisation"},"b":{"name":"Data Standards Authority","type":"organisation"},"same":false},
+    {"name":"Explicit human rejection","a":{"name":"Acme LLC","type":"organisation"},"b":{"name":"Acme","type":"organisation"},"same":false,"decision":{"verdict":"different","decidedBy":"human"}},
+    {"name":"Cited rename","a":{"name":"Acme Board","type":"organisation"},"b":{"name":"Acme Authority","type":"organisation"},"same":true,"decision":{"verdict":"same","decidedBy":"llm","verdictConfidence":0.98,"citations":["The Board was renamed the Authority."]}},
+    {"name":"Uncited rename claim","a":{"name":"Acme Board","type":"organisation"},"b":{"name":"Acme Authority","type":"organisation"},"same":false,"decision":{"verdict":"same","decidedBy":"llm","verdictConfidence":1}}
+  ],
+  "extraction": [
+    {"text":"Alex Smith leads Sample Project North.","mentions":[{"text":"Alex Smith","type":"person"},{"text":"Sample Project North","type":"project"}]},
+    {"text":"Estonia operates X-Road. The Estonian Information System Authority oversees it.","mentions":[{"text":"Estonia","type":"location"},{"text":"X-Road","type":"system"},{"text":"Estonian Information System Authority","type":"organisation"}]},
+    {"text":"The Research Board and Research Board Committee met separately.","mentions":[{"text":"Research Board","type":"organisation"},{"text":"Research Board Committee","type":"organisation"}]},
+    {"text":"I am visiting Edinburgh next week.","mentions":[{"text":"Edinburgh","type":"location"}]}
+  ]
+}

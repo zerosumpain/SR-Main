@@ -64,7 +64,7 @@ describe('buildAdjudicationPrompt', () => {
   });
   const b = ent('b', 'IBCA Board');
 
-  it('carries names, aliases, types, addresses and the matcher’s own reasoning', () => {
+  it('carries evidence without anchoring the adjudicator to a heuristic score', () => {
     const prompt = buildAdjudicationPrompt({
       a,
       b,
@@ -78,8 +78,8 @@ describe('buildAdjudicationPrompt', () => {
     expect(prompt).toContain('info@ibca.gov.uk');
     expect(prompt).toContain('IBCA was established');
     expect(prompt).toContain('Cabinet Office');
-    expect(prompt).toContain('55%');
-    expect(prompt).toContain('names share most of their words');
+    expect(prompt).not.toContain('55%');
+    expect(prompt).toContain('independently');
   });
 
   it('says so plainly when an entity has no evidence, rather than omitting the line', () => {

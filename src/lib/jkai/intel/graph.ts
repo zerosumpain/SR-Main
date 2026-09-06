@@ -59,6 +59,15 @@ async function loadTypeIndex(opts: { activeOnly?: boolean } = {}): Promise<Map<s
     index.set(r.name.toLowerCase(), r.id);
     index.set(normaliseTypeName(r.name), r.id);
   }
+  if (opts.activeOnly) {
+    const aliases = await db.execute(sql`WITH RECURSIVE aliases(name,target,path) AS (
+      SELECT t.name,c.into_id,ARRAY[c.from_id,c.into_id] FROM intel_taxonomy_changes c JOIN intel_entity_types t ON t.id=c.from_id
+      WHERE c.kind='type' AND c.action='merge' AND c.undone_at IS NULL
+      UNION ALL SELECT a.name,c.into_id,a.path||c.into_id FROM aliases a JOIN intel_taxonomy_changes c ON c.from_id=a.target
+      WHERE c.kind='type' AND c.action='merge' AND c.undone_at IS NULL AND NOT c.into_id=ANY(a.path)
+    ) SELECT a.name,t.id FROM aliases a JOIN intel_entity_types t ON t.id=a.target WHERE t.status='active'`);
+    for (const row of aliases.rows) { index.set(String(row.name).toLowerCase(),String(row.id)); index.set(normaliseTypeName(String(row.name)),String(row.id)); }
+  }
   return index;
 }
 
@@ -184,161 +193,10 @@ async function createProposedTypes(proposed: ProposedNewType[]): Promise<void> {
   }
 }
 
-async function upsertEntity(
-  entity: ExtractedEntity,
-  noteId: string,
-): Promise<string> {
-  if (entity.possibleMatchId) {
-    // Filtered on mergedIntoId like every other entity lookup in this file.
-    // Without it, an id the extractor picked up before a merge sweep ran could
-    // write relationships and note links against a TOMBSTONE — rows the graph
-    // loader can only rescue one hop, so they silently vanish from every view.
-    const [existing] = await db
-      .select()
-      .from(intelEntities)
-      .where(and(eq(intelEntities.id, entity.possibleMatchId), isNull(intelEntities.mergedIntoId)))
-      .limit(1);
-
-    if (existing) {
-      const mergedProps = { ...(existing.properties as Record<string, unknown> ?? {}), ...entity.properties };
-      await db
-        .update(intelEntities)
-        .set({
-          properties: mergedProps,
-          updatedAt: new Date(),
-          ...(entity.confidence === 'high' ? { confidence: 'high' } : {}),
-        })
-        .where(eq(intelEntities.id, existing.id));
-      return existing.id;
-    }
-  }
-
-  // An unrecognised type used to discard the entity outright, which lost real
-  // intelligence whenever the model coined a type it hadn't also proposed.
-  // Park it under `concept` instead — visible, reviewable, and retypeable.
-  let typeId = await resolveTypeId(entity.type);
-  if (!typeId) {
-    typeId = await ensureFallbackType();
-    if (!typeId) {
-      console.warn(`[intel] no type available for "${entity.name}", skipping`);
-      return '';
-    }
-    console.warn(`[intel] unknown type "${entity.type}" for "${entity.name}" → concept`);
-  }
-
-  // Deterministic fallback before inserting. Resolution otherwise depends
-  // entirely on the model returning possibleMatchId, so a missed match created a
-  // duplicate — and now that candidates are retrieved by similarity rather than
-  // listed exhaustively, an exact name the model didn't see must still resolve.
-  //
-  // Matched on NAME ALONE, deliberately. This used to require the type to match
-  // too, which meant the model calling something a `policy` in one note and a
-  // `system` in the next produced two entities with the same name — over twenty
-  // such pairs in production, including "Responsible AI Strategy" split into a
-  // project (16 links) and a policy (1 link). One name is one thing; a
-  // disagreement about its type is a typing question, not grounds for a second
-  // node. The existing type is kept, since it was chosen with the evidence that
-  // first created the entity.
-  // When several live entities share the name, the SAME-TYPE one wins. Without
-  // that tie-break, name-only matching could fuse a person and an organisation
-  // that happen to share a name (a real risk with surnames like "Morgan").
-  // Falling back to name alone only happens when no same-type candidate exists,
-  // which is the case this relaxation is for.
-  const [sameName] = await db
-    .select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId })
-    .from(intelEntities)
-    .where(
-      and(
-        sql`lower(${intelEntities.name}) = ${entity.name.trim().toLowerCase()}`,
-        isNull(intelEntities.mergedIntoId),
-      ),
-    )
-    .orderBy(
-      sql`(${intelEntities.typeId} = ${typeId}) DESC`,
-      desc(intelEntities.confirmed),
-      intelEntities.createdAt,
-    )
-    .limit(1);
-
-  // Canonical resolution — the deterministic half of what the extractor was
-  // being asked to do with `possibleMatchId`.
-  //
-  // Exact-name matching only catches a mention written EXACTLY as the entity
-  // already is. The canonical form additionally sees through a file extension,
-  // a namespace prefix and a legal suffix, so "z-ai/glm-5-turbo" binds onto
-  // "GLM-5 Turbo" as it arrives rather than waiting for a nightly sweep to
-  // notice. Same-type first, for the reason the name lookup does it.
-  //
-  // An empty canonical form — a name made entirely of noise words — is skipped
-  // rather than looked up, or every such entity would resolve onto the first
-  // one ever created.
-  const canonical = canonicalName(entity.name);
-  const [sameCanonical] = sameName || !canonical
-    ? []
-    : await db
-        .select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId })
-        .from(intelEntities)
-        .where(
-          and(
-            eq(intelEntities.canonicalName, canonical),
-            isNull(intelEntities.mergedIntoId),
-          ),
-        )
-        .orderBy(
-          sql`(${intelEntities.typeId} = ${typeId}) DESC`,
-          desc(intelEntities.confirmed),
-          intelEntities.createdAt,
-        )
-        .limit(1);
-
-  const resolved = sameName ?? sameCanonical;
-
-  if (resolved) {
-    // The one exception: an entity parked under the `concept` fallback should
-    // adopt a real type as soon as one is offered.
-    const fallbackId = await ensureFallbackType();
-    const retype = resolved.typeId === fallbackId && typeId !== fallbackId;
-
-    await db
-      .update(intelEntities)
-      .set({
-        properties: { ...(resolved.properties as Record<string, unknown> ?? {}), ...entity.properties },
-        updatedAt: new Date(),
-        ...(retype ? { typeId } : {}),
-        ...(entity.confidence === 'high' ? { confidence: 'high', confirmed: true } : {}),
-      })
-      .where(eq(intelEntities.id, resolved.id));
-    return resolved.id;
-  }
-
-  // A brand-new entity is embedded immediately, not merely when a summary
-  // eventually lands. Candidate retrieval in extract.ts filters on
-  // `embedding IS NOT NULL`, so an unembedded entity cannot be matched against
-  // and the next note mentioning it creates a second copy.
-  const [created] = await db
-    .insert(intelEntities)
-    .values({
-      name: entity.name,
-      canonicalName: canonical || null,
-      typeId,
-      properties: entity.properties,
-      confidence: entity.confidence,
-      // Confidence gate: high-confidence extractions join the graph directly;
-      // medium/low wait in /jkai/intel/review. Without this every entity
-      // needed manual confirmation, which does not scale now that /drive
-      // uploads and finished research auto-extract too.
-      confirmed: entity.confidence === 'high',
-      firstSeenIn: noteId,
-    })
-    .returning({ id: intelEntities.id });
-
-  // Fire-and-forget: extraction must not wait on, or fail because of, the
-  // embedding service. The backfill sweep catches anything that misses.
-  void import('./embed')
-    .then(({ embedEntity }) => embedEntity(created.id))
-    .catch(() => {});
-
-  return created.id;
+async function upsertEntity(entity: ExtractedEntity, noteId: string, text: string): Promise<string> {
+  const typeId = await resolveTypeId(entity.type) ?? await ensureFallbackType();
+  const { persistMention } = await import('./resolve/ingestion.server');
+  return persistMention(entity, noteId, typeId, text);
 }
 
 /** Most entities summarised in a single batched call. */
@@ -562,6 +420,7 @@ export async function persistExtraction(
   /** Edge weight after corroboration, then discounted for age. */
   const aged = (observations: number, confidence: string) =>
     decayWeight(weightFor(observations, confidence), recency);
+  await db.update(intelNotes).set({ metadata: sql`coalesce(${intelNotes.metadata}, '{}'::jsonb) || jsonb_build_object('lastExtraction', ${JSON.stringify(result)}::jsonb)` }).where(eq(intelNotes.id,noteId));
   await createProposedTypes(result.proposedNewTypes);
 
   // Loaded once for excerpt capture — the evidence sentence behind each entity.
@@ -573,15 +432,18 @@ export async function persistExtraction(
   const noteText = noteRow?.processed || noteRow?.raw || '';
 
   const entityIdMap = new Map<string, string>();
+  const resolvedEntities = new Map<ExtractedEntity, string>();
   for (const entity of result.entities) {
-    const id = await upsertEntity(entity, noteId);
+    const id = await upsertEntity(entity, noteId, noteText);
     if (id) {
-      entityIdMap.set(entity.name, id);
+      resolvedEntities.set(entity,id);
+      if (entity.mentionId) entityIdMap.set(entity.mentionId,id);
+      if (result.entities.filter(e=>e.name===entity.name).length===1) entityIdMap.set(entity.name, id);
     }
   }
 
   for (const entity of result.entities) {
-    const entityId = entityIdMap.get(entity.name);
+    const entityId = resolvedEntities.get(entity);
     if (!entityId) continue;
 
     // Checked explicitly rather than relying on `.onConflictDoNothing()`, which
@@ -606,7 +468,7 @@ export async function persistExtraction(
       // and was never written, so nothing in the graph could show WHY it
       // believed anything — every claim was unfalsifiable. Captured here so
       // entity cards, dossiers and briefs can cite their evidence.
-      excerpt: findExcerpt(noteText, entity.name),
+      excerpt: findExcerpt(noteText, entity.mention?.text ?? entity.name),
     });
   }
 
@@ -617,7 +479,7 @@ export async function persistExtraction(
   // round-trip each — and each carried a correlated COUNT DISTINCT over a table
   // that had no index at all, so a note naming fifteen entities meant fifteen
   // full scans of intel_note_entities.
-  const entityIds = [...entityIdMap.values()];
+  const entityIds = [...new Set(resolvedEntities.values())];
   if (entityIds.length) {
     await db.execute(sql`
       UPDATE intel_entities e SET
@@ -640,7 +502,7 @@ export async function persistExtraction(
   // one that errors.
   try {
     const { refreshConfidence } = await import('./trust-refresh');
-    await refreshConfidence([...entityIdMap.values()]);
+    await refreshConfidence([...new Set(resolvedEntities.values())]);
   } catch (err) {
     console.warn('[intel] confidence refresh failed:', err instanceof Error ? err.message : err);
   }
@@ -754,5 +616,5 @@ export async function persistExtraction(
     console.error('[intel] Summary update failed:', err);
   });
 
-  return { entityCount: entityIdMap.size, relationshipCount, timelineEventCount };
+  return { entityCount: new Set(resolvedEntities.values()).size, relationshipCount, timelineEventCount };
 }

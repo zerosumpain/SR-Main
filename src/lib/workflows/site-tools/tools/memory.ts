@@ -3,9 +3,6 @@ import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
 // src/lib/workflows/site-tools/tools/memory.ts
 
 import { register } from '../registry-internal';
-import { db } from '$lib/db';
-import { jkaiMemories } from '$lib/db/schema';
-import { eq, and, isNull, ilike, desc } from 'drizzle-orm';
 
 const CATEGORIES = ['people', 'preferences', 'places', 'health', 'devices', 'situations', 'patterns'] as const;
 
@@ -22,6 +19,9 @@ register({
       },
       assertion: { type: 'string', enum: ['stated', 'inferred'], description: 'stated only for an explicit user statement; otherwise inferred (default).' },
       sourceMessageId: { type: 'string', description: 'Source user message or evidence identifier, when available.' },
+      entityIds: { type: 'array', items: { type: 'string' }, description: 'Verified graph entity IDs this memory concerns.' },
+      validFrom: { type: 'string', description: 'ISO date when this fact becomes true, if known.' },
+      validUntil: { type: 'string', description: 'ISO expiry date for temporary situations.' },
       replacesId: { type: 'string', description: 'Explicit current memory ID to replace; omit for an independent fact.' },
       content: {
         type: 'string',
@@ -34,8 +34,8 @@ register({
   toolset: 'memory',
   handler: async (args, ctx) => {
     const row = await writeMemory({ category: args.category as string, content: args.content as string,
-      replacesId: args.replacesId as string | undefined, sourceConversationId: ctx?.conversationId,
-      provenance: { origin: 'user', assertion: args.assertion === 'stated' ? 'stated' : 'inferred', sourceId: (args.sourceMessageId as string | undefined) ?? ctx?.conversationId },
+      entityIds: args.entityIds as string[] | undefined, replacesId: args.replacesId as string | undefined, sourceConversationId: ctx?.conversationId,
+      provenance: { validFrom: args.validFrom as string | undefined, validUntil: args.validUntil as string | undefined, origin: 'user', assertion: args.assertion === 'stated' ? 'stated' : 'inferred', sourceId: (args.sourceMessageId as string | undefined) ?? ctx?.conversationId },
     });
     return { success: true, data: { id: row.id, category: row.category, content: row.content, stored: row.stored } };
   },
@@ -49,8 +49,9 @@ register({
     properties: {
       query: {
         type: 'string',
-        description: 'Search text (case-insensitive substring match)',
+        description: 'Natural-language recall using text, semantic similarity and connected entities',
       },
+      asOf: { type: 'string', description: 'ISO date for historical recall; forgotten facts remain excluded.' },
       category: {
         type: 'string',
         enum: CATEGORIES,
@@ -64,9 +65,11 @@ register({
     const query = args.query as string | undefined;
     const category = args.category as string | undefined;
 
-    const rows = await retrieveMemories(query, category, 50);
+    const rows = await retrieveMemories(query, category, 50, { asOf: args.asOf as string | undefined });
 
-    return { success: true, data: { memories: rows, count: rows.length } };
+    const { buildKnowledgeContext } = await import('$lib/jkai/intel/context');
+    const intelligence = query ? await buildKnowledgeContext(query) : '';
+    return { success: true, data: { memories: rows, count: rows.length, intelligence } };
   },
 });
 

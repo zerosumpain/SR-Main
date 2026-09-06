@@ -1,3 +1,4 @@
+import { loadEvidenceVersions, pairEvidenceVersion } from './evidence-version.server';
 // Research-assisted adjudication: read the evidence, then decide.
 //
 // Every signal the resolver had was a comparison of strings, an equality of
@@ -37,6 +38,7 @@ const NEIGHBOURS_SHOWN = 8;
 
 export interface PairEvidence {
   /** The entity this excerpt is evidence FOR, or 'both' for a co-mention. */
+  noteId?: string;
   entityId: string;
   noteTitle: string | null;
   noteSource: string;
@@ -58,6 +60,7 @@ export interface AdjudicationInput {
 
 export interface Adjudication {
   verdict: Verdict;
+  citations?: string[];
   /** 0..1 — how sure the reader is of ITS answer, not the matcher's score. */
   confidence: number;
   rationale: string;
@@ -69,7 +72,7 @@ const SYSTEM_PROMPT = `You are an entity-resolution adjudicator for a personal k
 You are given two nodes that an automated matcher thinks MIGHT be the same real-world thing, together with the evidence each was extracted from. Decide whether they are one thing or two.
 
 Answer with JSON only:
-{"verdict":"same"|"different"|"unsure","confidence":0.0-1.0,"rationale":"one sentence"}
+{"verdict":"same"|"different"|"unsure","confidence":0.0-1.0,"rationale":"one sentence", "citations":["exact supporting quote copied from evidence"]}
 
 How to decide:
 - "same" — the evidence shows one real-world thing recorded twice: an abbreviation and its expansion, a rename, a person under two display names, the same document under two filenames.
@@ -77,6 +80,8 @@ How to decide:
 - "unsure" — the evidence does not settle it. This is the correct answer far more often than either of the others. Use it whenever you would be guessing.
 
 Rules:
+- A replacement or successor is not automatically a rename. Require an explicit statement of continuity for "same".
+- Supply at least one exact supporting quote for any same or different verdict. Never cite the matcher score as evidence.
 - Judge from the evidence given. Do not invent facts about the world to break a tie; if outside knowledge is doing the work, that is "unsure".
 - Similar names are not evidence of sameness. Organisations deliberately name their subsidiaries after themselves.
 - A source naming BOTH is the most decisive thing you have, and usually says they are DIFFERENT — a sentence introducing two names is introducing two things. The exception is a source that states the equivalence outright ("the Authority, formerly the Body"), which is "same".
@@ -97,10 +102,11 @@ export async function loadEntityNames(ids: string[]): Promise<Map<string, string
 /** Assemble what the reader is given. One query, both entities. */
 export async function loadPairEvidence(aId: string, bId: string): Promise<PairEvidence[]> {
   const res = await db.execute(sql`
-    SELECT ne.entity_id, n.title, n.source, ne.excerpt
+    SELECT n.id AS note_id, ne.entity_id, n.title, n.source, ne.excerpt
     FROM intel_note_entities ne
     JOIN intel_notes n ON n.id = ne.note_id
     WHERE ne.entity_id IN (${aId}, ${bId})
+      AND n.graph_state = 'admitted'
       AND ne.excerpt IS NOT NULL
       AND length(ne.excerpt) > 0
     ORDER BY n.created_at DESC
@@ -114,6 +120,7 @@ export async function loadPairEvidence(aId: string, bId: string): Promise<PairEv
     if (used >= EXCERPTS_PER_ENTITY) continue;
     perEntity.set(entityId, used + 1);
     out.push({
+      noteId: String(row.note_id),
       entityId,
       noteTitle: typeof row.title === 'string' ? row.title : null,
       noteSource: String(row.source ?? 'unknown'),
@@ -135,18 +142,20 @@ export async function loadPairEvidence(aId: string, bId: string): Promise<PairEv
  */
 export async function loadCoMentions(aId: string, bId: string, limit = 2): Promise<PairEvidence[]> {
   const res = await db.execute(sql`
-    SELECT n.title, n.source,
+    SELECT n.id AS note_id, n.title, n.source,
            COALESCE(a.excerpt, b.excerpt) AS excerpt
     FROM intel_note_entities a
     JOIN intel_note_entities b ON b.note_id = a.note_id AND b.entity_id = ${bId}
     JOIN intel_notes n ON n.id = a.note_id
     WHERE a.entity_id = ${aId}
+      AND n.graph_state = 'admitted'
       AND COALESCE(a.excerpt, b.excerpt) IS NOT NULL
     ORDER BY n.created_at DESC
     LIMIT ${limit}
   `);
   return (res.rows as Array<Record<string, unknown>>).map((r) => ({
     entityId: CO_MENTION,
+    noteId: String(r.note_id),
     noteTitle: typeof r.title === 'string' ? r.title : null,
     noteSource: String(r.source ?? 'unknown'),
     excerpt: String(r.excerpt ?? '').slice(0, EXCERPT_CHARS),
@@ -196,7 +205,7 @@ export function buildAdjudicationPrompt(input: AdjudicationInput): string {
       ? `Both are connected to: ${sharedNeighbours.slice(0, NEIGHBOURS_SHOWN).join(', ')}`
       : 'They share no connections in the graph.',
     '',
-    `The automated matcher scored this ${Math.round(input.confidence * 100)}% — ${input.reason}.`,
+    'Use the source evidence to decide identity independently.',
     '',
     'Are A and B the same real-world thing?',
   ].join('\n');
@@ -275,7 +284,12 @@ export async function adjudicatePair(input: AdjudicationInput): Promise<Adjudica
     );
     return null;
   }
-  return { ...parsed, model };
+  const raw = response.choices[0]?.message?.content ?? '';
+  let quotes: string[] = [];
+  try { const value = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    quotes = Array.isArray(value.citations) ? value.citations.filter((q: unknown): q is string => typeof q === 'string' && q.length >= 12 && input.evidence.some(e => e.excerpt.includes(q))) : [];
+  } catch { /* An ungrounded verdict must abstain. */ }
+  return { ...parsed, verdict: parsed.verdict !== 'unsure' && !quotes.length ? 'unsure' : parsed.verdict, citations: quotes, model };
 }
 
 export interface AdjudicationRun {
@@ -312,6 +326,7 @@ export async function adjudicateBatch(
 ): Promise<AdjudicationRun> {
   const run: AdjudicationRun = { considered: pairs.length, decided: 0, same: 0, different: 0, unsure: 0, failed: 0 };
 
+  const versions = await loadEvidenceVersions();
   let index = 0;
   for (const pair of pairs) {
     opts.onProgress?.(index++, pairs.length);
@@ -332,6 +347,8 @@ export async function adjudicateBatch(
         continue;
       }
       await recordDecision({
+        evidenceVersion: pairEvidenceVersion(pair.a.id, pair.b.id, versions),
+        citations: verdict.citations,
         aId: pair.a.id,
         bId: pair.b.id,
         verdict: verdict.verdict,
@@ -373,7 +390,7 @@ export interface CandidateForAdjudication {
   candidate: { confidence: number; reason: string };
   keep: ResolvableEntity;
   merge: ResolvableEntity;
-  decision?: { decidedBy: string } | null;
+  decision?: { decidedBy: string; stale?: boolean } | null;
 }
 
 /**
@@ -397,7 +414,8 @@ export async function adjudicateCandidates(
   const limit = opts.limit ?? ADJUDICATION_NIGHTLY_LIMIT;
 
   const eligible = reports.filter((r) => {
-    if (!opts.force && r.decision) return false;
+    if (r.decision?.decidedBy === 'human') return false;
+    if (!opts.force && r.decision && !r.decision.stale) return false;
     const c = r.candidate.confidence;
     return c >= band.min && c <= band.max;
   });

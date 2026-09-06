@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MentionReview from '$lib/components/intel/MentionReview.svelte';
   // Source-data quality — the page that fixes the graph rather than reading it.
   //
   // Three problems, in the order they matter:
@@ -407,7 +408,7 @@
       </p>
     {:else}
       <p class="muted">
-        {visible.length} shown of {total}. Above {Math.round(threshold * 100)}% confidence a merge is safe to
+        {visible.length} shown of {total}. Above the {Math.round(threshold * 100)}% score threshold, identity checks determine eligibility to
         apply without reading it; below that, judgement is needed.
       </p>
 
@@ -417,7 +418,7 @@
           Select all {visible.length}
         </label>
         <button type="button" class="ghost" onclick={selectAutoMergeable}>
-          Select the {visible.filter((d) => d.autoMergeable).length} safe ones
+          Select the {visible.filter((d) => d.autoMergeable).length} eligible pairs
         </button>
         {#if confirmedRows.length}
           <button type="button" class="ghost" onclick={selectConfirmed}>
@@ -495,6 +496,8 @@
       </ul>
     {/if}
   </section>
+
+  <MentionReview />
 
   <!-- The taxonomy moved out.
        It used to be two panels here: proposed types as a list, and every type

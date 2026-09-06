@@ -3065,6 +3065,8 @@ export const intelMatchDecisions = pgTable(
     /** 0..1 — how sure the DECIDER was, which is a different question. */
     verdictConfidence: doublePrecision('verdict_confidence'),
     signals: jsonb('signals').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    evidenceVersion: text('evidence_version'),
+    citations: jsonb('citations').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     rationale: text('rationale'),
     /** Which model produced an `llm` verdict. Null for a human one. */
     model: text('model'),
@@ -6824,3 +6826,65 @@ export const jkaiAnswerQuality = pgTable('jkai_answer_quality', {
   details: jsonb('details').$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, t => [index('jkai_answer_quality_policy_idx').on(t.policyVersion, t.createdAt)]);
+
+// Source records remain independent of mutable entity identities.
+export const intelMentions = pgTable('intel_mentions', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  noteId: text('note_id').notNull().references(() => intelNotes.id, { onDelete: 'cascade' }),
+  entityId: text('entity_id').references(() => intelEntities.id, { onDelete: 'set null' }),
+  surface: text('surface').notNull(),
+  start: integer('start_offset'),
+  end: integer('end_offset'),
+  excerpt: text('excerpt'),
+  proposedType: text('proposed_type').notNull(),
+  status: text('status').notNull(),
+  reason: text('reason').notNull(),
+  candidates: jsonb('candidates').$type<Array<{ id: string; score: number; reason: string }>>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('intel_mentions_note_idx').on(t.noteId), index('intel_mentions_status_idx').on(t.status)]);
+
+export const intelAssertions = pgTable('intel_assertions', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  entityId: text('entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+  noteId: text('note_id').references(() => intelNotes.id, { onDelete: 'cascade' }),
+  predicate: text('predicate').notNull(),
+  value: jsonb('value').notNull(),
+  status: text('status').notNull().default('observed'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('intel_assertions_entity_idx').on(t.entityId)]);
+
+export const jkaiMemoryEntities = pgTable('jkai_memory_entities', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  memoryId: text('memory_id').notNull().references(() => jkaiMemories.id, { onDelete: 'cascade' }),
+  entityId: text('entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+  method: text('method').notNull().default('review'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex('jkai_memory_entities_pair_idx').on(t.memoryId, t.entityId)]);
+
+export const intelTaxonomyChanges = pgTable('intel_taxonomy_changes', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  kind: text('kind').notNull(),
+  action: text('action').notNull(),
+  fromId: text('from_id').notNull(),
+  intoId: text('into_id').notNull(),
+  snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+  undoneAt: timestamp('undone_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export const intelTaxonomyLinks = pgTable('intel_taxonomy_links', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  kind: text('kind').notNull(),
+  fromId: text('from_id').notNull(),
+  intoId: text('into_id').notNull(),
+  relation: text('relation').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex('intel_taxonomy_links_pair_idx').on(t.kind, t.fromId, t.intoId, t.relation)]);
+
+export const intelResolutionLabels = pgTable('intel_resolution_labels', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+  pairKey: text('pair_key').notNull(),
+  verdict: text('verdict').notNull(),
+  decidedBy: text('decided_by').notNull(),
+  features: jsonb('features').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

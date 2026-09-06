@@ -64,7 +64,7 @@ describe('suggestTypeMerges', () => {
   it('flags a proposal nothing was ever filed under', () => {
     const s = suggestTypeMerges([type('newsletter_issue', 0, { status: 'proposed' })]);
     expect(s[0].kind).toBe('empty-proposal');
-    expect(s[0].reason).toContain('extraction prompt');
+    expect(s[0].reason).toContain('definition');
   });
 
   it('does not call an ACTIVE empty type a stray proposal', () => {
