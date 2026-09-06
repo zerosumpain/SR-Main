@@ -61,6 +61,15 @@ export const POST: RequestHandler = async ({ request }) => {
     return json(await backfillPendingEmbeddings());
   }
 
+  if (action === 'score-relevance') {
+    // Scores held mail against the graph. No model calls, so it is safe to run
+    // on demand from the page rather than waiting for the nightly stage — and
+    // it must be re-runnable, because watching an entity or pinning one to a
+    // dossier changes every score in the queue.
+    const { scoreMailRelevance } = await import('$lib/jkai/intel/mail-relevance');
+    return json(await scoreMailRelevance({ states: ['pending', 'admitted'] }));
+  }
+
   if (action === 'similar') {
     const [noteId] = noteIds;
     if (!noteId) return json({ error: 'similar needs one note id.' }, { status: 400 });

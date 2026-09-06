@@ -26,6 +26,11 @@ const FACTS: MailFacts = {
   hasAttachments: false,
   bodyChars: 1200,
   ageDays: 7,
+  // An unscored thread. Every relevance test sets these explicitly, so the
+  // baseline stays "the graph has nothing to say about this one".
+  graphEntityHits: 0,
+  graphTopHitWeight: 0,
+  graphSimilarity: 0,
 };
 
 describe('a rule is data', () => {

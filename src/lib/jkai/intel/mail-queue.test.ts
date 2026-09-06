@@ -21,7 +21,47 @@ const FACTS: MailFacts = {
   hasAttachments: false,
   bodyChars: 800,
   ageDays: 10,
+  // An unscored thread. Every relevance test sets these explicitly, so the
+  // baseline stays "the graph has nothing to say about this one".
+  graphEntityHits: 0,
+  graphTopHitWeight: 0,
+  graphSimilarity: 0,
 };
+
+describe('scoreThread and the graph', () => {
+  it('lifts a broadcast that names things the graph knows', () => {
+    // The case the shape signals cannot reach: an update you never replied to,
+    // from an automated sender, that is squarely about your work.
+    const bare = scoreThread({ ...FACTS, emailKind: 'notification' });
+    const relevant = scoreThread({
+      ...FACTS,
+      emailKind: 'notification',
+      graphEntityHits: 4,
+      graphTopHitWeight: 2,
+    });
+    expect(relevant.score).toBeGreaterThan(bare.score);
+    expect(relevant.reasons.join(' ')).toContain('names 4 things in the graph');
+  });
+
+  it('weighs one foreground hit above several unremarkable ones', () => {
+    const watched = scoreThread({ ...FACTS, graphEntityHits: 1, graphTopHitWeight: 3 });
+    const many = scoreThread({ ...FACTS, graphEntityHits: 4, graphTopHitWeight: 1 });
+    expect(watched.score).toBeGreaterThan(many.score);
+  });
+
+  it('adds nothing for a thread the scorer has never seen', () => {
+    expect(scoreThread(FACTS)).toEqual(scoreThread({ ...FACTS, graphEntityHits: 0, graphTopHitWeight: 0 }));
+  });
+
+  it('treats similarity as a nudge, never as a reason on its own', () => {
+    // Measured on production, note-to-entity similarity is compressed into
+    // 0.34-0.72 and carries far less signal than a name match. A thread that
+    // only clears the similarity bar must not outrank one that names something.
+    const similar = scoreThread({ ...FACTS, graphSimilarity: 0.9 });
+    const named = scoreThread({ ...FACTS, graphEntityHits: 1, graphTopHitWeight: 2 });
+    expect(named.score).toBeGreaterThan(similar.score);
+  });
+});
 
 describe('scoreThread', () => {
   it('ranks a replied-to conversation above a marketing blast', () => {

@@ -57,6 +57,58 @@ export const SEED_RULE: Omit<MailRule, 'proposedAt'> = {
   },
 };
 
+/**
+ * The topical seed: mail that is about what the graph already knows.
+ *
+ * The other seed rule describes a thread's SHAPE — you and a person both wrote.
+ * This one describes what it is ABOUT, which is the axis the gate could not see
+ * until ../mail-relevance existed. It catches the case the shape rule cannot:
+ * an update from a supplier you never reply to, naming a project the graph
+ * already knows about, is exactly the mail the graph should have and reads as a
+ * broadcast from every angle except its subject matter.
+ *
+ * Narrow on three counts at once, because a topical rule is the one with the
+ * most room to be wrong:
+ *
+ *   - `graphTopHitWeight >= 2` — at least one entity is WELL CORROBORATED
+ *     (asserted by three or more notes, or scored above 0.7). Naming something
+ *     the graph merely holds once is not enough; a mailshot saying "Google"
+ *     would clear a weaker bar. On production 589 of the 4,085 anchored
+ *     entities qualify.
+ *
+ *     Not `>= 3`, which is the owner's foreground — watched, lensed or in a
+ *     dossier — because production currently has ZERO of all three. A rule
+ *     written against the stronger signal would match nothing at all and look
+ *     exactly like a working rule on a quiet mailbox. It tightens on its own
+ *     the day something is watched, because a foreground hit also satisfies
+ *     this condition.
+ *   - `graphEntityHits >= 2` — one hit is a coincidence. Two anchored entities
+ *     in the same thread is a subject.
+ *   - `bodyChars >= 400` — twice the extractor's floor. A notification naming a
+ *     known project has nothing in it to extract beyond the name.
+ *
+ * The relevance facts are 0 on a thread nobody has scored, so this rule admits
+ * nothing at all until the scorer has run — which is the correct failure.
+ */
+export const RELEVANCE_SEED_RULE: Omit<MailRule, 'proposedAt'> = {
+  key: 'names-what-you-track',
+  label: 'Admit threads naming two or more well-corroborated things in the graph',
+  action: 'admit',
+  origin: 'seed',
+  status: 'proposed',
+  rationale:
+    'A thread naming two or more entities from the graph, at least one of them well corroborated, is about your ' +
+    'work whether or not you replied to it. Relevance is measured only against entities the graph knows from ' +
+    'somewhere other than email, so admitted mail can never make more mail look relevant.',
+  condition: {
+    all: [
+      { fact: 'graphTopHitWeight', op: 'gte', value: 2 },
+      { fact: 'graphEntityHits', op: 'gte', value: 2 },
+      { fact: 'bodyChars', op: 'gte', value: 400 },
+    ],
+  },
+};
+
 export async function ensureMailRules(): Promise<void> {
   await ensureCollection(
     MAIL_RULES_COLLECTION,
@@ -185,11 +237,15 @@ export async function saveBacktest(key: string, backtest: MailRuleBacktest): Pro
   );
 }
 
-/** Put the seed proposal in place if it has never been offered. Returns whether
- *  it was created — an owner who declined it must not be asked again. */
-export async function seedMailRules(): Promise<boolean> {
+/** Put the seed proposals in place if they have never been offered. Returns how
+ *  many were created — an owner who declined one must not be asked again. */
+export async function seedMailRules(): Promise<number> {
   const existing = await listMailRules();
-  if (existing.some((r) => r.key === SEED_RULE.key)) return false;
-  const result = await proposeRule(SEED_RULE);
-  return result.ok;
+  const keys = new Set(existing.map((r) => r.key));
+  let created = 0;
+  for (const seed of [SEED_RULE, RELEVANCE_SEED_RULE]) {
+    if (keys.has(seed.key)) continue;
+    if ((await proposeRule(seed)).ok) created++;
+  }
+  return created;
 }

@@ -54,6 +54,23 @@ export const MAIL_FACT_KEYS = [
   /** Days since the thread's own receipt time — the observation clock, never
    *  the sweep's. */
   'ageDays',
+
+  // ── What it has to do with the graph you already have ──
+  // Written by ./mail-relevance, which scores every held thread against the
+  // entities the graph knows from somewhere OTHER than email. Read from stored
+  // metadata like every other fact, so a backtest replays them without a single
+  // vector probe. An unscored thread reports zeroes, which makes any condition
+  // over them false — a rule can never admit mail on a score nobody computed.
+  /** Distinct anchored entities the thread names. */
+  'graphEntityHits',
+  /** Weight of the most important one: 3 watched or in a dossier, 2 well
+   *  corroborated, 1 merely known, 0 none. The difference between a thread that
+   *  names something you actively track and one that names a passing mention. */
+  'graphTopHitWeight',
+  /** 1 − cosine distance to the nearest anchored entity, 0..1. The topical
+   *  half: it catches a thread plainly about your work that happens to share no
+   *  vocabulary with the graph. */
+  'graphSimilarity',
 ] as const;
 
 export type MailFactKey = (typeof MAIL_FACT_KEYS)[number];
@@ -85,6 +102,9 @@ export type MailFacts = {
   hasAttachments: boolean;
   bodyChars: number;
   ageDays: number;
+  graphEntityHits: number;
+  graphTopHitWeight: number;
+  graphSimilarity: number;
 };
 
 /** The stored shape a note has to offer. Declared minimally so this module can
@@ -224,8 +244,15 @@ export function subjectFamily(subject: string | null | undefined): string {
  * backtest that silently used the wall clock would score every historic thread
  * as ancient and pass any rule with an age condition.
  */
+/** A stored score, defensively — the value is jsonb somebody else wrote. */
+function numberFrom(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export function factsFor(note: NoteForFacts, now: number): MailFacts {
   const meta = note.metadata ?? {};
+  const relevance = (meta.graphRelevance ?? null) as { hits?: unknown; topWeight?: unknown; similarity?: unknown } | null;
   const body = note.rawContent ?? '';
   const owner = String(meta.gmailAccount ?? '').toLowerCase();
   const participants = Array.isArray(meta.participants)
@@ -288,5 +315,12 @@ export function factsFor(note: NoteForFacts, now: number): MailFacts {
         : /^---\s.+\s---$/m.test(body),
     bodyChars: body.length,
     ageDays,
+    // Zero rather than undefined when the note has never been scored. An absent
+    // fact would make `graphEntityHits gte 2` false either way, but a zero also
+    // makes `lt 2` TRUE — which is what a reject rule for irrelevant mail needs,
+    // and what an undefined value would silently deny it.
+    graphEntityHits: numberFrom(relevance?.hits),
+    graphTopHitWeight: numberFrom(relevance?.topWeight),
+    graphSimilarity: numberFrom(relevance?.similarity),
   };
 }

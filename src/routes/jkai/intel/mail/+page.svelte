@@ -23,6 +23,8 @@
   let message = $state('');
   let filter = $state('');
   let kindFilter = $state<'all' | 'correspondence' | 'notification' | 'bulk'>('all');
+  /** Show only threads that name something the graph already knows. */
+  let graphOnly = $state(false);
 
   const queue = $derived(data.queue);
 
@@ -30,10 +32,18 @@
     const needle = filter.trim().toLowerCase();
     return queue.rows.filter((r) => {
       if (kindFilter !== 'all' && r.emailKind !== kindFilter) return false;
+      if (graphOnly && r.graphHits === 0) return false;
       if (!needle) return true;
       return r.subject.toLowerCase().includes(needle) || r.senderDomain.includes(needle);
     });
   });
+
+  // The toggle has to mean the same thing on every tab, or it reads as broken
+  // on the one it does not reach. Suggestions are already ranked server-side;
+  // this only narrows them.
+  const visibleSuggestions = $derived(
+    graphOnly ? queue.suggestions.filter((r) => r.graphHits > 0) : queue.suggestions,
+  );
 
   const visibleClusters = $derived.by(() => {
     const needle = filter.trim().toLowerCase();
@@ -143,6 +153,43 @@
     }
   }
 
+  /**
+   * Re-score the queue against the graph.
+   *
+   * Offered as a button as well as a nightly stage because the scores go stale
+   * the moment the graph changes — watch an entity, merge two, pin one to a
+   * dossier, and every thread in the queue is answering a slightly different
+   * question. No model calls, so it is cheap to run whenever.
+   */
+  async function scoreRelevance() {
+    if (busy) return;
+    busy = true;
+    message = 'Matching held threads against the graph…';
+    try {
+      const res = await fetch('/api/jkai/intel/mail', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'score-relevance' }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        message = body?.error ?? 'Scoring failed.';
+        return;
+      }
+      message = body.entities
+        ? `${body.withHits} of ${body.scanned} threads name something the graph knows, ` +
+          `scored against ${body.entities} entities.` +
+          (body.remaining ? ` ${body.remaining} past the limit — run it again.` : '') +
+          (body.similarityFailed ? ' Similarity was unavailable — the name matching still ran.' : '')
+        : 'Nothing in the graph is known from outside email yet, so there is nothing to score against.';
+      await invalidateAll();
+    } catch (err) {
+      message = err instanceof Error ? err.message : 'Scoring failed.';
+    } finally {
+      busy = false;
+    }
+  }
+
   async function ruleAction(action: string, key?: string) {
     if (busy) return;
     busy = true;
@@ -202,8 +249,16 @@
     <span><b>{queue.pending.toLocaleString()}</b> held</span>
     <span><b>{queue.admitted.toLocaleString()}</b> in the graph</span>
     <span><b>{queue.rejected.toLocaleString()}</b> refused</span>
+    <span><b>{data.relevance.withHits.toLocaleString()}</b> name the graph</span>
     <span class="ghost">{data.index.threads.toLocaleString()} threads searchable · {data.index.chunks.toLocaleString()} passages</span>
+    <button class="plain" disabled={busy} onclick={scoreRelevance}>Re-score against the graph</button>
   </div>
+  {#if data.relevance.unscored > 0}
+    <p class="hint warn">
+      {data.relevance.unscored.toLocaleString()} held threads have never been scored against the graph, so every
+      graph* fact reads 0 for them and no topical rule can match them. Re-score to fix it.
+    </p>
+  {/if}
 
   <div class="tabs">
     <button class:on={tab === 'suggested'} onclick={() => (tab = 'suggested')}>
@@ -227,6 +282,7 @@
         <option value="notification">notifications</option>
         <option value="bulk">bulk</option>
       </select>
+      <label class="toggle"><input type="checkbox" bind:checked={graphOnly} /> names the graph</label>
     {/if}
   </div>
 
@@ -244,15 +300,23 @@
   {/if}
 
   {#if tab === 'suggested'}
-    {#if queue.suggestions.length === 0}
-      <p class="empty">Nothing held. Every swept thread has been decided.</p>
+    {#if visibleSuggestions.length === 0}
+      <p class="empty">
+        {#if graphOnly && queue.suggestions.length}
+          None of the top-ranked threads name anything the graph knows. Clear the filter, or re-score.
+        {:else}
+          Nothing held. Every swept thread has been decided.
+        {/if}
+      </p>
     {:else}
       <p class="hint">
-        Ranked by what usually means a thread mattered — whether you replied, whether it is two-way, and
-        Gmail's own importance flag. The reasons are on each row; nothing here is a black box.
+        Ranked by what usually means a thread mattered — whether you replied, whether it is two-way, Gmail's own
+        importance flag, and what the thread has to do with the graph you already have. Entities it names are
+        listed on the row. Only entities the graph knows from somewhere other than email count, so admitted mail
+        can never make more mail look relevant.
       </p>
       <ul class="rows">
-        {#each queue.suggestions as row (row.id)}
+        {#each visibleSuggestions as row (row.id)}
           <li class="row" class:picked={selected.has(row.id)}>
             <label class="pick">
               <input type="checkbox" checked={selected.has(row.id)} onchange={() => toggle(row.id)} />
@@ -267,6 +331,14 @@
                 {row.senderDomain} · {row.emailKind} · {row.messageCount} msg · {shortDate(row.observedAt)}
               </div>
               <div class="why">{row.reasons.join(' · ')}</div>
+              {#if row.graphNames.length}
+                <div class="graph">
+                  {#each row.graphNames as name}<span class="ent">{name}</span>{/each}
+                  {#if row.graphHits > row.graphNames.length}
+                    <span class="ghost">+{row.graphHits - row.graphNames.length} more</span>
+                  {/if}
+                </div>
+              {/if}
             </div>
             <div class="acts">
               {#if row.gmailUrl}
@@ -325,6 +397,11 @@
           <div class="body">
             <div class="subject">{row.subject}</div>
             <div class="meta">{row.senderDomain} · {row.emailKind} · {shortDate(row.observedAt)}</div>
+            {#if row.graphNames.length}
+              <div class="graph">
+                {#each row.graphNames as name}<span class="ent">{name}</span>{/each}
+              </div>
+            {/if}
           </div>
           <div class="acts">
             <button class="go" disabled={busy} onclick={() => act('admit', [row.id])}>Add</button>
@@ -618,6 +695,30 @@
     border-radius: var(--radius-sharp);
     color: var(--text-ghost);
   }
+  .graph {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .ent {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 1px 5px;
+    border: 1px solid var(--line-hair);
+    border-radius: var(--radius-sharp);
+    color: var(--accent-ink);
+  }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
   .tag.warn {
     color: var(--warn);
     border-color: var(--warn);

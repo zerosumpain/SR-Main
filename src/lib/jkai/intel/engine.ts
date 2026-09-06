@@ -207,6 +207,34 @@ export async function runIntelSweep(
     );
   }
 
+  // Score the queue against the graph BEFORE the rules read it, and after the
+  // sweep that captured tonight's mail.
+  //
+  // The ordering is load-bearing in both directions. Score before the rules or
+  // a topical rule decides on last night's numbers — and on a thread swept an
+  // hour ago, on no numbers at all, which reads as "irrelevant" rather than as
+  // "unknown". Score after the sweep or tonight's mail waits a full day for its
+  // first look. Costs no model calls: one pass over the entity names plus one
+  // kNN per thread against vectors the gate already paid for.
+  stages.push(
+    await runStage('mail-relevance', async () => {
+      const { scoreMailRelevance } = await import('./mail-relevance');
+      const scored = await scoreMailRelevance();
+      return {
+        scanned: scored.scanned,
+        scored: scored.scored,
+        withHits: scored.withHits,
+        remaining: scored.remaining,
+        // Anchored entities the matcher was built from. Zero is the number that
+        // matters: it means nothing in the graph is known from outside email, so
+        // every thread scores 0 and a topical rule admits nothing — which is
+        // correct, and indistinguishable from a broken stage without this line.
+        entities: scored.entities,
+        similarityFailed: scored.similarityFailed ? 1 : 0,
+      };
+    }, batch),
+  );
+
   // The owner's approved rules, immediately after the sweep that captured the
   // mail they act on. A rule that ran before the sweep would be a night behind
   // for ever, always deciding about yesterday's post.

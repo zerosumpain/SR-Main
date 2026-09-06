@@ -75,6 +75,19 @@ export async function gatherProposalContext(): Promise<string> {
     .orderBy(sql`count(*) desc`)
     .limit(25);
 
+  // How the pending queue is distributed across the topical axis. Without this
+  // the proposer is guessing at thresholds: "graphEntityHits >= 2" is a narrow
+  // rule or the whole mailbox depending on numbers only the scorer knows.
+  const [relevance] = await db
+    .select({
+      scored: sql<number>`count(*) filter (where coalesce(${intelNotes.metadata}, '{}'::jsonb) ? 'graphRelevance')::int`,
+      anyHit: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'hits')::int > 0)::int`,
+      twoPlus: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'hits')::int >= 2)::int`,
+      watched: sql<number>`count(*) filter (where (${intelNotes.metadata}->'graphRelevance'->>'topWeight')::int >= 3)::int`,
+    })
+    .from(intelNotes)
+    .where(and(eq(intelNotes.source, 'email'), eq(intelNotes.graphState, 'pending')));
+
   const existing = await listMailRules();
   const numeric = MAIL_FACT_KEYS.filter((f) => !STRING_MAIL_FACTS.has(f) && !BOOLEAN_MAIL_FACTS.has(f));
 
@@ -90,6 +103,12 @@ export async function gatherProposalContext(): Promise<string> {
     '',
     'TOP PENDING SENDERS:',
     ...(senders.length ? senders.map((s) => `  ${s.domain}: ${s.n}`) : ['  none']),
+    '',
+    'RELATION TO THE GRAPH (pending threads):',
+    `  scored: ${relevance?.scored ?? 0}  (unscored threads report 0 for every graph* fact)`,
+    `  naming at least one anchored entity: ${relevance?.anyHit ?? 0}`,
+    `  naming two or more: ${relevance?.twoPlus ?? 0}`,
+    `  naming something watched or in a dossier: ${relevance?.watched ?? 0}`,
     '',
     "WHAT THE OWNER HAS DECIDED (their own decisions only):",
     `  admitted ${admits.length}:`,
@@ -135,6 +154,10 @@ A <condition> is one of:
 
 Hard constraints — a proposal breaking any of these is discarded unread:
 - Only facts from the list given. There is nothing else. You cannot read a subject line, a body, an address or a document.
+- The graph* facts are the one topical signal you have. They are scored against entities the graph knows from sources
+  OTHER than email, so admitted mail can never inflate them. graphTopHitWeight is 3 when the thread names something
+  watched or in a dossier, 2 when well corroborated, 1 when merely known, 0 when nothing. Prefer WEIGHT over count:
+  many hits of unimportant entities is a mailshot, two hits including a watched one is a subject.
 - String and boolean facts take only eq/neq.
 - At most 16 conditions, nesting at most 4 deep, at most 8 branches per all/any.
 - Never set "status". Rules are activated by the owner, never by you.
@@ -142,7 +165,8 @@ Hard constraints — a proposal breaking any of these is discarded unread:
 What makes a GOOD rule:
 - It is NARROW. An admit rule matching more than ${Math.round(MAX_ADMIT_SHARE * 100)}% of the mailbox, or admitting more than
   ${MAX_ADMITS_PER_WEEK} threads a week, is rejected automatically.
-- It describes a SHAPE of thread, not a topic — you cannot see topics.
+- It describes either the SHAPE of a thread (who wrote, how often, how long) or its RELATION TO THE GRAPH (the
+  graph* facts). Those are the only two axes that exist. You still cannot see what a thread is actually about.
 - A reject rule for a specific bulk sender is often more useful than another admit rule: it drains the queue
   without putting anything into the graph.
 - It degrades safely: an unknown fact makes its condition false, so never depend on something being absent.

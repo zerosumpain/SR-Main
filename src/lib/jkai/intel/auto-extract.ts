@@ -246,7 +246,14 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
     const held = !!input.hold && priorState !== 'admitted';
 
     const clipped = text.length > MAX_EXTRACT_CHARS ? text.slice(0, MAX_EXTRACT_CHARS) : text;
+    // The caller's metadata REPLACES what is stored, so anything derived after
+    // ingest has to be carried across by name or a re-sweep silently drops it.
+    // `graphRelevance` is the case that bites: the nightly scorer writes it, the
+    // sweep runs before the rules, and a thread whose score had been wiped an
+    // hour earlier reads as irrelevant to every rule that night.
+    const priorRelevance = (existing?.metadata as Record<string, unknown> | null)?.graphRelevance;
     const metadata = {
+      ...(priorRelevance ? { graphRelevance: priorRelevance } : {}),
       ...(input.metadata ?? {}),
       autoKind: input.kind,
       refId: input.refId,
