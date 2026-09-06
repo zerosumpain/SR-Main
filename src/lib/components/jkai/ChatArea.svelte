@@ -94,7 +94,6 @@
     onbusychange,
     recentThreads = [],
     dailyAlerts,
-    onselectthread,
     onopenlibrary,
   }: {
     conversationId: string | null;
@@ -155,12 +154,7 @@
      */
     onbusychange?: (busy: boolean, ok: boolean) => void;
     dailyAlerts?: DailyAlertsData;
-    /**
-     * The thread list, for the empty-state's "pick up where you left off"
-     * column. The hub keeps the library behind a rail that is collapsed by
-     * default, so a fresh thread otherwise opens with no route back to the
-     * work already in flight — see the empty state below.
-     */
+    /** Threads used for the welcome panel workspace count. */
     recentThreads?: Array<{
       id: string;
       title: string | null;
@@ -169,7 +163,6 @@
       lastMessage: string | null;
       messageCount: number;
     }>;
-    onselectthread?: (id: string) => void;
     onopenlibrary?: () => void;
   } = $props();
 
@@ -1860,45 +1853,10 @@
     void send();
   }
 
-  /** Same shape as the thread library's own column: minutes, hours, days, then
-   *  a date. Kept local because the library does not export its copy. */
-  function threadAge(value: string | Date): string {
-    const elapsed = Date.now() - new Date(value).getTime();
-    if (!Number.isFinite(elapsed) || elapsed < 0) return 'now';
-    const minutes = Math.floor(elapsed / 60_000);
-    if (minutes < 1) return 'now';
-    if (minutes < 60) return `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h`;
-    const days = Math.floor(hours / 24);
-    return days < 7
-      ? `${days}d`
-      : new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(value));
-  }
-
-  /**
-   * Threads worth offering back. Empty ones are dropped rather than listed:
-   * every page load opens a fresh conversation, so an unfiltered list is mostly
-   * "New thread" rows that were never used — including the one being rendered.
-   */
+  /** Count conversations with messages, excluding WhatsApp and unused drafts. */
   const startedThreads = $derived(
     recentThreads.filter((c) => c.source !== 'whatsapp' && (c.messageCount ?? 0) > 0),
   );
-  const recentThreadRows = $derived(
-    startedThreads
-      .filter((c) => c.id !== conversationId)
-      .slice(0, 5)
-      .map((c) => ({
-        id: c.id,
-        label:
-          c.title?.trim() ||
-          c.lastMessage?.trim().split('\n')[0]?.slice(0, 60) ||
-          'Untitled thread',
-        when: threadAge(c.updatedAt),
-        count: c.messageCount ?? 0,
-      })),
-  );
-
   // ── Model switcher ────────────────────────────────────────────────────────
 
   function onComposerInput() {
@@ -2929,7 +2887,7 @@
           <p class="hero-sub">
             Ask plainly, or take the workspace in another direction. Your systems, notes, health data and working context can come with you.
           </p>
-            <div class="direction-grid" aria-label="Workspace directions">
+            <div class="direction-grid" class:has-library={!!onopenlibrary} aria-label="Workspace directions">
               {#each LANDING_DIRECTIONS as direction (direction.label)}
                 <a class="direction-card" href={direction.href} title={direction.note}>
                   <span class="direction-index">{direction.index}</span>
@@ -2939,46 +2897,23 @@
                   <span class="direction-arrow" aria-hidden="true">↗</span>
                 </a>
               {/each}
+              {#if onopenlibrary}
+                <button type="button" class="direction-card" onclick={() => onopenlibrary?.()}>
+                  <span class="direction-index">05</span>
+                  <span class="direction-copy"><strong>Library</strong></span>
+                  <span class="direction-arrow" aria-hidden="true">↗</span>
+                </button>
+              {/if}
             </div>
           {#if dailyAlerts}
             <DailyAlertsSummary summary={dailyAlerts} />
           {/if}
-          <div class="hero-body">
-           <div class="hero-main">
             <div class="hero-metrics" aria-label="Current workspace status">
               <span><small>Threads</small><strong>{startedThreads.length}</strong></span>
               <span><small>Model</small><strong>{shortModelLabel(currentModel.modelId)}</strong></span>
               <span><small>Context</small><strong>{contextTokens === null ? 'ready' : `${Math.round(contextTokens / 1000)}k`}</strong></span>
               <span><small>Build</small><strong>{activeBuild?.status ?? 'ready'}</strong></span>
             </div>
-           </div>
-           <!-- The thread library is a rail that starts collapsed, so on a fresh
-                thread there is no left pane and nothing pointing back at work
-                already under way. This column is that pane, folded into the
-                opening page. -->
-           <aside class="hero-side" aria-label="Recent threads">
-            <p class="side-head">
-              <span>Pick up where you left off</span>
-              {#if onopenlibrary}
-                <button type="button" class="side-all" onclick={() => onopenlibrary?.()}>Library ↗</button>
-              {/if}
-            </p>
-            {#if recentThreadRows.length === 0}
-              <p class="side-empty">Nothing to carry over yet — this is the first thread with anything in it.</p>
-            {:else}
-              <ul class="recent-list">
-                {#each recentThreadRows as t (t.id)}
-                  <li>
-                    <button type="button" class="recent-row" onclick={() => onselectthread?.(t.id)}>
-                      <span class="recent-title">{t.label}</span>
-                      <span class="recent-meta">{t.when} · {t.count} message{t.count === 1 ? '' : 's'}</span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-           </aside>
-          </div>
           <div class="hero-rule"><span>Or ask now</span></div>
           <div class="hero-chips">
             {#each EXAMPLE_PROMPTS as p (p.label)}
@@ -4303,67 +4238,11 @@
     margin: 0 0 1.35rem;
     max-width: 58ch;
   }
-  .hero-body { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(250px,1fr); gap:clamp(20px, 2.6vw, 40px); align-items:start; margin-bottom:20px; }
-  .hero-main { min-width:0; }
-
-  /* The collapsed thread rail, folded into the opening page. Rows are the
-     facet-row shape used across the hub: a hairline drawn as the container's
-     ground through a 1px gap, and a hover that inverts to cream. */
-  .hero-side { min-width:0; }
-  .side-head {
-    display:flex; align-items:baseline; justify-content:space-between; gap:10px;
-    margin:0 0 10px;
-    font-family:var(--font-mono); font-size:var(--fs-label-xs);
-    text-transform:uppercase; letter-spacing:var(--tracking-label);
-    color:rgba(237,228,212,.46);
-  }
-  .side-all {
-    flex:none;
-    background:none; border:0; padding:0; cursor:pointer;
-    font-family:var(--font-mono); font-size:var(--fs-label-xs);
-    text-transform:uppercase; letter-spacing:var(--tracking-label);
-    color:var(--accent-on-dark);
-  }
-  .side-all:hover { color:var(--bg); }
-  .side-all:focus-visible { outline:2px solid var(--accent-on-dark); outline-offset:2px; }
-  .side-empty {
-    margin:0; padding:12px 0 0;
-    border-top:1px solid rgba(237,228,212,.25);
-    font-size:var(--fs-label); line-height:1.5; color:rgba(237,228,212,.52);
-  }
-  .recent-list {
-    list-style:none; margin:0; padding:0;
-    display:flex; flex-direction:column; gap:1px;
-    border-top:1px solid rgba(237,228,212,.25);
-    border-bottom:1px solid rgba(237,228,212,.25);
-    background:rgba(237,228,212,.25);
-  }
-  .recent-row {
-    display:block; width:100%; text-align:left;
-    padding:9px 10px;
-    border:0; background:var(--text-primary); cursor:pointer;
-    transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
-  }
-  .recent-title {
-    display:block; min-width:0;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    font-size:var(--fs-label); line-height:1.35; color:rgba(237,228,212,.88);
-  }
-  .recent-meta {
-    display:block; margin-top:3px;
-    font-family:var(--font-mono); font-size:var(--fs-label-xs);
-    text-transform:uppercase; letter-spacing:.08em;
-    color:rgba(237,228,212,.42);
-  }
-  .recent-row:hover { background:var(--bg); }
-  .recent-row:hover .recent-title { color:var(--text-primary); }
-  .recent-row:hover .recent-meta { color:var(--text-muted); }
-  .recent-row:focus-visible { outline:2px solid var(--accent-on-dark); outline-offset:-2px; }
-
   .hero-rule { display:flex; align-items:center; gap:12px; margin-bottom:12px; color:rgba(237,228,212,.46); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:var(--tracking-label); }
   .hero-rule::after { content:''; flex:1; height:1px; background:rgba(237,228,212,.2); }
   .direction-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
-  .direction-card { display:flex; align-items:center; gap:8px; min-height:44px; padding:8px 10px; border:1px solid var(--accent-on-dark); background:rgba(232,134,58,.08); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
+  .direction-grid.has-library { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .direction-card { cursor:pointer; text-align:left; display:flex; align-items:center; gap:8px; min-height:44px; padding:8px 10px; border:1px solid var(--accent-on-dark); background:rgba(232,134,58,.08); color:var(--bg); transition:background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
   .direction-card:hover { background:var(--bg); color:var(--text-primary); }
   .direction-index { color:var(--accent-on-dark); font-family:var(--font-mono); font-size:var(--fs-label-xs); font-variant-numeric:tabular-nums; }
   .direction-card:hover .direction-index { color:var(--accent); }
@@ -4376,7 +4255,7 @@
   .has-alerts .hero-kicker { margin-bottom:8px; }
   .has-alerts .hero-title { font-size:clamp(1.6rem, 2.4vw, 2.2rem); max-width:none; margin-bottom:8px; }
   .has-alerts .hero-sub { margin-bottom:12px; max-width:none; line-height:1.4; }
-  .hero-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:10px 0 0; border:1px solid rgba(237,228,212,.14); }
+  .hero-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:10px 0 20px; border:1px solid rgba(237,228,212,.14); }
   .hero-metrics > span { min-width:0; padding:8px 10px; border-right:1px solid rgba(237,228,212,.14); }
   .hero-metrics > span:last-child { border-right:0; }
   .hero-metrics small, .hero-metrics strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -5110,8 +4989,7 @@
       font-size:clamp(2rem, 10vw, 2.9rem);
       max-width:none;
     }
-    .hero-body { grid-template-columns:minmax(0,1fr); gap:26px; }
-    .direction-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .direction-grid, .direction-grid.has-library { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .hero-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .hero-metrics > span:nth-child(2) { border-right:0; }
     .hero-metrics > span:nth-child(-n+2) { border-bottom:1px solid rgba(237,228,212,.14); }
@@ -5157,16 +5035,8 @@
       display: none;
     }
   }
-  /* The pane loses ~390px to the context rail, so the viewport is comfortably
-     wider than the space the hero actually gets. Stack below 1340px rather than
-     squeezing a 250px thread column out of a 500px pane. */
-  @media (min-width: 800px) and (max-width: 1339px) {
-    .hero-body { grid-template-columns:minmax(0,1fr); }
-    .hero-side { max-width:520px; }
-  }
   @media (prefers-reduced-motion:reduce) {
     .hero, .msg-stack { animation:none; }
-    .recent-row { transition:none; }
     .direction-card, .direction-arrow { transition:none; }
   }
 
