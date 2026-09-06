@@ -52,6 +52,11 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     .where(eq(workflowFiles.id, params.id))
     .returning();
 
+  if (updates.name) {
+    const { syncSourcePolicy } = await import('$lib/jkai/intel/source-policy.server');
+    const { folderOf } = await import('$lib/jkai/intel/source-policy');
+    await syncSourcePolicy(folderOf(updated.name), [updated.id]);
+  }
   return json({ file: updated });
 };
 

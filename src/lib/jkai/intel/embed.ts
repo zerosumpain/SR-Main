@@ -123,7 +123,7 @@ export function entityEmbeddingText(entity: {
 
 export async function embedEntity(entityId: string): Promise<void> {
   const [entity] = await db
-    .select()
+    .select({ id: intelEntities.id, name: intelEntities.name, summary: intelEntities.summary, properties: intelEntities.properties, version: sql<string>`${intelEntities.updatedAt}::text` })
     .from(intelEntities)
     .where(eq(intelEntities.id, entityId))
     .limit(1);
@@ -138,7 +138,7 @@ export async function embedEntity(entityId: string): Promise<void> {
   await db
     .update(intelEntities)
     .set({ embedding })
-    .where(eq(intelEntities.id, entityId));
+    .where(and(eq(intelEntities.id, entityId), sql`${intelEntities.updatedAt}::text = ${entity.version}`));
 }
 
 /**
@@ -168,6 +168,7 @@ export async function backfillEntityEmbeddings(
       name: intelEntities.name,
       summary: intelEntities.summary,
       properties: intelEntities.properties,
+      version: sql<string>`${intelEntities.updatedAt}::text`,
     })
     .from(intelEntities)
     .where(and(isNull(intelEntities.embedding), isNull(intelEntities.mergedIntoId)))
@@ -187,7 +188,7 @@ export async function backfillEntityEmbeddings(
         await db
           .update(intelEntities)
           .set({ embedding: vec })
-          .where(eq(intelEntities.id, batch[j].id));
+          .where(and(eq(intelEntities.id, batch[j].id), sql`${intelEntities.updatedAt}::text = ${batch[j].version}`));
         embedded++;
       }
     } catch (err) {

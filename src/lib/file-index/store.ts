@@ -177,7 +177,7 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
   // RAG) is unaffected either way, but an excluded folder must not put entities
   // in the graph. Categories inherited from the folder tree ride along so the
   // Intel graph filter can select on them.
-  const policy = await policyForFileName(row.name).catch(() => null);
+  const policy = await policyForFileName(row.name);
   if (policy && !policy.included) {
     console.log(`[file-index] ${row.name} is in an ER-excluded folder — skipping intel extraction`);
   } else {

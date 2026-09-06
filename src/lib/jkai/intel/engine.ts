@@ -163,6 +163,11 @@ export async function runIntelSweep(
   const batch = beginBatch('intel:sweep', 'starting');
   try {
 
+  stages.push(await runStage('cleanup', async () => {
+    const { cleanupIntelligence } = await import('./cleanup.server');
+    return (await cleanupIntelligence({ apply: true })).counts;
+  }, batch));
+
   // Mail FIRST, so everything downstream scores the graph the mail just added:
   // confidence backfill, the watchlist diff and lens checks all read the graph,
   // and running them before ingestion would leave a night's correspondence

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GraphCleanup from '$lib/components/intel/GraphCleanup.svelte';
   import MentionReview from '$lib/components/intel/MentionReview.svelte';
   // Source-data quality — the page that fixes the graph rather than reading it.
   //
@@ -496,6 +497,8 @@
       </ul>
     {/if}
   </section>
+
+  <GraphCleanup />
 
   <MentionReview />
 

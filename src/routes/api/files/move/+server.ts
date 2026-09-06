@@ -123,6 +123,9 @@ export const POST: RequestHandler = async ({ request }) => {
     );
   }
 
+  const { syncSourcePolicy } = await import('$lib/jkai/intel/source-policy.server');
+  await syncSourcePolicy('', changed.map((move) => move.id));
+
   return json({
     moved: changed.map((m) => ({ id: m.id, from: before.get(m.id) ?? null, to: m.name })),
     skipped: moves.length - changed.length,
