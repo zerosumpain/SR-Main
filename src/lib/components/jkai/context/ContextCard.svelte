@@ -16,9 +16,33 @@
    */
   import { scaleLinear, scaleTime } from 'd3-scale';
   import { curveMonotoneX, line } from 'd3-shape';
-  import type { ContextCard as Card } from '$lib/jkai/context-panel/types';
+  import type { ContextCard as Card, ContextLens } from '$lib/jkai/context-panel/types';
 
-  let { card, onSelect }: { card: Card; onSelect?: (label: string, detail: string) => void } = $props();
+  let {
+    card,
+    lens = 'general',
+    onSelect,
+    onDrill,
+  }: {
+    card: Card;
+    /** The lens the card was composed under — part of the generic drill key. */
+    lens?: ContextLens | string;
+    onSelect?: (label: string, detail: string) => void;
+    /**
+     * Double-click, and the title button. The key is the card's own where
+     * the composer gave one, or the generic `card:<lens>:<id>` key, which the
+     * drill resolves back into this card's contents — so no card is a dead
+     * end, whichever lens composed it.
+     */
+    onDrill?: (target: string) => void;
+  } = $props();
+
+  const cardDrill = $derived(card.drill ?? `card:${lens}:${card.id}`);
+  function drillFor(own: string | undefined, metric?: string): string {
+    if (own) return own;
+    if (metric && !card.drill) return `card:${lens}:${card.id}:${encodeURIComponent(metric)}`;
+    return cardDrill;
+  }
 
   let width = $state(0);
   let selectedPoint = $state<{ label: string; detail: string } | null>(null);
@@ -67,7 +91,16 @@
 <section class="cd" use:measure>
   <header class="cd-hd">
     <div class="cd-hd-text">
-      <h3 class="cd-title">{card.title}</h3>
+      <!-- The title is the keyboard and touch route into the drill: a
+           double-click has neither, and a hidden gesture is a missing one. -->
+      {#if onDrill}
+        <button type="button" class="cd-title-btn" onclick={() => onDrill?.(cardDrill)} title="Open {card.title} in detail">
+          <h3 class="cd-title">{card.title}</h3>
+          <span class="cd-drill-glyph" aria-hidden="true">⤢</span>
+        </button>
+      {:else}
+        <h3 class="cd-title">{card.title}</h3>
+      {/if}
       {#if card.subtitle}<p class="cd-sub">{card.subtitle}</p>{/if}
     </div>
     {#if card.href}
@@ -85,6 +118,8 @@
           class="mt"
           data-tone={metric.tone ?? 'default'}
           onclick={() => choose(metric.label, `${metric.label}: ${metric.value}${metric.detail ? ` — ${metric.detail}` : ''}`)}
+          ondblclick={() => onDrill?.(drillFor(metric.drill, metric.label))}
+          title={onDrill ? 'Click to select · double-click to drill in' : undefined}
         >
           <span class="mt-label">{metric.label}</span>
           <strong class="mt-val">{metric.value}</strong>
@@ -104,6 +139,8 @@
           type="button"
           class="br"
           onclick={() => choose(row.label, `${row.label}: ${row.display ?? row.value}`)}
+          ondblclick={() => onDrill?.(drillFor(row.drill))}
+          title={onDrill ? 'Click to select · double-click to drill in' : undefined}
         >
           <span class="br-label">{row.label}</span>
           <strong class="br-val">{row.display ?? row.value}</strong>
@@ -122,6 +159,8 @@
             type="button"
             class="lk-main"
             onclick={() => choose(row.label, [row.label, row.meta, row.note].filter(Boolean).join(' — '))}
+            ondblclick={() => onDrill?.(drillFor(row.drill))}
+            title={onDrill ? 'Click to select · double-click to drill in' : undefined}
           >
             <span class="lk-label">{row.label}</span>
             {#if row.meta}<small class="lk-meta">{row.meta}</small>{/if}
@@ -135,7 +174,8 @@
 
   {:else if card.type === 'series'}
     {#if chart}
-      <svg class="cd-chart" viewBox="0 0 {Math.max(width, 240)} {height}" role="img" aria-label={card.title}>
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <svg class="cd-chart" viewBox="0 0 {Math.max(width, 240)} {height}" role="img" aria-label={card.title} ondblclick={() => onDrill?.(cardDrill)}>
         {#each chart.yTicks as tick (tick)}
           <line x1={pad.left} x2={Math.max(pad.left, width - pad.right)} y1={chart.y(tick)} y2={chart.y(tick)} class="grid" />
           <text x={pad.left - 5} y={chart.y(tick) + 3} text-anchor="end">{tick}</text>
@@ -207,6 +247,33 @@
   }
   .cd-hd-text {
     min-width: 0;
+  }
+  .cd-title-btn {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+  }
+  .cd-title-btn:hover .cd-title {
+    color: var(--accent);
+  }
+  /* The drill glyph appears on hover only; a permanent icon on every title
+     is a second row of chrome the column does not have room for. */
+  .cd-drill-glyph {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+  .cd-title-btn:hover .cd-drill-glyph,
+  .cd-title-btn:focus-visible .cd-drill-glyph {
+    opacity: 1;
   }
   .cd-title {
     margin: 0;

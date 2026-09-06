@@ -9,6 +9,8 @@
    *                                           and the thread's knowledge graph
    *   ACTIVITY  what it is DOING            — workers, tool calls, builds
    *   LEDGER    what it has COST            — spend, context window, model
+   *   MEMORY    what it CARRIES IN          — what jkai was given, what the
+   *                                           thread wrote, what went stale
    *
    * Only the first was ever drawn here. The other two existed as numbers the
    * chat pane already owned and had nowhere to put: the ledger went to the hub
@@ -40,7 +42,10 @@
   import { shortModelLabel } from '$lib/jkai/model-label';
   import type { TraceStep } from '$lib/jkai/tool-trace';
   import ContextCard from './context/ContextCard.svelte';
+  import ContextDrillModal from './context/ContextDrillModal.svelte';
+  import MemoryMode from './context/MemoryMode.svelte';
   import ThreadGraphCard from './ThreadGraphCard.svelte';
+  import { bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
 
   let { conversationId, sheetDetent = 'closed', onCloseSheet }: {
     conversationId: string | null;
@@ -52,18 +57,19 @@
 
   // ── Mode ──────────────────────────────────────────────────────────────────
 
-  type Mode = 'context' | 'activity' | 'ledger';
+  type Mode = 'context' | 'activity' | 'ledger' | 'memory';
   const MODE_STORAGE_KEY = 'jkai.inspectorMode';
   const MODES: { key: Mode; label: string }[] = [
     { key: 'context', label: 'Context' },
     { key: 'activity', label: 'Activity' },
     { key: 'ledger', label: 'Ledger' },
+    { key: 'memory', label: 'Memory' },
   ];
 
   function storedMode(): Mode {
     try {
       const v = localStorage.getItem(MODE_STORAGE_KEY);
-      if (v === 'context' || v === 'activity' || v === 'ledger') return v;
+      if (v === 'context' || v === 'activity' || v === 'ledger' || v === 'memory') return v;
     } catch {
       // Private mode / storage disabled — the default is a fine answer.
     }
@@ -209,6 +215,31 @@
     window.dispatchEvent(new CustomEvent('jkai:context-prompt', {
       detail: { conversationId, text: `Use the selected context from the side panel:\n${detail}\n\n${label}` },
     }));
+  }
+
+  // ── Drill ─────────────────────────────────────────────────────────────────
+  // A double-click on any tile or row, or the card's title, opens ONE modal
+  // with a server-composed manifest for that target. The rail only holds the
+  // key; what it means is the drill composer's business.
+
+  let drillTarget = $state<string | null>(null);
+  /** Bumped after a memory action in the drill so the MEMORY mode re-reads. */
+  let memoryRevision = $state(0);
+
+  function openDrill(target: string): void {
+    drillTarget = target;
+  }
+
+  function refreshAfterDrill(what: 'panel' | 'graph' | 'memory'): void {
+    if (what === 'graph') {
+      bumpGraphRevision();
+      return;
+    }
+    if (what === 'memory') {
+      memoryRevision += 1;
+      return;
+    }
+    if (conversationId) void load(conversationId, manualLens);
   }
 
   /** The graph is a reading of the thread's entities, so it belongs to the two
@@ -542,7 +573,7 @@
         </p>
       {:else}
         {#each panel.cards as card (card.id)}
-          <ContextCard {card} onSelect={askAbout} />
+          <ContextCard {card} lens={panel.selectedLens} onSelect={askAbout} onDrill={openDrill} />
         {/each}
         {#if showGraph}
           <ThreadGraphCard {conversationId} />
@@ -751,6 +782,12 @@
       {/if}
     </div>
 
+  <!-- ══ MEMORY ══════════════════════════════════════════════════════════ -->
+  {:else if mode === 'memory'}
+    <div class="ins-scroll" id="ins-panel" role="tabpanel" tabindex="0" aria-labelledby="ins-tab-{mode}">
+      <MemoryMode {conversationId} revision={memoryRevision} onDrill={openDrill} onAsk={askAbout} />
+    </div>
+
   <!-- ══ LEDGER ══════════════════════════════════════════════════════════ -->
   {:else}
     <div class="ins-scroll" id="ins-panel" role="tabpanel" tabindex="0" aria-labelledby="ins-tab-{mode}">
@@ -862,6 +899,16 @@
   </footer>
 </aside>
 
+{#if drillTarget && conversationId}
+  <ContextDrillModal
+    {conversationId}
+    target={drillTarget}
+    onClose={() => (drillTarget = null)}
+    onAsk={askAbout}
+    onRefresh={refreshAfterDrill}
+  />
+{/if}
+
 <style>
   /* ══ Shell ════════════════════════════════════════════════════════════════
      The column reads as CHROME, not as content: it drops to the deep rail paper
@@ -882,7 +929,9 @@
   }
 
   /* ── Shared cell grammar ─────────────────────────────────────────────── */
-  .ins-eyebrow {
+  /* Reaches the child modes (MemoryMode) through :global under the column's
+     own root, so the grammar is declared ONCE rather than copied per mode. */
+  .inspector :global(.ins-eyebrow) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -891,38 +940,38 @@
     color: var(--text-ghost);
     line-height: 1.2;
   }
-  .ins-meta {
+  .inspector :global(.ins-meta) {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
-  .ins-cell {
+  .inspector :global(.ins-cell) {
     flex: none;
     padding: 12px 15px 14px;
     border-bottom: 1px solid var(--line-hair);
   }
-  .ins-cell-hd {
+  .inspector :global(.ins-cell-hd) {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 10px;
   }
-  .ins-rows {
+  .inspector :global(.ins-rows) {
     display: flex;
     flex-direction: column;
     gap: 1px;
   }
-  .ins-note {
+  .inspector :global(.ins-note) {
     margin: 0;
     font-family: var(--font-body);
     font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
   }
-  .ins-empty {
+  .inspector :global(.ins-empty) {
     margin: 0;
     padding: 24px 18px;
     text-align: center;
@@ -931,11 +980,11 @@
     line-height: 1.55;
     color: var(--text-ghost);
   }
-  .ins-empty--left {
+  .inspector :global(.ins-empty--left) {
     text-align: left;
   }
   /* One "there is more of this elsewhere" affordance, shared by every list. */
-  .ins-more {
+  .inspector :global(.ins-more) {
     display: block;
     margin-top: 8px;
     padding: 0;
@@ -949,17 +998,21 @@
     text-transform: uppercase;
     color: var(--accent);
   }
-  .ins-more:hover {
+  .inspector :global(.ins-more:hover:not(:disabled)) {
     color: var(--accent-hover);
   }
-  .ins-alert {
+  .inspector :global(.ins-more:disabled) {
+    color: var(--text-ghost);
+    cursor: default;
+  }
+  .inspector :global(.ins-alert) {
     margin: 14px 15px;
     padding: 12px 13px;
     border: 1px solid var(--line-strong);
     border-left: 3px solid var(--error);
     background: var(--bg);
   }
-  .ins-alert .ins-note {
+  .inspector :global(.ins-alert .ins-note) {
     margin-top: 5px;
     color: var(--error);
   }
@@ -981,7 +1034,7 @@
     50% { opacity: 0.25; }
   }
 
-  .ins-act {
+  .inspector :global(.ins-act) {
     padding: 0;
     border: none;
     background: none;
@@ -994,10 +1047,10 @@
     text-decoration: none;
     transition: color 0.15s ease-out;
   }
-  .ins-act:hover:not(:disabled) {
+  .inspector :global(.ins-act:hover:not(:disabled)) {
     color: var(--accent-hover);
   }
-  .ins-act:disabled {
+  .inspector :global(.ins-act:disabled) {
     color: var(--text-ghost);
     cursor: default;
   }
@@ -1010,7 +1063,7 @@
   .ins-modes {
     flex: none;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     /* 42, not 40: `.strip-row` is 40px and `.tab-strip` puts the 2px rule
        OUTSIDE it, so the band is 42 in total. Under border-box this height
        includes the rule, which leaves the keys the same 40px as the tabs and

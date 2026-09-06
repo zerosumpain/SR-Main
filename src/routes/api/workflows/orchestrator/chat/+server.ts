@@ -395,7 +395,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         // creation so a spell queued behind another turn is not billed to this
         // one's latency.
         const turnStartedAt = Date.now();
-        const { response: responseText, usage: turnUsage } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
+        const { response: responseText, usage: turnUsage, memory: turnMemory } = await generalChat({ text: message, attachments: attachmentRows }, conversationHistory, {
           workflowId,
           conversationId,
           jobId,
@@ -537,6 +537,10 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
         if (traceId) assistantMetaParts.traceId = traceId;
         if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;
         if (turnStamp) assistantMetaParts.usage = turnStamp;
+        // Which memories the model was GIVEN this turn — the durable record the
+        // inspector's Memory mode reads. Stamped like `usage`: a reader that
+        // finds no stamp says "not recorded", never zero.
+        if (turnMemory) assistantMetaParts.memory = turnMemory;
         const assistantMetadata = Object.keys(assistantMetaParts).length > 0 ? assistantMetaParts : undefined;
         let assistantMsgId: string | null = null;
         if (conversationId) {

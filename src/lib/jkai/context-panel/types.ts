@@ -3,11 +3,20 @@ import { z } from 'zod';
 export const contextLensSchema = z.enum(['general', 'intel', 'research', 'health', 'daydream']);
 export type ContextLens = z.infer<typeof contextLensSchema>;
 
+/**
+ * A drill key names what a double-click on this element opens — an opaque
+ * target such as `entity:<uuid>` or `research-run:<id>` that
+ * `$lib/jkai/context-panel/drill` parses and `drill.server` resolves into a
+ * manifest. Optional: an element without one falls back to the card's key.
+ */
+const drill = z.string().min(1).optional();
+
 const baseCard = {
   id: z.string().min(1),
   title: z.string().min(1),
   subtitle: z.string().optional(),
   href: z.string().optional(),
+  drill,
 };
 
 export const metricCardSchema = z.object({
@@ -18,6 +27,7 @@ export const metricCardSchema = z.object({
     value: z.string(),
     detail: z.string().optional(),
     tone: z.enum(['default', 'good', 'warn', 'bad']).optional(),
+    drill,
   })).max(6),
 });
 
@@ -42,6 +52,7 @@ export const barsCardSchema = z.object({
     value: z.number().finite().nonnegative(),
     display: z.string().optional(),
     href: z.string().optional(),
+    drill,
   })).max(12),
 });
 
@@ -54,6 +65,7 @@ export const linksCardSchema = z.object({
     meta: z.string().optional(),
     note: z.string().optional(),
     href: z.string().optional(),
+    drill,
   })).max(12),
 });
 
@@ -87,3 +99,111 @@ export const contextPanelSchema = z.object({
 });
 
 export type ContextPanel = z.infer<typeof contextPanelSchema>;
+
+// ── Drill manifests ────────────────────────────────────────────────────────
+//
+// What a double-click opens. Composed on the server (`drill.server.ts`) and
+// rendered generically by `ContextDrillModal.svelte`, so a new drill is a new
+// resolver rather than a new modal. Actions are declared here and EXECUTED by
+// the modal; the endpoint is constrained to this site's own API.
+
+export const drillToneSchema = z.enum(['default', 'good', 'warn', 'bad', 'accent']);
+export type DrillTone = z.infer<typeof drillToneSchema>;
+
+export const drillFactSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  detail: z.string().optional(),
+  tone: drillToneSchema.optional(),
+});
+export type DrillFact = z.infer<typeof drillFactSchema>;
+
+export const drillRowSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  meta: z.string().optional(),
+  note: z.string().optional(),
+  href: z.string().optional(),
+  /** Another drill this row opens — the modal navigates in place. */
+  drill: z.string().optional(),
+  tone: drillToneSchema.optional(),
+  /** ISO time, when the row is an event. */
+  when: z.string().optional(),
+});
+export type DrillRow = z.infer<typeof drillRowSchema>;
+
+export const drillSectionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('rows'),
+    id: z.string(),
+    title: z.string(),
+    rows: z.array(drillRowSchema).max(60),
+    /** Shown instead of an empty list, so "nothing" is a statement. */
+    empty: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal('prose'),
+    id: z.string(),
+    title: z.string(),
+    body: z.string(),
+    tone: drillToneSchema.optional(),
+  }),
+  z.object({
+    kind: z.literal('list'),
+    id: z.string(),
+    title: z.string(),
+    items: z.array(z.string()).max(60),
+  }),
+]);
+export type DrillSection = z.infer<typeof drillSectionSchema>;
+
+export const drillActionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  /**
+   * link    — navigate to `href`
+   * ask     — hand `ask` to the composer (the context-prompt bridge)
+   * post    — fetch `endpoint` with `body`, then re-read the manifest
+   * prompt  — a post that first asks for one line of text (`promptLabel`),
+   *           sent as `body[promptField]`
+   * confirm — a post behind a two-click confirm; for anything destructive
+   */
+  kind: z.enum(['link', 'ask', 'post', 'prompt', 'confirm']),
+  href: z.string().optional(),
+  endpoint: z.string().startsWith('/api/').optional(),
+  method: z.enum(['POST', 'DELETE']).optional(),
+  body: z.record(z.string(), z.unknown()).optional(),
+  promptLabel: z.string().optional(),
+  promptDefault: z.string().optional(),
+  promptField: z.string().optional(),
+  ask: z.object({ label: z.string(), detail: z.string() }).optional(),
+  tone: z.enum(['default', 'danger']).optional(),
+  disabled: z.boolean().optional(),
+  /** Why it is disabled, or what it will do. */
+  note: z.string().optional(),
+  /** After a successful post: what else to refresh. */
+  refresh: z.enum(['panel', 'graph', 'memory']).optional(),
+});
+export type DrillAction = z.infer<typeof drillActionSchema>;
+
+export const drillManifestSchema = z.object({
+  target: z.string(),
+  kind: z.enum([
+    'entity', 'entities', 'relations',
+    'research-desk', 'research-run',
+    'thoughts', 'thought', 'places', 'place',
+    'memory', 'memories',
+    'card',
+  ]),
+  eyebrow: z.string(),
+  title: z.string(),
+  subtitle: z.string().optional(),
+  href: z.string().optional(),
+  /** Set for `entity` manifests: the modal mounts the intel EntityCard. */
+  entityId: z.string().optional(),
+  facts: z.array(drillFactSchema).max(8).default([]),
+  sections: z.array(drillSectionSchema).max(8).default([]),
+  actions: z.array(drillActionSchema).max(8).default([]),
+  ask: z.object({ label: z.string(), detail: z.string() }).optional(),
+});
+export type DrillManifest = z.infer<typeof drillManifestSchema>;

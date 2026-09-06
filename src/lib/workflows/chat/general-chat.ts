@@ -4,7 +4,7 @@ import { answerContract, renderAnswerContract, type AnswerAssessment } from '$li
 import { assessAnswer } from '$lib/jkai/grounding/answer.server';
 import { contextResult } from '$lib/jkai/grounding/evidence';
 import { retrieveMemories } from '$lib/jkai/memory/retrieve.server';
-import { renderMemories } from '$lib/jkai/memory/contracts';
+import { MEMORY_PROMPT_BUDGET, selectMemoryLines, type MemorySelection, type MemoryTurnStamp } from '$lib/jkai/memory/contracts';
 import { getActivePolicy, renderGlobalGuidance } from '$lib/toolpolicy/policy';
 import { applyCapabilityPolicy, resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 // src/lib/workflows/chat/general-chat.ts — full replacement
@@ -271,11 +271,22 @@ interface ChatOptions {
   maxRounds?: number;
 }
 
-const MEMORY_BUDGET = 4000; // max chars for memory section
+const MEMORY_BUDGET = MEMORY_PROMPT_BUDGET; // max chars for memory section — one constant, shared with the rail's gauge
 
-async function buildMemorySection(query = ''): Promise<string> {
-  try { return renderMemories(await retrieveMemories(query), query, MEMORY_BUDGET); }
-  catch (err) { console.warn('[memory] retrieval failed', err instanceof Error ? err.message : err); return '\nMemory retrieval unavailable; do not treat this as no saved facts.'; }
+/**
+ * The memory evidence for this turn, AND the record of what it contained.
+ *
+ * `served` is what the inspector's Memory mode reads back off the assistant
+ * row: the difference between "jkai has 40 memories" and "this reply was
+ * given these 23". Retrieval failing is reported as such — the model is told
+ * so in the text, and the stamp says `unavailable` rather than serving zero.
+ */
+async function buildMemorySection(query = ''): Promise<MemorySelection & { unavailable?: boolean }> {
+  try { return selectMemoryLines(await retrieveMemories(query), query, MEMORY_BUDGET); }
+  catch (err) {
+    console.warn('[memory] retrieval failed', err instanceof Error ? err.message : err);
+    return { text: '\nMemory retrieval unavailable; do not treat this as no saved facts.', served: [], omitted: [], retrieved: 0, chars: 0, unavailable: true };
+  }
 }
 
 function maybeIngestAsNote(userMessage: string): void {
@@ -718,7 +729,7 @@ export async function generalChat(
   input: { text: string; attachments?: JkaiAttachment[] },
   conversationHistory: HistoryMessage[],
   options: ChatOptions,
-): Promise<{ response: string; usage: ChatUsageTotals }> {
+): Promise<{ response: string; usage: ChatUsageTotals; memory: MemoryTurnStamp }> {
   // Skipped for sub-agents — their output isn't meant for the user chat.
   const ack =
     options.conversationId && (options.subagentDepth ?? 0) === 0
@@ -746,7 +757,7 @@ export async function generalChat(
     // the workload registry the model picker writes to. A workload id there
     // would imply a switch that does not exist.
     const usage = emptyChatUsage();
-    const { response } = await withChatContext(
+    const { response, memory } = await withChatContext(
       {
         jobId: options.jobId ?? undefined,
         conversationId: options.conversationId ?? undefined,
@@ -762,7 +773,7 @@ export async function generalChat(
     // Returned even when every field is zero. A caller that gets no usage
     // cannot tell "the turn was free" from "nobody measured it", and that
     // ambiguity is what left every reply without a ledger line.
-    return { response, usage };
+    return { response, usage, memory };
   } finally {
     ack?.cancel();
   }
@@ -774,7 +785,7 @@ async function runGeneralChat(
   options: ChatOptions,
   /** Disarms the opening ack. Called on the first visible sign of life. */
   cancelAck: () => void,
-): Promise<{ response: string }> {
+): Promise<{ response: string; memory: MemoryTurnStamp }> {
   const { onProgress, onToolProgress } = options;
   const userMessage = input.text;
 
@@ -846,7 +857,7 @@ async function runGeneralChat(
         ? Promise.resolve('')
         : buildKnowledgeContext(userMessage);
 
-  const [basePrompt, memorySection, graphSection, canvasSection, pastedUrlsSection, integrationContext] = await Promise.all([
+  const [basePrompt, memorySelection, graphSection, canvasSection, pastedUrlsSection, integrationContext] = await Promise.all([
     getCompiledPrompt(),
     buildMemorySection(userMessage),
     graphSectionPromise,
@@ -854,6 +865,9 @@ async function runGeneralChat(
     buildPastedUrlsSection(userMessage, onProgress, options.onStreamEvent),
     discoverIntegrations(userMessage, 3).then(integrations => ({ integrations, status: 'ok' })).catch(() => ({ integrations: [], status: 'unavailable' })),
   ]);
+  // The evidence text is what the model sees; the ids are what the turn
+  // records (see the stamp at the end of this function).
+  const memorySection = memorySelection.text;
 
   // Run the keyword classifier once, up front. Drives both the conditional
   // scraper playbook below and the toolset auto-activation further down.
@@ -1620,5 +1634,11 @@ async function runGeneralChat(
     evidenceCount: outcomes.filter(r => r.evidence?.resultHandle).length,
   });
   if (contract.needsReview) options.onStreamEvent?.({ type: 'token', delta: responseText });
-  return { response: responseText };
+  const memory: MemoryTurnStamp = {
+    served: memorySelection.served,
+    retrieved: memorySelection.retrieved,
+    chars: memorySelection.chars,
+    ...(memorySelection.unavailable ? { unavailable: true } : {}),
+  };
+  return { response: responseText, memory };
 }
