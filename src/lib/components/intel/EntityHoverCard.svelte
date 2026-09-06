@@ -140,7 +140,7 @@
   <div
     bind:this={host}
     use:portal
-    use:dragPanel={{ handle: '.drag-handle', move, reset: () => (moved = null) }}
+    use:dragPanel={{ handle: '.toolbar, .pinned .entity-card > header', move, reset: () => (moved = null) }}
     class="hover-card"
     class:pinned={anchor.pinned}
     style="{vStyle}; left: {layout.left}px; width: {width}px; max-height: {layout.maxHeight}px;"
@@ -151,7 +151,7 @@
   >
     {#if anchor.pinned}
       <div class="toolbar">
-        <button class="drag-handle" type="button" aria-label="Move entity details"
+        <button class="drag-handle" data-drag-handle type="button" aria-label="Move entity details"
           title="Drag to move · Arrow keys move · Shift moves faster · Home resets position">
           <span aria-hidden="true">⠿</span> Entity details <span class="drag-hint">Drag to move</span>
         </button>
@@ -181,6 +181,12 @@
 {/if}
 
 <style>
+  .hover-card.pinned :global(.entity-card > header), .toolbar {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
   .hover-card {
     position: fixed;
     z-index: 90;
@@ -222,7 +228,7 @@
     touch-action: none;
     user-select: none;
   }
-  .hover-card[data-dragging] .drag-handle { cursor: grabbing; }
+  .hover-card:global([data-dragging]) :global(.entity-card > header), .hover-card:global([data-dragging]) .toolbar, .hover-card:global([data-dragging]) .drag-handle { cursor: grabbing; }
   .drag-hint {
     margin-left: auto;
     text-transform: none;
