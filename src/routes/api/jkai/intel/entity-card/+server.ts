@@ -57,6 +57,7 @@ export const GET: RequestHandler = async ({ url }) => {
       properties: intelEntities.properties,
       confidence: intelEntities.confidence,
       confirmed: intelEntities.confirmed,
+      watched: intelEntities.watched,
       confidenceScore: intelEntities.confidenceScore,
       createdAt: intelEntities.createdAt,
       updatedAt: intelEntities.updatedAt,
@@ -204,6 +205,7 @@ export const GET: RequestHandler = async ({ url }) => {
       properties: row.properties ?? {},
       confidence: row.confidence,
       confirmed: row.confirmed,
+      watched: row.watched,
       type: {
         id: row.typeId,
         name: row.typeName,
