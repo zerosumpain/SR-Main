@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HEALTH_TIMEZONE, localToday } from '$lib/health/day';
+import { HEALTH_TIMEZONE, localToday } from '$lib/constants/health-day';
 import { HERO_ACTIVITY_DEFAULTS, type HeroActivityRules, type HeroSlot } from '$lib/constants/hero-slots';
 
 export const heroActivitySchema = z.object({
