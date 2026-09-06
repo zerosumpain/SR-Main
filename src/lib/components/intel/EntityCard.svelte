@@ -5,7 +5,11 @@
   // reply, and clicking a node on the Intel network graph. Fetches lazily and
   // caches per entity id, so hovering the same name repeatedly is free.
 
-  import { fetchEntityCard, type EntityCardData } from '$lib/jkai/intel/entity-card-store';
+  import {
+    fetchEntityCard,
+    invalidateEntityCard,
+    type EntityCardData,
+  } from '$lib/jkai/intel/entity-card-store';
   import EvidenceList from './EvidenceList.svelte';
   import EvidenceTimeline from './EvidenceTimeline.svelte';
   import {
@@ -40,6 +44,42 @@
   let data = $state<EntityCardData | null>(null);
   let loading = $state(true);
   let failed = $state(false);
+  let watchBusy = $state(false);
+
+  /**
+   * Put this entity on the watchlist, or take it off.
+   *
+   * The same call the entities index makes, so there is one write path and one
+   * meaning. It earns its place here rather than being a convenience: `watched`
+   * is what gives an entity FOREGROUND weight, and the mail gate's topical
+   * admit rule keys on exactly that — so this is how the rule gets armed while
+   * looking at the graph, instead of a detour to /jkai/intel/entities.
+   *
+   * Optimistic, then reconciled. The star is the whole feedback, and waiting a
+   * round trip before redrawing it reads as a dead button; on failure it goes
+   * back to where it was.
+   */
+  async function toggleWatch() {
+    if (!data || watchBusy) return;
+    const next = !data.entity.watched;
+    watchBusy = true;
+    data.entity.watched = next;
+    try {
+      const res = await fetch('/api/jkai/intel/entities', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: next ? 'watch' : 'unwatch', entityIds: [data.entity.id] }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // The card cache holds a promise per id and never expires, so without this
+      // the next open of the same entity redraws the old star.
+      invalidateEntityCard(data.entity.id);
+    } catch {
+      if (data) data.entity.watched = !next;
+    } finally {
+      watchBusy = false;
+    }
+  }
 
   // Keyed on entityId so the card reloads when the hovered mention changes.
   $effect(() => {
@@ -242,6 +282,16 @@
           {/if}
         </div>
       </div>
+      <button
+        type="button"
+        class="star"
+        class:on={data.entity.watched}
+        disabled={watchBusy}
+        title={data.entity.watched ? 'Watched — click to stop' : 'Not watched — click to watch'}
+        aria-label={data.entity.watched ? `Stop watching ${data.entity.name}` : `Watch ${data.entity.name}`}
+        aria-pressed={data.entity.watched}
+        onclick={toggleWatch}
+      >{data.entity.watched ? '★' : '☆'}</button>
     </header>
 
     {#if data.entity.summary}
@@ -545,6 +595,27 @@
   .head-text {
     min-width: 0;
     flex: 1;
+  }
+  /* Same glyphs and the same two states as the entities index, so the control
+     means one thing wherever it is met. */
+  .star {
+    flex: none;
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 0 2px;
+    cursor: pointer;
+    font-size: var(--fs-body);
+    line-height: 1;
+    color: var(--text-ghost);
+  }
+  .star.on,
+  .star:hover:not(:disabled) {
+    color: var(--accent);
+  }
+  .star:disabled {
+    cursor: default;
+    opacity: 0.5;
   }
   h3 {
     margin: 0;

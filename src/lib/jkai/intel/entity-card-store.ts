@@ -13,6 +13,11 @@ export interface EntityCardData {
     properties: Record<string, unknown>;
     confidence: string;
     confirmed: boolean;
+    /** On the watchlist. Carried on the card so the star draws without a second
+     *  request, and so the mail gate's foreground — the thing its topical admit
+     *  rule keys on — is reachable from the graph, not only from
+     *  /jkai/intel/entities. */
+    watched: boolean;
     type: { id: string; name: string; icon: string; color: string };
     createdAt: string;
     updatedAt: string;
@@ -91,6 +96,17 @@ export function fetchEntityCard(id: string): Promise<EntityCardData> {
 
   cards.set(id, req);
   return req;
+}
+
+/**
+ * Forget one entity's cached card.
+ *
+ * The cache holds a PROMISE per id and never expires, so a card whose data
+ * changed under it — starring it, say — would keep rendering the old answer
+ * until a full reload. Dropping the one entry is enough; the next open refetches.
+ */
+export function invalidateEntityCard(id: string): void {
+  cards.delete(id);
 }
 
 let mentionsPromise: Promise<MentionTarget[]> | null = null;
