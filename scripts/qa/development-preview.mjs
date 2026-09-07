@@ -9,11 +9,12 @@ let id;
 await client.connect();
 try {
   await page.goto(`${base}/jkai/develop`, { waitUntil: 'networkidle' });
-  await page.getByLabel('Product area', { exact: true }).selectOption('Health');
-  await page.getByLabel('Intended outcome', { exact: true }).fill('Synthetic preview: save a weekly comparison');
-  await page.getByRole('button', { name: 'Refine this brief' }).click();
-  await page.waitForURL('**/jkai/develop/*');
-  id = new URL(page.url()).pathname.split('/').pop();
+  // This suite covers manual acceptance and build controls. Model grooming is
+  // exercised separately by development-grooming-preview.mjs.
+  const created = await page.request.post(`${base}/api/jkai/development`, { data: { area: 'Health', outcome: 'Synthetic preview: save a weekly comparison' } });
+  assert.equal(created.status(), 201);
+  id = (await created.json()).buildId;
+  await page.goto(`${base}/jkai/develop/${id}`, { waitUntil: 'networkidle' });
   await page.getByLabel('Acceptance criteria', { exact: true }).fill('The saved comparison survives reload\nThe controls remain usable on a phone');
   await page.getByLabel('Target routes', { exact: true }).fill('/health');
   await page.getByLabel('Constraints', { exact: true }).fill('Preserve the public/owner split');

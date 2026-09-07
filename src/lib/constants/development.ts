@@ -11,7 +11,9 @@ export interface DeliveryState {
   version: 1;
   area: string;
   stage: DeliveryStage;
-  brief: { revision: number; outcome: string; constraints: string; routes: string[]; acceptedAt: string | null };
+  originalAsk?: string;
+  grooming?: { model: string; at: string; summary: string };
+  brief: { scope?: string; dependencies?: string; assumptions?: string; questions?: string; validation?: string; revision: number; outcome: string; constraints: string; routes: string[]; acceptedAt: string | null };
   criteria: Criterion[];
   decisions: Array<{ id: string; question: string; answer: string | null; requestId?: string }>;
   session: { engine: 'pi'; id: string | null; file: string | null; recovery: string | null };
