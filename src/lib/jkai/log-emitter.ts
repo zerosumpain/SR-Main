@@ -9,7 +9,7 @@ emitter.setMaxListeners(50);
 
 export function onBuildLog(
   buildId: string,
-  handler: (log: { id: number; type: string; content: string; iterationId: string | null }) => void,
+  handler: (log: { id: number; type: string; content: string; iterationId: string | null; createdAt?: string }) => void,
 ): () => void {
   const key = `log:${buildId}`;
   emitter.on(key, handler);
@@ -38,6 +38,7 @@ export async function emitLog(
     type: log.type,
     content: log.content,
     iterationId: log.iterationId,
+    createdAt: log.createdAt.toISOString(),
   });
 }
 
@@ -54,6 +55,7 @@ export interface LiveEvent {
     | 'stream_thinking'
     | 'stream_tool_start'
     | 'stream_tool_delta'
+    | 'stream_tool_output'
     | 'stream_tool_end'
     | 'stream_turn_end'
     | 'plan_proposed'

@@ -31,7 +31,7 @@ export function handleEvents(buildId: string, req: IncomingMessage, res: ServerR
   }
 
   const unsubLog = onBuildLog(buildId, (log) => {
-    send(log.id, { type: log.type, content: log.content, iterationId: log.iterationId });
+    send(log.id, { type: log.type, content: log.content, iterationId: log.iterationId, createdAt: log.createdAt });
   });
   const unsubLive = onBuildLive(buildId, (ev) => {
     liveSeq += 1;
