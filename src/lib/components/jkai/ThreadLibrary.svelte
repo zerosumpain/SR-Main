@@ -171,13 +171,15 @@
     return text.length > 110 ? `${text.slice(0, 109)}…` : text;
   }
 
-  /** Why this thread is in a result set, when the title does not already say so. */
-  function matchBadges(c: ConversationItem): string[] {
+  /** Why this thread is in a result set, when the title does not already say so.
+   *  A tool name is a literal identifier (`web_search`), so it is marked to opt
+   *  out of the foot's uppercasing — `WEB_SEARCH` is not a thing you can call. */
+  function matchBadges(c: ConversationItem): Array<{ label: string; literal: boolean }> {
     if (!searchActive) return [];
-    const badges = (c.matchedTools ?? []).slice(0, 2);
+    const badges = (c.matchedTools ?? []).slice(0, 2).map((label) => ({ label, literal: true }));
     const where = c.matchedIn ?? [];
-    if (where.includes('message') && !where.includes('title')) badges.push('in messages');
-    if (where.includes('model')) badges.push(shortModelLabel(c.modelId) || 'model');
+    if (where.includes('message') && !where.includes('title')) badges.push({ label: 'in messages', literal: false });
+    if (where.includes('model')) badges.push({ label: shortModelLabel(c.modelId) || 'model', literal: false });
     return badges.slice(0, 3);
   }
 
@@ -279,7 +281,7 @@
         </div>
       {:else}
         <div class="thread-grid">
-          {#each threads as c, index (c.id)}
+          {#each threads as c (c.id)}
             <article class="thread-card" class:current={activeConversationId === c.id} class:running={liveSet.has(c.id)}>
               {#if renamingId === c.id}
                 <form class="rename" onsubmit={(event) => { event.preventDefault(); commitRename(); }}>
@@ -289,23 +291,23 @@
                 </form>
               {:else}
                 <button type="button" class="thread-open" onclick={() => onSelect(c.id)}>
-                  <span class="card-index">
-                    <span class="thread-state">
-                      {#if liveSet.has(c.id)}<span class="pulse"></span>working{:else if openSet.has(c.id)}open{:else if c.pinned}pinned{:else}{String(index + 1).padStart(2, '0')}{/if}
-                    </span>
-                    <span>{age(c.updatedAt)}</span>
+                  <span class="card-head">
+                    {#if liveSet.has(c.id)}
+                      <span class="state"><span class="pulse"></span><span class="vh">working</span></span>
+                    {:else if openSet.has(c.id)}<span class="state">open</span>
+                    {:else if c.pinned}<span class="state">pin</span>{/if}
+                    <strong>{title(c)}</strong>
+                    <span class="age">{age(c.updatedAt)}</span>
                   </span>
-                  <strong>{title(c)}</strong>
                   <span class="excerpt">{excerpt(c)}</span>
-                  {#if matchBadges(c).length > 0}
-                    <span class="matches">
-                      {#each matchBadges(c) as badge}<span class="match">{badge}</span>{/each}
-                    </span>
-                  {/if}
                 </button>
 
                 <div class="card-foot">
-                  <span class="foot-meta">{meta(c).join(' / ')}</span>
+                  <span class="foot-meta">
+                    {#if matchBadges(c).length > 0}
+                      {#each matchBadges(c) as badge}<span class="match" class:literal={badge.literal}>{badge.label}</span>{/each}
+                    {:else}{meta(c).join(' / ')}{/if}
+                  </span>
                   <div class="card-actions">
                     <button type="button" class:active={c.pinned} onclick={() => onTogglePin(c.id, !c.pinned)}>{c.pinned ? 'Unpin' : 'Pin'}</button>
                     <button type="button" onclick={() => beginRename(c)}>Rename</button>
@@ -365,37 +367,44 @@
   .channel-open { margin-left:auto; color:var(--accent); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; }
   .live-dot, .pulse { width:7px; height:7px; border-radius:50%; background:var(--wa-green); }
 
-  /* Three columns of short cards: the old two-column 225px card showed six
-     threads on an 780px window, which is not a library. */
-  .thread-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); border-top:1px solid var(--line-strong); border-left:1px solid var(--line-strong); }
-  .thread-card { min-width:0; display:flex; flex-direction:column; min-height:124px; border-right:1px solid var(--line-strong); border-bottom:1px solid var(--line-strong); background:var(--bg); }
-  .thread-card.current { box-shadow:inset 4px 0 var(--accent); background:var(--accent-tint-04); }
-  .thread-card.running { box-shadow:inset 0 3px var(--accent); }
-  .thread-open { flex:1; display:flex; flex-direction:column; align-items:stretch; gap:5px; min-width:0; padding:8px 11px 9px; border:0; background:transparent; color:var(--text-primary); text-align:left; cursor:pointer; }
+  /* Four columns of three-row cards. The row this lost was the index strip: a
+     decorative 01..81 counter and a state word on a line of their own, both of
+     which fit beside the title. 12px is the sitewide floor, so the density has
+     to come out of rows and padding — never out of type size. */
+  .thread-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); border-top:1px solid var(--line-strong); border-left:1px solid var(--line-strong); }
+  .thread-card { min-width:0; display:flex; flex-direction:column; min-height:76px; border-right:1px solid var(--line-strong); border-bottom:1px solid var(--line-strong); background:var(--bg); }
+  .thread-card.current { box-shadow:inset 3px 0 var(--accent); background:var(--accent-tint-04); }
+  .thread-card.running { box-shadow:inset 0 2px var(--accent); }
+  .thread-open { flex:1; display:flex; flex-direction:column; align-items:stretch; gap:3px; min-width:0; padding:7px 10px 7px; border:0; background:transparent; color:var(--text-primary); text-align:left; cursor:pointer; }
   .thread-open:hover strong { color:var(--accent); }
-  .card-index { display:flex; justify-content:space-between; gap:8px; color:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.08em; }
-  .thread-state { display:flex; align-items:center; gap:5px; min-width:0; overflow:hidden; color:var(--accent); text-overflow:ellipsis; white-space:nowrap; }
-  .pulse { flex:none; background:var(--accent); animation:pulse 1.5s ease-in-out infinite; }
-  .thread-open strong { max-width:100%; overflow:hidden; color:var(--text-primary); font-size:var(--fs-body-sm); line-height:1.25; text-overflow:ellipsis; white-space:nowrap; }
-  .excerpt { display:-webkit-box; overflow:hidden; color:var(--text-muted); font-size:var(--fs-label); line-height:1.4; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-  .matches { display:flex; flex-wrap:wrap; gap:4px; margin-top:auto; }
+  .card-head { display:flex; align-items:baseline; gap:6px; min-width:0; }
+  .state { flex:none; display:flex; align-items:center; gap:4px; color:var(--accent); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.06em; }
+  .pulse { flex:none; align-self:center; background:var(--accent); animation:pulse 1.5s ease-in-out infinite; }
+  .age { flex:none; margin-left:auto; color:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.06em; }
+  .thread-open strong { flex:0 1 auto; min-width:0; overflow:hidden; color:var(--text-primary); font-size:var(--fs-label); line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
+  .excerpt { overflow:hidden; color:var(--text-muted); font-size:var(--fs-label-xs); line-height:1.35; text-overflow:ellipsis; white-space:nowrap; }
+  /* Screen-reader text for the working state, which is a dot on screen. */
+  .vh { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
   /* Petrol, not the burnt orange: a match badge is ordinary data about the row,
      and the accent is reserved for state (working / pinned / current). */
-  .match { padding:1px 5px; border:1px solid color-mix(in srgb, var(--accent-ink) 34%, transparent); color:var(--accent-ink); font-family:var(--font-mono); font-size:var(--fs-label-xs); letter-spacing:.04em; }
+  .match { flex:none; max-width:100%; overflow:hidden; text-overflow:ellipsis; padding:0 4px; border:1px solid color-mix(in srgb, var(--accent-ink) 34%, transparent); color:var(--accent-ink); font-family:var(--font-mono); font-size:var(--fs-label-xs); letter-spacing:.04em; }
+  .match.literal { text-transform:none; letter-spacing:0; }
 
   /* Meta and actions share one grid cell and cross-fade: at 3 columns there is
      no room for both, and a permanently visible action row is what made the old
      card tall. Opacity keeps the buttons focusable for the keyboard. */
-  .card-foot { display:grid; align-items:center; padding:7px 11px; border-top:1px solid var(--line-hair); color:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; }
+  .card-foot { display:grid; align-items:center; padding:5px 10px; border-top:1px solid var(--line-hair); color:var(--text-ghost); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; }
   .card-foot > * { grid-area:1 / 1; min-width:0; }
-  .foot-meta { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Under search the badges take this line rather than adding a fourth row —
+     why a thread matched is worth more here than its model and cost. */
+  .foot-meta { display:flex; align-items:center; gap:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .card-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; opacity:0; transition:opacity .12s ease; }
   .thread-card:hover .card-actions, .thread-card:focus-within .card-actions { opacity:1; }
   .thread-card:hover .foot-meta, .thread-card:focus-within .foot-meta { opacity:0; }
   .card-actions button { padding:0; border:0; background:transparent; color:var(--text-muted); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; cursor:pointer; }
   .card-actions button:hover, .card-actions button.active { color:var(--accent); }
   .card-actions button.danger { color:var(--error); }
-  .rename { flex:1; display:flex; align-content:flex-start; flex-wrap:wrap; gap:7px; padding:11px; }
+  .rename { flex:1; display:flex; align-content:flex-start; flex-wrap:wrap; gap:6px; padding:8px 10px; }
   .rename input { width:100%; padding:7px 9px; border:1px solid var(--accent); background:var(--surface-card); color:var(--text-primary); font-size:var(--fs-body-sm); }
   .rename button { padding:4px 8px; border:1px solid var(--line-strong); background:transparent; color:var(--text-muted); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; cursor:pointer; }
   .load-more { display:block; margin:16px auto 0; padding:8px 13px; border:1px solid var(--line-strong); background:var(--surface-sunken); color:var(--text-primary); font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:.08em; cursor:pointer; }
@@ -415,7 +424,8 @@
     .card-actions { opacity:1; justify-content:flex-start; }
     .thread-card:hover .foot-meta { opacity:1; }
   }
-  @media (max-width:980px) { .thread-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  @media (max-width:1100px) { .thread-grid { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+  @media (max-width:860px) { .thread-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
   @media (max-width:720px) {
     .library-layer { padding:0; place-items:stretch; }
     .library { width:100%; height:100dvh; border:0; }
