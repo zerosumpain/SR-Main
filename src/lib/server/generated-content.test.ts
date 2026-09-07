@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FIRST_PARTY_BUNDLE_CSP,
   GENERATED_CONTENT_CSP,
   safeGeneratedRequestHeaders,
   safeGeneratedResponseHeaders,
@@ -10,6 +11,40 @@ describe('generated-content browser boundary', () => {
     expect(GENERATED_CONTENT_CSP).toContain('sandbox allow-scripts');
     expect(GENERATED_CONTENT_CSP).not.toContain('allow-same-origin');
     expect(GENERATED_CONTENT_CSP).toContain("form-action 'none'");
+  });
+
+  it('keeps a hand-built bundle first-party, with the rest of the hardening', () => {
+    // No sandbox: an opaque origin costs a Vite bundle its own crossorigin
+    // <script>/<link> (fetched without cookies -> 404 on a private project) and
+    // turns every same-origin fetch('/api/...') into a cross-origin one.
+    expect(FIRST_PARTY_BUNDLE_CSP).not.toContain('sandbox');
+    expect(FIRST_PARTY_BUNDLE_CSP).toContain("object-src 'none'");
+    expect(FIRST_PARTY_BUNDLE_CSP).toContain("base-uri 'self'");
+    expect(FIRST_PARTY_BUNDLE_CSP).toContain("frame-ancestors 'self'");
+    // The two policies differ by the sandbox directive and nothing else.
+    expect(GENERATED_CONTENT_CSP).toBe(
+      `sandbox allow-scripts allow-modals allow-downloads; ${FIRST_PARTY_BUNDLE_CSP}`,
+    );
+  });
+
+  it('serves first-party HTML without the sandbox only when asked', () => {
+    const html = () => new Headers({ 'content-type': 'text/html' });
+    expect(safeGeneratedResponseHeaders(html()).get('content-security-policy')).toBe(
+      GENERATED_CONTENT_CSP,
+    );
+    expect(
+      safeGeneratedResponseHeaders(html(), { firstParty: false }).get('content-security-policy'),
+    ).toBe(GENERATED_CONTENT_CSP);
+    expect(
+      safeGeneratedResponseHeaders(html(), { firstParty: true }).get('content-security-policy'),
+    ).toBe(FIRST_PARTY_BUNDLE_CSP);
+  });
+
+  it('never puts a policy on a non-HTML response, first-party or not', () => {
+    const js = new Headers({ 'content-type': 'application/javascript' });
+    expect(
+      safeGeneratedResponseHeaders(js, { firstParty: true }).get('content-security-policy'),
+    ).toBeNull();
   });
 
   it('drops upstream credential and policy headers', () => {
