@@ -67,6 +67,13 @@
    * rather than leaving a hole where the routes section was.
    */
   const experimentsLetter = $derived(owner ? 'H' : 'G');
+
+  // The kicker below carries "· hover any figure". It is the ONE place the page
+  // says it is interactive: discovery is otherwise hover-only, and a reader who
+  // never rests the pointer on a tile would not know the band ladders, the
+  // formulas and the what-ifs are there at all. It goes in the kicker the shell
+  // already prints rather than in a banner — a strip telling you how to use a
+  // page is a strip you stop reading.
   const verdictLetter = $derived(owner ? 'I' : 'H');
 
   /** The public page's only interactive thing below the fold. */
@@ -181,8 +188,8 @@
   path="/health"
   footerAction={owner ? undefined : methodButton}
   kicker={owner
-    ? 'Full read · 8 signal families · sections A–I'
-    : 'Public read · 8 signal families · sections A–H'}
+    ? 'Full read · 8 signal families · sections A–I · hover any figure'
+    : 'Public read · 8 signal families · sections A–H · hover any figure'}
   nav={owner
     ? [
         { href: '/health/activities', label: 'Activities' },
