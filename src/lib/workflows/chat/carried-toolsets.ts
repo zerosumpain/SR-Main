@@ -34,7 +34,13 @@ export function carriedToolsets(
 
   const carried: string[] = [];
   for (const turn of recentUserTurns) {
-    for (const ts of inferToolsets(turn.content)) {
+    // Keep the builder and its vocabulary together before incidental topics
+    // consume the carry budget (e.g. "build a deck from research and files").
+    const inferred = inferToolsets(turn.content);
+    const ordered = inferred.includes('decks')
+      ? ['decks', 'presentations', ...inferred]
+      : inferred;
+    for (const ts of ordered) {
       if (already.has(ts)) continue;
       already.add(ts);
       carried.push(ts);
