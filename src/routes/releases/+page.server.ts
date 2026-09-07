@@ -1,3 +1,4 @@
+import { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
 import { getReleaseShowcase } from '$lib/releases/public';
 import { getReleaseConsole, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { isOwnerRequest } from '$lib/server/owner';
@@ -26,7 +27,7 @@ export const load: PageServerLoad = async (event) => {
   const filters = parseConsoleFilters(event.url);
 
   if (await isOwnerRequest(event)) {
-    return { mode: 'owner' as const, ...(await getReleaseConsole(filters)) };
+    return { sourceFootprint: SOURCE_FOOTPRINT, mode: 'owner' as const, ...(await getReleaseConsole(filters)) };
   }
 
   const data = await getReleaseShowcase();
@@ -58,6 +59,7 @@ export const load: PageServerLoad = async (event) => {
 
   return {
     mode: 'public' as const,
+    sourceFootprint: SOURCE_FOOTPRINT,
     totals: data.totals,
     cadence: weeklyCadence(data.cadence),
     kindMix: [...mix.entries()]

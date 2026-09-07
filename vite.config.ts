@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'url';
 import { routeManifest } from './vite-plugins/route-manifest.mjs';
+import { sourceFootprint } from './vite-plugins/source-footprint.mjs';
 
 function readBuildId(): string {
 	const supplied = process.env.JKAI_BUILD_ID?.trim();
@@ -31,6 +32,7 @@ export default defineConfig({
 		// at build time: `src/` is not deployed, so a runtime scan reads a stale
 		// leftover tree on the VPS. See vite-plugins/route-manifest.mjs.
 		routeManifest(),
+		sourceFootprint(),
 		sveltekit(),
 		SvelteKitPWA({
 			// Long-lived chat sessions may contain unsent text. Download updates in
