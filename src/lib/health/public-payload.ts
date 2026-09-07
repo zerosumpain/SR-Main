@@ -143,6 +143,26 @@ const SEGMENT_NAME = /^[a-z]+\.[a-z]+\.[a-z]+$/;
 const ENCODED_POLYLINE = /^[\x3F-\x7E]{30,}$/;
 
 /**
+ * A link into a page the anonymous reader cannot open.
+ *
+ * The walker was written to catch a PLACE — a coordinate, a segment name, an
+ * outing's clock. It had no idea what a URL was, so when `moves` and
+ * `experiments` grew a call to action in 2026-09-07, an href like
+ * `/health/segments?form=improving&gap=..3` went straight through it: not a
+ * timestamp, not a segment name, not a polyline, and its key is `href`, which
+ * no geometry or identity pattern matches.
+ *
+ * Two things are wrong with such a link reaching an anonymous browser. It is a
+ * dead end — every destination under /health but the hub itself is owner-gated
+ * — and the query string is a DESCRIPTION of ground the same reader is
+ * deliberately not shown three sections lower.
+ *
+ * `/health` itself is excluded: the hub is the page they are already on, and
+ * `?metric=` names a metric rather than anything on the ground.
+ */
+const OWNER_GATED_LINK = /^\/health\/(activities|segments|plan|routes|record)\b/;
+
+/**
  * Walk a payload and name everything in it that could disclose a place, a
  * route, or the clock of a specific outing. An empty array means the payload is
  * safe to hand an anonymous browser.
@@ -167,6 +187,7 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
       // algorithm emits printable ASCII 63–126 in dense runs; ordinary prose
       // does not go 30 characters without a space or a vowel.
       else if (ENCODED_POLYLINE.test(node)) found.push(`${at}: encoded polyline`);
+      else if (OWNER_GATED_LINK.test(node)) found.push(`${at}: owner-gated link`);
       return;
     }
     if (typeof node !== 'object') return;
@@ -267,4 +288,49 @@ export function publicSegmentForms<T extends { nearest: unknown; board: unknown[
   if (!forms) return null;
   const { nearest: _nearest, board: _board, ...rest } = forms;
   return { ...rest, nearest: null, board: [] };
+}
+
+/**
+ * The ranked moves, with their calls to action removed.
+ *
+ * `moves` is on PUBLIC_FIELDS and should stay there — the argument each row
+ * makes is derived from thresholds, names no ground and is the most readable
+ * thing on the anonymous page. What cannot cross is the BUTTON: every
+ * destination a move offers (`/health/plan`, `/health/segments`) is owner-gated,
+ * so an anonymous reader would be shown an action that bounces off the front
+ * door. Worse, the gettable link carries the board's own gates in its query
+ * string, which is a description of ground the same reader is deliberately not
+ * shown three sections further down.
+ *
+ * Dropped here rather than hidden in the template, for the reason the whole
+ * loader is built this way: `{#if owner}` still ships the bytes.
+ */
+/**
+ * The experiments, with their calls to action removed.
+ *
+ * Same argument as `publicMoves`, and a sharper one: `disclosureLeaks` walks
+ * the anonymous payload for coordinates, place names and local timestamps, and
+ * a URL is none of those. `/health/segments?form=improving&gap=..3` would pass
+ * that guard untouched — so the href never goes into the payload in the first
+ * place. The METRICS stay: they are registry ids, they name no ground, and the
+ * anonymous reader can hover a chip for the same definition the owner gets.
+ */
+export function publicExperiments<T extends { action: unknown }>(
+  experiments: readonly T[] | null | undefined,
+): Array<Omit<T, 'action'> & { action: null }> {
+  if (!experiments?.length) return [];
+  return experiments.map((e) => {
+    const { action: _action, ...rest } = e;
+    return { ...rest, action: null };
+  });
+}
+
+export function publicMoves<T extends { action: unknown }>(
+  moves: readonly T[] | null | undefined,
+): Array<Omit<T, 'action'> & { action: null }> {
+  if (!moves?.length) return [];
+  return moves.map((move) => {
+    const { action: _action, ...rest } = move;
+    return { ...rest, action: null };
+  });
 }

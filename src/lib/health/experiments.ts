@@ -17,6 +17,7 @@
 // series backs the trigger, the counter honestly reads day one.
 
 import type { MetricResult } from './analytics/types';
+import { gettableHref, plannerHref } from './deep-links';
 import { ACWR_BANDS, type ACWRResult } from './analytics/acwr';
 import { POLARISED_HARD_PCT, type PolarisedResult } from './analytics/polarised';
 import { SRI_TARGET } from './analytics/sri';
@@ -28,7 +29,26 @@ import {
 } from './analytics/recovery-debt';
 
 export type ExperimentId = 'fixed-window' | 'dull-long-day' | 'one-hard-effort';
+
+/**
+ * The distance E2's own change text names — "one 12–15 km outing a week". The
+ * midpoint, so the button and the sentence above it agree.
+ */
+const LONG_DAY_KM = 13.5;
 export type ExperimentState = 'LIVE' | 'QUEUED';
+
+/**
+ * What an experiment sends you off to do, when it is an outing rather than a
+ * habit. Same shape and same rules as `MoveAction` — see the note there: a
+ * button under a row that does not do what the row argues for teaches the
+ * reader that the buttons are decoration.
+ */
+export interface ExperimentAction {
+  kind: 'planner' | 'segments';
+  label: string;
+  href: string;
+  note: string;
+}
 
 export interface Experiment {
   id: ExperimentId;
@@ -51,6 +71,17 @@ export interface Experiment {
   stopRuleLabel: 'STOP RULE' | 'ENTRY CONDITION';
   /** Codes of the experiments that must run first. Empty when nothing gates it. */
   gatedBy: string[];
+  /**
+   * The instruments this experiment is JUDGED on — registry ids, so the card's
+   * chips open the same drill every other figure on the page opens.
+   *
+   * `measure` already names them in prose. This is the same list as ids, so a
+   * reader can go and look at the line the experiment claims it will move
+   * instead of taking the sentence on trust.
+   */
+  metrics: string[];
+  /** Where the card sends you, when it sends you anywhere. Owner-only. */
+  action: ExperimentAction | null;
 }
 
 export interface ExperimentsInput {
@@ -121,6 +152,12 @@ export function computeExperiments(input: ExperimentsInput): Experiment[] {
       stopRule: d.stopRule,
       stopRuleLabel: gatedBy.length ? 'ENTRY CONDITION' : 'STOP RULE',
       gatedBy,
+      metrics: d.metrics,
+      // A GATED experiment has not started and must not offer to start it. The
+      // stop-rule block already reads ENTRY CONDITION rather than STOP RULE for
+      // exactly these, and a live-looking button under that is the card
+      // contradicting itself.
+      action: gatedBy.length ? null : d.action,
     };
   });
 }
@@ -165,6 +202,10 @@ function fixedWindow(i: ExperimentsInput): Draft | null {
 
   return {
     id: 'fixed-window',
+    // A bedtime. Nothing on this site plans one, so no action — the same call
+    // `moves.ts` makes for the sleep-window move it shares a subject with.
+    action: null,
+    metrics: ['sri', 'circadian', 'balance'],
     title: 'THE FIXED WINDOW',
     daysSinceOnset,
     dayCount,
@@ -201,6 +242,19 @@ function dullLongDay(i: ExperimentsInput): Draft | null {
 
   return {
     id: 'dull-long-day',
+    action: {
+      kind: 'planner',
+      label: 'Plan the outing',
+      href: plannerHref({
+        km: LONG_DAY_KM,
+        prefer: 'steady',
+        mode: 'loop',
+        from: 'experiment:dull-long-day',
+        why: 'One 12–15 km outing a week at hike heart rate.',
+      }),
+      note: 'The planner, opened on steady ground at this distance.',
+    },
+    metrics: ['acwr', 'volume', 'vo2max'],
     title: 'THE DULL LONG DAY',
     daysSinceOnset,
     dayCount,
@@ -243,6 +297,15 @@ function oneHardEffort(i: ExperimentsInput): Draft | null {
 
   return {
     id: 'one-hard-effort',
+    action: {
+      kind: 'segments',
+      // The experiment's own change text says "on a gettable segment", so the
+      // board is the destination it named rather than one chosen for it.
+      label: 'Pick the segment',
+      href: gettableHref(),
+      note: 'The explorer under the gettable board’s own gates — improving, inside 3%, six efforts or more.',
+    },
+    metrics: ['polarised', 'vo2max'],
     title: 'ONE HARD EFFORT',
     daysSinceOnset,
     dayCount,

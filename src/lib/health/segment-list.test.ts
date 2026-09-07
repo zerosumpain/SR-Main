@@ -314,3 +314,30 @@ describe('cost ranks like efficiency', () => {
     ).toEqual([1, 2]);
   });
 });
+
+describe('the form facet and the form range share a name, not a key', () => {
+  // Until 2026-09-07 both were written to `?form=`, and `filtersToQuery` set the
+  // facet and then let the range loop overwrite it. A reader asking for
+  // "improving, and gaining more than 5%" got a URL carrying only the second
+  // half and a table that had quietly dropped the first.
+  it('round-trips a facet and a range set together', () => {
+    const filters = emptyFilters();
+    filters.forms = ['improving'];
+    filters.ranges.form = { min: null, max: -5 };
+    const back = parseFilters(new URLSearchParams(filtersToQuery(filters, null)), []);
+    expect(back.forms).toEqual(['improving']);
+    expect(back.ranges.form).toEqual({ min: null, max: -5 });
+  });
+
+  it('still reads a range written to the old key, so old links keep working', () => {
+    const back = parseFilters(new URLSearchParams('form=..-5'), []);
+    expect(back.ranges.form).toEqual({ min: null, max: -5 });
+    expect(back.forms).toEqual([]);
+  });
+
+  it('still reads a bare facet', () => {
+    const back = parseFilters(new URLSearchParams('form=slipping'), []);
+    expect(back.forms).toEqual(['slipping']);
+    expect(back.ranges.form).toEqual({ min: null, max: null });
+  });
+});

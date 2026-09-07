@@ -265,6 +265,48 @@ function leastSquares(xs: number[], ys: number[]): { slope: number; intercept: n
   return { slope, intercept, r2 };
 }
 
+/** The horizons the forecast section offers. 90 is what `computeForecast` fits. */
+export const FORECAST_HORIZONS = [30, 60, 90] as const;
+export type ForecastHorizon = (typeof FORECAST_HORIZONS)[number];
+
+/**
+ * The same forecast, read at a nearer horizon.
+ *
+ * This is a TRUNCATION, not a refit, and the distinction is the whole reason it
+ * is a named function with tests rather than a slice at the call site. The
+ * projection is a straight line and the cone is computed per step, so reading
+ * either at day 30 instead of day 90 is picking a point that was already
+ * computed — no new fit, no new residual, and `slopePerMonth`, `confidence` and
+ * `residualSd` are properties of the FIT and therefore unchanged.
+ *
+ * What does change is `then`, which is the value AT the horizon, and
+ * `horizonDays`, which the caller renders as an axis label. Leaving either at
+ * its 90-day value while drawing 30 days is the version of this that lies.
+ *
+ * A horizon at or beyond the fitted one returns the result untouched.
+ */
+export function narrowHorizon(result: ForecastResult, days: number): ForecastResult {
+  if (!(days > 0) || days >= result.horizonDays) return result;
+  if (!result.projection.length) return { ...result, horizonDays: days };
+
+  const start = dayNumber(result.projection[0].date);
+  const within = (date: string) => dayNumber(date) - start <= days;
+
+  // The first point IS today, so a horizon shorter than one step still leaves
+  // the line something to draw from rather than an empty polyline.
+  const projection = result.projection.filter((p) => within(p.date));
+  const kept = projection.length >= 2 ? projection : result.projection.slice(0, 2);
+  const cone = result.cone.filter((p) => within(p.date)).slice(0, kept.length);
+
+  return {
+    ...result,
+    projection: kept,
+    cone,
+    then: kept[kept.length - 1].value,
+    horizonDays: days,
+  };
+}
+
 function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }

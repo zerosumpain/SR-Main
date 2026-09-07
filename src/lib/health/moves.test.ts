@@ -243,3 +243,105 @@ describe('computeMoves — sufficiency', () => {
     expect(m.rationale).not.toContain('drift');
   });
 });
+
+describe('computeMoves — where a row sends you', () => {
+  // The rule this suite defends: a button under a row must do the thing the
+  // row argues for. A "fixed lights-out window" with PLAN A ROUTE under it is
+  // worse than no button, because it teaches the reader that the buttons on
+  // this page are decoration.
+  function actionFor(id: string, input = prototypeInput()) {
+    return computeMoves(input).find((m) => m.id === id)?.action ?? null;
+  }
+
+  it('gives the habit moves no action at all', () => {
+    expect(actionFor('sleep-window')).toBeNull();
+    const held = computeMoves(prototypeInput()).find((m) => m.id === 'hold-and-watch');
+    expect(held?.action ?? null).toBeNull();
+  });
+
+  it('sends the long easy day to the planner, at the distance the row names', () => {
+    const action = actionFor('long-easy-day');
+    expect(action?.kind).toBe('planner');
+    const url = new URL(action!.href, 'https://example.test');
+    expect(url.pathname).toBe('/health/plan');
+    expect(url.searchParams.get('km')).toBe('13.5');
+    expect(url.searchParams.get('prefer')).toBe('steady');
+    expect(url.searchParams.get('mode')).toBe('loop');
+    expect(url.searchParams.get('from')).toBe('move:long-easy-day');
+    expect(action!.label).toContain('13.5');
+  });
+
+  it('seeds the planner with the sport actually being done, not a hardcoded run', () => {
+    expect(
+      new URL(actionFor('long-easy-day')!.href, 'https://example.test').searchParams.get('sport'),
+    ).toBe('run');
+    const onABike = actionFor('long-easy-day', { ...prototypeInput(), sport: 'ride' });
+    expect(new URL(onABike!.href, 'https://example.test').searchParams.get('sport')).toBe('ride');
+  });
+
+  it('sends the mix move to the gettable board, because it asks for a segment not a route', () => {
+    // The mix move's own words are "a targeted segment, not a race". A planned
+    // route would be a different thing from the one it argued for.
+    const input = prototypeInput();
+    input.polarised = ok({
+      easyPct: 60,
+      midPct: 28,
+      hardPct: 12,
+      verdict: 'junk-middle' as const,
+      totalMinutes: 400,
+    });
+    const action = actionFor('polarised-mix', input);
+    expect(action?.kind).toBe('segments');
+    const url = new URL(action!.href, 'https://example.test');
+    expect(url.pathname).toBe('/health/segments');
+    expect(url.searchParams.get('form')).toBe('improving');
+    // The board's gates, not a hand-written approximation of them.
+    expect(url.searchParams.get('gap')).toBe('..3');
+    expect(url.searchParams.get('efforts')).toBe('6..');
+  });
+
+  it('sizes the booked big day as a whole median week in one outing', () => {
+    const action = actionFor('book-big-day');
+    expect(action?.kind).toBe('planner');
+    // prototypeInput's twelve-week median is 20 km.
+    expect(new URL(action!.href, 'https://example.test').searchParams.get('km')).toBe('20');
+    expect(action!.label).toContain('20 km');
+  });
+
+  it('omits the distance rather than inventing one when there is no median to read', () => {
+    const input = prototypeInput();
+    // ACWR alone keeps the move alive with no weekly volume behind it.
+    input.volume = null;
+    const action = actionFor('book-big-day', input);
+    expect(action).not.toBeNull();
+    const url = new URL(action!.href, 'https://example.test');
+    expect(url.searchParams.get('km')).toBeNull();
+    expect(url.searchParams.get('sport')).toBe('run');
+    expect(action!.label).toBe('Plan the day');
+  });
+
+  it('gives every action a label and a note — a bare arrow is not a call to action', () => {
+    for (const move of computeMoves(prototypeInput())) {
+      if (!move.action) continue;
+      expect(move.action.label.length).toBeGreaterThan(4);
+      expect(move.action.note.length).toBeGreaterThan(10);
+      expect(move.action.href.startsWith('/health/')).toBe(true);
+    }
+  });
+});
+
+describe('computeMoves — the big day’s button cannot promise what the URL drops', () => {
+  it('omits a distance past the planner’s ceiling from the label as well as the href', () => {
+    const input = prototypeInput();
+    // A 120 km median week: real for an ultra block, and past the planner's
+    // own 100 km slider. `plannerHref` drops it; the label must not keep it.
+    input.volume = { weekKm: 40, medianKm: 120 };
+    const move = computeMoves(input).find((m) => m.id === 'book-big-day');
+    expect(move?.action).not.toBeNull();
+    expect(move!.action!.label).toBe('Plan the day');
+    expect(new URL(move!.action!.href, 'https://x.test').searchParams.get('km')).toBeNull();
+    // …and it says why, rather than silently dropping the number it computed.
+    expect(move!.action!.note).toContain('120');
+    expect(move!.action!.note).toContain('ceiling');
+  });
+});

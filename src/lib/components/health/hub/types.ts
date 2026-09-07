@@ -88,6 +88,16 @@ export interface OwnerHealthData {
   dashboardUpdatedAt: string;
 
   /**
+   * The metric drill to open on load, from `?metric=`, or null.
+   *
+   * Validated in the loader against the registry, so a stale or hand-edited
+   * link opens nothing rather than a drawer titled "undefined". It is on BOTH
+   * audiences: the drill describes a metric and shows the reading its reader
+   * was already sent, so there is nothing here to gate.
+   */
+  initialMetric: string | null;
+
+  /**
    * Where the numbers came from, straight off `getHealthSeries30d`.
    *
    * `seriesIsMock` is the one flag on this payload that changes what the page
@@ -159,6 +169,7 @@ export interface PublicHealthData
   extends Pick<
     OwnerHealthData,
     | 'dashboardUpdatedAt'
+    | 'initialMetric'
     | 'provenance'
     | 'today'
     | 'series'

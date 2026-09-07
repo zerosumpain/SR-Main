@@ -10,6 +10,8 @@
   // FORM READ. That is not a gap in the data; it is the honest answer for
   // ground covered twice.
   import type { SegmentChain } from '$lib/trails/highlights-service';
+  import type { FormDirection } from '$lib/trails/segments/form';
+  import { gettableHref, taxonomyHref } from '$lib/health/deep-links';
   import SectionHead from './SectionHead.svelte';
   import type { HealthAudience, SegmentForms } from './types';
   import { duration, shortDate } from './format';
@@ -47,6 +49,8 @@
     count: number | null;
     tone: 'good' | 'plain' | 'accent' | 'ghost';
     note: string;
+    /** The form state this tile counts — what the explorer filters to. */
+    direction: FormDirection;
   }
 
   const tiles = $derived.by((): Tile[] => {
@@ -57,33 +61,51 @@
         count: t?.improving ?? null,
         tone: 'good',
         note: 'Recent median quicker than the earlier window by more than 2%.',
+        direction: 'improving',
       },
       {
         label: 'Holding',
         count: t?.holding ?? null,
         tone: 'plain',
         note: 'Inside the ±2% noise band. Neither gaining nor losing ground.',
+        direction: 'holding',
       },
       {
         label: 'Slipping',
         count: t?.slipping ?? null,
         tone: 'accent',
         note: 'Slower by more than 2%. Expected across the board once weekly volume drops.',
+        direction: 'slipping',
       },
       {
         label: 'No form read',
         count: t?.noRead ?? null,
         tone: 'ghost',
         note: `Under six efforts. Most of a ${corpus}-segment corpus will sit here permanently.`,
+        direction: 'unknown',
       },
     ];
   });
+
+  /**
+   * A tile is a link only when there is a page behind it AND a count to open.
+   *
+   * The explorer is owner-gated, so on `public` the tiles stay the paragraphs
+   * they have always been rather than becoming links that bounce off the front
+   * door. A tile reading an em dash — no feed yet — is not a link either: it
+   * would land on a filtered view of nothing and read as a broken page rather
+   * than as an absent one.
+   */
+  function tileHref(tile: Tile): string | null {
+    if (!owner || tile.count == null || tile.count === 0) return null;
+    return taxonomyHref(tile.direction);
+  }
 
   const board = $derived(segmentForms?.board ?? []);
   const topChain = $derived(chains[0] ?? null);
 </script>
 
-<section class="f">
+<section id="health-f" class="f">
   <div class="f-inner">
     <SectionHead
       {kicker}
@@ -91,25 +113,57 @@
       strap="A leaderboard says what your best ever was. Form says whether you're gaining on that ground. Gettable is where the two agree: improving, and inside 3% of the record."
     />
 
+    {#snippet tileBody(tile: Tile, linked: boolean)}
+      <p class="f-tile-label">{tile.label}</p>
+      <p class="f-tile-value tone-{tile.tone}">
+        {#if tile.count == null}
+          — <span class="f-tile-await">awaiting feed</span>
+        {:else}
+          {tile.count}
+        {/if}
+      </p>
+      <p class="f-tile-note">{tile.note}</p>
+      <!-- The affordance is one mono line in the tile's own register, not an
+           icon and not a border change: the four tiles are a stat grid and a
+           row of buttons would read as a toolbar. It only appears on a tile
+           that actually goes somewhere. -->
+      {#if linked}
+        <p class="f-tile-go">Open in the explorer →</p>
+      {/if}
+    {/snippet}
+
     <div class="f-tiles">
       {#each tiles as tile (tile.label)}
-        <div class="f-tile">
-          <p class="f-tile-label">{tile.label}</p>
-          <p class="f-tile-value tone-{tile.tone}">
-            {#if tile.count == null}
-              — <span class="f-tile-await">awaiting feed</span>
-            {:else}
-              {tile.count}
-            {/if}
-          </p>
-          <p class="f-tile-note">{tile.note}</p>
-        </div>
+        {@const href = tileHref(tile)}
+        {#if href}
+          <a
+            class="f-tile f-tile-link"
+            {href}
+            data-sveltekit-preload-data="hover"
+            aria-label="{tile.count} {tile.label.toLowerCase()} segments — open the explorer filtered to them"
+          >
+            {@render tileBody(tile, true)}
+          </a>
+        {:else}
+          <div class="f-tile">{@render tileBody(tile, false)}</div>
+        {/if}
       {/each}
     </div>
 
     <div class="f-cols">
       <div class="f-board">
-        <p class="f-board-label">The gettable board</p>
+        <div class="f-board-top">
+          <p class="f-board-label">The gettable board</p>
+          <!-- The board itself names ground, so this link is owner-only for the
+               same reason the board is. `gettableHref` applies the board's own
+               three gates from the shared constants, so the list it opens is
+               the list above it and not an approximation of it. -->
+          {#if owner && board.length}
+            <a class="f-board-go" href={gettableHref()} data-sveltekit-preload-data="hover">
+              All {board.length === 1 ? 'of it' : 'of them'} in the explorer →
+            </a>
+          {/if}
+        </div>
         <p class="f-board-lede">
           Ranked by one composite instead of by name:
           <span class="f-strong">improving direction, gap under 3%, an old PB, six or more efforts.</span>
@@ -220,6 +274,65 @@
     border: 1px solid var(--card-border);
     padding: 20px;
     min-width: 0;
+  }
+
+  /* A linked tile must be pixel-identical to a plain one at rest — the four
+     read as one stat grid, and a link that announces itself with a colour or an
+     underline would break that row into two kinds of thing. So the anchor is
+     stripped back to the div it replaces, and everything it gains happens on
+     hover and focus. */
+  .f-tile-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
+  }
+  .f-tile-link:hover,
+  .f-tile-link:focus-visible {
+    border-color: var(--accent);
+    background: var(--accent-tint-04);
+  }
+  .f-tile-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .f-board-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .f-board-go {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 2px;
+  }
+  .f-board-go:hover,
+  .f-board-go:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .f-tile-go {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+    margin: 12px 0 0;
+    transition: color 120ms ease;
+  }
+  .f-tile-link:hover .f-tile-go,
+  .f-tile-link:focus-visible .f-tile-go {
+    color: var(--accent);
   }
   .f-tile-label {
     font-family: var(--font-mono);

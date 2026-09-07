@@ -13,6 +13,13 @@
   import type { DailyPlan } from '$lib/trails/coach-service';
   import SectionHead from './SectionHead.svelte';
   import { fixed, whole } from './format';
+  import {
+    asPlannerSport,
+    gettableHref,
+    plannerHref,
+    PLAN_PATH,
+    type PlannerPreference,
+  } from '$lib/health/deep-links';
 
   interface Props {
     coach: DailyPlan | null;
@@ -65,8 +72,38 @@
     ];
   });
 
+  /**
+   * The sport a card's "plan this" button seeds with — the one the coach has
+   * already decided on today, off eight weeks of history and a readiness veto.
+   * Null falls through to the planner's own default rather than to a guess.
+   */
+  const sport = $derived(asPlannerSport(session?.sport) ?? undefined);
+
+  /**
+   * What each card sends the reader off to do.
+   *
+   * Three of the four are outings, so they seed the planner with the distance
+   * and gradient the card's own figures name. The fourth is not: "your own
+   * segment loop" is explicitly "not a new route — the loop that already
+   * carries the most-repeated segments", so a planner that drew fresh geometry
+   * would answer a different question. It goes to the gettable board, the same
+   * destination the ranked mix move uses for the same reason.
+   */
+  type CardPlan =
+    | { kind: 'planner'; km: number; climbPerKm: number; prefer: PlannerPreference; label: string }
+    | { kind: 'segments'; label: string };
+
   /** Fixed editorial copy — four kinds of day, not four planner results. */
-  const ROUTES = [
+  const ROUTES: Array<{
+    goal: string;
+    band: string;
+    severe: boolean;
+    name: string;
+    figures: string;
+    body: string;
+    moves: string;
+    plan: CardPlan;
+  }> = [
     {
       goal: 'Goal · volume',
       band: 'Moderate',
@@ -75,6 +112,8 @@
       figures: '14 km · ~60 m climb · 14.6 equiv-km',
       body: 'The Teesdale Way corridor from the town edge. Flat, surfaced, weather-proof, and repeatable on a weekday evening — which is the only property that matters for the one move that has to happen 12 times.',
       moves: 'Moves: ACWR · weekly volume',
+      // 14 km, ~60 m climb — the figures this card already prints.
+      plan: { kind: 'planner', km: 14, climbPerKm: 4, prefer: 'steady', label: 'Plan 14 km flat' },
     },
     {
       goal: 'Goal · vert',
@@ -84,6 +123,8 @@
       figures: '18 km · ~700 m climb · 25 equiv-km',
       body: 'Cleveland Way ground, roughly 40 minutes out. The nearest terrain that rehearses 3 Peaks physiology — sustained climbing at hike heart rate, which is what 193 m/h of VAM was built on.',
       moves: 'Moves: VO₂max slope · big-day prep',
+      // 18 km, ~700 m — 39 m of climb per kilometre.
+      plan: { kind: 'planner', km: 18, climbPerKm: 39, prefer: 'steady', label: 'Plan 18 km climbing' },
     },
     {
       goal: 'Goal · pace',
@@ -93,6 +134,7 @@
       figures: '6–8 km · minimal climb · 7 equiv-km',
       body: 'Not a new route: the loop that already carries the most-repeated segments, run with one hard effort inside it. Repeated ground is the only ground where a time means anything, and this is where the hard-effort move gets measured.',
       moves: 'Moves: intensity mix · segment PBs',
+      plan: { kind: 'segments', label: 'Pick the segment to attack' },
     },
     {
       goal: 'Goal · the big day',
@@ -102,11 +144,13 @@
       figures: '45–50 km · 1500 m+ · 60 equiv-km',
       body: 'Beyond the 3 Peaks round: a national or regional trail section from the discovery search, done in a day. This is the booked-objective move made concrete — and the reason the other three matter.',
       moves: 'Moves: everything · needs a date',
+      // 45–50 km, 1500 m+ — the midpoint, and 32 m of climb per kilometre.
+      plan: { kind: 'planner', km: 47, climbPerKm: 32, prefer: 'spiky', label: 'Plan the 47 km push' },
     },
   ];
 </script>
 
-<section class="g">
+<section id="health-g" class="g">
   <div class="g-inner">
     <SectionHead
       kicker="G / Routes &amp; plan · Darlington, 15 km discovery radius"
@@ -182,6 +226,23 @@
           <p class="g-route-body">{route.body}</p>
           <div class="g-route-foot">
             <p class="g-route-moves">{route.moves}</p>
+            <a
+              class="g-route-go"
+              data-sveltekit-preload-data="hover"
+              href={route.plan.kind === 'planner'
+                ? plannerHref({
+                    sport,
+                    km: route.plan.km,
+                    climbPerKm: route.plan.climbPerKm,
+                    prefer: route.plan.prefer,
+                    mode: 'loop',
+                    from: `route:${route.name}`,
+                    why: `${route.name} — ${route.figures}`,
+                  })
+                : gettableHref()}
+            >
+              {route.plan.label} →
+            </a>
           </div>
         </div>
       {/each}
@@ -189,7 +250,8 @@
 
     <p class="g-note">
       Route names above are real trail corridors near Darlington, not planner output. Run them
-      through /health/plan with live device location for scored geometry, elevation and GPX.
+      through <a class="g-note-link" href={PLAN_PATH}>/health/plan</a> with live device location for
+      scored geometry, elevation and GPX — each card above opens it with that day's shape already set.
     </p>
   </div>
 </section>
@@ -397,6 +459,39 @@
   .g-route-foot {
     border-top: 1px solid rgba(26, 16, 8, 0.14);
     padding-top: 12px;
+  }
+  /* The card's own action. A mono line rather than a filled button: four filled
+     buttons across a row of editorial cards would turn the section into a
+     toolbar, and the cards are an argument first. */
+  .g-route-go {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 2px;
+    transition:
+      color 120ms ease,
+      border-color 120ms ease;
+  }
+  .g-route-go:hover,
+  .g-route-go:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .g-note-link {
+    color: var(--accent-ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-ink-tint-35);
+  }
+  .g-note-link:hover,
+  .g-note-link:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .g-route-moves {
     font-family: var(--font-mono);

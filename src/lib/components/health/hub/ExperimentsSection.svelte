@@ -6,7 +6,10 @@
   // resolution — so the rest sit QUEUED behind an entry condition, and their
   // last block says what would let them start rather than when to stop.
   import type { Experiment } from '$lib/health/experiments';
+  import type { HealthAudience } from './types';
   import SectionHead from './SectionHead.svelte';
+  import { metricDescriptor } from '$lib/health/metric-registry';
+  import { metricPeekHandlers } from '$lib/health/metric-peek.svelte';
   import { countWord } from './format';
 
   interface Props {
@@ -18,9 +21,15 @@
      * it rather than as a shorter page.
      */
     letter?: string;
+    /** Opens the drill for one of the instruments an experiment is judged on. */
+    onmetric?: (id: string) => void;
+    /** The second belt on the call to action — see the note in `RankedMoves`. */
+    audience?: HealthAudience;
   }
 
-  let { experiments, letter = 'H' }: Props = $props();
+  let { experiments, letter = 'H', onmetric, audience = 'owner' }: Props = $props();
+
+  const owner = $derived(audience === 'owner');
 
   const live = $derived(experiments.filter((e) => e.state === 'LIVE').length);
   const queued = $derived(experiments.length - live);
@@ -30,7 +39,7 @@
 </script>
 
 {#if experiments.length}
-  <section class="h">
+  <section id="health-h" class="h" {...metricPeekHandlers()}>
     <div class="h-inner">
       <SectionHead
         dark
@@ -62,10 +71,41 @@
               <div>
                 <p class="h-label">Measure</p>
                 <p class="h-text">{exp.measure}</p>
+                <!-- The instruments the sentence above names, as chips that
+                     open the same drill every other figure on the page opens.
+                     A reader can go and look at the line the experiment claims
+                     it will move instead of taking the sentence on trust. -->
+                <!-- Optional-chained, not asserted. `metrics` is always built
+                     by `computeExperiments`, but this section renders inside
+                     HealthShell: an undefined read here throws during SSR and
+                     takes the WHOLE page down, not just the card. A struct that
+                     arrives without it — a stale cached payload, a fixture —
+                     should cost the chips, nothing else. -->
+                {#if onmetric && exp.metrics?.length}
+                  <div class="h-chips">
+                    {#each exp.metrics ?? [] as id (id)}
+                      {@const d = metricDescriptor(id)}
+                      {#if d}
+                        <button type="button" class="h-chip" data-metric={id} onclick={() => onmetric?.(id)}>
+                          {d.label}
+                        </button>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
               </div>
               <div class="h-stop">
                 <p class="h-label">{exp.stopRuleLabel}</p>
                 <p class="h-text">{exp.stopRule}</p>
+                <!-- Owner-only, and stripped in the payload rather than hidden
+                     here: `disclosureLeaks` cannot see an href, so the link
+                     never reaches an anonymous browser at all. -->
+                {#if owner && exp.action}
+                  <a class="h-go" href={exp.action.href} data-sveltekit-preload-data="hover">
+                    {exp.action.label} →
+                  </a>
+                  <p class="h-go-note">{exp.action.note}</p>
+                {/if}
               </div>
             </div>
           </div>
@@ -76,6 +116,63 @@
 {/if}
 
 <style>
+  /* Everything below sits on the INK ground (#1a1008), so the paper accent and
+     the paper olive are invisible here — `--accent-on-dark` and
+     `--good-on-dark` are their partners. Grep before adding a colour. */
+  .h-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .h-chip {
+    background: none;
+    border: 1px solid rgba(237, 228, 212, 0.22);
+    border-radius: 0;
+    padding: 4px 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(237, 228, 212, 0.7);
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .h-chip:hover,
+  .h-chip:focus-visible {
+    border-color: var(--accent-on-dark);
+    color: var(--accent-on-dark);
+  }
+  .h-go {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 7px 14px;
+    border: 1px solid rgba(237, 228, 212, 0.28);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ede4d4;
+    text-decoration: none;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .h-go:hover,
+  .h-go:focus-visible {
+    border-color: var(--accent-on-dark);
+    color: var(--accent-on-dark);
+  }
+  .h-go-note {
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: rgba(237, 228, 212, 0.55);
+    margin: 8px 0 0;
+    text-wrap: pretty;
+  }
+
   .h {
     background: var(--text-primary);
     color: var(--bg);

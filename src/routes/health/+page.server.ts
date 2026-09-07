@@ -4,6 +4,8 @@ import {
   disclosureLeaks,
   pickPublic,
   publicDashboard,
+  publicExperiments,
+  publicMoves,
   publicSegmentForms,
 } from '$lib/health/public-payload';
 import { getHealthSeries30d } from '$lib/health/series-30d-service';
@@ -31,6 +33,8 @@ import { computeForecast } from '$lib/health/analytics/forecast';
 import { GETTABLE_GAP_PCT } from '$lib/trails/segments/form';
 import { formTaxonomy } from '$lib/health/segment-list';
 import { computeMoves } from '$lib/health/moves';
+import { asPlannerSport } from '$lib/health/deep-links';
+import { metricDescriptor } from '$lib/health/metric-registry';
 import { computeTripwires, weeklyVolumeSummary, type GettableSummary } from '$lib/health/tripwires';
 import { computeExperiments } from '$lib/health/experiments';
 import { computeVerdict } from '$lib/health/verdict';
@@ -151,6 +155,10 @@ function summariseSegmentForms(rows: SegmentListRow[]) {
 
 export const load: PageServerLoad = async (event) => {
   const owner = await isOwnerRequest(event);
+
+  /** `?metric=acwr` — the drill to open on load, when it names a real one. */
+  const requested = event.url.searchParams.get('metric');
+  const openMetric = requested && metricDescriptor(requested) ? requested : null;
 
   // /health is ONE public URL serving two different documents, so the owner's
   // must never be cacheable by anything in front of it. cloudflared sits
@@ -332,7 +340,16 @@ export const load: PageServerLoad = async (event) => {
     volume: volume ? { weekKm: volume.weekKm, medianKm: volume.medianKm } : null,
   };
 
-  const moves = safeSync('moves', () => computeMoves(instrumentInputs)) ?? [];
+  // The sport a move's "plan this" button seeds the planner with. The coach
+  // has already decided what it would commission today, off eight weeks of
+  // history and a readiness veto, so reading it here keeps ONE answer to that
+  // question on the page rather than two that can disagree. Null on the
+  // anonymous branch, where the coach is not run and the buttons are stripped
+  // anyway — `moves.ts` then falls back to the planner's own default, a run.
+  const moves =
+    safeSync('moves', () =>
+      computeMoves({ ...instrumentInputs, sport: asPlannerSport(coach?.session.sport) }),
+    ) ?? [];
   const tripwires =
     safeSync('tripwires', () =>
       computeTripwires({
@@ -416,6 +433,11 @@ export const load: PageServerLoad = async (event) => {
       // exists on this branch.
       dashboard: publicDashboard(dashboard),
       segmentForms: publicForms,
+      // Same shape, no buttons. Every destination a move offers is owner-gated,
+      // so the anonymous reader keeps the argument and loses the call to action.
+      moves: publicMoves(moves),
+      // Same reason, and a sharper one: `disclosureLeaks` cannot see an href.
+      experiments: publicExperiments(experiments),
       // Sections the anonymous document does not render at all. Declared as
       // empty rather than omitted so `PublicHealthData` and the component's
       // props stay one shape — and so that a reader of this file can see that
@@ -423,6 +445,10 @@ export const load: PageServerLoad = async (event) => {
       segments: null,
       chains: [],
       coach: null,
+      // The drill itself is not owner-gated — it describes a metric and shows
+      // the reading the anonymous page was already sent. What it cannot show,
+      // it does not have.
+      initialMetric: openMetric,
     };
 
     // The second belt, and it is buckled: the allow-list decides which KEYS go
@@ -445,6 +471,15 @@ export const load: PageServerLoad = async (event) => {
   return {
     mode: 'owner' as const,
     ...shared,
+    // A drill opened from the URL, so one is shareable, bookmarkable and
+    // restored by the back button. Validated here rather than in the component
+    // for the reason every other seed on this page is: `?metric=nonsense`
+    // should open nothing, not a drawer titled "undefined".
+    //
+    // Seeded through the payload rather than read from `$app/state` because
+    // that is what `SegmentsView` does with `initialQuery` — one pattern for
+    // "the URL decided the opening state", not two.
+    initialMetric: openMetric,
     ...derived,
     // Two fields the owner dashboard has no reader for, dropped here rather
     // than shipped and ignored. They cost no query — they arrive on `shared`

@@ -7,21 +7,32 @@
   // right is `leverage` out of five; the label under it says what the meter is
   // measuring, because "4 of 5" on its own is a number without a unit.
   import type { Move } from '$lib/health/moves';
+  import type { HealthAudience } from './types';
   import SectionHead from './SectionHead.svelte';
   import { countWord } from './format';
 
   interface Props {
     moves: Move[];
+    /**
+     * The second belt. `publicMoves()` already nulls every action in the
+     * anonymous payload — that is the braces, and it is where the split belongs
+     * — but a move's action is a LINK INTO GROUND-BEARING PAGES, which is the
+     * one class of value this page double-guards. Sections F and G do the same
+     * thing with the board and the route cards.
+     */
+    audience?: HealthAudience;
   }
 
-  let { moves }: Props = $props();
+  let { moves, audience = 'owner' }: Props = $props();
+
+  const owner = $derived(audience === 'owner');
 
   const METER_BARS = 5;
   const bars = [...Array(METER_BARS).keys()];
 </script>
 
 {#if moves.length}
-  <section class="d">
+  <section id="health-d" class="d">
     <div class="d-inner">
       <SectionHead
         kicker="D / Ranked moves · you choose"
@@ -39,6 +50,18 @@
             <div class="d-cell">
               <h3 class="d-title">{move.title}</h3>
               <p class="d-rationale">{move.rationale}</p>
+              <!-- The button sits under the argument it follows from, inside
+                   the cell that says what the move IS — not in a column of its
+                   own, which would put a toolbar down the side of an editorial
+                   table and imply every row has one. Most rows do not: a habit
+                   has nowhere to send you, and `moves.ts` returns a null action
+                   rather than inventing a destination. -->
+              {#if owner && move.action}
+                <a class="d-go" href={move.action.href} data-sveltekit-preload-data="hover">
+                  {move.action.label} →
+                </a>
+                <p class="d-go-note">{move.action.note}</p>
+              {/if}
             </div>
 
             <div class="d-cell">
@@ -129,6 +152,45 @@
     line-height: 1.5;
     color: var(--text-secondary);
     margin: 0;
+    text-wrap: pretty;
+  }
+
+  /* The page's own button shape, copied from `hd-method` in HealthDashboard
+     rather than invented: hairline box, mono label, accent on hover. This page
+     already had exactly one button and it looked like this. */
+  .d-go {
+    display: inline-block;
+    margin: 14px 0 0;
+    padding: 9px 16px;
+    background: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+  .d-go:hover,
+  .d-go:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-tint-04);
+  }
+  .d-go:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .d-go-note {
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-muted);
+    margin: 8px 0 0;
     text-wrap: pretty;
   }
   .d-label {

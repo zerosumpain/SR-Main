@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { metricDescriptor } from './metric-registry';
+import { SRI_TARGET } from './analytics/sri';
 import { computeExperiments, type ExperimentsInput } from './experiments';
 import type { MetricResult } from './analytics/types';
 
@@ -175,5 +177,61 @@ describe('computeExperiments — eligibility', () => {
     expect(xs[0].id).toBe('fixed-window');
     expect(xs[0].daysSinceOnset).toBe(0);
     expect(xs[0].counter).toBe('DAY 1 OF 21');
+  });
+});
+
+describe('computeExperiments — what a card sends you to', () => {
+  it('names the instruments it is judged on, and they all resolve', () => {
+    for (const e of computeExperiments(prototypeInput())) {
+      expect(e.metrics.length, e.id).toBeGreaterThan(0);
+      for (const id of e.metrics) {
+        expect(metricDescriptor(id), `${e.id} → ${id}`).not.toBeNull();
+      }
+    }
+  });
+
+  it('gives the sleep experiment no action — nothing here plans a bedtime', () => {
+    const e = computeExperiments(prototypeInput()).find((x) => x.id === 'fixed-window');
+    expect(e?.action ?? null).toBeNull();
+  });
+
+  it('sends the long day to the planner at the distance its own change text names', () => {
+    const e = computeExperiments(prototypeInput()).find((x) => x.id === 'dull-long-day');
+    if (!e) return;
+    expect(e.action?.kind).toBe('planner');
+    const url = new URL(e.action!.href, 'https://x.test');
+    expect(url.pathname).toBe('/health/plan');
+    expect(url.searchParams.get('km')).toBe('13.5');
+    expect(e.change).toContain('12–15 km');
+  });
+
+  it('sends the hard effort to the gettable board it already names — once it can start', () => {
+    const e = computeExperiments(prototypeInput()).find((x) => x.id === 'one-hard-effort');
+    if (!e) return;
+    // In the prototype reading E3 is GATED behind E1 and E2, and a gated card
+    // must not offer to start: its stop-rule block already reads ENTRY
+    // CONDITION, so a live button under it is the card contradicting itself.
+    expect(e.gatedBy.length).toBeGreaterThan(0);
+    expect(e.action).toBeNull();
+    expect(e.change).toContain('gettable segment');
+  });
+
+  it('gives an UNGATED hard effort the board its own change text names', () => {
+    // The same experiment with nothing in front of it: a polarised verdict that
+    // still needs work, and the two sleep/volume triggers quiet so neither E1
+    // nor E2 is eligible to gate it.
+    const input = prototypeInput();
+    input.sri = ok(SRI_TARGET + 5);
+    input.circadian = ok({ driftHours: 0.2, baselineMidpointMin: 190, recentMidpointMin: 202, flag: 'aligned' as const });
+    input.recoveryDebt = ok({ ...BALANCE_ZERO, averageBalanceMin: -5, strainRecoveryBalance: 1 });
+    input.acwr = ok({ acuteEWMA: 10, chronicEWMA: 10, ratio: 1.0, zone: 'optimal' as const });
+    input.volume = { weekKm: 21, medianKm: 20 };
+    const e = computeExperiments(input).find((x) => x.id === 'one-hard-effort');
+    if (!e) return;
+    expect(e.gatedBy).toEqual([]);
+    expect(e.action?.kind).toBe('segments');
+    const url = new URL(e.action!.href, 'https://x.test');
+    expect(url.pathname).toBe('/health/segments');
+    expect(url.searchParams.get('form')).toBe('improving');
   });
 });

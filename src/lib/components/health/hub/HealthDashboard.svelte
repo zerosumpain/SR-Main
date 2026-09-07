@@ -44,6 +44,12 @@
   import ExperimentsSection from './ExperimentsSection.svelte';
   import VerdictSection from './VerdictSection.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
+  import MetricPeek from './MetricPeek.svelte';
+  import MetricDrill from './MetricDrill.svelte';
+  import { buildReadings } from '$lib/health/metric-readings';
+  import { metricPeek } from '$lib/health/metric-peek.svelte';
+  import { replaceState } from '$app/navigation';
+  import { untrack } from 'svelte';
   import { fmtAgo } from '$lib/components/health/v2/utils';
   import type { HealthAudience, OwnerHealthData, PublicHealthData } from './types';
 
@@ -62,10 +68,100 @@
    * rather than leaving a hole where the routes section was.
    */
   const experimentsLetter = $derived(owner ? 'H' : 'G');
+
+  // The kicker below carries "· hover any figure". It is the ONE place the page
+  // says it is interactive: discovery is otherwise hover-only, and a reader who
+  // never rests the pointer on a tile would not know the band ladders, the
+  // formulas and the what-ifs are there at all. It goes in the kicker the shell
+  // already prints rather than in a banner — a strip telling you how to use a
+  // page is a strip you stop reading.
   const verdictLetter = $derived(owner ? 'I' : 'H');
 
   /** The public page's only interactive thing below the fold. */
   let methodOpen = $state(false);
+
+  // ——— the metric layer ————————————————————————————————————————
+  //
+  // Every figure in A and B is hoverable and openable, and BOTH layers are
+  // mounted once here rather than per section: the hub renders about thirty
+  // figures and thirty popovers would be thirty idle components. The sections
+  // mark their figures with `data-metric` and delegate the pointer handlers;
+  // this file owns the state and the two floating layers.
+  //
+  // Readings are derived from the payload the loader already built — nothing
+  // below fetches, and nothing below recomputes a figure the page has printed.
+  const readings = $derived(
+    buildReadings({
+      series: data.series ?? [],
+      today: data.today ?? null,
+      rhrBaseline: data.rhrBaseline ?? 0,
+      readiness: data.readiness ?? null,
+      volume: data.volume ?? null,
+      acwr: data.acwr ?? null,
+      monotony: data.monotony ?? null,
+      polarised: data.polarised ?? null,
+      sleepRegularity: data.sleepRegularity ?? null,
+      circadian: data.circadian ?? null,
+      autonomic: data.autonomic ?? null,
+      recoveryDebt: data.recoveryDebt ?? null,
+      vo2max: data.vo2max ?? null,
+      dashboard: data.dashboard ?? null,
+    }),
+  );
+
+  /** Daily TRIMP — the series the drill's what-if pane simulates over. */
+  const loadDays = $derived(data.dashboard?.load?.days ?? []);
+
+  // Seeded from the URL by the loader, then owned locally — so a drill is a
+  // link you can send someone, and the back button closes it.
+  //
+  // Plain `$state`, NOT a `$derived` off the URL: the write path has to stay
+  // one-directional. Something that read the URL and also wrote it is the
+  // read-own-write cycle that ends in `effect_update_depth_exceeded`.
+  //
+  // The initialiser reads `data` and Svelte warns `state_referenced_locally`.
+  // That is CORRECT here and deliberate: it captures the value at mount, which
+  // is what makes a `?metric=` link render its drill open during SSR rather
+  // than flashing shut and reopening after hydration. The effect below covers
+  // the case the warning is actually about.
+  // svelte-ignore state_referenced_locally
+  let drillId = $state<string | null>(data.initialMetric ?? null);
+
+  // A genuinely NEW payload — a client-side navigation to /health carrying a
+  // different `?metric=` — re-seeds the drill. `replaceState` never re-runs
+  // load, so opening a drill does not trip this; only a real navigation does.
+  //
+  // The tracked read is hoisted and the write is untracked, which is the
+  // house pattern for a prop-to-state sync: without `untrack`, the assignment
+  // re-subscribes the effect to what it just wrote.
+  $effect(() => {
+    const seed = data.initialMetric ?? null;
+    untrack(() => {
+      if (seed !== drillId) drillId = seed;
+    });
+  });
+
+  /** Put `?metric=` in the address bar without adding a history entry per hover. */
+  function syncUrl(id: string | null) {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set('metric', id);
+    else url.searchParams.delete('metric');
+    replaceState(`${url.pathname}${url.search}`, {});
+  }
+
+  function openDrill(id: string) {
+    // The hover card and the drill are the same gesture at two depths, so
+    // opening the drill dismisses the card rather than leaving it behind it.
+    metricPeek.close();
+    drillId = id;
+    syncUrl(id);
+  }
+
+  function closeDrill() {
+    drillId = null;
+    syncUrl(null);
+  }
 
   /** Twelve hours without a reading and "live" is a claim, not a fact. */
   const stale = $derived(data.syncedAgoSeconds > 12 * 3600);
@@ -113,8 +209,8 @@
   path="/health"
   footerAction={owner ? undefined : methodButton}
   kicker={owner
-    ? 'Full read · 8 signal families · sections A–I'
-    : 'Public read · 8 signal families · sections A–H'}
+    ? 'Full read · 8 signal families · sections A–I · hover any figure'
+    : 'Public read · 8 signal families · sections A–H · hover any figure'}
   nav={owner
     ? [
         { href: '/health/activities', label: 'Activities' },
@@ -147,6 +243,7 @@
   {/if}
 
   <StateOfPlay
+    onmetric={openDrill}
     today={data.today}
     series={data.series}
     rhrBaseline={data.rhrBaseline}
@@ -160,6 +257,7 @@
   />
 
   <InstrumentDeck
+    onmetric={openDrill}
     acwr={data.acwr}
     monotony={data.monotony}
     polarised={data.polarised}
@@ -171,11 +269,11 @@
     loadDays={data.dashboard?.load.days ?? []}
   />
 
-  <ForecastSection forecast={data.forecast} />
+  <ForecastSection forecast={data.forecast} onmetric={openDrill} />
 
-  <RankedMoves moves={data.moves} />
+  <RankedMoves moves={data.moves} {audience} />
 
-  <TripwireTable tripwires={data.tripwires} />
+  <TripwireTable tripwires={data.tripwires} onmetric={openDrill} {owner} />
 
   <SegmentsSection
     {audience}
@@ -192,11 +290,34 @@
     <RoutesPlan coach={data.coach} />
   {/if}
 
-  <ExperimentsSection experiments={data.experiments} letter={experimentsLetter} />
+  <ExperimentsSection
+    experiments={data.experiments}
+    letter={experimentsLetter}
+    onmetric={openDrill}
+    {audience}
+  />
 
-  <VerdictSection verdict={data.verdict} letter={verdictLetter} />
+  <VerdictSection
+    verdict={data.verdict}
+    letter={verdictLetter}
+    moves={data.moves ?? []}
+    {audience}
+  />
 
 </HealthShell>
+
+<!-- The two floating layers, mounted once for the whole document. Both are
+     PAPER whichever band opened them, which is what every other floating layer
+     on this site does — a layer that changed register with its trigger would
+     read as two components. -->
+<MetricPeek {readings} onopen={openDrill} />
+<MetricDrill
+  metricId={drillId}
+  {readings}
+  {loadDays}
+  onclose={closeDrill}
+  onopen={openDrill}
+/>
 
 <!-- The one thing carried over from the retired public document. Nine sections
      of derived figures earn a page that says how each one is derived. -->

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { computeTripwires, TRIPWIRE_IDS, type TripwireInput } from './tripwires';
+import {
+  computeTripwires,
+  TRIPWIRE_IDS,
+  TRIPWIRE_METRIC,
+  type TripwireInput,
+} from './tripwires';
+import { metricDescriptor } from './metric-registry';
 import type { MetricResult } from './analytics/types';
 import type { DayPoint } from './analytics/rolling';
 
@@ -406,5 +412,28 @@ describe('computeTripwires — streaks count DAYS, not readings', () => {
       ]),
     });
     expect(rows.find((r) => r.id === 'recovery-reds')!.state).toBe('TRIPPED');
+  });
+});
+
+describe('TRIPWIRE_METRIC — every wire says what it opens, or that it opens nothing', () => {
+  it('covers every id, with no extras', () => {
+    expect(Object.keys(TRIPWIRE_METRIC).sort()).toEqual([...TRIPWIRE_IDS].sort());
+  });
+
+  // A row offering a drill that opens on "unknown metric" reads as a bug. The
+  // two nulls are deliberate and documented; everything else must resolve.
+  it('names a metric the registry actually describes', () => {
+    for (const [wire, metric] of Object.entries(TRIPWIRE_METRIC)) {
+      if (metric == null) continue;
+      expect(metricDescriptor(metric), `${wire} → ${metric}`).not.toBeNull();
+    }
+  });
+
+  it('leaves exactly the two wires with nothing to open', () => {
+    const inert = Object.entries(TRIPWIRE_METRIC)
+      .filter(([, m]) => m == null)
+      .map(([id]) => id)
+      .sort();
+    expect(inert).toEqual(['segment-pb', 'strain-balance']);
   });
 });

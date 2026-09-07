@@ -47,6 +47,37 @@ export const TRIPWIRE_IDS = [
 
 export type TripwireId = (typeof TRIPWIRE_IDS)[number];
 
+/**
+ * The instrument behind each wire — the id `$lib/health/metric-registry`
+ * describes and the drill opens on.
+ *
+ * A wire is a THRESHOLD on a signal, and the signal is almost always something
+ * the deck already measures. Mapping the two means the table's rows open the
+ * same drill the tiles and panels do, rather than growing a second, parallel
+ * expander that would then have to be kept in step with it.
+ *
+ * Two wires are null on purpose:
+ *
+ *   `strain-balance` watches strain against recovery, which is a ratio no panel
+ *   on the deck prints — there is nothing to open, and a row that opened the
+ *   nearest-looking instrument would be worse than one that opens nothing.
+ *
+ *   `segment-pb` is not a body signal at all. It watches GROUND, so its
+ *   destination is the gettable board, which the component links separately and
+ *   only for the owner.
+ */
+export const TRIPWIRE_METRIC: Record<TripwireId, string | null> = {
+  'sleep-balance': 'balance',
+  'weekly-volume': 'volume',
+  acwr: 'acwr',
+  'hrv-crossing': 'hrv',
+  'resting-hr': 'rhr',
+  'recovery-reds': 'recovery',
+  'strain-balance': null,
+  'vo2-slope': 'vo2max',
+  'segment-pb': null,
+};
+
 export interface Tripwire {
   id: TripwireId;
   state: TripwireState;

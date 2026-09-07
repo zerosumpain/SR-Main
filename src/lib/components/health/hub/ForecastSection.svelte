@@ -12,7 +12,12 @@
   // drawn at the edges of a 300×110 frame, and half of a 3.5px dot at x=300 is
   // outside the box: the viewport clips it, and no CSS `overflow` gets it back.
   import type { MetricResult } from '$lib/health/analytics/types';
-  import type { ForecastResult } from '$lib/health/analytics/forecast';
+  import {
+    FORECAST_HORIZONS,
+    narrowHorizon,
+    type ForecastHorizon,
+    type ForecastResult,
+  } from '$lib/health/analytics/forecast';
   import { ACWR_BANDS } from '$lib/health/analytics/acwr';
   import { usable } from '$lib/health/ledes';
   import SectionHead from './SectionHead.svelte';
@@ -21,10 +26,24 @@
   import { extent, include, yOf, type Extent } from './chart';
 
   interface Props {
+    /** Opens the drill for a card's own instrument. */
+    onmetric?: (id: string) => void;
     forecast: ForecastSet;
   }
 
-  let { forecast }: Props = $props();
+  let { forecast, onmetric }: Props = $props();
+
+  /**
+   * How far ahead the four cards read.
+   *
+   * A TRUNCATION of the fit, never a refit — `narrowHorizon` keeps the slope,
+   * the confidence and the residual, because those are properties of the line
+   * and not of how far it is drawn. Ninety days is what the loader fitted and
+   * stays the default; the shorter reads exist because "where does this go by
+   * the end of the month" is a different question from "by Christmas", and the
+   * page could only answer the second one.
+   */
+  let horizon = $state<ForecastHorizon>(90);
 
   /** Frame the chart is drawn in, before padding. */
   const W = 300;
@@ -153,7 +172,7 @@
           chart: null,
         };
       }
-      const f = r.value;
+      const f = narrowHorizon(r.value, horizon);
       const { guides, band } = marksFor(spec.id, f.history);
 
       // One scale for everything drawn: history, projection, the whole cone,
@@ -197,7 +216,7 @@
           ? 'Tight cone: the recorded points sit close to their own trend, so the projection is worth reading.'
           : f.confidence >= 50
             ? 'A wide cone — the scatter about the trend is comparable to the move being projected.'
-            : 'The widest cone here, and deliberately: this much scatter cannot pin a direction over ninety days.';
+            : `The widest cone here, and deliberately: this much scatter cannot pin a direction over ${f.horizonDays} days.`;
 
       return {
         id: spec.id,
@@ -236,19 +255,49 @@
   );
 </script>
 
-<section class="c">
+<section id="health-c" class="c">
   <div class="c-inner">
     <SectionHead
-      kicker="C / Forecast · 90 days"
+      kicker="C / Forecast · {horizon} days"
       title={['Where the lines', 'go if nothing changes']}
       strap="Solid is recorded. Dashed is the current trend extended. The cone is the honest spread — it widens because thin data should look uncertain."
     />
+
+    <!-- The horizon control. Nothing is refitted when it moves: the same line
+         is read at a nearer point, which is why the confidence figure on each
+         card does not change with it. -->
+    <div class="c-horizon">
+      <span class="c-horizon-label">Read to</span>
+      {#each FORECAST_HORIZONS as h (h)}
+        <button
+          type="button"
+          class="c-horizon-btn"
+          class:on={h === horizon}
+          aria-pressed={h === horizon}
+          onclick={() => (horizon = h)}
+        >
+          +{h}d
+        </button>
+      {/each}
+      <span class="c-horizon-note">Same fit, read nearer — the confidence does not move.</span>
+    </div>
 
     <div class="c-grid">
       {#each cards as card (card.id)}
         <div class="c-card">
           <div class="c-card-head">
-            <p class="c-name">{card.name}</p>
+            <!-- `sleep`, `hrv`, `vo2max` and `acwr` are the registry's own ids,
+                 so a card opens the SAME drill the tiles and panels do rather
+                 than a fifth way of showing one metric. -->
+            <p class="c-name">
+              {#if onmetric}
+                <button type="button" class="c-open" onclick={() => onmetric?.(card.id)}>
+                  {card.name}
+                </button>
+              {:else}
+                {card.name}
+              {/if}
+            </p>
             <p class="c-conf">{card.readable ? `${card.confidence}% conf` : 'no read'}</p>
           </div>
           <!-- No read means no figure: `— → —` at 30px Archivo Black paints
@@ -260,7 +309,7 @@
           {/if}
 
           {#if card.chart}
-            <svg viewBox="-6 -6 312 124" class="c-chart" role="img" aria-label="{card.name}: {card.now} today, {card.then} in ninety days">
+            <svg viewBox="-6 -6 312 124" class="c-chart" role="img" aria-label="{card.name}: {card.now} today, {card.then} in {horizon} days">
               {#if card.chart.band}
                 <rect x="0" y={card.chart.band.y} width={W} height={card.chart.band.height} fill="rgba(138,154,91,0.16)" />
                 <text x="4" y={card.chart.band.labelY} class="c-axis">{card.chart.band.label}</text>
@@ -277,7 +326,7 @@
               <circle cx={card.chart.dot.x} cy={card.chart.dot.y} r="3.5" fill="var(--accent)" />
               <line x1={MID} y1="0" x2={MID} y2={H} stroke="rgba(26,16,8,0.2)" stroke-width="1" />
               <text x={MID - 4} y={H - 3} text-anchor="end" class="c-axis">Today</text>
-              <text x={W - 4} y={H - 3} text-anchor="end" class="c-axis">+90d</text>
+              <text x={W - 4} y={H - 3} text-anchor="end" class="c-axis">+{horizon}d</text>
             </svg>
           {:else}
             <div class="c-empty">Awaiting a window</div>
@@ -328,6 +377,74 @@
   .c-name {
     font-weight: 500;
     letter-spacing: 0.15em;
+  }
+  /* Styled back to the label it replaces: the card head is a mono kicker row,
+     and a button that looked like a button would make four of them. */
+  .c-open {
+    display: inline;
+    padding: 0;
+    margin: 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    text-transform: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+  }
+  .c-open:hover,
+  .c-open:focus-visible {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* The horizon control. A mono segmented row on the same register as the
+     kicker above it, so it reads as part of the section head rather than as a
+     widget dropped into an editorial page. */
+  .c-horizon {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: clamp(18px, 2vw, 28px);
+  }
+  .c-horizon-label,
+  .c-horizon-note {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+  .c-horizon-note {
+    text-transform: none;
+    letter-spacing: 0.04em;
+    margin-left: 6px;
+  }
+  .c-horizon-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 0;
+    padding: 5px 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .c-horizon-btn:hover,
+  .c-horizon-btn:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .c-horizon-btn.on {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
   }
   .c-conf {
     letter-spacing: 0.1em;

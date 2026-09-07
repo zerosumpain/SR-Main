@@ -40,6 +40,13 @@ import {
   type RecoveryDebtResult,
 } from './analytics/recovery-debt';
 import type { VO2Result } from './analytics/vo2max-percentile';
+import {
+  gettableHref,
+  plannerAcceptsKm,
+  plannerHref,
+  PLANNER_KM_MAX,
+  type PlannerSport,
+} from './deep-links';
 
 export const MAX_MOVES = 5;
 
@@ -49,6 +56,28 @@ export type MoveId =
   | 'polarised-mix'
   | 'book-big-day'
   | 'hold-and-watch';
+
+/**
+ * The one thing a move sends you off to go and do.
+ *
+ * NOT every move has one, and that is the whole design. A "fixed lights-out
+ * window" with a PLAN A ROUTE button under it would be a button that does not
+ * do the thing the row just argued for, and a page of those teaches the reader
+ * that the buttons are decoration. So the destination is read off what the move
+ * actually asks for: the long easy day and the booked objective are outings, so
+ * they seed the planner; tipping the mix asks for "a targeted segment, not a
+ * race", so it goes to the gettable board; the sleep window and the hold are
+ * habits and have none.
+ */
+export interface MoveAction {
+  /** Which surface it lands on — drives nothing but the label's icon-free wording. */
+  kind: 'planner' | 'segments';
+  /** The button's words. Names the actual session, never "Learn more". */
+  label: string;
+  href: string;
+  /** One line under the button saying why THIS destination follows from the row. */
+  note: string;
+}
 
 export interface Move {
   id: MoveId;
@@ -66,6 +95,8 @@ export interface Move {
   tone: 'accent' | 'muted';
   /** The deck panels this move actually moves. Drives `leverage`. */
   instruments: string[];
+  /** Where the row sends you, when it sends you anywhere. */
+  action: MoveAction | null;
 }
 
 export interface MovesInput {
@@ -83,6 +114,13 @@ export interface MovesInput {
   vo2: MetricResult<VO2Result> | null;
   /** Last COMPLETE week against the twelve-week median, in kilometres. */
   volume: { weekKm: number; medianKm: number } | null;
+  /**
+   * The sport the planner would commission today, so a move that sends the
+   * reader to /health/plan seeds it with what they actually do rather than
+   * with a hardcoded run. Absent means the caller could not read one, and the
+   * planner's own `proposeSession()` fallback — a run — stands.
+   */
+  sport?: PlannerSport | null;
 }
 
 /** Circadian drift past an hour is flagged — the same edge `computeCircadianAlignment` uses. */
@@ -187,6 +225,9 @@ function sleepWindow(i: MovesInput): Draft | null {
 
   return {
     id: 'sleep-window',
+    // A habit, not an outing. Nothing on this site plans a bedtime, so a
+    // button here would be a button that does not do what the row argues for.
+    action: null,
     title: 'FIXED LIGHTS-OUT WINDOW',
     rationale: `A 30-minute bedtime window, five nights in seven. Attacks ${sentence(clauses)} with one habit${tail}`,
     buys,
@@ -244,6 +285,7 @@ function longEasyDay(i: MovesInput): Draft | null {
 
   return {
     id: 'long-easy-day',
+    action: longEasyAction(i.sport ?? 'run'),
     title: 'ONE LONG EASY DAY A WEEK',
     rationale: `12–15 km at hike heart rate. It ${sentence(clauses)}. Deliberately dull — the shape a resting-heart-rate floor is built on.`,
     buys,
@@ -272,7 +314,16 @@ function polarisedMix(i: MovesInput): Draft | null {
       ? `Add one genuinely hard effort a week — a targeted segment, not a race. ${Math.round(p.midPct)}% of the time is being spent in the middle zones, which is the real trap; this takes the hard share from ${Math.round(p.hardPct)}% to the ${POLARISED_HARD_PCT}% a polarised verdict needs.`
       : `Add one genuinely hard effort a week — a targeted segment, not a race. Takes the hard share from ${Math.round(p.hardPct)}% to the ${POLARISED_HARD_PCT}% that turns the ${p.verdict} verdict polarised, without touching the ${Math.round(p.easyPct)}% easy share.`;
 
-  return { id: 'polarised-mix', title: 'TIP THE MIX TO POLARISED', rationale, buys, costs, ...meter(instruments), instruments };
+  return {
+    id: 'polarised-mix',
+    action: mixAction(),
+    title: 'TIP THE MIX TO POLARISED',
+    rationale,
+    buys,
+    costs,
+    ...meter(instruments),
+    instruments,
+  };
 }
 
 // ——— 04 · book one big day ————————————————————————————————————————
@@ -291,6 +342,7 @@ function bookBigDay(i: MovesInput): Draft | null {
 
   return {
     id: 'book-big-day',
+    action: bigDayAction(i.sport ?? 'run', vol?.medianKm ?? null),
     title: 'BOOK ONE BIG DAY',
     rationale: `A named objective with a date on it. ${why} A booked date does the motivational work no dashboard can.`,
     buys: [
@@ -345,6 +397,8 @@ function holdAndWatch(i: MovesInput, others: Draft[]): Draft | null {
 
   return {
     id: 'hold-and-watch',
+    // The move IS doing nothing. A call to action would contradict it.
+    action: null,
     title: 'DO NOTHING NEW · HOLD AND WATCH',
     rationale: `${opening} A quarter of holding is a legitimate choice, not a failure.`,
     buys: ['Zero cost.', 'Keeps the tripwires as the whole system until something actually trips.'],
@@ -357,6 +411,81 @@ function holdAndWatch(i: MovesInput, others: Draft[]): Draft | null {
 }
 
 // ——— shared ————————————————————————————————————————————————————
+
+// ——— where a move sends you ——————————————————————————————————————
+//
+// Every href below is built by `$lib/health/deep-links`, which round-trips
+// through the destination page's OWN parser. A template string here would be a
+// second, untested encoder for the same contract — and one that fails silently,
+// because a bad param lands on an unfiltered page rather than an error.
+
+/** The one long easy day's own distance, from the sentence the row prints. */
+const LONG_EASY_KM = 13.5;
+
+function longEasyAction(sport: PlannerSport): MoveAction {
+  return {
+    kind: 'planner',
+    label: `Plan a ${trim(LONG_EASY_KM)} km easy loop`,
+    href: plannerHref({
+      sport,
+      km: LONG_EASY_KM,
+      prefer: 'steady',
+      mode: 'loop',
+      from: 'move:long-easy-day',
+      why: 'One long easy day a week — steady ground, hike heart rate.',
+    }),
+    note: 'Opens the planner on steady ground at this distance. Readiness still gates the session there.',
+  };
+}
+
+/**
+ * The booked objective's distance is the reader's OWN median week done in a
+ * day, which is what makes it big for them rather than big in the abstract.
+ * With no median to read, the seed carries the sport alone — a number invented
+ * here would be the one thing on this page that came from nowhere.
+ */
+function bigDayAction(sport: PlannerSport, medianKm: number | null): MoveAction {
+  const rounded = medianKm != null && medianKm > 0 ? Math.round(medianKm * 10) / 10 : null;
+  // The label is built from the SAME number the href carries, so it must ask
+  // the planner whether that number survives. `plannerHref` drops a distance
+  // outside the planner's own range rather than clamping it — the right call —
+  // but a button reading "Plan the 120 km day" beside a URL with no distance in
+  // it is the button lying, which is worse than a vaguer button.
+  const km = plannerAcceptsKm(rounded) ? rounded : null;
+  return {
+    kind: 'planner',
+    label: km != null ? `Plan the ${trim(km)} km day` : 'Plan the day',
+    href: plannerHref({
+      sport,
+      km: km ?? undefined,
+      prefer: 'spiky',
+      from: 'move:book-big-day',
+      why: km != null
+        ? `A named objective: a whole median week — ${trim(km)} km — in one day.`
+        : 'A named objective with a date on it.',
+    }),
+    note:
+      km != null
+        ? `A whole ${trim(km)} km median week in one outing. Put a date on it, then plan the ground.`
+        : rounded != null
+          ? `A whole ${trim(rounded)} km median week in one outing — past the planner's ${PLANNER_KM_MAX} km ceiling, so set the distance there yourself.`
+          : 'Put a date on it, then plan the ground.',
+  };
+}
+
+/**
+ * Tipping the mix asks for "a targeted segment, not a race", so the honest
+ * destination is the gettable board — the list where a PB is a realistic
+ * afternoon — and not a route the planner drew.
+ */
+function mixAction(): MoveAction {
+  return {
+    kind: 'segments',
+    label: 'Pick a gettable segment',
+    href: gettableHref(),
+    note: 'The explorer, filtered to the board’s own gates: improving, inside 3% of the record, six efforts or more.',
+  };
+}
 
 /** Leverage, its label and its tone, from the instruments a move actually moves. */
 function meter(instruments: string[]): Pick<Move, 'leverage' | 'leverageLabel' | 'tone'> {

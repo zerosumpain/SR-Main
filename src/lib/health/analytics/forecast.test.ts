@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { computeForecast, FORECAST_ZERO, MIN_FORECAST_POINTS, type ForecastTrend } from './forecast';
+import { computeForecast, FORECAST_ZERO, MIN_FORECAST_POINTS, type ForecastTrend,
+  narrowHorizon,
+} from './forecast';
 import type { DayPoint } from './rolling';
 
 /** Days from a fixed origin, so every fixture is deterministic. */
@@ -160,5 +162,56 @@ describe('computeForecast — provenance', () => {
     const r = computeForecast(trend({ rolling7: series(28, () => 42) }));
     expect(r.asOf).toBe(day(27));
     expect(r.sampleSize).toBe(28);
+  });
+});
+
+describe('narrowHorizon — the same fit, read nearer', () => {
+  function ninetyDay() {
+    const daily: DayPoint[] = [];
+    for (let i = 0; i < 40; i++) {
+      const d = new Date('2026-07-01T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + i);
+      daily.push({ date: d.toISOString().slice(0, 10), value: 50 + i * 0.2 });
+    }
+    const r = computeForecast({ daily, rolling7: daily, latest7: null, baseline28: null, lastDate: daily[39].date });
+    expect(r.sufficiency).not.toBe('insufficient');
+    return r.value;
+  }
+
+  it('keeps the properties of the FIT untouched — it is not a refit', () => {
+    const full = ninetyDay();
+    const near = narrowHorizon(full, 30);
+    expect(near.slopePerMonth).toBe(full.slopePerMonth);
+    expect(near.confidence).toBe(full.confidence);
+    expect(near.residualSd).toBe(full.residualSd);
+    expect(near.now).toBe(full.now);
+    // History is what was recorded; a nearer horizon does not shorten the past.
+    expect(near.history).toEqual(full.history);
+  });
+
+  it('moves `then` and `horizonDays` to the horizon actually drawn', () => {
+    const full = ninetyDay();
+    const near = narrowHorizon(full, 30);
+    expect(near.horizonDays).toBe(30);
+    expect(near.then).not.toBe(full.then);
+    expect(near.then).toBe(near.projection[near.projection.length - 1].value);
+  });
+
+  it('drops the projection and cone points past the horizon, and keeps them paired', () => {
+    const full = ninetyDay();
+    const near = narrowHorizon(full, 30);
+    expect(near.projection.length).toBeLessThan(full.projection.length);
+    expect(near.cone.length).toBe(near.projection.length);
+  });
+
+  it('returns the result untouched at or beyond its own horizon', () => {
+    const full = ninetyDay();
+    expect(narrowHorizon(full, 90)).toBe(full);
+    expect(narrowHorizon(full, 180)).toBe(full);
+  });
+
+  it('never leaves a polyline with a single point to draw', () => {
+    const full = ninetyDay();
+    expect(narrowHorizon(full, 1).projection.length).toBeGreaterThanOrEqual(2);
   });
 });
