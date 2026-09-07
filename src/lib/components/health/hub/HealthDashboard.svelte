@@ -49,6 +49,7 @@
   import { buildReadings } from '$lib/health/metric-readings';
   import { metricPeek } from '$lib/health/metric-peek.svelte';
   import { replaceState } from '$app/navigation';
+  import { untrack } from 'svelte';
   import { fmtAgo } from '$lib/components/health/v2/utils';
   import type { HealthAudience, OwnerHealthData, PublicHealthData } from './types';
 
@@ -111,14 +112,34 @@
   /** Daily TRIMP — the series the drill's what-if pane simulates over. */
   const loadDays = $derived(data.dashboard?.load?.days ?? []);
 
-  // Seeded from the URL by the loader, then kept in step with it — so a drill
-  // is a link you can send someone, and the back button closes it.
+  // Seeded from the URL by the loader, then owned locally — so a drill is a
+  // link you can send someone, and the back button closes it.
   //
-  // Plain `$state` seeded once, NOT a `$derived` off a store: this is the
-  // pattern `SegmentsView` uses with `initialQuery`, and it keeps the write
-  // path one-directional. An effect that read the URL and also wrote it is the
+  // Plain `$state`, NOT a `$derived` off the URL: the write path has to stay
+  // one-directional. Something that read the URL and also wrote it is the
   // read-own-write cycle that ends in `effect_update_depth_exceeded`.
+  //
+  // The initialiser reads `data` and Svelte warns `state_referenced_locally`.
+  // That is CORRECT here and deliberate: it captures the value at mount, which
+  // is what makes a `?metric=` link render its drill open during SSR rather
+  // than flashing shut and reopening after hydration. The effect below covers
+  // the case the warning is actually about.
+  // svelte-ignore state_referenced_locally
   let drillId = $state<string | null>(data.initialMetric ?? null);
+
+  // A genuinely NEW payload — a client-side navigation to /health carrying a
+  // different `?metric=` — re-seeds the drill. `replaceState` never re-runs
+  // load, so opening a drill does not trip this; only a real navigation does.
+  //
+  // The tracked read is hoisted and the write is untracked, which is the
+  // house pattern for a prop-to-state sync: without `untrack`, the assignment
+  // re-subscribes the effect to what it just wrote.
+  $effect(() => {
+    const seed = data.initialMetric ?? null;
+    untrack(() => {
+      if (seed !== drillId) drillId = seed;
+    });
+  });
 
   /** Put `?metric=` in the address bar without adding a history entry per hover. */
   function syncUrl(id: string | null) {

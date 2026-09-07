@@ -167,15 +167,41 @@ describe('HealthDashboard — the public audience', () => {
 
   it('offers no way into the owner-only children', () => {
     const body = publicHtml(ownerData());
-    for (const child of [
-      '/health/activities',
-      '/health/segments',
-      '/health/plan',
-      '/health/routes',
-      '/health/record',
-    ]) {
-      expect(body).not.toContain(`href="${child}"`);
-    }
+    // Matched as a PREFIX, not an exact string. The original asserted
+    // `href="/health/segments"` and would have sailed past
+    // `href="/health/segments?form=improving&gap=..3"` — which is exactly what
+    // the ranked moves, the experiments and the segment tiles started emitting
+    // in 2026-09-07, and the query string is a description of ground this
+    // reader is deliberately not shown.
+    const hrefs = [...body.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+    const gated = hrefs.filter((h) =>
+      /^\/health\/(activities|segments|plan|routes|record)\b/.test(h),
+    );
+    expect(gated).toEqual([]);
+  });
+
+  it('keeps the ARGUMENT the buttons hung off, having dropped the buttons', () => {
+    // The split is that an anonymous reader gets the reasoning and not the
+    // destinations — not that the sections go quiet. `publicMoves` nulls the
+    // action; everything else on the row is the same document the owner reads.
+    const move = {
+      id: 'long-easy-day' as const,
+      rank: 1,
+      title: 'ONE LONG EASY DAY A WEEK',
+      rationale: '12–15 km at hike heart rate.',
+      buys: ['ACWR into the building band.'],
+      costs: ['Two to three hours of calendar a week.'],
+      leverage: 3,
+      leverageLabel: '1 INSTRUMENT',
+      tone: 'accent' as const,
+      instruments: ['ACWR'],
+      action: null,
+    };
+    const body = publicHtml(ownerData({ moves: [move] }));
+    expect(body).toContain('ONE LONG EASY DAY A WEEK');
+    expect(body).toContain('12–15 km at hike heart rate.');
+    // …and no button under it.
+    expect(body).not.toContain('d-go');
   });
 
   it('keeps the nav for the owner', () => {
