@@ -5,6 +5,8 @@ import {
   disclosureLeaks,
   publicDashboard,
   publicSegmentForms,
+  publicMoves,
+  publicExperiments,
 } from './public-payload';
 
 /** Roughly the shape /health builds for a signed-in owner. */
@@ -364,5 +366,36 @@ describe('the anonymous payload, as the loader assembles it', () => {
     expect(publicPayload.coach).toBeNull();
     expect(publicPayload.segments).toBeNull();
     expect(publicPayload.chains).toEqual([]);
+  });
+});
+
+describe('disclosureLeaks — links into pages the reader cannot open', () => {
+  // The walker was written to catch a PLACE and had no idea what a URL was, so
+  // when the ranked moves grew a call to action the href went straight through
+  // it: not a timestamp, not a segment name, not a polyline, and its key is
+  // `href`, which no geometry or identity pattern matches.
+  it('catches an owner-gated href wherever it appears', () => {
+    expect(disclosureLeaks({ moves: [{ action: { href: '/health/segments?form=improving&gap=..3' } }] }))
+      .toEqual(['moves[0].action.href: owner-gated link']);
+    expect(disclosureLeaks({ a: { b: '/health/plan?sport=run&km=13.5' } }))
+      .toEqual(['a.b: owner-gated link']);
+    expect(disclosureLeaks({ x: '/health/activities' })).toEqual(['x: owner-gated link']);
+  });
+
+  it('leaves the hub itself alone — it is the page they are already on', () => {
+    expect(disclosureLeaks({ x: '/health' })).toEqual([]);
+    expect(disclosureLeaks({ x: '/health?metric=acwr' })).toEqual([]);
+  });
+
+  it('does not fire on an unrelated path that merely starts the same way', () => {
+    expect(disclosureLeaks({ x: '/healthy-eating' })).toEqual([]);
+  });
+
+  it('finds nothing in a payload the strippers have been through', () => {
+    const stripped = {
+      moves: publicMoves([{ id: 'long-easy-day', action: { href: '/health/plan?km=13' } }]),
+      experiments: publicExperiments([{ id: 'one-hard-effort', action: { href: '/health/segments' } }]),
+    };
+    expect(disclosureLeaks(stripped)).toEqual([]);
   });
 });

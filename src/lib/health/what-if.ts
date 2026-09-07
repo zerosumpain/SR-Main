@@ -29,8 +29,9 @@
 //
 //  3. THE SESSION IS THE UNIT, NOT THE TRIMP. Nobody knows what "adding 120
 //     TRIMP" means. The presets below are sessions with a duration and an
-//     intensity, and the load is derived from them — so the control reads "a
-//     90-minute easy day" and the arithmetic stays visible underneath.
+//     intensity, and the load is derived from them — so the control reads "the
+//     long easy day" and the arithmetic (105 min × easy = 105 load) stays
+//     visible underneath it.
 import { computeACWR, type ACWRResult, type LoadDay } from './analytics/acwr';
 import { computeMonotony, type MonotonyResult } from './analytics/monotony';
 import type { MetricResult } from './analytics/types';

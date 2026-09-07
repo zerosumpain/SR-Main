@@ -143,6 +143,26 @@ const SEGMENT_NAME = /^[a-z]+\.[a-z]+\.[a-z]+$/;
 const ENCODED_POLYLINE = /^[\x3F-\x7E]{30,}$/;
 
 /**
+ * A link into a page the anonymous reader cannot open.
+ *
+ * The walker was written to catch a PLACE — a coordinate, a segment name, an
+ * outing's clock. It had no idea what a URL was, so when `moves` and
+ * `experiments` grew a call to action in 2026-09-07, an href like
+ * `/health/segments?form=improving&gap=..3` went straight through it: not a
+ * timestamp, not a segment name, not a polyline, and its key is `href`, which
+ * no geometry or identity pattern matches.
+ *
+ * Two things are wrong with such a link reaching an anonymous browser. It is a
+ * dead end — every destination under /health but the hub itself is owner-gated
+ * — and the query string is a DESCRIPTION of ground the same reader is
+ * deliberately not shown three sections lower.
+ *
+ * `/health` itself is excluded: the hub is the page they are already on, and
+ * `?metric=` names a metric rather than anything on the ground.
+ */
+const OWNER_GATED_LINK = /^\/health\/(activities|segments|plan|routes|record)\b/;
+
+/**
  * Walk a payload and name everything in it that could disclose a place, a
  * route, or the clock of a specific outing. An empty array means the payload is
  * safe to hand an anonymous browser.
@@ -167,6 +187,7 @@ export function disclosureLeaks(value: unknown, path = ''): string[] {
       // algorithm emits printable ASCII 63–126 in dense runs; ordinary prose
       // does not go 30 characters without a space or a vowel.
       else if (ENCODED_POLYLINE.test(node)) found.push(`${at}: encoded polyline`);
+      else if (OWNER_GATED_LINK.test(node)) found.push(`${at}: owner-gated link`);
       return;
     }
     if (typeof node !== 'object') return;
