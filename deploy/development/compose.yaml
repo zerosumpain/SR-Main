@@ -1,0 +1,63 @@
+name: sr-development
+services:
+  development-docker:
+    image: docker:29.7.2-dind@sha256:3ef33f2e220b79ed3ef3b99d81746f06f306cd6340e2cb7331d17ae996e74cb6
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ''
+    volumes:
+      - docker_state:/var/lib/docker
+    healthcheck:
+      test: ['CMD', 'docker', 'info']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  broker:
+    image: sr-development-broker:${DEVELOPMENT_IMAGE_REVISION:?required}
+    build:
+      context: ${DEVELOPMENT_SOURCE_ROOT:?required}
+      dockerfile: deploy/development/Dockerfile
+    restart: unless-stopped
+    command: ['node', '/source/scripts/development-workspace-broker.mjs']
+    ports:
+      - '127.0.0.1:5280:5280'
+    environment:
+      DOCKER_HOST: tcp://development-docker:2375
+      BUILDER_DOCKER_HOSTNAME: development-docker
+      BUILDER_SOURCE_ROOT: /source
+      BUILDER_WORKSPACE_BROKER_TOKEN: ${BUILDER_WORKSPACE_BROKER_TOKEN:?required}
+      BUILDER_PREVIEW_ACCESS_SECRET: ${BUILDER_PREVIEW_ACCESS_SECRET:?required}
+      BUILDER_PREVIEW_DOMAIN: strangeramblings.com
+      BUILDER_PREVIEW_PARENT_ORIGIN: https://strangeramblings.com
+      # Preserve the existing host builder's legacy workspace ownership.
+      BUILDER_PROTECT_WORKSPACES: '0'
+    volumes:
+      - ${DEVELOPMENT_SOURCE_ROOT}:/source:ro
+      - /home/jkai/workspace:/home/jkai/workspace
+      - broker_state:/var/lib/development-broker
+    depends_on:
+      development-docker:
+        condition: service_healthy
+  gateway:
+    image: sr-development-broker:${DEVELOPMENT_IMAGE_REVISION:?required}
+    user: '1000:1000'
+    restart: unless-stopped
+    command: ['node', '/source/scripts/development-preview-gateway.mjs']
+    ports:
+      - '127.0.0.1:5289:5289'
+    environment:
+      BUILDER_DOCKER_HOSTNAME: development-docker
+      BUILDER_PREVIEW_DOMAIN: strangeramblings.com
+      BUILDER_PREVIEW_ACCESS_SECRET: ${BUILDER_PREVIEW_ACCESS_SECRET:?required}
+    volumes:
+      - ${DEVELOPMENT_SOURCE_ROOT}:/source:ro
+      - broker_state:/var/lib/development-broker:ro
+    depends_on:
+      - broker
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    mem_limit: 256m
+volumes:
+  docker_state:
+  broker_state:

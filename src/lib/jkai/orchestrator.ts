@@ -1,3 +1,7 @@
+import { readdir } from 'node:fs/promises';
+import { loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
+import { candidateChanged } from '$lib/jkai/development';
+import { interruptActiveChild } from './interrupt-registry';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, and, desc, asc, isNotNull, lt, sql, inArray } from 'drizzle-orm';
@@ -150,7 +154,7 @@ class Orchestrator {
   }
 
   async startBuild(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'start' });
       return;
     }
@@ -186,6 +190,7 @@ class Orchestrator {
     // the queue entry so the user sees a coherent state.
     const wasActive = this.activeBuildId === buildId;
     if (wasActive) {
+      interruptActiveChild(buildId);
       this.stopped = true;
       if (this.loopTimer) clearTimeout(this.loopTimer);
       this.loopTimer = null;
@@ -214,7 +219,7 @@ class Orchestrator {
    * whatever pi wrote before it was killed.
    */
   async restartBuild(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'restart' });
       return;
     }
@@ -237,7 +242,7 @@ class Orchestrator {
   }
 
   async resumeBuild(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'resume' });
       return;
     }
@@ -261,6 +266,7 @@ class Orchestrator {
   async stopBuild(buildId: string): Promise<void> {
     const wasActive = this.activeBuildId === buildId;
     if (wasActive) {
+      interruptActiveChild(buildId);
       this.stopped = true;
       if (this.loopTimer) clearTimeout(this.loopTimer);
       this.loopTimer = null;
@@ -304,7 +310,7 @@ class Orchestrator {
     improvementPrompt: string,
     modelOverride?: { provider?: string; modelId?: string },
   ): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'continue', prompt: improvementPrompt, modelOverride });
       return;
     }
@@ -447,6 +453,10 @@ class Orchestrator {
    * their own enqueue check.
    */
   private async dequeueNext(): Promise<void> {
+    if (this.iteratingBuildId) {
+      setTimeout(() => { void this.dequeueNext(); }, 100);
+      return;
+    }
     if (this.activeBuildId) return; // race guard — something else took the slot
     const [next] = await db
       .select()
@@ -508,29 +518,29 @@ class Orchestrator {
   }
 
   async recoverOnStartup(): Promise<void> {
-    // Mark every build that was mid-flight as failed. A pi subprocess lives
-    // in our process tree, so a systemctl restart kills it mid-iteration —
-    // there is no safe way to resume from that state. The user can retry
-    // with /continue if they want to pick up the work.
-    const runningBuilds = await db
-      .select()
-      .from(jkaiBuilds)
-      .where(eq(jkaiBuilds.status, 'running'));
-
+    const runningBuilds = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.status, 'running'));
     for (const build of runningBuilds) {
       await failOrphanedIterations(build.id);
-      await db
-        .update(jkaiBuilds)
-        .set({ status: 'failed', updatedAt: new Date() })
-        .where(eq(jkaiBuilds.id, build.id));
-      await emitLog(
-        build.id,
-        'error',
-        'Service restarted mid-build — marked failed. Use Continue to pick up from the last good iteration.',
-      );
+      const delivery = await loadDelivery(build.id);
+      if (delivery?.state.decisions.some((d) => !d.answer)) {
+        await db.update(jkaiBuilds).set({ status: 'paused', updatedAt: new Date() }).where(eq(jkaiBuilds.id, build.id));
+        await emitLog(build.id, 'system', 'Saved session is waiting for an owner decision. Answer it before continuing.');
+        continue;
+      }
+      const configuredRoot = process.env.JKAI_BUILDS_ROOT;
+      const sessionsRoot = !configuredRoot || configuredRoot === '/opt/jkai-builds' ? '/home/jkai/workspace' : configuredRoot;
+      const sessionFiles = await readdir(`${sessionsRoot}/${build.id}/sessions`).catch(() => []);
+      if (delivery?.state.session.file || sessionFiles.some((f) => f.endsWith('.jsonl'))) {
+        if (delivery) await mutateDelivery(build.id, 'recovery_queued', (s) => ({ ...s, stage: 'queued',
+          session: { ...s.session, recovery: 'Builder restarted. Reconcile the saved session, git status and unfinished commands before continuing.' } }));
+        await db.update(jkaiBuilds).set({ status: 'queued', queuedAction: { kind: 'restart' }, queuedAt: new Date(), updatedAt: new Date() })
+          .where(eq(jkaiBuilds.id, build.id));
+        await emitLog(build.id, 'system', 'Saved Pi session queued for recovery. Workspace and completed instruction receipts are retained.');
+      } else {
+        await db.update(jkaiBuilds).set({ status: 'paused', updatedAt: new Date() }).where(eq(jkaiBuilds.id, build.id));
+        await emitLog(build.id, 'system', 'Paused after restart: no durable session was recorded. Inspect the workspace before restarting.');
+      }
     }
-
-    // Queued builds survive a restart — kick the next one in line.
     await this.dequeueNext();
   }
 
@@ -735,7 +745,7 @@ class Orchestrator {
       // Idempotent: silently no-op (double-click, already approved/skipped).
       return;
     }
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'approvePlan' });
       return;
     }
@@ -770,7 +780,7 @@ class Orchestrator {
   }
 
   async skipPlan(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'skipPlan' });
       return;
     }
@@ -795,7 +805,7 @@ class Orchestrator {
   }
 
   async replan(buildId: string, revisedPrompt?: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'replan', revisedPrompt });
       return;
     }
@@ -853,7 +863,7 @@ class Orchestrator {
   // --- Iteration-approval API (Phase 2) ---
 
   async approveIteration(buildId: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'approveIteration' });
       return;
     }
@@ -871,7 +881,7 @@ class Orchestrator {
   }
 
   async rejectIteration(buildId: string, notes: string): Promise<void> {
-    if (this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) {
+    if ((this.activeBuildId && this.activeBuildId !== buildId && !this.dequeueing) || (!this.activeBuildId && this.iteratingBuildId)) {
       await this.enqueue(buildId, { kind: 'rejectIteration', notes });
       return;
     }
@@ -1131,10 +1141,12 @@ class Orchestrator {
         prevIteration,
         projectPlan,
         iterationNumber,
-        () => this.stopped,
+        () => this.stopped || this.activeBuildId !== buildId,
         retryNudge,
         deadlineRef,
       );
+      if (this.stopped || this.activeBuildId !== buildId) return;
+
 
       this.currentDeadline = null;
 
@@ -1549,6 +1561,9 @@ class Orchestrator {
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         testResult = await runTests(buildId, `/home/jkai/workspace/${buildId}/dev`);
       }
+      // A paused attempt may finish its external gate, but cannot publish its
+      // result or replace the state of a queued continuation.
+      if (this.stopped || this.activeBuildId !== buildId) return;
       const testSummary = formatTestSummary(testResult, durationMs);
       // Show the human what the AGENT was shown, not the head of the transcript.
       // The stored log for every failed gate on change request #223 was 1,996
@@ -1841,6 +1856,22 @@ class Orchestrator {
       // the top of runIteration, so a never-passing gate still terminates.
       if (build.gitTargetConfig) {
         if (testResult.passed) {
+          const delivery = await loadDelivery(buildId);
+          if (delivery) {
+            const { snapshotCandidate, prepareDevelopmentPreview } = await import('./development-workspace.server');
+            const { revision, changes } = await snapshotCandidate(buildId);
+            await mutateDelivery(buildId, 'candidate_verified', (s) => ({ ...candidateChanged(s, revision), changes, stage: 'review',
+              gate: { passed: true, evidence: testResult.gateCommand ?? 'Repository feedback and release gates passed', revision } }));
+            await prepareDevelopmentPreview(buildId).catch(async (err) => {
+              await mutateDelivery(buildId, 'preview_failed', (s) => ({ ...s, preview: { url: null, status: 'failed', detail: err.message } }));
+            });
+            await db.update(jkaiBuilds).set({ status: 'paused', outcome: 'preview_ready', updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
+            await emitLog(buildId, 'system', 'Candidate ready for review. Acceptance and batch integration remain pending; no PR was created.');
+            await emitStage(buildId, { stage: 'paused', message: 'Ready for preview and acceptance review' });
+            this.activeBuildId = null;
+            await this.dequeueNext();
+            return;
+          }
           await emitLog(buildId, 'system', 'Gate passed — publishing via GitHub PR (no auto-merge; human review required).', iteration.id);
           await emitRepoVerification(buildId, {
             phase: 'publish',
@@ -2092,7 +2123,7 @@ class Orchestrator {
    */
   private async rescueFailedGitBuild(buildId: string, failure: FailureEnvelope): Promise<void> {
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-    if (!build?.gitTargetConfig) return;
+    if (!build?.gitTargetConfig || await loadDelivery(buildId)) return;
 
     const cfg = build.gitTargetConfig as GitTargetConfig;
     const dev = `/home/jkai/workspace/${buildId}/dev`;

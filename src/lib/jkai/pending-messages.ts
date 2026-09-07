@@ -1,18 +1,8 @@
-/**
- * Pending-message queue helpers — Phase 5.
- *
- * The agent's iteration loop drains any unconsumed rows for a build at
- * the start of each LLM turn (drainPendingMessages), prepends them to
- * the system prompt as a `<user-injected>` block, then marks them
- * consumed. This is the user's "stop, do this instead" channel:
- * messages typed into /jkai/builds/<id>'s prompt land here.
- *
- * The DB table (jkai_build_pending_messages) is the source of truth so
- * messages survive process restarts of the builder.
- */
+/** Durable steering outbox. Inclusion is recorded only after Pi echoes the user message. */
 import { db } from '$lib/db';
 import { jkaiBuildPendingMessages, type JkaiBuildPendingMessage } from '$lib/db/schema';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, inArray } from 'drizzle-orm';
+import { activePiWorker, instructionEnvelope } from './pi-rpc';
 
 export async function enqueuePendingMessage(
   buildId: string,
@@ -30,49 +20,49 @@ export async function listPendingMessages(buildId: string): Promise<JkaiBuildPen
   return db
     .select()
     .from(jkaiBuildPendingMessages)
-    .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), isNull(jkaiBuildPendingMessages.consumedAt)))
+    .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), isNull(jkaiBuildPendingMessages.consumedAt), isNull(jkaiBuildPendingMessages.cancelledAt)))
     .orderBy(asc(jkaiBuildPendingMessages.createdAt));
-}
-
-/** Drain the queue: return everything unconsumed for this build, mark
- *  consumed atomically. Called at the top of each LLM turn so the agent
- *  receives a stable snapshot. Concurrent inserts after the drain wait
- *  for the next turn — fine, we never lose messages.
- */
-export async function drainPendingMessages(buildId: string): Promise<JkaiBuildPendingMessage[]> {
-  const now = new Date();
-  const drained = await db
-    .update(jkaiBuildPendingMessages)
-    .set({ consumedAt: now })
-    .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), isNull(jkaiBuildPendingMessages.consumedAt)))
-    .returning();
-  return drained.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
 export async function removePendingMessage(buildId: string, id: number): Promise<boolean> {
   const result = await db
     .update(jkaiBuildPendingMessages)
-    .set({ consumedAt: new Date() })
-    .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), eq(jkaiBuildPendingMessages.id, id)))
+    .set({ cancelledAt: new Date() })
+    .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), eq(jkaiBuildPendingMessages.id, id), isNull(jkaiBuildPendingMessages.dispatchedAt), isNull(jkaiBuildPendingMessages.acknowledgedAt), isNull(jkaiBuildPendingMessages.consumedAt), isNull(jkaiBuildPendingMessages.cancelledAt)))
     .returning();
   return result.length > 0;
 }
 
-/** Format a drained batch into the prompt block the agent sees. Empty
- *  string when there are no messages — caller can decide whether to skip
- *  the block. */
-export function formatPendingForPrompt(messages: JkaiBuildPendingMessage[]): string {
-  if (messages.length === 0) return '';
-  const lines = messages.map((m) => {
-    const ts = m.createdAt.toISOString().slice(11, 19); // HH:MM:SS
-    return `[${ts} ${m.role}] ${m.content}`;
-  });
-  return [
-    '<user-injected>',
-    'The user typed these messages while you were working. Apply them now —',
-    'they take precedence over earlier instructions where they conflict.',
-    '',
-    ...lines,
-    '</user-injected>',
-  ].join('\n');
+export async function instructionHistory(buildId: string) {
+  const rows = await db.select().from(jkaiBuildPendingMessages).where(eq(jkaiBuildPendingMessages.buildId, buildId))
+    .orderBy(desc(jkaiBuildPendingMessages.id)).limit(200);
+  return rows.reverse();
+}
+
+/** Only the echoed user message proves inclusion in the durable agent session. */
+export async function markInstructionsApplied(buildId: string, ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  await db.update(jkaiBuildPendingMessages).set({ consumedAt: new Date() })
+    .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), inArray(jkaiBuildPendingMessages.id, ids), isNull(jkaiBuildPendingMessages.consumedAt), isNull(jkaiBuildPendingMessages.cancelledAt)));
+}
+
+const delivering = new Set<string>();
+export async function deliverPendingInstructions(buildId: string, sent: Set<number>): Promise<void> {
+  const worker = activePiWorker(buildId);
+  if (!worker || delivering.has(buildId)) return;
+  delivering.add(buildId);
+  try {
+    for (const item of await listPendingMessages(buildId)) {
+      if (sent.has(item.id)) continue;
+      // Reserve before awaiting: a response failure is ambiguous. Reconcile from
+      // Pi's persisted transcript on reconnection instead of sending twice here.
+      sent.add(item.id);
+      const reserved = await db.update(jkaiBuildPendingMessages).set({ dispatchedAt: new Date() })
+        .where(and(eq(jkaiBuildPendingMessages.id, item.id), isNull(jkaiBuildPendingMessages.cancelledAt), isNull(jkaiBuildPendingMessages.consumedAt))).returning();
+      if (!reserved.length) continue;
+      await worker.request('steer', { message: instructionEnvelope(item.id, item.content) });
+      await db.update(jkaiBuildPendingMessages).set({ acknowledgedAt: new Date() })
+        .where(and(eq(jkaiBuildPendingMessages.buildId, buildId), eq(jkaiBuildPendingMessages.id, item.id)));
+    }
+  } finally { delivering.delete(buildId); }
 }

@@ -58,6 +58,7 @@ function rpc<T = unknown>(method: string, args: unknown[]): Promise<T> {
  * over the Unix socket instead of called in-process.
  */
 export const builderClient = {
+  developmentCapabilities: () => rpc<{ engine: string; persistentSessions: boolean; brokerConfigured: boolean }>('developmentCapabilities', []),
   startBuild: (buildId: string) => rpc<void>('startBuild', [buildId]),
   pauseBuild: (buildId: string) => rpc<void>('pauseBuild', [buildId]),
   resumeBuild: (buildId: string) => rpc<void>('resumeBuild', [buildId]),
@@ -75,6 +76,7 @@ export const builderClient = {
   cancelQueued: (buildId: string) => rpc<void>('cancelQueued', [buildId]),
 
   // Phase 5/6/7 session actions.
+  sessionAnswer: (buildId: string, decisionId: string) => rpc<void>('sessionAnswer', [buildId, decisionId]),
   sessionInject: (buildId: string, content: string) => rpc<void>('sessionInject', [buildId, content]),
   sessionInjectRemove: (buildId: string, id: number) => rpc<void>('sessionInjectRemove', [buildId, id]),
   sessionInterrupt: (buildId: string) => rpc<{ ok: boolean }>('sessionInterrupt', [buildId]),

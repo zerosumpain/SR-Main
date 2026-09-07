@@ -1,5 +1,8 @@
 import { spawn } from 'child_process';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { PiRpc, registerPiWorker, instructionIds, type RpcEvent } from './pi-rpc';
+import { deliverPendingInstructions, markInstructionsApplied } from './pending-messages';
+import { ensureDelivery, loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
 import { db } from '$lib/db';
 import { jkaiIterations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -118,7 +121,7 @@ export function readVersionFrom(cmd: string, args: string[]): Promise<string | n
   return new Promise<string | null>((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     } catch {
       resolve(null);
       return;
@@ -218,6 +221,7 @@ interface PiMessage {
 
 interface PiEvent {
   type: string;
+  id?: string; method?: string; title?: string;
   message?: PiMessage;
   // message_update events carry streaming deltas; we only need a few fields.
   assistantMessageEvent?: {
@@ -464,8 +468,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   const piParts = [
     'pi',
-    '--mode', 'json',
-    '--no-session',
+    '--mode', 'rpc',
+    '--session-dir', sh(join(dirname(workdir), 'sessions')),
+    '--continue',
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
@@ -494,7 +499,6 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   piParts.push('--provider', provider);
   piParts.push('--model', sh(modelId));
   piParts.push('--append-system-prompt', sh(systemPrompt));
-  piParts.push('-p', sh(userPrompt));
   const piCmd = piParts.join(' ');
 
   // Host-mode: run pi directly on the host shell with cwd=workdir. No
@@ -518,7 +522,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     spawnCmd = 'bash';
     spawnArgs = ['-c', piCmd];
     spawnOpts = {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       cwd: workdir,
       env: buildChildEnvironment({
         ...(auth ? { [auth.envVar]: auth.value } : {}),
@@ -546,7 +550,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     dockerArgs.push(CONTAINER_NAME, 'bash', '-c', piCmd);
     spawnCmd = 'docker';
     spawnArgs = dockerArgs;
-    spawnOpts = { stdio: ['ignore', 'pipe', 'pipe'] };
+    spawnOpts = { stdio: ['pipe', 'pipe', 'pipe'] };
   }
 
   await emitLog(
@@ -588,7 +592,25 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
   const child = spawn(spawnCmd, spawnArgs, spawnOpts);
-  // spawnOpts always uses `stdio: ['ignore', 'pipe', 'pipe']` (both branches),
+  let agentEnded = false;
+  let eventChain: Promise<void> = Promise.resolve();
+  const sentInstructions = new Set<number>();
+  const rpc = new PiRpc((line) => {
+    if (!child.stdin?.writable) throw new Error('Pi input is closed');
+    child.stdin.write(line);
+  });
+  const unregisterWorker = registerPiWorker(build.id, rpc);
+  const closed = new Promise<number>((resolve) => {
+    child.once('error', (err) => { errorMessage = err.message; resolve(1); });
+    child.once('close', (code) => resolve(code ?? (agentEnded ? 0 : 1)));
+  });
+  child.stdin?.on('error', (err) => { errorMessage ??= err.message; });
+  const instructionTimer = setInterval(() => {
+    void deliverPendingInstructions(build.id, sentInstructions).catch((err) => {
+      void emitLog(build.id, 'error', `Instruction remains saved for recovery: ${err.message}`, iteration.id);
+    });
+  }, 1000);
+  // spawnOpts always uses `stdio: ['pipe', 'pipe', 'pipe']` (both branches),
   // so stdout/stderr are real pipes — this guard narrows the types and would
   // only ever fire if the stdio config above is changed.
   if (!child.stdout || !child.stderr) {
@@ -597,10 +619,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   // Register so the WebSocket inbound `interrupt` handler can SIGTERM us.
   registerActiveChild(build.id, child);
   child.once('exit', () => clearActiveChild(build.id, child));
-  // `docker exec -i` keeps the container's stdin attached to our pipe; if that
-  // pipe never closes, pi with `--mode json -p` waits indefinitely for EOF
-  // before emitting its first event. Using `stdio: 'ignore'` for stdin closes
-  // it at spawn time, so pi sees an EOF immediately and starts work.
+  // RPC keeps stdin open for steering; EOF closes a completed session.
 
   const stopTimer = setInterval(async () => {
     if (isStopped()) {
@@ -612,7 +631,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   // Poll the deadline (mutable) every 5s so user-initiated extensions via the
   // orchestrator's extendDeadline() take effect mid-run.
+  let ownerWaitSince: number | null = null;
   const wallClockCheck = setInterval(() => {
+    if (ownerWaitSince !== null) return;
     if (Date.now() >= deadline.current) {
       try {
         wallClockHit = true;
@@ -657,6 +678,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   /** When the currently-outstanding batch of tool calls began; null when idle. */
   let toolBusySince: number | null = null;
   const idleCheck = setInterval(() => {
+    if (ownerWaitSince !== null) return;
     const now = Date.now();
 
     if (toolBusySince !== null) {
@@ -713,7 +735,14 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       stdoutBuf = stdoutBuf.slice(nlIdx + 1);
       nlIdx = stdoutBuf.indexOf('\n');
       if (!line) continue;
-      void handleLine(line);
+      // Responses must bypass the event chain: an event may be awaiting RPC.
+      let parsed: RpcEvent;
+      try { parsed = JSON.parse(line); } catch { continue; }
+      if (rpc.receive(parsed)) continue;
+      eventChain = eventChain.then(() => handleLine(line)).catch((err) => {
+        errorMessage ??= `Could not process Pi event: ${err.message}`;
+        child.kill('SIGTERM');
+      });
     }
   });
 
@@ -733,6 +762,24 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       // ./strip-nulls for what that did to build 85dac418.
       ev = stripNulls(JSON.parse(line) as PiEvent);
     } catch {
+      return;
+    }
+
+    if (ev.type === 'extension_ui_request' && ev.method === 'input' && ev.id) {
+      const row = await ensureDelivery(build.id);
+      const question = (ev.title ?? 'A product decision is needed').slice(0, 5000);
+      const existing = row.state.decisions.find((d) => d.question === question);
+      if (existing?.answer) { rpc.respond(ev.id, existing.answer); return; }
+      await mutateDelivery(build.id, 'decision_requested', (s) => ({ ...s, stage: 'needs_input', decisions: existing
+        ? s.decisions.map((d) => d.id === existing.id ? { ...d, requestId: ev.id } : d)
+        : [...s.decisions, { id: crypto.randomUUID(), question, answer: null, requestId: ev.id }] }));
+      ownerWaitSince = Date.now();
+      await emitLog(build.id, 'system', `Waiting for your decision: ${question}`, iteration.id);
+      return;
+    }
+    if (ev.type === 'agent_end') {
+      agentEnded = true;
+      child.stdin?.end();
       return;
     }
 
@@ -857,6 +904,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       }
 
       const name = call?.name ?? m.toolName ?? 'tool';
+      if (name === 'ask_owner' && ownerWaitSince !== null) {
+        deadline.current += Date.now() - ownerWaitSince;
+        ownerWaitSince = null;
+        toolBusySince = pendingCalls.size ? Date.now() : null;
+        lastOutputAt = Date.now();
+      }
       const code = summarizeArgs(call?.args);
 
       actions.push({
@@ -881,7 +934,10 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     // --- User (just the initial prompt echo — record but don't log) ---
     else if (m.role === 'user') {
       const text = (m.content ?? []).map((c) => c.text ?? '').join('\n');
-      if (text) messages.push({ role: 'user', content: text.slice(0, 32000) });
+      if (text) {
+        await markInstructionsApplied(build.id, instructionIds(text));
+        messages.push({ role: 'user', content: text.slice(0, 32000) });
+      }
     }
 
     // Persist incrementally.
@@ -909,9 +965,30 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       });
   }
 
-  const exitCode: number = await new Promise((resolve) => {
-    child.on('close', (code) => resolve(code ?? 0));
-  });
+  // get_messages reconciles a crash between Pi's durable write and our receipt.
+  // Only replay unconsumed instructions absent from that transcript.
+  void (async () => {
+    const stateReply = await rpc.request('get_state');
+    const session = stateReply.data as { sessionId?: string; sessionFile?: string };
+    const history = await rpc.request('get_messages');
+    const stored = (history.data as { messages?: Array<{ role: string; content?: unknown }> }).messages ?? [];
+    for (const message of stored) {
+      if (message.role === 'user') await markInstructionsApplied(build.id, instructionIds(JSON.stringify(message.content)));
+    }
+    if (await loadDelivery(build.id)) {
+      await mutateDelivery(build.id, 'session_connected', (s) => ({ ...s, stage: 'building',
+        session: { ...s.session, id: session.sessionId ?? null, file: session.sessionFile ?? null } }));
+    }
+    await rpc.request('prompt', { message: userPrompt });
+    await deliverPendingInstructions(build.id, sentInstructions);
+  })().catch((err) => { errorMessage ??= err.message; child.kill('SIGTERM'); });
+
+  const exitCode = await closed;
+  clearInterval(instructionTimer);
+  unregisterWorker();
+  rpc.close();
+  await eventChain;
+  if (!agentEnded && !errorMessage && !isStopped()) errorMessage = 'Pi disconnected before completing the turn; its session is preserved.';
 
   clearInterval(stopTimer);
   clearInterval(idleCheck);

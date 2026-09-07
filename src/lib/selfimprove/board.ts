@@ -489,6 +489,8 @@ export function stageFor(item: BacklogItemData, ctx: StageContext): WorkStage {
     return 'live';
   }
 
+  // A dispatch receipt is still build work, even when the retry cap was reached.
+  if (item.buildRef) return 'building';
   // open
   if (item.attempts >= ctx.attemptCeiling) return 'parked';
   if (item.attempts > 0) return 'building';
@@ -617,8 +619,8 @@ export function buildBoard(input: BoardInput): BoardView {
       createdAt: b.createdAt,
       updatedAt: b.updatedAt,
       lastError: b.lastError ?? null,
-      artifact: tool ? tool.name : (b.prUrl ?? null),
-      artifactHref: artifactHref(b.prUrl ?? null),
+      artifact: tool ? tool.name : (b.prUrl ?? b.buildRef ?? null),
+      artifactHref: artifactHref(b.prUrl ?? b.buildRef ?? null),
       calls: tool ? tool.runCount : null,
       errorRate: tool && tool.runCount > 0 ? tool.errorCount / tool.runCount : null,
       newData: bringsNewData(b.kind),

@@ -1722,6 +1722,36 @@ export const jkaiBuildPendingMessages = pgTable('jkai_build_pending_messages', {
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+});
+
+/** Versioned delivery contract; kept separate from the worker's execution status. */
+export const jkaiBuildDeliveries = pgTable('jkai_build_deliveries', {
+  buildId: text('build_id').primaryKey().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  revision: integer('revision').notNull().default(1),
+  state: jsonb('state').notNull().$type<import('$lib/constants/development').DeliveryState>(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jkaiBuildDeliveryEvents = pgTable('jkai_build_delivery_events', {
+  id: serial('id').primaryKey(),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  detail: jsonb('detail').notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jkaiBuildLessons = pgTable('jkai_build_lessons', {
+  id: serial('id').primaryKey(),
+  buildId: text('build_id').notNull().references(() => jkaiBuilds.id, { onDelete: 'cascade' }),
+  area: text('area').notNull(),
+  lesson: text('lesson').notNull(),
+  evidence: text('evidence').notNull(),
+  revision: text('revision').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type JkaiBuildPendingMessage = typeof jkaiBuildPendingMessages.$inferSelect;

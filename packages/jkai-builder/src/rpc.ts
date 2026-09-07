@@ -11,6 +11,7 @@
  * to debug from the client side than non-standard HTTP statuses.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { PI_CAPABILITIES } from '$lib/jkai/pi-rpc';
 import { orchestrator } from '$lib/jkai/orchestrator';
 import {
   sessionInject,
@@ -20,12 +21,14 @@ import {
   sessionRemoveNote,
   sessionSnapshot,
   sessionShell,
+  sessionAnswer,
 } from '$lib/jkai/session-actions';
 
 type AnyArgs = unknown[];
 
 // Dispatch table — every call site in SvelteKit must come through one of these.
 const dispatchTable: Record<string, (args: AnyArgs) => Promise<unknown> | unknown> = {
+  developmentCapabilities: () => ({ ...PI_CAPABILITIES, brokerConfigured: Boolean(process.env.BUILDER_WORKSPACE_BROKER_URL) }),
   startBuild: (a) => orchestrator.startBuild(a[0] as string),
   pauseBuild: (a) => orchestrator.pauseBuild(a[0] as string),
   resumeBuild: (a) => orchestrator.resumeBuild(a[0] as string),
@@ -44,6 +47,7 @@ const dispatchTable: Record<string, (args: AnyArgs) => Promise<unknown> | unknow
   // Phase 5/6/7 session actions — POST /api/jkai/builds/<id>/session forwards
   // here. Outbound state changes are emitted via emitLive() so the existing
   // SSE stream (Cloudflare-compatible) delivers them.
+  sessionAnswer: (a) => sessionAnswer(a[0] as string, a[1] as string),
   sessionInject: (a) => sessionInject(a[0] as string, a[1] as string),
   sessionInjectRemove: (a) => sessionInjectRemove(a[0] as string, a[1] as number),
   sessionInterrupt: (a) => sessionInterrupt(a[0] as string),

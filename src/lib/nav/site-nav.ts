@@ -219,6 +219,7 @@ export const SECTIONS: NavSection[] = [
       { label: 'Intel', href: '/jkai/intel' },
       { label: 'Codegraph', href: '/jkai/codegraph' },
       { label: 'Builds', href: '/jkai/builds' },
+      { label: 'Develop', href: '/jkai/develop' },
       { label: 'Daydreams', href: '/jkai/daydreams' },
       { label: 'Notes', href: '/jkai/notes' },
       // Personal data: the source catalogue and the evidence audit. Two cells,
