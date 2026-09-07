@@ -17,10 +17,10 @@ metadata:
 
 An **sr. deck** is a multidirectional editorial slide presentation at `strangeramblings.com/decks/<slug>`. A deck is a tree of slides; each slide is an ordered list of typed blocks that render in the site's field-study register (Fraunces serif, paper-and-ink). The main pathway runs **left→right**; a slide with `children` carries a **side journey** — a floating pill on it says "↓ down for `journey_label`" and the viewer walks the journey downward (a journey inside a journey runs rightward; ↑/Escape climb back; a nav map bottom-left shows the way home). **Always set `journey_label`** (2–5 words naming the side story) on any slide with children. Decks are **private by default**; the build tool mints a share link.
 
-## The design-first gate (same discipline as canvas builds)
+## Commissioning and creation
 
-1. **Design in chat first.** Write the outline as numbered slides: title, block types, the key content of each block, and which slide nests a sub-deck. Keep it skimmable — this is the approval artifact.
-2. **Wait for yes** ("build it", "go", "yes") before calling the tool. Never call `presentation_build_from_spec` with a guessed design.
+1. **Design from the brief.** Plan numbered slides, key content, block types and any side journeys. For an outline-only request, present that plan; for a commission, continue through creation without an extra approval turn.
+2. **Create when commissioned.** An explicit request to create or commission a deck authorizes the build in the same turn. Use the brief and conversation to design the slides, call `presentation_describe_vocabulary`, then `presentation_build_from_spec`. If asked only for an outline, wait for a creation request.
 3. **One build call.** On return, paste `data.summaryMarkdown` VERBATIM — it has the deck URL, the share link and the outline. Do not rewrite it or invent URLs.
 4. If the tool returns validation issues, fix the spec and call again — do not hand the errors to John.
 
@@ -70,7 +70,7 @@ After building a first draft, John may ask to enrich it with real content from t
 
 ## Tools
 
-- `presentation_build_from_spec` — create a NEW deck. Args: `{ title, description?, slug?, is_public?, slides: [{ title, layout?, blocks, notes?, children? }] }`. The full block vocabulary is in the tool description.
+- `presentation_build_from_spec` — create a NEW deck. Args: `{ title, description?, slug?, is_public?, slides: [{ title, layout?, blocks, notes?, children? }] }`. Fetch the block vocabulary with `presentation_describe_vocabulary`.
 - `presentation_list` — slugs/titles/visibility of existing decks.
 - `presentation_get_spec` — read a deck as an editable spec.
 - `presentation_update_from_spec` — rewrite an existing deck from a revised spec (destructive: platform will ask the user to confirm).

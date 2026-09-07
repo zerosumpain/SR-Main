@@ -63,6 +63,12 @@ describe('carriedToolsets', () => {
     expect(carriedToolsets(history, [])).toEqual([]);
   });
 
+  it('keeps deck creation and vocabulary through a mixed-topic commission follow-up', () => {
+    const carried = carriedToolsets([user('Build a deck from my research files about health')], ['builds']);
+    expect(carried).toContain('decks');
+    expect(carried).toContain('presentations');
+  });
+
   it('is safe on an empty history', () => {
     expect(carriedToolsets([], [])).toEqual([]);
   });

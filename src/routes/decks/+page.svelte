@@ -15,7 +15,10 @@
   import HealthShell from '$lib/components/health/hub/HealthShell.svelte';
   import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
 
-  let { data } = $props();
+  import { enhance } from '$app/forms';
+
+  let { data, form } = $props();
+  let creating = $state(false);
 
   const fmtDate = (d: Date) =>
     new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -81,6 +84,23 @@
         strap="Newest first. The one wearing the accent edge is the most recently rebuilt."
       />
 
+  {#if data.isOwner}
+    <section class="create-panel" aria-label="New deck">
+      <form method="POST" action="?/create" use:enhance={() => {
+        creating = true;
+        return async ({ update }) => { try { await update(); } finally { creating = false; } };
+      }}>
+        <label for="deck-title">New deck title</label>
+        <div class="create-row">
+          <input id="deck-title" name="title" required maxlength="160" placeholder="What is your presentation about?" value={form?.title ?? ''} />
+          <button type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create deck'}</button>
+        </div>
+        {#if form?.error}<p role="alert">{form.error}</p>{/if}
+      </form>
+      <p>Start with a private title slide and edit it, or <a href="/jkai?new=1&q=Commission%20a%20new%20sr.%20deck%20presentation%20about%20">Commission in JKAI</a> from a brief.</p>
+    </section>
+  {/if}
+
       {#if data.decks.length === 0}
         <p class="empty">Nothing published yet.</p>
       {:else}
@@ -111,6 +131,16 @@
 </HealthShell>
 
 <style>
+  .create-panel { padding: 18px 0; margin-bottom: 22px; border-bottom: 1px solid var(--line-strong); font-family: var(--font-body); }
+  .create-panel label { display: block; margin-bottom: 8px; font-weight: 600; }
+  .create-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .create-row input { flex: 1 1 240px; min-width: 0; padding: 10px; border: 1px solid var(--line-strong); background: var(--surface-card); color: var(--text-primary); font-size: var(--fs-body); }
+  .create-row button { padding: 10px 18px; background: var(--accent); color: var(--bg); border: 1px solid var(--accent); font-size: var(--fs-body); cursor: pointer; }
+  .create-row button:disabled { opacity: 0.6; cursor: wait; }
+  .create-panel p { margin: 10px 0 0; font-size: var(--fs-label); color: var(--text-muted); }
+  .create-panel a { color: var(--accent-ink); }
+  .create-panel [role='alert'] { color: var(--error); }
+
   /* --- Cover: the ink band, lit the way every band in this system is --- */
   .lede {
     padding: clamp(28px, 3.5vw, 48px) clamp(20px, 3vw, 44px);

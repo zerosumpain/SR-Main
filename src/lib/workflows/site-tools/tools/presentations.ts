@@ -1,6 +1,6 @@
 // sr. decks — build a presentation from an explicit spec. The deck twin of
-// workflow_build_from_spec: the LLM designs the deck IN CHAT first (outline,
-// per-slide blocks), gets a yes, then persists it here. Zero LLM calls inside
+// workflow_build_from_spec: the LLM designs the commissioned deck (outline,
+// per-slide blocks), then persists it here. Zero LLM calls inside
 // the tool — the model is the author, this is the persister.
 // Spec: docs/superpowers/specs/2026-07-11-decks-presentation-capability.md
 
@@ -211,9 +211,9 @@ register({
   description:
     'Build a NEW sr. decks presentation (/decks/<slug>) from an EXPLICIT spec — title plus a tree of slides, ' +
     'each slide an ordered list of typed blocks. ' +
-    'DESIGN-FIRST WORKFLOW: before calling this tool you MUST have written the deck outline in chat ' +
-    '(numbered slides, per-slide block types and key content, which slides carry a side journey) ' +
-    'and the user must have said yes/build it. Never call this tool with a guess at the design. ' +
+    'When the user commissions or asks you to create a deck, design the slides and call this tool in the same turn. ' +
+    'An explicit commission authorizes creation; do not require a second yes. If the user asks only for an outline, ' +
+    'provide the outline and wait for a creation request. Ask for missing subject matter only when the conversation does not supply it. ' +
     'Slides with `children` become SIDE JOURNEYS: the main pathway runs left→right; a floating pill on the ' +
     'parent ("down for <journey_label>") leads down into the journey; ↑/Escape climb back. ' +
     'Every slide is a FIXED 1280×720 page — nothing scrolls, overfull specs are REJECTED with fit feedback: ' +
