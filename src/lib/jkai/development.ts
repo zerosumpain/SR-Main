@@ -33,6 +33,8 @@ export function deliveryPrompt(state: DeliveryState): string {
     'Constraints: ' + state.brief.constraints, 'Target routes: ' + state.brief.routes.join(', '),
     'Scope: ' + (state.brief.scope ?? ''), 'Dependencies to verify: ' + (state.brief.dependencies ?? ''),
     'Assumptions: ' + (state.brief.assumptions ?? ''), 'Validation plan: ' + (state.brief.validation ?? ''),
+    'Remaining questions to resolve during implementation: ' + (state.brief.questions ?? ''),
+    'Use the agreed scope and assumptions for reversible implementation choices. Ask the owner if a remaining question blocks the feature or requires changing scope or taking an irreversible action.',
     'Acceptance criteria:', ...state.criteria.map((c) => `- ${c.text}`),
     'Owner decisions:', ...state.decisions.filter((d) => d.answer).map((d) => `${d.question}: ${d.answer}`),
     'Prepare the change for local preview. Do not push, create a PR, merge or deploy.',

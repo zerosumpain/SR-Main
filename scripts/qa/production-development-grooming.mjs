@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import pg from 'pg';
 export async function verifyGrooming(headers) {
-  const fingerprint = createHash('sha256').update(await readFile(new URL('../../src/lib/jkai/development-grooming.server.ts', import.meta.url))).digest('hex');
+  const fingerprint = createHash('sha256').update(await readFile(new URL('../../src/lib/jkai/development-grooming.server.ts', import.meta.url))).update(await readFile(new URL(import.meta.url))).digest('hex');
   const stamp = '/opt/sr-development/verified-grooming.sha256';
   if ((await readFile(stamp, 'utf8').catch(() => '')).trim() === fingerprint) {
     console.log('PASS: this grooming implementation already passed the live model smoke.');
@@ -39,13 +39,26 @@ export async function verifyGrooming(headers) {
     assert.equal(result.state.brief.acceptedAt, null, 'Grooming must not approve implementation');
     assert.equal(build.status, 'paused', 'Grooming must not start Pi');
     assert.equal(result.state.originalAsk, prompt);
+    const questions = 'Verify the smallest readable mobile layout during implementation.';
+    const accepted = await fetch(`${endpoint}/${id}`, { ...options, method: 'POST', body: JSON.stringify({
+      ...result.state.brief, action: 'brief', area: 'Health', revision: result.revision,
+      briefRevision: result.state.brief.revision, routes: result.state.brief.routes.join('\n'),
+      criteria: result.state.criteria.map(c => c.text).join('\n'), questions,
+    }), signal: AbortSignal.timeout(30000) });
+    assert.equal(accepted.status, 200, 'Owner must be able to accept a brief with remaining questions');
+    const confirmation = await fetch(`${endpoint}/${id}`, options);
+    assert.equal(confirmation.status, 200);
+    const confirmed = await confirmation.json();
+    assert.ok(confirmed.delivery.state.brief.acceptedAt);
+    assert.equal(confirmed.delivery.state.brief.questions, questions, 'Acceptance must retain unresolved questions');
+    assert.equal(confirmed.build.status, 'paused', 'Acceptance alone must not start Pi');
     await writeFile(stamp, `${fingerprint}\n`, { mode: 0o600 });
-    console.log(`PASS: live model grooming saved ${result.state.criteria.length} criteria, dependencies and validation; original ask retained, brief unaccepted, Pi not started.`);
+    console.log(`PASS: live model grooming saved ${result.state.criteria.length} criteria, dependencies and validation; original ask retained, grooming did not approve; explicit acceptance retained open questions; Pi not started.`);
   } finally {
     if (id) {
       const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
       await client.connect();
-      try { await client.query('delete from jkai_builds where id=$1 and prompt=$2 and status=$3', [id, prompt, 'paused']); }
+      try { await client.query("delete from jkai_builds where id=$1 and status=$3 and exists (select 1 from jkai_build_deliveries d where d.build_id=jkai_builds.id and d.state->>'originalAsk'=$2)", [id, prompt, 'paused']); }
       finally { await client.end(); }
     }
   }

@@ -79,6 +79,7 @@
       <button class="nm-btn-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
       <button class="nm-btn-ghost" disabled={busy || !running} onclick={() => act('stop')}>Stop</button>
     </div>
+    {#if deliveryState && !deliveryState.brief.acceptedAt}<p class="muted">Accept the brief below to enable Build to preview. Remaining questions do not prevent acceptance.</p>{/if}
   </header>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if deliveryState?.decisions.some((d) => !d.answer)}<aside class="attention"><strong>A decision is waiting</strong><button onclick={() => tab = 'Build'}>Open decisions</button></aside>{/if}
@@ -92,7 +93,7 @@
             <h2>{deliveryState.grooming ? 'Proposed brief' : 'Let’s shape your ask'}</h2>
             <p>{deliveryState.grooming?.summary ?? 'The model will propose acceptance criteria, scope, dependencies and a validation plan. Review its assumptions before accepting.'}</p>
             {#if deliveryState.grooming}<small>Proposed by {deliveryState.grooming.model} · {new Date(deliveryState.grooming.at).toLocaleString()}</small>{/if}
-            {#if questions.trim()}<p><strong>Your input is needed</strong></p><ul>{#each questions.split('\n').filter(Boolean) as pending}<li>{pending}</li>{/each}</ul>{/if}
+            {#if questions.trim()}<p><strong>Questions to consider</strong></p><ul>{#each questions.split('\n').filter(Boolean) as pending}<li>{pending}</li>{/each}</ul>{/if}
             <label>Answers or changes for the model<textarea bind:value={feedback} rows="3" placeholder="Answer the questions below, or explain what you want changed." disabled={busy}></textarea></label>
             <button class="nm-save-btn" disabled={busy || running} onclick={() => refine()}>{grooming ? 'Refining your brief…' : deliveryState.grooming ? 'Refine with my answers' : 'Propose a brief'}</button>
             {#if grooming}<p role="status">Drafting criteria and checking the supplied site context. Your original ask is saved.</p>{/if}
@@ -109,9 +110,9 @@
           <label>Scope and exclusions<textarea bind:value={scope} rows="3"></textarea></label>
           <div class="columns"><label>Dependencies to verify<textarea bind:value={dependencies} rows="3"></textarea></label><label>Assumptions<textarea bind:value={assumptions} rows="3"></textarea></label></div>
           <label>Validation plan<textarea bind:value={validation} rows="4"></textarea></label>
-          <label>Open questions<textarea bind:value={questions} rows="3" placeholder="Resolve these with the model above, or incorporate your answers into the brief and clear the resolved questions."></textarea></label>
-          <p class="muted">Resolve open questions before accepting. Dependencies are proposals to verify during implementation.</p>
-          <button class="nm-save-btn" disabled={busy || running || !!questions.trim()}>Accept brief</button><span class="muted">Revision {deliveryState.brief.revision}{deliveryState.brief.acceptedAt ? ' · accepted' : ' · draft'}</span></fieldset>
+          <label>Open questions<textarea bind:value={questions} rows="3" placeholder="Answer these with the model, or accept the brief and retain them for the builder."></textarea></label>
+          <p class="muted">You can accept this brief now. Remaining questions travel with it; the builder will ask if a decision blocks implementation.</p>
+          <button class="nm-save-btn" disabled={busy || running || !outcome.trim() || !criteria.trim()}>{questions.trim() ? 'Accept brief with open questions' : 'Accept brief'}</button><span class="muted">Revision {deliveryState.brief.revision}{deliveryState.brief.acceptedAt ? ' · accepted' : ' · draft'}</span></fieldset>
         </form>
         <details><summary>Verified repository knowledge</summary>{#each snapshot.lessons as item}<p>{item.lesson}<small>{item.evidence} · recheck after {new Date(item.expiresAt).toLocaleDateString()}</small></p>{:else}<p>No accepted lessons for this product area yet.</p>{/each}</details>
       {:else if tab === 'Build'}

@@ -39,11 +39,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (body.briefRevision !== delivery.state.brief.revision) throw new Error('The brief changed; reload before refining.');
         if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
         const draft = readBriefFields(body);
-        const proposal = await groomDevelopmentBrief({ ...draft, area: body.area }, text(body.message ?? '', 5000), await relevantLessons(body.area));
+        const message = text(body.message ?? '', 5000);
+        const turns = delivery.state.grooming?.turns ?? [];
+        const proposal = await groomDevelopmentBrief({ ...draft, area: body.area }, message, await relevantLessons(body.area), turns);
         await mutateDelivery(id, 'brief_groomed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
           brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null },
           criteria: proposal.criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
-          grooming: proposal.grooming,
+          grooming: { ...proposal.grooming, turns: [...turns, ...(message ? [{ questions: draft.questions, answer: message }] : [])].slice(-12) },
         }), revision);
         break;
       }
@@ -51,7 +53,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (body.briefRevision !== delivery.state.brief.revision) throw new Error('The brief changed in another session; reload before editing.');
         if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before changing its accepted brief. You can send a steering instruction while it runs.');
         const extra = readBriefFields(body);
-        if (extra.questions) throw new Error('Resolve the open questions before accepting the brief.');
         const outcome = text(body.outcome, 20000);
         const constraints = text(body.constraints, 20000);
         const criteria = text(body.criteria, 30000).split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 30);

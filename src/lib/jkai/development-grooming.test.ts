@@ -8,11 +8,12 @@ const proposal = { summary: 'Review visibility.', outcome: 'Save weekly comparis
 beforeEach(() => vi.clearAllMocks());
 it('calls the selected model with edited draft, owner answers and bounded site context', async () => {
   mocks.create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(proposal) } }] });
-  const result = await groomDevelopmentBrief({ ...readBriefFields({ outcome: 'Compare weeks', dependencies: 'Keep my data source' }), area: 'Health' }, 'Use steps only', [{ lesson: 'Owner gated', evidence: 'Verified route' }]);
+  const result = await groomDevelopmentBrief({ ...readBriefFields({ outcome: 'Compare weeks', dependencies: 'Keep my data source' }), area: 'Health' }, 'Use steps only', [{ lesson: 'Owner gated', evidence: 'Verified route' }], [{ questions: 'Which metrics?', answer: 'Steps only' }]);
   expect(mocks.resolve).toHaveBeenCalledOnce();
   const request = mocks.create.mock.calls[0][0];
   const context = JSON.parse(request.messages[1].content);
   expect(context.message).toBe('Use steps only');
+  expect(context.earlierAnswers).toEqual([{ questions: 'Which metrics?', answer: 'Steps only' }]);
   expect(context.draft.dependencies).toBe('Keep my data source');
   expect(context.navigation).toContainEqual(expect.objectContaining({ href: '/health' }));
   expect(result.brief.dependencies).toContain('Verify health data');
@@ -31,6 +32,7 @@ it('retains dependency and validation requirements in the Pi implementation prom
   const prompt = deliveryPrompt(state);
   expect(prompt).toContain('Verify health data access');
   expect(prompt).toContain('Save, reload and compare values');
+  expect(prompt).toContain('Which metrics?');
 });
 it('rejects malformed or oversized browser fields without altering input', () => {
   expect(() => readBriefFields({ outcome: 'Ask', questions: [] })).toThrow('Invalid questions');
