@@ -75,8 +75,7 @@ manifest and relevant verified lessons. This is proposal generation from supplie
 context, not a claim that the model inspected the repository or tested providers.
 
 Proposals contain criteria, scope, dependencies to verify, assumptions, up to
-three material questions, and validation. They remain unaccepted. Questions must
-be resolved before acceptance; dependencies and validation travel into Pi's
+three material questions, and validation. They remain unaccepted. Questions are advisory and retained on explicit owner acceptance; dependencies and validation travel into Pi's
 implementation prompt. The original ask is retained separately. Provider failure
 or malformed output preserves the draft; revision checks reject results that
 would overwrite intervening changes. Accepted briefs cannot be silently groomed.
@@ -101,6 +100,28 @@ changed as part of this correction. Local web and builder services were restarte
 Release verification now performs one bounded real-model grooming request per
 implementation fingerprint, using a disposable paused draft. It verifies that
 criteria, dependencies and validation are saved, the original ask is retained,
-and neither approval nor Pi execution occurs. The synthetic build is deleted
+and grooming itself neither approves the brief nor starts Pi. The smoke then
+explicitly accepts the disposable draft with a remaining question and verifies
+that the question is retained while Pi stays paused. The synthetic build is deleted
 in a finally block. Later deployments with the same grooming implementation
 skip that model call. Owner verification tokens expire after three minutes.
+
+
+### Grooming convergence and owner acceptance
+
+Open questions no longer disable brief acceptance or cause the API to reject an
+otherwise usable brief. The owner explicitly chooses **Accept brief with open
+questions**; those questions remain in the accepted brief and Pi prompt. Pi is
+instructed to ask the owner if a decision blocks implementation or requires a
+scope change or irreversible action. The feature is still not started until
+**Build to preview** is selected.
+
+Grooming retains the last twelve question/answer turns and supplies them on
+subsequent calls. The prompt directs the model to converge on reasonable stated
+assumptions and stop inventing fresh question rounds. Existing drafts remain
+compatible; their previous answers can only be recovered from the current brief
+where the earlier model incorporated them. No conversation history is invented.
+
+Regression checks cover four answer rounds, supplying earlier answers to the
+model, acceptance with unresolved questions, persistence and Pi prompt handoff.
+The LAN browser check confirms desktop/phone approval with questions present.

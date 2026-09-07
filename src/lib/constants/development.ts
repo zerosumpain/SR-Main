@@ -12,7 +12,7 @@ export interface DeliveryState {
   area: string;
   stage: DeliveryStage;
   originalAsk?: string;
-  grooming?: { model: string; at: string; summary: string };
+  grooming?: { turns?: Array<{ questions: string; answer: string }>; model: string; at: string; summary: string };
   brief: { scope?: string; dependencies?: string; assumptions?: string; questions?: string; validation?: string; revision: number; outcome: string; constraints: string; routes: string[]; acceptedAt: string | null };
   criteria: Criterion[];
   decisions: Array<{ id: string; question: string; answer: string | null; requestId?: string }>;

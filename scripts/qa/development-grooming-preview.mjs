@@ -17,7 +17,7 @@ try {
     id = new URL(route.request().url()).pathname.split('/').pop();
     const { rows } = await client.query('select state from jkai_build_deliveries where build_id=$1', [id]);
     const state = rows[0].state;
-    state.brief = { ...state.brief, revision: state.brief.revision + 1, outcome: 'Save weekly health comparisons', constraints: 'Owner only', routes: ['/health'], scope: 'Compare two selected weeks', dependencies: 'Verify existing health data access', assumptions: 'Reuse existing measurements', validation: 'Save and reload the comparison', questions: calls === 2 ? 'Which metrics should be included?' : '' };
+    state.brief = { ...state.brief, revision: state.brief.revision + 1, outcome: 'Save weekly health comparisons', constraints: 'Owner only', routes: ['/health'], scope: 'Compare two selected weeks', dependencies: 'Verify existing health data access', assumptions: 'Reuse existing measurements', validation: 'Save and reload the comparison', questions: 'Which layout works best?' };
     if (calls === 3) assert.equal(body.message, 'Steps only.');
     state.criteria = [{ id: 'criterion-1', text: 'A saved comparison survives reload', verdict: 'unverified', evidence: '', revision: null }];
     state.grooming = { model: 'Synthetic browser fixture', at: new Date().toISOString(), summary: calls === 2 ? 'Choose the metrics before building.' : 'Steps only; ready for your review.' };
@@ -34,7 +34,7 @@ try {
   await page.getByRole('button', { name: 'Propose a brief', exact: true }).click();
   await page.getByRole('heading', { name: 'Proposed brief' }).waitFor();
   assert.equal(await page.getByLabel('Dependencies to verify').inputValue(), 'Verify existing health data access');
-  assert.equal(await page.getByRole('button', { name: 'Accept brief', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Accept brief with open questions', exact: true }).isEnabled(), true);
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -52,9 +52,11 @@ try {
   await page.getByLabel('Answers or changes for the model').fill('Steps only.');
   await page.getByRole('button', { name: 'Refine with my answers', exact: true }).click();
   await page.getByText('Steps only; ready for your review.').waitFor();
-  await page.getByRole('button', { name: 'Accept brief', exact: true }).click();
+  await page.getByRole('button', { name: 'Accept brief with open questions', exact: true }).click();
   await page.getByText('Revision 5 · accepted').waitFor();
   assert.equal(await page.getByRole('button', { name: 'Build to preview', exact: true }).isEnabled(), true);
+  const accepted = await client.query('select state from jkai_build_deliveries where build_id=$1', [id]);
+  assert.equal(accepted.rows[0].state.brief.questions, 'Which layout works best?');
   console.log('PASS: automatic grooming request, failure recovery, populated proposal, follow-up answers, persistence, approval and desktop/mobile layout. Synthetic model responses; no provider invoked.');
 } finally {
   if (id) await client.query('delete from jkai_builds where id=$1', [id]);
