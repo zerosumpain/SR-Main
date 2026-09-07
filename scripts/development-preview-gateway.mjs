@@ -6,30 +6,37 @@ import { pathToFileURL } from 'node:url';
 import { verifyPreviewAccess } from './development-preview-access.mjs';
 const COOKIE = '__Host-sr-development';
 
+/** @param {{ secret: string | undefined, receiptRoot: string, domain: string | undefined, upstreamHost: string, upstreamPort?: (port: number) => number }} options */
 export function createPreviewGateway({ secret, receiptRoot, domain, upstreamHost, upstreamPort = p => p }) {
-  if (!secret || secret.length < 32 || !/^[a-z0-9.-]+$/.test(domain)) throw new Error('Preview gateway configuration is required');
+  if (!secret || secret.length < 32 || typeof domain !== 'string' || !/^[a-z0-9.-]+$/.test(domain)) throw new Error('Preview gateway configuration is required');
+  /** @param {string | undefined} host */
   const hostPort = host => {
     for (let port = 5281; port <= 5288; port++) if (host === `preview-${port}.${domain}`) return port;
     return null;
   };
+  /** @param {http.IncomingMessage} req @param {unknown} token */
   const authorize = async (req, token) => {
     const claim = verifyPreviewAccess(secret, token);
     if (!claim || hostPort(req.headers.host) !== claim.port) return null;
     const receipt = JSON.parse(await readFile(join(receiptRoot, `${claim.buildId}-preview.json`), 'utf8').catch(() => '{}'));
     return receipt.revision === claim.revision && receipt.port === claim.port ? claim : null;
   };
+  /** @param {http.IncomingMessage} req */
   const cookieToken = req => (req.headers.cookie ?? '').split(';').map(v => v.trim()).find(v => v.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
+  /** @param {http.IncomingMessage} req */
   const safeHeaders = req => {
     const headers = { ...req.headers, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host };
     delete headers.cookie; delete headers.authorization; delete headers['proxy-authorization'];
     return headers;
   };
+  /** @param {http.IncomingMessage} reply */
   const responseHeaders = reply => {
     const headers = { ...reply.headers, 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex, nofollow' };
     // A proposed site cannot set cookies on the production parent domain.
     delete headers['set-cookie'];
     return headers;
   };
+  /** @param {http.ServerResponse} res */
   const deny = res => { res.writeHead(401, { 'content-type': 'text/plain', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' }); res.end('Open or refresh this preview from the owner Development workspace.'); };
   const server = http.createServer(async (req, res) => {
     try {
@@ -45,9 +52,9 @@ export function createPreviewGateway({ secret, receiptRoot, domain, upstreamHost
       }
       const claim = await authorize(req, cookieToken(req));
       if (!claim) return deny(res);
-      if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin !== `https://${req.headers.host}`) { res.writeHead(403); return res.end('Preview origin mismatch'); }
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? '') && req.headers.origin !== `https://${req.headers.host}`) { res.writeHead(403); return res.end('Preview origin mismatch'); }
       const upstream = http.request({ hostname: upstreamHost, port: upstreamPort(claim.port), path: req.url, method: req.method, headers: safeHeaders(req) }, reply => {
-        res.writeHead(reply.statusCode, responseHeaders(reply)); reply.pipe(res);
+        res.writeHead(reply.statusCode ?? 502, responseHeaders(reply)); reply.pipe(res);
       });
       upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end('Preview is starting; refresh shortly.'); });
       req.pipe(upstream);
