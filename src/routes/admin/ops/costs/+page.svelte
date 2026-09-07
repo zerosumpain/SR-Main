@@ -379,7 +379,7 @@
           <code>{w.effectiveModelId}</code>
           <span class="research-note">{w.source === 'pinned' ? 'Selected for research' : w.source === 'env' ? 'Environment setting' : 'Follows site default'}</span>
           {#if w.id === 'research-fast' && w.effectiveModelId.startsWith('codex/')}
-            <span class="research-note">Instant, Scan and Brief all run on this. Only Instant&rsquo;s &quot;fast&quot; web grounding needs OpenRouter, and falls back for that call alone.</span>
+            <span class="research-note">Instant, Scan and Brief all run on this. Instant&rsquo;s &quot;fast&quot; web grounding is OpenRouter-only, so it answers on &quot;free&quot; grounding instead — slower, no cash cost.</span>
           {/if}
         </div>
         <button class="nm-link-btn" aria-label={`Change ${w.label} model`} aria-expanded={researchSwitching === w.id} onclick={() => researchSwitching = researchSwitching === w.id ? null : w.id}>Change model</button>

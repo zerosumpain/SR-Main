@@ -11,6 +11,9 @@ import { isRateLimitError, chatCompletion, jsonCompletion, streamCompletion, gro
 
 const mockPrimaryCreate = vi.fn();
 const mockFallbackCreate = vi.fn();
+// The Codex bridge's grounded endpoint — the `free` route, and where a Codex
+// research model's `fast` request is sent instead of OpenRouter's web plugin.
+const mockCodexCreate = vi.fn();
 
 let primaryModel = 'z-ai/glm-5.2';
 let fallbackModel = 'google/gemini-3.1-flash-lite-preview';
@@ -22,6 +25,7 @@ vi.mock('$lib/llm/client', () => ({
     client: { chat: { completions: { create: mockPrimaryCreate } } },
     model: ctx?.modelId ?? primaryModel,
   })),
+  getGroundedCodexClient: () => ({ chat: { completions: { create: mockCodexCreate } } }),
 }));
 // `getPrimary()` resolves the `research-deep` workload, not the bare site
 // default — unset, that role follows the default, so the value under test is
@@ -380,20 +384,33 @@ describe('groundedCompletion (fast mode)', () => {
     expect(req.plugins).toEqual([{ id: 'web', max_results: 5 }]);
   });
 
-  it('substitutes the OpenRouter fallback for a codex id rather than failing the run', async () => {
+  it('sends a codex id down the free route rather than swapping the model', async () => {
     /**
      * `plugins` is an OpenRouter request extension: the Codex bridge has no
      * such parameter and OpenRouter has no such model, so this ONE call cannot
-     * carry a Codex research pick. Everything else Instant, Scan and Brief do
-     * can, which is why the role is no longer gated on the provider — the
-     * substitution belongs here, at the call that actually needs it.
+     * carry a Codex research pick. The answer is the model's OWN grounded
+     * route, not a different model — the owner's pick keeps answering, and the
+     * search costs nothing rather than ~$0.15 on a substitute.
      */
-    mockFallbackCreate.mockResolvedValueOnce(makeStream([{ delta: 'grounded' }]));
+    mockCodexCreate.mockResolvedValueOnce(makeSuccess('grounded on codex'));
 
     const promise = groundedCompletion('sys', 'user', { mode: 'fast', model: 'codex/gpt-5.6-terra' });
     await vi.runAllTimersAsync();
-    expect((await promise).text).toBe('grounded');
+    expect((await promise).text).toBe('grounded on codex');
 
-    expect(mockFallbackCreate.mock.calls[0][0].model).toBe('google/gemini-3.1-flash-lite-preview');
+    // The bridge wants the bare slug; the `codex/` prefix is ours.
+    expect(mockCodexCreate.mock.calls[0][0].model).toBe('gpt-5.6-terra');
+    // And OpenRouter's web plugin was never asked.
+    expect(mockFallbackCreate).not.toHaveBeenCalled();
+  });
+
+  it('lets an explicit free call keep naming its own codex model', async () => {
+    mockCodexCreate.mockResolvedValueOnce(makeSuccess('grounded'));
+
+    const promise = groundedCompletion('sys', 'user', { mode: 'free', model: 'codex/gpt-5.6-luna' });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(mockCodexCreate.mock.calls[0][0].model).toBe('gpt-5.6-luna');
   });
 });

@@ -255,11 +255,11 @@ export const resolveArtDirectorModel = () => resolveById('art-director');
  * `jsonCompletion` / `streamCompletion`, both of which pass an explicit id to
  * `getLLMClient` and therefore speak to the Codex bridge for a `codex/` id.
  * Exactly one call in the three tiers is OpenRouter-only — Instant's `fast`
- * grounding, which posts OpenRouter's `plugins` web-search extension — and that
- * is handled where it happens, in `groundedCompletion`, rather than by refusing
- * the role. Instant's OTHER grounded mode, `free`, runs on the Codex bridge, so
- * the old guard also refused a Codex model on its way to a call that REQUIRES
- * one.
+ * grounding, which posts OpenRouter's `plugins` web-search extension. A Codex
+ * model takes the `free` route there instead (`groundedRoute`), which is the
+ * Codex bridge's own grounded search, so the chosen model still answers. That
+ * the old guard refused a Codex model on its way to a call served BY Codex is
+ * the clearest sign it was gating the wrong thing.
  */
 export async function resolveResearchFastModel(): Promise<ModelContext> {
   const def = SITE_WORKLOADS.find((w) => w.id === 'research-fast')!;

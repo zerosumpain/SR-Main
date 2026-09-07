@@ -93,6 +93,27 @@ export function isGrounded(mode: Grounding): mode is Exclude<Grounding, 'off'> {
 }
 
 /**
+ * The route a grounded call will actually take.
+ *
+ * `fast` is OpenRouter's web plugin — an OpenRouter request extension, so it
+ * cannot carry a `codex/` id. A Codex pick therefore falls to `free`, which is
+ * not a downgrade but that model's OWN grounded route, over the ChatGPT
+ * subscription: the model the owner chose is the model that answers, and the
+ * search costs nothing instead of ~$0.15 on a substitute nobody picked.
+ *
+ * The price is in the table above — ~25-32s rather than ~17s, and chunks rather
+ * than word by word. That is why this is a function a caller resolves BEFORE it
+ * speaks: everything the reader is told about the wait has to describe the call
+ * that actually runs.
+ */
+export function groundedRoute(
+  mode: Exclude<Grounding, 'off'>,
+  modelId: string,
+): Exclude<Grounding, 'off'> {
+  return mode === 'fast' && modelId.startsWith('codex/') ? 'free' : mode;
+}
+
+/**
  * One citation, however the provider phrased it.
  *
  * Both routes emit OpenAI-shaped `url_citation` annotations — the Codex bridge
