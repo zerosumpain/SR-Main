@@ -894,14 +894,12 @@ jobs:
           const id=builds.find(b=>b.status==='running')?.id??builds[0]?.id;
           if(id){
           const page=await fetch(`http://127.0.0.1:4173/jkai/develop/${id}`,{headers,redirect:'manual'});console.log('OWNER_WORKSPACE_HTTP',page.status);await page.body?.cancel();
-          console.log('ISOLATION_ERRORS',JSON.stringify((await client.query("select left(content,2400) as content from jkai_logs where build_id=$1 and content ilike '%bwrap:%' order by id desc limit 3",[id])).rows));
-          console.log('BUILD_DETAIL',JSON.stringify((await client.query('select b.prompt,b.status,b.failure,b.budget_config,b.iterations_completed,d.state from jkai_builds b join jkai_build_deliveries d on d.build_id=b.id where b.id=$1',[id])).rows));
-          console.log('ITERATION_DETAIL',JSON.stringify((await client.query('select number,status,goals,evaluation,next_steps,tokens_used,output_tokens,failure from jkai_iterations where build_id=$1 order by number desc limit 10',[id])).rows));
-          console.log('RECENT_LOGS',JSON.stringify((await client.query('select type,left(content,2000) as content,created_at from jkai_logs where build_id=$1 order by id desc limit 45',[id])).rows));
           const snapshot=await fetch(`http://127.0.0.1:4173/api/jkai/development/${id}`,{headers,redirect:'manual'});
           if(snapshot.status!==200)throw new Error(`Snapshot HTTP ${snapshot.status}`);
           const data=await snapshot.json();const progress=data.progress;
           if(!progress || !Number.isFinite(progress.totalTokens) || !Number.isFinite(progress.outputTokens) || progress.totalTokens<0 || progress.outputTokens<0 || !Array.isArray(progress.iterations) || progress.iterations.length>12)throw new Error('Invalid progress response');
+          if(!Object.hasOwn(progress,'verification') || !Object.hasOwn(progress,'stage') || !Object.hasOwn(progress,'testFailure') || !Object.hasOwn(data.build,'outcome'))throw new Error('Dense workspace fields missing');
+          console.log('DENSE_WORKSPACE_VERIFIED',JSON.stringify({buildId:id,outcome:data.build.outcome,stage:progress.stage,verification:progress.verification,hasFailure:!!progress.testFailure,preview:data.delivery.state.preview.status,acceptanceBlocked:!!data.blocker}));
           console.log('PROGRESS_VERIFIED',JSON.stringify({buildId:id,model:data.build.modelId,status:data.build.status,totalTokens:progress.totalTokens,outputTokens:progress.outputTokens,iterations:progress.iterations.map(i=>({number:i.number,status:i.status,outputTokens:i.outputTokens,hasGoal:!!i.goals,hasAssessment:!!i.evaluation}))}));
           const logs=await fetch(`http://127.0.0.1:4173/api/jkai/builds/${id}/logs`,{headers,redirect:'manual'});
           console.log('OWNER_LOGS_HTTP',logs.status);
