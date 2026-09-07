@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
-  let rows = $state<Array<{ buildId: string; title: string; status: string; state: DeliveryState }>>([]);
+  let rows = $state<Array<{ buildId: string; title: string; status: string; outcome?: string | null; state: DeliveryState }>>([]);
   let outcome = $state(''); let area = $state('Platform'); let filter = $state('All areas');
   let error = $state(''); let busy = $state(false); let loaded = $state(false);
   onMount(() => { void fetch('/api/jkai/development').then(async (r) => {
@@ -22,6 +22,7 @@
 <section class="development">
   <header><p class="mark">SITE / DEVELOPMENT</p><h1>What should the site do next?</h1>
     <p>Describe an idea to get proposed acceptance criteria, dependencies and questions. Review the brief, guide its build and try the result before accepting it into your local batch.</p>
+    <p class="process-note">01 Brief → 02 Build → 03 Checks → 04 Preview → 05 Accept</p>
     <a href="/jkai/daydreams/backlog">Open the epic backlog →</a></header>
   <form onsubmit={(e) => { e.preventDefault(); void create(); }}>
     <label>Product area<select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value}<option>{value}</option>{/each}</select></label>
@@ -35,21 +36,22 @@
   {:else}
     {#each rows.filter((r) => filter === 'All areas' || r.state.area === filter) as row}
       <a class="work-row" href={`/jkai/develop/${row.buildId}`}><span><small>{row.state.area}</small><strong>{row.title}</strong></span>
-        <span>{visibleDevelopmentStage(row.state, row.status)}<small>{row.status} · {row.state.criteria.filter((c) => c.verdict === 'passed').length}/{row.state.criteria.length} criteria evidenced</small></span></a>
+        <span>{visibleDevelopmentStage(row.state, row.status, row.outcome)}<small>{row.state.criteria.filter((c) => c.verdict === 'passed' && !!row.state.candidate && c.revision === row.state.candidate).length}/{row.state.criteria.length} criteria evidenced</small></span></a>
     {/each}
   {/if}
 </section>
 <style>
-  .development { width: min(1100px, 100%); margin: 0 auto; padding: 24px; box-sizing: border-box; }
-  header { border-bottom: 2px solid var(--line-strong); padding-bottom: 20px; margin-bottom: 24px; }
-  h1 { font: clamp(1.6rem, 4vw, 2.5rem) var(--font-display); margin: 10px 0; }
+  .process-note { font-size: var(--fs-label); color: var(--accent-ink); letter-spacing: .02em; }
+  .development { width: min(1440px, 100%); margin: 0 auto; padding: 16px 20px; box-sizing: border-box; }
+  header { border-bottom: 2px solid var(--line-strong); padding-bottom: 12px; margin-bottom: 14px; }
+  h1 { font: clamp(1.3rem, 3vw, 1.8rem) var(--font-display); margin: 10px 0; }
   .mark, small { color: var(--text-secondary); font-size: var(--fs-label); }
-  form { display: flex; gap: 16px; align-items: end; padding-bottom: 24px; }
+  form { display: flex; gap: 16px; align-items: end; padding-bottom: 14px; }
   label { display: flex; flex-direction: column; gap: 7px; font-size: var(--fs-nav); }
-  .outcome { flex: 1; } textarea { min-height: 90px; resize: vertical; }
+  .outcome { flex: 1; } textarea { min-height: 72px; resize: vertical; }
   textarea, select { background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--line-strong); padding: 10px; font: inherit; max-width: 100%; }
-  .list-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 2px solid var(--line-strong); padding: 16px 0; }
-  .work-row { display: flex; justify-content: space-between; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); text-decoration: none; color: var(--text-primary); }
+  .list-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 2px solid var(--line-strong); padding: 10px 0; }
+  .work-row { display: flex; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); text-decoration: none; color: var(--text-primary); }
   .work-row span, .work-row strong, .work-row small { display: block; } .work-row strong { margin-top: 6px; } .error { color: var(--error); }
   a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   @media (max-width: 700px) { .development { padding: 16px; } form { flex-direction: column; align-items: stretch; } .list-heading, .work-row { align-items: stretch; flex-direction: column; } }

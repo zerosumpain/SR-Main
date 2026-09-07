@@ -11,7 +11,7 @@ import type { RequestHandler } from './$types';
 
 // /api/jkai inherits the owner gate in hooks.server.ts.
 export const GET: RequestHandler = async () => json(await db.select({
-  buildId: jkaiBuilds.id, title: jkaiBuilds.title, status: jkaiBuilds.status,
+  buildId: jkaiBuilds.id, title: jkaiBuilds.title, status: jkaiBuilds.status, outcome: jkaiBuilds.outcome,
   revision: jkaiBuildDeliveries.revision, state: jkaiBuildDeliveries.state,
 }).from(jkaiBuildDeliveries).innerJoin(jkaiBuilds, eq(jkaiBuilds.id, jkaiBuildDeliveries.buildId))
   .orderBy(desc(jkaiBuildDeliveries.updatedAt)).limit(100));

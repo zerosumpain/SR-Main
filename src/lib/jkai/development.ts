@@ -43,11 +43,22 @@ export function deliveryPrompt(state: DeliveryState): string {
 }
 
 /** Product review stages remain distinct from worker liveness. */
-export function visibleDevelopmentStage(state: DeliveryState, workerStatus: string): string {
+export function visibleDevelopmentStage(state: DeliveryState, workerStatus: string, outcome?: string | null): string {
+  if (outcome === 'stopped_by_user') return 'stopped';
+  if (workerStatus === 'completed' && !state.acceptedAt && !state.candidate) return 'ended without a candidate';
   if (state.stage === 'integrating' || state.stage === 'accepted') return state.stage;
   if (state.decisions.some((d) => !d.answer)) return 'needs input';
   if (workerStatus === 'failed' || workerStatus === 'stopped') return workerStatus;
   if (workerStatus === 'queued') return 'queued';
   if (workerStatus === 'paused' && state.stage === 'building') return 'paused';
   return state.stage.replaceAll('_', ' ');
+}
+
+/** Inspection keeps acceptance locked even when the isolated site can start. */
+export function inspectionCandidate(state: DeliveryState, revision: string, changes?: { files: string[]; patch: string }): DeliveryState {
+  return { ...candidateChanged(state, revision), stage: 'review', changes, acceptedAt: null, batch: null,
+    preview: { url: null, status: 'starting', detail: 'Preparing an unverified inspection snapshot.' },
+    gate: { passed: false, revision, evidence: 'Inspection snapshot only. Repository checks have not passed for this candidate.' },
+    criteria: state.criteria.map(c => ({ ...c, verdict: 'unverified', revision: null })),
+  };
 }

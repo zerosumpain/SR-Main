@@ -1,5 +1,6 @@
-export interface ActivityBuild { status: string; heartbeatAt?: string | null; updatedAt?: string; iterationsCompleted?: number; failure?: { message?: string; kind?: string } | null }
+export interface ActivityBuild { status: string; outcome?: string | null; heartbeatAt?: string | null; updatedAt?: string; iterationsCompleted?: number; failure?: { message?: string; kind?: string } | null }
 export function activityStatus(build: ActivityBuild, lastOutput: number, now: number, needsOwner = false) {
+  if (build.outcome === 'stopped_by_user') return { label: 'Build stopped', detail: 'Saved work is retained. Stopping a run does not verify or deliver its feature.', warning: false };
   if (needsOwner) return { label: 'Waiting for your decision', detail: 'Open the decisions below to unblock implementation.', warning: true };
   if (build.status !== 'running') {
     const labels: Record<string, string> = { queued: 'Queued — waiting for a worker', paused: 'Build paused', stopped: 'Build stopped', failed: 'Build failed', completed: 'Iteration work finished' };
