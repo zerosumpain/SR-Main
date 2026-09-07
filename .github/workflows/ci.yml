@@ -891,9 +891,14 @@ jobs:
           const cookieParts=[];
           for(const salt of ['authjs.session-token','__Secure-authjs.session-token'])cookieParts.push(`${salt}=${await encode({secret:process.env.AUTH_SECRET,salt,maxAge:180,token:{email:process.env.AUTH_ALLOWED_EMAILS.split(',')[0].trim(),name:'Deployment verification',sub:'deployment-verification'}})}`);
           const headers={host:'strangeramblings.com','x-forwarded-proto':'https',cookie:cookieParts.join('; ')};
-          const id=builds.find(b=>b.id==='17526133-64d8-433d-b062-5e094462d7c4')?.id??builds[0]?.id;
+          const id=builds.find(b=>b.status==='running')?.id??builds[0]?.id;
           if(id){
           const page=await fetch(`http://127.0.0.1:4173/jkai/develop/${id}`,{headers,redirect:'manual'});console.log('OWNER_WORKSPACE_HTTP',page.status);await page.body?.cancel();
+          const snapshot=await fetch(`http://127.0.0.1:4173/api/jkai/development/${id}`,{headers,redirect:'manual'});
+          if(snapshot.status!==200)throw new Error(`Snapshot HTTP ${snapshot.status}`);
+          const data=await snapshot.json();const progress=data.progress;
+          if(!progress || !Number.isFinite(progress.totalTokens) || !Number.isFinite(progress.outputTokens) || progress.totalTokens<0 || progress.outputTokens<0 || !Array.isArray(progress.iterations) || progress.iterations.length>12)throw new Error('Invalid progress response');
+          console.log('PROGRESS_VERIFIED',JSON.stringify({buildId:id,model:data.build.modelId,status:data.build.status,totalTokens:progress.totalTokens,outputTokens:progress.outputTokens,iterations:progress.iterations.map(i=>({number:i.number,status:i.status,outputTokens:i.outputTokens,hasGoal:!!i.goals,hasAssessment:!!i.evaluation}))}));
           const logs=await fetch(`http://127.0.0.1:4173/api/jkai/builds/${id}/logs`,{headers,redirect:'manual'});
           console.log('OWNER_LOGS_HTTP',logs.status);
           if(logs.ok){const body=await logs.json();console.log('LOG_REPLAY',JSON.stringify({rows:body.logs.length,cursor:body.cursor,latest:body.logs.at(-1)?.createdAt}));}else await logs.body?.cancel();
