@@ -2,8 +2,8 @@ import type { RequestHandler } from './$types';
 import { getPublishedDir } from '$lib/jkai/sandbox';
 import { db } from '$lib/db';
 import { projectVisibility, jkaiBuilds } from '$lib/db/schema';
-import { eq, and } from 'drizzle-orm';
-import { isProjectPublic } from '$lib/projects/visibility';
+import { eq } from 'drizzle-orm';
+import { isProjectPublic, isStaticProjectKey } from '$lib/projects/visibility';
 import { resolveShareToken } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
 import { open, realpath, type FileHandle } from 'fs/promises';
@@ -162,13 +162,21 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
   // Gated on studio origin on purpose. The relocated bundles under /projects/
   // (whitehall, brass-and-rails) use "./assets/..." from pages at varying
   // depths; a base tag would re-root those too and break them.
+  //
+  // The same query answers which browser boundary this document gets. A
+  // hand-built bundle (STATIC_PROJECT_KEYS — the owner's own code, published
+  // from his own repo) is first-party and keeps its origin; anything else stays
+  // in the opaque sandbox. A build is published under whatever its title
+  // slugifies to, so a static key some build has CLAIMED is treated as a build
+  // — the registry entry alone is not proof of who wrote the files on disk.
+  let firstParty = false;
   if (responseFile.mime.startsWith('text/html')) {
-    const [studio] = await db
-      .select({ id: jkaiBuilds.id })
+    const claims = await db
+      .select({ origin: jkaiBuilds.origin })
       .from(jkaiBuilds)
-      .where(and(eq(jkaiBuilds.publishedSlug, params.slug), eq(jkaiBuilds.origin, 'studio')))
-      .limit(1);
-    if (studio) {
+      .where(eq(jkaiBuilds.publishedSlug, params.slug));
+    firstParty = isStaticProjectKey(params.slug) && claims.length === 0;
+    if (claims.some((c) => c.origin === 'studio')) {
       const text = new TextDecoder().decode(responseFile.data);
       if (!/<base\s/i.test(text)) {
         const baseTag = `<base href="/projects/${params.slug}/">`;
@@ -185,7 +193,10 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
     }
   }
 
-  const headers = safeGeneratedResponseHeaders(new Headers({ 'Content-Type': responseFile.mime }));
+  const headers = safeGeneratedResponseHeaders(
+    new Headers({ 'Content-Type': responseFile.mime }),
+    { firstParty },
+  );
   if (isPublic) {
     if (!responseFile.mime.startsWith('text/html')) headers.set('Cache-Control', 'public, max-age=3600');
   } else {
