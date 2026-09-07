@@ -56,6 +56,7 @@
 /api/mcp/local
 /api/policy-engine/ingest
 /api/policy-engine/seed-workflows
+/api/projects/local-plan-navigator/ask
 /api/releases/ingest
 /api/releases/summarise
 /api/scraper/interactive

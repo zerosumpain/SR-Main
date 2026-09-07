@@ -302,6 +302,9 @@ export const resolveChatMaintenanceModel = () => resolveById('chat-maintenance')
 /** Intel's read side: preprocessing, briefs, recall and conflation repair. */
 export const resolveIntelAnalysisModel = () => resolveById('intel-analysis');
 
+/** The Local Plan Navigator's public "describe a problem" endpoint. */
+export const resolveLocalPlanNavigatorModel = () => resolveById('local-plan-navigator');
+
 /** The notebook's scan / brief passes. */
 export const resolveNotebookModel = () => resolveById('notebook');
 

@@ -26,6 +26,12 @@ const PUBLIC_PATHS = [
   // unknown tokens all 404 alike. This is a PREFIX — check-public-routes.mjs
   // is what stops a new sibling route becoming anonymous unnoticed.
   '/api/file-shares',
+  // The Local Plan Navigator's "describe a problem" endpoint, called by a
+  // public static bundle (/projects/local-plan-navigator) for anonymous
+  // visitors. A PREFIX for that one project only, never '/api/projects' —
+  // the visibility toggle lives under that tree and is owner-only. The route
+  // itself is rate-limited per IP and capped per day; see its +server.ts.
+  '/api/projects/local-plan-navigator',
   // Read-only public serving of blog post images — referenced by <img src> on the
   // public /blog pages, so it must be reachable by anonymous readers. The UPLOAD
   // endpoint (/api/admin/blog/upload-image) stays owner-gated; this serves only

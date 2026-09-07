@@ -163,6 +163,15 @@ export const DEFAULT_DAYDREAM_REVIEW_MODEL_ID = 'codex/gpt-5.6-luna';
  */
 export const DEFAULT_NOTE_REVIEW_MODEL_ID = 'codex/gpt-5.6-luna';
 
+/**
+ * The Local Plan Navigator's "describe a problem" answers
+ * (/projects/local-plan-navigator, a public page). John asked for the Codex
+ * provider here on 2026-09-07: a public prototype should spend subscription
+ * quota, not OpenRouter cash, and Astra is the subscription's frontier model
+ * (`DEFAULT_CODEX_MODEL_SLUG` in $lib/server/models/codex-catalogue).
+ */
+export const DEFAULT_LOCAL_PLAN_NAVIGATOR_MODEL_ID = 'codex/gpt-6-astra';
+
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client
 // localStorage) can still carry bare ids; coerce instead of 400ing at OpenRouter.
