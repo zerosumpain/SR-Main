@@ -7,6 +7,7 @@ import { db } from '$lib/db';
 import { jkaiIterations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { emitLog, emitLive } from './log-emitter';
+import { piLiveUpdate, piToolCode, type PiAssistantUpdate } from './pi-live';
 import { recordBuildUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
 import type { ActionRecord, BudgetConfig, FailureEnvelope, FailureKind } from './types';
@@ -224,12 +225,10 @@ interface PiEvent {
   id?: string; method?: string; title?: string;
   message?: PiMessage;
   // message_update events carry streaming deltas; we only need a few fields.
-  assistantMessageEvent?: {
-    type: string; // text_start, text_delta, text_end, thinking_start, thinking_delta, thinking_end, tool_input_start, tool_input_delta, tool_input_end
-    contentIndex?: number;
-    delta?: string;
-    content?: string;
-  };
+  assistantMessageEvent?: PiAssistantUpdate;
+  toolCallId?: string; toolName?: string;
+  partialResult?: { content?: Array<{ type?: string; text?: string }> };
+
 }
 
 // --- Result ---
@@ -671,6 +670,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   // wall clock, so a genuinely hung tool is still caught.
   const TOOL_TIMEOUT_MS = 15 * 60 * 1000;
   const startedAt = Date.now();
+  let assistantMessageSequence = 0;
   let lastOutputAt = Date.now();
   let anyOutput = false;
   let stalled = false;
@@ -783,48 +783,25 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       return;
     }
 
-    // --- Streaming deltas (live, not persisted) ---
+    // Streaming content uses Pi's current toolcall_* schema, with one id per message.
+    if (ev.type === 'message_start' && ev.message?.role === 'assistant') assistantMessageSequence++;
     if (ev.type === 'message_update' && ev.assistantMessageEvent) {
-      const sub = ev.assistantMessageEvent;
-      const streamId = `${iteration.id}:${sub.contentIndex ?? 0}`;
-      if (sub.type === 'text_delta' && sub.delta) {
-        emitLive(build.id, {
-          type: 'stream_text',
-          iterationId: iteration.id,
-          streamId,
-          delta: sub.delta,
-        });
-      } else if (sub.type === 'thinking_delta' && sub.delta) {
-        emitLive(build.id, {
-          type: 'stream_thinking',
-          iterationId: iteration.id,
-          streamId,
-          delta: sub.delta,
-        });
-      } else if (sub.type === 'tool_input_start') {
-        emitLive(build.id, {
-          type: 'stream_tool_start',
-          iterationId: iteration.id,
-          streamId,
-        });
-      } else if (sub.type === 'tool_input_delta' && sub.delta) {
-        emitLive(build.id, {
-          type: 'stream_tool_delta',
-          iterationId: iteration.id,
-          streamId,
-          delta: sub.delta,
-        });
-      } else if (sub.type === 'text_end' || sub.type === 'thinking_end' || sub.type === 'tool_input_end') {
-        emitLive(build.id, {
-          type: sub.type === 'tool_input_end' ? 'stream_tool_end' : 'stream_turn_end',
-          iterationId: iteration.id,
-          streamId,
-          full: sub.content,
-        });
-      }
+      const live = piLiveUpdate(ev.assistantMessageEvent, iteration.id, assistantMessageSequence);
+      if (live) emitLive(build.id, live);
+      return;
+    }
+    if (ev.type === 'tool_execution_update' && ev.partialResult) {
+      emitLive(build.id, { type: 'stream_tool_output', iterationId: iteration.id,
+        streamId: `${iteration.id}:execution:${ev.toolCallId ?? 'tool'}`, toolName: ev.toolName,
+        full: (ev.partialResult.content ?? []).filter(c => c.type === 'text').map(c => c.text ?? '').join('\n').slice(-32000) });
       return;
     }
 
+    if (ev.type === 'tool_execution_end') {
+      emitLive(build.id, { type: 'stream_tool_end', iterationId: iteration.id,
+        streamId: `${iteration.id}:execution:${ev.toolCallId ?? 'tool'}` });
+      return;
+    }
     if (ev.type !== 'message_end' || !ev.message) return;
     const m = ev.message;
 
@@ -875,7 +852,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
           // Suspend the idle watchdog for the duration of the call — pi goes
           // silent while it runs, and that silence is work, not a stall.
           if (toolBusySince === null) toolBusySince = Date.now();
-          const body = summarizeArgs(c.arguments);
+          const body = piToolCode(c.arguments);
           await emitLog(
             build.id,
             'code',

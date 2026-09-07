@@ -125,3 +125,39 @@ where the earlier model incorporated them. No conversation history is invented.
 Regression checks cover four answer rounds, supplying earlier answers to the
 model, acceptance with unresolved questions, persistence and Pi prompt handoff.
 The LAN browser check confirms desktop/phone approval with questions present.
+
+
+### Build activity visibility
+
+The accepted-brief workspace now keeps a build activity status visible and shows
+live code, commands and tool output on the Build tab. Worker heartbeat, last
+output and SSE connection are separate signals: a quiet command with a recent
+heartbeat is not reported as a stalled worker. An overdue or absent heartbeat
+shows a warning without claiming the process has definitely stopped.
+
+Pi 0.84 emits `toolcall_start/delta/end`; the adapter now handles these alongside
+older `tool_input_*` events and tool execution output. Stream IDs include the
+assistant-message sequence so separate calls within an iteration do not collide.
+Completed code writes and edits are saved as readable source, rather than only
+file paths. Thinking events update activity timing but are not displayed here.
+
+The owner-only logs endpoint recovers persisted events using an independent
+cursor, including while SSE reconnects. Initial replay takes the latest 80 rows;
+the UI retains 160 rows with a 16,000-character cap per saved entry, plus bounded
+live segments. Incomplete token streams cannot be recovered after a reload;
+saved final events are recovered. Scrolling up pauses automatic following.
+
+Validation: 59 focused unit/integration checks passed, including actual Pi event
+shapes and PostgreSQL replay/isolation. The LAN browser fixture passed at 1440px
+and 390px, covering incremental deltas, persisted code after reload, disconnect
+error recovery, overdue heartbeat and paused state. Svelte check reported zero
+errors (891 existing warnings); production build, builder bundle, boundaries,
+source footprint and client budgets passed. Compose validated and local web and
+builder services restarted. The browser stream is synthetic; local Pi provider
+auth remains unconfigured, so this is not a real model-backed local build test.
+
+Production investigation used read-only worker and database diagnostics: the
+reported build had fresh heartbeats and was writing code and running checks.
+The old workspace hid that progress, while the Pi tool event-name mismatch hid
+code-argument deltas. Deployment must preserve an active production build and let the existing idle
+worker update mechanism activate the new adapter.

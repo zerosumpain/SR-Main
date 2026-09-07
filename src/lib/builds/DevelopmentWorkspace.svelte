@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import DevelopmentBuildActivity from './DevelopmentBuildActivity.svelte';
   import { replaceState } from '$app/navigation';
   import { PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
   let { buildId }: { buildId: string } = $props();
   type Snapshot = {
     delivery: { revision: number; state: DeliveryState };
-    build: { prompt: string; title: string; status: string; modelId: string; iterationsCompleted: number; costUsd: string | null; budgetConfig: { maxCostUsd?: number; maxTotalMinutes?: number } };
+    build: { heartbeatAt?: string | null; updatedAt?: string; failure?: { message?: string; kind?: string } | null; prompt: string; title: string; status: string; modelId: string; iterationsCompleted: number; costUsd: string | null; budgetConfig: { maxCostUsd?: number; maxTotalMinutes?: number } };
     instructions: Array<{ id: number; content: string; consumedAt: string | null; acknowledgedAt: string | null; dispatchedAt: string | null; cancelledAt: string | null }>;
     notes: Array<{ id: number; content: string }>;
     events: Array<{ id: number; kind: string; createdAt: string }>;
@@ -59,6 +60,7 @@
       const response = await fetch(`/api/jkai/development/${buildId}`, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, revision: snapshot.delivery.revision, briefRevision, candidate: snapshot.delivery.state.candidate, ...fields }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Operation failed');
+      if (action === 'start' || action === 'resume') tab = 'Build';
       if (action === 'brief' || action === 'groom') initialized = false;
       await refresh(); return true;
     } catch (e) { error = e instanceof Error ? e.message : 'Operation failed'; await refresh(); return false; }
@@ -73,7 +75,7 @@
 <section class="workspace">
   <header><a href="/jkai/develop">← Site development</a><h1>{snapshot?.build.title ?? 'Development workspace'}</h1>
     <div class="status" role="status"><strong>{deliveryState && snapshot ? visibleDevelopmentStage(deliveryState, snapshot.build.status) : 'Loading'}</strong><span>{connection}</span>
-      {#if snapshot}<span>{snapshot.build.iterationsCompleted} iterations</span><span>${Number(snapshot.build.costUsd ?? 0).toFixed(2)} spent · ${snapshot.build.budgetConfig.maxCostUsd ?? 2} limit</span>{/if}</div>
+      {#if snapshot}<span>{snapshot.build.iterationsCompleted} iterations completed</span><span>${Number(snapshot.build.costUsd ?? 0).toFixed(2)} spent · ${snapshot.build.budgetConfig.maxCostUsd ?? 2} limit</span>{/if}</div>
     <div class="actions">
       <button class="nm-save-btn" disabled={busy || running || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue to preview' : 'Build to preview'}</button>
       <button class="nm-btn-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
@@ -83,7 +85,10 @@
   </header>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if deliveryState?.decisions.some((d) => !d.answer)}<aside class="attention"><strong>A decision is waiting</strong><button onclick={() => tab = 'Build'}>Open decisions</button></aside>{/if}
-  <nav aria-label="Development views">{#each ['Brief', 'Build', 'Preview', 'Delivery'] as name}<button class:active={tab === name} aria-pressed={tab === name} onclick={() => tab = name}>{name}</button>{/each}</nav>
+  <nav aria-label="Development views">{#each ['Brief', 'Build', 'Preview', 'Delivery'] as name}<button disabled={!snapshot} class:active={tab === name} aria-pressed={tab === name} onclick={() => tab = name}>{name}</button>{/each}</nav>
+  {#if snapshot && deliveryState?.brief.acceptedAt}
+    {#key buildId}<DevelopmentBuildActivity {buildId} build={snapshot.build} needsOwner={deliveryState.decisions.some(d => !d.answer)} showOutput={tab === 'Build'} />{/key}
+  {/if}
   {#if !snapshot}<p>{connection === 'Loading' ? 'Loading saved work…' : connection}</p>
   {:else if deliveryState}
     <div class="pane">
