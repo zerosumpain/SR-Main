@@ -58,7 +58,7 @@
 </script>
 
 {#if tripwires.length}
-  <section class="e">
+  <section id="health-e" class="e">
     <div class="e-inner">
       <SectionHead
         dark

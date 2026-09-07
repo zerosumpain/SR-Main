@@ -7,18 +7,37 @@
   // from the same instrument readings the deck drew, which is why this section
   // can be a summary without being a second opinion.
   import type { Verdict } from '$lib/health/verdict';
+  import type { Move } from '$lib/health/moves';
 
   interface Props {
     verdict: Verdict | null;
     /** See `ExperimentsSection` — the anonymous document is one section shorter. */
     letter?: string;
+    /**
+     * Section D's own list, so the closing quote can offer the button that
+     * belongs to the move it is quoting. Anonymous readers get moves whose
+     * `action` is null, so this resolves to nothing for them without a second
+     * audience check here.
+     */
+    moves?: Move[];
   }
 
-  let { verdict, letter = 'I' }: Props = $props();
+  let { verdict, letter = 'I', moves = [] }: Props = $props();
+
+  /** The first of the quoted moves that actually has somewhere to send you. */
+  const quoteAction = $derived.by(() => {
+    // Same guard as the experiment chips: an older payload without the field
+    // must cost the button, not the page.
+    for (const id of verdict?.pullQuoteMoves ?? []) {
+      const action = (moves ?? []).find((m) => m.id === id)?.action;
+      if (action) return action;
+    }
+    return null;
+  });
 </script>
 
 {#if verdict}
-  <section class="i">
+  <section id="health-i" class="i">
     <div class="i-inner">
       <div class="i-left">
         <p class="i-kicker">{letter} / The verdict</p>
@@ -34,6 +53,16 @@
         <p class="i-quote-label">{verdict.pullQuoteLabel}</p>
         <p class="i-quote">{verdict.pullQuote}</p>
         <p class="i-follow">{verdict.pullQuoteFollow}</p>
+        <!-- The quote IS the top move's imperative, so the closing section can
+             offer the same button section D carries rather than restating the
+             sentence and stopping. The action comes off `moves` — it is built
+             once there and stripped for the anonymous payload there, so nothing
+             unstripped rides along on `verdict`, which is also public. -->
+        {#if quoteAction}
+          <a class="i-go" href={quoteAction.href} data-sveltekit-preload-data="hover">
+            {quoteAction.label} →
+          </a>
+        {/if}
         {#if verdict.reviews.length}
           <div class="i-reviews">
             {#each verdict.reviews as review (review.label)}
@@ -50,6 +79,33 @@
 {/if}
 
 <style>
+  /* The section sets no ground of its own, so it inherits paper — the accent
+     and the strong line are the paper tokens, not the on-dark partners. */
+  .i-go {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 9px 16px;
+    background: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+  .i-go:hover,
+  .i-go:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-tint-04);
+  }
+
   .i {
     padding: clamp(48px, 6vw, 88px) clamp(20px, 3vw, 44px);
   }

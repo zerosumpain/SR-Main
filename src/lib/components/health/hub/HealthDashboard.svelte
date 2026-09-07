@@ -239,9 +239,13 @@
     <RoutesPlan coach={data.coach} />
   {/if}
 
-  <ExperimentsSection experiments={data.experiments} letter={experimentsLetter} />
+  <ExperimentsSection
+    experiments={data.experiments}
+    letter={experimentsLetter}
+    onmetric={openDrill}
+  />
 
-  <VerdictSection verdict={data.verdict} letter={verdictLetter} />
+  <VerdictSection verdict={data.verdict} letter={verdictLetter} moves={data.moves ?? []} />
 
 </HealthShell>
 

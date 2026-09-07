@@ -443,7 +443,7 @@
 <!-- The hover handlers are DELEGATED onto the section: eight panels would
      otherwise want thirty-two listeners and thirty-two pieces of markup to keep
      in step. A panel opts in with one attribute, `data-metric`. -->
-<section class="b" {...metricPeekHandlers()}>
+<section id="health-b" class="b" {...metricPeekHandlers()}>
   <div class="b-inner">
     <div class="b-head">
       <SectionHead

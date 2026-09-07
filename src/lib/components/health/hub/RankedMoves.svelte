@@ -21,7 +21,7 @@
 </script>
 
 {#if moves.length}
-  <section class="d">
+  <section id="health-d" class="d">
     <div class="d-inner">
       <SectionHead
         kicker="D / Ranked moves · you choose"

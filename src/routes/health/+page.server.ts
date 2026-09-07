@@ -4,6 +4,7 @@ import {
   disclosureLeaks,
   pickPublic,
   publicDashboard,
+  publicExperiments,
   publicMoves,
   publicSegmentForms,
 } from '$lib/health/public-payload';
@@ -430,6 +431,8 @@ export const load: PageServerLoad = async (event) => {
       // Same shape, no buttons. Every destination a move offers is owner-gated,
       // so the anonymous reader keeps the argument and loses the call to action.
       moves: publicMoves(moves),
+      // Same reason, and a sharper one: `disclosureLeaks` cannot see an href.
+      experiments: publicExperiments(experiments),
       // Sections the anonymous document does not render at all. Declared as
       // empty rather than omitted so `PublicHealthData` and the component's
       // props stay one shape — and so that a reader of this file can see that

@@ -105,7 +105,7 @@
   const topChain = $derived(chains[0] ?? null);
 </script>
 
-<section class="f">
+<section id="health-f" class="f">
   <div class="f-inner">
     <SectionHead
       {kicker}

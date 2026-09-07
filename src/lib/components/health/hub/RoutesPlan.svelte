@@ -150,7 +150,7 @@
   ];
 </script>
 
-<section class="g">
+<section id="health-g" class="g">
   <div class="g-inner">
     <SectionHead
       kicker="G / Routes &amp; plan · Darlington, 15 km discovery radius"

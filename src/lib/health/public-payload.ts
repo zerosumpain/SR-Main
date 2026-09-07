@@ -284,6 +284,26 @@ export function publicSegmentForms<T extends { nearest: unknown; board: unknown[
  * Dropped here rather than hidden in the template, for the reason the whole
  * loader is built this way: `{#if owner}` still ships the bytes.
  */
+/**
+ * The experiments, with their calls to action removed.
+ *
+ * Same argument as `publicMoves`, and a sharper one: `disclosureLeaks` walks
+ * the anonymous payload for coordinates, place names and local timestamps, and
+ * a URL is none of those. `/health/segments?form=improving&gap=..3` would pass
+ * that guard untouched — so the href never goes into the payload in the first
+ * place. The METRICS stay: they are registry ids, they name no ground, and the
+ * anonymous reader can hover a chip for the same definition the owner gets.
+ */
+export function publicExperiments<T extends { action: unknown }>(
+  experiments: readonly T[] | null | undefined,
+): Array<Omit<T, 'action'> & { action: null }> {
+  if (!experiments?.length) return [];
+  return experiments.map((e) => {
+    const { action: _action, ...rest } = e;
+    return { ...rest, action: null };
+  });
+}
+
 export function publicMoves<T extends { action: unknown }>(
   moves: readonly T[] | null | undefined,
 ): Array<Omit<T, 'action'> & { action: null }> {

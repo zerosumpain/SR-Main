@@ -337,7 +337,7 @@
   });
 </script>
 
-<section class="a" {...metricPeekHandlers()}>
+<section id="health-a" class="a" {...metricPeekHandlers()}>
   <div class="a-inner">
     <div class="a-head">
       <p class="a-kicker">A / State of play</p>

@@ -42,6 +42,16 @@ export interface Verdict {
   pullQuoteLabel: string;
   pullQuote: string;
   pullQuoteFollow: string;
+  /**
+   * The moves the quote is literally made of — it is `IMPERATIVE[m.id]` for the
+   * top one or two — so the closing section can offer the same call to action
+   * section D already carries rather than restating the sentence and stopping.
+   *
+   * Ids only. The ACTION lives on `Move`, where it is built once and stripped
+   * for the anonymous payload by `publicMoves`; carrying a copy of the href
+   * here would put a second, unstripped one on a struct that is also public.
+   */
+  pullQuoteMoves: MoveId[];
   reviews: ReviewRow[];
 }
 
@@ -199,12 +209,17 @@ function bigDay(i: VerdictInput): string | null {
 
 // ——— the pull quote ——————————————————————————————————————————————
 
-function pullQuote(i: VerdictInput): { pullQuote: string; pullQuoteFollow: string } {
+function pullQuote(i: VerdictInput): {
+  pullQuote: string;
+  pullQuoteFollow: string;
+  pullQuoteMoves: MoveId[];
+} {
   const top = i.moves.filter((m) => m.id !== 'hold-and-watch').slice(0, 2);
   if (!top.length) {
     return {
       pullQuote: 'Change nothing. Nothing on this page is asking to be fixed.',
       pullQuoteFollow: 'The tripwires are the whole system until one of them trips.',
+      pullQuoteMoves: [],
     };
   }
   const quote = top.map((m, k) => (k === 0 ? IMPERATIVE[m.id] : `Then ${lower(IMPERATIVE[m.id])}`)).join('. ') + '.';
@@ -213,7 +228,7 @@ function pullQuote(i: VerdictInput): { pullQuote: string; pullQuoteFollow: strin
   const follow = n
     ? `${top.length === 1 ? 'That move touches' : 'Those two moves touch'} ${words(n)} of the ${words(INSTRUMENT_COUNT)} instruments. Everything else on this page is either downstream of them or already good enough to leave alone.`
     : 'Everything else on this page is either downstream of that or already good enough to leave alone.';
-  return { pullQuote: quote, pullQuoteFollow: follow };
+  return { pullQuote: quote, pullQuoteFollow: follow, pullQuoteMoves: top.map((m) => m.id) };
 }
 
 // ——— the review rows —————————————————————————————————————————————

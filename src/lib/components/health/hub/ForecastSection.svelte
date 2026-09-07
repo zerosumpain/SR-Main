@@ -255,7 +255,7 @@
   );
 </script>
 
-<section class="c">
+<section id="health-c" class="c">
   <div class="c-inner">
     <SectionHead
       kicker="C / Forecast · {horizon} days"
