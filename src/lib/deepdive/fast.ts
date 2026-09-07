@@ -17,7 +17,7 @@ import { researchSessions, sources as sourcesTable } from '$lib/db/schema';
 import type { ResearchSession } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, groundedCompletion } from './ai';
-import { coerceGrounding, groundingOption, isGrounded } from './grounding';
+import { coerceGrounding, groundingOption, groundedRoute, isGrounded } from './grounding';
 import { recordCitations } from './grounding.server';
 import { search } from './tavily';
 import { classifyDomain } from './credibility';
@@ -26,7 +26,6 @@ import { emitArtefact } from './desk-events';
 import { coerceScope, scopeToSearchOptions, scopeAdmits, credibilityBonus, describeScope } from './scope';
 import { depthPreset, SYNTHESIS_MAX_TOKENS } from './depth';
 import { resolveResearchFastModel } from '$lib/server/models/workload-settings';
-import { getFallbackModel } from '$lib/llm/keys';
 import type { ResearchBudget } from './budget';
 import type { SessionStats, ResearchReport } from './types';
 
@@ -130,33 +129,39 @@ export async function runInstant(
     return;
   }
 
-  const option = groundingOption(grounding);
+  /**
+   * A Codex research model cannot take the `fast` route — that is OpenRouter's
+   * web plugin — so it answers on `free`, the Codex bridge's own grounded
+   * search. The model the owner chose stays the model that answers.
+   *
+   * Resolved before anything is emitted because it changes what the reader is
+   * waiting for: `free` measures ~25-32s against ~17s, and arrives in chunks
+   * rather than word by word. Instant's whole budget is 30s and synthesis may
+   * spend all of it, so a rerouted run sits right on the deadline — exactly the
+   * exposure anyone choosing `free` here already has, and the reason to pin a
+   * fast OpenRouter model on this role if instant answers matter more than
+   * keeping the Codex one.
+   */
+  const route = groundedRoute(grounding, model);
+  const option = groundingOption(route);
+
   emitLog(
     sessionId,
     '\u{1F310}',
-    grounding === 'free'
+    route === 'free'
       ? 'Searching the web on the subscription — the answer arrives in one piece, not word by word.'
       : 'Searching the web while answering.',
   );
-
-  /**
-   * `fast` grounding is the one OpenRouter-only call in this tier, so a Codex
-   * research model is swapped for the OpenRouter fallback there (see
-   * `groundedCompletion`). `free` grounding IS the Codex bridge and keeps the
-   * chosen model. Announce the substitution: an answer attributed to a model
-   * that did not write it is the quiet wrongness this file exists to avoid, and
-   * the remedy — pick free grounding — is one control away.
-   */
-  if (grounding === 'fast' && model.startsWith('codex/')) {
+  if (route !== grounding) {
     emitLog(
       sessionId,
       'ℹ️',
-      `Web grounding runs through OpenRouter, so ${getFallbackModel()} answered this rather than ${model}. Choose free grounding to keep ${model}.`,
+      `${model} searches through the Codex bridge, so this ran on free grounding rather than the paid OpenRouter plugin — no cash cost, but slower.`,
     );
   }
 
   const { text, citations } = await groundedCompletion(GROUNDED_RULES, question, {
-    mode: grounding,
+    mode: route,
     model,
     maxTokens: SYNTHESIS_MAX_TOKENS,
     signal: budget.signalFor('synthesis'),

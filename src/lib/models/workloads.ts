@@ -84,7 +84,8 @@ export type WorkloadRequirement =
    * to `getLLMClient`, so Scan and Brief run on a `codex/` id perfectly well.
    * The one real OpenRouter dependency — Instant's `fast` grounding, which
    * posts the `plugins` web-search extension — is a property of that CALL, not
-   * of the role, and is handled in `groundedCompletion`. Kept because the
+   * of the role: `groundedRoute` sends a Codex pick down the `free` route,
+   * which is that model's own grounded search. Kept because the
    * constraint is real for any future role that hard-wires the OpenRouter
    * client, but check that it is the ROLE and not one call before using it.
    */
@@ -325,7 +326,7 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     requires: null,
     catalogue: 'tools',
     reason:
-      'The model behind Instant, Scan and Brief. Any chat model serves these — they reach the model through the shared LLM client, so a Codex pick is a Codex call. With no selection they follow the chat selection or the site default. Faster models leave more of the 30s / 90s / 110s time limits for the answer. One exception: Instant’s "fast" web grounding is an OpenRouter-only request, so a Codex model is swapped for the OpenRouter fallback on that call alone.',
+      'The model behind Instant, Scan and Brief. Any chat model serves these — they reach the model through the shared LLM client, so a Codex pick is a Codex call. With no selection they follow the chat selection or the site default. Faster models leave more of the 30s / 90s / 110s time limits for the answer. One exception: Instant’s "fast" web grounding is an OpenRouter-only request, so a Codex model answers that one call on "free" grounding instead — its own bridge route, no cash cost, but slower.',
   },
   {
     id: 'research-deep',

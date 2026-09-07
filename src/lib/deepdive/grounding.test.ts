@@ -4,6 +4,7 @@ import {
   GROUNDING_OPTIONS,
   coerceGrounding,
   groundingOption,
+  groundedRoute,
   isGrounded,
   isRedirectCitation,
   readCitations,
@@ -124,5 +125,22 @@ describe('isRedirectCitation', () => {
     expect(isRedirectCitation('https://evil-vertexaisearch.cloud.google.com.attacker.test/x')).toBe(
       false,
     );
+  });
+});
+
+describe('groundedRoute', () => {
+  it('sends a codex model asking for fast grounding down the free route', () => {
+    // `fast` is OpenRouter's web plugin, which cannot carry a `codex/` id.
+    // `free` is that model's own grounded search, so the owner's pick answers.
+    expect(groundedRoute('fast', 'codex/gpt-5.6-terra')).toBe('free');
+  });
+
+  it('leaves an OpenRouter model on the route it asked for', () => {
+    expect(groundedRoute('fast', 'openai/gpt-4o')).toBe('fast');
+    expect(groundedRoute('free', 'openai/gpt-4o')).toBe('free');
+  });
+
+  it('never reroutes a free call', () => {
+    expect(groundedRoute('free', 'codex/gpt-5.6-terra')).toBe('free');
   });
 });

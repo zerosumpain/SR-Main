@@ -1,7 +1,8 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from '$lib/llm/keys';
 import { getLLMClient, getGroundedCodexClient } from '$lib/llm/client';
-import { readCitations, type Citation } from './grounding';
+import { readCitations, groundedRoute, type Citation } from './grounding';
+import { toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { resolveResearchDeepModel } from '$lib/server/models/workload-settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { currentSessionModel } from '$lib/context/chat';
@@ -463,7 +464,12 @@ export async function groundedCompletion(
   userPrompt: string,
   options: {
     mode: 'fast' | 'free';
-    /** Only used by `fast`; the free route is whatever Codex model is default. */
+    /**
+     * The answering model. Used directly by `fast`; on `free` the bridge is
+     * asked for `codexModel`, but a `codex/` id here still names itself rather
+     * than deferring to the default — and a `codex/` id sent with `fast` is
+     * what reroutes the call to `free` in the first place (`groundedRoute`).
+     */
     model?: string;
     codexModel?: string;
     maxTokens?: number;
@@ -477,13 +483,25 @@ export async function groundedCompletion(
   ];
   const maxTokens = options.maxTokens ?? 4096;
 
-  if (options.mode === 'free') {
+  /**
+   * Settled here as well as in the caller so no future call site can post a
+   * `codex/` id to OpenRouter's web plugin by forgetting to ask.
+   */
+  const codexSlug = options.model?.startsWith('codex/') ? toCodexSlug(options.model) : null;
+
+  if (groundedRoute(options.mode, options.model ?? '') === 'free') {
     // Codex does not usefully stream — measured, it emits an item at a time
     // rather than tokens — so this asks for the whole turn and hands it over in
     // one go. The caller has already told the reader to expect that.
     const client = getGroundedCodexClient();
     const response = await client.chat.completions.create(
-      { model: options.codexModel ?? DEFAULT_GROUNDED_CODEX_MODEL, messages, max_tokens: maxTokens },
+      {
+        // A Codex model that arrived here names itself; only a rerouted call
+        // with no Codex pick of its own falls back to the constant.
+        model: options.codexModel ?? codexSlug ?? DEFAULT_GROUNDED_CODEX_MODEL,
+        messages,
+        max_tokens: maxTokens,
+      },
       { signal: options.signal as any },
     );
     const message = response.choices[0]?.message;
@@ -498,18 +516,10 @@ export async function groundedCompletion(
    * non-OpenRouter base URL would simply be ignored, and this path always uses
    * the OpenRouter client.
    */
+  // Only OpenRouter ids reach here — a `codex/` pick took the `free` branch
+  // above rather than being swapped for a model the owner did not choose.
   const client = await getOpenRouterClient();
-  /**
-   * The web plugin is an OpenRouter request extension, so this call — alone
-   * among everything the fast tiers do — cannot carry a `codex/` id: the bridge
-   * has no such parameter and OpenRouter has no such model. Substituting the
-   * OpenRouter fallback is exactly what an unset `options.model` already does,
-   * and it keeps a Codex research model usable everywhere else instead of
-   * refusing the role outright. `runInstant` tells the reader which model
-   * actually answered.
-   */
-  const requested = options.model;
-  const model = requested && !requested.startsWith('codex/') ? requested : getFallbackModel();
+  const model = options.model ?? getFallbackModel();
   let text = '';
   /**
    * Accumulated, keyed by URL — NOT replaced.
