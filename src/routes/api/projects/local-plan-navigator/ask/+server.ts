@@ -11,9 +11,9 @@
 // Public and anonymous, so three limits: the shared handler's per-IP token
 // bucket, a per-day cap on calls for the whole site (the model is the ChatGPT
 // subscription — quota, not cash, but finite), and the body caps in
-// $lib/projects/local-plan-navigator/ask. CORS is open because the bundle is
-// also downloadable and may be served from elsewhere; the endpoint has nothing
-// to protect beyond those limits.
+// $lib/projects/local-plan-navigator/ask. Same-origin only: hooks.server.ts
+// blocks cross-origin state-changing requests for the whole site, so a
+// downloaded copy of the bundle cannot call this and its page says so.
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { withActivity } from '$lib/context/activity';
@@ -33,13 +33,6 @@ function underDailyCap(): boolean {
   usedToday++;
   return true;
 }
-
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'content-type',
-  'Access-Control-Max-Age': '86400',
-};
 
 const core = createProjectChatCore({
   slug: 'local-plan-navigator',
@@ -62,9 +55,5 @@ export const POST: RequestHandler = (event) =>
     if (!underDailyCap()) {
       throw error(503, "The site's model has answered its daily allowance of questions. Run a model on your own device instead, or try tomorrow.");
     }
-    const response = await core(event);
-    for (const [k, v] of Object.entries(CORS)) response.headers.set(k, v);
-    return response;
+    return core(event);
   });
-
-export const OPTIONS: RequestHandler = () => new Response(null, { status: 204, headers: CORS });
