@@ -898,7 +898,7 @@ jobs:
           console.log('OWNER_LOGS_HTTP',logs.status);
           if(logs.ok){const body=await logs.json();console.log('LOG_REPLAY',JSON.stringify({rows:body.logs.length,cursor:body.cursor,latest:body.logs.at(-1)?.createdAt}));}else await logs.body?.cancel();
           const anon=await fetch(`http://127.0.0.1:4173/api/jkai/builds/${id}/logs`,{headers:{host:'strangeramblings.com','x-forwarded-proto':'https'},redirect:'manual'});console.log('ANONYMOUS_LOGS_HTTP',anon.status);await anon.body?.cancel();
-          const stream=await fetch(`http://127.0.0.1:4173/api/jkai/builds/${id}/stream`,{headers,signal:AbortSignal.timeout(10000)});console.log('OWNER_STREAM',stream.status,stream.headers.get('content-type'),stream.headers.get('cache-control'));await stream.body?.cancel();
+          const stream=await fetch(`http://127.0.0.1:4173/api/jkai/builds/${id}/stream`,{headers,signal:AbortSignal.timeout(35000)});console.log('OWNER_STREAM',stream.status,stream.headers.get('content-type'),stream.headers.get('cache-control'));await stream.body?.cancel();
           }
           await client.query('rollback');await client.end();
           NODE
