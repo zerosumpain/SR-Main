@@ -89,7 +89,12 @@ export interface ReadingsInput {
   sleepRegularity: Result<number>;
   circadian: Result<{ driftHours: number }>;
   autonomic: Result<{ score: number }>;
-  recoveryDebt: Result<{ averageBalanceMin: number; series?: DayPoint[] }>;
+  /**
+   * `RecoveryDebtResult.series` is `{ date, balanceMin }` — NOT a `DayPoint`.
+   * Typed structurally here and got wrong: the drill would have plotted
+   * `undefined` for every night. Spelled out so the compiler checks it.
+   */
+  recoveryDebt: Result<{ averageBalanceMin: number; series?: Array<{ date: string; balanceMin: number }> }>;
   vo2max: Result<{ current: number }>;
   dashboard: {
     vo2?: { series?: DayPoint[] } | null;
@@ -98,7 +103,8 @@ export interface ReadingsInput {
     hrvSdnn?: { daily?: DayPoint[]; latest7?: number | null; baseline28?: number | null } | null;
     rhr?: { daily?: DayPoint[]; baseline28?: number | null } | null;
     recovery?: DayPoint[] | null;
-    weeks?: Array<{ weekStart: string; km: number }> | null;
+    /** `WeekVolume` — metres, not kilometres, and there is no `km` on it. */
+    weeks?: Array<{ weekStart: string; totalDistanceM: number }> | null;
     load?: { days?: Array<{ date: string; load: number }> | null } | null;
     efficiency?: { bkm?: { rolling7?: DayPoint[]; latest7?: number | null; baseline28?: number | null } | null } | null;
   } | null;
@@ -186,7 +192,12 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     baselineLabel: sleptMean != null ? '30-day mean' : null,
   });
 
-  const weeks = (d?.weeks ?? []).map((w) => ({ date: w.weekStart, value: w.km }));
+  // Metres on the wire, kilometres on the page — `WeekVolume.totalDistanceM`
+  // is the field, and the tile above it prints km.
+  const weeks = (d?.weeks ?? []).map((w) => ({
+    date: w.weekStart,
+    value: w.totalDistanceM / 1000,
+  }));
   add({
     ...blank('volume', 'Needs a completed week with distance on it.'),
     value: input.volume?.weekKm ?? null,
@@ -264,7 +275,9 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     value: valueOf(input.recoveryDebt, (v) => v.averageBalanceMin),
     readable: readable(input.recoveryDebt),
     needs: readable(input.recoveryDebt) ? null : 'Needs seven complete nights of scored sleep.',
-    series: readable(input.recoveryDebt) ? series(input.recoveryDebt.value.series) : [],
+    series: readable(input.recoveryDebt)
+      ? series((input.recoveryDebt.value.series ?? []).map((n) => ({ date: n.date, value: n.balanceMin })))
+      : [],
     seriesLabel: 'Nightly balance',
   });
 

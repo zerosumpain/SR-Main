@@ -136,9 +136,9 @@ describe('buildReadings — series', () => {
         rhrBaseline: 46,
         volume: { weekKm: 18, medianKm: 22 },
         dashboard: { weeks: [
-          { weekStart: '2026-07-06', km: 20 },
-          { weekStart: '2026-07-13', km: 24 },
-          { weekStart: '2026-07-20', km: 18 },
+          { weekStart: '2026-07-06', totalDistanceM: 20_000 },
+          { weekStart: '2026-07-13', totalDistanceM: 24_000 },
+          { weekStart: '2026-07-20', totalDistanceM: 18_000 },
         ] },
       }),
     );
@@ -178,5 +178,44 @@ describe('buildReadings — series', () => {
     expect(readings.efficiency.value).toBe(742);
     expect(readings.efficiency.baseline).toBe(728);
     expect(readings.efficiency.series.length).toBe(2);
+  });
+});
+
+describe('buildReadings — the two series whose shape is not a DayPoint', () => {
+  // Both of these were typed structurally, both were typed WRONG, and both
+  // would have plotted `undefined` for every point. The types are spelled out
+  // now; these assert the conversion rather than the annotation.
+  it('converts the nightly sleep balance from balanceMin, not value', () => {
+    const readings = buildReadings(
+      emptyInput({
+        recoveryDebt: ok({
+          averageBalanceMin: -22,
+          series: [
+            { date: '2026-09-01', balanceMin: -30 },
+            { date: '2026-09-02', balanceMin: -14 },
+          ],
+        }),
+      }),
+    );
+    expect(readings.balance.series).toEqual([
+      { date: '2026-09-01', value: -30 },
+      { date: '2026-09-02', value: -14 },
+    ]);
+  });
+
+  it('converts week volume from metres to the kilometres the tile prints', () => {
+    const readings = buildReadings(
+      emptyInput({
+        volume: { weekKm: 18, medianKm: 22 },
+        dashboard: { weeks: [
+          { weekStart: '2026-08-24', totalDistanceM: 18_400 },
+          { weekStart: '2026-08-31', totalDistanceM: 22_000 },
+        ] },
+      }),
+    );
+    expect(readings.volume.series).toEqual([
+      { date: '2026-08-24', value: 18.4 },
+      { date: '2026-08-31', value: 22 },
+    ]);
   });
 });

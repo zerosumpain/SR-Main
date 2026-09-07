@@ -202,6 +202,7 @@ describe('HealthDashboard — the public audience', () => {
           body: ['One paragraph.'],
           pullQuoteLabel: 'The one thing',
           pullQuote: 'Hold the window.',
+          pullQuoteMoves: [],
           pullQuoteFollow: 'Everything else follows it.',
           reviews: [],
         },
