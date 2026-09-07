@@ -862,7 +862,12 @@ jobs:
           docker version --format '{{.Server.Version}}'
           docker compose version
           docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'
-          sudo nginx -T 2>/dev/null | grep -E '^[[:space:]]*(server_name|listen|ssl_certificate|ssl_certificate_key) ' | sort -u
+          systemctl is-active caddy nginx cloudflared || true
+          sudo ss -ltnp | head -25
+          docker inspect strange-rambling-caddy-1 --format '{{json .Mounts}}'
+          sudo ls -la /etc/cloudflared /root/.cloudflared /home/johnk/.cloudflared 2>/dev/null || true
+          sudo sh -c "test ! -f /etc/cloudflared/config.yml || grep -E 'hostname:|service:' /etc/cloudflared/config.yml"
+          sudo ufw status || true
           command -v pi
           pi --version 2>&1 | head -1
           sudo -u johnk test -s /home/johnk/.pi/agent/auth.json && echo 'Pi auth file present'
