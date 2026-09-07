@@ -238,7 +238,7 @@ STATUS=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
 if [ "$STATUS" = "active" ]; then
   echo "==> Deployed successfully to https://strangeramblings.com"
 
-  # Record what just went live (/admin/ops/releases) — the same step
+  # Record what just went live (/releases) — the same step
   # scripts/ci-deploy.sh runs, so the two paths stay in step. Non-fatal: the
   # release log records the deploy, it never gates it. `via=manual` marks these
   # apart from CI deploys in the UI.

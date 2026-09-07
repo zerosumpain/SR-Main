@@ -330,7 +330,7 @@ if wait_for_public_release "$SHA" 90; then
   ln -sfn "$SHA" "$VPS_DIR/builder-releases/pending.tmp"
   mv -Tf "$VPS_DIR/builder-releases/pending.tmp" "$VPS_DIR/builder-releases/pending"
 
-  # Record what just went live (/admin/ops/releases). Deliberately AFTER the
+  # Record what just went live (/releases). Deliberately AFTER the
   # public-URL check, so a build that never reached production is never logged
   # as a release — and deliberately non-fatal: the release log is a record of
   # the deploy, never a gate on it.

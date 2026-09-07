@@ -86,7 +86,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
       { label: 'Live', href: '/admin/ops/live' },
       { label: 'Architecture', href: '/admin/ops/architecture' },
-      { label: 'Releases', href: '/admin/ops/releases' },
+      { label: 'Releases', href: '/releases' },
       { label: 'Changelog', href: '/admin/ops/claude-changelog' },
     ],
   },
@@ -147,6 +147,11 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/agent/costs': '/admin/ops/costs',
   '/admin/agent': '/admin/ops/agent',
   '/admin/pulse': '/admin/ops/live',
+  // The release console folded into /releases (2026-09-07), the same way the
+  // admin files page folded into /drive: one page serving the owner the full
+  // log and an anonymous reader the public record, rather than two pages two
+  // redesigns apart at different addresses.
+  '/admin/ops/releases': '/releases',
   '/admin/deepdive': '/admin/ai/keys',
   '/admin/login': '/login?callbackUrl=/admin',
 };

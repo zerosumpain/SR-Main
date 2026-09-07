@@ -54,7 +54,7 @@ You are given the complete git evidence for ONE production deploy: its commits a
 Rules:
 1. Ground everything in the evidence. Never mention a file, route, commit or capability that is not in the evidence. If the evidence is thin, say less and set confidence to "low".
 2. Group related commits into ONE item. A deploy carrying "add X endpoint", "fix X test" and "style X page" is one item about X, not three. Aim for 1-6 items; never more than ${MAX_ITEMS}.
-3. "includes" = the concrete things the change actually covers, as specific as the evidence allows ("adds a /admin/ops/releases page", "backfills history from git", "adds a bearer-token ingest endpoint").
+3. "includes" = the concrete things the change actually covers, as specific as the evidence allows ("adds a /releases page", "backfills history from git", "adds a bearer-token ingest endpoint").
 4. "excludes" = what it does NOT cover, and this is the most valuable field. Use it for: work the commits explicitly defer ("phase 2", "TODO", "follow-up"), stated non-goals, obvious adjacent surfaces the diff leaves untouched, and limits a reader would otherwise assume away. Only state an exclusion you can justify from the evidence. An empty list is correct and expected when nothing supports one — do NOT pad it.
 5. Titles are sentence case, under 70 characters. Follow the voice notes below.
 
@@ -73,7 +73,7 @@ Return JSON of exactly this shape:
       "summary": "2-4 sentences on what this does",
       "includes": ["..."],
       "excludes": ["..."],
-      "surfaces": ["/admin/ops/releases", "workflow engine", ...],
+      "surfaces": ["/releases", "workflow engine", ...],
       "files": ["src/..."],
       "commits": ["abc1234"],
       "confidence": "low | medium | high"

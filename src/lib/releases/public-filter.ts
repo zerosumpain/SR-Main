@@ -1,10 +1,11 @@
 /**
  * Public-safety filter for the release log.
  *
- * The release log at /admin/ops/releases is owner-only and holds the full truth:
- * internal infra work, file paths, commit shas, and items describing security
- * mechanisms. The landing page showcases the same body of work to anonymous
- * visitors, so everything served publicly passes through here first.
+ * The owner branch of /releases (see ./console) holds the full truth: internal
+ * infra work, file paths, commit shas, and items describing security
+ * mechanisms. The landing page and the anonymous branch of that same URL show
+ * the same body of work to visitors, so everything served publicly passes
+ * through here first.
  *
  * The rule is allow-list first, deny-list second — an item is public only when
  * it is user-facing AND touches no private surface AND reads clean. Anything
