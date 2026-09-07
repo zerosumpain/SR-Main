@@ -100,18 +100,3 @@ test('downloaded OSM imagery renders in Mapbox when the connection drops', async
   await expect(page.locator('#map-test .mapboxgl-canvas')).toHaveCount(0);
 });
 
-test('Broads Pilot renders its overlays and switches map themes', async ({ page }) => {
-  test.setTimeout(120_000);
-  await harness(page);
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/projects/broads-pilot');
-  await expect(page.locator('.bp-map .mapboxgl-canvas')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('.bp-map .mapboxgl-marker').first()).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: 'Start planning', exact: true }).click();
-  await page.getByRole('button', { name: 'Map options' }).click();
-  await page.getByRole('button', { name: 'Schematic', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Schematic', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.bp-map .mapboxgl-marker').first()).toBeVisible();
-  expect(errors).toEqual([]);
-});

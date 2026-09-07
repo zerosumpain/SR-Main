@@ -10,9 +10,9 @@ import { open, realpath, type FileHandle } from 'fs/promises';
 import { join, extname, resolve, sep } from 'path';
 import { safeGeneratedResponseHeaders } from '$lib/server/generated-content';
 
-// Relocated static bundles (whitehall, brass-and-rails) use relative ./assets/
-// paths across multiple HTML files, so the trailing slash must be preserved —
-// never let SvelteKit strip it (default is 'never').
+// Relocated static bundles use relative ./assets/ paths across multiple HTML
+// files, so the trailing slash must be preserved — never let SvelteKit strip it
+// (default is 'never').
 export const trailingSlash = 'ignore';
 
 const MIME_TYPES: Record<string, string> = {
@@ -159,9 +159,9 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
   // published. Observed 2026-08-10 on build 7c5f2ef2 — broken nav, unstyled
   // pages and dead three.js, all from that one mismatch.
   //
-  // Gated on studio origin on purpose. The relocated bundles under /projects/
-  // (whitehall, brass-and-rails) use "./assets/..." from pages at varying
-  // depths; a base tag would re-root those too and break them.
+  // Gated on studio origin on purpose. The multi-page relocated bundles under
+  // /projects/ use "./assets/..." from pages at varying depths; a base tag would
+  // re-root those too and break them.
   //
   // The same query answers which browser boundary this document gets. A
   // hand-built bundle (STATIC_PROJECT_KEYS — the owner's own code, published

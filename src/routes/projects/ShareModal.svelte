@@ -4,7 +4,7 @@
 
   interface Props {
     projectKey: string;
-    href: string;        // the project's route path, e.g. /projects/policy-engine or /projects/whitehall/
+    href: string;        // the project's route path, e.g. /projects/policy-engine or /projects/terminal-descent/
     title?: string;
     onClose: () => void;
   }

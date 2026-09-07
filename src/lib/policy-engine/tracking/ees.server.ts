@@ -1,6 +1,6 @@
 // tracking/ees.server.ts — DfE Explore Education Statistics v1 query plumbing.
 // Pure builders/extractors (tested) + a thin live fetcher with the same 5s-timeout +
-// finite-value discipline as dfe-data-estate/lib/live.server.ts.
+// finite-value discipline the archived dfe-data-estate study used.
 
 import type { EesFetch, TimePeriod } from './types';
 

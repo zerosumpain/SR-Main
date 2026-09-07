@@ -14,7 +14,7 @@ const VIS: Record<string, boolean> = {
   'policy-engine': false,
   'data-spine': false,
   'dfe-data-strategy': false,
-  'brass-and-rails': true,
+  'archetype': true,
   'terminal-descent': true,
 };
 
@@ -47,7 +47,7 @@ describe('isSurfacePublic', () => {
     expect(isSurfacePublic('/jkai', VIS)).toBe(true);
     expect(isSurfacePublic('/health', VIS)).toBe(true);
     expect(isSurfacePublic('workflow engine', VIS)).toBe(true);
-    expect(isSurfacePublic('/projects/brass-and-rails', VIS)).toBe(true);
+    expect(isSurfacePublic('/projects/archetype', VIS)).toBe(true);
   });
 
   it('blocks admin and api routes wherever they appear in the path', () => {
@@ -61,7 +61,7 @@ describe('isSurfacePublic', () => {
     expect(isSurfacePublic('/projects/policy-engine/neet', VIS)).toBe(false);
     expect(isSurfacePublic('/projects/data-spine', VIS)).toBe(false);
     // Unknown key: absent from the map means public, matching isProjectPublic.
-    expect(isSurfacePublic('/projects/broads-pilot', VIS)).toBe(true);
+    expect(isSurfacePublic('/projects/engine-room', VIS)).toBe(true);
   });
 
   it('rejects empty surfaces', () => {
