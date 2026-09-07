@@ -161,3 +161,37 @@ reported build had fresh heartbeats and was writing code and running checks.
 The old workspace hid that progress, while the Pi tool event-name mismatch hid
 code-argument deltas. Deployment must preserve an active production build and let the existing idle
 worker update mechanism activate the new adapter.
+
+
+### Iteration progress and Codex token usage
+
+Accepted workspaces open on Build. The progress summary shows the running
+iteration's recorded goal and elapsed time, the last worker assessment, recent
+iteration goals/results/next steps, generated output tokens and total reported
+tokens. Totals include every iteration, while detailed history is bounded to
+twelve entries and long fields are truncated server-side. The iteration budget
+bar measures output-token consumption; it is explicitly not feature completion.
+Criteria counts include only passed evidence for the current candidate revision.
+
+Codex builds no longer show a misleading $0.00 build-spend header. They display
+recorded tokens and explain that subscription allowance and monetary charges
+are not reported by this per-build view. Counts refresh with the existing
+three-second snapshot poll after model responses are persisted; incomplete
+responses do not supply authoritative usage. A disconnected workspace labels
+counts as saved data. This uses existing iteration counters and needs no worker
+restart, schema migration or production build interruption.
+
+Local browser fixtures cover live counter increments, budget, assessment,
+candidate-specific criteria, desktop/phone layout, stream recovery and paused
+state without a model call. The persistent local example is explicitly synthetic
+and paused: /jkai/develop/ac5416a9-0829-491c-8c93-bd1ca728800b.
+Deployment of this enhancement does not require a worker restart.
+
+Validation for this enhancement: 15 focused unit/integration/regression checks
+passed; real local PostgreSQL aggregation and build isolation passed. The LAN
+browser fixture passed token increments, candidate-specific evidence counts and
+wide/narrow rendering. Svelte diagnostics reported zero errors and 891 existing
+warnings; production build, client budgets, boundaries and source footprint
+passed. Compose validated, the local web service restarted, and the persistent
+preview returned HTTP 200. Real provider-backed generation remains a local
+parity gap; the tests use persisted synthetic counters and synthetic SSE.

@@ -1,3 +1,4 @@
+import { developmentProgress } from '$lib/builds/development-progress.server';
 import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiBuildLessons } from '$lib/db/schema';
@@ -15,7 +16,7 @@ export const GET: RequestHandler = async ({ params }) => {
   const delivery = await loadDelivery(params.id);
   if (!delivery) throw error(404, 'Development workspace not found');
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
-  return json({ delivery, build, instructions: await instructionHistory(params.id), notes: await listNotes(params.id),
+  return json({ delivery, build, progress: await developmentProgress(params.id), instructions: await instructionHistory(params.id), notes: await listNotes(params.id),
     events: await deliveryEvents(params.id), lessons: await relevantLessons(delivery.state.area), blocker: acceptanceBlocker(delivery.state) });
 };
 function text(value: unknown, limit = 5000): string {
