@@ -268,3 +268,28 @@ export function publicSegmentForms<T extends { nearest: unknown; board: unknown[
   const { nearest: _nearest, board: _board, ...rest } = forms;
   return { ...rest, nearest: null, board: [] };
 }
+
+/**
+ * The ranked moves, with their calls to action removed.
+ *
+ * `moves` is on PUBLIC_FIELDS and should stay there — the argument each row
+ * makes is derived from thresholds, names no ground and is the most readable
+ * thing on the anonymous page. What cannot cross is the BUTTON: every
+ * destination a move offers (`/health/plan`, `/health/segments`) is owner-gated,
+ * so an anonymous reader would be shown an action that bounces off the front
+ * door. Worse, the gettable link carries the board's own gates in its query
+ * string, which is a description of ground the same reader is deliberately not
+ * shown three sections further down.
+ *
+ * Dropped here rather than hidden in the template, for the reason the whole
+ * loader is built this way: `{#if owner}` still ships the bytes.
+ */
+export function publicMoves<T extends { action: unknown }>(
+  moves: readonly T[] | null | undefined,
+): Array<Omit<T, 'action'> & { action: null }> {
+  if (!moves?.length) return [];
+  return moves.map((move) => {
+    const { action: _action, ...rest } = move;
+    return { ...rest, action: null };
+  });
+}

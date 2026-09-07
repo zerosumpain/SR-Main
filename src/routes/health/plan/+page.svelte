@@ -15,7 +15,25 @@
 
   // The form opens on what the engine would commission today; every control
   // stays live, so the proposal is a starting point, never a decision.
-  let sport = $state<(typeof SPORTS)[number]>(data.proposal?.sport ?? 'run');
+  //
+  // A SEED from the URL takes the fields it names, and only those — it arrives
+  // from a "plan this" button on /health's ranked moves, where the row has
+  // already argued for a specific outing. Every other field still opens on the
+  // proposal, because a seed that filled the whole form would be a link written
+  // days ago overriding a reading taken this morning. `seed.sport` is checked
+  // against SPORTS by `parsePlannerSeed` before it gets here.
+  const seed = $derived(data.seed ?? {});
+  const seeded = $derived(
+    seed.sport != null ||
+      seed.km != null ||
+      seed.prefer != null ||
+      seed.climbPerKm != null ||
+      seed.mode != null,
+  );
+
+  let sport = $state<(typeof SPORTS)[number]>(
+    data.seed?.sport ?? data.proposal?.sport ?? 'run',
+  );
   // The start defaults to the last place Home Assistant saw the john device;
   // any manual placement (map tap, geolocation, geocoded place) replaces it.
   let start = $state<[number, number] | null>(
@@ -23,12 +41,16 @@
   );
   let startFromDevice = $state(Boolean(data.deviceLocation));
   let finish = $state<[number, number] | null>(null);
-  let mode = $state<'loop' | 'point'>('loop');
+  let mode = $state<'loop' | 'point'>(data.seed?.mode ?? 'loop');
   let picking = $state<'start' | 'finish'>('start');
 
-  let targetKm = $state(data.proposal ? Number((data.proposal.distanceM / 1000).toFixed(1)) : 8);
-  let climbPerKm = $state<number | null>(null);
-  let prefer = $state<'any' | 'steady' | 'spiky'>(data.proposal?.prefer ?? 'any');
+  let targetKm = $state(
+    data.seed?.km ?? (data.proposal ? Number((data.proposal.distanceM / 1000).toFixed(1)) : 8),
+  );
+  let climbPerKm = $state<number | null>(data.seed?.climbPerKm ?? null);
+  let prefer = $state<'any' | 'steady' | 'spiky'>(
+    data.seed?.prefer ?? data.proposal?.prefer ?? 'any',
+  );
   let allowOutAndBack = $state(false);
   let candidateCount = $state(5);
 
@@ -95,7 +117,9 @@
 
   // Results are graded against the sport they were planned with — grading
   // against the live chip would silently re-grade old results on every click.
-  let plannedSport = $state<(typeof SPORTS)[number]>(data.proposal?.sport ?? 'run');
+  let plannedSport = $state<(typeof SPORTS)[number]>(
+    data.seed?.sport ?? data.proposal?.sport ?? 'run',
+  );
 
   // A shared route being viewed takes over the map; clearing it hands the map
   // back to the planned candidates.
@@ -262,6 +286,25 @@
     } finally {
       interpreting = false;
     }
+  }
+
+  /**
+   * Hand the form back to what the engine would commission NOW.
+   *
+   * The escape hatch for a stale seed. It resets only the fields a seed can
+   * carry, so a start point already placed on the map survives — losing that
+   * to a settings reset is the kind of small rudeness that stops people using
+   * the button at all.
+   */
+  function useTodaysProposal() {
+    const p = data.proposal;
+    if (!p) return;
+    sport = p.sport;
+    targetKm = Number((p.distanceM / 1000).toFixed(1));
+    prefer = p.prefer;
+    climbPerKm = null;
+    mode = 'loop';
+    savedId = null;
   }
 
   async function applyProposal() {
@@ -464,6 +507,43 @@
       <p class="error-line">{interpretError}</p>
     {/if}
   </section>
+
+  <!-- A commissioned session says so. Without this band the form simply opens
+       on different numbers than it did last time, which reads as a bug; and the
+       reader could not tell a link written days ago from this morning's
+       reading. The proposal card below still shows what the engine would
+       commission NOW, and one button hands the form back to it. -->
+  {#if seeded}
+    <section class="nm-sec seeded">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Commissioned</span>
+        <span class="nm-sec-meta">{seed.from ?? 'from a link'}</span>
+      </div>
+      {#if seed.why}
+        <p class="proposal-line">{seed.why}</p>
+      {/if}
+      <p class="seeded-fields">
+        {#if seed.sport}<span>{activityLabel(seed.sport)}</span>{/if}
+        {#if seed.km != null}<span>{seed.km} km</span>{/if}
+        {#if seed.prefer && seed.prefer !== 'any'}
+          <span>{seed.prefer === 'steady' ? 'steady climbing' : 'one big climb'}</span>
+        {/if}
+        {#if seed.climbPerKm != null}<span>{seed.climbPerKm} m/km</span>{/if}
+        {#if seed.mode}<span>{seed.mode === 'loop' ? 'loop' : 'point to point'}</span>{/if}
+      </p>
+      <p class="seeded-note">
+        The fields below opened on this. Everything is still live — readiness gates the
+        session when you plan it, not when the link was written.
+      </p>
+      {#if data.proposal}
+        <div class="actions">
+          <button class="nm-ghost-btn" onclick={useTodaysProposal}>
+            Use today's proposal instead
+          </button>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   {#if data.proposal}
     <section class="nm-sec">
@@ -929,6 +1009,67 @@
     font-family: var(--font-mono);
     font-size: var(--fs-body-sm);
     color: var(--text-primary);
+  }
+
+  /* The commissioned band. One accent hairline down the left is the whole
+     decoration — it marks the section as "this came from somewhere else"
+     without becoming a second, louder proposal card above the real one. */
+  .seeded {
+    border-left: 2px solid var(--accent);
+    padding-left: 1rem;
+  }
+  .seeded-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    list-style: none;
+  }
+  .seeded-fields span {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-tint-35);
+    background: var(--accent-tint-08);
+    padding: 3px 8px;
+  }
+  .seeded-note {
+    margin: 0 0 0.8rem;
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-muted);
+    max-width: 62ch;
+    text-wrap: pretty;
+  }
+
+  /* The outline partner to the filled `.nm-save-btn` — a secondary action
+     beside a primary one, and the pairing this design system already uses.
+     Defined here because `.nm-ghost-btn` exists nowhere else; a class used and
+     never defined is the trap this page's `.nm-select` fell into. */
+  .nm-ghost-btn {
+    background: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+  .nm-ghost-btn:hover,
+  .nm-ghost-btn:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-tint-04);
   }
 
   .shared-list {

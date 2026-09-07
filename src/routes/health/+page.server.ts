@@ -4,6 +4,7 @@ import {
   disclosureLeaks,
   pickPublic,
   publicDashboard,
+  publicMoves,
   publicSegmentForms,
 } from '$lib/health/public-payload';
 import { getHealthSeries30d } from '$lib/health/series-30d-service';
@@ -31,6 +32,7 @@ import { computeForecast } from '$lib/health/analytics/forecast';
 import { GETTABLE_GAP_PCT } from '$lib/trails/segments/form';
 import { formTaxonomy } from '$lib/health/segment-list';
 import { computeMoves } from '$lib/health/moves';
+import { asPlannerSport } from '$lib/health/deep-links';
 import { computeTripwires, weeklyVolumeSummary, type GettableSummary } from '$lib/health/tripwires';
 import { computeExperiments } from '$lib/health/experiments';
 import { computeVerdict } from '$lib/health/verdict';
@@ -332,7 +334,16 @@ export const load: PageServerLoad = async (event) => {
     volume: volume ? { weekKm: volume.weekKm, medianKm: volume.medianKm } : null,
   };
 
-  const moves = safeSync('moves', () => computeMoves(instrumentInputs)) ?? [];
+  // The sport a move's "plan this" button seeds the planner with. The coach
+  // has already decided what it would commission today, off eight weeks of
+  // history and a readiness veto, so reading it here keeps ONE answer to that
+  // question on the page rather than two that can disagree. Null on the
+  // anonymous branch, where the coach is not run and the buttons are stripped
+  // anyway — `moves.ts` then falls back to the planner's own default, a run.
+  const moves =
+    safeSync('moves', () =>
+      computeMoves({ ...instrumentInputs, sport: asPlannerSport(coach?.session.sport) }),
+    ) ?? [];
   const tripwires =
     safeSync('tripwires', () =>
       computeTripwires({
@@ -416,6 +427,9 @@ export const load: PageServerLoad = async (event) => {
       // exists on this branch.
       dashboard: publicDashboard(dashboard),
       segmentForms: publicForms,
+      // Same shape, no buttons. Every destination a move offers is owner-gated,
+      // so the anonymous reader keeps the argument and loses the call to action.
+      moves: publicMoves(moves),
       // Sections the anonymous document does not render at all. Declared as
       // empty rather than omitted so `PublicHealthData` and the component's
       // props stay one shape — and so that a reader of this file can see that

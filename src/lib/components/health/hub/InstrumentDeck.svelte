@@ -37,6 +37,7 @@
   import SectionHead from './SectionHead.svelte';
   import { fixed, whole, signed, clockFromMinutes, hoursAndMinutes } from './format';
   import { sparkPoints, barHeights, extent, yOf, sample } from './chart';
+  import { metricPeekHandlers } from '$lib/health/metric-peek.svelte';
 
   interface Props {
     acwr: MetricResult<ACWRResult> | null;
@@ -50,6 +51,8 @@
     efficiency: TrendSeries | null;
     /** Daily TRIMP, oldest first. The monotony panel draws the last seven. */
     loadDays: Array<{ date: string; load: number }>;
+    /** Opens the drill for a panel. Absent leaves the panels inert. */
+    onmetric?: (id: string) => void;
   }
 
   let {
@@ -62,6 +65,7 @@
     recoveryDebt,
     efficiency,
     loadDays,
+    onmetric,
   }: Props = $props();
 
   type Tone = 'accent' | 'good' | 'plain';
@@ -436,7 +440,10 @@
   ]);
 </script>
 
-<section class="b">
+<!-- The hover handlers are DELEGATED onto the section: eight panels would
+     otherwise want thirty-two listeners and thirty-two pieces of markup to keep
+     in step. A panel opts in with one attribute, `data-metric`. -->
+<section class="b" {...metricPeekHandlers()}>
   <div class="b-inner">
     <div class="b-head">
       <SectionHead
@@ -450,7 +457,12 @@
 
     <div class="b-grid">
       {#each panels as p (p.id)}
-        <div class="b-panel">
+        <!-- A BUTTON, not a div, and styled back to the div it replaces: the
+             panel is the whole hit target, so hover, click and Tab all reach
+             the same thing, and none of that needs a second element inside the
+             card to explain itself. `data-metric` is what the delegated hover
+             handler on the section reads. -->
+        <button type="button" class="b-panel" data-metric={p.id} onclick={() => onmetric?.(p.id)}>
           <div class="b-panel-head">
             <p class="b-panel-name">{p.name}</p>
             <p class="b-panel-badge" class:needs={!p.readable}>
@@ -538,7 +550,7 @@
             <p class="b-caption">{p.caption}</p>
           {/if}
           <p class="b-body">{p.body}</p>
-        </div>
+        </button>
       {/each}
     </div>
 
@@ -573,11 +585,31 @@
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 16px;
   }
+  /* Styled back to the DIV it replaced, exactly: a button's user-agent font,
+     colour, alignment and display would all have moved the panel, and the brief
+     for this work was that the deck does not change. Everything it gains is on
+     hover and focus. */
   .b-panel {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    border-radius: 0;
     background: var(--text-primary);
     border: 1px solid rgba(237, 228, 212, 0.16);
     padding: 22px;
     min-width: 0;
+    cursor: pointer;
+    transition: border-color 120ms ease;
+  }
+  .b-panel:hover,
+  .b-panel:focus-visible {
+    border-color: var(--accent-on-dark);
+  }
+  .b-panel:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
   }
 
   .b-panel-head {

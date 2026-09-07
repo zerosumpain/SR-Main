@@ -23,6 +23,7 @@
   import type { WeeklyVolumeRead } from './types';
   import { fixed, whole, signed, ordinal, duration } from './format';
   import { sparkPoints, sample, bars } from './chart';
+  import { metricPeekHandlers } from '$lib/health/metric-peek.svelte';
 
   interface Props {
     today: HealthDay | null;
@@ -35,6 +36,8 @@
     vo2max: MetricResult<VO2Result> | null;
     acwr: MetricResult<ACWRResult> | null;
     volume: WeeklyVolumeRead | null;
+    /** Opens the drill for a figure. Absent leaves the tiles inert. */
+    onmetric?: (id: string) => void;
   }
 
   let {
@@ -48,6 +51,7 @@
     vo2max,
     acwr,
     volume,
+    onmetric,
   }: Props = $props();
 
   // ——— the donut ————————————————————————————————————————————————
@@ -122,6 +126,8 @@
   const mean = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
 
   interface Tile {
+    /** The registry id — what `data-metric` carries and the drill opens on. */
+    id: string;
     label: string;
     value: string;
     unit: string;
@@ -180,6 +186,7 @@
     const rec = today?.rec ?? 0;
     const recWeek = mean(recSeries.slice(-7));
     out.push({
+      id: 'recovery',
       label: 'Recovery',
       value: rec > 0 ? whole(rec) : '—',
       unit: '%',
@@ -196,6 +203,7 @@
     const hrv7 = dashboard?.hrv?.latest7 ?? mean(hrvSeries.slice(-7));
     const trough = hrvSeries.length ? Math.min(...hrvSeries) : null;
     out.push({
+      id: 'hrv',
       label: 'HRV RMSSD',
       value: hrv > 0 ? whole(hrv) : '—',
       unit: 'ms',
@@ -212,6 +220,7 @@
     const rhrDelta = todayDeltas?.rhrDelta ?? 0;
     const peak = rhrSeries.length ? Math.max(...rhrSeries) : null;
     out.push({
+      id: 'rhr',
       label: 'Resting HR',
       value: rhr > 0 ? whole(rhr) : '—',
       unit: 'bpm',
@@ -228,6 +237,7 @@
     const sleptMean = mean(sleptSeries);
     const best = sleptSeries.length ? Math.max(...sleptSeries) : null;
     out.push({
+      id: 'sleep',
       label: 'Sleep',
       value: slept > 0 ? fixed(slept, 1) : '—',
       unit: 'h',
@@ -252,6 +262,7 @@
       : 0;
     const lowestOfRun = weekKms.length > 1 && weekKms[weekKms.length - 1] === Math.min(...weekKms);
     out.push({
+      id: 'volume',
       label: 'Week volume',
       value: volume ? fixed(volume.weekKm, 1) : '—',
       unit: 'km',
@@ -265,6 +276,7 @@
 
     const vo2 = usable(vo2max) ? vo2max.value : null;
     out.push({
+      id: 'vo2max',
       label: 'VO₂max',
       value: vo2 ? fixed(vo2.current, 1) : '—',
       unit: '',
@@ -325,7 +337,7 @@
   });
 </script>
 
-<section class="a">
+<section class="a" {...metricPeekHandlers()}>
   <div class="a-inner">
     <div class="a-head">
       <p class="a-kicker">A / State of play</p>
@@ -334,7 +346,21 @@
 
     <div class="a-grid">
       <div class="a-readiness">
-        <div class="a-dial">
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div
+          class="a-dial"
+          data-metric="readiness"
+          role="button"
+          tabindex="0"
+          aria-label="Readiness — open the detail"
+          onclick={() => onmetric?.('readiness')}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onmetric?.('readiness');
+            }
+          }}
+        >
           <svg viewBox="0 0 120 120" class="a-donut" role="img" aria-label={score != null ? `Readiness ${score} of 100` : 'Readiness not scored'}>
             <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(237,228,212,0.14)" stroke-width="10" />
             {#if score != null}
@@ -385,7 +411,7 @@
       <div>
         <div class="a-tiles">
           {#each tiles as t (t.label)}
-            <div class="a-tile">
+            <button type="button" class="a-tile" data-metric={t.id} onclick={() => onmetric?.(t.id)}>
               <p class="a-tile-label">{t.label}</p>
               <!-- An em dash takes no unit: "—h" reads as a broken number rather
                    than as a missing one. -->
@@ -418,7 +444,7 @@
                 </svg>
               {/if}
               <p class="a-tile-foot" class:good={t.good}>{t.foot}</p>
-            </div>
+            </button>
           {/each}
         </div>
 
@@ -598,11 +624,41 @@
     grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
     gap: 14px;
   }
+  /* Styled back to the DIV it replaced. See the same note on `.b-panel`: a
+     button's user-agent font, colour, alignment and display would all move the
+     tile, and this row of six must look exactly as it did. */
   .a-tile {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    border-radius: 0;
     background: var(--text-primary);
     border: 1px solid rgba(237, 228, 212, 0.16);
     padding: 18px;
     min-width: 0;
+    cursor: pointer;
+    transition: border-color 120ms ease;
+  }
+  .a-tile:hover,
+  .a-tile:focus-visible {
+    border-color: var(--accent-on-dark);
+  }
+  .a-tile:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
+  }
+  /* The dial opens the drill, but it is not a <button>: the donut inside it is
+     an image with its own label, and wrapping that in a control announces the
+     figure twice to a screen reader. `role="button"` on the box plus a real
+     keydown handler gives the behaviour without the double announcement. */
+  .a-dial {
+    cursor: pointer;
+  }
+  .a-dial:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 4px;
   }
   .a-tile-label {
     font-family: var(--font-mono);
