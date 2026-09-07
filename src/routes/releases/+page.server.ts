@@ -47,11 +47,23 @@ export const load: PageServerLoad = async (event) => {
     );
   });
 
+  // Two different questions, so two different lists. The MIX describes what is
+  // on the page, and narrows as you filter. The OPTIONS come from the whole
+  // safe corpus, because deriving them from the filtered set would shrink the
+  // picker to the choice you already made and trap you there — and they are the
+  // corpus's kinds rather than all six, so the picker never offers `infra`,
+  // whose items the public filter removes in their entirety.
+  const mix = new Map<string, number>();
+  for (const i of items) mix.set(i.kind, (mix.get(i.kind) ?? 0) + 1);
+
   return {
     mode: 'public' as const,
     totals: data.totals,
     cadence: weeklyCadence(data.cadence),
-    kindMix: data.kindMix,
+    kindMix: [...mix.entries()]
+      .map(([kind, count]) => ({ kind, count }))
+      .sort((a, b) => b.count - a.count),
+    kindOptions: data.kindMix.map((k) => String(k.kind)),
     items,
     filters: { kind: filters.kind, q: filters.q },
   };

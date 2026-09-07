@@ -197,7 +197,12 @@
           onRegenerate={(id, version) => summarise({ id, force: true }, `re-summarising ${version}…`)}
         />
       {:else}
-        <ReleaseFilters kind={data.filters.kind} q={data.filters.q} {result} />
+        <ReleaseFilters
+          kind={data.filters.kind}
+          q={data.filters.q}
+          kinds={data.kindOptions}
+          {result}
+        />
         <CapabilityRecord items={data.items} />
       {/if}
     </div>

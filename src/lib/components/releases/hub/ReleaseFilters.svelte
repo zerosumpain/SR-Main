@@ -10,11 +10,18 @@
   // against the unfiltered corpus — an anonymous reader is served the
   // user-facing subset already, so an "impact" select would offer one real
   // choice and one empty one.
-  import { KIND_LABEL, RELEASE_ITEM_KINDS } from '$lib/releases/types';
+  import { KIND_LABEL, RELEASE_ITEM_KINDS, type ReleaseItemKind } from '$lib/releases/types';
 
   interface Props {
     kind: string;
     q: string;
+    /**
+     * The kinds worth offering. Omit for all six — the owner sees the whole
+     * corpus. The public view passes the kinds its corpus actually contains,
+     * because `infra` items are removed wholesale by the public filter and an
+     * option that can only ever return nothing is a dead end, not a choice.
+     */
+    kinds?: string[];
     /** Owner only. */
     impact?: string;
     via?: string;
@@ -24,7 +31,16 @@
     result: string;
   }
 
-  let { kind, q, impact = 'all', via = 'all', vias = [], owner = false, result }: Props = $props();
+  let {
+    kind,
+    q,
+    kinds = [...RELEASE_ITEM_KINDS],
+    impact = 'all',
+    via = 'all',
+    vias = [],
+    owner = false,
+    result,
+  }: Props = $props();
 
   const dirty = $derived(kind !== 'all' || q !== '' || impact !== 'all' || via !== 'all');
 </script>
@@ -45,8 +61,8 @@
     <span class="cf-label">Kind</span>
     <select id="rel-kind" name="kind" value={kind}>
       <option value="all">All kinds</option>
-      {#each RELEASE_ITEM_KINDS as k (k)}
-        <option value={k}>{KIND_LABEL[k]}</option>
+      {#each kinds as k (k)}
+        <option value={k}>{KIND_LABEL[k as ReleaseItemKind] ?? k}</option>
       {/each}
     </select>
   </label>

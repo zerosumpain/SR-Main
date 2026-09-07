@@ -8,7 +8,10 @@ export interface PublicReleasesData {
   mode: 'public';
   totals: ShowcaseTotals;
   cadence: CadenceWeek[];
+  /** The mix over the FILTERED items — it describes what is on the page. */
   kindMix: KindSlice[];
+  /** The kinds the whole safe corpus contains — what the picker may offer. */
+  kindOptions: string[];
   items: ShowcaseItem[];
   filters: { kind: string; q: string };
 }

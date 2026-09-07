@@ -35,7 +35,8 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
       days: 133,
     },
     cadence: [{ week: '2026-W30', deploys: 9, shipped: 14 }],
-    kindMix: [{ kind: 'feature', count: 308 }],
+    kindMix: [{ kind: 'feature', count: 1 }],
+    kindOptions: ['feature', 'fix', 'improvement', 'content'],
     items: [
       {
         kind: 'feature',
@@ -139,6 +140,14 @@ describe('the public document', () => {
     expect(body).toContain('All kinds');
     expect(body).toContain('Cadence');
     expect(body).toContain('Capabilities');
+  });
+
+  it('offers only the kinds its corpus can actually return', () => {
+    // `infra` items are removed wholesale by the public filter, so offering
+    // the option would be offering a guaranteed empty result.
+    expect(body).toContain('>Feature</option>');
+    expect(body).not.toContain('>Infra</option>');
+    expect(body).not.toContain('>Chore</option>');
   });
 
   it('offers no owner control', () => {
