@@ -15,6 +15,7 @@ const BANNER = 'Nothing below is a measurement';
 function ownerData(over: Partial<OwnerHealthData> = {}): OwnerHealthData {
   return {
     dashboardUpdatedAt: '2026-08-31T14:23:45.000Z',
+    initialMetric: null,
     provenance: { seriesIsMock: false, correlationsAreIllustrative: false },
     today: null,
     series: [],
