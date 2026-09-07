@@ -894,6 +894,7 @@ jobs:
           const id=builds.find(b=>b.status==='running')?.id??builds[0]?.id;
           if(id){
           const page=await fetch(`http://127.0.0.1:4173/jkai/develop/${id}`,{headers,redirect:'manual'});console.log('OWNER_WORKSPACE_HTTP',page.status);await page.body?.cancel();
+          console.log('ISOLATION_ERRORS',JSON.stringify((await client.query("select left(content,2400) as content from jkai_logs where build_id=$1 and content ilike '%bwrap:%' order by id desc limit 3",[id])).rows));
           console.log('BUILD_DETAIL',JSON.stringify((await client.query('select b.prompt,b.status,b.failure,b.budget_config,b.iterations_completed,d.state from jkai_builds b join jkai_build_deliveries d on d.build_id=b.id where b.id=$1',[id])).rows));
           console.log('ITERATION_DETAIL',JSON.stringify((await client.query('select number,status,goals,evaluation,next_steps,tokens_used,output_tokens,failure from jkai_iterations where build_id=$1 order by number desc limit 10',[id])).rows));
           console.log('RECENT_LOGS',JSON.stringify((await client.query('select type,left(content,2000) as content,created_at from jkai_logs where build_id=$1 order by id desc limit 45',[id])).rows));
@@ -910,7 +911,7 @@ jobs:
           }
           await client.query('rollback');await client.end();
           NODE
-          systemctl show jkai-builder -p ActiveState -p SubState -p MainPID -p ActiveEnterTimestamp
+          systemctl show jkai-builder -p RestrictNamespaces -p ActiveState -p SubState -p MainPID -p ActiveEnterTimestamp
           readlink -f /opt/strange-rambling-svelte/build
           cat /opt/strange-rambling-svelte/build/.deploy-sha
           readlink -f /opt/strange-rambling-svelte/builder-releases/pending
