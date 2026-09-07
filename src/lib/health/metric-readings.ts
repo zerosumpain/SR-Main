@@ -21,6 +21,15 @@
 //    Otherwise a fortnight with no sync draws a cliff to zero and then a climb
 //    back, which is a shape, and shapes get read.
 //
+//  * FIVE OF THOSE FIELDS ARE ALREADY CARRY-FORWARD BACKFILLED upstream.
+//    `series-30d-service` copies the prior day into any zero `rec`, `hrv`,
+//    `rhr`, `slept` or `strain`, so a flat run in one of those series may be a
+//    day nothing synced rather than a day nothing changed. The 26px sparkline
+//    on the tile could get away with not saying so; a 600px trace with dates
+//    on it, which is what the drill draws, cannot. `CARRIED_FORWARD` marks
+//    them and the series label says it out loud. `steps` and `weight` are NOT
+//    backfilled, which is why the zero filter above still has work to do.
+//
 //  * A series of one is not a series. Anything under two real points comes back
 //    empty so the drill draws its empty state instead of a line between a point
 //    and itself.
@@ -66,6 +75,12 @@ function series(points: DayPoint[] | null | undefined): DayPoint[] {
   const kept = (points ?? []).filter((p) => p && Number.isFinite(p.value));
   return kept.length >= MIN_SERIES_POINTS ? kept : [];
 }
+
+/**
+ * The `HealthDay` fields `series-30d-service` carry-forward backfills, and the
+ * suffix that says so wherever one of them is plotted.
+ */
+const CARRIED_SUFFIX = ' · gaps carried forward';
 
 /** A `HealthDay` field as a series, with 0 treated as the absence it is. */
 function fromDays(days: readonly HealthDay[], pick: (d: HealthDay) => number): DayPoint[] {
@@ -150,7 +165,7 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     readable: !!input.today && input.today.rec > 0,
     needs: input.today && input.today.rec > 0 ? null : 'No recovery score has synced.',
     series: fromDays(days, (x) => x.rec),
-    seriesLabel: 'Last 30 days',
+    seriesLabel: `Last 30 days${CARRIED_SUFFIX}`,
   });
 
   const hrvSeries = fromDays(days, (x) => x.hrv);
@@ -160,7 +175,7 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     readable: !!input.today && input.today.hrv > 0,
     needs: input.today && input.today.hrv > 0 ? null : 'No HRV reading has synced.',
     series: hrvSeries.length ? hrvSeries : series(d?.hrv?.daily),
-    seriesLabel: 'Last 30 days',
+    seriesLabel: `Last 30 days${hrvSeries.length ? CARRIED_SUFFIX : ''}`,
     baseline: d?.hrv?.baseline28 ?? null,
     baselineLabel: d?.hrv?.baseline28 != null ? '28-day mean' : null,
   });
@@ -172,7 +187,7 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     readable: !!input.today && input.today.rhr > 0,
     needs: input.today && input.today.rhr > 0 ? null : 'No resting heart rate has synced.',
     series: rhrSeries.length ? rhrSeries : series(d?.rhr?.daily),
-    seriesLabel: 'Last 30 days',
+    seriesLabel: `Last 30 days${rhrSeries.length ? CARRIED_SUFFIX : ''}`,
     baseline: input.rhrBaseline > 0 ? input.rhrBaseline : (d?.rhr?.baseline28 ?? null),
     baselineLabel: 'own baseline',
   });
@@ -187,7 +202,7 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     readable: !!input.today && input.today.slept > 0,
     needs: input.today && input.today.slept > 0 ? null : 'No sleep has been recorded.',
     series: sleptSeries,
-    seriesLabel: 'Last 30 days',
+    seriesLabel: `Last 30 days${CARRIED_SUFFIX}`,
     baseline: sleptMean,
     baselineLabel: sleptMean != null ? '30-day mean' : null,
   });
@@ -304,7 +319,7 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     readable: !!input.today && input.today.strain > 0,
     needs: input.today && input.today.strain > 0 ? null : 'No strain score has synced.',
     series: strainSeries,
-    seriesLabel: 'Last 30 days',
+    seriesLabel: `Last 30 days${CARRIED_SUFFIX}`,
   });
 
   const stepSeries = fromDays(days, (x) => x.steps);

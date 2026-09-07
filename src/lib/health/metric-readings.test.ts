@@ -219,3 +219,39 @@ describe('buildReadings — the two series whose shape is not a DayPoint', () =>
     ]);
   });
 });
+
+describe('buildReadings — the series that are carried forward say so', () => {
+  const days = Array.from({ length: 30 }, (_, i) => day(i));
+
+  // `series-30d-service` copies the prior day into any zero rec/hrv/rhr/slept/
+  // strain, so a flat run may be a day nothing synced rather than a day nothing
+  // changed. A 26px sparkline can get away with not saying that; a 600px trace
+  // with dates on it cannot.
+  it.each(['recovery', 'hrv', 'rhr', 'sleep', 'strain'])('marks %s', (id) => {
+    const readings = buildReadings(emptyInput({ series: days, today: days[29] }));
+    expect(readings[id].seriesLabel).toContain('carried forward');
+  });
+
+  it('does NOT mark steps or weight, which the service does not backfill', () => {
+    const readings = buildReadings(emptyInput({ series: days, today: days[29] }));
+    expect(readings.steps.seriesLabel).not.toContain('carried forward');
+    expect(readings.weight.seriesLabel).not.toContain('carried forward');
+  });
+
+  it('does not claim a carry on the Apple daily series, which is a different source', () => {
+    const readings = buildReadings(
+      emptyInput({
+        dashboard: {
+          hrvSdnn: {
+            latest7: 44,
+            daily: [
+              { date: '2026-09-01', value: 42 },
+              { date: '2026-09-02', value: 46 },
+            ],
+          },
+        },
+      }),
+    );
+    expect(readings['hrv-sdnn'].seriesLabel).not.toContain('carried forward');
+  });
+});
