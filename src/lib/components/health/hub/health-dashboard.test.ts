@@ -272,3 +272,41 @@ describe('HealthDashboard — the public audience', () => {
     expect(body).not.toContain('Nothing clears all four today');
   });
 });
+
+describe('HealthDashboard — the calls to action are double-guarded', () => {
+  // `publicMoves()` / `publicExperiments()` null every action in the anonymous
+  // payload, and that is where the split belongs. This asserts the SECOND belt:
+  // handed an action anyway, the template still withholds it for a public
+  // reader — the same treatment sections F and G give the gettable board and
+  // the route cards, because these hrefs point into ground-bearing pages.
+  const withAction = {
+    id: 'long-easy-day' as const,
+    rank: 1,
+    title: 'ONE LONG EASY DAY A WEEK',
+    rationale: '12–15 km at hike heart rate.',
+    buys: ['ACWR into the building band.'],
+    costs: ['Two to three hours of calendar a week.'],
+    leverage: 3,
+    leverageLabel: '1 INSTRUMENT',
+    tone: 'accent' as const,
+    instruments: ['ACWR'],
+    action: {
+      kind: 'planner' as const,
+      label: 'Plan a 13.5 km easy loop',
+      href: '/health/plan?sport=run&km=13.5',
+      note: 'Opens the planner on steady ground.',
+    },
+  };
+
+  it('withholds a move’s action from the public reader even when the payload carries one', () => {
+    const body = publicHtml(ownerData({ moves: [withAction] }));
+    expect(body).toContain('ONE LONG EASY DAY A WEEK');
+    expect(body).not.toContain('/health/plan?sport=run&amp;km=13.5');
+    expect(body).not.toContain('Plan a 13.5 km easy loop');
+  });
+
+  it('renders it for the owner — this is a split, not a deletion', () => {
+    const body = html(ownerData({ moves: [withAction] }));
+    expect(body).toContain('Plan a 13.5 km easy loop');
+  });
+});

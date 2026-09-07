@@ -271,7 +271,7 @@
 
   <ForecastSection forecast={data.forecast} onmetric={openDrill} />
 
-  <RankedMoves moves={data.moves} />
+  <RankedMoves moves={data.moves} {audience} />
 
   <TripwireTable tripwires={data.tripwires} onmetric={openDrill} {owner} />
 
@@ -294,9 +294,15 @@
     experiments={data.experiments}
     letter={experimentsLetter}
     onmetric={openDrill}
+    {audience}
   />
 
-  <VerdictSection verdict={data.verdict} letter={verdictLetter} moves={data.moves ?? []} />
+  <VerdictSection
+    verdict={data.verdict}
+    letter={verdictLetter}
+    moves={data.moves ?? []}
+    {audience}
+  />
 
 </HealthShell>
 

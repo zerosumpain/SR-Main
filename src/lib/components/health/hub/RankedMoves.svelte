@@ -7,14 +7,25 @@
   // right is `leverage` out of five; the label under it says what the meter is
   // measuring, because "4 of 5" on its own is a number without a unit.
   import type { Move } from '$lib/health/moves';
+  import type { HealthAudience } from './types';
   import SectionHead from './SectionHead.svelte';
   import { countWord } from './format';
 
   interface Props {
     moves: Move[];
+    /**
+     * The second belt. `publicMoves()` already nulls every action in the
+     * anonymous payload — that is the braces, and it is where the split belongs
+     * — but a move's action is a LINK INTO GROUND-BEARING PAGES, which is the
+     * one class of value this page double-guards. Sections F and G do the same
+     * thing with the board and the route cards.
+     */
+    audience?: HealthAudience;
   }
 
-  let { moves }: Props = $props();
+  let { moves, audience = 'owner' }: Props = $props();
+
+  const owner = $derived(audience === 'owner');
 
   const METER_BARS = 5;
   const bars = [...Array(METER_BARS).keys()];
@@ -45,7 +56,7 @@
                    table and imply every row has one. Most rows do not: a habit
                    has nowhere to send you, and `moves.ts` returns a null action
                    rather than inventing a destination. -->
-              {#if move.action}
+              {#if owner && move.action}
                 <a class="d-go" href={move.action.href} data-sveltekit-preload-data="hover">
                   {move.action.label} →
                 </a>

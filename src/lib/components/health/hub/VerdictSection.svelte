@@ -8,6 +8,7 @@
   // can be a summary without being a second opinion.
   import type { Verdict } from '$lib/health/verdict';
   import type { Move } from '$lib/health/moves';
+  import type { HealthAudience } from './types';
 
   interface Props {
     verdict: Verdict | null;
@@ -20,12 +21,15 @@
      * audience check here.
      */
     moves?: Move[];
+    /** The second belt on the call to action — see the note in `RankedMoves`. */
+    audience?: HealthAudience;
   }
 
-  let { verdict, letter = 'I', moves = [] }: Props = $props();
+  let { verdict, letter = 'I', moves = [], audience = 'owner' }: Props = $props();
 
   /** The first of the quoted moves that actually has somewhere to send you. */
   const quoteAction = $derived.by(() => {
+    if (audience !== 'owner') return null;
     // Same guard as the experiment chips: an older payload without the field
     // must cost the button, not the page.
     for (const id of verdict?.pullQuoteMoves ?? []) {

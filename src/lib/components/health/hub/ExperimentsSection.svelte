@@ -22,9 +22,13 @@
     letter?: string;
     /** Opens the drill for one of the instruments an experiment is judged on. */
     onmetric?: (id: string) => void;
+    /** The second belt on the call to action — see the note in `RankedMoves`. */
+    audience?: HealthAudience;
   }
 
-  let { experiments, letter = 'H', onmetric }: Props = $props();
+  let { experiments, letter = 'H', onmetric, audience = 'owner' }: Props = $props();
+
+  const owner = $derived(audience === 'owner');
 
   const live = $derived(experiments.filter((e) => e.state === 'LIVE').length);
   const queued = $derived(experiments.length - live);
@@ -95,7 +99,7 @@
                 <!-- Owner-only, and stripped in the payload rather than hidden
                      here: `disclosureLeaks` cannot see an href, so the link
                      never reaches an anonymous browser at all. -->
-                {#if exp.action}
+                {#if owner && exp.action}
                   <a class="h-go" href={exp.action.href} data-sveltekit-preload-data="hover">
                     {exp.action.label} →
                   </a>
