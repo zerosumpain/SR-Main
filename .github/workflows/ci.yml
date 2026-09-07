@@ -377,7 +377,9 @@ jobs:
 
       - name: Memory and evidence database contracts
         if: matrix.shard == 1
-        run: npx vitest run src/lib/jkai/memory/service.integration.test.ts src/lib/jkai/grounding/evidence.integration.test.ts src/lib/daydream/memory-consolidation.integration.test.ts
+        # These contracts share a database; consolidation scans pending memories.
+        # Do not let another file insert/delete memory fixtures during that scan.
+        run: npx vitest run --no-file-parallelism src/lib/jkai/memory/service.integration.test.ts src/lib/jkai/grounding/evidence.integration.test.ts src/lib/daydream/memory-consolidation.integration.test.ts
 
   # ── the build ────────────────────────────────────────────────────────────────
   #
