@@ -74,11 +74,19 @@ export type WorkloadRequirement =
   /**
    * Must be an OpenRouter model, not a `codex/` id.
    *
-   * Not a capability of the model so much as of the route to it: the budgeted
-   * research tiers stream through OpenRouter's client directly (and the Instant
-   * tier through OpenRouter's web plugin), so a Codex pick would be sent to the
-   * wrong base URL as an unknown slug. Refused at save time rather than
-   * discovered at call time on a tier that has 30 seconds to answer.
+   * Not a capability of the model so much as of the route to it: a role that
+   * builds an OpenRouter-only request would send a Codex pick to the wrong base
+   * URL as an unknown slug.
+   *
+   * NO ROLE DECLARES THIS TODAY. `research-fast` did until 2026-09-07, on the
+   * belief that all three budgeted tiers streamed through OpenRouter's client.
+   * They do not: `jsonCompletion` and `streamCompletion` hand an explicit model
+   * to `getLLMClient`, so Scan and Brief run on a `codex/` id perfectly well.
+   * The one real OpenRouter dependency — Instant's `fast` grounding, which
+   * posts the `plugins` web-search extension — is a property of that CALL, not
+   * of the role, and is handled in `groundedCompletion`. Kept because the
+   * constraint is real for any future role that hard-wires the OpenRouter
+   * client, but check that it is the ROLE and not one call before using it.
    */
   | 'openrouter'
   | null;
@@ -314,10 +322,10 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     key: 'jkai.research.fast_model',
     envKey: 'RESEARCH_FAST_MODEL',
     fallbackModelId: null,
-    requires: 'openrouter',
+    requires: null,
     catalogue: 'tools',
     reason:
-      'Choose an OpenRouter model for Instant, Scan and Brief. With no selection, these use the OpenRouter chat selection or site default. Faster models leave more of the 30s / 90s / 110s time limits for the answer. If the default is Codex, select an OpenRouter model here.',
+      'The model behind Instant, Scan and Brief. Any chat model serves these — they reach the model through the shared LLM client, so a Codex pick is a Codex call. With no selection they follow the chat selection or the site default. Faster models leave more of the 30s / 90s / 110s time limits for the answer. One exception: Instant’s "fast" web grounding is an OpenRouter-only request, so a Codex model is swapped for the OpenRouter fallback on that call alone.',
   },
   {
     id: 'research-deep',

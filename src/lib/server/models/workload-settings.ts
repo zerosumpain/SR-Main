@@ -243,22 +243,30 @@ export const resolveAudioModel = () => resolveById('audio');
 /** Deck slide art direction. */
 export const resolveArtDirectorModel = () => resolveById('art-director');
 
-/** Fast research uses an explicit role selection, then a compatible chat
- * selection, the legacy environment setting, or the site default. There is no
- * hidden model fallback. Grounded fast calls require OpenRouter's web plugin. */
+/**
+ * Fast research uses an explicit role selection, then the chat selection, the
+ * legacy environment setting, or the site default. There is no hidden model
+ * fallback.
+ *
+ * Provider-agnostic on purpose. This threw for any non-OpenRouter model until
+ * 2026-09-07, which made Instant, Scan and Brief impossible to commission
+ * whenever the site default was Codex — a state the site is routinely in. The
+ * premise was wrong. `fast.ts` and `brief.ts` reach the model only through
+ * `jsonCompletion` / `streamCompletion`, both of which pass an explicit id to
+ * `getLLMClient` and therefore speak to the Codex bridge for a `codex/` id.
+ * Exactly one call in the three tiers is OpenRouter-only — Instant's `fast`
+ * grounding, which posts OpenRouter's `plugins` web-search extension — and that
+ * is handled where it happens, in `groundedCompletion`, rather than by refusing
+ * the role. Instant's OTHER grounded mode, `free`, runs on the Codex bridge, so
+ * the old guard also refused a Codex model on its way to a call that REQUIRES
+ * one.
+ */
 export async function resolveResearchFastModel(): Promise<ModelContext> {
   const def = SITE_WORKLOADS.find((w) => w.id === 'research-fast')!;
   const pinned = await getSetting<{ modelId?: string } | null>(def.key);
   const { currentSessionModel } = await import('$lib/context/chat');
-  const session = currentSessionModel();
-  const modelId = pinned?.modelId
-    ?? (session?.provider === 'openrouter' ? session.modelId : null)
-    ?? envModelFor(def);
-  const model = modelId ? coerceModelContext({ modelId }) : await resolveDefaultModel();
-  if (model.provider !== 'openrouter') {
-    throw new Error('Select an OpenRouter model for Research — fast tiers in /admin/ops/costs#research-models. Instant, Scan and Brief cannot use the Codex site default.');
-  }
-  return model;
+  const modelId = pinned?.modelId ?? currentSessionModel()?.modelId ?? envModelFor(def);
+  return modelId ? coerceModelContext({ modelId }) : resolveDefaultModel();
 }
 
 /** The unbudgeted Investigation tier. Follows the site default until pinned. */

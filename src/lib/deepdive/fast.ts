@@ -26,6 +26,7 @@ import { emitArtefact } from './desk-events';
 import { coerceScope, scopeToSearchOptions, scopeAdmits, credibilityBonus, describeScope } from './scope';
 import { depthPreset, SYNTHESIS_MAX_TOKENS } from './depth';
 import { resolveResearchFastModel } from '$lib/server/models/workload-settings';
+import { getFallbackModel } from '$lib/llm/keys';
 import type { ResearchBudget } from './budget';
 import type { SessionStats, ResearchReport } from './types';
 
@@ -137,6 +138,22 @@ export async function runInstant(
       ? 'Searching the web on the subscription — the answer arrives in one piece, not word by word.'
       : 'Searching the web while answering.',
   );
+
+  /**
+   * `fast` grounding is the one OpenRouter-only call in this tier, so a Codex
+   * research model is swapped for the OpenRouter fallback there (see
+   * `groundedCompletion`). `free` grounding IS the Codex bridge and keeps the
+   * chosen model. Announce the substitution: an answer attributed to a model
+   * that did not write it is the quiet wrongness this file exists to avoid, and
+   * the remedy — pick free grounding — is one control away.
+   */
+  if (grounding === 'fast' && model.startsWith('codex/')) {
+    emitLog(
+      sessionId,
+      'ℹ️',
+      `Web grounding runs through OpenRouter, so ${getFallbackModel()} answered this rather than ${model}. Choose free grounding to keep ${model}.`,
+    );
+  }
 
   const { text, citations } = await groundedCompletion(GROUNDED_RULES, question, {
     mode: grounding,
