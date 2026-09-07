@@ -105,6 +105,10 @@
   // Offered only where it is honest: `simulate` runs the REAL `computeACWR` and
   // `computeMonotony`, and returns null when the baseline is not readable. So
   // the pane appears when there is something true to show and not otherwise.
+  // The chosen scenario is deliberately NOT in the URL and NOT carried across
+  // subjects — see the `{#key metricId}` on the pane below. A lever the reader
+  // set two metrics ago, still selected under a figure they have forgotten
+  // choosing it for, is a hypothesis wearing the clothes of a reading.
   let presetId = $state(SESSION_PRESETS[2].id);
   const preset = $derived(SESSION_PRESETS.find((p) => p.id === presetId) ?? SESSION_PRESETS[2]);
   const sim = $derived(simulate(loadDays, preset));
@@ -208,6 +212,10 @@
 
       <!-- WHAT IF -->
       {#if showWhatIf && sim}
+        <!-- Keyed on the subject: opening a different metric's drill starts its
+             what-if from the default rather than under whatever was last
+             asked. -->
+        {#key metricId}
         <section class="md-sec">
           <p class="md-sec-head">
             What if <span class="md-sec-meta">a session on {short(sim.day)}</span>
@@ -276,6 +284,7 @@
             instrument, so read the change rather than matching the before.
           </p>
         </section>
+        {/key}
       {/if}
 
       <!-- HOW -->
