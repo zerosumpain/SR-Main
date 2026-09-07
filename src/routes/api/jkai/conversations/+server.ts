@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations } from '$lib/db/schema';
-import { getConversationList } from '$lib/jkai/queries';
+import { getConversationList, searchConversationList } from '$lib/jkai/queries';
 import { resolveDefaultThinkingLevel } from '$lib/server/models/settings';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
@@ -11,6 +11,13 @@ import type { ModelContext } from '$lib/server/models/types';
 
 export const GET: RequestHandler = async ({ url }) => {
 	const limit = Number(url.searchParams.get('limit') ?? undefined);
+	// A search reaches the whole archive and answers in one un-paged set, so it
+	// short-circuits the cursor path entirely: a cursor describes a position in
+	// the recency ordering, which the relevance ordering does not share.
+	const q = (url.searchParams.get('q') ?? '').trim();
+	if (q) {
+		return json(await searchConversationList({ q, limit: Number.isFinite(limit) ? limit : undefined }));
+	}
 	const beforeRaw = url.searchParams.get('before');
 	const beforeId = url.searchParams.get('beforeId');
 	const pinnedRaw = url.searchParams.get('beforePinned');
