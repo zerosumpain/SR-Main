@@ -23,6 +23,7 @@ const COMMIT_BODY = 'normalise the JID for the number that kept failing';
 function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData {
   return {
     mode: 'public',
+    sourceFootprint: { lines: 456789, files: 2345, measuredAt: '2026-09-07T09:00:00Z' },
     totals: {
       releases: 1004,
       commits: 2338,
@@ -55,6 +56,7 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
 function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
   return {
     mode: 'owner',
+    sourceFootprint: { lines: 456789, files: 2345, measuredAt: '2026-09-07T09:00:00Z' },
     filters: { kind: 'all', impact: 'all', via: 'all', q: '', page: 0 },
     totals: {
       releases: 418,
@@ -248,3 +250,14 @@ describe('weeklyCadence', () => {
     expect(weeks[0].week < weeks[39].week).toBe(true);
   });
 });
+
+ it('shows the same current-build count in both audiences alongside release history', () => {
+   for (const data of [publicData(), ownerData()]) {
+     const { body } = render(ReleasesHub, { props: { data } });
+     expect(body).toContain('Current source lines');
+     expect(body).toContain('456,789');
+     expect(body).toContain('2,345 source files');
+     expect(body).toContain('690,507');
+     expect(body).toContain('7 Sep');
+   }
+ });

@@ -12,6 +12,8 @@
   // snippet: with `unifiedNav` the shell renders `SiteHeader` and drops
   // `actions` entirely, so anything interactive has to be below the bar.
   import SectionHead from '$lib/components/health/hub/SectionHead.svelte';
+  import { shortDate } from '$lib/releases/seam';
+  import type { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
   import type { Tile } from './types';
 
   interface Props {
@@ -19,6 +21,7 @@
     title: string[];
     strap: string;
     tiles: Tile[];
+    sourceFootprint: typeof SOURCE_FOOTPRINT;
     /** Owner only. Omit and no ops row renders. */
     queue?: { pending: number; failed: number } | null;
     busy?: boolean;
@@ -33,6 +36,7 @@
     title,
     strap,
     tiles,
+    sourceFootprint,
     queue = null,
     busy = false,
     busyMsg = null,
@@ -53,6 +57,12 @@
         </div>
       {/each}
     </div>
+
+    <p class="a-source">
+      Current source counts the non-blank lines supporting the site and its features, including comments.
+      Excludes tests, dependencies, vendored code and generated output. Recounted every build;
+      measured <time datetime={sourceFootprint.measuredAt}>{shortDate(sourceFootprint.measuredAt.slice(0, 10))}</time>.
+    </p>
 
     {#if queue}
       <div class="a-ops">
@@ -143,6 +153,16 @@
     text-transform: uppercase;
     color: rgba(237, 228, 212, 0.45);
     margin: 10px 0 0;
+  }
+
+  .a-source {
+    margin: 18px 0 0;
+    max-width: 90ch;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
+    line-height: 1.6;
+    color: var(--bg);
+    opacity: 0.7;
   }
 
   .a-ops {

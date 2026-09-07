@@ -77,6 +77,7 @@
 
   // ——— A ————————————————————————————————————————————————————————————
   const tiles = $derived.by((): Tile[] => {
+    const source: Tile = { label: 'Current source lines', value: fmt(data.sourceFootprint.lines), note: `${fmt(data.sourceFootprint.files)} source files · this build` };
     if (data.mode === 'owner') {
       const t = data.totals;
       return [
@@ -85,6 +86,7 @@
         { label: 'File changes', value: fmt(t.files) },
         { label: 'Lines', value: `+${fmt(t.insertions)}`, note: `−${fmt(t.deletions)} removed` },
         { label: 'Range', value: t.minDate ?? '—', note: `to ${t.maxDate ?? '—'}` },
+        source,
       ];
     }
     const t = data.totals;
@@ -94,6 +96,7 @@
       { label: 'Commits', value: fmt(t.commits) },
       { label: 'Lines added', value: fmt(t.insertions) },
       { label: 'Files touched', value: fmt(t.files) },
+      source,
     ];
   });
 
@@ -158,6 +161,7 @@
     title={['Every deploy,', 'and what it carried']}
     strap={mastheadStrap}
     {tiles}
+    sourceFootprint={data.sourceFootprint}
     queue={data.mode === 'owner'
       ? { pending: data.totals.pending, failed: data.totals.failed }
       : null}
