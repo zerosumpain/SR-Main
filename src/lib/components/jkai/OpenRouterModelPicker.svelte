@@ -102,6 +102,8 @@
   interface Picture {
     routingEnabled: boolean;
     siteDefaultModelId: string;
+    /** The budgeted research tiers' effective model — see the quick picks. */
+    researchFastModelId?: string;
     profiles: ProfileInfo[];
   }
 
@@ -610,14 +612,30 @@
     }
   }
 
-  // One-tap picks for the two site-configured models (admin default + alt).
-  // Deduped — when the alt IS the default only one chip renders.
+  /**
+   * One-tap picks for the site-configured models: the admin default, the alt,
+   * and whatever the budgeted research tiers run on.
+   *
+   * Research earns a chip because it is the one role routinely pinned AWAY from
+   * the site default — the fast tiers answer against a 30s / 90s / 110s clock,
+   * so they want a fast model even when chat is on something slower. Having it
+   * here means picking that model for anything else is one tap rather than a
+   * trip through the workloads tab to read what it is.
+   *
+   * Deduped throughout: a chip never renders the same model twice, so an
+   * unpinned research role (which resolves to the site default) shows nothing
+   * extra.
+   */
   const quickPicks = $derived.by(() => {
     const siteDefault = picture?.siteDefaultModelId ?? defaultModelId;
     const picks: Array<{ id: string; tag: string }> = [];
     if (siteDefault) picks.push({ id: siteDefault, tag: 'default' });
     if (altModel && altModel.modelId !== siteDefault) {
       picks.push({ id: altModel.modelId, tag: 'alt' });
+    }
+    const research = picture?.researchFastModelId;
+    if (research && !picks.some((p) => p.id === research)) {
+      picks.push({ id: research, tag: 'research' });
     }
     return picks;
   });
