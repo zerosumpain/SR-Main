@@ -10,6 +10,7 @@
   let scroller: HTMLDivElement | undefined = $state();
   let cursor = 0; let polling = false; let disposed = false;
   const status = $derived(activityStatus(build, lastOutput, now, needsOwner));
+  const latestAction = $derived([...logs].reverse().find(row => row.type === 'code'));
   const lines = $derived([
     ...logs.filter(l => l.type !== 'thinking').map(l => ({ ...l, key: `saved:${l.id}`, streaming: false })),
     ...Object.entries(live).map(([key, l]) => ({ ...l, key, id: null })),
@@ -73,6 +74,7 @@
   <div class:warning={status.warning} class="activity-status" role="status"><strong>{status.label}</strong><p>{status.detail}</p></div>
   <div class="signals"><span>{connection}</span><span>Worker heartbeat: {ageLabel(Date.parse(build.heartbeatAt ?? ''), now)}</span><span>Last output: {ageLabel(lastOutput, now)}</span></div>
   {#if showOutput}
+    {#if latestAction}<p class="latest-action"><strong>Latest recorded action:</strong> {latestAction.content.slice(0, 400)}</p>{/if}
     <div class="output-heading"><h2>Live code and commands</h2><button class="nm-btn-ghost" aria-pressed={follow} onclick={() => { follow = !follow; if (follow) void scroll(); }}>{follow ? 'Following output' : 'Follow output'}</button></div>
     <p class="muted">{replay}. Recent output is restored on reload. Long commands can be quiet while the worker heartbeat continues.</p>
     <!-- svelte-ignore a11y_no_noninteractive_tabindex (The scrollable log needs keyboard focus for scrolling.) -->
@@ -83,6 +85,7 @@
   {/if}
 </section>
 <style>
+  .latest-action { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-code); font-size: var(--fs-label); }
   .activity { margin: 16px 0; min-width: 0; }
   .activity-status { border-left: 3px solid var(--accent-ink); padding: 10px 14px; background: var(--surface-sunken); }
   .activity-status.warning { border-color: var(--accent); } .activity-status p { margin: 5px 0 0; }
