@@ -1,8 +1,8 @@
 /**
  * Public, anonymised read model over the release log.
  *
- * /admin/ops/releases holds the full truth and stays owner-only; this module is
- * what the landing page and the public release history are allowed to see.
+ * The owner branch of /releases holds the full truth (see ./console); this
+ * module is what the landing page and the public release history may see.
  * Everything item-shaped passes through $lib/releases/public-filter first —
  * see that file for why the safe set is smaller than the real one.
  *
