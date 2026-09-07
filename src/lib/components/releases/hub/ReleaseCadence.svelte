@@ -54,7 +54,7 @@
     <div class="b-grid">
       <figure class="b-panel wide">
         <figcaption class="b-panel-hd">
-          <span class="b-panel-name">Cadence · last {cadence.length} weeks</span>
+          <span class="b-panel-name">Cadence · last {cadence.length} week{cadence.length === 1 ? '' : 's'}</span>
           <span class="b-legend">
             <span class="b-key"><span class="b-swatch deploys"></span>Deploys</span>
             <span class="b-key"><span class="b-swatch shipped"></span>{shippedLabel}</span>

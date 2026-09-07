@@ -24,7 +24,7 @@ function publicData(over: Partial<PublicReleasesData> = {}): PublicReleasesData 
   return {
     mode: 'public',
     totals: {
-      releases: 418,
+      releases: 1004,
       commits: 2338,
       files: 7249,
       insertions: 690507,
@@ -131,7 +131,7 @@ describe('the public document', () => {
     expect(body).toContain('Deck editor chart room');
     expect(body).toContain('Adds a chart editor to the deck builder.');
     // The two unfiltered release-level figures plus the one filtered item count.
-    expect(body).toContain('418');
+    expect(body).toContain('1,004');
     expect(body).toContain('357');
   });
 
@@ -203,6 +203,22 @@ describe('the owner document', () => {
 
   it('is not indexable copy — it names the full read', () => {
     expect(body).toContain('full read');
+  });
+});
+
+describe('counts read as English', () => {
+  it('says entry, not entries, when a filter lands on one', () => {
+    const one = html(publicData({ items: [publicData().items[0]] }));
+    expect(one).toContain('1 entry matched');
+    expect(one).not.toContain('1 entries');
+    // The cadence fixture is a single week, so it exercises the same helper.
+    expect(one).toContain('1 week');
+    expect(one).not.toContain('1 weeks');
+  });
+
+  it('still pluralises everything else', () => {
+    const many = html(publicData());
+    expect(many).toContain('1,004 releases');
   });
 });
 

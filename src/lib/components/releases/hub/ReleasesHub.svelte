@@ -38,6 +38,11 @@
     return n.toLocaleString('en-GB');
   }
 
+  /** `1 entry` / `664 entries`. A filtered view lands on one often enough. */
+  function plural(n: number, one: string, many: string): string {
+    return `${fmt(n)} ${n === 1 ? one : many}`;
+  }
+
   // ——— the summariser, owned here so the batch buttons in A and the
   // per-release Regenerate in C share one in-flight flag ————————————
   let busy = $state(false);
@@ -94,8 +99,8 @@
 
   const mastheadKicker = $derived(
     data.mode === 'owner'
-      ? `A / The record · full read · ${fmt(data.totals.releases)} releases`
-      : `A / The record · ${fmt(data.totals.releases)} releases`,
+      ? `A / The record · full read · ${plural(data.totals.releases, 'release', 'releases')}`
+      : `A / The record · ${plural(data.totals.releases, 'release', 'releases')}`,
   );
 
   const mastheadStrap = $derived(
@@ -117,13 +122,13 @@
   const logKicker = $derived(
     data.mode === 'owner'
       ? `C / Version log · page ${data.filters.page + 1}`
-      : `C / What shipped · ${fmt(data.items.length)} entries`,
+      : `C / What shipped · ${plural(data.items.length, 'entry', 'entries')}`,
   );
 
   const result = $derived(
     data.mode === 'owner'
-      ? `${fmt(data.totals.releases)} releases matched`
-      : `${fmt(data.items.length)} entries matched`,
+      ? `${plural(data.totals.releases, 'release', 'releases')} matched`
+      : `${plural(data.items.length, 'entry', 'entries')} matched`,
   );
 
   const footer = $derived(
@@ -162,7 +167,7 @@
   />
 
   <ReleaseCadence
-    kicker="B / Cadence · {data.cadence.length} weeks"
+    kicker={`B / Cadence · ${plural(data.cadence.length, 'week', 'weeks')}`}
     cadence={data.cadence}
     {kindMix}
     shippedLabel={owner ? 'Entries' : 'Capabilities'}
