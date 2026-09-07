@@ -13,7 +13,7 @@
     try {
       const response = await fetch('/api/jkai/development', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ outcome, area }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error);
-      await goto(`/jkai/develop/${result.buildId}`);
+      await goto(`/jkai/develop/${result.buildId}?refine=1`);
     } catch (e) { error = e instanceof Error ? e.message : 'Could not save the brief'; }
     finally { busy = false; }
   }
@@ -21,12 +21,12 @@
 <svelte:head><title>Site development — Strange Ramblings</title></svelte:head>
 <section class="development">
   <header><p class="mark">SITE / DEVELOPMENT</p><h1>What should the site do next?</h1>
-    <p>Commission a feature, guide its build and try the result before accepting it into your local batch.</p>
+    <p>Describe an idea to get proposed acceptance criteria, dependencies and questions. Review the brief, guide its build and try the result before accepting it into your local batch.</p>
     <a href="/jkai/daydreams/backlog">Open the epic backlog →</a></header>
   <form onsubmit={(e) => { e.preventDefault(); void create(); }}>
     <label>Product area<select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value}<option>{value}</option>{/each}</select></label>
     <label class="outcome">Intended outcome<textarea required maxlength="20000" bind:value={outcome} placeholder="For example: compare two weeks of health data and save the comparison."></textarea></label>
-    <button class="nm-save-btn" disabled={busy}>{busy ? 'Saving…' : 'Refine this brief'}</button>
+    <button class="nm-save-btn" disabled={busy}>{busy ? 'Opening your draft…' : 'Refine this brief'}</button>
   </form>
   {#if error}<p role="alert" class="error">{error}</p>{/if}
   <div class="list-heading"><h2>Development work</h2><label>Filter by area<select aria-label="Filter by area" bind:value={filter}><option>All areas</option>{#each PRODUCT_AREAS as value}<option>{value}</option>{/each}</select></label></div>

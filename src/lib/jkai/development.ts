@@ -4,7 +4,7 @@ export type { DeliveryState, DeliveryStage, Criterion } from '$lib/constants/dev
 
 export function newDelivery(outcome: string, area = 'Platform', criteria: string[] = []): DeliveryState {
   return {
-    version: 1, area, stage: 'brief',
+    version: 1, originalAsk: outcome, area, stage: 'brief',
     brief: { revision: 1, outcome, constraints: '', routes: [], acceptedAt: null },
     criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
     decisions: [], session: { engine: 'pi', id: null, file: null, recovery: null },
@@ -31,6 +31,8 @@ export function candidateChanged(state: DeliveryState, revision: string): Delive
 export function deliveryPrompt(state: DeliveryState): string {
   return ['Accepted product brief (revision ' + state.brief.revision + '):', state.brief.outcome,
     'Constraints: ' + state.brief.constraints, 'Target routes: ' + state.brief.routes.join(', '),
+    'Scope: ' + (state.brief.scope ?? ''), 'Dependencies to verify: ' + (state.brief.dependencies ?? ''),
+    'Assumptions: ' + (state.brief.assumptions ?? ''), 'Validation plan: ' + (state.brief.validation ?? ''),
     'Acceptance criteria:', ...state.criteria.map((c) => `- ${c.text}`),
     'Owner decisions:', ...state.decisions.filter((d) => d.answer).map((d) => `${d.question}: ${d.answer}`),
     'Prepare the change for local preview. Do not push, create a PR, merge or deploy.',

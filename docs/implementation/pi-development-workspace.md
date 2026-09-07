@@ -64,3 +64,43 @@ Eight new hostnames, `preview-5281.strangeramblings.com` through `preview-5288.s
 Preview links are eight-hour capabilities bound to an exact build, revision and slot. The gateway exchanges the link for an HttpOnly, Secure, host-only cookie and removes the grant from the URL. It rejects anonymous/expired/wrong-slot requests, strips credentials before forwarding, blocks candidate cookie writes, and revokes access when the preview closes or its revision changes. Refresh an expired link with Prepare preview. Treat these links as private until they expire.
 
 The release provisions and exercises an isolated site over the real HTTPS ingress before switching the web app when the preview runtime changes. This canary makes no model calls and does not access the production database. After the switch, a short-lived owner session verifies the new page and delivery API without logging its token, and checks the builder's session/broker capabilities.
+
+### Interactive brief grooming correction
+
+The initial “Refine this brief” previously only created an empty delivery. It
+now opens the saved draft and automatically requests a model proposal. Existing
+drafts offer “Propose a brief”; answers and edits can be submitted for another
+pass. The site's selected default model receives the current draft, navigation
+manifest and relevant verified lessons. This is proposal generation from supplied
+context, not a claim that the model inspected the repository or tested providers.
+
+Proposals contain criteria, scope, dependencies to verify, assumptions, up to
+three material questions, and validation. They remain unaccepted. Questions must
+be resolved before acceptance; dependencies and validation travel into Pi's
+implementation prompt. The original ask is retained separately. Provider failure
+or malformed output preserves the draft; revision checks reject results that
+would overwrite intervening changes. Accepted briefs cannot be silently groomed.
+
+Validation: focused model/parser tests and isolated Postgres route tests cover
+persistence, provider failure, stale-result rejection and approval boundaries.
+`scripts/qa/development-grooming-preview.mjs` exercises the LAN browser flow at
+1440px and 390px with explicitly synthetic model responses, including automatic
+invocation, failure/retry, follow-up answers, reload and manual acceptance. No
+production credentials or paid model calls are used by these local checks.
+
+Final local validation: 10 focused/unit/Postgres tests passed; both development
+browser suites passed on desktop and phone, including late-result refresh.
+Type checking reported zero errors (891 existing warnings); module boundaries,
+font sizes, source footprint, builder bundle and client budgets passed. The
+production build passed with `NODE_OPTIONS='--import=lru-cache --max-old-space-size=6144'`
+using `node node_modules/vite/bin/vite.js build`. The preload avoids a Node 22
+ES-module loading race in the existing dom-selector/lru-cache dependencies;
+an ordinary build attempt hit ERR_INTERNAL_ASSERTION. No dependencies were
+changed as part of this correction. Local web and builder services were restarted.
+
+Release verification now performs one bounded real-model grooming request per
+implementation fingerprint, using a disposable paused draft. It verifies that
+criteria, dependencies and validation are saved, the original ask is retained,
+and neither approval nor Pi execution occurs. The synthetic build is deleted
+in a finally block. Later deployments with the same grooming implementation
+skip that model call. Owner verification tokens expire after three minutes.

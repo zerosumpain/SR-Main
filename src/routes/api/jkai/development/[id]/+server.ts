@@ -8,6 +8,7 @@ import { listNotes, addNote, removeNote } from '$lib/jkai/build-notes';
 import { builderClient } from '$lib/jkai/builder-client';
 import { acceptDevelopment, prepareDevelopmentPreview, workspaceBroker } from '$lib/jkai/development-workspace.server';
 import { PRODUCT_AREAS, acceptanceBlocker } from '$lib/jkai/development';
+import { groomDevelopmentBrief, readBriefFields } from '$lib/jkai/development-grooming.server';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -33,17 +34,32 @@ export const POST: RequestHandler = async ({ params, request }) => {
   try {
     if (delivery.state.stage === 'integrating' && body.action !== 'accept') throw new Error('Batch integration is in progress.');
     switch (body.action) {
+      case 'groom': {
+        if (['running', 'queued'].includes(build.status) || delivery.state.brief.acceptedAt) throw new Error('Grooming is available for draft briefs. Pause and edit an accepted brief explicitly.');
+        if (body.briefRevision !== delivery.state.brief.revision) throw new Error('The brief changed; reload before refining.');
+        if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
+        const draft = readBriefFields(body);
+        const proposal = await groomDevelopmentBrief({ ...draft, area: body.area }, text(body.message ?? '', 5000), await relevantLessons(body.area));
+        await mutateDelivery(id, 'brief_groomed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
+          brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null },
+          criteria: proposal.criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
+          grooming: proposal.grooming,
+        }), revision);
+        break;
+      }
       case 'brief': {
         if (body.briefRevision !== delivery.state.brief.revision) throw new Error('The brief changed in another session; reload before editing.');
         if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before changing its accepted brief. You can send a steering instruction while it runs.');
+        const extra = readBriefFields(body);
+        if (extra.questions) throw new Error('Resolve the open questions before accepting the brief.');
         const outcome = text(body.outcome, 20000);
-        const constraints = text(body.constraints);
-        const criteria = text(body.criteria).split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 30);
+        const constraints = text(body.constraints, 20000);
+        const criteria = text(body.criteria, 30000).split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 30);
         const routes = text(body.routes).split('\n').map((s) => s.trim()).filter(Boolean);
         if (!outcome || !criteria.length || routes.some((r) => !r.startsWith('/') || r.startsWith('//'))) throw new Error('Provide an outcome, acceptance criteria and valid local route paths.');
         if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
-        await mutateDelivery(id, 'brief_accepted', (s) => ({ ...s, area: body.area, stage: 'brief', acceptedAt: null, batch: null, gate: null, preview: { url: null, status: 'unavailable', detail: 'The brief changed; build and verify it again.' },
-          brief: { revision: s.brief.revision + 1, outcome, constraints, routes, acceptedAt: new Date().toISOString() },
+        await mutateDelivery(id, 'brief_accepted', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area, stage: 'brief', acceptedAt: null, batch: null, gate: null, preview: { url: null, status: 'unavailable', detail: 'The brief changed; build and verify it again.' },
+          brief: { ...extra, revision: s.brief.revision + 1, outcome, constraints, routes, acceptedAt: new Date().toISOString() },
           criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })) }), revision);
         await db.update(jkaiBuilds).set({ prompt: outcome }).where(eq(jkaiBuilds.id, id));
         break;

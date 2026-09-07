@@ -1,12 +1,13 @@
-/** Owner-surface smoke. Tokens stay in memory and expire after one minute. */
+/** Owner-surface smoke. Tokens stay in memory and expire after three minutes. */
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { encode } from '@auth/core/jwt';
+import { verifyGrooming } from './qa/production-development-grooming.mjs';
 const email = process.env.AUTH_ALLOWED_EMAILS?.split(',')[0]?.trim();
 assert.ok(email && process.env.AUTH_SECRET, 'Owner authentication must be configured');
 const cookies = [];
 for (const salt of ['authjs.session-token', '__Secure-authjs.session-token']) {
-  cookies.push(`${salt}=${await encode({ secret: process.env.AUTH_SECRET, salt, maxAge: 60, token: { email, name: 'Deployment verification', sub: 'deployment-verification' } })}`);
+  cookies.push(`${salt}=${await encode({ secret: process.env.AUTH_SECRET, salt, maxAge: 180, token: { email, name: 'Deployment verification', sub: 'deployment-verification' } })}`);
 }
 const headers = { host: 'strangeramblings.com', 'x-forwarded-proto': 'https', cookie: cookies.join('; ') };
 const page = await fetch('http://127.0.0.1:4173/jkai/develop', { headers, redirect: 'manual' });
@@ -35,3 +36,5 @@ for (let attempt = 0; attempt < 24; attempt++) {
 }
 assert.ok(ready, 'Updated development builder is still pending; preserve any active build and check apply-when-idle status.');
 console.log('PASS: production builder reports persistent Pi sessions and a configured workspace broker.');
+
+await verifyGrooming(headers);
