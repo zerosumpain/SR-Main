@@ -66,7 +66,9 @@ describe('createProjectChatHandler', () => {
 
     expect(mocks.requireProjectPublic).toHaveBeenCalledWith('example', expect.anything());
     expect(mocks.rateLimit).toHaveBeenCalledWith('project-chat:example:203.0.113.8', expect.anything());
-    expect(retrieve).toHaveBeenCalledWith('What changed?', 10);
+    // The request body travels with the question so a project can retrieve by
+    // ids the page found rather than by searching server-side.
+    expect(retrieve).toHaveBeenCalledWith('What changed?', 10, expect.objectContaining({ question: 'What changed?' }));
     expect(mocks.withActivity).toHaveBeenCalledWith('project-chat', expect.any(Function));
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({

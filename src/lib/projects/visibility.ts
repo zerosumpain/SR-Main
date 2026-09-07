@@ -27,6 +27,7 @@
 // `pulse` is reachable by URL only and is not a build, so without an entry the
 // build default would 404 it.
 export const STATIC_PROJECT_KEYS = [
+  'local-plan-navigator',
   'engine-room',
   'scs-earnings',
   'terminal-descent',

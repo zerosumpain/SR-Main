@@ -33,6 +33,17 @@ export interface ProjectCard {
 
 export const PROJECT_CARDS: ProjectCard[] = [
   {
+    key: 'local-plan-navigator',
+    href: '/projects/local-plan-navigator/',
+    label: 'Open the Local Plan Navigator',
+    kind: 'Prototype',
+    tag: 'GOV.UK style · Planning',
+    title: 'Local Plan Navigator — Thirty Months, Three Gateways, One Map',
+    blurb:
+      'A prototype in the style of a GOV.UK service, for the planning officers now working to England\'s 30-month local plan system. The whole process as a map and a page per stage, the three gateways compared, a question flow that says where a plan is and what comes next, a planner that turns a Gateway 1 date into every statutory milestone, checklists for each gateway, and one search across the 2026 Regulations, the SEA Regulations, the NPPF and the guidance. Ask it a question and, if you like, a small model running in your own browser answers from the cited passages. Built deliberately outside this site\'s design system, to GDS standards, and downloadable in full.',
+    chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · in-browser model',
+  },
+  {
     key: 'bathroom',
     href: '/projects/bathroom',
     label: 'Open Bathroom Planner',

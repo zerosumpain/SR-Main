@@ -5,6 +5,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { rateLimit } from '$lib/server/rate-limit';
 import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
+import type { ModelContext } from '$lib/constants/model-context';
 
 export interface ProjectChatChunk {
   title: string;
@@ -21,7 +22,18 @@ interface ProjectChatContext {
 interface ProjectChatOptions {
   slug: string;
   systemPrompt: string;
-  retrieve: (question: string, limit: number) => ProjectChatChunk[] | Promise<ProjectChatChunk[]>;
+  /**
+   * The passages to ground the answer in. Most projects search their own
+   * corpus for the question; one (the Local Plan Navigator) searches in the
+   * browser and sends the ids of what it found, which is why the request body
+   * is passed along too.
+   */
+  retrieve: (question: string, limit: number, context: ProjectChatContext) => ProjectChatChunk[] | Promise<ProjectChatChunk[]>;
+  /**
+   * Which model answers. Defaults to the shared `project-chat` role; a project
+   * with a registered role of its own (and a reason for it) passes its resolver.
+   */
+  resolveModel?: () => Promise<ModelContext>;
   corpusLabel?: string;
   answerScope?: string;
   scopeLabel?: string;
@@ -45,7 +57,12 @@ function contextPassages(chunks: ProjectChatChunk[]): string {
     .join('\n\n');
 }
 
-export function createProjectChatHandler(options: ProjectChatOptions): RequestHandler {
+/**
+ * The handler without an activity tag, for a project whose calls are logged
+ * under a role of its own: the call site wraps it in withActivity with that
+ * role's id as a string literal, so the registry test can see the tag.
+ */
+export function createProjectChatCore(options: ProjectChatOptions): RequestHandler {
   const handle: RequestHandler = async (event) => {
     await requireProjectPublic(options.slug, event);
 
@@ -76,7 +93,8 @@ export function createProjectChatHandler(options: ProjectChatOptions): RequestHa
           .join('\n')}`
       : '';
 
-    const chunks = await options.retrieve(question, 10);
+    const chunks = await options.retrieve(question, 10, { body, question });
+    if (!chunks.length) throw error(400, 'Nothing to answer from — no passages were found for that question.');
     const sources = chunks.map((chunk, index) => ({
       n: index + 1,
       title: chunk.title,
@@ -103,7 +121,7 @@ export function createProjectChatHandler(options: ProjectChatOptions): RequestHa
 
         send({ type: 'sources', sources });
         try {
-          const { client, model } = await getLLMClient(await resolveProjectChatModel());
+          const { client, model } = await getLLMClient(await (options.resolveModel ?? resolveProjectChatModel)());
           const completion = await client.chat.completions.create(
             {
               model,
@@ -156,5 +174,10 @@ export function createProjectChatHandler(options: ProjectChatOptions): RequestHa
     });
   };
 
+  return handle;
+}
+
+export function createProjectChatHandler(options: ProjectChatOptions): RequestHandler {
+  const handle = createProjectChatCore(options);
   return (event) => withActivity('project-chat', async () => handle(event));
 }

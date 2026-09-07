@@ -45,6 +45,7 @@ import {
   DEFAULT_ART_DIRECTOR_MODEL_ID,
   DEFAULT_DESIGN_REVIEW_MODEL_ID,
   DEFAULT_NOTE_REVIEW_MODEL_ID,
+  DEFAULT_LOCAL_PLAN_NAVIGATOR_MODEL_ID,
 } from '$lib/constants/default-models';
 
 /** Where the setting lives, which decides how a change is applied. */
@@ -443,6 +444,19 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     requires: null,
     catalogue: 'tools',
     reason: null,
+  },
+  {
+    id: 'local-plan-navigator',
+    scope: 'site',
+    label: 'Local Plan Navigator answers',
+    blurb:
+      'The "describe a problem" answers on /projects/local-plan-navigator — a public page, so every call is anonymous, rate-limited and capped per day.',
+    key: 'jkai.projects.local_plan_navigator_model',
+    fallbackModelId: DEFAULT_LOCAL_PLAN_NAVIGATOR_MODEL_ID,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Pinned to Codex at John\'s request (2026-09-07): a public prototype should spend subscription quota, not per-token cash, and the questions are small enough that the bridge overhead does not matter.',
   },
   {
     id: 'trails',
