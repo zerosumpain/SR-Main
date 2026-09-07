@@ -94,6 +94,8 @@ export interface ReadingsInput {
   dashboard: {
     vo2?: { series?: DayPoint[] } | null;
     hrv?: { daily?: DayPoint[]; rolling7?: DayPoint[]; baseline28?: number | null } | null;
+    /** Apple SDNN daily medians — a DIFFERENT statistic from the Whoop RMSSD. */
+    hrvSdnn?: { daily?: DayPoint[]; latest7?: number | null; baseline28?: number | null } | null;
     rhr?: { daily?: DayPoint[]; baseline28?: number | null } | null;
     recovery?: DayPoint[] | null;
     weeks?: Array<{ weekStart: string; km: number }> | null;
@@ -264,6 +266,62 @@ export function buildReadings(input: ReadingsInput): Record<string, MetricReadin
     needs: readable(input.recoveryDebt) ? null : 'Needs seven complete nights of scored sleep.',
     series: readable(input.recoveryDebt) ? series(input.recoveryDebt.value.series) : [],
     seriesLabel: 'Nightly balance',
+  });
+
+  // ——— the four that were measured and drawn nowhere ————————————
+  const sdnn = d?.hrvSdnn ?? null;
+  add({
+    ...blank('hrv-sdnn', 'Needs Apple Health HRV samples.'),
+    value: sdnn?.latest7 ?? null,
+    readable: sdnn?.latest7 != null,
+    needs: sdnn?.latest7 != null ? null : 'No Apple HRV has synced.',
+    series: series(sdnn?.daily),
+    seriesLabel: 'Daily medians',
+    baseline: sdnn?.baseline28 ?? null,
+    baselineLabel: sdnn?.baseline28 != null ? '28-day mean' : null,
+  });
+
+  // `HealthDay.strain` is already normalised through `realStrain()` in
+  // series-30d-service — the column held two scales at once for four months
+  // and the reader-side fix lives there, not here.
+  const strainSeries = fromDays(days, (x) => x.strain);
+  add({
+    ...blank('strain', 'Needs a scored day.'),
+    value: input.today && input.today.strain > 0 ? input.today.strain : null,
+    readable: !!input.today && input.today.strain > 0,
+    needs: input.today && input.today.strain > 0 ? null : 'No strain score has synced.',
+    series: strainSeries,
+    seriesLabel: 'Last 30 days',
+  });
+
+  const stepSeries = fromDays(days, (x) => x.steps);
+  const stepMean = stepSeries.length
+    ? stepSeries.reduce((a, p) => a + p.value, 0) / stepSeries.length
+    : null;
+  add({
+    ...blank('steps', 'Needs Apple Health step counts.'),
+    value: input.today && input.today.steps > 0 ? input.today.steps : null,
+    readable: !!input.today && input.today.steps > 0,
+    needs: input.today && input.today.steps > 0 ? null : 'No step count has synced.',
+    series: stepSeries,
+    seriesLabel: 'Last 30 days',
+    baseline: stepMean,
+    baselineLabel: stepMean != null ? '30-day mean' : null,
+  });
+
+  const weightSeries = fromDays(days, (x) => x.weight);
+  const weightMean = weightSeries.length
+    ? weightSeries.reduce((a, p) => a + p.value, 0) / weightSeries.length
+    : null;
+  add({
+    ...blank('weight', 'Needs a weight reading.'),
+    value: input.today && input.today.weight > 0 ? input.today.weight : null,
+    readable: !!input.today && input.today.weight > 0,
+    needs: input.today && input.today.weight > 0 ? null : 'No weight has synced.',
+    series: weightSeries,
+    seriesLabel: 'Last 30 days',
+    baseline: weightMean,
+    baselineLabel: weightMean != null ? '30-day mean' : null,
   });
 
   const bkm = d?.efficiency?.bkm ?? null;

@@ -299,6 +299,71 @@ const DESCRIPTORS: MetricDescriptor[] = [
     methodologyId: 'recovery-debt',
     dp: 0,
   },
+  // ——— Measured, and until now drawn nowhere ————————————————————
+  //
+  // Four signals the loader already ships to the browser and no section
+  // renders. They are not new tiles — the deck's eight panels and section A's
+  // six are the document's shape and adding to them would change it — they are
+  // reachable through `relatedMetrics`, so a reader who opens HRV is offered
+  // the OTHER HRV, and one who opens the intensity mix is offered the zones the
+  // mix was computed from.
+  {
+    id: 'hrv-sdnn',
+    label: 'HRV SDNN · Apple',
+    unit: 'ms',
+    family: 'autonomic',
+    what: 'Apple’s own HRV measure, taken across the whole day rather than during sleep.',
+    moves: 'The same things that move the Whoop figure — but it is a DIFFERENT statistic on a different window, so the two are not comparable and only their directions are.',
+    window: 'daily medians',
+    higherIsBetter: true,
+    bands: [],
+    methodologyId: 'autonomic-balance',
+    dp: 0,
+  },
+  {
+    id: 'strain',
+    label: 'Strain · Whoop',
+    unit: '',
+    family: 'load',
+    what: 'Whoop’s own 0–21 cardiovascular load score for the day.',
+    moves: 'Time spent at raised heart rate, whether or not it was a workout. A hot commute counts.',
+    window: 'today',
+    higherIsBetter: true,
+    bands: [
+      { label: 'Light', from: null, to: 10, tone: 'plain' },
+      { label: 'Moderate', from: 10, to: 14, tone: 'good' },
+      { label: 'Strenuous', from: 14, to: 18, tone: 'plain' },
+      { label: 'All out', from: 18, to: null, tone: 'warn' },
+    ],
+    methodologyId: 'trimp',
+    dp: 1,
+  },
+  {
+    id: 'steps',
+    label: 'Steps',
+    unit: '',
+    family: 'load',
+    what: 'Steps taken, from Apple Health.',
+    moves: 'Everything that is not a session. It is the base the training sits on rather than part of it.',
+    window: 'today vs 30d',
+    higherIsBetter: true,
+    bands: [],
+    methodologyId: null,
+    dp: 0,
+  },
+  {
+    id: 'weight',
+    label: 'Weight',
+    unit: 'kg',
+    family: 'fitness',
+    what: 'Body mass, from Apple Health.',
+    moves: 'Slowly, and mostly not by training. Read the month, never the morning — a kilo of it is water.',
+    window: 'today vs 30d',
+    higherIsBetter: false,
+    bands: [],
+    methodologyId: null,
+    dp: 1,
+  },
   {
     id: 'efficiency',
     label: 'Efficiency · beats/km',

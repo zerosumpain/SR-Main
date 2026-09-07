@@ -48,6 +48,7 @@
   import MetricDrill from './MetricDrill.svelte';
   import { buildReadings } from '$lib/health/metric-readings';
   import { metricPeek } from '$lib/health/metric-peek.svelte';
+  import { replaceState } from '$app/navigation';
   import { fmtAgo } from '$lib/components/health/v2/utils';
   import type { HealthAudience, OwnerHealthData, PublicHealthData } from './types';
 
@@ -103,13 +104,35 @@
   /** Daily TRIMP — the series the drill's what-if pane simulates over. */
   const loadDays = $derived(data.dashboard?.load?.days ?? []);
 
-  let drillId = $state<string | null>(null);
+  // Seeded from the URL by the loader, then kept in step with it — so a drill
+  // is a link you can send someone, and the back button closes it.
+  //
+  // Plain `$state` seeded once, NOT a `$derived` off a store: this is the
+  // pattern `SegmentsView` uses with `initialQuery`, and it keeps the write
+  // path one-directional. An effect that read the URL and also wrote it is the
+  // read-own-write cycle that ends in `effect_update_depth_exceeded`.
+  let drillId = $state<string | null>(data.initialMetric ?? null);
+
+  /** Put `?metric=` in the address bar without adding a history entry per hover. */
+  function syncUrl(id: string | null) {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set('metric', id);
+    else url.searchParams.delete('metric');
+    replaceState(`${url.pathname}${url.search}`, {});
+  }
 
   function openDrill(id: string) {
     // The hover card and the drill are the same gesture at two depths, so
     // opening the drill dismisses the card rather than leaving it behind it.
     metricPeek.close();
     drillId = id;
+    syncUrl(id);
+  }
+
+  function closeDrill() {
+    drillId = null;
+    syncUrl(null);
   }
 
   /** Twelve hours without a reading and "live" is a claim, not a fact. */
@@ -258,7 +281,7 @@
   metricId={drillId}
   {readings}
   {loadDays}
-  onclose={() => (drillId = null)}
+  onclose={closeDrill}
   onopen={openDrill}
 />
 
