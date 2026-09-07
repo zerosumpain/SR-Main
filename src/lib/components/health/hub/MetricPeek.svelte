@@ -71,9 +71,25 @@
   function onkeydown(e: KeyboardEvent) {
     if (metricPeek.current && e.key === 'Escape') metricPeek.close();
   }
+
+  /**
+   * A scroll dismisses the card.
+   *
+   * The anchor rect is captured in viewport coordinates when the card OPENS, so
+   * the moment the page moves under it the card is pointing at whatever has
+   * scrolled into that spot. On a 7,800px editorial document a wheel scroll
+   * does not move the pointer, so no `mouseout` fires and nothing else would
+   * take it down — it just sits there describing a figure no longer beneath it.
+   *
+   * Dismiss rather than reposition: the reader has moved on, and a card that
+   * chases its trigger up the page is worse than one that gets out of the way.
+   */
+  function onscroll() {
+    if (metricPeek.current) metricPeek.close();
+  }
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onscroll} />
 
 {#if anchor && descriptor && placement}
   <!-- Not a dialog: it is a description of the thing under the pointer, and
