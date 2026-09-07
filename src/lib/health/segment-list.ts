@@ -282,6 +282,12 @@ export const TABLE_ORDER: ColumnKey[] = [
  * they simply cannot be ranged. Everything here is a plain number in the unit
  * its `ColumnDef` names.
  */
+/**
+ * Where the form RANGE is written, so it stops colliding with the form FACET.
+ * Both are called "form" on the page and only one of them can own `?form=`.
+ */
+export const FORM_RANGE_PARAM = 'formpct';
+
 export const RANGE_COLUMNS: NumericColumnKey[] = [
   'distance',
   'climb',
@@ -706,6 +712,18 @@ export function parseFilters(
   filters.forms = list(params.get('form')).filter(isForm);
   filters.name = params.get('q') ?? '';
   for (const key of RANGE_COLUMNS) filters.ranges[key] = parseRange(params.get(key));
+  // `form` is BOTH a facet (improving/holding/…) and a range column (the change
+  // in median time, as a percentage), and until 2026-09-07 both were written to
+  // the same key. Parsing coped — `improving` is not a range and `..-5` is not
+  // a form name, so each side ignored the other's value — but EMITTING did not:
+  // `filtersToQuery` set the facet and then the range loop overwrote it, so a
+  // reader who asked for "improving, and gaining more than 5%" got a URL saying
+  // only the second half and a table that had quietly dropped the first.
+  //
+  // The range now has its own key. `form` is still read as a range when it does
+  // not parse as a facet, so every link written before this still works.
+  const formRange = parseRange(params.get(FORM_RANGE_PARAM));
+  if (formRange.min != null || formRange.max != null) filters.ranges.form = formRange;
   return filters;
 }
 
@@ -730,7 +748,9 @@ export function filtersToQuery(filters: SegmentFilters, sort: SortState | null):
   if (filters.name.trim()) params.set('q', filters.name.trim());
   for (const key of RANGE_COLUMNS) {
     const encoded = encodeRange(filters.ranges[key]);
-    if (encoded) params.set(key, encoded);
+    // The form RANGE goes to its own key — see `parseFilters`. Writing it to
+    // `form` overwrote the facet that had just been set there.
+    if (encoded) params.set(key === 'form' ? FORM_RANGE_PARAM : key, encoded);
   }
   if (sort) {
     params.set('sort', sort.key);

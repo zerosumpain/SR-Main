@@ -218,11 +218,11 @@
     loadDays={data.dashboard?.load.days ?? []}
   />
 
-  <ForecastSection forecast={data.forecast} />
+  <ForecastSection forecast={data.forecast} onmetric={openDrill} />
 
   <RankedMoves moves={data.moves} />
 
-  <TripwireTable tripwires={data.tripwires} />
+  <TripwireTable tripwires={data.tripwires} onmetric={openDrill} {owner} />
 
   <SegmentsSection
     {audience}

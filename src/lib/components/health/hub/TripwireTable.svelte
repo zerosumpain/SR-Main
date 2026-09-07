@@ -12,15 +12,38 @@
   // is no fourth state — so the badge goes MUTED rather than olive here: "we
   // cannot see it" and "it is fine" are different sentences, and only one of
   // them is good news.
-  import type { Tripwire } from '$lib/health/tripwires';
+  import { TRIPWIRE_METRIC, type Tripwire } from '$lib/health/tripwires';
+  import { gettableHref } from '$lib/health/deep-links';
   import SectionHead from './SectionHead.svelte';
   import { countWord } from './format';
 
   interface Props {
     tripwires: Tripwire[];
+    /** Opens the drill for the instrument behind a wire. */
+    onmetric?: (id: string) => void;
+    /**
+     * The segment wire watches GROUND, so its row links to the gettable board
+     * rather than to an instrument — and only when the reader is allowed the
+     * board at all. Section F strips it for the anonymous audience and this row
+     * has to make the same decision.
+     */
+    owner?: boolean;
   }
 
-  let { tripwires }: Props = $props();
+  let { tripwires, onmetric, owner = true }: Props = $props();
+
+  /**
+   * What a row opens, or null when it opens nothing.
+   *
+   * A wire with no instrument behind it is not made clickable. `strain-balance`
+   * watches a ratio no panel prints, and an unreadable wire has nothing to show
+   * — offering a drill that opens on an em dash and an empty chart is a worse
+   * answer than a row that stays a row.
+   */
+  function drillFor(w: Tripwire): string | null {
+    if (!w.readable) return null;
+    return TRIPWIRE_METRIC[w.id];
+  }
 
   const tripped = $derived(tripwires.filter((t) => t.state === 'TRIPPED').length);
   const strap = $derived(
@@ -57,18 +80,36 @@
           </thead>
           <tbody>
             {#each tripwires as w (w.id)}
-              <tr class:tripped={w.state === 'TRIPPED'}>
+              {@const drill = drillFor(w)}
+              <tr class:tripped={w.state === 'TRIPPED'} class:live={drill != null}>
                 <td>
                   <span class="e-badge state-{w.state.toLowerCase()}" class:unread={!w.readable}>
                     {w.readable ? w.state : 'NO READ'}
                   </span>
                 </td>
                 <td class="e-signal">
-                  {w.signal}<br /><span class="e-window">{w.window}</span>
+                  <!-- The signal name is the handle. Making the whole ROW a
+                       button would swallow the meaning column's text selection,
+                       and this table is read as much as it is clicked. -->
+                  {#if drill}
+                    <button type="button" class="e-open" onclick={() => onmetric?.(drill)}>
+                      {w.signal}
+                    </button>
+                  {:else}
+                    {w.signal}
+                  {/if}
+                  <br /><span class="e-window">{w.window}</span>
                 </td>
                 <td class="e-trigger">{w.trigger}</td>
                 <td class="e-now state-{w.state.toLowerCase()}" class:unread={!w.readable}>{w.now}</td>
-                <td class="e-meaning">{w.meaning}</td>
+                <td class="e-meaning">
+                  {w.meaning}
+                  {#if w.id === 'segment-pb' && owner && w.readable}
+                    <a class="e-go" href={gettableHref()} data-sveltekit-preload-data="hover">
+                      Open the gettable board →
+                    </a>
+                  {/if}
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -159,6 +200,46 @@
 
   .e-signal {
     font-weight: 500;
+  }
+  /* Styled back to the plain text it replaces. The signal name reads exactly as
+     it did; it gains an underline on hover, which is what a name that opens
+     something should do on a table that is mostly prose. */
+  .e-open {
+    display: inline;
+    padding: 0;
+    margin: 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    font: inherit;
+    font-weight: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+  }
+  .e-open:hover,
+  .e-open:focus-visible {
+    color: var(--accent-on-dark);
+    border-bottom-color: var(--accent-on-dark);
+  }
+  .e-open:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 3px;
+  }
+  .e-go {
+    display: block;
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(237, 228, 212, 0.55);
+    text-decoration: none;
+  }
+  .e-go:hover,
+  .e-go:focus-visible {
+    color: var(--accent-on-dark);
   }
   .e-window {
     color: rgba(237, 228, 212, 0.55);

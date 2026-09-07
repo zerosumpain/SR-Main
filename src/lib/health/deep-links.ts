@@ -104,7 +104,15 @@ export function segmentsHref(options: SegmentsLinkOptions = {}): string {
 export function taxonomyHref(direction: FormDirection): string {
   return segmentsHref({
     forms: [direction],
-    sort: { key: 'form', dir: direction === 'slipping' ? 'desc' : 'asc' },
+    // `unknown` means there IS no form value, so sorting by form sinks every
+    // row and the sort does nothing — the tile would land on a list ordered by
+    // whatever the fallback comparator says. Effort count is the useful
+    // ordering there: it puts the ground closest to earning a read at the top,
+    // which is the only actionable question about a segment with no form.
+    sort:
+      direction === 'unknown'
+        ? { key: 'efforts', dir: 'desc' }
+        : { key: 'form', dir: direction === 'slipping' ? 'desc' : 'asc' },
   });
 }
 
@@ -160,9 +168,21 @@ export interface PlannerSeed {
   why?: string;
 }
 
-/** Kilometres the planner will accept: its own slider range. */
-const KM_MIN = 1;
-const KM_MAX = 100;
+/**
+ * Kilometres the planner will accept: its own slider range.
+ *
+ * Exported because a caller that builds a LABEL from a distance has to know
+ * what `plannerHref` will silently drop. `bigDayAction` in `moves.ts` reads a
+ * median week off the payload and calls the button "Plan the N km day" — with
+ * a 120 km median that button promised a distance the URL did not carry.
+ */
+export const PLANNER_KM_MIN = 1;
+export const PLANNER_KM_MAX = 100;
+
+/** True when `plannerHref` will actually carry this distance. */
+export function plannerAcceptsKm(km: number | null | undefined): boolean {
+  return km != null && Number.isFinite(km) && km >= PLANNER_KM_MIN && km <= PLANNER_KM_MAX;
+}
 /** Metres of climb per kilometre — above this is a scramble, not a route. */
 const CLIMB_MAX = 120;
 
@@ -224,7 +244,7 @@ export function parsePlannerSeed(params: URLSearchParams): PlannerSeed {
   const seed: PlannerSeed = {};
   const sport = params.get('sport');
   if (sport && isSport(sport)) seed.sport = sport;
-  const km = boundedNumber(params.get('km'), KM_MIN, KM_MAX);
+  const km = boundedNumber(params.get('km'), PLANNER_KM_MIN, PLANNER_KM_MAX);
   if (km != null) seed.km = km;
   const prefer = params.get('prefer');
   if (prefer && isPreference(prefer)) seed.prefer = prefer;

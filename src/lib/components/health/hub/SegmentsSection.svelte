@@ -11,7 +11,7 @@
   // ground covered twice.
   import type { SegmentChain } from '$lib/trails/highlights-service';
   import type { FormDirection } from '$lib/trails/segments/form';
-  import { taxonomyHref } from '$lib/health/deep-links';
+  import { gettableHref, taxonomyHref } from '$lib/health/deep-links';
   import SectionHead from './SectionHead.svelte';
   import type { HealthAudience, SegmentForms } from './types';
   import { duration, shortDate } from './format';
@@ -152,7 +152,18 @@
 
     <div class="f-cols">
       <div class="f-board">
-        <p class="f-board-label">The gettable board</p>
+        <div class="f-board-top">
+          <p class="f-board-label">The gettable board</p>
+          <!-- The board itself names ground, so this link is owner-only for the
+               same reason the board is. `gettableHref` applies the board's own
+               three gates from the shared constants, so the list it opens is
+               the list above it and not an approximation of it. -->
+          {#if owner && board.length}
+            <a class="f-board-go" href={gettableHref()} data-sveltekit-preload-data="hover">
+              All {board.length === 1 ? 'of it' : 'of them'} in the explorer →
+            </a>
+          {/if}
+        </div>
         <p class="f-board-lede">
           Ranked by one composite instead of by name:
           <span class="f-strong">improving direction, gap under 3%, an old PB, six or more efforts.</span>
@@ -287,6 +298,28 @@
   .f-tile-link:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+  .f-board-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .f-board-go {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 2px;
+  }
+  .f-board-go:hover,
+  .f-board-go:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .f-tile-go {
     font-family: var(--font-mono);

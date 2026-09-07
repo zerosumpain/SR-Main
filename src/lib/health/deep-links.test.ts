@@ -212,3 +212,11 @@ describe('activitiesHref', () => {
     expect(sort).toEqual({ key: 'distance', dir: 'desc' });
   });
 });
+
+describe('taxonomyHref — the unknown tile', () => {
+  // `unknown` means there IS no form value, so sorting by form sinks every row
+  // and the sort does nothing at all.
+  it('sorts by effort count, not by the form it has not got', () => {
+    expect(seedExplorer(taxonomyHref('unknown')).sort).toEqual({ key: 'efforts', dir: 'desc' });
+  });
+});

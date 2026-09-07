@@ -329,3 +329,19 @@ describe('computeMoves — where a row sends you', () => {
     }
   });
 });
+
+describe('computeMoves — the big day’s button cannot promise what the URL drops', () => {
+  it('omits a distance past the planner’s ceiling from the label as well as the href', () => {
+    const input = prototypeInput();
+    // A 120 km median week: real for an ultra block, and past the planner's
+    // own 100 km slider. `plannerHref` drops it; the label must not keep it.
+    input.volume = { weekKm: 40, medianKm: 120 };
+    const move = computeMoves(input).find((m) => m.id === 'book-big-day');
+    expect(move?.action).not.toBeNull();
+    expect(move!.action!.label).toBe('Plan the day');
+    expect(new URL(move!.action!.href, 'https://x.test').searchParams.get('km')).toBeNull();
+    // …and it says why, rather than silently dropping the number it computed.
+    expect(move!.action!.note).toContain('120');
+    expect(move!.action!.note).toContain('ceiling');
+  });
+});

@@ -40,7 +40,13 @@ import {
   type RecoveryDebtResult,
 } from './analytics/recovery-debt';
 import type { VO2Result } from './analytics/vo2max-percentile';
-import { gettableHref, plannerHref, type PlannerSport } from './deep-links';
+import {
+  gettableHref,
+  plannerAcceptsKm,
+  plannerHref,
+  PLANNER_KM_MAX,
+  type PlannerSport,
+} from './deep-links';
 
 export const MAX_MOVES = 5;
 
@@ -439,7 +445,13 @@ function longEasyAction(sport: PlannerSport): MoveAction {
  * here would be the one thing on this page that came from nowhere.
  */
 function bigDayAction(sport: PlannerSport, medianKm: number | null): MoveAction {
-  const km = medianKm != null && medianKm > 0 ? Math.round(medianKm * 10) / 10 : null;
+  const rounded = medianKm != null && medianKm > 0 ? Math.round(medianKm * 10) / 10 : null;
+  // The label is built from the SAME number the href carries, so it must ask
+  // the planner whether that number survives. `plannerHref` drops a distance
+  // outside the planner's own range rather than clamping it — the right call —
+  // but a button reading "Plan the 120 km day" beside a URL with no distance in
+  // it is the button lying, which is worse than a vaguer button.
+  const km = plannerAcceptsKm(rounded) ? rounded : null;
   return {
     kind: 'planner',
     label: km != null ? `Plan the ${trim(km)} km day` : 'Plan the day',
@@ -455,7 +467,9 @@ function bigDayAction(sport: PlannerSport, medianKm: number | null): MoveAction 
     note:
       km != null
         ? `A whole ${trim(km)} km median week in one outing. Put a date on it, then plan the ground.`
-        : 'Put a date on it, then plan the ground.',
+        : rounded != null
+          ? `A whole ${trim(rounded)} km median week in one outing — past the planner's ${PLANNER_KM_MAX} km ceiling, so set the distance there yourself.`
+          : 'Put a date on it, then plan the ground.',
   };
 }
 
