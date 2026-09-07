@@ -842,3 +842,29 @@ jobs:
           fi
           GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
           echo "Merged PR #$PR (tier=low, agent branch)."
+
+  production-readiness:
+    name: Production development readiness
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/release/pi-development-workspace'
+    runs-on: [self-hosted, Linux, X64, srmain]
+    timeout-minutes: 5
+    steps:
+      - name: Inspect deployment prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          hostname
+          df -h /opt
+          free -m
+          systemctl is-active strange-rambling-svelte jkai-builder
+          systemctl show strange-rambling-svelte jkai-builder --property=User,WorkingDirectory,FragmentPath,DropInPaths
+          readlink /opt/strange-rambling-svelte/build
+          docker version --format '{{.Server.Version}}'
+          docker compose version
+          docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'
+          sudo nginx -T 2>/dev/null | grep -E '^[[:space:]]*(server_name|listen|ssl_certificate|ssl_certificate_key) ' | sort -u
+          command -v pi
+          pi --version 2>&1 | head -1
+          sudo -u johnk test -s /home/johnk/.pi/agent/auth.json && echo 'Pi auth file present'
+          sudo ufw status
+          ss -ltn | grep -E ':528[0-9]|:538[0-9]' || true

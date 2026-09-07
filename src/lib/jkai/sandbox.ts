@@ -391,6 +391,13 @@ export function gitTargetBranchName(buildId: string, cfg: GitTargetConfig): stri
  * `ensureWorkspace`) so the rest of the iteration loop is unchanged.
  */
 export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig): Promise<string> {
+  if (process.env.BUILDER_WORKSPACE_BROKER_URL) {
+    const { workspaceBroker } = await import('./development-workspace.server');
+    await workspaceBroker('prepare', buildId);
+    await writeGateEnv(buildId, `/home/jkai/workspace/${buildId}/dev`);
+    return `/home/jkai/workspace/${buildId}/dev`;
+  }
+
   const base = `/home/jkai/workspace/${buildId}`;
   const dev = `${base}/dev`;
   const branch = gitTargetBranchName(buildId, cfg);

@@ -95,3 +95,15 @@ export async function sessionShell(buildId: string, command: string): Promise<vo
   const transcript = `[user-shell] $ ${trimmed}\n${stdoutBuf}${stderrBuf ? `\n[stderr] ${stderrBuf}` : ''}`.slice(0, 4000);
   await emitLog(buildId, 'output', transcript);
 }
+
+export async function sessionAnswer(buildId: string, decisionId: string): Promise<void> {
+  const { loadDelivery, mutateDelivery } = await import('$lib/jkai/development-state.server');
+  const { activePiWorker } = await import('./pi-rpc');
+  const row = await loadDelivery(buildId);
+  const decision = row?.state.decisions.find((d) => d.id === decisionId);
+  const worker = activePiWorker(buildId);
+  if (worker && decision?.answer && decision.requestId) {
+    worker.respond(decision.requestId, decision.answer);
+    await mutateDelivery(buildId, 'decision_delivered', (s) => ({ ...s, stage: 'building' }));
+  }
+}

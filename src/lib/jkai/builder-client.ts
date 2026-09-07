@@ -75,6 +75,7 @@ export const builderClient = {
   cancelQueued: (buildId: string) => rpc<void>('cancelQueued', [buildId]),
 
   // Phase 5/6/7 session actions.
+  sessionAnswer: (buildId: string, decisionId: string) => rpc<void>('sessionAnswer', [buildId, decisionId]),
   sessionInject: (buildId: string, content: string) => rpc<void>('sessionInject', [buildId, content]),
   sessionInjectRemove: (buildId: string, id: number) => rpc<void>('sessionInjectRemove', [buildId, id]),
   sessionInterrupt: (buildId: string) => rpc<{ ok: boolean }>('sessionInterrupt', [buildId]),

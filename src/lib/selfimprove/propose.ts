@@ -272,7 +272,7 @@ export async function proposeFeatures(
           request: changeRequestBody(item, runId),
         });
         dispatched++;
-        await markAttempt(item, { status: 'shipped', runId });
+        await markAttempt(item, { status: 'open', runId, buildRef: res.ref });
         if (item.capabilitySlug) {
           await markCapability(item.capabilitySlug, 'building', `Handed to the builder — ${res.label}.`, res.ref);
         }

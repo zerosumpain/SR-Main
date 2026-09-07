@@ -282,7 +282,7 @@ export function pickWork(
 ): BacklogItemData[] {
   if (limit <= 0) return [];
   const open = items.filter(
-    (i) => i.status === 'open' && i.kind === kind && i.attempts < MAX_ATTEMPTS,
+    (i) => i.status === 'open' && !i.buildRef && i.kind === kind && i.attempts < MAX_ATTEMPTS,
   );
   const rank = (a: BacklogItemData, b: BacklogItemData) =>
     a.priority - b.priority || (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '');
@@ -648,6 +648,7 @@ export async function setParked(
     if (reason) next.parkedReason = reason.slice(0, 300);
   } else {
     if (next.attempts >= MAX_ATTEMPTS) next.attempts = 0;
+    delete next.buildRef;
     delete next.parkedReason;
     delete next.foldedInto;
   }
@@ -775,7 +776,7 @@ export async function foldItems(slugs: string[], into?: string): Promise<FoldRes
 /** Record the outcome of an attempt against an item. Best-effort. */
 export async function markAttempt(
   item: BacklogItemData,
-  outcome: { status: BacklogStatus; error?: string; runId?: string; prUrl?: string },
+  outcome: { status: BacklogStatus; error?: string; runId?: string; prUrl?: string; buildRef?: string },
 ): Promise<void> {
   const now = new Date().toISOString();
   const next: BacklogItemData = {
@@ -785,6 +786,7 @@ export async function markAttempt(
     lastError: outcome.error ? outcome.error.slice(0, 500) : undefined,
     lastAttemptRunId: outcome.runId,
     prUrl: outcome.prUrl ?? item.prUrl,
+    buildRef: outcome.buildRef ?? item.buildRef,
     updatedAt: now,
   };
   try {

@@ -43,8 +43,10 @@ vi.mock('./pending-messages', () => ({
   drainPendingMessages: async () => [],
   formatPendingForPrompt: () => '--- PENDING MESSAGE ---',
 }));
+vi.mock('$lib/jkai/development-state.server', () => ({ loadDelivery: async () => null, relevantLessons: async () => [] }));
 vi.mock('./codebase-digest', () => ({ buildCodebaseDigest: async () => '' }));
 vi.mock('./sandbox', () => ({
+  writeFileInSandbox: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
   listWorkspaceFiles: async () => '',
   listDevFiles: async () => [],
   allocatePort: async () => 8123,
@@ -128,12 +130,12 @@ describe('studio research brief injection', () => {
     for (const f of BRIEF.facts) expect(p).toContain(f.sourceUrl);
   });
 
-  it('keeps the brief ahead of the notes and pending-message blocks', async () => {
+  it('keeps the brief ahead of pinned notes; steering is delivered through RPC', async () => {
     // A user's later instruction must still have the last word.
     const p = await systemPromptFor(build());
     expect(p.indexOf('# Research Brief —')).toBeGreaterThan(-1);
     expect(p.indexOf('# Research Brief —')).toBeLessThan(p.indexOf('--- PINNED NOTE ---'));
-    expect(p.indexOf('--- PINNED NOTE ---')).toBeLessThan(p.indexOf('--- PENDING MESSAGE ---'));
+    expect(p).not.toContain('--- PENDING MESSAGE ---');
   });
 
   it('does not inject a brief into a non-studio build', async () => {

@@ -172,6 +172,23 @@ export async function executeIteration(
   // Updates land here so the agent always sees the latest tokens.
   const skillDirs: string[] = [];
   const extensions: string[] = [];
+  // Owner questions are durable UI requests over the same RPC session.
+  const questionExtension = `/home/jkai/workspace/${build.id}/owner-question.mjs`;
+  const { writeFileInSandbox: writeExtension } = await import('./sandbox');
+  const extensionWrite = await writeExtension(questionExtension, `export default function(pi) {
+    pi.registerTool({ name: 'ask_owner', label: 'Ask owner', description: 'Ask a consequential product question. Do not use for routine implementation choices.',
+      parameters: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] },
+      async execute(_id, args, signal, _update, ctx) {
+        if (typeof args.question !== 'string' || !args.question.trim()) throw new Error('Question required');
+        const answer = await ctx.ui.input(args.question.slice(0, 5000), 'Your decision', { signal });
+        if (answer === undefined) throw new Error('Owner question remains unanswered; do not assume approval.');
+        return { content: [{ type: 'text', text: answer }], details: {} };
+      }
+    });
+  }`);
+  if (extensionWrite.exitCode !== 0) throw new Error('Could not prepare owner question tool');
+  extensions.push(questionExtension);
+
   const extraEnv: Record<string, string> = {};
   let bridgedToolNames: string[] = [];
   if (isStudio) {
@@ -569,21 +586,14 @@ export async function executeIteration(
   const notesBlock = formatNotesForPrompt(notes);
   if (notesBlock) systemPrompt = `${systemPrompt}\n\n${notesBlock}`;
 
-  // Phase 5: drain queued user messages (typed mid-iteration via the
-  // session WebSocket). They take precedence over earlier instructions
-  // where they conflict, so they're appended last.
-  const { drainPendingMessages, formatPendingForPrompt } = await import('./pending-messages');
-  const pending = await drainPendingMessages(build.id).catch(() => []);
-  const pendingBlock = formatPendingForPrompt(pending);
-  if (pendingBlock) systemPrompt = `${systemPrompt}\n\n${pendingBlock}`;
-
+  // User instructions are delivered and acknowledged through Pi RPC.
   const deliveries = await consumePendingDeliveries(build.id, 10).catch(() => []);
   const deliveriesBlock = buildDeliveriesBlock(deliveries);
 
   // Codegraph last: it is the most specific thing in the prompt, and what the
   // history says about THIS file set should be the freshest instruction the
   // agent reads before it starts work.
-  const userPrompt = [
+  let userPrompt = [
     deliveriesBlock,
     contextMessages.map((m) => m.content).join('\n\n'),
     // Shape first, then history: "here is how we write this" is context for
@@ -593,6 +603,21 @@ export async function executeIteration(
   ]
     .filter((s) => s.length > 0)
     .join('\n\n');
+
+  const { loadDelivery, relevantLessons } = await import('$lib/jkai/development-state.server');
+  const { deliveryPrompt } = await import('$lib/jkai/development');
+  const delivery = await loadDelivery(build.id);
+  if (iterationNumber > 1) {
+    // The full tool history lives in Pi. Supply new feedback rather than
+    // repeatedly re-sending SR's lossy reconstruction of the same history.
+    userPrompt = [build.prompt, `Continue iteration ${iterationNumber}. Inspect the current workspace before acting.`,
+      prevIteration?.evaluation ?? '', prevIteration?.nextSteps ?? '', deliveriesBlock, precedentBlock, codegraphBlock].filter(Boolean).join('\n\n');
+  }
+  if (delivery) {
+    const lessons = await relevantLessons(delivery.state.area);
+    userPrompt = [deliveryPrompt(delivery.state), userPrompt,
+      ...lessons.map((l) => `Repository note (recheck against current code; revision ${l.revision}): ${l.lesson}\nEvidence: ${l.evidence}`)].join('\n\n');
+  }
 
   await emitLog(
     build.id,
@@ -613,7 +638,7 @@ export async function executeIteration(
     skillDirs,
     thinkingLevel,
     extraEnv,
-    bridgedToolNames,
+    bridgedToolNames: [...(bridgedToolNames ?? []), 'ask_owner'],
   });
 
   const tailText = result.finalAssistantText || '';

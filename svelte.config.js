@@ -28,6 +28,7 @@ const config = {
 				'worker-src': ['self', 'blob:'],
 				'manifest-src': ['self'],
 				'frame-src': [
+					...(process.env.BUILDER_WORKSPACE_BROKER_URL ? Array.from({ length: 8 }, (_, i) => `http://127.0.0.1:${5281 + i}`) : []),
 					'self',
 					'https://vnc.strangeramblings.com',
 					'https://www.youtube.com',

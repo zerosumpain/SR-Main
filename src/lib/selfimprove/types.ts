@@ -547,6 +547,8 @@ export interface BacklogItemData {
   updatedAt: string;
   /** Set when kind='feature' and a draft PR was opened. */
   prUrl?: string;
+  /** Dispatch receipt, not evidence of delivery. Prevents duplicate builds. */
+  buildRef?: string;
   /** The `daydream_capabilities` row this came from, so the lane can report
    *  back what the idea became. Absent on fault- and question-mined ideas. */
   capabilitySlug?: string;

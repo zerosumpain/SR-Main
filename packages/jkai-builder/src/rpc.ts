@@ -20,6 +20,7 @@ import {
   sessionRemoveNote,
   sessionSnapshot,
   sessionShell,
+  sessionAnswer,
 } from '$lib/jkai/session-actions';
 
 type AnyArgs = unknown[];
@@ -44,6 +45,7 @@ const dispatchTable: Record<string, (args: AnyArgs) => Promise<unknown> | unknow
   // Phase 5/6/7 session actions — POST /api/jkai/builds/<id>/session forwards
   // here. Outbound state changes are emitted via emitLive() so the existing
   // SSE stream (Cloudflare-compatible) delivers them.
+  sessionAnswer: (a) => sessionAnswer(a[0] as string, a[1] as string),
   sessionInject: (a) => sessionInject(a[0] as string, a[1] as string),
   sessionInjectRemove: (a) => sessionInjectRemove(a[0] as string, a[1] as number),
   sessionInterrupt: (a) => sessionInterrupt(a[0] as string),

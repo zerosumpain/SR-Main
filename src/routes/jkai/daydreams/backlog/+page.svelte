@@ -90,6 +90,8 @@
       strap="Every feature the engine is holding, grouped into the areas they belong to and ordered the way it will reach for them. Switch the board between epics and the deliverables inside them, drag a card to accept or park it, and open any card to name it, rank it or take it out."
     />
 
+    <p><a href="/jkai/develop">Commission and review a whole-site feature →</a></p>
+
     {#if data.error}
       <div class="card t-urgent">
         <p class="card-body">The backlog could not be read, so nothing below is drawn from it: {data.error}</p>

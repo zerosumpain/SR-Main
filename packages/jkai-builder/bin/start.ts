@@ -5,6 +5,7 @@
  *
  * Run via `node packages/jkai-builder/dist/start.js` (compiled by esbuild).
  */
+import { Client } from 'pg';
 import { startServer } from '../src/server';
 import { orchestrator } from '$lib/jkai/orchestrator';
 
@@ -28,6 +29,14 @@ const sock =
   (xdg ? `${xdg}/jkai-builder.sock` : '/run/jkai-builder/jkai-builder.sock');
 
 async function main(): Promise<void> {
+  // Session-scoped database lock fences duplicate controllers. PostgreSQL
+  // releases it on disconnect; a lost connection terminates this worker.
+  const leader = new Client({ connectionString: process.env.DATABASE_URL });
+  await leader.connect();
+  const result = await leader.query("SELECT pg_try_advisory_lock(hashtext('jkai-builder-controller')) AS acquired");
+  if (!result.rows[0]?.acquired) { await leader.end(); throw new Error('Another builder already owns this database'); }
+  leader.on('error', () => { console.error('[jkai-builder] ownership connection lost'); process.exit(1); });
+
   // Bind the socket FIRST so the SvelteKit web app's RPC client doesn't
   // ECONNREFUSED while we recover. The orchestrator's recovery scan can
   // take a few hundred ms.
