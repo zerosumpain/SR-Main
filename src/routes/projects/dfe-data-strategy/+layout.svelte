@@ -150,7 +150,7 @@
     <div class="foot-inner">
       <p class="foot-personal"><b>An independent project.</b> It does not represent any government department or political party,
         nor any official position, and takes no political stance.</p>
-      <p class="foot-disc">Keystone · <code>/projects/dfe-data-strategy</code> · a decision-support tool, <b>not an official strategy</b>. Grounded in published UK-government and industry sources — <a href="/projects/dfe-data-strategy/method#sources">all {SOURCES.length} sources</a> and the method are on <a href="/projects/dfe-data-strategy/method">How it works</a>. Companion to the <a href="/projects/policy-engine">Policy Engine</a> and <a href="/projects/dfe-data-estate">The Data Estate</a>.</p>
+      <p class="foot-disc">Keystone · <code>/projects/dfe-data-strategy</code> · a decision-support tool, <b>not an official strategy</b>. Grounded in published UK-government and industry sources — <a href="/projects/dfe-data-strategy/method#sources">all {SOURCES.length} sources</a> and the method are on <a href="/projects/dfe-data-strategy/method">How it works</a>. Companion to the <a href="/projects/policy-engine">Policy Engine</a>.</p>
     </div>
   </footer>
 

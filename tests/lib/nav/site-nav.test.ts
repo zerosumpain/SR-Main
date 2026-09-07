@@ -117,9 +117,7 @@ describe('wearsSharedChrome', () => {
     expect(wearsSharedChrome('/capture/note')).toBe(false);
     expect(wearsSharedChrome('/login')).toBe(false);
     expect(wearsSharedChrome('/auth-error')).toBe(false);
-    expect(wearsSharedChrome('/broads/speed')).toBe(false);
     expect(wearsSharedChrome('/deepdive/share/tok123')).toBe(false);
-    expect(wearsSharedChrome('/projects/broads-pilot')).toBe(false);
     expect(wearsSharedChrome('/research/abc/desk')).toBe(false);
     expect(wearsSharedChrome('/decks/my-deck/print')).toBe(false);
   });

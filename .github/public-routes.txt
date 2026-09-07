@@ -22,9 +22,6 @@
 /api/agent/tasks
 /api/agent/tasks/[id]
 /api/blog/images/[postId]/[filename]
-/api/broads-pilot/guide
-/api/broads-pilot/ratings
-/api/broads/current
 /api/claude-changelog/ingest
 /api/claude-changelog/session/[id]
 /api/data-standard-designer/ingest
@@ -79,7 +76,6 @@
 /blog/[slug]/track
 /blog/preview/[token]
 /blog/tag/[tag]
-/broads/speed
 /dav/[...path]
 /decks
 /decks/[slug]
@@ -103,9 +99,6 @@
 /projects/bathroom/programme
 /projects/bathroom/signoff
 /projects/bathroom/trades
-/projects/broads-pilot
-/projects/broads-pilot/method
-/projects/data-convergence
 /projects/data-spine
 /projects/data-spine/architecture
 /projects/data-spine/chat
@@ -130,7 +123,6 @@
 /projects/data-standard-designer/publish
 /projects/data-standard-designer/schema
 /projects/data-standard-designer/validate
-/projects/dfe-data-estate
 /projects/dfe-data-strategy
 /projects/dfe-data-strategy/author
 /projects/dfe-data-strategy/author/generate

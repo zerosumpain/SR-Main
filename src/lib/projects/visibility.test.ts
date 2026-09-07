@@ -11,10 +11,10 @@ import {
 describe('resolveVisibilityMap', () => {
   it('builds a key -> isPublic map from rows', () => {
     const map = resolveVisibilityMap([
-      { projectKey: 'whitehall', isPublic: false },
+      { projectKey: 'terminal-descent', isPublic: false },
       { projectKey: 'policy-engine', isPublic: true },
     ]);
-    expect(map).toEqual({ whitehall: false, 'policy-engine': true });
+    expect(map).toEqual({ 'terminal-descent': false, 'policy-engine': true });
   });
 
   it('returns an empty map for no rows', () => {
@@ -24,7 +24,7 @@ describe('resolveVisibilityMap', () => {
 
 describe('isProjectSlug', () => {
   it('accepts a /projects address', () => {
-    expect(isProjectSlug('brass-and-rails')).toBe(true);
+    expect(isProjectSlug('terminal-descent')).toBe(true);
     expect(isProjectSlug('stopwatch')).toBe(true);
     expect(isProjectSlug('0ad-strategy')).toBe(true);
   });
@@ -65,7 +65,7 @@ describe('defaultsPublic', () => {
 
 describe('isProjectPublic', () => {
   it('defaults a static card to public when there is no row for the key', () => {
-    expect(isProjectPublic({}, 'brass-and-rails')).toBe(true);
+    expect(isProjectPublic({}, 'terminal-descent')).toBe(true);
   });
 
   it('defaults a build slug to PRIVATE when there is no row for the key', () => {
@@ -75,11 +75,11 @@ describe('isProjectPublic', () => {
   });
 
   it('honours an explicit private row', () => {
-    expect(isProjectPublic({ 'brass-and-rails': false }, 'brass-and-rails')).toBe(false);
+    expect(isProjectPublic({ 'terminal-descent': false }, 'terminal-descent')).toBe(false);
   });
 
   it('honours an explicit public row', () => {
-    expect(isProjectPublic({ whitehall: true }, 'whitehall')).toBe(true);
+    expect(isProjectPublic({ 'terminal-descent': true }, 'terminal-descent')).toBe(true);
     expect(isProjectPublic({ stopwatch: true }, 'stopwatch')).toBe(true);
   });
 });
@@ -88,10 +88,10 @@ describe('filterForViewer', () => {
   // Static keys, so the pre-existing "no row means public" rule applies.
   const items = [
     { key: 'policy-engine' },
-    { key: 'whitehall' },
+    { key: 'terminal-descent' },
     { key: 'archetype' },
   ];
-  const map = { whitehall: false }; // whitehall is private, the others default public
+  const map = { 'terminal-descent': false }; // terminal-descent is private, the others default public
 
   it('returns every item for an authed viewer', () => {
     expect(filterForViewer(items, map, true)).toEqual(items);

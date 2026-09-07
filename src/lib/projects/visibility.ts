@@ -29,18 +29,13 @@
 export const STATIC_PROJECT_KEYS = [
   'engine-room',
   'scs-earnings',
-  'broads-pilot',
   'terminal-descent',
   'data-standard-designer',
   'data-spine',
   'spine-in-practice',
   'dfe-data-strategy',
-  'dfe-data-estate',
   'policy-engine',
-  'whitehall',
-  'brass-and-rails',
   'archetype',
-  'data-convergence',
   'bathroom',
   'pulse',
 ] as const;

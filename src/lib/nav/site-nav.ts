@@ -75,18 +75,10 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
     why: 'A separate installable PWA with its own service worker and manifest, on a Tailwind gray shell rather than SR tokens. A site strip would be SW-cached and advertise routes unreachable offline.',
   },
   {
-    prefix: '/projects/broads-pilot',
-    why: 'A third PWA: display=standalone, scope=/projects/broads-pilot. A link to / navigates outside the manifest scope, which in a standalone launch strands the user in an in-app browser with no back button.',
-  },
-  {
     prefix: '/login',
     why: 'The auth gate’s own destination. Every owner-only cell on it bounces straight back here.',
   },
   { prefix: '/auth-error', why: 'The auth gate’s failure page — same reason as /login.' },
-  {
-    prefix: '/broads/speed',
-    why: 'Opened from a WhatsApp link by people with no session and no /broads index to be a child of. Full-bleed Mapbox map.',
-  },
   {
     prefix: '/deepdive/share',
     why: 'A full-viewport research desk — `position: fixed; inset: 0` declared on both the host and ResearchDesk’s own shell — already wearing CommandBar.',

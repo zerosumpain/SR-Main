@@ -65,10 +65,6 @@ const PUBLIC_PATHS = [
   // POST surface is bounded by single-use nonces, rate limiting and server-side
   // score recomputation (see src/lib/space-lander/score.ts), not a cookie gate.
   '/api/space-lander',
-  // Public, read-only ratings proxy for Broads Pilot (/projects/broads-pilot).
-  // Anonymous GET only; the handler self-limits and caches Google Places data
-  // server-side (no OAuth, since holidaymakers using the planner never sign in).
-  '/api/broads-pilot',
   // Read-only public Mapbox browser token, validated as pk. only. Maps on public
   // projects and shared chats need it; no credential metadata is returned.
   '/api/maps/config',
@@ -86,10 +82,6 @@ const PUBLIC_PATHS = [
   // so this does not make posture public. The one mutating action (unban) is
   // owner-session ONLY and rejects the bearer outright.
   '/api/admin/security',
-  // Broads Speed Tracker — live map + stats, needs to be accessible from
-  // a WhatsApp link without signing in. API serves the dashboard data.
-  '/broads',
-  '/api/broads',
 ];
 
 export function isPublicPath(pathname: string): boolean {

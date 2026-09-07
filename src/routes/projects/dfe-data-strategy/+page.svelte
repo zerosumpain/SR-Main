@@ -96,8 +96,8 @@
 
   <h2 class="pe-h2">Built on the work, not beside it</h2>
   <p class="pe-prose link-para">
-    Keystone is a companion to <a href="/projects/policy-engine">the Policy Engine</a> and
-    <a href="/projects/dfe-data-estate">The Data Estate</a>. The department-policy pressures are drawn straight from the
+    Keystone is a companion to <a href="/projects/policy-engine">the Policy Engine</a>.
+    The department-policy pressures are drawn straight from the
     Policy Engine's field studies — the
     <a href="/projects/policy-engine/monitor">data spine and consistent child identifier</a>,
     <a href="/projects/policy-engine/attendance">attendance data</a>, <a href="/projects/policy-engine/send">SEND</a>,

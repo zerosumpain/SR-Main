@@ -55,17 +55,6 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'gov.uk data · 46,595 posts · OGL',
   },
   {
-    key: 'broads-pilot',
-    href: '/projects/broads-pilot',
-    label: 'Open Broads Pilot',
-    kind: 'Field Study №5',
-    tag: 'Interactive · Route planner',
-    title: 'Broads Pilot — Norfolk Broads Route Planner',
-    blurb:
-      'Pick your hire boat, drop a pin, and see exactly where you can get to today — and safely. True river-following routing over an OpenStreetMap waterway graph, honouring the 3–6 mph speed zones, with travel times, fuel cost and range. Every bridge, the Mutford lock and the Breydon tidal crossing are checked against your boat\'s air draft and beam, with moorings, charges, dog-friendly walks and waterside pubs along the way.',
-    chips: 'waterway routing · boat-aware · PWA',
-  },
-  {
     key: 'terminal-descent',
     href: '/projects/terminal-descent/',
     label: 'Play Terminal Descent',
@@ -132,17 +121,6 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'pressures · trade-offs · maturity · cited',
   },
   {
-    key: 'dfe-data-estate',
-    href: '/projects/dfe-data-estate',
-    label: 'Open The Data Estate',
-    kind: 'Reference',
-    tag: 'Live · DfE APIs',
-    title: 'The Data Estate — DfE\'s Public Data Services',
-    blurb:
-      'A fact-checked map of every public-facing service the Department for Education uses to share and aggregate data — GIAS, Explore Education Statistics, performance tables, Teaching Vacancies, the teacher-training APIs and the restricted pupil-data tier. Where each one\'s data comes from, how often it refreshes, who owns it, and what\'s open — with six widgets calling the real DfE APIs live.',
-    chips: 'live APIs · 16 services · OGL',
-  },
-  {
     key: 'policy-engine',
     href: '/projects/policy-engine',
     label: 'Open Education Policy Modelling',
@@ -154,17 +132,6 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'system dynamics · Monte-Carlo · cited',
   },
   {
-    key: 'whitehall',
-    href: '/projects/whitehall/',
-    label: 'Play Whitehall',
-    kind: 'Field Study №3',
-    tag: 'Playable · WebGL',
-    title: 'Whitehall — The Machinery of Government',
-    blurb:
-      'A turn-based 4X set inside the UK civil service. Cities are government departments, units are civil-service grades — Executive Officers, glass-cannon Fast Streamers, Permanent Secretaries — and level-10 departments commission national Special Projects for empire-wide bonuses. Play solo against an AI that learns from every defeat, or watch eight Whitehall blocs fight it out.',
-    chips: 'Three.js · civil service · special projects',
-  },
-  {
     key: 'archetype',
     href: '/projects/archetype/',
     label: 'Open Archetype',
@@ -174,27 +141,5 @@ export const PROJECT_CARDS: ProjectCard[] = [
     blurb:
       'An isometric 4X board game whose real subject is the AI. Six named strategists — the Spear, the Jackal, the Sprawl, the Ledger, the Concord, the Bulwark — build models of each other from what they can see through the fog, bend their strategy to exploit what they infer, and provoke each other into counter-adapting. A strategy observatory shows every drive vector, belief and change of mind as it happens.',
     chips: 'Three.js · opponent modelling · co-evolution',
-  },
-  {
-    key: 'brass-and-rails',
-    href: '/projects/brass-and-rails/',
-    label: 'Play Brass & Rails',
-    kind: 'Field Study №2',
-    tag: 'Playable · WebGL',
-    title: 'Brass & Rails — An Empire of the Skerne',
-    blurb:
-      'A turn-based 4X empire on a tilt-shift diorama of old Darlington, birthplace of the railway. Settle villages, harvest coal & iron, research the Age of Steam — against an AI that remembers every defeat and rewrites its strategy to beat you next time. Play solo, or watch up to 8 AI houses fight it out autonomously.',
-    chips: 'Three.js · tilt-shift · learning AI',
-  },
-  {
-    key: 'data-convergence',
-    href: '/projects/data-convergence',
-    label: 'Open The Spine',
-    kind: 'Field Study №1',
-    tag: 'One-shot prompt',
-    title: 'The Spine — Data Convergence Timeline',
-    blurb:
-      'Scattered data sources are tributaries. They enter as oscillating strands of twine, wind together at confluences, and bind into a single horizontal spine — the source of truth. Interactive: play, scrub, edit the sources.',
-    chips: 'Canvas · DAG · braid render',
   },
 ];

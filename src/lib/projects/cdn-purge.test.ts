@@ -3,16 +3,16 @@ import { buildPurgeUrls } from './cdn-purge';
 
 describe('buildPurgeUrls', () => {
   it('maps relative bundle files to absolute prod URLs', () => {
-    expect(buildPurgeUrls('whitehall', ['index.html', 'assets/index-abc.js'])).toEqual([
-      'https://strangeramblings.com/projects/whitehall/',
-      'https://strangeramblings.com/projects/whitehall/index.html',
-      'https://strangeramblings.com/projects/whitehall/assets/index-abc.js',
+    expect(buildPurgeUrls('terminal-descent', ['index.html', 'assets/index-abc.js'])).toEqual([
+      'https://strangeramblings.com/projects/terminal-descent/',
+      'https://strangeramblings.com/projects/terminal-descent/index.html',
+      'https://strangeramblings.com/projects/terminal-descent/assets/index-abc.js',
     ]);
   });
 
   it('always includes the directory-root URL even with no files', () => {
-    expect(buildPurgeUrls('brass-and-rails', [])).toEqual([
-      'https://strangeramblings.com/projects/brass-and-rails/',
+    expect(buildPurgeUrls('archetype', [])).toEqual([
+      'https://strangeramblings.com/projects/archetype/',
     ]);
   });
 

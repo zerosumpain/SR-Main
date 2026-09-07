@@ -5,7 +5,7 @@ import type { RequestHandler } from './$types';
 export const trailingSlash = 'ignore';
 
 // This legacy path served published bundles from getPublishedDir()/<slug> with
-// NO visibility/share guard — so a private project (incl. whitehall/brass-and-rails)
+// NO visibility/share guard — so a private project (incl. archetype/terminal-descent)
 // would have leaked here regardless of the /projects visibility + share controls.
 // The canonical route /projects/<slug>/[...path] serves the IDENTICAL bundles
 // behind the full guard (visibility + owner session + share token), so we
