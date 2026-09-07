@@ -288,9 +288,13 @@ describe('fast research model selection', () => {
     expect(shown?.effectiveModelId).toBe(selected.modelId);
   });
 
-  it('honours an OpenRouter chat selection when research has no saved choice', async () => {
-    const selected = { provider: 'openrouter' as const, modelId: 'openai/gpt-4o' };
-    expect(await withChatContext({ sessionModel: selected }, resolveResearchFastModel)).toEqual(selected);
+  it('honours the chat selection when research has no saved choice, whichever provider', async () => {
+    const openrouter = { provider: 'openrouter' as const, modelId: 'openai/gpt-4o' };
+    expect(await withChatContext({ sessionModel: openrouter }, resolveResearchFastModel)).toEqual(openrouter);
+    // A Codex pin used to be discarded here and then rejected below, so a
+    // Codex-pinned thread could not commission Instant, Scan or Brief at all.
+    const codex = { provider: 'codex' as const, modelId: 'codex/gpt-5.6-luna' };
+    expect(await withChatContext({ sessionModel: codex }, resolveResearchFastModel)).toEqual(codex);
   });
 
   it('inherits an OpenRouter site default rather than Gemini', async () => {
@@ -303,9 +307,21 @@ describe('fast research model selection', () => {
     expect((await resolveResearchFastModel()).modelId).toBe('openai/gpt-4o');
   });
 
-  it('requests a compatible selection instead of silently switching providers', async () => {
-    await expect(resolveResearchFastModel()).rejects.toThrow('Select an OpenRouter model');
-    expect(await workloadBlockReason(wl('research-fast'), 'codex/gpt-5.6-terra')).toMatch(/OpenRouter/);
+  it('runs the fast tiers on a Codex site default instead of refusing them', async () => {
+    /**
+     * The regression this pins. `resolveResearchFastModel` threw for any
+     * non-OpenRouter model, so with the site default on Codex — a state the
+     * site is routinely in — Instant, Scan and Brief could not be commissioned
+     * at all, with an error telling the owner to go and pin a model.
+     *
+     * The premise was wrong: those tiers reach the model through
+     * `jsonCompletion` / `streamCompletion`, which pass an explicit id to
+     * `getLLMClient` and so reach the Codex bridge. The single OpenRouter-only
+     * call — Instant's `fast` grounding web plugin — substitutes the fallback
+     * itself; see the `groundedCompletion` tests in `ai.test.ts`.
+     */
+    expect(await resolveResearchFastModel()).toEqual({ provider: 'codex', modelId: 'codex/gpt-5.6-terra' });
+    expect(await workloadBlockReason(wl('research-fast'), 'codex/gpt-5.6-terra')).toBeNull();
     expect(await workloadBlockReason(wl('research-fast'), 'openai/gpt-4o')).toBeNull();
   });
 });

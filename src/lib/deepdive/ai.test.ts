@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { APIUserAbortError } from 'openai';
-import { isRateLimitError, chatCompletion, jsonCompletion, streamCompletion } from './ai';
+import { isRateLimitError, chatCompletion, jsonCompletion, streamCompletion, groundedCompletion } from './ai';
 
 // ---------------------------------------------------------------------------
 // Post-migration the primary client is the admin-configured OpenRouter default,
@@ -354,5 +354,46 @@ describe('streamCompletion', () => {
     expect(mockPrimaryCreate).toHaveBeenCalledOnce();
     expect(mockPrimaryCreate.mock.calls[0][0].model).toBe('anthropic/claude-opus-4');
     expect(mockFallbackCreate).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// groundedCompletion — the one OpenRouter-only call in the fast research tiers
+// ---------------------------------------------------------------------------
+
+describe('groundedCompletion (fast mode)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.clearAllTimers();
+    fallbackModel = 'google/gemini-3.1-flash-lite-preview';
+  });
+
+  it('sends an OpenRouter model through unchanged, with the web plugin attached', async () => {
+    mockFallbackCreate.mockResolvedValueOnce(makeStream([{ delta: 'grounded' }]));
+
+    const promise = groundedCompletion('sys', 'user', { mode: 'fast', model: 'openai/gpt-4o' });
+    await vi.runAllTimersAsync();
+    expect((await promise).text).toBe('grounded');
+
+    const req = mockFallbackCreate.mock.calls[0][0];
+    expect(req.model).toBe('openai/gpt-4o');
+    expect(req.plugins).toEqual([{ id: 'web', max_results: 5 }]);
+  });
+
+  it('substitutes the OpenRouter fallback for a codex id rather than failing the run', async () => {
+    /**
+     * `plugins` is an OpenRouter request extension: the Codex bridge has no
+     * such parameter and OpenRouter has no such model, so this ONE call cannot
+     * carry a Codex research pick. Everything else Instant, Scan and Brief do
+     * can, which is why the role is no longer gated on the provider — the
+     * substitution belongs here, at the call that actually needs it.
+     */
+    mockFallbackCreate.mockResolvedValueOnce(makeStream([{ delta: 'grounded' }]));
+
+    const promise = groundedCompletion('sys', 'user', { mode: 'fast', model: 'codex/gpt-5.6-terra' });
+    await vi.runAllTimersAsync();
+    expect((await promise).text).toBe('grounded');
+
+    expect(mockFallbackCreate.mock.calls[0][0].model).toBe('google/gemini-3.1-flash-lite-preview');
   });
 });

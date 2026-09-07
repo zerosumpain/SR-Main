@@ -499,7 +499,17 @@ export async function groundedCompletion(
    * the OpenRouter client.
    */
   const client = await getOpenRouterClient();
-  const model = options.model ?? getFallbackModel();
+  /**
+   * The web plugin is an OpenRouter request extension, so this call — alone
+   * among everything the fast tiers do — cannot carry a `codex/` id: the bridge
+   * has no such parameter and OpenRouter has no such model. Substituting the
+   * OpenRouter fallback is exactly what an unset `options.model` already does,
+   * and it keeps a Codex research model usable everywhere else instead of
+   * refusing the role outright. `runInstant` tells the reader which model
+   * actually answered.
+   */
+  const requested = options.model;
+  const model = requested && !requested.startsWith('codex/') ? requested : getFallbackModel();
   let text = '';
   /**
    * Accumulated, keyed by URL — NOT replaced.

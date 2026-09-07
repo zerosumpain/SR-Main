@@ -113,9 +113,14 @@ describe('depthPreset', () => {
     expect(ms('scan')).toBeLessThan(ms('brief'));
   });
 
-  // Fast tiers must not inherit the site default: it may be a reasoning model
-  // (reasoning tokens eat max_tokens and add tens of seconds) or a codex/ id
-  // (~10s on the first call). Either would blow a 110s budget on its own.
+  // The fast tiers get a role of their own so the site default can be
+  // OVERRIDDEN, not so it can be refused: the default may be a reasoning model
+  // (reasoning tokens eat max_tokens and add tens of seconds), and Instant only
+  // has 30s in total. Pinning something fast here is the remedy. The codex/
+  // latency this comment used to cite was the SDK bridge's ~7s floor, gone
+  // since the raw-Responses swap (PR #442, measured 1.4s). Until 2026-09-07
+  // and THREW on a codex/ default, which did not make the tiers fast — it made
+  // them impossible to commission. See `resolveResearchFastModel`.
   it('puts the fast tiers on their own role and investigation on the deep one', () => {
     expect(depthPreset('instant').modelRole).toBe('research-fast');
     expect(depthPreset('scan').modelRole).toBe('research-fast');
@@ -125,7 +130,11 @@ describe('depthPreset', () => {
 
   it('keeps fast research selectable without a hard-coded model fallback', () => {
     const fast = WORKLOADS.find((w) => w.id === 'research-fast')!;
-    expect(fast.requires).toBe('openrouter');
+    // Deliberately unconstrained: Instant, Scan and Brief reach the model
+    // through `getLLMClient`, so any chat model serves them. The lone
+    // OpenRouter-only call (Instant's `fast` web grounding) substitutes the
+    // fallback in `groundedCompletion` rather than gating the whole role.
+    expect(fast.requires).toBeNull();
     expect(fast.fallbackModelId).toBeNull();
     expect(fast.envKey).toBe('RESEARCH_FAST_MODEL');
   });
