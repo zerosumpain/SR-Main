@@ -12,19 +12,32 @@ import { setSetting, clearSettingsCache, resolveDefaultModel } from '$lib/server
 import { coerceModelContext } from '$lib/constants/default-models';
 import { siteDefaultBlockReason } from '$lib/server/models/capabilities';
 import { describeProfiles, setOverride, isRoutingEnabled } from '$lib/routing/events';
+import { resolveResearchFastModel } from '$lib/server/models/workload-settings';
 import { PROFILE_LABEL, PROFILES, type ModelProfile } from '$lib/routing/types';
 
 const SITE_DEFAULT_KEY = 'jkai.chat.default_model';
 
 async function picture() {
-  const [siteDefault, profiles, routingEnabled] = await Promise.all([
+  const [siteDefault, profiles, routingEnabled, researchFast] = await Promise.all([
     resolveDefaultModel(),
     describeProfiles(),
     isRoutingEnabled(),
+    /**
+     * What the budgeted research tiers actually run on, so the picker can offer
+     * it as a one-tap pick beside the site default and the alt.
+     *
+     * Resolved rather than read raw from the setting: unpinned, this role IS
+     * the site default, and the chip that would then duplicate it dedupes
+     * itself away instead. Sending the effective value also means the chip
+     * tells the truth about what research runs on, which a raw pin cannot when
+     * the pin is absent.
+     */
+    resolveResearchFastModel(),
   ]);
   return {
     routingEnabled,
     siteDefaultModelId: siteDefault.modelId,
+    researchFastModelId: researchFast.modelId,
     profiles: profiles.map((p) => ({ ...p, label: PROFILE_LABEL[p.profile] })),
   };
 }
