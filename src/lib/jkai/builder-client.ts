@@ -58,6 +58,7 @@ function rpc<T = unknown>(method: string, args: unknown[]): Promise<T> {
  * over the Unix socket instead of called in-process.
  */
 export const builderClient = {
+  developmentCapabilities: () => rpc<{ engine: string; persistentSessions: boolean; brokerConfigured: boolean }>('developmentCapabilities', []),
   startBuild: (buildId: string) => rpc<void>('startBuild', [buildId]),
   pauseBuild: (buildId: string) => rpc<void>('pauseBuild', [buildId]),
   resumeBuild: (buildId: string) => rpc<void>('resumeBuild', [buildId]),

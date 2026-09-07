@@ -50,6 +50,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
       }
       case 'start':
       case 'resume': {
+        const capabilities = await builderClient.developmentCapabilities().catch(() => null);
+        if (!capabilities?.persistentSessions || !capabilities.brokerConfigured) throw new Error('The development worker is not ready. An updated worker waiting for an active build will become available when that build finishes.');
         if (!delivery.state.brief.acceptedAt) throw new Error('Accept the brief before building.');
         if (delivery.state.decisions.some((d) => !d.answer)) throw new Error('Answer the pending decisions first.');
         if (['running', 'queued'].includes(build.status)) throw new Error('This build is already active.');

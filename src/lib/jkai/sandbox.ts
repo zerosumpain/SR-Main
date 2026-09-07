@@ -328,6 +328,10 @@ export async function writeFileInSandbox(
 }
 
 export async function ensureWorkspace(buildId: string): Promise<string> {
+  if (process.env.BUILDER_WORKSPACE_BROKER_URL) {
+    const { workspaceBroker } = await import('./development-workspace.server');
+    await workspaceBroker('allocate', buildId);
+  }
   const base = `/home/jkai/workspace/${buildId}`;
   await execInSandbox(`mkdir -p ${base}/dev ${base}/live`);
   return `${base}/dev`;
@@ -392,10 +396,14 @@ export function gitTargetBranchName(buildId: string, cfg: GitTargetConfig): stri
  */
 export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig): Promise<string> {
   if (process.env.BUILDER_WORKSPACE_BROKER_URL) {
+    const { loadDelivery } = await import('./development-state.server');
     const { workspaceBroker } = await import('./development-workspace.server');
-    await workspaceBroker('prepare', buildId);
-    await writeGateEnv(buildId, `/home/jkai/workspace/${buildId}/dev`);
-    return `/home/jkai/workspace/${buildId}/dev`;
+    if (await loadDelivery(buildId)) {
+      await workspaceBroker('prepare', buildId);
+      await writeGateEnv(buildId, `/home/jkai/workspace/${buildId}/dev`);
+      return `/home/jkai/workspace/${buildId}/dev`;
+    }
+    await workspaceBroker('allocate', buildId);
   }
 
   const base = `/home/jkai/workspace/${buildId}`;

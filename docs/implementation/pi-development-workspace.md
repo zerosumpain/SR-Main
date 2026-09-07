@@ -50,3 +50,17 @@ The production-source allowance is 611,000 lines for this authorised cumulative 
 - Local Compose validates, the migration is applied to the isolated database, and the local app/builder were restarted successfully. The main workspace returns HTTP 200 through the existing local gateway. Earlier cumulative work remains in the working tree; no PR or production deployment was made.
 
  A passing transport fixture is deliberately separate from a claim that a paid model has implemented and satisfied a real product brief.
+
+## Production deployment
+
+The live release is reconciled onto current master; its newer backlog layout, archived projects and source budgets are retained. `scripts/ci-development.sh` provisions the broker before the normal atomic web release, and the existing builder maintenance service applies the matching sidecar when idle. The development API checks worker capabilities before starting work during this transition.
+
+`deploy/development/compose.yaml` creates a separate nested Docker daemon, broker and preview gateway. Only the trusted broker (`127.0.0.1:5280`) and gateway (`127.0.0.1:5289`) bind host ports. Candidate containers retain separate databases, an internal network and no production credentials or host mounts. Production retains the existing service-owned workspace root for legacy builders; allocation supports both flows, while only delivery-managed jobs use broker snapshots. The broker's private Git baselines and receipts live in its own volume.
+
+The installer generates dedicated broker/access secrets in root-readable files and adds separate systemd environment drop-ins. It does not replace the production `.env`, copy production data, or pass production provider credentials to previews. Source snapshots contain the committed release and separately installed dependencies.
+
+Eight new hostnames, `preview-5281.strangeramblings.com` through `preview-5288.strangeramblings.com`, use the existing Cloudflare Tunnel. Existing ingress rules are preserved, the updated configuration is validated, and the old configuration is retained for rollback. Provisioning follows Cloudflare's [locally managed tunnel DNS](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/dns/) and [ingress validation](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/configuration-file/) commands.
+
+Preview links are eight-hour capabilities bound to an exact build, revision and slot. The gateway exchanges the link for an HttpOnly, Secure, host-only cookie and removes the grant from the URL. It rejects anonymous/expired/wrong-slot requests, strips credentials before forwarding, blocks candidate cookie writes, and revokes access when the preview closes or its revision changes. Refresh an expired link with Prepare preview. Treat these links as private until they expire.
+
+The release provisions and exercises an isolated site over the real HTTPS ingress before switching the web app when the preview runtime changes. This canary makes no model calls and does not access the production database. After the switch, a short-lived owner session verifies the new page and delivery API without logging its token, and checks the builder's session/broker capabilities.

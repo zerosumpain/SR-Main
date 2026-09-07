@@ -11,6 +11,7 @@
  * to debug from the client side than non-standard HTTP statuses.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { PI_CAPABILITIES } from '$lib/jkai/pi-rpc';
 import { orchestrator } from '$lib/jkai/orchestrator';
 import {
   sessionInject,
@@ -27,6 +28,7 @@ type AnyArgs = unknown[];
 
 // Dispatch table — every call site in SvelteKit must come through one of these.
 const dispatchTable: Record<string, (args: AnyArgs) => Promise<unknown> | unknown> = {
+  developmentCapabilities: () => ({ ...PI_CAPABILITIES, brokerConfigured: Boolean(process.env.BUILDER_WORKSPACE_BROKER_URL) }),
   startBuild: (a) => orchestrator.startBuild(a[0] as string),
   pauseBuild: (a) => orchestrator.pauseBuild(a[0] as string),
   resumeBuild: (a) => orchestrator.resumeBuild(a[0] as string),

@@ -27,7 +27,7 @@ const config = {
 				'connect-src': ['self', 'blob:', 'https:', 'wss:'],
 				'worker-src': ['self', 'blob:'],
 				'manifest-src': ['self'],
-				'frame-src': [
+				'frame-src': [...Array.from({ length: 8 }, (_, i) => `https://preview-${5281 + i}.strangeramblings.com`),
 					...(process.env.BUILDER_WORKSPACE_BROKER_URL ? Array.from({ length: 8 }, (_, i) => `http://127.0.0.1:${5281 + i}`) : []),
 					'self',
 					'https://vnc.strangeramblings.com',

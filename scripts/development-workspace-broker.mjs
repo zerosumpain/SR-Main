@@ -1,5 +1,6 @@
 /** Trusted local broker. Docker points exclusively at the isolated DinD daemon. */
 import http from 'node:http';
+import { previewAccessUrl } from './development-preview-access.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile, stat, realpath } from 'node:fs/promises';
@@ -30,8 +31,21 @@ async function copySource(from, to, removeMissing = false) {
 const trustedRoot = '/var/lib/development-broker';
 await mkdir(trustedRoot, { recursive: true });
 // The worker can write its own attempt, but cannot replace sibling roots.
-await command('chown', ['0:0', root]);
-await command('chmod', ['755', root]);
+if (process.env.BUILDER_PROTECT_WORKSPACES !== '0') {
+  await command('chown', ['0:0', root]);
+  await command('chmod', ['755', root]);
+}
+// Production keeps the existing service-owned root for legacy build compatibility.
+const previewLink = (id, revision, port) => process.env.BUILDER_PREVIEW_DOMAIN
+  ? previewAccessUrl(process.env.BUILDER_PREVIEW_ACCESS_SECRET, process.env.BUILDER_PREVIEW_DOMAIN, id, revision, port)
+  : `${process.env.BUILDER_PREVIEW_ORIGIN ?? 'http://127.0.0.1'}:${port}`;
+async function allocate(id) {
+  const base = join(root, id);
+  await mkdir(base, { recursive: true });
+  if (await realpath(base) !== base) throw new Error('Workspace must not be a symlink');
+  await command('chown', ['1000:1000', base]);
+  return { allocated: true };
+}
 const batch = join(trustedRoot, 'batch');
 async function ensureBatch() {
   if (!(await stat(join(batch, '.git')).catch(() => null))) {
@@ -127,8 +141,9 @@ async function preview(id, revision) {
       await new Promise((r) => setTimeout(r, 2000));
     }
     const healthy = await fetch(`http://${process.env.BUILDER_DOCKER_HOSTNAME ?? 'development-docker'}:${old.port}/jkai/develop`, { headers: { host: `127.0.0.1:${old.port}` }, redirect: 'manual', signal: AbortSignal.timeout(5000) }).then((r) => r.status === 200, () => false);
-    if (healthy) await writeFile(receiptFile, JSON.stringify({ ...old, proxyVersion: 2, runtimeVersion: 3 }));
-    if (healthy) return { revision, url: old.url, detail: 'Retained isolated preview for this exact candidate.' };
+    const refreshedUrl = previewLink(id, revision, old.port);
+    if (healthy) await writeFile(receiptFile, JSON.stringify({ ...old, url: refreshedUrl, proxyVersion: 2, runtimeVersion: 3 }));
+    if (healthy) return { revision, url: refreshedUrl, detail: 'Retained isolated preview for this exact candidate.' };
   }
   // One port per retained preview. Reuse the old slot, otherwise choose a free one.
   const ports = await docker('ps', '--format', '{{.Ports}}');
@@ -186,7 +201,7 @@ async function preview(id, revision) {
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!healthy) { const log = await docker('exec', name, 'cat', '/tmp/site.log').catch(() => 'No startup log'); throw new Error('Preview readiness failed: ' + log.slice(-1600)); }
-  const url = `${process.env.BUILDER_PREVIEW_ORIGIN ?? 'http://127.0.0.1'}:${port}`;
+  const url = previewLink(id, revision, port);
   await writeFile(receiptFile, JSON.stringify({ revision, port, url, proxyVersion: 2, runtimeVersion: 3 }));
   return { revision, url, detail: 'Separate disposable database, no provider credentials, no outbound network or host mounts.' };
 }
@@ -286,7 +301,7 @@ http.createServer(async (req, res) => {
     for await (const chunk of req) { raw += chunk; if (raw.length > 32000) throw new Error('Request too large'); }
     const body = JSON.parse(raw);
     const id = validId(body.buildId);
-    const methods = { '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision) };
+    const methods = { '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision) };
     if (req.method !== 'POST' || !Object.hasOwn(methods, req.url)) { respond(404, { error: 'Unknown operation' }); return; }
     const work = lane.then(methods[req.url]);
     lane = work.catch(() => {});

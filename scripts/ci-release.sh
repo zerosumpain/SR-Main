@@ -235,6 +235,9 @@ else
   echo "$SCHEMA_HASH" > "$STATE_DIR/schema.sha256"
 fi
 
+# Prepare the full development runtime before the web candidate becomes live.
+./scripts/ci-development.sh
+
 # Preserve legacy conclusions before the new investigation lifecycle starts.
 # Stamp only committed data; a failed migration leaves the current app running.
 DAYDREAM_MIGRATION="$(pwd)/scripts/migrations/2026-09-06-daydream-investigations.sql"
@@ -329,6 +332,15 @@ if wait_for_public_release "$SHA" 90; then
   echo "==> Activating jkai-builder candidate for apply-when-idle..."
   ln -sfn "$SHA" "$VPS_DIR/builder-releases/pending.tmp"
   mv -Tf "$VPS_DIR/builder-releases/pending.tmp" "$VPS_DIR/builder-releases/pending"
+  # Use the existing service so this invocation serialises with its timer.
+  sudo systemctl start jkai-builder-watchdog.service
+  sudo bash -s -- "/opt/sr-development/sources/$SHA" <<'VERIFY'
+set -euo pipefail
+set -a
+. /opt/strange-rambling-svelte/.env
+set +a
+node "$1/scripts/ci-verify-development.mjs"
+VERIFY
 
   # Record what just went live (/releases). Deliberately AFTER the
   # public-URL check, so a build that never reached production is never logged

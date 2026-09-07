@@ -104,7 +104,7 @@
       {:else if tab === 'Preview'}
         <div class="actions"><button disabled={busy || running || !deliveryState.candidate} onclick={() => act('preview')}>Prepare preview</button><button aria-pressed={phone} onclick={() => phone = !phone}>{phone ? 'Desktop width' : 'Phone width'}</button>
           {#if deliveryState.preview.url}<a href={deliveryState.preview.url} target="_blank" rel="noopener noreferrer">Open site preview ↗</a><button disabled={busy || running} onclick={() => act('close_preview')}>Close preview</button>{/if}</div>
-        {#if deliveryState.preview.url?.startsWith('http://127.0.0.1:')}<p class="muted">This preview uses a loopback port on the build host. When reviewing from another computer, forward that port before opening it here.</p>{/if}
+        {#if deliveryState.preview.url?.startsWith('http://127.0.0.1:')}<p class="muted">This preview uses a loopback port on the build host. When reviewing from another computer, forward that port before opening it here.</p>{:else if deliveryState.preview.url}<p class="muted">Preview access lasts eight hours. Use Prepare preview to refresh an expired link.</p>{/if}
         <p role="status">{deliveryState.preview.status} · {deliveryState.preview.detail}</p>
         {#if deliveryState.preview.url}<div class:phone class="preview"><iframe title="Isolated feature preview" src={deliveryState.preview.url} sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></div>{/if}
         <h2>Acceptance evidence</h2><p class="muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Record what you actually exercised, including data or provider limitations.</p>
