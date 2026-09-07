@@ -86,7 +86,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
       { label: 'Live', href: '/admin/ops/live' },
       { label: 'Architecture', href: '/admin/ops/architecture' },
-      { label: 'Releases', href: '/releases' },
       { label: 'Changelog', href: '/admin/ops/claude-changelog' },
     ],
   },
