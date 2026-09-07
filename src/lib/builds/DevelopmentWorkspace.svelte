@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import DevelopmentBuildProgress from './DevelopmentBuildProgress.svelte';
+  import { featurePreviewUrl } from './development-progress';
   import type { DevelopmentProgress } from './development-progress';
   import DevelopmentBuildActivity from './DevelopmentBuildActivity.svelte';
   import { replaceState } from '$app/navigation';
@@ -9,7 +10,7 @@
   type Snapshot = {
     progress?: DevelopmentProgress;
     delivery: { revision: number; state: DeliveryState };
-    build: { heartbeatAt?: string | null; updatedAt?: string; failure?: { message?: string; kind?: string } | null; prompt: string; title: string; status: string; modelId: string; modelProvider?: string; iterationsCompleted: number; costUsd: string | null; budgetConfig: { maxCostUsd?: number; maxTotalMinutes?: number; maxIterations?: number; maxTokensPerIteration?: number } };
+    build: { outcome?: string | null; heartbeatAt?: string | null; updatedAt?: string; failure?: { message?: string; kind?: string } | null; prompt: string; title: string; status: string; modelId: string; modelProvider?: string; iterationsCompleted: number; costUsd: string | null; budgetConfig: { maxCostUsd?: number; maxTotalMinutes?: number; maxIterations?: number; maxTokensPerIteration?: number } };
     instructions: Array<{ id: number; content: string; consumedAt: string | null; acknowledgedAt: string | null; dispatchedAt: string | null; cancelledAt: string | null }>;
     notes: Array<{ id: number; content: string }>;
     events: Array<{ id: number; kind: string; createdAt: string }>;
@@ -25,8 +26,11 @@
   let instruction = $state(''); let question = $state(''); let answers = $state<Record<string, string>>({});
   let evidence = $state<Record<string, string>>({}); let verdicts = $state<Record<string, string>>({});
   let lesson = $state(''); let lessonEvidence = $state(''); let note = $state(''); let phone = $state(false);
+  let previewRoute = $state('');
   let evidenceCandidate: string | null = null; let briefRevision = 0; let loadedBrief = ''; let initialized = false; let refreshing = false;
   const deliveryState = $derived(snapshot?.delivery.state);
+  const chosenRoute = $derived(deliveryState?.brief.routes.includes(previewRoute) ? previewRoute : deliveryState?.brief.routes[0] ?? '/');
+  const previewHref = $derived(featurePreviewUrl(deliveryState?.preview.url ?? null, chosenRoute));
   const running = $derived(snapshot?.build.status === 'running' || snapshot?.build.status === 'queued');
   async function refresh() {
     if (refreshing) return; refreshing = true;
@@ -47,7 +51,7 @@
       if (snapshot && snapshot.delivery.state.candidate !== evidenceCandidate) {
         evidenceCandidate = snapshot.delivery.state.candidate;
         evidence = {}; verdicts = {};
-        error = 'The candidate changed. Review its new preview before recording fresh evidence.';
+        if (!busy) error = 'The candidate changed. Review its new preview before recording fresh evidence.';
       }
     } catch { connection = 'Disconnected — saved work is retained'; }
     finally { refreshing = false; }
@@ -57,13 +61,15 @@
     if (auto) replaceState(location.pathname, {});
     await refresh();
     if (auto && snapshot && !snapshot.delivery.state.grooming && !snapshot.delivery.state.brief.acceptedAt) await refine();
-  })(); const timer = setInterval(() => { if (!busy) void refresh(); }, 3000); return () => clearInterval(timer); });
+  })(); const timer = setInterval(() => { void refresh(); }, 3000); return () => clearInterval(timer); });
   async function act(action: string, fields: Record<string, unknown> = {}) {
     if (!snapshot) return false; busy = true; error = '';
+    if (action === 'inspect_preview' || action === 'preview') tab = 'Preview';
     try {
       const response = await fetch(`/api/jkai/development/${buildId}`, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, revision: snapshot.delivery.revision, briefRevision, candidate: snapshot.delivery.state.candidate, ...fields }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Operation failed');
+      if (action === 'inspect_preview' || action === 'preview') tab = 'Preview';
       if (action === 'start' || action === 'resume') tab = 'Build';
       if (action === 'brief' || action === 'groom') initialized = false;
       await refresh(); return true;
@@ -77,11 +83,11 @@
   }
 </script>
 <section class="workspace">
-  <header><a href="/jkai/develop">← Site development</a><h1>{snapshot?.build.title ?? 'Development workspace'}</h1>
-    <div class="status" role="status"><strong>{deliveryState && snapshot ? visibleDevelopmentStage(deliveryState, snapshot.build.status) : 'Loading'}</strong><span>{connection}</span>
+  <header><div class="workspace-title"><a href="/jkai/develop">← Site development</a><h1>{snapshot?.build.title ?? 'Development workspace'}</h1></div>
+    <div class="status" role="status"><strong>{deliveryState && snapshot ? visibleDevelopmentStage(deliveryState, snapshot.build.status, snapshot.build.outcome) : 'Loading'}</strong><span>{connection}</span>
       {#if snapshot}<span>{snapshot.build.iterationsCompleted} iterations completed</span>{/if}</div>
     <div class="actions">
-      <button class="nm-save-btn" disabled={busy || running || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue to preview' : 'Build to preview'}</button>
+      <button class="nm-save-btn" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue to preview' : 'Build to preview'}</button>
       <button class="nm-btn-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
       <button class="nm-btn-ghost" disabled={busy || !running} onclick={() => act('stop')}>Stop</button>
     </div>
@@ -91,7 +97,7 @@
   {#if deliveryState?.decisions.some((d) => !d.answer)}<aside class="attention"><strong>A decision is waiting</strong><button onclick={() => tab = 'Build'}>Open decisions</button></aside>{/if}
   <nav aria-label="Development views">{#each ['Brief', 'Build', 'Preview', 'Delivery'] as name}<button disabled={!snapshot} class:active={tab === name} aria-pressed={tab === name} onclick={() => tab = name}>{name}</button>{/each}</nav>
   {#if snapshot && deliveryState?.brief.acceptedAt}
-    {#if snapshot.progress}<DevelopmentBuildProgress progress={snapshot.progress} build={snapshot.build} delivery={deliveryState} connected={connection === 'Connected'} />{/if}
+    {#if snapshot.progress && tab === 'Build'}<DevelopmentBuildProgress {buildId} {busy} progress={snapshot.progress} build={snapshot.build} delivery={deliveryState} connected={connection === 'Connected'} navigate={(name) => tab = name} inspect={() => act('inspect_preview')} prepare={() => act('preview')} />{/if}
     {#key buildId}<DevelopmentBuildActivity {buildId} build={snapshot.build} needsOwner={deliveryState.decisions.some(d => !d.answer)} showOutput={tab === 'Build'} />{/key}
   {/if}
   {#if !snapshot}<p>{connection === 'Loading' ? 'Loading saved work…' : connection}</p>
@@ -126,7 +132,7 @@
         </form>
         <details><summary>Verified repository knowledge</summary>{#each snapshot.lessons as item}<p>{item.lesson}<small>{item.evidence} · recheck after {new Date(item.expiresAt).toLocaleDateString()}</small></p>{:else}<p>No accepted lessons for this product area yet.</p>{/each}</details>
       {:else if tab === 'Build'}
-        <p><strong>{snapshot.build.status}</strong> · {snapshot.build.modelId} · Pi session {deliveryState.session.id ? deliveryState.session.id.slice(0, 12) : 'not started'}</p>
+        <div class="section-label">Steering / decisions <small>{snapshot.build.modelId}</small></div>
         {#if deliveryState.session.recovery}<p class="attention">{deliveryState.session.recovery}</p>{/if}
         <form onsubmit={async (e) => { e.preventDefault(); if (await act('steer', { content: instruction })) instruction = ''; }}>
           <label>Guide this build<textarea bind:value={instruction} required rows="3" placeholder="For example: keep the date controls visible while scrolling."></textarea></label>
@@ -146,11 +152,13 @@
         </details>
         <details><summary>Advanced build controls and logs</summary><a href={`/jkai/builds/${buildId}`}>Open the existing build console →</a></details>
       {:else if tab === 'Preview'}
+        {#if !deliveryState.gate?.passed}<aside class="attention"><div><strong>Inspection is not acceptance</strong><p>Failed or missing repository checks remain blocking. Previewing saved work does not verify the feature.</p></div>{#if !deliveryState.candidate}<button disabled={busy || running || !snapshot.progress?.iterations.some(i => i.tokensUsed > 0)} onclick={() => act('inspect_preview')}>Prepare inspection preview</button>{/if}</aside>{/if}
         <div class="actions"><button disabled={busy || running || !deliveryState.candidate} onclick={() => act('preview')}>Prepare preview</button><button aria-pressed={phone} onclick={() => phone = !phone}>{phone ? 'Desktop width' : 'Phone width'}</button>
-          {#if deliveryState.preview.url}<a href={deliveryState.preview.url} target="_blank" rel="noopener noreferrer">Open site preview ↗</a><button disabled={busy || running} onclick={() => act('close_preview')}>Close preview</button>{/if}</div>
+          {#if previewHref}<a href={previewHref} target="_blank" rel="noopener noreferrer">Open site preview ↗</a><button disabled={busy || running} onclick={() => act('close_preview')}>Close preview</button>{/if}</div>
         {#if deliveryState.preview.url?.startsWith('http://127.0.0.1:')}<p class="muted">This preview uses a loopback port on the build host. When reviewing from another computer, forward that port before opening it here.</p>{:else if deliveryState.preview.url}<p class="muted">Preview access lasts eight hours. Use Prepare preview to refresh an expired link.</p>{/if}
         <p role="status">{deliveryState.preview.status} · {deliveryState.preview.detail}</p>
-        {#if deliveryState.preview.url}<div class:phone class="preview"><iframe title="Isolated feature preview" src={deliveryState.preview.url} sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></div>{/if}
+        {#if deliveryState.brief.routes.length}<div class="actions" aria-label="Feature routes">{#each deliveryState.brief.routes as route}<button aria-pressed={chosenRoute === route} onclick={() => previewRoute = route}>{route}</button>{/each}</div>{/if}
+        {#if previewHref}<div class:phone class="preview"><iframe title="Isolated feature preview" src={previewHref} sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></div>{/if}
         <h2>Acceptance evidence</h2><p class="muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Record what you actually exercised, including data or provider limitations.</p>
         {#each deliveryState.criteria as criterion}<form class="criterion" onsubmit={(e) => { e.preventDefault(); void act('criterion', { criterionId: criterion.id, verdict: verdicts[criterion.id] ?? 'unverified', evidence: evidence[criterion.id] ?? '' }); }}>
           <strong>{criterion.text}</strong><label>Verdict for {criterion.text}<select bind:value={verdicts[criterion.id]}><option value="unverified">Not exercised</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="blocked">Blocked</option></select></label>
@@ -170,21 +178,22 @@
   {/if}
 </section>
 <style>
+  .section-label { display: flex; justify-content: space-between; gap: 12px; text-transform: uppercase; letter-spacing: .06em; font-size: var(--fs-label-xs); border-bottom: 1px solid var(--line-strong); padding: 8px 0; } .section-label small { margin: 0; text-transform: none; }
   .original-ask { white-space: pre-wrap; overflow-wrap: anywhere; }
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; } .grooming { border-left: 3px solid var(--accent); padding: 4px 16px 16px; background: var(--surface-sunken); }
-  .workspace { width: min(1200px, 100%); margin: 0 auto; padding: 24px; box-sizing: border-box; min-width: 0; }
-  header { border-bottom: 2px solid var(--line-strong); padding-bottom: 18px; } h1 { font: clamp(1.4rem, 3vw, 2rem) var(--font-display); overflow-wrap: anywhere; margin: 14px 0; }
-  .status, .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; } .status { color: var(--text-secondary); font-size: var(--fs-nav); }
-  nav { display: flex; border-bottom: 1px solid var(--line-strong); margin: 18px 0; } nav button { flex: 1; border: 0; border-bottom: 3px solid transparent; background: transparent; padding: 12px 6px; } nav button.active { border-color: var(--accent); color: var(--accent); }
+  .workspace { width: min(1440px, 100%); margin: 0 auto; padding: 16px 20px; box-sizing: border-box; min-width: 0; }
+  header { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 16px; border-bottom: 2px solid var(--line-strong); padding-bottom: 10px; } .workspace-title a { font-size: var(--fs-label); color: var(--accent-ink); } .workspace-title { grid-column: 1; } header > .status { grid-column: 1; margin: 0; } header > .actions { grid-column: 2; grid-row: 1 / 3; margin: 0; align-self: center; } header > p { grid-column: 1 / -1; } h1 { font: clamp(1.1rem, 2vw, 1.5rem) var(--font-display); overflow-wrap: anywhere; margin: 6px 0 2px; }
+  .status, .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; } .status { color: var(--text-secondary); font-size: var(--fs-nav); }
+  nav { display: flex; border-bottom: 1px solid var(--line-strong); margin: 8px 0; } nav button { flex: 1; border: 0; border-bottom: 3px solid transparent; background: transparent; padding: 8px 6px; } nav button.active { border-color: var(--accent); color: var(--accent); }
   button, input, select, textarea { font: inherit; color: var(--text-primary); } button { cursor: pointer; padding: 8px 12px; border: 1px solid var(--line-strong); background: var(--surface-elevated); } button:disabled { opacity: .5; cursor: default; }
-  label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; font-size: var(--fs-nav); min-width: 0; }
+  label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; font-size: var(--fs-nav); min-width: 0; }
   input, textarea, select { border: 1px solid var(--line-strong); background: var(--surface-elevated); padding: 10px; width: 100%; box-sizing: border-box; } textarea { resize: vertical; }
-  form { margin: 20px 0; } .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; } .muted, small { color: var(--text-secondary); font-size: var(--fs-label); } small { display: block; margin-top: 8px; }
+  form { margin: 12px 0; } .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; } .muted, small { color: var(--text-secondary); font-size: var(--fs-label); } small { display: block; margin-top: 8px; }
   .patch { max-height: 500px; overflow: auto; white-space: pre; font-size: var(--fs-label); padding: 12px; background: var(--surface-sunken); }
   .error { color: var(--error); } .attention { border-left: 3px solid var(--accent); padding: 12px; background: var(--surface-sunken); display: flex; gap: 16px; align-items: center; }
-  .receipt, .criterion, .event { border-bottom: 1px solid var(--line); padding: 15px 0; overflow-wrap: anywhere; } .receipt p { white-space: pre-wrap; }
+  .receipt, .criterion, .event { border-bottom: 1px solid var(--line); padding: 9px 0; overflow-wrap: anywhere; } .receipt p { white-space: pre-wrap; }
   .preview { width: 100%; height: 650px; margin: 16px auto; border: 1px solid var(--line-strong); background: var(--surface-elevated); } .preview.phone { max-width: 390px; } iframe { width: 100%; height: 100%; border: 0; }
-  details { margin: 24px 0; padding: 15px 0; border-top: 1px solid var(--line); } summary { cursor: pointer; } .event { display: flex; justify-content: space-between; gap: 12px; } time { color: var(--text-secondary); font-size: var(--fs-label); }
+  details { margin: 12px 0; padding: 9px 0; border-top: 1px solid var(--line); } summary { cursor: pointer; } .event { display: flex; justify-content: space-between; gap: 12px; } time { color: var(--text-secondary); font-size: var(--fs-label); }
   a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  @media (max-width: 700px) { .workspace { padding: 16px; } .columns { grid-template-columns: 1fr; gap: 0; } .event { flex-direction: column; } .preview { height: 550px; } }
+  @media (max-width: 700px) { .workspace { padding: 12px; } header { display: block; } header > .actions { margin-top: 10px; } .columns { grid-template-columns: 1fr; gap: 0; } .event { flex-direction: column; } .preview { height: 550px; } }
 </style>

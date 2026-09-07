@@ -8,7 +8,7 @@ import { instructionHistory, enqueuePendingMessage } from '$lib/jkai/pending-mes
 import { listNotes, addNote, removeNote } from '$lib/jkai/build-notes';
 import { builderClient } from '$lib/jkai/builder-client';
 import { acceptDevelopment, prepareDevelopmentPreview, workspaceBroker } from '$lib/jkai/development-workspace.server';
-import { PRODUCT_AREAS, acceptanceBlocker } from '$lib/jkai/development';
+import { PRODUCT_AREAS, acceptanceBlocker, inspectionCandidate } from '$lib/jkai/development';
 import { groomDevelopmentBrief, readBriefFields } from '$lib/jkai/development-grooming.server';
 import type { RequestHandler } from './$types';
 
@@ -34,6 +34,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id));
   try {
     if (delivery.state.stage === 'integrating' && body.action !== 'accept') throw new Error('Batch integration is in progress.');
+    if (delivery.state.preview.status === 'starting') throw new Error('Preview preparation is in progress. Wait for its result before changing this workspace.');
     switch (body.action) {
       case 'groom': {
         if (['running', 'queued'].includes(build.status) || delivery.state.brief.acceptedAt) throw new Error('Grooming is available for draft briefs. Pause and edit an accepted brief explicitly.');
@@ -127,6 +128,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
         await mutateDelivery(id, 'preview_closed', (s) => ({ ...s, preview: { url: null, status: 'unavailable', detail: 'Preview closed. Source and session are retained.' } }), revision);
         await workspaceBroker('close-preview', id, { batch: Boolean(delivery.state.batch) });
         break;
+      case 'inspect_preview': {
+        if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before preparing an inspection preview.');
+        if (!delivery.state.brief.acceptedAt || delivery.state.acceptedAt) throw new Error('Inspection needs an accepted brief that has not joined the batch.');
+        const progress = await developmentProgress(id);
+        if (!progress.iterations.some(i => i.tokensUsed > 0) && !delivery.state.candidate) throw new Error('No saved implementation to inspect yet.');
+        await mutateDelivery(id, 'inspection_requested', s => ({ ...s, preview: { url: null, status: 'starting', detail: 'Snapshotting saved work for inspection; acceptance remains blocked.' } }), revision);
+        try {
+          const result = await workspaceBroker('snapshot', id);
+          await mutateDelivery(id, 'inspection_snapshot', s => inspectionCandidate(s, result.revision, result.changes));
+          await prepareDevelopmentPreview(id);
+        } catch (e) {
+          await mutateDelivery(id, 'inspection_failed', s => ({ ...s, preview: { url: null, status: 'failed', detail: e instanceof Error ? e.message.slice(-2000) : 'Inspection preview failed.' } }));
+          throw e;
+        }
+        break;
+      }
       case 'preview':
         if (['running', 'queued'].includes(build.status)) throw new Error('Wait for a verified candidate before preparing a preview.');
         await prepareDevelopmentPreview(id); break;

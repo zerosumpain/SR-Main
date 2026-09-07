@@ -34,11 +34,13 @@ try {
  await page.goto(`${base}/jkai/develop/${id}`, { waitUntil: 'domcontentloaded' });
  await page.getByText('Live stream connected', { exact: true }).waitFor();
  await page.getByRole('button', { name: 'Build', exact: true }).click();
- await page.getByText('Iteration 2 in progress', { exact: true }).waitFor();
+ await page.getByRole('heading', {name: /Iteration 2 in progress/}).waitFor();
  await page.getByText('170,000', { exact: true }).waitFor();
  await page.getByText('1,500', { exact: true }).waitFor();
  await page.getByText('1 / 2', { exact: true }).waitFor();
+ await page.getByText('How to read usage', {exact:true}).click();
  await page.getByText('Codex usage is tracked in tokens.', { exact: false }).waitFor();
+ await page.getByText('How to read usage', {exact:true}).click();
  assert.equal(await page.getByText(/\$0\.00 spent/).count(), 0);
  await client.query("update jkai_iterations set output_tokens=800,tokens_used=53000 where build_id=$1 and number=2", [id]);
  await page.getByText('1,800', { exact: true }).waitFor();

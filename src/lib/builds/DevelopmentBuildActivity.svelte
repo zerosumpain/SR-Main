@@ -71,11 +71,11 @@
   });
 </script>
 <section class="activity" aria-label="Build activity">
-  <div class:warning={status.warning} class="activity-status" role="status"><strong>{status.label}</strong><p>{status.detail}</p></div>
+  <div class:warning={status.warning} class="activity-status" role="status"><strong>{status.label}</strong><span>{status.detail}</span></div>
   <div class="signals"><span>{connection}</span><span>Worker heartbeat: {ageLabel(Date.parse(build.heartbeatAt ?? ''), now)}</span><span>Last output: {ageLabel(lastOutput, now)}</span></div>
   {#if showOutput}
     {#if latestAction}<p class="latest-action"><strong>Latest recorded action:</strong> {latestAction.content.slice(0, 400)}</p>{/if}
-    <div class="output-heading"><h2>Live code and commands</h2><button class="nm-btn-ghost" aria-pressed={follow} onclick={() => { follow = !follow; if (follow) void scroll(); }}>{follow ? 'Following output' : 'Follow output'}</button></div>
+    <div class="output-heading"><h2>Activity / live code and commands</h2><button class="nm-btn-ghost" aria-pressed={follow} onclick={() => { follow = !follow; if (follow) void scroll(); }}>{follow ? 'Following output' : 'Follow output'}</button></div>
     <p class="muted">{replay}. Recent output is restored on reload. Long commands can be quiet while the worker heartbeat continues.</p>
     <!-- svelte-ignore a11y_no_noninteractive_tabindex (The scrollable log needs keyboard focus for scrolling.) -->
     <div class="output" bind:this={scroller} onscroll={() => { if (scroller && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 80) follow = false; }} role="log" aria-label="Code generation and command output" aria-live="off" tabindex="0">
@@ -86,15 +86,16 @@
 </section>
 <style>
   .latest-action { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-code); font-size: var(--fs-label); }
-  .activity { margin: 16px 0; min-width: 0; }
-  .activity-status { border-left: 3px solid var(--accent-ink); padding: 10px 14px; background: var(--surface-sunken); }
-  .activity-status.warning { border-color: var(--accent); } .activity-status p { margin: 5px 0 0; }
-  .signals, .output-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
+  .activity { margin: 10px 0; min-width: 0; }
+  .activity-status { border-left: 3px solid var(--accent-ink); padding: 8px 10px; background: var(--surface-sunken); }
+  .activity-status.warning { border-color: var(--accent); } .activity-status { display: flex; flex-wrap: wrap; gap: 5px 12px; font-size: var(--fs-label); } .activity-status span { color: var(--text-secondary); }
+  .output-heading h2 { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: .06em; }
+  .signals, .output-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 7px 0; }
   .output-heading { justify-content: space-between; } h2 { font-size: var(--fs-body-lg); margin: 0; }
   .signals, .muted { color: var(--text-secondary); font-size: var(--fs-label); }
-  .output { height: 420px; overflow: auto; border: 1px solid var(--line-strong); padding: 10px; background: var(--surface-sunken); overflow-wrap: anywhere; }
+  .output { height: 260px; overflow: auto; border: 1px solid var(--line-strong); padding: 10px; background: var(--surface-sunken); overflow-wrap: anywhere; }
   .output :global(.body) { font-family: var(--font-code); font-size: var(--fs-label); }
   @media(prefers-reduced-motion: reduce) { .output :global(.cursor) { animation: none; } }
   .output:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  @media(max-width: 700px) { .output { height: 360px; padding: 6px; } }
+  @media(max-width: 700px) { .output { height: 220px; padding: 6px; } }
 </style>

@@ -163,6 +163,17 @@ code-argument deltas. Deployment must preserve an active production build and le
 worker update mechanism activate the new adapter.
 
 
+Deployment record (2026-09-07): PR #772 merged as a562799b; production workflow
+34153164790 succeeded. Authenticated workspace and bounded log replay returned
+200, anonymous log replay returned 401, and the stream returned 200 with
+text/event-stream and no-cache/no-transform. The worker remained active with
+its original start time and the new bundle staged pending idle. The existing
+user build had completed three iterations and had an overdue heartbeat at the
+verification snapshot; it was not restarted or otherwise modified. The CI
+memory contracts now run sequentially to avoid shared pending-memory fixtures
+interfering with consolidation; all four test shards and the release gate passed.
+
+
 ### Iteration progress and Codex token usage
 
 Accepted workspaces open on Build. The progress summary shows the running
@@ -185,7 +196,7 @@ Local browser fixtures cover live counter increments, budget, assessment,
 candidate-specific criteria, desktop/phone layout, stream recovery and paused
 state without a model call. The persistent local example is explicitly synthetic
 and paused: /jkai/develop/ac5416a9-0829-491c-8c93-bd1ca728800b.
-Deployment of this enhancement does not require a worker restart.
+This progress/usage enhancement was deployed in release af54f91b (PR #773).
 
 Validation for this enhancement: 15 focused unit/integration/regression checks
 passed; real local PostgreSQL aggregation and build isolation passed. The LAN
@@ -195,3 +206,57 @@ warnings; production build, client budgets, boundaries and source footprint
 passed. Compose validated, the local web service restarted, and the persistent
 preview returned HTTP 200. Real provider-backed generation remains a local
 parity gap; the tests use persisted synthetic counters and synthetic SSE.
+
+Production workflow 34156723512 succeeded. Read-only verification confirmed
+the current Codex build returned recorded token totals, six iteration goals and
+assessments, authenticated workspace/log responses of 200, anonymous logs of
+401 and a streaming response of 200. The builder retained its original start
+time; this deployment did not interrupt the active build. The previous Pi
+stream-adapter bundle remains pending the existing idle-update mechanism.
+
+### Dense build controls and inspection snapshots
+
+The workspace now uses the compact SR layout: a five-step process strip,
+current result and next action, repository check evidence, a resource ledger,
+and expandable iteration history. Model assessments remain labelled as reports;
+verified criteria require evidence for the current candidate. Stopped runs no
+longer appear delivered because their legacy build status is `completed`.
+The progress API includes bounded recent verification/stage events and the
+latest repository-test failure excerpt.
+
+An idle run with saved work can prepare an inspection preview before its full
+repository gate passes. The owner-only, revision-checked action snapshots the
+workspace through the existing broker and prepares its isolated preview. It
+resets candidate evidence, retains a red gate, and keeps batch acceptance
+disabled. Active builds and concurrent preview mutations are rejected; broker
+failures clear the preparation state and expose the error. Snapshot polling
+continues during preparation. Preview navigation opens the first brief route,
+offers the remaining routes, and preserves signed access parameters.
+
+Read-only production diagnosis on 2026-09-07 found that the reported run
+repeated repository-wide authored-handler isolation failures, then reached the
+existing three-iteration no-progress stop. The worker service has
+`RestrictNamespaces=yes`, while these tests invoke bubblewrap with
+`--unshare-all`. This is an incompatible verification environment. Four
+authored-handler tests passed in the local isolated preview container. The
+worker hardening and gate execution have not been changed here: moving full
+verification into a compatible isolated executor remains required. An
+inspection snapshot does not resolve or waive that gate.
+
+Local validation covers 22 focused tests, including real PostgreSQL API state
+transitions with broker-boundary mocks, and wide/narrow browser checks for
+streaming, counters, stopped status and failed-check evidence. A separate real
+broker/container browser run built and opened a synthetic saved feature and
+confirmed that acceptance remained disabled. No model calls or production
+data were used. The retained example is
+`/jkai/develop/24f50ac8-4a61-40b9-8586-4a530bf838ef`; its preview feature route
+is `/inspection-example`. Preview ports remain loopback-only and need
+forwarding for review from another computer. These changes are local and have
+not been deployed to production.
+
+Final checks for this update: Svelte diagnostics passed with zero errors and
+891 existing warnings; the production build, client budgets, source footprint
+and module boundaries passed. Compose validated and the local web service was
+restarted. The workspace returned HTTP 200; the final browser smoke test opened
+the requested route inside the real iframe at desktop and phone widths,
+confirmed blocked acceptance, and reported no browser errors.
