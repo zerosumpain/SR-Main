@@ -37,3 +37,23 @@ it('opens the requested feature route while retaining the signed preview grant',
  expect(featurePreviewUrl('https://preview.test/?__sr_grant=example','/\\outside.test/path')).toBe('https://preview.test/?__sr_grant=example');
  expect(featurePreviewUrl(null,'/travel/rome')).toBeNull();
 });
+
+import { developmentLane, developmentTone } from './development-progress';
+it('places a delivery in exactly one portfolio lane, latest stage winning', () => {
+ const draft=newDelivery('example','Platform');
+ expect(developmentLane(draft)).toBe('brief');
+ const accepted={...draft,brief:{...draft.brief,acceptedAt:new Date().toISOString()}};
+ expect(developmentLane(accepted)).toBe('building');
+ expect(developmentLane({...accepted,candidate:'abc'})).toBe('review');
+ expect(developmentLane({...accepted,candidate:'abc',decisions:[{id:'d',question:'Which?',answer:null}]})).toBe('input');
+ expect(developmentLane({...accepted,candidate:'abc',decisions:[{id:'d',question:'Which?',answer:null}],stage:'accepted'})).toBe('accepted');
+});
+it('maps the printed stage word onto the hub tones and never invents one', () => {
+ expect(developmentTone('needs input')).toBe('action');
+ expect(developmentTone('failed')).toBe('urgent');
+ expect(developmentTone('ended without a candidate')).toBe('urgent');
+ expect(developmentTone('paused')).toBe('watch');
+ expect(developmentTone('accepted')).toBe('good');
+ expect(developmentTone('brief')).toBe('quiet');
+ expect(developmentTone('building')).toBe('steady');
+});

@@ -25,6 +25,14 @@
     kicker: string;
     /** One entry per rendered line; the fold is a typographic decision. */
     title: string[];
+    /**
+     * The headline is DATA rather than editorial copy — a build title, say —
+     * so it takes the section-head register instead of the cover's. The cover
+     * size is chosen for a fold the designer picked; a headline of arbitrary
+     * length set at 76px is four lines of shouting that push the page's actual
+     * work below the fold.
+     */
+    compactTitle?: boolean;
     standfirst: string;
     /** Mono lines on the right of the masthead — last run, coverage, span. */
     readout?: { label: string; value: string }[];
@@ -36,6 +44,15 @@
     active: string;
     /** For a tab with no `href` — in-page state, the shape /jkai/agents keeps. */
     ontab?: (id: string) => void;
+    /**
+     * Interactive chrome on the right of the RAIL, after the tabs — the
+     * development workspace's build/pause/stop controls. The shape
+     * `HealthShell.actions` has, and here for the same reason: a control that
+     * must stay reachable at every scroll position belongs in the only thing
+     * on the page that is sticky. The cover would carry it out of reach the
+     * moment the page scrolls.
+     */
+    actions?: Snippet;
     /** The tile deck under the headline. Named `masthead`, not `deck`, because
      *  a snippet's name shadows the page's own bindings and the daydream page
      *  already has a `deck` — the triage cards. */
@@ -49,6 +66,7 @@
     path,
     kicker,
     title,
+    compactTitle = false,
     standfirst,
     readout = [],
     live = true,
@@ -57,6 +75,7 @@
     tabs,
     active,
     ontab = undefined,
+    actions = undefined,
     masthead = undefined,
     footer = [],
     children,
@@ -73,7 +92,7 @@
             <span class="ds-caret">&gt;</span> strangeramblings.com<span class="ds-path">{path}</span>
           </p>
           <p class="ds-kicker">{kicker}</p>
-          <h1 class="ds-title">
+          <h1 class="ds-title" class:compact={compactTitle}>
             {#each title as line, i (i)}{#if i > 0}<br />{/if}{line}{/each}
           </h1>
           <p class="ds-standfirst">{standfirst}</p>
@@ -116,7 +135,7 @@
        on a phone rather than wrapping to three rows: twelve tabs wrapped is a
        block of chrome taller than the first card under it. -->
   <nav class="ds-rail" aria-label="Daydream sections">
-    <div class="ds-inner ds-rail-inner">
+    <div class="ds-inner ds-rail-inner" class:has-actions={!!actions}>
       {#each tabs as t (t.id)}
         {#if t.href}
           <a
@@ -142,6 +161,7 @@
           </button>
         {/if}
       {/each}
+      {#if actions}<div class="ds-rail-actions">{@render actions()}</div>{/if}
     </div>
   </nav>
 
@@ -220,6 +240,10 @@
     letter-spacing: -0.02em;
     text-transform: uppercase;
     margin: 0 0 18px;
+  }
+  .ds-title.compact {
+    font-size: clamp(26px, 3.2vw, 44px);
+    line-height: 0.96;
   }
   .ds-standfirst {
     font-size: var(--fs-body);
@@ -336,6 +360,16 @@
     display: none;
   }
 
+  /* Pushed to the right edge of the rail. */
+  .ds-rail-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 14px;
+  }
+
   .ds-tab {
     position: relative;
     display: inline-flex;
@@ -392,6 +426,29 @@
   }
   .ds-tab-n.tone-quiet {
     color: var(--text-muted);
+  }
+
+  /* A rail carrying controls takes a SECOND ROW on a phone rather than
+     scrolling. Measured at 390px: tabs plus controls are 792px wide, which put
+     Stop 387px off screen, and pinning it to the scrollport's right edge only
+     traded that for a floating group that swallowed clicks on the tabs beneath
+     it. Wrapping is safe here and only here — the rule needs `has-actions`,
+     and the twelve-room daydream rail (which this shell's comment above is
+     about) passes no actions and keeps scrolling. */
+  @media (max-width: 760px) {
+    .ds-rail-inner.has-actions {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+    .ds-rail-inner.has-actions .ds-tab {
+      padding: 13px 13px;
+    }
+    .ds-rail-inner.has-actions .ds-rail-actions {
+      width: 100%;
+      margin-left: 0;
+      padding: 9px 0;
+      border-top: 1px solid var(--line-hair);
+    }
   }
 
   /* ——— foot ——— */

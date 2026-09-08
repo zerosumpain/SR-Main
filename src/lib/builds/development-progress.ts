@@ -1,5 +1,6 @@
 import type { DeliveryState } from '$lib/constants/development';
 import type { RepoVerificationEvent, RepoVerificationPhase } from '$lib/verification/repo';
+import type { Tone } from '$lib/daydream/priority';
 export type IterationProgress = { id: string; number: number; status: string; goals: string | null; evaluation: string | null;
   nextSteps: string | null; tokensUsed: number; outputTokens: number; durationMs: number | null; createdAt: string | Date };
 export type DevelopmentProgress = { totalTokens: number; outputTokens: number; iterations: IterationProgress[]; verification?: Partial<Record<RepoVerificationPhase, RepoVerificationEvent>>; stage?: { stage: string; message?: string; iteration?: number } | null; testFailure?: { content: string; createdAt: string | Date } | null };
@@ -42,4 +43,38 @@ export function featurePreviewUrl(base: string | null, route: string): string | 
     for (const [key, value] of origin.searchParams) target.searchParams.set(key, value);
     return target.toString();
   } catch { return null; }
+}
+
+/**
+ * Which column of the portfolio a delivery belongs in.
+ *
+ * One function rather than a filter expression per surface: the list page's
+ * lane tabs and the workspace's own reading of "where am I" must agree, and
+ * two copies of this ladder is how a build ends up counted under Building and
+ * displayed under Review.
+ */
+export type DevelopmentLane = 'brief' | 'building' | 'input' | 'review' | 'accepted';
+export function developmentLane(state: DeliveryState): DevelopmentLane {
+  if (state.acceptedAt || state.stage === 'accepted' || state.stage === 'integrating') return 'accepted';
+  if (state.decisions.some((d) => !d.answer)) return 'input';
+  if (state.candidate || state.stage === 'review') return 'review';
+  if (!state.brief.acceptedAt) return 'brief';
+  return 'building';
+}
+
+/**
+ * The hub's six tones, from the stage word the page actually prints.
+ *
+ * The daydream hub's rule applies here too: never hand-write a `t-*` class
+ * from a database word. `visibleDevelopmentStage` is the only producer of
+ * these strings, so this is the one place the two vocabularies meet.
+ */
+export function developmentTone(visibleStage: string): Tone {
+  const stage = visibleStage.toLowerCase();
+  if (stage === 'failed' || stage === 'stopped' || stage.startsWith('ended without')) return 'urgent';
+  if (stage === 'needs input') return 'action';
+  if (stage === 'paused') return 'watch';
+  if (stage === 'accepted' || stage === 'deployed') return 'good';
+  if (stage === 'brief') return 'quiet';
+  return 'steady';
 }
