@@ -63,6 +63,20 @@
   }
 
   const stageOf = (row: Row) => visibleDevelopmentStage(row.state, row.status, row.outcome);
+  // The API derives a build's title FROM its outcome, so on an ungroomed brief
+  // the two say the same thing and the row printed it twice. The middle column
+  // is for what the title does NOT already say — constraints first, because
+  // that is the part a reader cannot guess.
+  const norm = (s: string) => s.trim().toLowerCase().replace(/[.\s]+$/, '');
+  const detailOf = (row: Row) => {
+    const constraints = row.state.brief.constraints?.trim();
+    if (constraints) return constraints;
+    const routes = row.state.brief.routes.filter(Boolean);
+    if (routes.length) return `Target routes: ${routes.join(', ')}`;
+    const outcome = row.state.brief.outcome?.trim() ?? '';
+    if (outcome && norm(outcome) !== norm(row.title)) return outcome;
+    return `Brief revision ${row.state.brief.revision}${row.state.brief.acceptedAt ? ', accepted' : ', not yet groomed'}`;
+  };
   const evidenced = (row: Row) =>
     row.state.criteria.filter(
       (c) => c.verdict === 'passed' && !!row.state.candidate && c.revision === row.state.candidate,
@@ -236,7 +250,7 @@
                 <p class="dv-title">{row.title}</p>
               </div>
               <div class="dv-cell dv-outcome-cell">
-                <p class="dv-blurb">{row.state.brief.outcome}</p>
+                <p class="dv-blurb">{detailOf(row)}</p>
               </div>
               <div class="dv-cell dv-status">
                 <span class="dv-pill tone-{developmentTone(stage)}">{stage}</span>
