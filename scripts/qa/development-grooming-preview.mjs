@@ -65,7 +65,7 @@ try {
   await page.getByText('Revision 5 · accepted').waitFor();
   assert.equal(await page.getByRole('button', { name: 'Build first working page', exact: true }).isEnabled(), true);
   assert.equal((await client.query('select model_id from jkai_builds where id=$1', [id])).rows[0].model_id, 'codex/gpt-5.6-terra');
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Brief', exact: true }).click();
   assert.equal(await page.getByLabel('Build model', { exact: true }).inputValue(), 'codex/gpt-5.6-terra');
   for (const width of [1440, 390]) {
