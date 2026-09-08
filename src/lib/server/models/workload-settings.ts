@@ -276,6 +276,17 @@ export const resolveResearchDeepModel = () => resolveById('research-deep');
 export const resolveBuilderModel = () => resolveById('builder');
 
 /**
+ * The adversary that judges a development candidate against its criteria.
+ *
+ * Resolved at assessment time, never stamped on the build row, for the same
+ * reason `design-review` is: a bad reviewer should be fixable while the run
+ * that needs it is still going. `developmentAssessorModel` in
+ * `$lib/jkai/development-review.server` is what actually calls it, and it
+ * refuses to run on the same model id the build is using.
+ */
+export const resolveDevelopmentAssessorModel = () => resolveById('development-assessor');
+
+/**
  * The studio build's visual design review. Must accept images.
  *
  * Deliberately resolved at review time rather than read off the build row.

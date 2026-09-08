@@ -16,6 +16,8 @@ describe('activeSection', () => {
   it('prefers the deepest matching section', () => {
     expect(activeSection('/jkai/intel/notes')?.id).toBe('jkai-intel');
     expect(activeSection('/jkai/codegraph/ask')?.id).toBe('jkai-codegraph');
+    expect(activeSection('/jkai/develop/42')?.id).toBe('jkai');
+    // The archive console still lives under /jkai/builds and must keep a section.
     expect(activeSection('/jkai/builds/42')?.id).toBe('jkai');
     expect(activeSection('/jkai')?.id).toBe('jkai');
   });
@@ -31,6 +33,10 @@ describe('activeSection', () => {
 describe('parentHref — the common way back', () => {
   it('walks one level up, never straight home', () => {
     expect(parentHref('/blog/some-post')).toBe('/blog');
+    expect(parentHref('/jkai/develop/42')).toBe('/jkai/develop');
+    // /jkai/builds is a 308 stub with a +page.server.ts and no component. It has
+    // to stay a real route: delete it and this back link points at a 404, which
+    // is exactly what nav-parents.test.ts fails on.
     expect(parentHref('/jkai/builds/42')).toBe('/jkai/builds');
     expect(parentHref('/jkai/intel/notes/new')).toBe('/jkai/intel/notes');
     expect(parentHref('/health/activities/17')).toBe('/health/activities');
@@ -147,7 +153,7 @@ describe('isItemActive', () => {
   it('lights the chat cell only on the hub root', () => {
     const chat = SECTIONS.find((s) => s.id === 'jkai')!.items.find((i) => i.label === 'Chat')!;
     expect(isItemActive(chat, '/jkai')).toBe(true);
-    expect(isItemActive(chat, '/jkai/builds')).toBe(false);
+    expect(isItemActive(chat, '/jkai/develop')).toBe(false);
   });
 
   it('lights a section cell for its whole subtree', () => {

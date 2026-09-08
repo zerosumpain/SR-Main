@@ -128,7 +128,7 @@
     // Beside Intel, not under it: the two graphs answer different questions
     // (the world vs this codebase) and neither is a subsection of the other.
     { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
-    { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
+    { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
   ]);
   const library = $derived<MenuRow[]>([
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },

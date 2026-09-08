@@ -1843,7 +1843,7 @@
     { icon: 'spark', label: 'What can you do?', text: 'What can you help me with? Give me a short tour of your capabilities.' },
   ] as const;
   const LANDING_DIRECTIONS = [
-    { index: '01', label: 'Build', href: '/jkai/builds/new', note: 'Turn an idea into working software', metric: '0 → 1' },
+    { index: '01', label: 'Build', href: '/jkai/develop', note: 'Turn an idea into working software', metric: '0 → 1' },
     { index: '02', label: 'Daydream', href: '/jkai/daydreams/feed', note: 'Let patterns and possibilities surface', metric: 'always on' },
     { index: '03', label: 'Research', href: '/research', note: 'Choose the depth, follow the evidence', metric: '4 depths' },
     { index: '04', label: 'Canvas', href: '/jkai/canvas', note: 'Shape repeatable visual workflows', metric: 'visual' },

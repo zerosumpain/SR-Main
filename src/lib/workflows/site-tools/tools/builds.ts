@@ -646,12 +646,12 @@ register({
 register({
   name: 'register_chat_build',
   description:
-    'Register an app you just built as a JKAI build, so it appears at /jkai/builds and can be promoted to /projects/<slug>/. ' +
+    'Register an app you just built as a JKAI build, so it appears in the Archive tab on /jkai/develop and can be promoted to /projects/<slug>/. ' +
     'Use this whenever you finish a static web app (single-page or multi-page HTML/JS/CSS) in a conversation — typically WhatsApp or general chat. ' +
     'You provide the source files; this tool writes them to the build workspace, creates a `jkai_builds` row marked origin=chat, status=completed, and returns the build id + URL. ' +
     'After calling this, ask the user (in the same conversation) whether they want it conformed to the Strange Ramblings design system and published. ' +
     'If yes, call `build_tweak` with the build id and an instruction like "Apply the site design system, then publish to /projects/". ' +
-    'If no, leave it — the user can still hit "Publish" from the /jkai/builds card to ship the raw version. ' +
+    'If no, leave it — the user can still hit "Promote" on its Archive row at /jkai/develop to ship the raw version. ' +
     'IMPROVING AN APP THAT IS ALREADY LIVE: pass `updateBuildId` so this replaces the existing build instead of creating another one, ' +
     'then publish with `build_control` passing the SAME `slug` the app already uses — otherwise the old, broken page stays up at its old address. ' +
     'EDITING: to revise a registered app, call this again with the full corrected file bodies, or use `build_write_file`. ' +
@@ -838,7 +838,7 @@ register({
     await db.insert(jkaiLogs).values({
       buildId,
       type: 'system',
-      content: `${updateId ? 'Re-registered' : 'Registered'} ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or call build_tweak to conform it to the site design system first.`,
+      content: `${updateId ? 'Re-registered' : 'Registered'} ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Promote on its row in the Archive tab at /jkai/develop to ship to /projects/, or call build_tweak to conform it to the site design system first.`,
     });
 
     // Run it before anyone calls it done. `status: completed` on this row only

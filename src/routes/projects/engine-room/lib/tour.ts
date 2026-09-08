@@ -199,7 +199,7 @@ export const SURFACES: Surface[] = [
     id: 'builds',
     tier: 'work',
     label: 'Builds',
-    route: '/jkai/builds',
+    route: '/jkai/develop',
     kicker: 'Owner only',
     open: false,
     line: 'Describe an application, go and do something else, come back to a working one. It plans first, writes second, runs the thing in a container, and argues with its own failures until they stop.',

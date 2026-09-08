@@ -127,7 +127,7 @@ export const daydreamImprove: ActivityHandler = {
       `${shipped} tool(s) shipped`,
       ...(repaired ? [`${repaired} repaired`] : []),
       `${queued} queued`,
-      ...(builds ? [`${builds} change request(s) → /jkai/builds`] : []),
+      ...(builds ? [`${builds} change request(s) → /jkai/develop`] : []),
       ...(watches ? [`${watches} watch(es)`] : []),
       ...(prs ? [`${prs} draft PR(s)`] : []),
       ...(policy ? [`${policy} policy action(s)`] : []),

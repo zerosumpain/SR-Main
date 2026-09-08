@@ -345,13 +345,25 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     id: 'builder',
     scope: 'site',
     label: 'Autonomous builder',
-    blurb: 'The pi coding agent and the orchestrator planner behind /jkai/builds.',
+    blurb: 'The pi coding agent and the orchestrator planner behind /jkai/develop.',
     key: 'jkai.builder.model',
     fallbackModelId: null,
     requires: 'tools',
     catalogue: 'tools',
     reason:
       'Follows the site default. Note a build PINS its model at creation from whatever this resolves to, so changing it affects new builds only — the same rule chat conversations follow.',
+  },
+  {
+    id: 'development-assessor',
+    scope: 'site',
+    label: 'Development adversary',
+    blurb: 'Judges whether a candidate really meets its acceptance criteria, and vetoes a release.',
+    key: 'jkai.development.assessor_model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'The one role that must NOT be the model that wrote the code. Until this existed the build graded its own homework — the same model, at temperature 0.2, told the owner prefers autonomous progress. It reads a diff and browser evidence and writes a verdict, so it needs neither tools nor vision; keeping it off the builder is the whole point, and it is cheap enough per round to be worth pinning up.',
   },
   {
     id: 'design-review',

@@ -218,8 +218,14 @@ export const SECTIONS: NavSection[] = [
       { label: 'Canvas', href: '/jkai/canvas' },
       { label: 'Intel', href: '/jkai/intel' },
       { label: 'Codegraph', href: '/jkai/codegraph' },
-      { label: 'Builds', href: '/jkai/builds' },
-      { label: 'Develop', href: '/jkai/develop' },
+      // One cell for the whole development family. /jkai/builds is a
+      // redirect stub and /jkai/builds/<id> is the archive console, so both
+      // light this cell rather than leaving the bar blank on a console page.
+      {
+        label: 'Develop',
+        href: '/jkai/develop',
+        match: (p) => under('/jkai/develop', p) || under('/jkai/builds', p),
+      },
       { label: 'Daydreams', href: '/jkai/daydreams' },
       { label: 'Notes', href: '/jkai/notes' },
       // Personal data: the source catalogue and the evidence audit. Two cells,
