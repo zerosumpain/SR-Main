@@ -60,6 +60,22 @@ jobs:
           if(!progress || !Number.isFinite(progress.totalTokens) || !Number.isFinite(progress.outputTokens) || progress.totalTokens<0 || progress.outputTokens<0 || !Array.isArray(progress.iterations) || progress.iterations.length>12)throw new Error('Invalid progress response');
           if(!Object.hasOwn(progress,'verification') || !Object.hasOwn(progress,'stage') || !Object.hasOwn(progress,'testFailure') || !Object.hasOwn(data.build,'outcome'))throw new Error('Dense workspace fields missing');
           console.log('DENSE_WORKSPACE_VERIFIED',JSON.stringify({buildId:id,outcome:data.build.outcome,stage:progress.stage,verification:progress.verification,hasFailure:!!progress.testFailure,preview:data.delivery.state.preview.status,acceptanceBlocked:!!data.blocker}));
+          const { readFileSync, readdirSync } = await import('node:fs');
+          const assets='/opt/strange-rambling-svelte/build/client/_app/immutable';
+          const hasReview=readdirSync(assets,{recursive:true}).filter(p=>p.endsWith('.js')).some(p=>readFileSync(`${assets}/${p}`,'utf8').includes('Continue automatically'));
+          console.log('AUTOMATIC_REVIEW_ASSET_PRESENT',hasReview);
+          if(data.delivery.state.preview.url){
+            const url=new URL(data.delivery.state.preview.url);url.pathname=data.delivery.state.brief.routes[0]??'/';
+            const entry=await fetch(`http://127.0.0.1:5289${url.pathname}${url.search}`,{headers:{host:url.host},redirect:'manual'});
+            const location=entry.headers.get('location');const clean=new URL(url);clean.searchParams.delete('__sr_grant');
+            console.log('FEATURE_GATEWAY_REDIRECT',JSON.stringify({status:entry.status,path:location,correct:location===`${clean.pathname}${clean.search}`}));
+            if(entry.status===303 && location===`${clean.pathname}${clean.search}`){
+              const cookie=entry.headers.get('set-cookie')?.split(';')[0];
+              const feature=await fetch(`http://127.0.0.1:5289${location}`,{headers:{host:url.host,cookie},redirect:'manual'});
+              console.log('FEATURE_GATEWAY_PAGE_HTTP',feature.status);await feature.body?.cancel();
+            }
+            await entry.body?.cancel();
+          }
           console.log('PREVIEW_DETAIL',JSON.stringify({buildId:id,title:data.build.title,status:data.build.status,preview:data.delivery.state.preview,cycle:data.delivery.state.cycle,routes:data.delivery.state.brief.routes,iterations:progress.iterations.map(i=>({number:i.number,status:i.status,evaluation:i.evaluation,nextSteps:i.nextSteps}))}));
           console.log('PROGRESS_VERIFIED',JSON.stringify({buildId:id,model:data.build.modelId,status:data.build.status,totalTokens:progress.totalTokens,outputTokens:progress.outputTokens,iterations:progress.iterations.map(i=>({number:i.number,status:i.status,outputTokens:i.outputTokens,hasGoal:!!i.goals,hasAssessment:!!i.evaluation}))}));
           const logs=await fetch(`http://127.0.0.1:4173/api/jkai/builds/${id}/logs`,{headers,redirect:'manual'});
@@ -75,6 +91,7 @@ jobs:
           cat /opt/strange-rambling-svelte/build/.deploy-sha
           readlink -f /opt/strange-rambling-svelte/builder-releases/pending
           if cmp -s /opt/strange-rambling-svelte/builder-releases/pending/start.js /opt/strange-rambling-svelte/packages/jkai-builder/dist/start.js; then echo BUILDER_PENDING_IS_ACTIVE; else echo BUILDER_UPDATE_WAITING; fi
+          docker inspect --format '{{.Name}} {{.State.Status}} {{.State.StartedAt}}' sr-development-broker-1 sr-development-gateway-1
           journalctl -t jkai-builder-maintain --since '30 minutes ago' -n 10 --no-pager
           ps -C pi -C node -o pid,ppid,etime,pcpu,rss,comm
           DIAG
