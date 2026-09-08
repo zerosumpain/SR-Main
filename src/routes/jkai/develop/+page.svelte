@@ -152,9 +152,12 @@
       id: l.id,
       label: l.label,
       count: countIn(l.id),
-      tone: (l.id === 'input' ? 'action' : l.id === 'shipped' ? 'good' : 'quiet') as ShellTab['tone'],
+      // The rail renders exactly three tones — action, watch, quiet — and `action`
+      // is the only one that shouts. Shipped is good news, not something to
+      // chase, so it stays quiet; only the lane blocked on the owner shouts.
+      tone: (l.id === 'input' ? 'action' : 'quiet') as ShellTab['tone'],
     })),
-    { id: 'archive', label: 'Archive', count: archive.length, tone: 'quiet' as ShellTab['tone'] },
+    { id: 'archive', label: 'Archive', count: archive.length, tone: 'quiet' },
   ]);
 
   const areaFacets = $derived<Facet[]>([
@@ -247,10 +250,30 @@
   /** A repo build's page already lives in the repo; only its card is missing. */
   const promoteKind = (b: ArchiveRow): 'app' | 'repo' =>
     laneOf({ origin: b.origin, gitTargetConfig: b.gitTargetConfig } as Parameters<typeof laneOf>[0]) === 'repo' ? 'repo' : 'app';
+  /**
+   * A card names a page in THIS repo, so only a build that targets this repo can
+   * have one. The Forge is a repo build too — it drives the game repo — and the
+   * card detector reads a /projects route out of an SR-Main pull request, so
+   * offering the button there could only ever produce a card pointing at a page
+   * that does not exist here.
+   */
+  const cardable = (b: ArchiveRow) => {
+    const config = b.gitTargetConfig as { repoUrl?: unknown } | null;
+    return typeof config?.repoUrl === 'string' && config.repoUrl.includes('SR-Main');
+  };
   const canPromote = (b: ArchiveRow) =>
-    !['queued', 'pending'].includes(b.status) && !(promoteKind(b) === 'app' && b.publishedSlug) && !(promoteKind(b) === 'repo' && b.projectSlug);
+    !['queued', 'pending'].includes(b.status) &&
+    (promoteKind(b) === 'repo' ? cardable(b) && !b.projectSlug : !b.publishedSlug);
 
   async function removeBuild(b: ArchiveRow) {
+    // Deleting the row does not delete the files it published. Those live under
+    // data/jkai-projects and are rsynced to the VPS, so a delete here would
+    // leave a public page with nothing left in the database able to take it
+    // down. Unpublish first; that is what unpublish is for.
+    if (publishedLink(b.publishedSlug) && !publishedLink(b.publishedSlug)?.external) {
+      notice = 'Unpublish this build before deleting it, or its published files stay on the site with nothing left to remove them.';
+      return;
+    }
     if (!confirm(`Delete "${b.title ?? b.id.slice(0, 8)}"? This also removes its saved lessons, which later builds in the same area read.`)) return;
     removing = b.id;
     try {
@@ -269,9 +292,11 @@
     if (!confirm(`Remove the published files for "${b.publishedSlug}"? The build itself is kept.`)) return;
     removing = b.id;
     try {
-      await fetch(`/api/jkai/builds/${b.id}/unpublish`, { method: 'POST' });
-      notice = 'Unpublished.';
-      await invalidateAll();
+      const response = await fetch(`/api/jkai/builds/${b.id}/unpublish`, { method: 'POST' });
+      notice = response.ok ? 'Unpublished.' : 'Could not unpublish that build; its files are still live.';
+      if (response.ok) await invalidateAll();
+    } catch {
+      notice = 'Could not reach the server; the build is still published.';
     } finally {
       removing = null;
     }
@@ -391,7 +416,9 @@
         />
 
         {#if lanes.some((l) => l.total > 0)}
-          <div class="dv-table-wrap">
+          <!-- A horizontal scroller is unreachable by keyboard unless it can take
+               focus, and this one is nine columns wide on a phone. -->
+          <div class="dv-table-wrap" tabindex="0" role="region" aria-label="Delivery rate and iteration cost by lane">
             <table class="dv-table">
               <caption class="dv-caption">Delivery rate counts only builds that ran, and iterations are counted from the rows, never from the lossy column on the build.</caption>
               <thead>
@@ -428,7 +455,8 @@
           <div class="dv-rows">
             {#each archiveVisible as b, i (b.id)}
               {@const bucket = bucketFor(b)}
-              {@const link = publishedLink(b.publishedSlug) ?? publishedLink(b.projectSlug)}
+              {@const published = publishedLink(b.publishedSlug)}
+              {@const link = published ?? publishedLink(b.projectSlug)}
               <div class="dv-row dv-arch">
                 <p class="dv-rank">{String(i + 1).padStart(2, '0')}</p>
                 <div class="dv-cell">
@@ -443,7 +471,7 @@
                       <button class="dv-act" onclick={() => (promoting = b)}>Edit card</button>
                       <button class="dv-act" onclick={() => copyLink(b)}>Copy link</button>
                     {/if}
-                    {#if b.publishedSlug && link && !link.external}
+                    {#if published && !published.external}
                       <button class="dv-act" disabled={removing === b.id} onclick={() => unpublish(b)}>Unpublish</button>
                     {/if}
                     <a class="dv-act" href={`/jkai/builds/${b.id}`}>Console</a>

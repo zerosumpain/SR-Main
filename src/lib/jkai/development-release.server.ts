@@ -33,7 +33,7 @@ import { execInSandbox } from './sandbox';
 import { emitLog } from './log-emitter';
 import { loadDelivery, mutateDelivery } from './development-state.server';
 import { workspaceBroker } from './development-workspace.server';
-import { releaseBlocker } from './development';
+import { criterionResult, releaseBlocker } from './development';
 import { SR_MAIN_GIT_TARGET } from './git-targets';
 
 /** Big enough for a real feature, small enough that a runaway diff is refused. */
@@ -146,11 +146,24 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     const body = prBody({
       outcome: state.brief.outcome, buildId, independent,
       gateEvidence: state.gate?.evidence ?? 'Isolated repository verification passed for this candidate.',
-      criteria: state.criteria.map(c => ({ text: c.text, verdict: c.assessment?.verdict ?? c.verdict, evidence: c.assessment?.evidence ?? c.evidence })),
+      // criterionResult, not the assessment: an owner who recorded a verdict
+      // outranks the reviewer everywhere else, and a pull request that says
+      // otherwise misreports the one judgement that is not a model's.
+      criteria: state.criteria.map(c => {
+        const result = criterionResult(c, candidate);
+        return { text: c.text, verdict: result.verdict, evidence: result.evidence };
+      }),
     });
-    const { prUrl, prNumber } = await openPullRequest({ title, head: branch, body, token });
+    // The two permissions have to differ in something CI can see, or "open a
+    // pull request" and "ship to production" are the same button with different
+    // labels. A DRAFT is exactly that lever: ci.yml's auto-merge job requires
+    // `pull_request.draft == false`, so a draft waits for a person to mark it
+    // ready however green it goes.
+    const draft = state.releasePolicy !== 'production';
+    const { prUrl, prNumber } = await openPullRequest({ title, head: branch, body, token, draft });
     await mutateDelivery(buildId, 'release_pr_open', s => ({ ...s, stage: 'pr_open',
-      release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, prUrl, prNumber, ci: 'pending', detail: 'Pull request open. CI decides whether it merges.' } }));
+      release: { ...(s.release ?? { revision: candidate }), revision: candidate, branch, prUrl, prNumber, ci: 'pending',
+        detail: draft ? 'Draft pull request open. Mark it ready on GitHub when you want CI to consider merging it.' : 'Pull request open. CI decides whether it merges.' } }));
     await db.update(jkaiBuilds).set({ publishedSlug: prUrl, outcome: 'pr_open', updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
     await emitLog(buildId, 'system', `Release proposed: ${prUrl}. Merging is CI's decision, not the builder's.`);
     return { prUrl, branch };
@@ -163,7 +176,7 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
 }
 
 /** Open the pull request, or recover the one that already exists for this head. */
-async function openPullRequest(args: { title: string; head: string; body: string; token: string }): Promise<{ prUrl: string; prNumber: number }> {
+async function openPullRequest(args: { title: string; head: string; body: string; token: string; draft: boolean }): Promise<{ prUrl: string; prNumber: number }> {
   const headers = {
     Authorization: `Bearer ${args.token}`,
     Accept: 'application/vnd.github+json',
@@ -172,7 +185,7 @@ async function openPullRequest(args: { title: string; head: string; body: string
   };
   const created = await fetch('https://api.github.com/repos/zerosumpain/SR-Main/pulls', {
     method: 'POST', headers,
-    body: JSON.stringify({ title: args.title, head: args.head, base: SR_MAIN_GIT_TARGET.baseBranch, body: args.body }),
+    body: JSON.stringify({ title: args.title, head: args.head, base: SR_MAIN_GIT_TARGET.baseBranch, body: args.body, draft: args.draft }),
   });
   if (created.ok) {
     const json = (await created.json()) as { html_url?: string; number?: number };
@@ -208,7 +221,11 @@ export async function watchDevelopmentRelease(buildId: string): Promise<'pending
   const pr = (await response.json()) as { merged?: boolean; merge_commit_sha?: string; state?: string; merged_at?: string };
   if (!pr.merged) {
     if (pr.state === 'closed') {
-      await mutateDelivery(buildId, 'release_closed', s => ({ ...s, release: { ...(s.release ?? { revision: '' }), ci: 'failure', detail: 'The pull request was closed without merging.' } }));
+      // Back to review, not left at pr_open: developmentLane reads that stage as
+      // shipped, so a rejected proposal would sit in the Shipped column and
+      // autopilot would never leave the branch that only watches for a merge.
+      await mutateDelivery(buildId, 'release_closed', s => ({ ...s, stage: 'review',
+        release: { ...(s.release ?? { revision: '' }), ci: 'failure', prUrl: undefined, detail: 'The pull request was closed without merging. The candidate and its batch are unchanged.' } }));
       return 'closed';
     }
     return 'pending';

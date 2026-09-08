@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuildDeliveries, jkaiBuilds } from '$lib/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { ensureDelivery } from '$lib/jkai/development-state.server';
-import { PRODUCT_AREAS, RELEASE_POLICIES, isCommissioned } from '$lib/jkai/development';
+import { PRODUCT_AREAS, RELEASE_POLICIES } from '$lib/jkai/development';
 import type { ReleasePolicy } from '$lib/jkai/development';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
 import { CHANGE_REQUEST_BUDGET } from '$lib/jkai/change-request';
@@ -12,15 +12,17 @@ import type { RequestHandler } from './$types';
 
 // /api/jkai inherits the owner gate in hooks.server.ts.
 export const GET: RequestHandler = async () => {
+  // The commissioned test runs in SQL, BEFORE the limit. Filtering a capped page
+  // in JavaScript would drop rows the archive has already excluded, so a
+  // feature could fall through the gap and appear in neither half of the page.
+  // `IS DISTINCT FROM 'false'` is `isCommissioned` in SQL: absent means yes.
   const rows = await db.select({
     buildId: jkaiBuilds.id, title: jkaiBuilds.title, status: jkaiBuilds.status, outcome: jkaiBuilds.outcome,
     revision: jkaiBuildDeliveries.revision, state: jkaiBuildDeliveries.state,
   }).from(jkaiBuildDeliveries).innerJoin(jkaiBuilds, eq(jkaiBuilds.id, jkaiBuildDeliveries.buildId))
+    .where(sql`${jkaiBuildDeliveries.state}->>'commissioned' IS DISTINCT FROM 'false'`)
     .orderBy(desc(jkaiBuildDeliveries.updatedAt)).limit(200);
-  // Filtered here rather than in SQL: the flag lives inside the jsonb state, and
-  // one shared predicate is what stops the portfolio and the archive disagreeing
-  // about which half a build belongs to.
-  return json(rows.filter((row) => isCommissioned(row.state)));
+  return json(rows);
 };
 
 export const POST: RequestHandler = async ({ request }) => {

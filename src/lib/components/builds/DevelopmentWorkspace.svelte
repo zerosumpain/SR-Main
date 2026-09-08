@@ -399,7 +399,7 @@
             </select>
           </label>
           <button class="wk-ghost" disabled={busy || running || policyDraft === deliveryState.releasePolicy} onclick={() => act('release_policy', { policy: policyDraft })}>Save</button>
-          <button class="wk-run" disabled={busy || running || !!blockedFromRelease || !!release?.prUrl} onclick={() => act('release')}>Release this candidate</button>
+          <button class="wk-run" disabled={busy || running || !!blockedFromRelease} onclick={() => act('release')}>Release this candidate</button>
           {#if release?.prUrl}<button class="wk-ghost" disabled={busy} onclick={() => act('release_check')}>Check the release</button>{/if}
         </div>
         {#if blockedFromRelease && !release?.prUrl}<p class="wk-stamp">{blockedFromRelease}</p>{/if}

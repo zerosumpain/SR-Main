@@ -41,6 +41,10 @@ const feature = (buildId, over = {}) => ({
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
+// Registered before anything happens. A listener attached at the end of the
+// script watches nothing, so the assertion below could only ever pass.
+const errors = [];
+page.on('pageerror', (error) => errors.push(String(error)));
 
 await page.route('**/api/jkai/development', (route) =>
   route.request().method() === 'GET'
@@ -103,8 +107,6 @@ const overflow = await phone.evaluate(() => document.documentElement.scrollWidth
 assert.ok(overflow <= 1, `the page must not scroll horizontally on a phone (overflowed by ${overflow}px)`);
 await phone.screenshot({ path: '/tmp/develop-archive-phone.png', fullPage: true });
 
-const errors = [];
-page.on('pageerror', (error) => errors.push(String(error)));
 assert.deepEqual(errors, [], 'no browser errors');
 
 await browser.close();

@@ -208,7 +208,7 @@ export function coachingInstruction(input: {
  * `building` (the worker was restarted with feedback), or `blocked` when it
  * stopped and needs a person.
  */
-export async function continueDevelopment(buildId: string, expectedRevision: number): Promise<'accepted' | 'released' | 'building' | 'blocked'> {
+export async function continueDevelopment(buildId: string, expectedRevision: number): Promise<'accepted' | 'released' | 'building'> {
   const { acceptanceBlocker, criterionResult, autopilotActive } = await import('./development');
   const { acceptDevelopment } = await import('./development-workspace.server');
   const { builderClient } = await import('./builder-client');
