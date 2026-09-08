@@ -66,12 +66,12 @@ jobs:
           console.log('AUTOMATIC_REVIEW_ASSET_PRESENT',hasReview);
           if(data.delivery.state.preview.url){
             const url=new URL(data.delivery.state.preview.url);url.pathname=data.delivery.state.brief.routes[0]??'/';
-            const entry=await fetch(`http://127.0.0.1:5289${url.pathname}${url.search}`,{headers:{host:url.host},redirect:'manual'});
+            const entry=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(15000)});
             const location=entry.headers.get('location');const clean=new URL(url);clean.searchParams.delete('__sr_grant');
             console.log('FEATURE_GATEWAY_REDIRECT',JSON.stringify({status:entry.status,path:location,correct:location===`${clean.pathname}${clean.search}`}));
             if(entry.status===303 && location===`${clean.pathname}${clean.search}`){
               const cookie=entry.headers.get('set-cookie')?.split(';')[0];
-              const feature=await fetch(`http://127.0.0.1:5289${location}`,{headers:{host:url.host,cookie},redirect:'manual'});
+              const feature=await fetch(new URL(location,url),{headers:{cookie},redirect:'manual',signal:AbortSignal.timeout(15000)});
               console.log('FEATURE_GATEWAY_PAGE_HTTP',feature.status);await feature.body?.cancel();
             }
             await entry.body?.cancel();
