@@ -123,7 +123,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (!evidence && body.verdict !== 'unverified') throw new Error('Describe the evidence or blocker');
         if (!delivery.state.criteria.some((c) => c.id === body.criterionId)) throw new Error('Criterion not found');
         await mutateDelivery(id, 'criterion_reviewed', (s) => ({ ...s, acceptedAt: null, criteria: s.criteria.map((c) => c.id === body.criterionId ?
-          { ...c, verdict: body.verdict, evidence, revision: s.candidate } : c) }), revision);
+          { ...c, verdict: body.verdict, evidence, revision: s.candidate, assessment: undefined } : c) }), revision);
         break;
       }
       case 'close_preview':
@@ -150,6 +150,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
       case 'preview':
         if (['running', 'queued'].includes(build.status)) throw new Error('Wait for a verified candidate before preparing a preview.');
         await prepareDevelopmentPreview(id); break;
+      case 'continue': {
+        const { continueDevelopment } = await import('$lib/jkai/development-review.server');
+        return json({ ok: true, next: await continueDevelopment(id, revision) });
+      }
       case 'accept':
         if (['running', 'queued'].includes(build.status)) throw new Error('Pause implementation before accepting a candidate.');
         await acceptDevelopment(id, revision); break;

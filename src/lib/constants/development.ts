@@ -6,6 +6,7 @@ export interface Criterion {
   verdict: 'unverified' | 'passed' | 'failed' | 'blocked';
   evidence: string;
   revision: string | null;
+  assessment?: { basis: 'observed' | 'inferred'; verdict: 'passed' | 'failed' | 'blocked'; evidence: string; model: string; revision: string; at: string };
 }
 export interface DeliveryState {
   version: 1;

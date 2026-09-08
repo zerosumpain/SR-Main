@@ -170,6 +170,18 @@ async function assertCandidate(id, revision) {
   }
   return path;
 }
+/** Inspect the published revision without replacing its runtime or snapshot. */
+async function inspectPreview(id, revision) {
+  const path = await assertCandidate(id, revision);
+  const receipt = JSON.parse(await readFile(join(trustedRoot, `${id}-preview.json`), 'utf8'));
+  if (receipt.revision !== revision || !receipt.name || !receipt.plan?.scenarios?.length) throw new Error('A browser-checked preview of the current revision is required.');
+  await docker('cp', `${source}/scripts/development-preview-check.mjs`, `${receipt.name}:/tmp/development-preview-check.mjs`);
+  const evidence = JSON.parse(await docker('exec', receipt.name, 'node', '/tmp/development-preview-check.mjs'));
+  const base = (await readFile(join(trustedRoot, `${id}-base`), 'utf8')).trim();
+  if (!/^[a-f0-9]{40}$/.test(base)) throw new Error('Invalid base revision');
+  const patch = (await git(path, 'diff', '--no-ext-diff', '--no-textconv', base, revision, '--')).slice(0, 40000);
+  return { revision, evidence, changes: { files: (await git(path, 'diff', '--name-only', base, revision, '--')).split('\n').filter(Boolean), patch } };
+}
 async function preview(id, revision, options = {}) {
   const required = Boolean(options.working || options.verify);
   const path = await assertCandidate(id, revision);
@@ -374,9 +386,9 @@ http.createServer(async (req, res) => {
     for await (const chunk of req) { raw += chunk; if (raw.length > 32000) throw new Error('Request too large'); }
     const body = JSON.parse(raw);
     const id = validId(body.buildId);
-    const methods = { '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes) };
+    const methods = { '/inspect': () => inspectPreview(id, body.revision), '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes) };
     if (req.method !== 'POST' || !Object.hasOwn(methods, req.url)) { respond(404, { error: 'Unknown operation' }); return; }
-    const deadline = Math.min(Number.isFinite(body.deadline) ? body.deadline : Infinity, Date.now() + (req.url === '/preflight' ? 110_000 : ['/accept', '/verify'].includes(req.url) ? 1_170_000 : 570_000));
+    const deadline = Math.min(Number.isFinite(body.deadline) ? body.deadline : Infinity, Date.now() + (req.url === '/inspect' ? 120_000 : req.url === '/preflight' ? 110_000 : ['/accept', '/verify'].includes(req.url) ? 1_170_000 : 570_000));
     const timings = {};
     const requestedAt = Date.now();
     const work = lane.then(() => { timings.queue = Date.now() - requestedAt; return operation.run({ deadline, timings }, methods[req.url]); });

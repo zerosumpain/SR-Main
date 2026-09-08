@@ -22,7 +22,7 @@
   import FacetBar from '$lib/components/jkai/daydream/hub/FacetBar.svelte';
   import type { DeckTile, Facet, ShellTab } from '$lib/components/jkai/daydream/hub/types';
   import { developmentLane, developmentTone, type DevelopmentLane } from '$lib/builds/development-progress';
-  import { PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
+  import { criterionResult, PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
 
   type Row = { buildId: string; title: string; status: string; outcome?: string | null; state: DeliveryState };
 
@@ -81,7 +81,7 @@
   };
   const evidenced = (row: Row) =>
     row.state.criteria.filter(
-      (c) => c.verdict === 'passed' && !!row.state.candidate && c.revision === row.state.candidate,
+      (c) => criterionResult(c, row.state.candidate).verdict === 'passed',
     ).length;
 
   const laneOf = $derived(new Map(rows.map((r) => [r.buildId, developmentLane(r.state)])));
@@ -258,7 +258,7 @@
               <div class="dv-cell dv-status">
                 <span class="dv-pill tone-{developmentTone(stage)}">{stage}</span>
                 <p class="dv-meta">
-                  {evidenced(row)}/{row.state.criteria.length} criteria evidenced
+                  {evidenced(row)}/{row.state.criteria.length} criteria assessed as met
                 </p>
               </div>
             </a>

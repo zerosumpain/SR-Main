@@ -76,7 +76,7 @@
       <dl class="pg-dl">
         <div><dt>Generated output tokens</dt><dd>{number(progress.outputTokens)}</dd></div>
         <div><dt>Total reported tokens</dt><dd>{number(progress.totalTokens)}</dd></div>
-        <div><dt>Criteria verified for this candidate</dt><dd>{passed} / {delivery.criteria.length}</dd></div>
+        <div><dt>Criteria assessed as met</dt><dd>{passed} / {delivery.criteria.length}</dd></div>
       </dl>
       {#if current && budget}<label class="pg-budget">Iteration output-token budget: {number(budget.used)} / {number(budget.limit)}<progress aria-label="Iteration output-token budget consumed" max="100" value={budget.percent}></progress></label>{/if}
       <p class="pg-stamp">{connected ? 'Saved usage refreshes every 3s, after model responses complete.' : 'Disconnected — showing last saved usage.'}</p>
