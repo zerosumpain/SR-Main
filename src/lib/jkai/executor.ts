@@ -1,3 +1,4 @@
+import { developmentFeedback, developmentTools } from './development-cycle';
 import {
   buildSystemPrompt,
   buildIterationContext,
@@ -531,6 +532,8 @@ export async function executeIteration(
     }
   }
 
+  const { loadDelivery, relevantLessons } = await import('$lib/jkai/development-state.server');
+  const delivery = await loadDelivery(build.id);
   const contextMessages = buildIterationContext(
     build.prompt,
     prevIteration,
@@ -540,11 +543,11 @@ export async function executeIteration(
     assignedPort,
     codebaseDigest,
     promptMode,
-    gitTarget?.gateCommand ?? null,
+    delivery ? null : gitTarget?.gateCommand ?? null,
     isStudio
       ? ((build as JkaiBuild & { chapterPlan?: Array<ChapterPlanEntry> }).chapterPlan ?? null)
       : null,
-    gitTarget?.finalGateCommand ?? null,
+    delivery ? null : gitTarget?.finalGateCommand ?? null,
   );
 
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];
@@ -604,14 +607,12 @@ export async function executeIteration(
     .filter((s) => s.length > 0)
     .join('\n\n');
 
-  const { loadDelivery, relevantLessons } = await import('$lib/jkai/development-state.server');
   const { deliveryPrompt } = await import('$lib/jkai/development');
-  const delivery = await loadDelivery(build.id);
   if (iterationNumber > 1) {
     // The full tool history lives in Pi. Supply new feedback rather than
     // repeatedly re-sending SR's lossy reconstruction of the same history.
     userPrompt = [build.prompt, `Continue iteration ${iterationNumber}. Inspect the current workspace before acting.`,
-      prevIteration?.evaluation ?? '', prevIteration?.nextSteps ?? '', deliveriesBlock, precedentBlock, codegraphBlock].filter(Boolean).join('\n\n');
+      delivery ? developmentFeedback(prevIteration?.evaluation) : prevIteration?.evaluation ?? '', prevIteration?.nextSteps ?? '', deliveriesBlock, precedentBlock, codegraphBlock].filter(Boolean).join('\n\n');
   }
   if (delivery) {
     const lessons = await relevantLessons(delivery.state.area);
@@ -626,6 +627,7 @@ export async function executeIteration(
     iteration.id,
   );
 
+  if (delivery) await emitLog(build.id, 'system', `Development toolset: ${developmentTools([...(bridgedToolNames ?? []), 'ask_owner']).length} site tools plus Pi file and shell tools.`, iteration.id);
   const result = await runPi({
     build,
     iteration,
@@ -638,7 +640,7 @@ export async function executeIteration(
     skillDirs,
     thinkingLevel,
     extraEnv,
-    bridgedToolNames: [...(bridgedToolNames ?? []), 'ask_owner'],
+    bridgedToolNames: delivery ? developmentTools([...(bridgedToolNames ?? []), 'ask_owner']) : [...(bridgedToolNames ?? []), 'ask_owner'],
   });
 
   const tailText = result.finalAssistantText || '';

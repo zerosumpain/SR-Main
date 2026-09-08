@@ -12,6 +12,8 @@
   // deck, the sticky lane rail, and the ranked row — a numeral, a column
   // saying what the thing IS, then the content, with the hairline between rows
   // drawn as the container's own ground through a 1px gap.
+  import DevelopmentModelSelect from '$lib/components/builds/DevelopmentModelSelect.svelte';
+  let modelId = $state('');
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import DaydreamShell from '$lib/components/jkai/daydream/hub/DaydreamShell.svelte';
@@ -50,7 +52,7 @@
       const response = await fetch('/api/jkai/development', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ outcome, area }),
+        body: JSON.stringify({ outcome, area, modelId }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
@@ -191,6 +193,7 @@
       />
 
       <form class="dv-form" onsubmit={(e) => { e.preventDefault(); void create(); }}>
+        <DevelopmentModelSelect bind:value={modelId} disabled={busy} />
         <label class="dv-field dv-area">
           <span class="dv-label">Product area</span>
           <select aria-label="Product area" bind:value={area}>
@@ -286,7 +289,7 @@
   /* ——— commission ——— */
   .dv-form {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 180px minmax(0, 2fr) auto;
     gap: 18px;
     align-items: end;
   }

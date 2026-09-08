@@ -57,3 +57,12 @@ it('maps the printed stage word onto the hub tones and never invents one', () =>
  expect(developmentTone('brief')).toBe('quiet');
  expect(developmentTone('building')).toBe('steady');
 });
+
+it('keeps a working preview actionable while its replacement is being checked', () => {
+  const state = newDelivery('Working page');
+  state.candidate = 'new';
+  state.preview = { url: 'http://preview.test', revision: 'old', kind: 'working', number: 2, status: 'starting', detail: 'Checking next revision' };
+  const position = developmentPosition({ totalTokens: 0, outputTokens: 0, iterations: [] }, state, { status: 'running' });
+  expect(position.ready).toBe(true); expect(position.working).toBe(true);
+  expect(position.label).toBe('Working preview 2 · iterating'); expect(position.verified).toBe(false);
+});

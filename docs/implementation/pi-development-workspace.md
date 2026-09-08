@@ -251,8 +251,7 @@ confirmed that acceptance remained disabled. No model calls or production
 data were used. The retained example is
 `/jkai/develop/24f50ac8-4a61-40b9-8586-4a530bf838ef`; its preview feature route
 is `/inspection-example`. Preview ports remain loopback-only and need
-forwarding for review from another computer. These changes are local and have
-not been deployed to production.
+forwarding for review from another computer. These changes were validated locally before production rollout.
 
 Final checks for this update: Svelte diagnostics passed with zero errors and
 891 existing warnings; the production build, client budgets, source footprint
@@ -260,3 +259,188 @@ and module boundaries passed. Compose validated and the local web service was
 restarted. The workspace returned HTTP 200; the final browser smoke test opened
 the requested route inside the real iframe at desktop and phone widths,
 confirmed blocked acceptance, and reported no browser errors.
+
+Deployment record (2026-09-07): PR #776 merged as e72c976936234265a066af64c389304172b242dc. Production workflow 34163170097 succeeded. Authenticated workspace/logs returned 200, anonymous logs 401, and the stream returned 200 with text/event-stream. The stopped build returned its outcome, failed verification evidence and acceptance blocker. Read-only diagnostic job 101870256285 passed; unrelated diagnostic workflow checks were cancelled after verification. The worker applied the pending bundle while idle (active since 21:33:32 UTC); no build was resumed or mutated. The namespace-dependent verification environment repair remains outstanding.
+
+### Working page first (local cumulative development, 2026-09-08)
+
+Delivery-managed repository builds now prioritize a runnable first slice. The
+accepted brief tells Pi to end its first iteration once the target page has
+meaningful content and one core interaction. It authors a bounded declarative
+`.development-preview.json` plan with `complete:false`, target-route scenarios,
+accessible control names, and visible assertions after interaction. The broker
+runs those scenarios in Chromium at 1440px and 390px against a production build.
+It also opens every accepted target route and rejects missing/redirected/empty
+pages and JavaScript runtime errors. Sample data and unavailable integrations
+must be labelled in the page. These checks establish a working slice, not full
+acceptance of the brief; owner evidence remains required.
+
+Each completed model turn snapshots the workspace and attempts that working
+preview before further iteration. The agent continues automatically after a
+successful working preview. Setting `complete:true` requests full repository
+verification; only a passing result and feature browser checks produce a release
+candidate and pause for review. Repeated unchanged attempts and infrastructure
+blockers pause with source and the previous preview retained. Existing build
+budgets and owner decision/pause/stop controls remain in effect.
+
+Preview state records the displayed revision, ordinal, kind, browser evidence
+and latest failed replacement. A separate staging container/database/port is
+prepared alongside the current snapshot. The broker atomically replaces the
+access receipt only after the replacement passes, then removes the previous
+runtime. Build, startup, browser or repository failure removes only the staging
+runtime. An available staging slot is required; exhausting the eight-port pool
+retains the current preview and reports the blocker. Each published revision
+has its own synthetic database; disposable preview data does not migrate across
+versions. The UI keeps the previous iframe available during preparation and
+failure, and prevents recording acceptance evidence for a different revision.
+Signed access links retain the requested feature route after grant exchange.
+
+Repository verification for this delivery flow now runs in the broker's
+isolated runtime, not as a child of the restricted worker service. The checked-in
+worker has `RestrictNamespaces=true`, incompatible with the authored-handler
+runner's `bwrap --unshare-all`. The local builder image also has no Bubblewrap.
+The preview executor includes Bubblewrap and runs a namespace smoke before any
+feature code. Its existing scoped seccomp settings, internal network, separate
+Postgres, unprivileged UID, dropped capabilities and absent host socket remain.
+The worker's systemd restrictions have not been weakened. The full verification
+sequence covers structural checks, types, non-integration repository tests,
+production build/client budgets, all release sidecars and tracked-source
+cleanliness. Legacy repository builds outside `/jkai/develop` retain their
+existing executor path.
+
+Focused validation commands:
+
+```sh
+node --test scripts/qa/development-preview-check.test.mjs
+npx vitest run src/lib/builds/development-working-preview.test.ts src/lib/builds/development-progress.test.ts tests/scripts/development-preview-gateway.test.ts
+# Real isolated DB contracts, with JKAI_LOCAL_TESTS=1 and the local DATABASE_URL:
+npx vitest run src/lib/builds/development.integration.test.ts src/lib/builds/development-inspection.integration.test.ts
+# Run in the local broker with a new synthetic UUID:
+WORKING_PREVIEW_BUILD_ID=<uuid> node /source/scripts/qa/development-working-broker.mjs --verify
+```
+
+The broker fixture retains a synthetic working page, deliberately fails its
+replacement, checks that the previous receipt/page survive, exercises authored
+handler isolation and optionally runs the full release verification. It makes
+no model calls and never accepts into the batch or deploys production.
+
+Validation completed locally: 28 focused state/API/gateway tests passed against
+the isolated database; three browser/plan-reader tests passed, including real
+Chromium failure cases, persistent event streams and symlink rejection. The
+real broker fixture retained its previous page after a deliberately broken
+replacement, and all four authored-handler isolation tests passed. Full
+verification of the corrected synthetic feature snapshot passed 10,198 tests
+(three skipped), structural/type checks, the production build/client budgets,
+all release sidecars, source cleanliness and both feature browser viewports.
+The fresh executor now explicitly runs `gate:sync` before type checking. The
+synthetic page uses the shared PageHeader required by navigation coverage.
+
+The final cumulative web build and builder bundle passed; Svelte diagnostics
+reported zero errors and 891 existing warnings. Font, module-boundary and source
+budgets passed. Local Compose validated, and web, builder and broker services
+were restarted while local work was idle. Retained-preview refresh also passed
+after the broker restart. No production deployment or live-model build was
+performed; real provider-backed generation remains a local parity gap.
+
+After the final local restart, both LAN browser suites passed: the working
+preview fixture exercised real iframe interaction in working/replacing/failed
+states at desktop and phone widths, and the existing brief-grooming flow passed
+with synthetic model responses. Its selector now follows the accepted brief
+back to the Brief tab before checking its revision. The retained example is
+`/jkai/develop/c0a6c77d-fb23-4060-925e-1ff9237ad1a3`; its current preview uses
+loopback port 5284 and route `/working-preview-example`.
+
+### Bounded development cycles and build model selection (2026-09-08)
+
+The definition form and saved brief now include **Build model**. Choices come
+from the existing Codex catalogue and tool-capable OpenRouter catalogue. Creation
+resolves and stores the builder default unless a model is explicitly selected.
+Accepting an edited brief persists its model and outcome in the same transaction
+as the brief revision. Stale saves and changes to active builds are rejected.
+Changing the model affects that build, not the site's default or grooming model.
+The existing Pi invocation maps the saved provider/model onto its native provider.
+Provider access remains a worker requirement; catalogue presence is not an auth
+check and the UI says so.
+
+Each explicit start/resume begins a recorded cycle. Its timing survives worker
+recovery. The executor preflight has a two-minute request limit and checks the
+isolated Docker daemon, preview image, namespace support and spare preview slot
+before model generation. Model turns are capped at five minutes; even the legacy
+extension control cannot extend delivery turns. A turn that hits its clock or
+token cap checkpoints saved files instead of immediately starting another turn.
+The first working-preview deadline is ten minutes; once a working preview exists,
+the candidate deadline is twenty minutes from that cycle's start. These are
+checkpoint limits and initial targets, not guarantees of model completion.
+
+Infrastructure/provider failures pause immediately with saved work retained.
+Explicit feature failures permit one repair turn, regardless of cosmetic source
+changes. An unchanged checkpoint stops further model turns. Broker operations
+have cumulative deadlines (including queue time), and cleanup can still remove
+staging containers after expiry. Replacements retain the previous preview until
+the next snapshot passes. Full verification continues to run in the compatible
+isolated executor.
+
+Development prompts omit the legacy first-turn full-gate directive, bound the
+new feedback excerpt and avoid repeating repository listings. Their Pi tool
+allowlist contains file/shell tools, owner decisions and relevant discovery or
+inspection tools rather than the entire site catalogue. The worker reports the
+selected tool count. Healthy unchanged browser previews are reused only when the
+snapshot, scenario plan and executor fingerprint match. Full verification is
+still rerun: a lockfile alone cannot prove an agent-writable installed dependency
+tree is unchanged, so a prior gate result is not reused on that basis.
+
+The workspace shows model, preview and verification durations and successful
+executor phase totals. Cycle events retain measurements across later resumptions.
+For a read-only comparison of recent local builds on identical brief criteria:
+
+```sh
+DATABASE_URL=postgresql://jkai_local:jkai_local_only@127.0.0.1:15435/jkai_local node scripts/qa/development-cycle-report.mjs
+```
+
+Compare matching brief keys and count missing milestones as failures, not zero
+latency. The model selector enables controlled comparisons without silently
+changing the worker adapter. Live provider/model comparisons are not covered by
+synthetic tests: the isolated environment has no provider credentials.
+
+The comparison report records the model used at cycle start and its starting
+candidate; compare fresh builds separately from resumed work. Run
+`scripts/qa/development-cycle-broker.mjs` inside the local broker with
+`WORKING_PREVIEW_BUILD_ID` set to a synthetic retained preview to check real
+preflight, structured deadline errors, phase timing and preview retention on
+expiry without model calls or source changes.
+
+Validation completed for this update:
+
+- Focused cycle, provider mapping, deadline-extension, state and model-selection
+  checks passed. Real isolated Postgres checks cover persistence, atomic brief
+  edits, stale requests and rejection of changes to active builds.
+- The actual LAN browser flow passed after restart, including creation, grooming
+  recovery, model changes on acceptance and persistence on reload. Initial form
+  overflow was checked at 1440, 768 and 390 pixels; saved briefs were reviewed at
+  desktop and phone widths.
+- Working/replacing/failed preview states passed against a real feature iframe
+  at desktop and phone widths, with simulated cycle counters and no model calls.
+  The browser fixture waits for the child page to load before exercising its
+  server-rendered control. Three declarative browser-plan tests also passed.
+- The synthetic candidate's full isolated verification passed 10,205 tests
+  (three skipped), structural/type checks, production build/client budgets,
+  release sidecars and source cleanliness. Its namespace smoke and four actual
+  authored-handler isolation tests passed. A deliberately broken replacement
+  left the previous page and receipt usable.
+- The cumulative application passed type checking with zero errors and 891
+  existing warnings, its production build/client budgets, builder bundle and
+  structural checks. Compose validated. The local web, builder and broker were
+  restarted while idle; the LAN development page returned HTTP 200.
+- After restart, the real broker passed preflight, returned a structured deadline
+  error for an expired request, recorded phase timings and preserved its existing
+  preview receipt and page. The model-selection browser flow passed again.
+
+Retained synthetic release candidate:
+`http://192.168.0.77:5275/jkai/develop/ba19e5c0-9359-4873-80bb-53bb71eddd61`.
+It stays paused with actual broker gate evidence and unverified owner criteria;
+it has not joined the batch. Candidate iframe ports remain loopback-only and
+need forwarding from other computers, as previously documented. The definition
+form itself is directly accessible through the LAN gateway.
+
+No production deployment or real-model benchmark was performed. The local Pi
+provider list and OpenRouter key configuration were both empty when checked.

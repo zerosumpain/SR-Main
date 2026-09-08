@@ -25,6 +25,11 @@ try {
     await route.fulfill({ json: { ok: true } });
   });
   await page.goto(`${base}/jkai/develop`, { waitUntil: 'networkidle' });
+  await page.getByLabel('Build model', { exact: true }).selectOption('codex/gpt-5.6-luna');
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  }
   await page.getByLabel('Intended outcome', { exact: true }).fill('Synthetic ask: compare my weeks');
   await page.getByRole('button', { name: 'Refine this brief', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Synthetic provider unavailable' }).waitFor();
@@ -52,12 +57,25 @@ try {
   await page.getByLabel('Answers or changes for the model').fill('Steps only.');
   await page.getByRole('button', { name: 'Refine with my answers', exact: true }).click();
   await page.getByText('Steps only; ready for your review.').waitFor();
+  assert.equal(await page.getByLabel('Build model', { exact: true }).inputValue(), 'codex/gpt-5.6-luna');
+  await page.getByLabel('Build model', { exact: true }).selectOption('codex/gpt-5.6-terra');
   await page.getByRole('button', { name: 'Accept brief with open questions', exact: true }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Build first working page' && !button.disabled));
+  await page.getByRole('button', { name: 'Brief', exact: true }).click();
   await page.getByText('Revision 5 · accepted').waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Build to preview', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Build first working page', exact: true }).isEnabled(), true);
+  assert.equal((await client.query('select model_id from jkai_builds where id=$1', [id])).rows[0].model_id, 'codex/gpt-5.6-terra');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Brief', exact: true }).click();
+  assert.equal(await page.getByLabel('Build model', { exact: true }).inputValue(), 'codex/gpt-5.6-terra');
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: `/tmp/development-model-${width}.png`, fullPage: true });
+  }
   const accepted = await client.query('select state from jkai_build_deliveries where build_id=$1', [id]);
   assert.equal(accepted.rows[0].state.brief.questions, 'Which layout works best?');
-  console.log('PASS: automatic grooming request, failure recovery, populated proposal, follow-up answers, persistence, approval and desktop/mobile layout. Synthetic model responses; no provider invoked.');
+  console.log('PASS: automatic grooming request, failure recovery, populated proposal, follow-up answers, persistence, approval, per-build model persistence and desktop/mobile layout. Synthetic model responses; no provider invoked.');
 } finally {
   if (id) await client.query('delete from jkai_builds where id=$1', [id]);
   await client.end(); await browser.close();

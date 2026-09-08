@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DevelopmentModelSelect from './DevelopmentModelSelect.svelte';
+  let modelId = $state('');
   // The Pi builder wrapper's workspace, wearing the /health editorial system.
   //
   // Chrome is `DaydreamShell` — the ink cover with a tile deck, the sticky
@@ -43,7 +45,7 @@
   let outcome = $state(''); let constraints = $state(''); let routes = $state(''); let criteria = $state(''); let area = $state('Platform');
   let scope = $state(''); let dependencies = $state(''); let assumptions = $state(''); let questions = $state(''); let validation = $state('');
   let feedback = $state(''); let grooming = $state(false);
-  const briefFields = () => ({ outcome, constraints, routes, criteria, area, scope, dependencies, assumptions, questions, validation });
+  const briefFields = () => ({ outcome, constraints, routes, criteria, area, scope, dependencies, assumptions, questions, validation, modelId });
   let instruction = $state(''); let question = $state(''); let answers = $state<Record<string, string>>({});
   let evidence = $state<Record<string, string>>({}); let verdicts = $state<Record<string, string>>({});
   let lesson = $state(''); let lessonEvidence = $state(''); let note = $state(''); let phone = $state(false);
@@ -63,6 +65,7 @@
       if (snapshot && (!initialized || (snapshot.delivery.state.brief.revision !== briefRevision && JSON.stringify(briefFields()) === loadedBrief))) {
         const s = snapshot.delivery.state; briefRevision = s.brief.revision; outcome = s.brief.outcome; constraints = s.brief.constraints; routes = s.brief.routes.join('\n');
         scope = s.brief.scope ?? ''; dependencies = s.brief.dependencies ?? ''; assumptions = s.brief.assumptions ?? ''; questions = s.brief.questions ?? ''; validation = s.brief.validation ?? '';
+        modelId = snapshot.build.modelId;
         criteria = s.criteria.map((c) => c.text).join('\n'); area = s.area;
         for (const c of s.criteria) { evidence[c.id] = c.evidence; verdicts[c.id] = c.verdict; }
         evidenceCandidate = s.candidate;
@@ -173,14 +176,14 @@
 
   {#snippet actions()}
     <a class="wk-back" href="/jkai/develop">← Portfolio</a>
-    <button class="wk-run" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue to preview' : 'Build to preview'}</button>
+    <button class="wk-run" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue iteration' : 'Build first working page'}</button>
     <button class="wk-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
     <button class="wk-ghost" disabled={busy || !running} onclick={() => act('stop')}>Stop</button>
   {/snippet}
 
   <div class="wk">
     {#if deliveryState && !deliveryState.brief.acceptedAt}
-      <p class="wk-note">Accept the brief below to enable Build. Remaining questions do not prevent acceptance.</p>
+      <p class="wk-note">Accept the brief below to build the first working page. Remaining questions do not prevent acceptance.</p>
     {/if}
     {#if error}<p class="wk-alert wk-alert-bad" role="alert">{error}</p>{/if}
     {#if openDecisions}
@@ -224,6 +227,7 @@
         <form class="wk-form" onsubmit={(e) => { e.preventDefault(); void act('brief', briefFields()); }}>
           <fieldset disabled={busy || running}>
             <label class="wk-field wk-narrow"><span class="wk-label">Product area</span><select aria-label="Product area" bind:value={area}>{#each PRODUCT_AREAS as value (value)}<option>{value}</option>{/each}</select></label>
+            <DevelopmentModelSelect bind:value={modelId} disabled={busy || running} />
             <label class="wk-field"><span class="wk-label">Intended outcome</span><textarea required bind:value={outcome} rows="4"></textarea></label>
             <div class="wk-cols">
               <label class="wk-field"><span class="wk-label">Constraints</span><textarea bind:value={constraints} rows="4" placeholder="Behaviour, audience, design and data constraints"></textarea></label>
@@ -289,11 +293,11 @@
         <SectionHead
           kicker="03 / The preview"
           title={['Try it before', 'you accept it']}
-          strap="An isolated full-site preview of one candidate revision. Inspection is not acceptance — a preview of saved work verifies nothing on its own."
+          strap="An isolated full-site preview of one candidate revision. Working preview before release candidate — a preview of saved work verifies nothing on its own."
         />
         {#if !deliveryState.gate?.passed}
           <div class="wk-alert wk-alert-act">
-            <div><strong>Inspection is not acceptance</strong><p class="wk-muted">Failed or missing repository checks remain blocking. Previewing saved work does not verify the feature.</p></div>
+            <div><strong>Working preview before release candidate</strong><p class="wk-muted">Try the first useful page while iteration continues. Full repository checks and acceptance evidence are still required.</p></div>
             {#if !deliveryState.candidate}<button class="wk-ghost" disabled={busy || running || !snapshot.progress?.iterations.some(i => i.tokensUsed > 0)} onclick={() => act('inspect_preview')}>Prepare inspection preview</button>{/if}
           </div>
         {/if}
@@ -302,6 +306,9 @@
           <button class="wk-ghost" aria-pressed={phone} onclick={() => phone = !phone}>{phone ? 'Desktop width' : 'Phone width'}</button>
           {#if previewHref}<a class="wk-link" href={previewHref} target="_blank" rel="noopener noreferrer">Open site preview ↗</a><button class="wk-ghost" disabled={busy || running} onclick={() => act('close_preview')}>Close preview</button>{/if}
         </div>
+        {#if deliveryState.preview.url}<p class="wk-stamp"><strong>{deliveryState.preview.kind === 'working' ? `Working preview ${deliveryState.preview.number ?? 1}` : deliveryState.preview.kind === 'release' ? 'Release candidate' : 'Inspection preview'}</strong> · revision {deliveryState.preview.revision?.slice(0, 12) ?? 'legacy'}</p>{/if}
+        {#if deliveryState.preview.lastError}<p class="wk-alert wk-alert-bad" role="alert">{deliveryState.preview.lastError}</p>{/if}
+        {#if deliveryState.preview.evidence?.length}<details class="wk-fold"><summary>Feature browser checks</summary>{#each deliveryState.preview.evidence as evidence}<p>{evidence}</p>{/each}</details>{/if}
         {#if deliveryState.preview.url?.startsWith('http://127.0.0.1:')}<p class="wk-muted">This preview uses a loopback port on the build host. When reviewing from another computer, forward that port before opening it here.</p>{:else if deliveryState.preview.url}<p class="wk-muted">Preview access lasts eight hours. Use Prepare preview to refresh an expired link.</p>{/if}
         <p class="wk-stamp" role="status">{deliveryState.preview.status} · {deliveryState.preview.detail}</p>
         {#if deliveryState.brief.routes.length}
@@ -319,7 +326,7 @@
                 <label class="wk-field wk-narrow"><span class="wk-label">Verdict</span><select aria-label="Verdict for {criterion.text}" bind:value={verdicts[criterion.id]}><option value="unverified">Not exercised</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="blocked">Blocked</option></select></label>
                 <label class="wk-field"><span class="wk-label">Evidence</span><textarea aria-label="Evidence for {criterion.text}" bind:value={evidence[criterion.id]} rows="2" placeholder="What was tested, observed or blocked"></textarea></label>
               </div>
-              <div class="wk-actions"><button class="wk-ghost" disabled={busy || !deliveryState.candidate}>Save evidence</button><span class="wk-stamp">Recorded: {criterion.verdict}</span></div>
+              <div class="wk-actions"><button class="wk-ghost" disabled={busy || running || !deliveryState.candidate || (!!deliveryState.preview.revision && deliveryState.preview.revision !== deliveryState.candidate)}>Save evidence</button><span class="wk-stamp">Recorded: {criterion.verdict}</span></div>
             </form>
           {/each}
         </div>

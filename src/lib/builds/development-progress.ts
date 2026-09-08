@@ -18,15 +18,16 @@ export function developmentPosition(progress: DevelopmentProgress, state: Delive
   const checking = build.status === 'running' && (progress.stage?.stage === 'running_tests' || checks.some(check => check.status === 'running'));
   const stopped = build.outcome === 'stopped_by_user' || (build.status === 'completed' && progress.stage?.message === 'Stopped by user');
   const verified = !!state.candidate && state.gate?.passed === true && state.gate.revision === state.candidate;
-  const ready = !!state.preview.url && state.preview.status === 'ready';
+  const ready = !!state.preview.url && ['ready', 'starting'].includes(state.preview.status);
   const busy = ['running', 'queued'].includes(build.status);
   const work = progress.iterations.some(i => i.tokensUsed > 0) || !!state.candidate;
-  const inspection = ready && !verified;
-  const label = state.acceptedAt ? 'Accepted into batch' : state.decisions.some(d => !d.answer) ? 'Your decision is needed' : ready ? inspection ? 'Inspection preview available' : 'Ready for your review' : state.preview.status === 'starting' ? 'Preparing isolated preview' : stopped ? 'Stopped · no verified delivery' : checking ? 'Checking the implementation' : failed ? busy ? 'Working through failed checks' : 'Blocked by repository checks' : build.status === 'failed' ? 'Build failed · review the evidence' : busy ? 'Implementation in progress' : 'No verified preview yet';
-  return { label, failed, checking, stopped, verified, ready, inspection, busy, work,
+  const working = ready && state.preview.kind === 'working';
+  const inspection = ready && !verified && !working;
+  const label = state.acceptedAt ? 'Accepted into batch' : state.decisions.some(d => !d.answer) ? 'Your decision is needed' : ready ? working ? `Working preview ${state.preview.number ?? 1}${busy ? ' · iterating' : ' available'}` : inspection ? 'Inspection preview available' : 'Release candidate ready for review' : state.preview.status === 'starting' ? 'Preparing isolated preview' : stopped ? 'Stopped · no verified delivery' : checking ? 'Checking the implementation' : failed ? busy ? 'Working through failed checks' : 'Blocked by repository checks' : build.status === 'failed' ? 'Build failed · review the evidence' : busy ? 'Implementation in progress' : 'No verified preview yet';
+  return { label, failed, checking, stopped, verified, ready, inspection, working, busy, work,
     canInspect: work && !busy && !state.acceptedAt && state.preview.status !== 'starting',
     checksLabel: verified ? 'Passed' : checking ? 'Running' : failed ? 'Failed' : 'Not verified',
-    previewReason: state.preview.status === 'failed' ? state.preview.detail : failed ? 'Repository checks failed. Inspect saved work before commissioning more iterations.' : busy ? 'The worker has not produced a verified candidate. Pause it to inspect the work saved so far.' : 'No verified candidate has been prepared. An inspection preview does not approve this work.',
+    previewReason: state.preview.status === 'failed' ? state.preview.detail : failed ? 'Repository checks failed. Inspect saved work before commissioning more iterations.' : busy ? 'The worker is building the first useful page. A working preview will appear automatically after its browser checks pass.' : 'No verified candidate has been prepared. An inspection preview does not approve this work.',
   };
 }
 export function assessmentExcerpt(text: string | null, limit = 650) {

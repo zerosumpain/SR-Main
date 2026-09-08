@@ -19,3 +19,13 @@ describe('continuation while a paused attempt is still closing', () => {
     });
   }
 });
+
+it('does not let legacy extensions bypass a development checkpoint', () => {
+  const controller = Object.assign(Object.create(Object.getPrototypeOf(orchestrator)), {
+    activeBuildId: 'development', currentDeadline: { current: 100 }, developmentDeadlineCap: 100,
+  });
+  expect(controller.extendDeadline('development', 600_000)).toBe(100);
+  expect(controller.extendDeadline('other-build', 600_000)).toBeNull();
+  controller.developmentDeadlineCap = Infinity;
+  expect(controller.extendDeadline('development', 600_000)).toBe(600_100);
+});
