@@ -2,10 +2,11 @@ import { AUTOPILOT_ROUNDS, PRODUCT_AREAS, RELEASE_POLICIES, type DeliveryState, 
 export { PRODUCT_AREAS, RELEASE_POLICIES, AUTOPILOT_ROUNDS };
 export type { DeliveryState, DeliveryStage, Criterion, ReleasePolicy } from '$lib/constants/development';
 
-export function newDelivery(outcome: string, area = 'Platform', criteria: string[] = [], options: { releasePolicy?: ReleasePolicy; autopilot?: boolean; maxRounds?: number } = {}): DeliveryState {
+export function newDelivery(outcome: string, area = 'Platform', criteria: string[] = [], options: { releasePolicy?: ReleasePolicy; autopilot?: boolean; maxRounds?: number; commissioned?: boolean } = {}): DeliveryState {
   const maxRounds = Math.min(AUTOPILOT_ROUNDS.max, Math.max(1, Math.round(options.maxRounds ?? AUTOPILOT_ROUNDS.default)));
   return {
     version: 1, originalAsk: outcome, area, stage: 'brief',
+    ...(options.commissioned === false ? { commissioned: false } : {}),
     brief: { revision: 1, outcome, constraints: '', routes: [], acceptedAt: null },
     criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
     decisions: [], session: { engine: 'pi', id: null, file: null, recovery: null },
@@ -14,6 +15,17 @@ export function newDelivery(outcome: string, area = 'Platform', criteria: string
     batch: null, acceptedAt: null, releasePolicy: options.releasePolicy ?? 'preview_only',
     ...(options.autopilot ? { autopilot: { enabled: true, rounds: 0, maxRounds, startedAt: new Date().toISOString() } } : {}),
   };
+}
+
+/**
+ * Is this build a development feature, or a build that merely acquired a
+ * delivery row so a question had somewhere to live?
+ *
+ * Absent means yes, so every delivery written before the flag existed keeps its
+ * place in the portfolio.
+ */
+export function isCommissioned(state: DeliveryState): boolean {
+  return state.commissioned !== false;
 }
 
 /** A run is under way only while it is enabled AND has rounds left. */

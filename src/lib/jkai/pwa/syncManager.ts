@@ -1,12 +1,10 @@
 import { listOutbox, markOutboxFailure, deleteOutboxEntry, MAX_OUTBOX_ATTEMPTS, type SendMessagePayload } from './outbox';
 import {
 	putConversation,
-	putBuild,
 	evictConversations,
 	evictBuilds,
 	type OutboxRecord,
 	type ConversationCacheRecord,
-	type BuildCacheRecord,
 } from './db';
 
 export interface SyncReport {
@@ -77,13 +75,18 @@ async function refreshConversations(fetchImpl: typeof fetch): Promise<number> {
 	return list.length;
 }
 
-async function refreshBuilds(fetchImpl: typeof fetch): Promise<number> {
-	const res = await fetchImpl('/api/jkai/builds', { credentials: 'include' });
-	if (!res.ok) throw new Error(`builds HTTP ${res.status}`);
-	const list = (await res.json()) as BuildCacheRecord[];
-	for (const b of list) await putBuild(b);
-	return list.length;
-}
+/**
+ * The builds LIST cache is no longer refreshed here.
+ *
+ * Its only reader was `/jkai/builds`, which folded into `/jkai/develop` on
+ * 2026-09-08. The archive that replaced it is server-rendered, so nothing reads
+ * this store any more — and pulling every build over the wire on each
+ * visibility change, online event and sixty-second tick was paying for an
+ * offline promise the surface no longer makes. `buildDetail` still has a live
+ * reader (the archive console) and is untouched, as is `putBuild` itself, so a
+ * cached client path can be restored without re-plumbing the store.
+ */
+const BUILD_LIST_CACHE_RETIRED = 0;
 
 export async function syncAll(opts: SyncAllOpts = {}): Promise<SyncReport> {
 	const started = Date.now();
@@ -92,7 +95,7 @@ export async function syncAll(opts: SyncAllOpts = {}): Promise<SyncReport> {
 	let conversations = 0;
 	let builds = 0;
 	try { conversations = await refreshConversations(fetchImpl); } catch { /* offline / 401 surfaces via banner */ }
-	try { builds = await refreshBuilds(fetchImpl); } catch { /* same */ }
+	builds = BUILD_LIST_CACHE_RETIRED;
 	await evictConversations();
 	await evictBuilds();
 	return {

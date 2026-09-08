@@ -102,7 +102,13 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
   }
 
   if (!autopilotActive(state)) return stop(buildId, `Autopilot reached its limit of ${state.autopilot.maxRounds} rounds. The saved work, preview and evidence are retained.`);
-  if (!state.brief.acceptedAt) return stop(buildId, 'The brief has not been accepted, so there is nothing to build.');
+  // Waiting, not stopping. Arming autopilot at commission is the whole point of
+  // the checkbox, and a fresh delivery definitionally has no accepted brief —
+  // the owner accepts it on the next screen. Treating that as a failure fired an
+  // "Autopilot needs you" push within a minute of asking for an unattended run,
+  // which is the opposite of what was asked for. An unaccepted brief costs one
+  // row read per sweep and no round.
+  if (!state.brief.acceptedAt) return 'idle';
 
   // A blocking question. Answer it from the brief, or hand it back.
   const pendingDecision = state.decisions.find(d => !d.answer);

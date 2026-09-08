@@ -766,7 +766,10 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     }
 
     if (ev.type === 'extension_ui_request' && ev.method === 'input' && ev.id) {
-      const row = await ensureDelivery(build.id);
+      // Not commissioned: this row exists only so the owner's question has
+      // somewhere to live. A forge or studio build that asks one must not
+      // silently leave the archive, where its Promote and Delete actions are.
+      const row = await ensureDelivery(build.id, 'Platform', [], { commissioned: false });
       const question = (ev.title ?? 'A product decision is needed').slice(0, 5000);
       const existing = row.state.decisions.find((d) => d.question === question);
       if (existing?.answer) { rpc.respond(ev.id, existing.answer); return; }

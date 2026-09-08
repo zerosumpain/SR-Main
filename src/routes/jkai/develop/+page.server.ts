@@ -3,6 +3,7 @@ import { jkaiBuildDeliveries, jkaiIterations } from '$lib/db/schema';
 import { sql } from 'drizzle-orm';
 import { getBuildList } from '$lib/jkai/queries';
 import { laneStats } from '$lib/builds/lane-stats';
+import { isCommissioned } from '$lib/jkai/development';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -25,13 +26,15 @@ export const load: PageServerLoad = async () => {
       .select({ buildId: jkaiIterations.buildId, n: sql<number>`count(*)::int` })
       .from(jkaiIterations)
       .groupBy(jkaiIterations.buildId),
-    db.select({ buildId: jkaiBuildDeliveries.buildId }).from(jkaiBuildDeliveries),
+    db.select({ buildId: jkaiBuildDeliveries.buildId, state: jkaiBuildDeliveries.state }).from(jkaiBuildDeliveries),
   ]);
   const byBuild = new Map(counts.map((c) => [c.buildId, c.n]));
-  // A build with a delivery row is a development feature and belongs to the
-  // portfolio above, not to the archive. The row's existence is the lane
-  // everywhere else in this system, so it is the lane here too.
-  const isFeature = new Set(deliveries.map((d) => d.buildId));
+  // A COMMISSIONED delivery is a development feature and belongs to the
+  // portfolio above. A delivery row on its own is not enough: `pi-runner`
+  // creates one for any build that asks the owner a question, and a forge or
+  // studio build that did so would otherwise vanish from the archive along with
+  // the only Promote, Unpublish and Delete controls it has.
+  const isFeature = new Set(deliveries.filter((d) => isCommissioned(d.state)).map((d) => d.buildId));
   const builds = all.filter((b) => !isFeature.has(b.id));
 
   const lanes = laneStats(

@@ -1690,7 +1690,18 @@ export const jkaiIterations = pgTable('jkai_iterations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   failure: jsonb('failure'),
   retryOfIterationId: text('retry_of_iteration_id'),
-});
+}, (t) => [
+  // Real iteration counts are read per build on /jkai/develop, which is now the
+  // primary development surface rather than a page nobody opened routinely, and
+  // the release smoke fetches it on every deploy. `iterations_completed` on the
+  // build cannot answer instead: it is a read-modify-write over a row read at
+  // the top of an iteration, so concurrent iterations discarded each other's
+  // increments and it disagrees with the row count on 33 of the first 83 builds.
+  // Each row here carries `actions` and `messages` jsonb, so an unindexed
+  // count(*) GROUP BY is a full heap scan of the largest table in the build
+  // subsystem — the same shape that cost jkai_logs 1,034 buffers per poll.
+  index('jkai_iterations_build_idx').on(t.buildId),
+]);
 
 export type JkaiIteration = typeof jkaiIterations.$inferSelect;
 export type NewJkaiIteration = typeof jkaiIterations.$inferInsert;

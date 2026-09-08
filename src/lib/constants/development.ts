@@ -37,6 +37,21 @@ export interface Criterion {
 }
 export interface DeliveryState {
   version: 1;
+  /**
+   * Was this delivery asked for on /jkai/develop?
+   *
+   * A delivery row is normally what makes a build a development feature, but it
+   * is not only created there: `pi-runner` calls `ensureDelivery` opportunistically
+   * the first time ANY build — forge, studio, sandbox app, change request — asks
+   * the owner a question, purely so the question has somewhere to live. Without
+   * this flag such a build silently left the archive, taking its Promote, Edit
+   * card, Copy link, Unpublish and Delete actions with it, since those exist
+   * nowhere else.
+   *
+   * Absent means commissioned, so every delivery written before this flag keeps
+   * its place in the portfolio.
+   */
+  commissioned?: boolean;
   area: string;
   stage: DeliveryStage;
   originalAsk?: string;

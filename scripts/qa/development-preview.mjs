@@ -50,7 +50,10 @@ try {
   await page.getByRole('button', { name: 'Save answer', exact: true }).click();
   await page.getByText('Only the owner.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Delivery', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: 'Accept into batch', exact: true }).isDisabled(), true);
+  // The Delivery tab's primary control is 'Continue automatically' — the button
+  // that assesses the criteria and, only if they all pass, joins the batch. The
+  // assertion is unchanged in intent: acceptance must be unreachable here.
+  assert.equal(await page.getByRole('button', { name: 'Continue automatically', exact: true }).isDisabled(), true);
   const row = await client.query('select state from jkai_build_deliveries where build_id=$1', [id]);
   assert.equal(row.rows[0].state.brief.constraints, 'Preserve the public/owner split');
   assert.equal(row.rows[0].state.decisions[0].answer, 'Only the owner.');

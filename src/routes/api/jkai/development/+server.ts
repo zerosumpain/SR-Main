@@ -3,7 +3,7 @@ import { db } from '$lib/db';
 import { jkaiBuildDeliveries, jkaiBuilds } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { ensureDelivery } from '$lib/jkai/development-state.server';
-import { PRODUCT_AREAS, RELEASE_POLICIES } from '$lib/jkai/development';
+import { PRODUCT_AREAS, RELEASE_POLICIES, isCommissioned } from '$lib/jkai/development';
 import type { ReleasePolicy } from '$lib/jkai/development';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
 import { CHANGE_REQUEST_BUDGET } from '$lib/jkai/change-request';
@@ -11,11 +11,17 @@ import { resolveDevelopmentModel } from '$lib/jkai/development-models.server';
 import type { RequestHandler } from './$types';
 
 // /api/jkai inherits the owner gate in hooks.server.ts.
-export const GET: RequestHandler = async () => json(await db.select({
-  buildId: jkaiBuilds.id, title: jkaiBuilds.title, status: jkaiBuilds.status, outcome: jkaiBuilds.outcome,
-  revision: jkaiBuildDeliveries.revision, state: jkaiBuildDeliveries.state,
-}).from(jkaiBuildDeliveries).innerJoin(jkaiBuilds, eq(jkaiBuilds.id, jkaiBuildDeliveries.buildId))
-  .orderBy(desc(jkaiBuildDeliveries.updatedAt)).limit(200));
+export const GET: RequestHandler = async () => {
+  const rows = await db.select({
+    buildId: jkaiBuilds.id, title: jkaiBuilds.title, status: jkaiBuilds.status, outcome: jkaiBuilds.outcome,
+    revision: jkaiBuildDeliveries.revision, state: jkaiBuildDeliveries.state,
+  }).from(jkaiBuildDeliveries).innerJoin(jkaiBuilds, eq(jkaiBuilds.id, jkaiBuildDeliveries.buildId))
+    .orderBy(desc(jkaiBuildDeliveries.updatedAt)).limit(200);
+  // Filtered here rather than in SQL: the flag lives inside the jsonb state, and
+  // one shared predicate is what stops the portfolio and the archive disagreeing
+  // about which half a build belongs to.
+  return json(rows.filter((row) => isCommissioned(row.state)));
+};
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json().catch(() => null);
@@ -34,6 +40,7 @@ export const POST: RequestHandler = async ({ request }) => {
     budgetConfig: { ...CHANGE_REQUEST_BUDGET }, modelProvider: model.provider, modelId: model.modelId,
   }).returning();
   await ensureDelivery(build.id, body.area, [], {
+    commissioned: true,
     releasePolicy,
     autopilot: body.autopilot === true,
     maxRounds: typeof body.maxRounds === 'number' ? body.maxRounds : undefined,
