@@ -1,17 +1,36 @@
 /** Trusted local broker. Docker points exclusively at the isolated DinD daemon. */
 import http from 'node:http';
+import { previewPlan, readPreviewManifest } from './development-preview-check.mjs';
 import { previewAccessUrl } from './development-preview-access.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, writeFile, stat, realpath } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, stat, realpath, rename } from 'node:fs/promises';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomBytes, createHash } from 'node:crypto';
 const exec = promisify(execFile);
+const activeBrokerHash = createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex');
 const root = process.env.BUILDER_WORKSPACES_ROOT ?? '/home/jkai/workspace';
 const source = process.env.BUILDER_SOURCE_ROOT ?? '/source';
 const token = process.env.BUILDER_WORKSPACE_BROKER_TOKEN;
 if (!token || !process.env.DOCKER_HOST) throw new Error('Broker token and isolated DOCKER_HOST are required');
-const command = async (file, args, options = {}) => (await exec(file, args, { timeout: 600_000, maxBuffer: 8 * 1024 * 1024, ...options })).stdout.trim();
+const operation = new AsyncLocalStorage();
+const failure = (message, kind = 'infrastructure') => Object.assign(new Error(message), { kind });
+const command = async (file, args, options = {}) => {
+  const remaining = (operation.getStore()?.deadline ?? Date.now() + 600_000) - Date.now();
+  if (remaining <= 0) throw failure('Executor operation deadline reached; saved work is retained.', 'deadline');
+  const started = Date.now();
+  try { return (await exec(file, args, { timeout: Math.min(600_000, remaining), maxBuffer: 8 * 1024 * 1024, ...options })).stdout.trim(); }
+  catch (error) { if (error.killed) throw failure('Executor command exceeded its deadline; saved work is retained.', 'deadline'); throw error; }
+  finally {
+    const timings = operation.getStore()?.timings;
+    if (timings) {
+      const commandText = args.join(' ');
+      const phase = /svelte-check/.test(commandText) ? 'types' : /vitest/.test(commandText) ? 'tests' : /development-preview-check/.test(commandText) ? 'browser' : /gate:build|npm run build$/.test(commandText) ? 'build' : /build:release-sidecars/.test(commandText) ? 'sidecars' : 'setup';
+      timings[phase] = (timings[phase] ?? 0) + Date.now() - started;
+    }
+  }
+};
 const git = (cwd, ...args) => command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', `safe.directory=${cwd}`, '-c', 'user.name=SR local builder', '-c', 'user.email=builder@example.test', '-C', cwd, ...args]);
 const docker = (...args) => command('docker', args);
 const validId = (id) => { if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid build id'); return id; };
@@ -39,6 +58,35 @@ if (process.env.BUILDER_PROTECT_WORKSPACES !== '0') {
 const previewLink = (id, revision, port) => process.env.BUILDER_PREVIEW_DOMAIN
   ? previewAccessUrl(process.env.BUILDER_PREVIEW_ACCESS_SECRET, process.env.BUILDER_PREVIEW_DOMAIN, id, revision, port)
   : `${process.env.BUILDER_PREVIEW_ORIGIN ?? 'http://127.0.0.1'}:${port}`;
+async function ensureRuntimeImage() {
+  const image = 'sr-development-preview:v4';
+  if (!(await docker('image', 'inspect', image).then(() => true, () => false))) {
+    const imageRoot = join(trustedRoot, 'preview-image');
+    await mkdir(imageRoot, { recursive: true });
+    await writeFile(join(imageRoot, 'Dockerfile'), 'FROM node:22.23.2-bookworm-slim\nRUN apt-get update && apt-get install -y --no-install-recommends git python3 bubblewrap chromium && rm -rf /var/lib/apt/lists/*\nRUN mkdir -p /workspace && chown 1000:1000 /workspace\nUSER 1000:1000\nWORKDIR /workspace\n');
+    await docker('build', '-t', image, imageRoot);
+  }
+}
+async function preflight(id) {
+  await docker('info', '--format', '{{.ServerVersion}}');
+  await ensureRuntimeImage();
+  await docker('image', 'inspect', 'pgvector/pgvector:pg16');
+  const ports = await docker('ps', '--format', '{{.Ports}}');
+  if (Array.from({ length: 8 }, (_, i) => 5281 + i).every(p => ports.includes(`:${p}->`))) throw failure('All eight preview slots are occupied. Close a preview before building.');
+  const name = `sr-preflight-${id}`;
+  try {
+    await docker('run', '--rm', '--name', name, '--network', 'none', '--memory', '256m', '--pids-limit', '64',
+      '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--security-opt', `seccomp=${source}/scripts/development-seccomp.json`, '--security-opt', 'systempaths=unconfined',
+      'sr-development-preview:v4', 'bwrap', '--unshare-all', '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib', '--ro-bind', '/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--', '/usr/local/bin/node', '-e', 'process.exit(0)');
+    return { ready: true };
+  } finally { await exec('docker', ['rm', '-f', name], { timeout: 10_000 }).catch(() => {}); }
+}
+async function runtimeFingerprint() {
+  const hash = createHash('sha256').update(activeBrokerHash);
+  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
+  hash.update(await docker('image', 'inspect', 'sr-development-preview:v4', 'pgvector/pgvector:pg16', '--format', '{{.Id}}'));
+  return hash.digest('hex');
+}
 async function allocate(id) {
   const base = join(root, id);
   await mkdir(base, { recursive: true });
@@ -122,9 +170,25 @@ async function assertCandidate(id, revision) {
   }
   return path;
 }
-async function preview(id, revision) {
+async function preview(id, revision, options = {}) {
+  const required = Boolean(options.working || options.verify);
   const path = await assertCandidate(id, revision);
-  const name = `sr-preview-${id}`;
+  let plan;
+  try {
+    const input = await readPreviewManifest(join(path, '.development-preview.json'));
+    plan = previewPlan(input, options.routes ?? (!required && Array.isArray(input?.scenarios) ? input.scenarios.map(s => s.route) : []), required);
+  } catch (error) { throw failure(error.message, 'feature'); }
+  if (options.verify && !plan.complete) throw new Error('Complete the accepted brief before requesting release verification.');
+  if (options.verify) await assertVerificationControls(path, id);
+  return provisionPreview(id, revision, path, plan, options);
+}
+async function removeRuntime(name) {
+  // Cleanup must still run after the operation's command deadline expires.
+  for (const container of [`${name}-gateway`, name, `${name}-db`]) await exec('docker', ['rm', '-f', container], { timeout: 10_000 }).catch(() => {});
+  await exec('docker', ['network', 'rm', `${name}-net`], { timeout: 10_000 }).catch(() => {});
+}
+async function provisionPreview(id, revision, path, plan, options) {
+  const name = `sr-preview-${id}-${randomBytes(4).toString('hex')}`;
   const dbName = `${name}-db`;
   const gateway = `${name}-gateway`;
   const network = `${name}-net`;
@@ -132,35 +196,25 @@ async function preview(id, revision) {
   const target = join(root, id, 'preview');
   const receiptFile = join(trustedRoot, `${id}-preview.json`);
   const old = JSON.parse(await readFile(receiptFile, 'utf8').catch(() => '{}'));
-  if (old.revision === revision && old.url && old.port && old.runtimeVersion === 3) {
-    if (old.proxyVersion !== 2) {
-      await docker('cp', `${source}/scripts/local-preview-proxy.mjs`, `${name}:/tmp/sr-preview-proxy.mjs`);
-      await docker('restart', name);
-      await docker('exec', '-d', name, 'sh', '-c', 'node build > /tmp/site.log 2>&1');
-      await docker('exec', '-d', '-e', `PREVIEW_PARENT_ORIGIN=${process.env.BUILDER_PREVIEW_PARENT_ORIGIN ?? 'http://127.0.0.1:5275'}`, name, 'node', '/tmp/sr-preview-proxy.mjs');
-      await new Promise((r) => setTimeout(r, 2000));
+  await ensureRuntimeImage();
+  const fingerprint = await runtimeFingerprint();
+  if (!options.verify && old.fingerprint === fingerprint && old.revision === revision && old.url && old.port && old.runtimeVersion === 4 && JSON.stringify(old.plan) === JSON.stringify(plan)) {
+    const healthy = await fetch(`http://${process.env.BUILDER_DOCKER_HOSTNAME ?? 'development-docker'}:${old.port}${plan.routes[0]}`, { headers: { host: `127.0.0.1:${old.port}` }, redirect: 'manual', signal: AbortSignal.timeout(5000) }).then(r => r.ok, () => false);
+    if (healthy) {
+      const url = previewLink(id, revision, old.port);
+      await writeFile(receiptFile, JSON.stringify({ ...old, url }));
+      return { revision, url, complete: plan.complete, evidence: old.evidence, detail: 'Retained working preview for this revision.' };
     }
-    const healthy = await fetch(`http://${process.env.BUILDER_DOCKER_HOSTNAME ?? 'development-docker'}:${old.port}/jkai/develop`, { headers: { host: `127.0.0.1:${old.port}` }, redirect: 'manual', signal: AbortSignal.timeout(5000) }).then((r) => r.status === 200, () => false);
-    const refreshedUrl = previewLink(id, revision, old.port);
-    if (healthy) await writeFile(receiptFile, JSON.stringify({ ...old, url: refreshedUrl, proxyVersion: 2, runtimeVersion: 3 }));
-    if (healthy) return { revision, url: refreshedUrl, detail: 'Retained isolated preview for this exact candidate.' };
   }
-  // One port per retained preview. Reuse the old slot, otherwise choose a free one.
+  // Build beside the visible snapshot. A failure or occupied staging slot leaves it intact.
   const ports = await docker('ps', '--format', '{{.Ports}}');
-  const port = old.port ?? Array.from({ length: 8 }, (_, i) => 5281 + i).find((p) => !ports.includes(`:${p}->`));
-  if (!port) throw new Error('All eight preview slots are occupied. Remove a finished preview before starting another.');
-  for (const container of [gateway, name, dbName]) await docker('rm', '-f', container).catch(() => {});
-  await docker('network', 'rm', network).catch(() => {});
+  const port = Array.from({ length: 8 }, (_, i) => 5281 + i).find(p => !ports.includes(`:${p}->`));
+  if (!port) throw new Error('All eight preview slots are occupied; the previous working preview is retained. Close another preview to make room.');
+  try {
   await docker('network', 'create', '--internal', network);
   await docker('run', '-d', '--name', dbName, '--network', network, '--memory', '512m',
     '-e', 'POSTGRES_USER=preview', '-e', `POSTGRES_PASSWORD=${credentials}`, '-e', 'POSTGRES_DB=preview', 'pgvector/pgvector:pg16');
-  const image = 'sr-development-preview:v3';
-  if (!(await docker('image', 'inspect', image).then(() => true, () => false))) {
-    const imageRoot = join(trustedRoot, 'preview-image');
-    await mkdir(imageRoot, { recursive: true });
-    await writeFile(join(imageRoot, 'Dockerfile'), 'FROM node:22.23.2-bookworm-slim\nRUN apt-get update && apt-get install -y --no-install-recommends git python3 bubblewrap && rm -rf /var/lib/apt/lists/*\nRUN mkdir -p /workspace && chown 1000:1000 /workspace\nUSER 1000:1000\nWORKDIR /workspace\n');
-    await docker('build', '-t', image, imageRoot);
-  }
+  const image = 'sr-development-preview:v4';
   await docker('run', '-d', '--name', name, '--network', network, '--memory', '8g', '--cpus', '4', '--pids-limit', '256',
     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
     // Nested Bubblewrap needs user namespaces and an unmasked /proc to mount its own.
@@ -185,7 +239,8 @@ async function preview(id, revision) {
   await docker('exec', dbName, 'psql', '-U', 'preview', '-d', 'preview', '-c', 'CREATE EXTENSION IF NOT EXISTS vector');
   await docker('exec', name, 'npx', 'drizzle-kit', 'push', '--force');
   await docker('cp', `${source}/scripts/local-preview-proxy.mjs`, `${name}:/tmp/sr-preview-proxy.mjs`);
-  await docker('exec', name, 'npm', 'run', 'build');
+  if (options.verify) await verifyRuntime(id, name);
+  else try { await docker('exec', name, 'npm', 'run', 'build'); } catch (error) { throw error.kind ? error : failure(`Feature build failed: ${(error.stderr || error.stdout || error.message).slice(-1600)}`, 'feature'); }
   await docker('exec', '-d', name, 'sh', '-c', 'node build > /tmp/site.log 2>&1');
   await docker('exec', '-d', name, 'node', '/tmp/sr-preview-proxy.mjs');
   await docker('run', '-d', '--name', gateway, '--user', '1000:1000', '--memory', '128m', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -196,20 +251,51 @@ async function preview(id, revision) {
   const internal = `http://${process.env.BUILDER_DOCKER_HOSTNAME ?? 'development-docker'}:${port}`;
   let healthy = false;
   for (let attempt = 0; attempt < 90; attempt++) {
+    if (Date.now() >= (operation.getStore()?.deadline ?? Infinity)) throw failure('Preview startup exceeded the operation deadline.', 'deadline');
     healthy = await fetch(`${internal}/jkai/develop`, { redirect: 'manual', headers: { host: `127.0.0.1:${port}` }, signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false);
     if (healthy) break;
     await new Promise((r) => setTimeout(r, 1000));
   }
   if (!healthy) { const log = await docker('exec', name, 'cat', '/tmp/site.log').catch(() => 'No startup log'); throw new Error('Preview readiness failed: ' + log.slice(-1600)); }
+  await writeFile(join(target, 'preview-plan.json'), JSON.stringify(plan));
+  await docker('cp', `${target}/preview-plan.json`, `${name}:/tmp/preview-plan.json`);
+  await docker('cp', `${source}/scripts/development-preview-check.mjs`, `${name}:/tmp/development-preview-check.mjs`);
+  let evidence;
+  try { evidence = JSON.parse(await docker('exec', name, 'node', '/tmp/development-preview-check.mjs')); }
+  catch (error) { throw error.kind ? error : failure(`Feature browser check failed: ${(error.stderr || error.stdout || error.message).slice(-1600)}`, 'feature'); }
+  await assertCandidate(id, revision);
   const url = previewLink(id, revision, port);
-  await writeFile(receiptFile, JSON.stringify({ revision, port, url, proxyVersion: 2, runtimeVersion: 3 }));
-  return { revision, url, detail: 'Separate disposable database, no provider credentials, no outbound network or host mounts.' };
+  const receipt = { revision, port, url, name, plan, evidence, proxyVersion: 2, runtimeVersion: 4, fingerprint, verified: options.verify === true };
+  await writeFile(receiptFile + '.next', JSON.stringify(receipt));
+  await rename(receiptFile + '.next', receiptFile);
+  if (old.port) await removeRuntime(old.name ?? `sr-preview-${id}`);
+  return { revision, url, complete: plan.complete, evidence, detail: `${options.verify ? 'Release candidate' : plan.scenarios.length ? 'Working preview' : 'Inspection preview'}: feature routes checked at desktop and phone widths. Synthetic database; live providers are not connected.` };
+  } catch (error) { await removeRuntime(name); throw error; }
 }
 async function closePreview(id) {
-  for (const name of [`sr-preview-${id}-gateway`, `sr-preview-${id}`, `sr-preview-${id}-db`]) await docker('rm', '-f', name).catch(() => {});
-  await docker('network', 'rm', `sr-preview-${id}-net`).catch(() => {});
-  await writeFile(join(trustedRoot, `${id}-preview.json`), '{}');
+  const receiptFile = join(trustedRoot, `${id}-preview.json`);
+  const receipt = JSON.parse(await readFile(receiptFile, 'utf8').catch(() => '{}'));
+  await removeRuntime(receipt.name ?? `sr-preview-${id}`);
+  await writeFile(receiptFile, '{}');
   return { closed: true };
+}
+async function verifyRuntime(id, container) {
+  const verify = async (step, args, environment = []) => {
+    const log = join(trustedRoot, `${id}-gate-${step}.log`);
+    try { await writeFile(log, await docker('exec', ...environment, container, ...args)); }
+    catch (error) {
+      const output = `${error.stdout ?? ''}\n${error.stderr ?? error.message}`;
+      await writeFile(log, output);
+      throw failure(`${step} failed in isolated verification; full output retained in ${log}. ${output.replace(/\x1b\[[0-9;]*m/g, '').slice(-1600)}`, error.kind ?? 'feature');
+    }
+  };
+  await verify('structural', ['bash', './scripts/gate-structural.sh']);
+  await verify('sync', ['npm', 'run', 'gate:sync']);
+  await verify('types', ['npx', '--no-install', 'svelte-check', '--tsconfig', './tsconfig.json', '--threshold', 'error']);
+  await verify('tests', ['npx', '--no-install', 'vitest', 'run', '--exclude', '**/*.integration.test.ts', '--maxWorkers', '2'], ['-e', 'JKAI_SERVICE_ROLE=web']);
+  await verify('build', ['npm', 'run', 'gate:build']);
+  await verify('sidecars', ['npm', 'run', 'build:release-sidecars']);
+  await verify('clean', ['git', 'diff', '--exit-code']);
 }
 
 async function assertVerificationControls(path, id) {
@@ -225,7 +311,7 @@ async function assertVerificationControls(path, id) {
   if (JSON.stringify(trusted.scripts) !== JSON.stringify(candidate.scripts)) throw new Error('Build/test commands changed. Review them in the cumulative checkout before batch acceptance.');
 }
 
-async function accept(id, revision) {
+async function accept(id, revision, routes) {
   const path = await assertCandidate(id, revision);
   const acceptedFile = join(trustedRoot, `${id}-accepted.json`);
   const accepted = JSON.parse(await readFile(acceptedFile, 'utf8').catch(() => '{}'));
@@ -256,22 +342,9 @@ async function accept(id, revision) {
     if (!(await stat(join(trial, 'node_modules')).catch(() => null))) await command('cp', ['-a', `${path}/node_modules`, `${trial}/node_modules`]);
     await command('chown', ['-R', '1000:1000', join(root, trialId)]);
     const merged = await git(trial, 'rev-parse', 'HEAD');
-    const tested = await preview(trialId, merged);
-    const container = `sr-preview-${trialId}`;
-    const verify = async (step, args, environment = []) => {
-      const log = join(trustedRoot, `${id}-gate-${step}.log`);
-      try { await writeFile(log, await docker('exec', ...environment, container, ...args)); }
-      catch (error) {
-        await writeFile(log, `${error.stdout ?? ''}\n${error.stderr ?? error.message}`);
-        throw new Error(`${step} failed; full output retained in ${log}. ${String(error.stderr || error.stdout || error.message).replace(/\x1b\[[0-9;]*m/g, '').slice(-1400)}`);
-      }
-    };
-    await verify('structural', ['bash', './scripts/gate-structural.sh']);
-    await verify('types', ['npx', '--no-install', 'svelte-check', '--tsconfig', './tsconfig.json', '--threshold', 'error']);
-    await verify('tests', ['npx', '--no-install', 'vitest', 'run', '--exclude', '**/*.integration.test.ts', '--maxWorkers', '2'], ['-e', 'JKAI_SERVICE_ROLE=web']);
-    await verify('build', ['npm', 'run', 'gate:build']);
-    await verify('builder', ['node', 'packages/jkai-builder/build.mjs']);
-    await verify('clean', ['git', 'diff', '--exit-code']);
+    const tested = await preview(trialId, merged, { routes });
+    const container = JSON.parse(await readFile(join(trustedRoot, `${trialId}-preview.json`), 'utf8')).name;
+    await verifyRuntime(id, container);
     await assertCandidate(trialId, merged);
     // Build tools rewrote generated files; reopen the tested production server.
     await docker('restart', container);
@@ -301,10 +374,13 @@ http.createServer(async (req, res) => {
     for await (const chunk of req) { raw += chunk; if (raw.length > 32000) throw new Error('Request too large'); }
     const body = JSON.parse(raw);
     const id = validId(body.buildId);
-    const methods = { '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision) };
+    const methods = { '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes) };
     if (req.method !== 'POST' || !Object.hasOwn(methods, req.url)) { respond(404, { error: 'Unknown operation' }); return; }
-    const work = lane.then(methods[req.url]);
+    const deadline = Math.min(Number.isFinite(body.deadline) ? body.deadline : Infinity, Date.now() + (req.url === '/preflight' ? 110_000 : ['/accept', '/verify'].includes(req.url) ? 1_170_000 : 570_000));
+    const timings = {};
+    const requestedAt = Date.now();
+    const work = lane.then(() => { timings.queue = Date.now() - requestedAt; return operation.run({ deadline, timings }, methods[req.url]); });
     lane = work.catch(() => {});
-    respond(200, await work);
-  } catch (error) { respond(400, { error: String(error.message).slice(-2000) }); }
+    respond(200, { ...await work, timings });
+  } catch (error) { respond(400, { error: String(error.message).slice(-2000), kind: error.kind ?? 'infrastructure' }); }
 }).listen(5280, '0.0.0.0');

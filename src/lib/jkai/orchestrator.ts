@@ -1,3 +1,4 @@
+import { DEVELOPMENT_LIMITS, developmentDeadline, developmentFailureKind } from './development-cycle';
 import { readdir } from 'node:fs/promises';
 import { loadDelivery, mutateDelivery } from '$lib/jkai/development-state.server';
 import { candidateChanged } from '$lib/jkai/development';
@@ -136,6 +137,7 @@ class Orchestrator {
   // Mutable deadline for the currently-executing iteration's Pi process.
   // The UI can push this back via extendDeadline() to grant more time.
   private currentDeadline: { current: number } | null = null;
+  private developmentDeadlineCap = Infinity;
   // Re-entrancy guard: when an entry-point is being called by dequeueNext()
   // itself, we want to bypass the "queue if active" check. Without this,
   // dequeueNext could see activeBuildId still set during an in-progress
@@ -144,7 +146,7 @@ class Orchestrator {
 
   extendDeadline(buildId: string, additionalMs: number): number | null {
     if (this.activeBuildId !== buildId || !this.currentDeadline) return null;
-    this.currentDeadline.current += additionalMs;
+    this.currentDeadline.current = Math.min(this.developmentDeadlineCap, this.currentDeadline.current + additionalMs);
     return this.currentDeadline.current;
   }
 
@@ -1132,9 +1134,36 @@ class Orchestrator {
       }
       const retryNudge = nudges.length ? nudges.join('\n\n') : undefined;
 
-      const deadlineRef = { current: Date.now() + 30 * 60 * 1000 };
+      let development = await loadDelivery(buildId);
+      if (development) {
+        if (!development.state.cycle) development = await mutateDelivery(buildId, 'cycle_started', s => ({ ...s, cycle: { startedAt: new Date().toISOString(), modelId: build.modelId ?? undefined, startingCandidate: s.candidate, repairAttempts: 0, modelMs: 0, previewMs: 0, verificationMs: 0 } }));
+        const cycle = development.state.cycle!;
+        let blocker = '';
+        const checkpointExpired = Date.now() >= developmentDeadline(cycle.startedAt, Boolean(development.state.preview.url && ['working', 'release'].includes(development.state.preview.kind ?? '')));
+        if (checkpointExpired) blocker = 'Development checkpoint deadline reached. Review saved work before continuing.';
+        else if (!cycle.preflightAt) {
+          try {
+            const { workspaceBroker } = await import('./development-workspace.server');
+            await emitLog(buildId, 'system', 'Checking the isolated executor before model work.', iteration.id);
+            await workspaceBroker('preflight', buildId);
+            await mutateDelivery(buildId, 'executor_ready', s => ({ ...s, stage: 'building', cycle: { ...s.cycle!, preflightAt: new Date().toISOString() } }));
+          } catch (error) { blocker = error instanceof Error ? error.message : 'Executor unavailable'; }
+        }
+        if (this.stopped || this.activeBuildId !== buildId) return;
+        if (blocker) {
+          await mutateDelivery(buildId, 'cycle_blocked', s => ({ ...s, stage: 'building', cycle: { ...s.cycle!, failure: blocker, failureKind: checkpointExpired ? 'deadline' : 'infrastructure' } }));
+          await db.update(jkaiIterations).set({ status: 'failed', evaluation: blocker }).where(eq(jkaiIterations.id, iteration.id));
+          await db.update(jkaiBuilds).set({ status: 'paused', outcome: null, updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
+          await emitLog(buildId, 'error', blocker, iteration.id);
+          await emitStage(buildId, { stage: 'paused', message: blocker });
+          this.activeBuildId = null; await this.dequeueNext(); return;
+        }
+      }
+      const deadlineRef = { current: development ? Math.min(Date.now() + DEVELOPMENT_LIMITS.turnMs, developmentDeadline(development.state.cycle!.startedAt, Boolean(development.state.preview.url && ['working', 'release'].includes(development.state.preview.kind ?? '')))) : Date.now() + 30 * 60 * 1000 };
+      this.developmentDeadlineCap = development ? deadlineRef.current : Infinity;
       this.currentDeadline = deadlineRef;
 
+      const modelStartedAt = Date.now();
       const result = await executeIteration(
         build,
         iteration,
@@ -1150,6 +1179,7 @@ class Orchestrator {
 
       this.currentDeadline = null;
 
+      const modelMs = Date.now() - modelStartedAt;
       const durationMs = Date.now() - startTime;
       const failure = result.failure;
       const iterationStatus: 'completed' | 'failed' = failure ? 'failed' : 'completed';
@@ -1258,7 +1288,13 @@ class Orchestrator {
       //    real failure). max_iterations/maxTotalMinutes budget will still cap.
       // 4. Any other failure kind        → abort immediately.
       // 5. consecutive_failures >= 2     → safety net abort.
-      if (failure) {
+      if (failure && development && !['wall_clock_timeout', 'iteration_token_cap'].includes(failure.kind)) {
+        await mutateDelivery(buildId, 'provider_blocked', s => ({ ...s, stage: 'building', cycle: { ...s.cycle!, modelMs: s.cycle!.modelMs + modelMs, failureKind: 'infrastructure', failure: failure.message } }));
+        await db.update(jkaiBuilds).set({ status: 'paused', outcome: null, updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
+        await emitStage(buildId, { stage: 'paused', message: failure.message });
+        this.activeBuildId = null; await this.dequeueNext(); return;
+      }
+      if (failure && !(development && ['wall_clock_timeout', 'iteration_token_cap'].includes(failure.kind))) {
         const canContinue =
           (failure.kind === 'empty_output' && !isEmptyOutputRetry) ||
           failure.kind === 'wall_clock_timeout' ||
@@ -1449,6 +1485,56 @@ class Orchestrator {
             iteration.id,
           );
         }
+      }
+
+      // Delivery-managed work first produces a browser-checked working slice.
+      // Full repository gates run only for a requested release candidate, in
+      // the broker executor where namespace-dependent tests can run faithfully.
+      if (build.gitTargetConfig && await loadDelivery(buildId)) {
+        const { developmentCheckpoint } = await import('./development-workspace.server');
+        const before = (await loadDelivery(buildId))!.state.candidate;
+        let ready = false;
+        let failure = '';
+        let failureKind: 'feature' | 'infrastructure' | 'deadline' = 'feature';
+        try {
+          await emitLog(buildId, 'system', 'Preparing a working preview of the feature page before further iteration.', iteration.id);
+          ready = await developmentCheckpoint(buildId, async run => {
+            if (this.stopped || this.activeBuildId !== buildId) throw new Error('Build paused before release verification.');
+            const started = Date.now();
+            for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'running', command: 'Trusted broker: structural, types, tests, production build and sidecars' }, iteration.id);
+            try {
+              const result = await run();
+              if (this.stopped || this.activeBuildId !== buildId) throw new Error('Build paused during release verification.');
+              for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'passed', durationMs: Date.now() - started, detail: 'Repository and feature browser checks passed for this revision.' }, iteration.id);
+              return result;
+            } catch (error) {
+              for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'failed', durationMs: Date.now() - started, detail: error instanceof Error ? error.message : 'Verification failed.' }, iteration.id);
+              throw error;
+            }
+          });
+        } catch (error) { failure = error instanceof Error ? error.message : 'Working preview failed.'; failureKind = developmentFailureKind(error); }
+        if (this.stopped || this.activeBuildId !== buildId) return;
+        const state = (await loadDelivery(buildId))!.state;
+        const message = ready ? 'Release candidate ready: feature browser checks and isolated repository gates passed. Review the preview and record acceptance evidence.'
+          : failure ? `Preview/check failure: ${failure}. Fix this before expanding the feature. The last successful preview is retained.`
+          : `Working preview ${state.preview.number ?? 1} ready. Continue with the next useful increment; set complete:true in .development-preview.json only when the accepted brief is implemented.`;
+        await emitLog(buildId, failure ? 'error' : 'system', message, iteration.id);
+        await db.update(jkaiIterations).set({ evaluation: `${result.evaluation ?? ''}\n\n${message}` }).where(eq(jkaiIterations.id, iteration.id));
+        this.consecutiveIdleIterations = before && before === state.candidate ? this.consecutiveIdleIterations + 1 : 0;
+        const cycle = state.cycle;
+        const expired = cycle && Date.now() >= developmentDeadline(cycle.startedAt, Boolean(state.preview.url && ['working', 'release'].includes(state.preview.kind ?? '')));
+        const repairs = failure ? (cycle?.repairAttempts ?? 0) + 1 : 0;
+        const unchanged = !ready && this.consecutiveIdleIterations >= 1;
+        const pauseReason = expired && !ready ? 'Development checkpoint deadline reached. The last working preview and source are retained.' : failure || (unchanged ? 'The last turn changed no files. Review the preview or refine the brief before continuing.' : undefined);
+        await mutateDelivery(buildId, 'cycle_progress', s => !s.cycle ? s : ({ ...s, cycle: { ...s.cycle, modelMs: s.cycle.modelMs + modelMs, repairAttempts: repairs, failureKind: expired && !ready ? 'deadline' : failure ? failureKind : unchanged ? 'feature' : undefined, failure: pauseReason } }));
+        const idleCap = 1;
+        if (ready || expired || this.consecutiveIdleIterations >= idleCap || (failure && (failureKind !== 'feature' || repairs > DEVELOPMENT_LIMITS.repairAttempts))) {
+          await db.update(jkaiBuilds).set({ status: 'paused', outcome: ready ? 'preview_ready' : null, updatedAt: new Date() }).where(eq(jkaiBuilds.id, buildId));
+          await emitStage(buildId, { stage: 'paused', message: ready ? 'Release candidate ready for review' : pauseReason ?? 'Preview progress needs attention; saved work is retained.' });
+          this.activeBuildId = null;
+          await this.dequeueNext();
+        } else this.scheduleNext(buildId, 1000);
+        return;
       }
 
       // Run test suite. Test/eval branch-point: git-target builds run the

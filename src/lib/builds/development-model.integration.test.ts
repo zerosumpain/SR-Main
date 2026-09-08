@@ -1,0 +1,28 @@
+import { afterAll, expect, it } from 'vitest';
+import { db } from '$lib/db';
+import { jkaiBuilds } from '$lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { POST as create } from '../../routes/api/jkai/development/+server';
+import { POST as change } from '../../routes/api/jkai/development/[id]/+server';
+import { loadDelivery } from '$lib/jkai/development-state.server';
+import { CODEX_MODELS, toCodexModelId } from '$lib/server/models/codex-catalogue';
+const local = process.env.JKAI_LOCAL_TESTS === '1' && /127\.0\.0\.1:15435\/jkai_local/.test(process.env.DATABASE_URL ?? '');
+let id: string;
+const request = (body: unknown) => new Request('http://local/api/jkai/development', { method: 'POST', body: JSON.stringify(body) });
+afterAll(async () => { if (id) await db.delete(jkaiBuilds).where(eq(jkaiBuilds.id, id)); });
+it.skipIf(!local)('persists a selected model, rejects unknown and stale choices, and locks active builds', async () => {
+  const models = CODEX_MODELS.slice(0, 2).map(m => toCodexModelId(m.slug));
+  expect((await create({ request: request({ area: 'Platform', outcome: 'Synthetic model contract', modelId: 'invented/model' }) } as any)).status).toBe(400);
+  const response = await create({ request: request({ area: 'Platform', outcome: 'Synthetic model contract', modelId: models[0] }) } as any);
+  expect(response.status).toBe(201); id = (await response.json()).buildId;
+  const original = (await loadDelivery(id))!;
+  const body = { action: 'brief', revision: original.revision, briefRevision: original.state.brief.revision, area: 'Platform', outcome: 'Synthetic model contract', constraints: '', criteria: 'Works', routes: '/example', modelId: models[1] };
+  expect((await change({ params: { id }, request: request(body) } as any)).status).toBe(200);
+  let [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id));
+  expect(build.modelId).toBe(models[1]); expect(build.modelProvider).toBe('codex');
+  expect((await change({ params: { id }, request: request({ ...body, modelId: models[0] }) } as any)).status).toBe(409);
+  await db.update(jkaiBuilds).set({ status: 'running' }).where(eq(jkaiBuilds.id, id));
+  const current = (await loadDelivery(id))!;
+  expect((await change({ params: { id }, request: request({ ...body, revision: current.revision, briefRevision: current.state.brief.revision, modelId: models[0] }) } as any)).status).toBe(400);
+  [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id)); expect(build.modelId).toBe(models[1]);
+});

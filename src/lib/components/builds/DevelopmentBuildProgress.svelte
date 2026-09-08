@@ -51,15 +51,23 @@
            waits on `getByRole('heading', …)` for this exact sentence, and it
            is the panel's title either way. -->
       <h3 class="pg-headline">{position.label}</h3>
-      <p class="pg-body">{position.ready ? position.inspection ? 'Look at the saved implementation. Repository checks and acceptance evidence are still required.' : 'Try the candidate against the accepted brief, then record what passed.' : position.previewReason}</p>
+      <p class="pg-body">{position.ready ? position.working ? 'Try the working page and send feedback while the next increment is built.' : position.inspection ? 'Look at the saved implementation. Repository checks and acceptance evidence are still required.' : 'Try the candidate against the accepted brief, then record what passed.' : position.previewReason}</p>
       <div class="pg-actions">
         {#if position.ready}<button class="pg-run" onclick={() => navigate('Preview')}>Review {position.inspection ? 'inspection ' : ''}preview</button>
         {:else if position.verified}<button class="pg-run" disabled={busy || position.busy || delivery.preview.status === 'starting'} onclick={prepare}>Prepare preview</button>
         {:else if position.work}<button class="pg-run" disabled={busy || !position.canInspect} onclick={inspect}>{delivery.preview.status === 'starting' ? 'Preparing inspection…' : 'Prepare inspection preview'}</button>{/if}
         <a class="pg-link" href={`/jkai/builds/${buildId}`}>Inspect saved source ↗</a>
       </div>
-      {#if position.work && position.busy && !position.ready}<p class="pg-stamp">Pause the build above to create an inspection snapshot.</p>{/if}
-      {#if !position.verified}<p class="pg-stamp">Inspection does not pass the checks or permit acceptance into the batch.</p>{/if}
+      {#if position.work && position.busy && !position.ready}<p class="pg-stamp">The first working preview appears automatically. You can pause to inspect saved work.</p>{/if}
+      {#if !position.verified}<p class="pg-stamp">Full repository checks and acceptance evidence are required before this becomes a release candidate.</p>{/if}
+      {#if delivery.cycle}
+        <p class="pg-stamp">Checkpoint targets: working preview in 10m · release candidate in 20m.</p>
+        <p class="pg-stamp">Model work {Math.round(delivery.cycle.modelMs / 1000)}s · preview checks {Math.round(delivery.cycle.previewMs / 1000)}s · release checks {Math.round(delivery.cycle.verificationMs / 1000)}s</p>
+        {#if delivery.cycle.phaseMs}<details class="pg-fold"><summary>Executor time by phase</summary><dl class="pg-dl">{#each Object.entries(delivery.cycle.phaseMs) as [phase, ms]}<div><dt>{phase}</dt><dd>{Math.round(ms / 1000)}s</dd></div>{/each}</dl></details>{/if}
+        {#if delivery.cycle.firstPreviewAt}<p class="pg-stamp">First working preview: {Math.round((Date.parse(delivery.cycle.firstPreviewAt) - Date.parse(delivery.cycle.startedAt)) / 1000)}s from start.</p>{/if}
+        {#if delivery.cycle.failure}<p role="status" class="pg-fold">{delivery.cycle.failureKind}: {delivery.cycle.failure}</p>{/if}
+      {/if}
+      {#if delivery.preview.lastError}<details class="pg-fold"><summary>Latest preview or verification failure</summary><pre>{delivery.preview.lastError}</pre></details>{/if}
       {#if position.failed && progress.testFailure}<details class="pg-fold"><summary>Last repository failure · {new Date(progress.testFailure.createdAt).toLocaleTimeString()}</summary><pre>{progress.testFailure.content}</pre></details>{/if}
     </div>
 

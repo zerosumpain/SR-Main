@@ -1,3 +1,4 @@
+import { resolveDevelopmentModel } from '$lib/jkai/development-models.server';
 import { developmentProgress } from '$lib/builds/development-progress.server';
 import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/db';
@@ -34,12 +35,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id));
   try {
     if (delivery.state.stage === 'integrating' && body.action !== 'accept') throw new Error('Batch integration is in progress.');
-    if (delivery.state.preview.status === 'starting') throw new Error('Preview preparation is in progress. Wait for its result before changing this workspace.');
+    if (delivery.state.preview.status === 'starting' && !['steer', 'pause', 'stop', 'note'].includes(body.action)) throw new Error('Preview preparation is in progress. Wait for its result before changing this workspace.');
     switch (body.action) {
       case 'groom': {
         if (['running', 'queued'].includes(build.status) || delivery.state.brief.acceptedAt) throw new Error('Grooming is available for draft briefs. Pause and edit an accepted brief explicitly.');
         if (body.briefRevision !== delivery.state.brief.revision) throw new Error('The brief changed; reload before refining.');
         if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
+        const model = body.modelId === undefined || body.modelId === build.modelId ? { provider: build.modelProvider, modelId: build.modelId } : await resolveDevelopmentModel(body.modelId);
         const draft = readBriefFields(body);
         const message = text(body.message ?? '', 5000);
         const turns = delivery.state.grooming?.turns ?? [];
@@ -48,7 +50,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
           brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null },
           criteria: proposal.criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
           grooming: { ...proposal.grooming, turns: [...turns, ...(message ? [{ questions: draft.questions, answer: message }] : [])].slice(-12) },
-        }), revision);
+        }), revision, { modelProvider: model.provider, modelId: model.modelId });
         break;
       }
       case 'brief': {
@@ -61,10 +63,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
         const routes = text(body.routes).split('\n').map((s) => s.trim()).filter(Boolean);
         if (!outcome || !criteria.length || routes.some((r) => !r.startsWith('/') || r.startsWith('//'))) throw new Error('Provide an outcome, acceptance criteria and valid local route paths.');
         if (!PRODUCT_AREAS.includes(body.area)) throw new Error('Choose a product area');
+        const model = body.modelId === undefined || body.modelId === build.modelId ? { provider: build.modelProvider, modelId: build.modelId } : await resolveDevelopmentModel(body.modelId);
         await mutateDelivery(id, 'brief_accepted', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area, stage: 'brief', acceptedAt: null, batch: null, gate: null, preview: { url: null, status: 'unavailable', detail: 'The brief changed; build and verify it again.' },
           brief: { ...extra, revision: s.brief.revision + 1, outcome, constraints, routes, acceptedAt: new Date().toISOString() },
-          criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })) }), revision);
-        await db.update(jkaiBuilds).set({ prompt: outcome }).where(eq(jkaiBuilds.id, id));
+          criteria: criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })) }), revision, { prompt: outcome, modelProvider: model.provider, modelId: model.modelId });
         break;
       }
       case 'start':
@@ -74,7 +76,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (!delivery.state.brief.acceptedAt) throw new Error('Accept the brief before building.');
         if (delivery.state.decisions.some((d) => !d.answer)) throw new Error('Answer the pending decisions first.');
         if (['running', 'queued'].includes(build.status)) throw new Error('This build is already active.');
-        await mutateDelivery(id, 'build_requested', (s) => ({ ...s, stage: 'queued', acceptedAt: null, batch: null }), revision);
+        await mutateDelivery(id, 'build_requested', (s) => ({ ...s, stage: 'queued', acceptedAt: null, batch: null, cycle: { startedAt: new Date().toISOString(), modelId: build.modelId ?? undefined, startingCandidate: s.candidate, repairAttempts: 0, modelMs: 0, previewMs: 0, verificationMs: 0 } }), revision);
         try {
           if (delivery.state.session.id) await builderClient.restartBuild(id);
           else await builderClient.startBuild(id);
@@ -112,6 +114,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         break;
       }
       case 'criterion': {
+        if (['running', 'queued'].includes(build.status) || (delivery.state.preview.revision && delivery.state.preview.revision !== delivery.state.candidate)) throw new Error('Wait for the current revision to be previewed before recording evidence.');
         if (delivery.state.acceptedAt) throw new Error('Start a new revision before changing evidence for accepted work.');
         if (body.candidate !== delivery.state.candidate) throw new Error('The candidate changed; review the new preview.');
         if (!delivery.state.candidate) throw new Error('There is no candidate to evaluate.');
@@ -133,13 +136,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (!delivery.state.brief.acceptedAt || delivery.state.acceptedAt) throw new Error('Inspection needs an accepted brief that has not joined the batch.');
         const progress = await developmentProgress(id);
         if (!progress.iterations.some(i => i.tokensUsed > 0) && !delivery.state.candidate) throw new Error('No saved implementation to inspect yet.');
-        await mutateDelivery(id, 'inspection_requested', s => ({ ...s, preview: { url: null, status: 'starting', detail: 'Snapshotting saved work for inspection; acceptance remains blocked.' } }), revision);
+        await mutateDelivery(id, 'inspection_requested', s => ({ ...s, preview: { ...s.preview, status: 'starting', detail: 'Snapshotting saved work for inspection; acceptance remains blocked.' } }), revision);
         try {
           const result = await workspaceBroker('snapshot', id);
           await mutateDelivery(id, 'inspection_snapshot', s => inspectionCandidate(s, result.revision, result.changes));
           await prepareDevelopmentPreview(id);
         } catch (e) {
-          await mutateDelivery(id, 'inspection_failed', s => ({ ...s, preview: { url: null, status: 'failed', detail: e instanceof Error ? e.message.slice(-2000) : 'Inspection preview failed.' } }));
+          await mutateDelivery(id, 'inspection_failed', s => ({ ...s, preview: { ...delivery.state.preview, status: delivery.state.preview.url ? 'ready' : 'failed', lastError: e instanceof Error ? e.message.slice(-2000) : 'Inspection preview failed.', detail: 'Inspection failed; any previous working preview is retained.' } }));
           throw e;
         }
         break;

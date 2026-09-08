@@ -19,6 +19,13 @@ assert.equal(page.status, 200, 'Owner development page must load');
 // collapsing whitespace keeps this a check that the page rendered.
 const rendered = (await page.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
 assert.ok(rendered.includes('What should the site do next?'), 'The owner development page must render its headline');
+const models = await fetch('http://127.0.0.1:4173/api/jkai/development/models', { headers });
+assert.equal(models.status, 200, 'Owner model catalogue must load');
+const catalogue = await models.json();
+assert.ok(catalogue.models.some(model => model.id.startsWith('codex/')) && catalogue.defaultModel.modelId, 'Build models and default must be available');
+const anonymousModels = await fetch('http://127.0.0.1:4173/api/jkai/development/models');
+assert.ok([401, 403].includes(anonymousModels.status), 'Model catalogue remains owner-only');
+console.log('Production development model catalogue verified.');
 const api = await fetch('http://127.0.0.1:4173/api/jkai/development', { headers, redirect: 'manual' });
 assert.equal(api.status, 200, 'Delivery schema and owner API must be usable');
 assert.ok(Array.isArray(await api.json()));

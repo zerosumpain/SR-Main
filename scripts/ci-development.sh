@@ -36,6 +36,15 @@ sudo install -m 644 deploy/development/compose.yaml "$ROOT/compose.yaml"
 compose=(sudo docker compose --env-file "$ROOT/compose.env" -f "$ROOT/compose.yaml")
 "${compose[@]}" config --quiet
 "${compose[@]}" build broker
+# Replacing the broker while a worker is building can strand its in-flight
+# checkpoint. Check live database state immediately before changing containers.
+sudo bash -s -- "$SOURCE" <<'IDLE'
+set -euo pipefail
+set -a
+. /opt/strange-rambling-svelte/.env
+set +a
+node "$1/scripts/ci-development-idle.mjs"
+IDLE
 "${compose[@]}" up -d --wait --wait-timeout 180
 for attempt in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:5280/health >/dev/null; then break; fi
@@ -113,3 +122,15 @@ if [ "$(sudo cat "$ROOT/verified-runtime.sha256" 2>/dev/null || true)" != "$RUNT
   "${compose[@]}" exec -T broker node /source/scripts/qa/production-development-preview.mjs "$SHA"
   printf '%s\n' "$RUNTIME_HASH" | sudo tee "$ROOT/verified-runtime.sha256" >/dev/null
 fi
+
+"${compose[@]}" exec -T broker node --input-type=module <<'PREFLIGHT'
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+const response = await fetch('http://127.0.0.1:5280/preflight', {
+  method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.BUILDER_WORKSPACE_BROKER_TOKEN}` },
+  body: JSON.stringify({ buildId: randomUUID() }), signal: AbortSignal.timeout(115000),
+});
+const result = await response.json();
+assert.ok(response.ok && result.ready, result.error ?? 'Executor preflight failed');
+console.log('Production development executor preflight passed.');
+PREFLIGHT
