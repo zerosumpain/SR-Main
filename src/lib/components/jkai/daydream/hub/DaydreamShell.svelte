@@ -36,6 +36,15 @@
     active: string;
     /** For a tab with no `href` — in-page state, the shape /jkai/agents keeps. */
     ontab?: (id: string) => void;
+    /**
+     * Interactive chrome on the right of the RAIL, after the tabs — the
+     * development workspace's build/pause/stop controls. The shape
+     * `HealthShell.actions` has, and here for the same reason: a control that
+     * must stay reachable at every scroll position belongs in the only thing
+     * on the page that is sticky. The cover would carry it out of reach the
+     * moment the page scrolls.
+     */
+    actions?: Snippet;
     /** The tile deck under the headline. Named `masthead`, not `deck`, because
      *  a snippet's name shadows the page's own bindings and the daydream page
      *  already has a `deck` — the triage cards. */
@@ -57,6 +66,7 @@
     tabs,
     active,
     ontab = undefined,
+    actions = undefined,
     masthead = undefined,
     footer = [],
     children,
@@ -142,6 +152,7 @@
           </button>
         {/if}
       {/each}
+      {#if actions}<div class="ds-rail-actions">{@render actions()}</div>{/if}
     </div>
   </nav>
 
@@ -334,6 +345,17 @@
   }
   .ds-rail-inner::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Pushed to the right edge of the rail; on a phone the rail scrolls and
+     these come with it rather than wrapping the tabs onto a second row. */
+  .ds-rail-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 18px;
   }
 
   .ds-tab {
