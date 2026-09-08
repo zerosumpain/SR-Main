@@ -12,7 +12,13 @@ for (const salt of ['authjs.session-token', '__Secure-authjs.session-token']) {
 const headers = { host: 'strangeramblings.com', 'x-forwarded-proto': 'https', cookie: cookies.join('; ') };
 const page = await fetch('http://127.0.0.1:4173/jkai/develop', { headers, redirect: 'manual' });
 assert.equal(page.status, 200, 'Owner development page must load');
-assert.ok((await page.text()).includes('What should the site do next?'));
+// Match the rendered SENTENCE, not the raw HTML. The cover's headline arrives
+// as an array of lines — where it folds is a typographic decision — so the
+// words are separated by a `<br />` in the markup and a raw `includes` on the
+// document fails on a change that is purely visual. Stripping tags and
+// collapsing whitespace keeps this a check that the page rendered.
+const rendered = (await page.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+assert.ok(rendered.includes('What should the site do next?'), 'The owner development page must render its headline');
 const api = await fetch('http://127.0.0.1:4173/api/jkai/development', { headers, redirect: 'manual' });
 assert.equal(api.status, 200, 'Delivery schema and owner API must be usable');
 assert.ok(Array.isArray(await api.json()));
