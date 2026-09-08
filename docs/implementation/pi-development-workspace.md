@@ -444,3 +444,37 @@ form itself is directly accessible through the LAN gateway.
 
 No production deployment or real-model benchmark was performed. The local Pi
 provider list and OpenRouter key configuration were both empty when checked.
+
+
+### Default candidate review and feature preview navigation (2026-09-08)
+
+Protected preview grant exchange now preserves the requested feature path and
+query while removing the one-time grant parameter. Both the embedded preview
+and Open site preview therefore land on the selected feature, including
+`/rome-holiday-planner`, instead of being redirected to the home page.
+
+Continue automatically is the default next step on Preview and Delivery. It
+saves any edited owner observations, reinspects the retained candidate in a
+browser at desktop and phone widths, and asks the build's selected model to
+assess unanswered criteria using those observations and the candidate diff.
+Assessments carry observed/inferred attribution, evidence, model and revision;
+explicit owner verdicts remain authoritative. Optimistic revision checks prevent
+a review from overwriting feedback saved while the model is working.
+
+Passing criteria only join the cumulative batch when the exact candidate also
+has passing repository gates and no pending owner instructions. Otherwise the
+worker resumes with the assessment and owner feedback. This action does not
+publish a PR or deploy production. Inspection retains the existing preview.
+
+Validation includes gateway redirect and authenticated follow-through tests,
+criterion precedence/parser tests, isolated Postgres continuation/concurrency
+tests, real browser reinspection of a retained local preview, and desktop/phone
+UI checks with a synthetic reviewer. Local provider credentials are absent, so
+these checks do not claim a live model assessment.
+
+Local rollout validation: structural/source checks, Svelte checks (zero errors),
+`gate:build` including client budgets, and `build:builder` passed. Plain
+`npm run build` first exhausted Node's default heap; the configured 6 GiB build
+gate completed successfully. Refreshed the local web, builder and broker without
+resetting volumes or resuming existing builds. Review at
+`http://192.168.0.77:5275/jkai/develop`. No production deployment for this batch.

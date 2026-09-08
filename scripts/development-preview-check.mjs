@@ -41,7 +41,7 @@ export function previewPlan(input, routes, required = true) {
         if (!short(step.text)) throw new Error('Text checks need expected visible text.');
         if (interacted) observed = true;
       } else if (['click', 'fill', 'select'].includes(step.action)) {
-        if (!['button', 'link', 'textbox', 'combobox', 'checkbox', 'radio', 'tab', 'switch', 'spinbutton'].includes(step.role) || !short(step.name) || (step.action !== 'click' && !short(step.value))) throw new Error('Interactions need a supported role, accessible name and value.');
+        if (!['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio', 'tab', 'switch', 'spinbutton'].includes(step.role) || !short(step.name) || (step.action !== 'click' && !short(step.value))) throw new Error('Interactions need a supported role, accessible name and value.');
         interacted = true;
       } else if (step.action !== 'reload') throw new Error('Unsupported preview check action.');
     }
@@ -81,7 +81,7 @@ export async function checkPage(browser, base, plan) {
           }
           if (new URL(page.url()).origin !== new URL(base).origin) throw new Error('Feature interaction left the isolated preview.');
         }
-        evidence.push(`${width}px: ${scenario.route} — ${scenario.text}; interaction and visible result passed`);
+        evidence.push(`${width}px: ${scenario.route} — ${scenario.text}; interaction and visible result passed. Steps: ${JSON.stringify(scenario.steps)}. Observed page: ${(await page.locator('body').innerText()).slice(0, 3000)}`);
       }
       if (errors.length) throw new Error(`Browser runtime error: ${errors.join('; ').slice(0, 1000)}`);
     } finally { await context.close(); }

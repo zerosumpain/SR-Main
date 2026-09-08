@@ -46,7 +46,10 @@ export function createPreviewGateway({ secret, receiptRoot, domain, upstreamHost
       if (grant) {
         const claim = req.method === 'GET' && await authorize(req, grant);
         if (!claim) return deny(res);
-        res.writeHead(303, { location: '/', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
+        url.searchParams.delete('__sr_grant');
+        // Keep the feature route and its query; never redirect to another origin.
+        const location = `/${url.pathname.replace(/^\/+/, '')}${url.search}`;
+        res.writeHead(303, { location, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
           'set-cookie': `${COOKIE}=${grant}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${Math.floor((claim.expires - Date.now()) / 1000)}` });
         return res.end();
       }

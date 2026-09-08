@@ -28,7 +28,7 @@
   import { featurePreviewUrl, developmentTone } from '$lib/builds/development-progress';
   import type { DevelopmentProgress } from '$lib/builds/development-progress';
   import { replaceState } from '$app/navigation';
-  import { PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
+  import { criterionResult, PRODUCT_AREAS, visibleDevelopmentStage, type DeliveryState } from '$lib/jkai/development';
   let { buildId }: { buildId: string } = $props();
   type Snapshot = {
     progress?: DevelopmentProgress;
@@ -94,11 +94,24 @@
         body: JSON.stringify({ action, revision: snapshot.delivery.revision, briefRevision, candidate: snapshot.delivery.state.candidate, ...fields }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Operation failed');
       if (action === 'inspect_preview' || action === 'preview') tab = 'Preview';
-      if (action === 'start' || action === 'resume') tab = 'Build';
+      if (action === 'start' || action === 'resume' || result.next === 'building') tab = 'Build';
+      if (result.next === 'accepted') tab = 'Delivery';
       if (action === 'brief' || action === 'groom') initialized = false;
       await refresh(); return true;
     } catch (e) { error = e instanceof Error ? e.message : 'Operation failed'; await refresh(); return false; }
     finally { busy = false; }
+  }
+  async function continueAutomatically() {
+    if (!snapshot) return;
+    // Save any observations typed into this page before delegating the rest.
+    for (const criterion of snapshot.delivery.state.criteria) {
+      const verdict = verdicts[criterion.id] ?? 'unverified';
+      const observation = evidence[criterion.id] ?? '';
+      if (verdict !== criterion.verdict || observation !== criterion.evidence) {
+        if (!await act('criterion', { criterionId: criterion.id, verdict, evidence: observation })) return;
+      }
+    }
+    await act('continue');
   }
   async function refine() {
     grooming = true;
@@ -109,7 +122,7 @@
   // ── the chrome's copy ───────────────────────────────────────────────────
   const stage = $derived(deliveryState && snapshot ? visibleDevelopmentStage(deliveryState, snapshot.build.status, snapshot.build.outcome) : 'loading');
   const openDecisions = $derived(deliveryState?.decisions.filter((d) => !d.answer).length ?? 0);
-  const evidencedCount = $derived(deliveryState?.criteria.filter((c) => c.verdict === 'passed' && !!deliveryState.candidate && c.revision === deliveryState.candidate).length ?? 0);
+  const evidencedCount = $derived(deliveryState?.criteria.filter((c) => criterionResult(c, deliveryState.candidate).verdict === 'passed').length ?? 0);
   // Two lines at most: the fold is a typographic decision everywhere else in
   // this system, and a build title is arbitrary length, so it is split on
   // whole words near the middle rather than at a fixed character count.
@@ -140,7 +153,7 @@
   const tiles = $derived<DeckTile[]>(!deliveryState || !snapshot ? [] : [
     { key: 'stage', label: 'Stage', value: stage, tone: developmentTone(stage), lit: openDecisions > 0,
       sub: deliveryState.brief.acceptedAt ? `brief revision ${deliveryState.brief.revision}, accepted` : `brief revision ${deliveryState.brief.revision}, draft` },
-    { key: 'criteria', label: 'Criteria evidenced', value: String(evidencedCount), suffix: `/${deliveryState.criteria.length}`,
+    { key: 'criteria', label: 'Criteria assessed as met', value: String(evidencedCount), suffix: `/${deliveryState.criteria.length}`,
       tone: deliveryState.criteria.length && evidencedCount === deliveryState.criteria.length ? 'good' : 'steady',
       sub: deliveryState.candidate ? 'against the current candidate' : 'no candidate prepared yet' },
     { key: 'candidate', label: 'Candidate', value: deliveryState.candidate?.slice(0, 8) ?? '—', tone: deliveryState.candidate ? 'steady' : 'quiet',
@@ -302,6 +315,7 @@
           </div>
         {/if}
         <div class="wk-actions">
+          <button class="wk-run" disabled={busy || running || deliveryState.preview.status !== 'ready' || deliveryState.preview.revision !== deliveryState.candidate || !!deliveryState.acceptedAt} onclick={continueAutomatically}>{busy ? 'Inspecting and continuing…' : 'Continue automatically'}</button>
           <button class="wk-ghost" disabled={busy || running || !deliveryState.candidate} onclick={() => act('preview')}>Prepare preview</button>
           <button class="wk-ghost" aria-pressed={phone} onclick={() => phone = !phone}>{phone ? 'Desktop width' : 'Phone width'}</button>
           {#if previewHref}<a class="wk-link" href={previewHref} target="_blank" rel="noopener noreferrer">Open site preview ↗</a><button class="wk-ghost" disabled={busy || running} onclick={() => act('close_preview')}>Close preview</button>{/if}
@@ -317,11 +331,14 @@
         {#if previewHref}<div class:phone class="wk-preview"><iframe title="Isolated feature preview" src={previewHref} sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></div>{/if}
 
         <h2 class="wk-h2">Acceptance evidence</h2>
-        <p class="wk-muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Record what you actually exercised, including data or provider limitations.</p>
+        <p class="wk-muted">Candidate {deliveryState.candidate?.slice(0, 12) ?? 'not prepared'}. Leave these fields unchanged to let the model inspect and assess them when you continue. Your saved verdicts take precedence.</p>
         <div class="wk-rows">
           {#each deliveryState.criteria as criterion (criterion.id)}
             <form class="wk-row wk-criterion" onsubmit={(e) => { e.preventDefault(); void act('criterion', { criterionId: criterion.id, verdict: verdicts[criterion.id] ?? 'unverified', evidence: evidence[criterion.id] ?? '' }); }}>
               <p class="wk-criterion-text">{criterion.text}</p>
+              {#if criterion.assessment?.revision === deliveryState.candidate}
+                <div class="wk-assessment"><strong>Model assessment: {criterion.assessment.verdict} · {criterion.assessment.basis}</strong><p>{criterion.assessment.evidence}</p><span class="wk-stamp">{criterion.assessment.model} · {new Date(criterion.assessment.at).toLocaleString()}{criterion.revision === deliveryState.candidate && criterion.verdict !== 'unverified' ? ' · your saved verdict takes precedence' : ''}</span></div>
+              {/if}
               <div class="wk-criterion-controls">
                 <label class="wk-field wk-narrow"><span class="wk-label">Verdict</span><select aria-label="Verdict for {criterion.text}" bind:value={verdicts[criterion.id]}><option value="unverified">Not exercised</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="blocked">Blocked</option></select></label>
                 <label class="wk-field"><span class="wk-label">Evidence</span><textarea aria-label="Evidence for {criterion.text}" bind:value={evidence[criterion.id]} rows="2" placeholder="What was tested, observed or blocked"></textarea></label>
@@ -344,9 +361,10 @@
             <p class="wk-muted">Diff excerpt limited to 20,000 characters. The advanced build console provides the workspace files.</p>
           </details>
         {/if}
+        <p class="wk-muted">Continue automatically to have the model assess unanswered criteria and choose the next step. Missing behaviour returns to the builder; a candidate with passing criteria and repository checks joins the batch.</p>
         <p class="wk-lede">{snapshot.blocker ?? 'The current candidate has the required acceptance evidence.'}</p>
         <div class="wk-actions">
-          <button class="wk-run" disabled={busy || !!snapshot.blocker || !!deliveryState.acceptedAt} onclick={() => act('accept')}>{busy ? 'Working…' : deliveryState.acceptedAt ? 'Accepted into batch' : 'Accept into batch'}</button>
+          <button class="wk-run" disabled={busy || running || deliveryState.preview.status !== 'ready' || deliveryState.preview.revision !== deliveryState.candidate || !!deliveryState.acceptedAt} onclick={continueAutomatically}>{busy ? 'Inspecting and continuing…' : deliveryState.acceptedAt ? 'Accepted into batch' : 'Continue automatically'}</button>
           {#if deliveryState.batch}<span class="wk-stamp">Batch revision {deliveryState.batch.slice(0, 12)}</span>{/if}
         </div>
 
@@ -370,6 +388,8 @@
 </DaydreamShell>
 
 <style>
+  .wk-assessment { grid-column: 1 / -1; padding: 12px 0; border-top: 1px solid var(--line-hair); font-size: var(--fs-nav); }
+  .wk-assessment p { margin: 6px 0; }
   .wk {
     max-width: 1500px;
     margin: 0 auto;

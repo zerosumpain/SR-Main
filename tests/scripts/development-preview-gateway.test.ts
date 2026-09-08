@@ -18,7 +18,7 @@ const request = (path = '/', headers: Record<string, string> = {}, method = 'GET
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'sr-gateway-'));
   await writeFile(join(dir, 'gateway-test-preview.json'), JSON.stringify({ port: 5281, revision: 'a'.repeat(40) }));
-  upstream = http.createServer((req, res) => { res.setHeader('set-cookie', 'production=poison; Domain=example.test'); res.end(JSON.stringify(req.headers)); });
+  upstream = http.createServer((req, res) => { res.setHeader('set-cookie', 'production=poison; Domain=example.test'); res.end(JSON.stringify({ ...req.headers, _path: req.url })); });
   const upstreamPort = await listen(upstream);
   gateway = createPreviewGateway({ secret, receiptRoot: dir, domain: 'example.test', upstreamHost: '127.0.0.1', upstreamPort: () => upstreamPort });
   port = await listen(gateway);
@@ -43,6 +43,15 @@ describe('production preview access boundary', () => {
     expect(result.status).toBe(303); expect(result.headers.location).toBe('/');
     expect(result.headers['set-cookie']![0]).toContain('HttpOnly; Secure; SameSite=Strict; Path=/');
     expect(result.headers['referrer-policy']).toBe('no-referrer');
+  });
+  it('preserves the feature path and query when exchanging a grant', async () => {
+    const result = await request(`/rome-holiday-planner?day=2&__sr_grant=${signPreviewAccess(secret, claim())}`);
+    expect(result.status).toBe(303);
+    expect(result.headers.location).toBe('/rome-holiday-planner?day=2');
+    expect(result.headers.location).not.toContain('__sr_grant');
+    const opened = await request(result.headers.location!, { cookie: result.headers['set-cookie']![0].split(';')[0] });
+    expect(opened.status).toBe(200);
+    expect(JSON.parse(opened.body)._path).toBe('/rome-holiday-planner?day=2');
   });
   it('strips production credentials and candidate cookie writes at the boundary', async () => {
     const cookie = `__Host-sr-development=${signPreviewAccess(secret, claim())}; authjs.session-token=production-secret`;

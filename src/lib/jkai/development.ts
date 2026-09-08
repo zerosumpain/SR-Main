@@ -1,4 +1,4 @@
-import { PRODUCT_AREAS, type DeliveryState } from '$lib/constants/development';
+import { PRODUCT_AREAS, type DeliveryState, type Criterion } from '$lib/constants/development';
 export { PRODUCT_AREAS };
 export type { DeliveryState, DeliveryStage, Criterion } from '$lib/constants/development';
 
@@ -13,13 +13,19 @@ export function newDelivery(outcome: string, area = 'Platform', criteria: string
     batch: null, acceptedAt: null, releasePolicy: 'preview_only',
   };
 }
+/** Explicit owner verdicts win; model inference is tied to the inspected revision. */
+export function criterionResult(c: { verdict: string; revision: string | null; evidence?: string; assessment?: Criterion['assessment'] }, candidate: string | null) {
+  if (candidate && c.revision === candidate && c.verdict !== 'unverified') return { verdict: c.verdict, evidence: c.evidence ?? '', revision: candidate, source: 'owner' };
+  if (candidate && c.assessment?.revision === candidate) return { ...c.assessment, source: 'model' };
+  return { verdict: 'unverified', evidence: '', revision: null, source: 'unverified' };
+}
 export function acceptanceBlocker(state: DeliveryState): string | null {
   if (!state.brief.acceptedAt) return 'Accept the current brief first.';
   if (state.decisions.some((d) => !d.answer)) return 'Answer the pending decisions first.';
   if (!state.candidate || !state.gate?.passed || state.gate.revision !== state.candidate) return 'The current candidate needs a passing repository gate.';
   if (state.preview.status !== 'ready' || (state.preview.revision && state.preview.revision !== state.candidate)) return 'Prepare and try the site preview first.';
   if (!state.criteria.length) return 'Add at least one acceptance criterion.';
-  if (state.criteria.some((c) => c.verdict !== 'passed' || !c.evidence.trim() || c.revision !== state.candidate)) return 'Every criterion needs passing evidence for this candidate.';
+  if (state.criteria.some((c) => { const result = criterionResult(c, state.candidate); return result.verdict !== 'passed' || !result.evidence.trim(); })) return 'At least one criterion is not met yet. Continue automatically to inspect and address them, or record your own verdict.';
   return null;
 }
 export function candidateChanged(state: DeliveryState, revision: string): DeliveryState {
@@ -35,7 +41,7 @@ export function deliveryPrompt(state: DeliveryState): string {
     'Assumptions: ' + (state.brief.assumptions ?? ''), 'Validation plan: ' + (state.brief.validation ?? ''),
     'Remaining questions to resolve during implementation: ' + (state.brief.questions ?? ''),
     'Use the agreed scope and assumptions for reversible implementation choices. Ask the owner if a remaining question blocks the feature or requires changing scope or taking an irreversible action.',
-    'Acceptance criteria:', ...state.criteria.map((c) => `- ${c.text}`),
+    'Acceptance criteria:', ...state.criteria.map((c) => `- ${c.text} — ${JSON.stringify(criterionResult(c, state.candidate))}`),
     'Owner decisions:', ...state.decisions.filter((d) => d.answer).map((d) => `${d.question}: ${d.answer}`),
     'End each model turn within five minutes. Aim for a browser-checked first page within ten minutes and a verified candidate within twenty minutes of starting. The worker enforces checkpoints and retains saved work when it pauses.',
     'FIRST MILESTONE: implement the smallest useful working page at the target route, with meaningful content and one core interaction. End this iteration as soon as that slice is ready so the broker can build and open it. Do not attempt the whole brief before the first preview.',

@@ -1,3 +1,4 @@
+import { criterionResult } from '$lib/jkai/development';
 import type { DeliveryState } from '$lib/constants/development';
 import type { RepoVerificationEvent, RepoVerificationPhase } from '$lib/verification/repo';
 import type { Tone } from '$lib/daydream/priority';
@@ -7,8 +8,8 @@ export type DevelopmentProgress = { totalTokens: number; outputTokens: number; i
 export function outputBudget(used: number, limit?: number) {
   return limit && limit > 0 ? { used, limit, percent: Math.min(100, Math.max(0, used / limit * 100)) } : null;
 }
-export function evidencedCriteria(criteria: Array<{ verdict: string; revision: string | null }>, candidate: string | null) {
-  return candidate ? criteria.filter(c => c.verdict === 'passed' && c.revision === candidate).length : 0;
+export function evidencedCriteria(criteria: Array<{ verdict: string; revision: string | null; assessment?: DeliveryState['criteria'][number]['assessment'] }>, candidate: string | null) {
+  return candidate ? criteria.filter(c => criterionResult(c, candidate).verdict === 'passed').length : 0;
 }
 
 /** Assess observable delivery state, independently of the worker's terminal status. */
