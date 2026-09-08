@@ -116,6 +116,18 @@
     const half = Math.ceil(words.length / 2);
     return [words.slice(0, half).join(' '), words.slice(half).join(' ')];
   });
+  // The API derives the build title FROM the outcome, so the two usually say
+  // the same thing. Printing it twice — once at 44px, once as the standfirst —
+  // is not a summary, so the standfirst falls back to what the page is for.
+  const standfirst = $derived.by(() => {
+    const outcome = deliveryState?.brief.outcome?.trim() ?? '';
+    const title = (snapshot?.build.title ?? '').trim();
+    if (!snapshot) return 'Loading the saved brief, decisions and instructions for this feature.';
+    const same = outcome.toLowerCase().replace(/[.\s]+$/, '') === title.toLowerCase().replace(/[.\s]+$/, '');
+    if (outcome && !same) return outcome;
+    const routes = deliveryState?.brief.routes.filter(Boolean) ?? [];
+    return `Accept the brief, guide the build, then try the candidate in an isolated preview${routes.length ? ` on ${routes.join(', ')}` : ''}. Nothing here publishes a pull request or deploys production.`;
+  });
   const tabs = $derived<ShellTab[]>([
     { id: 'Brief', label: 'Brief', tone: 'quiet' },
     { id: 'Build', label: 'Build', count: openDecisions, tone: 'action' },
@@ -139,7 +151,8 @@
   path="/jkai/develop"
   kicker={deliveryState ? `${deliveryState.area} · Pi site development` : 'Pi site development'}
   title={titleLines}
-  standfirst={deliveryState?.brief.outcome || 'Loading the saved brief, decisions and instructions for this feature.'}
+  compactTitle
+  {standfirst}
   readout={[
     { label: 'Stage', value: stage },
     { label: 'Worker', value: connection === 'Connected' ? (snapshot?.build.status ?? '—') : connection },
@@ -160,7 +173,7 @@
 
   {#snippet actions()}
     <a class="wk-back" href="/jkai/develop">← Portfolio</a>
-    <button class="wk-run" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue' : 'Build'}</button>
+    <button class="wk-run" disabled={busy || running || deliveryState?.preview.status === 'starting' || !deliveryState?.brief.acceptedAt} onclick={() => act(deliveryState?.session.id ? 'resume' : 'start')}>{deliveryState?.session.id ? 'Continue to preview' : 'Build to preview'}</button>
     <button class="wk-ghost" disabled={busy || !running} onclick={() => act('pause')}>Pause</button>
     <button class="wk-ghost" disabled={busy || !running} onclick={() => act('stop')}>Stop</button>
   {/snippet}
@@ -193,7 +206,7 @@
         />
         {#if !deliveryState.brief.acceptedAt}
           <aside class="wk-groom" aria-busy={grooming}>
-            <p class="wk-eyebrow">{deliveryState.grooming ? 'Proposed brief' : 'Let’s shape your ask'}</p>
+            <h2 class="wk-eyebrow">{deliveryState.grooming ? 'Proposed brief' : 'Let’s shape your ask'}</h2>
             <p class="wk-lede">{deliveryState.grooming?.summary ?? 'The model will propose acceptance criteria, scope, dependencies and a validation plan. Review its assumptions before accepting.'}</p>
             {#if deliveryState.grooming}<p class="wk-stamp">Proposed by {deliveryState.grooming.model} · {new Date(deliveryState.grooming.at).toLocaleString()}</p>{/if}
             {#if questions.trim()}
@@ -647,6 +660,10 @@
   }
 
   @media (max-width: 760px) {
+    /* The rail's controls take one row on a phone and the four of them are
+       430px wide against a 390px screen. The way back is the first thing to
+       go: jkai's own header already carries `← Develop` two rows above this. */
+    .wk-back { display: none; }
     .wk-cols,
     .wk-criterion-controls { grid-template-columns: 1fr; gap: 0; }
     .wk-narrow { max-width: none; }

@@ -192,7 +192,7 @@
             placeholder="For example: compare two weeks of health data and save the comparison."
           ></textarea>
         </label>
-        <button class="dv-go" disabled={busy}>{busy ? 'Opening your draft…' : 'Refine this brief →'}</button>
+        <button class="dv-go" disabled={busy}>{busy ? 'Opening your draft…' : 'Refine this brief'}</button>
       </form>
 
       {#if error}<p role="alert" class="dv-error">{error}</p>{/if}

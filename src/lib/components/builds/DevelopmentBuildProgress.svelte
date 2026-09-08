@@ -47,7 +47,10 @@
   <div class="pg-pair">
     <div class="pg-panel pg-result" class:blocked={position.failed || position.stopped}>
       <p class="pg-eyebrow">Result / next action</p>
-      <p class="pg-headline">{position.label}</p>
+      <!-- A heading, not a styled paragraph: `development-inspection-preview`
+           waits on `getByRole('heading', …)` for this exact sentence, and it
+           is the panel's title either way. -->
+      <h3 class="pg-headline">{position.label}</h3>
       <p class="pg-body">{position.ready ? position.inspection ? 'Look at the saved implementation. Repository checks and acceptance evidence are still required.' : 'Try the candidate against the accepted brief, then record what passed.' : position.previewReason}</p>
       <div class="pg-actions">
         {#if position.ready}<button class="pg-run" onclick={() => navigate('Preview')}>Review {position.inspection ? 'inspection ' : ''}preview</button>
@@ -77,10 +80,10 @@
     <section class="pg-panel" aria-label="Current work">
       <p class="pg-eyebrow">Work / latest report</p>
       {#if current && position.busy}
-        <p class="pg-headline">Iteration {current.number} in progress <span class="pg-stamp">· {elapsed(current.createdAt)}m elapsed</span></p>
+        <h4 class="pg-headline">Iteration {current.number} in progress <span class="pg-stamp">· {elapsed(current.createdAt)}m elapsed</span></h4>
         <p class="pg-assessment">{assessmentExcerpt(current.goals) || 'No goal recorded yet. Watch the activity below.'}</p>
       {:else if lastAssessment}
-        <p class="pg-headline">Iteration {lastAssessment.number} · worker assessment</p>
+        <h4 class="pg-headline">Iteration {lastAssessment.number} · worker assessment</h4>
         <p class="pg-assessment">{assessmentExcerpt(lastAssessment.evaluation, 400)}</p>
       {:else}<p class="pg-body">No implementation report saved yet.</p>{/if}
       <p class="pg-stamp">Worker reports are claims; the checks and your preview review supply the evidence.</p>
