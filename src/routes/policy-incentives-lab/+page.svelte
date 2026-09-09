@@ -1,23 +1,29 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import PolicyLibrary from '$lib/components/policy-incentives-lab/PolicyLibrary.svelte';
+  import type { LibraryContent } from '$lib/policy-incentives-lab/library';
   import SectionGuide from '$lib/components/policy-incentives-lab/SectionGuide.svelte';
-  import PolicyExamples from '$lib/components/policy-incentives-lab/PolicyExamples.svelte';
-  import type { PolicyExample } from '$lib/policy-incentives-lab/examples';
   let { data } = $props();
   let title = $state(''); let busy = $state(false); let message = $state('');
-  async function create(example?: PolicyExample) {
+  async function create(publication?: LibraryContent) {
     busy = true; message = '';
     try {
-      const response = await fetch('/api/policy-incentives-lab/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: example?.title ?? title }) });
+      const response = await fetch('/api/policy-incentives-lab/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: publication?.title.slice(0, 200) ?? title }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error);
-      await goto(`/policy-incentives-lab/${result.id}?step=evidence${example ? `&example=${example.id}` : ''}`);
+      if (publication) {
+        const imported = await fetch(`/api/policy-incentives-lab/projects/${result.id}/govuk-source`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ revision: 0, path: publication.path, document: publication.selected }) });
+        if (!imported.ok) { const failure = await imported.json(); await goto(`/policy-incentives-lab/${result.id}?step=evidence`); throw new Error(failure.error); }
+        await goto(`/policy-incentives-lab/${result.id}?step=overview`); return;
+      }
+      await goto(`/policy-incentives-lab/${result.id}?step=evidence`);
     } catch (e) { message = (e as Error).message; } finally { busy = false; }
   }
 </script>
 <h1>Policy Incentives Lab</h1>
 <p>Explore how approved assumptions about incentives change the outcome of a policy model. Evidence, assumptions and calculated results remain separate.</p>
 <SectionGuide section="projects" />
-<PolicyExamples {busy} choose={example => { void create(example); }} />
+<PolicyLibrary {busy} choose={publication => { void create(publication); }} />
+
 <h2>Or start your own analysis</h2>
 <form onsubmit={(e) => { e.preventDefault(); void create(); }} class="nm-sec">
   <label>Analysis title <input class="nm-text-input" bind:value={title} maxlength="200" required /></label>

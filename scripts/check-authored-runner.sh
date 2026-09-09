@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # Install the runner and prove namespace isolation before tests or release.
 set -euo pipefail
+# Only distribution packages are needed here. On Ubuntu's deb822 layout, avoid
+# refreshing unrelated vendor indexes (a Chrome mirror checksum mismatch blocked
+# every CI shard). Keep signatures/hashes enforced and leave host sources intact.
+apt_sources=()
+if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+  apt_sources=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+fi
 if ! command -v bwrap >/dev/null 2>&1; then
-  sudo apt-get update -qq
-  sudo apt-get install -y --no-install-recommends bubblewrap
+  sudo apt-get "${apt_sources[@]}" update -qq
+  sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends bubblewrap
 fi
 node_bin="$(node -p 'process.execPath')"
 smoke() {
@@ -15,8 +22,8 @@ if smoke; then exit 0; fi
 # the distribution's dedicated profile; never disable AppArmor globally.
 # https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007
 if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-  sudo apt-get update -qq
-  sudo apt-get install -y --no-install-recommends apparmor
+  sudo apt-get "${apt_sources[@]}" update -qq
+  sudo apt-get "${apt_sources[@]}" install -y --no-install-recommends apparmor
   if [ ! -f /etc/apparmor.d/bwrap-userns-restrict ]; then
     # Ubuntu packages this in apparmor-profiles' extra-profiles directory.
     # Extract only bwrap: installing the whole package would enable unrelated
@@ -25,7 +32,7 @@ if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
     trap 'rm -rf "$profile_tmp"' EXIT
     (
       cd "$profile_tmp"
-      apt-get download apparmor-profiles
+      apt-get "${apt_sources[@]}" download apparmor-profiles
       dpkg-deb --fsys-tarfile ./*.deb | tar -xO ./usr/share/apparmor/extra-profiles/bwrap-userns-restrict > bwrap-profile
     )
     sudo install -m 644 "$profile_tmp/bwrap-profile" /etc/apparmor.d/bwrap-userns-restrict

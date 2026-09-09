@@ -16,6 +16,9 @@ import { guidedModel } from '$lib/policy-incentives-lab/guided-model';
 import { generateFirstLook } from '$lib/policy-incentives-lab/server/first-look';
 import { firstLookMarkdown } from '$lib/policy-incentives-lab/first-look';
 
+import { searchLibrary, loadLibraryContent } from '$lib/policy-incentives-lab/server/library';
+import { proposeIllustrative } from '$lib/policy-incentives-lab/server/auto-resolve';
+
 const uuid = z.uuid();
 const revisionSchema = z.number().int().min(0);
 const noCache = { 'cache-control': 'private, no-store', 'x-robots-tag': 'noindex, nofollow' };
@@ -38,8 +41,13 @@ async function handle(event: RequestEvent) {
   const owner = await requireLabOwner(event.locals);
   if (event.request.method !== 'GET' && event.request.headers.get('origin') && event.request.headers.get('origin') !== event.url.origin) error(403, 'Cross-origin write refused');
   const parts = (event.params.path ?? '').split('/').filter(Boolean);
-  if (parts[0] !== 'projects') error(404, 'Not found');
+
   try {
+    if (parts[0] === 'library' && event.request.method === 'GET' && parts.length <= 2) {
+      if (parts.length === 1) return json(await searchLibrary(event.url.searchParams));
+      if (parts[1] === 'content') return json(await loadLibraryContent(event.url.searchParams.get('path'), event.url.searchParams.get('document') ?? 0));
+    }
+    if (parts[0] !== 'projects') error(404, 'Not found');
     let body: Record<string, unknown> = {};
     let form: FormData | null = null;
     if (event.request.method !== 'GET') {
@@ -86,10 +94,15 @@ async function handle(event: RequestEvent) {
     const revision = revisionSchema.parse(form ? Number(form.get('revision')) : body.revision);
     if (revision !== project.revision) error(409, 'Revision conflict; reload before editing');
     const record = (action: string, item_ids: string[] = []) => draft.activity.push({ at: new Date().toISOString(), action, item_ids });
-    if (resource === 'sources' || resource === 'uploads') {
+    if (resource === 'sources' || resource === 'uploads' || resource === 'govuk-source') {
+      delete draft.govuk_import; delete draft.auto_resolution; delete draft.illustrative_setup;
       delete draft.attachment_path;
       let source;
-      if (body.synthetic === true) source = { ...syntheticSource, document_hash: hash(syntheticSource.text_sections[0].text) };
+      if (resource === 'govuk-source') {
+        const imported = await loadLibraryContent(body.path, body.document ?? 0);
+        source = makeSource({ title: imported.title, publisher: imported.publisher, publication_date: imported.publication_date, source_url: imported.source_url, synthetic: false }, imported.sections, Buffer.from(canonical(imported.sections)));
+        draft.govuk_import = imported;
+      } else if (body.synthetic === true) source = { ...syntheticSource, document_hash: hash(syntheticSource.text_sections[0].text) };
       else {
         if ((form ? form.get('public_material') : body.public_material) !== (form ? 'true' : true)) throw new Error('Confirm public or synthetic material only');
         const metadata = form ? JSON.parse(String(form.get('metadata'))) : body.metadata;
@@ -154,9 +167,11 @@ async function handle(event: RequestEvent) {
         if (!draft.candidate) throw new Error('Add a model first');
         candidate = candidateSchema.parse(resource === 'evidence' ? { ...draft.candidate, evidence: body.items } : { ...draft.candidate, game: { ...draft.candidate.game, [resource]: body.items } });
       }
+      delete draft.auto_resolution; delete draft.illustrative_setup;
       candidate.game = resetApprovals(candidate.game);
       draft.candidate = candidate; draft.hypotheses = []; record('Model edited; all dependent approvals invalidated');
     } else if (resource === 'approvals') {
+      delete draft.auto_resolution;
       if (!draft.candidate) throw new Error('Add a model first');
       const ids = z.array(z.string()).min(1).max(2000).parse(body.item_ids);
       const items = reviewItems(draft.candidate.game);
@@ -166,6 +181,28 @@ async function handle(event: RequestEvent) {
         if ('approved_by_user' in item) item.approved_by_user = true;
       }
       record('User approved specified items', ids);
+    } else if (resource === 'auto-resolve') {
+      let prepared;
+      try { prepared = await proposeIllustrative(draft, body.options, proposalTransport()); }
+      catch (e) { if (e instanceof ProposalError) { draft.attempts.push(...e.attempts); record('Illustrative setup proposal failed validation'); await saveDraft(owner, id, revision, draft); } throw e; }
+      draft.attempts.push(...prepared.attempts);
+      draft.auto_resolution = { proposal: prepared.proposal, hash: hash(prepared.proposal), basis_hash: hash({ source: draft.source, candidate: draft.candidate }) };
+      record('Prepared optional illustrative setup; no items approved');
+    } else if (resource === 'accept-auto-resolve') {
+      const prepared = draft.auto_resolution;
+      if (!prepared || body.proposal_hash !== prepared.hash || prepared.basis_hash !== hash({ source: draft.source, candidate: draft.candidate })) error(409, 'Setup preview is stale; prepare it again');
+      if (!draft.source || prepared.proposal.errors.length || validateModel(prepared.proposal.candidate.game, prepared.proposal.candidate.evidence, draft.source, false).length) throw new Error('Unresolved model issues still block acceptance');
+      if (body.accept_illustrative !== true) throw new Error('Explicit acceptance of illustrative assumptions is required');
+      const ids = z.array(z.string()).max(20000).parse(body.item_ids);
+      const items = reviewItems(prepared.proposal.candidate.game);
+      if (new Set(ids).size !== items.length || ids.length !== items.length || items.some(item => !ids.includes(item.id))) throw new Error('Accept the complete displayed item list');
+      const at = new Date().toISOString();
+      draft.candidate = prepared.proposal.candidate;
+      for (const item of reviewItems(draft.candidate.game)) { item.approval_status = { status: 'approved', approved_by: owner, approved_at: at }; if ('approved_by_user' in item) item.approved_by_user = true; }
+      const { version, seed, range, changes, config } = prepared.proposal;
+      draft.illustrative_setup = { version, seed, range, changes, config, accepted_by: owner, accepted_at: at };
+      delete draft.auto_resolution; draft.hypotheses = [];
+      record('User explicitly accepted displayed illustrative setup and all listed model items', ids);
     } else if (resource === 'versions') {
       if (!draft.source || !draft.candidate) throw new Error('Source and model required');
       const errors = validateModel(draft.candidate.game, draft.candidate.evidence, draft.source);

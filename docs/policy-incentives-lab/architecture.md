@@ -39,3 +39,16 @@ The LLM may propose null numerical assumptions or retain values already supplied
 D3 positions are presentational only. They never feed simulation calculations or result hashes.
 
 The first-look pass runs synchronously on source save using the existing proposal transport with a smaller token budget. Its source-bound report is an optional field in the existing draft payload; old drafts remain readable. Failure of a model response falls back to a labelled deterministic source scan, with raw attempts retained. The report does not populate the simulation model. A separate guided outline endpoint transforms reviewer input through the canonical candidate schema, with unknown numeric assumptions and pending approvals.
+
+Live library: `library.ts` defines client contracts and index scopes;
+`server/library.ts` consumes official search/content APIs and existing file
+extractors. `PolicyLibrary.svelte` searches/pages/previews full selected text.
+The API stores the selected document and import manifest in project JSON.
+
+Optional completion: `auto-resolve.ts` deterministically prepares an unapproved
+candidate; `server/auto-resolve.ts` optionally reuses the proposal gateway for
+qualitative structure. `AutoResolve.svelte` separates preparation from explicit
+acceptance. Accepted setup metadata stays in immutable version payloads.
+`SimulationReplay.svelte` reads only saved results and their matching saved model;
+it reuses ActorMap/NetworkGraph and ChartArtifact/Vega rather than recalculating
+steps or relying on current drafts.

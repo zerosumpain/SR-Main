@@ -8,6 +8,9 @@ import { canonical } from './engine';
 
 export interface ExtractionAttempt { task: string; prompt_version: string; model: string; response: string; error: string | null; timestamp: string }
 export interface Draft {
+  govuk_import?: import("../library").LibraryContent;
+  auto_resolution?: { proposal: import("../auto-resolve").AutoResolution; hash: string; basis_hash: string };
+  illustrative_setup?: { version: string; seed: number; range: { low: number; high: number }; changes: string[]; accepted_by: string; accepted_at: string; config: import("../schemas").RunConfig };
   first_look?: import('../first-look').FirstLook;
   attachment_path?: string; source: PolicySource | null; candidate: Candidate | null; attempts: ExtractionAttempt[];
   activity: { at: string; action: string; item_ids: string[] }[];
