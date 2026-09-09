@@ -172,7 +172,7 @@
   <p class="muted">
     {Math.max(0, Math.floor(((data.analysis.completedAt ? new Date(data.analysis.completedAt).getTime() : now) - new Date(data.analysis.createdAt).getTime()) / 60000))} minutes elapsed · {data.calls.length} model call{data.calls.length === 1 ? '' : 's'} · last update {fmt(data.heartbeat ?? data.analysis.updatedAt)}
   </p>
-  {#if running}<p class="muted">Now running <strong>{running.name}</strong>{#if runningCalls} — {runningCalls} model call{runningCalls === 1 ? '' : 's'} made so far in this stage{/if}.</p>{/if}
+  {#if running}<p class="muted">Now running <strong>{running.name}</strong>{#if runningCalls}{' — '}{runningCalls} model call{runningCalls === 1 ? '' : 's'} made so far in this stage{/if}.</p>{/if}
   {#if active}<p>You can close this page. Every stage is saved as it finishes and the run recovers from a restart on its own.</p>{/if}
   {#if data.analysis.error}<p class="warning" role="alert">{data.analysis.error}</p>{/if}
   {#if message || refreshError}<p class="warning" role="alert">{message || refreshError}</p>{/if}
