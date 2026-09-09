@@ -211,6 +211,11 @@ echo "==> Draining in-flight runs (running -> paused) before restart..."
 # Avoid orphan-pending: if we restart while a run is mid-flight, the new
 # process inherits a row stuck in 'running' that the engine politely waits
 # on forever. Pausing them lets the reaper pick them up cleanly. The VPS
+#
+# EXCEPT policy-analysis envelopes, which ci-release.sh has always excluded and
+# this script had not: a paused policy run is recoverable by nothing. Their own
+# lease expiry re-offers them (`releaseExpiredLeases`), which is what makes an
+# interrupted assessment resumable across a restart.
 # doesn't ship psql, so we run via docker exec on the strange-rambling
 # pgvector container. Best-effort — failure is logged but does not block.
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" bash -s <<'REMOTE' || echo "==> drain skipped (db container missing)"
@@ -218,7 +223,7 @@ set -e
 PG_CTR=$(docker ps --filter "name=strange-rambling-app-db" --format '{{.Names}}' | head -1)
 if [ -z "$PG_CTR" ]; then echo "==> drain: no app-db container found"; exit 0; fi
 docker exec "$PG_CTR" psql -U app -d strange_rambling -v ON_ERROR_STOP=1 \
-  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' RETURNING id;" || true
+  -c "UPDATE workflow_runs SET status='paused' WHERE status='running' AND trigger <> 'policy-analysis' RETURNING id;" || true
 REMOTE
 
 # Phase 3 invariant: this deploy script restarts ONLY strange-rambling-svelte.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-const base = 'http://192.168.0.77:5275';
+const base = process.env.POLICY_PREVIEW_ORIGIN ?? 'http://localhost:5275';
 const form = new FormData(); form.set('title', 'Synthetic autonomous worker check');
 form.set('document', new Blob([readFileSync('tests/fixtures/policy-analysis/policy.txt')], { type: 'text/plain' }), 'fixture.txt');
 const response = await fetch(`${base}/api/policy-analysis`, { method: 'POST', headers: { origin: base }, body: form });

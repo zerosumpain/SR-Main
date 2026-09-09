@@ -64,9 +64,9 @@ describe('policy ingestion and untrusted contracts', () => {
 });
 
 describe('complete fixture policy pipeline', () => {
-  it('advances every stage, builds a graph, runs 12 tests and traces final findings to the paper', async () => {
+  it('advances every stage, builds a graph, runs 12 tests, red-teams an actor and traces final findings to the paper', async () => {
     const all = (await ingest(fixture, 'policy.txt', 'text/plain')).artefacts;
-    for (let stage = 1; stage <= 10; stage++) {
+    for (let stage = 1; stage <= 12; stage++) {
       const result = await executeStage({ stage, title: 'Synthetic policy', jurisdiction: null, policyArea: null, context: null, artefacts: all }, { model: async (...args) => fixtureModel(...args), research: neverResearch, signal: new AbortController().signal });
       all.push(...result.artefacts);
       if (stage === 5) expect(result.warnings).toHaveLength(1);
@@ -75,11 +75,13 @@ describe('complete fixture policy pipeline', () => {
     expect(all.filter((a) => a.kind === 'test')).toHaveLength(12);
     expect(all.filter((a) => a.kind === 'model')).toHaveLength(PATTERNS.length);
     expect(all.filter((a) => a.kind === 'scenario')).toHaveLength(SCENARIOS.length);
+    expect(all.filter((a) => a.kind === 'exploit')).toHaveLength(1);
+    expect(all.find((a) => a.kind === 'exploit')!.data.band).toBe('significant');
     const map = new Map(all.map((a) => [a.id, a]));
     for (const finding of all.filter((a) => a.kind === 'finding')) expect(hasSource(finding.id, map)).toBe(true);
     const final = all.filter((a) => ['finding', 'recommendation'].includes(a.kind));
     const broken = structuredClone(final); broken[0].data.resultIds = [all[0].id];
-    expect(() => validateOutput({ artefacts: broken, warnings: [] }, 10, all.filter((a) => !final.includes(a)))).toThrow('conclusion must cite');
+    expect(() => validateOutput({ artefacts: broken, warnings: [] }, 12, all.filter((a) => !final.includes(a)))).toThrow('conclusion must cite');
   });
   it('stops before model calls when cancelled', async () => {
     const signal = AbortSignal.abort(); const model = vi.fn();

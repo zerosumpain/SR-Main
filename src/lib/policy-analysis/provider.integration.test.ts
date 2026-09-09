@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { PROMPT_VERSION } from './contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
@@ -20,7 +21,7 @@ const local = process.env.POLICY_LOCAL_TESTS === '1' && /^postgres(?:ql)?:\/\/[^
 describe.skipIf(!local)('persisted model audit and stage checkpoints', () => {
   it('records provider metadata and malformed output, and reuses a validated call after an interrupted stage', async () => {
     const bytes = readFileSync('tests/fixtures/policy-analysis/policy.txt');
-    const a = await createAnalysis('preview@example.test', { title: 'Synthetic provider audit fixture', jurisdiction: null, policyArea: null, context: null, filename: 'fixture.txt', mimeType: 'text/plain', bytes });
+    const a = await createAnalysis('preview@example.test', { title: 'Synthetic provider audit fixture', jurisdiction: null, policyArea: null, context: null, depth: 'standard' as const, filename: 'fixture.txt', mimeType: 'text/plain', bytes });
     try {
       const [stage] = await db.select().from(policyStages).where(eq(policyStages.analysisId, a.id)).orderBy(asc(policyStages.ordinal)).limit(1);
       const [execution] = await db.insert(policyExecutions).values({ stageId: stage.id, runId: stage.runId! }).returning();
@@ -35,7 +36,7 @@ describe.skipIf(!local)('persisted model audit and stage checkpoints', () => {
       mock.malformed = true;
       await expect(next(1, 'malformed', { ...input, idPrefix: 's1_bad_' })).rejects.toThrow('malformed JSON');
       const calls = await db.select().from(policyModelCalls).where(eq(policyModelCalls.executionId, execution.id));
-      expect(calls[0]).toMatchObject({ status: 'completed', provider: 'synthetic', model: 'synthetic/test-model', promptVersion: 'policy-analysis/1.0' });
+      expect(calls[0]).toMatchObject({ status: 'completed', provider: 'synthetic', model: 'synthetic/test-model', promptVersion: PROMPT_VERSION });
       expect(calls[0].usage).toMatchObject([{ tokensInput: 100, tokensOutput: 200, costUsd: null }]);
       const failed = await db.select().from(policyModelCalls).where(eq(policyModelCalls.executionId, retry.id));
       expect(failed[0]).toMatchObject({ status: 'failed', output: { malformedText: '{bad' } });

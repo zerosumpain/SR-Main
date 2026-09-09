@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { extractPdf } from '$lib/jkai/extract/pdf';
 import { extractDocx } from '$lib/jkai/extract/docx';
-import { artefact, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type StageOutput } from '../contracts';
+import { artefact, DEPTHS, MAX_BYTES, MAX_CHARACTERS, MAX_PAGES, type Artefact, type Depth, type StageOutput } from '../contracts';
 import { PolicyError } from '../validation';
 
-export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; filename: string; mimeType: string; bytes: Buffer };
+export type Submission = { title: string; jurisdiction: string | null; policyArea: string | null; context: string | null; depth: Depth; filename: string; mimeType: string; bytes: Buffer };
 const MIME: Record<string, string> = { txt: 'text/plain', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
 export function validateBytes(bytes: Buffer, filename: string, mimeType: string): string {
   if (!bytes.length || bytes.length > MAX_BYTES) throw new PolicyError('size', 'Supply a nonempty document of at most 10 MB.');
@@ -58,10 +58,15 @@ export async function readSubmission(request: Request): Promise<Submission> {
   const file = form.get('document');
   const uploaded = file && typeof file !== 'string' && file.size > 0;
   if (uploaded && pasted) throw new PolicyError('input', 'Supply either a document or pasted text.');
+  // Without this, an empty submission fell through to the byte check and was told
+  // its document exceeded 10 MB.
+  if (!uploaded && !pasted) throw new PolicyError('input', 'Attach a policy document or paste its text.');
   const filename = uploaded ? file.name.replace(/^.*[\\/]/, '').slice(0, 200) : 'policy.txt';
   const bytes = uploaded ? Buffer.from(await file.arrayBuffer()) : Buffer.from(pasted);
   const mimeType = validateBytes(bytes, filename, uploaded ? file.type : 'text/plain');
-  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, filename, mimeType, bytes };
+  const requested = str('depth', 20);
+  const depth: Depth = (DEPTHS as readonly string[]).includes(requested) ? requested as Depth : 'standard';
+  return { title, jurisdiction: str('jurisdiction', 200) || null, policyArea: str('policyArea', 200) || null, context: str('context', 5000) || null, depth, filename, mimeType, bytes };
 }
 export async function ingest(bytes: Buffer, filename: string, mimeType: string): Promise<StageOutput & { text: string; metadata: unknown }> {
   validateBytes(bytes, filename, mimeType);
@@ -83,8 +88,20 @@ export async function ingest(bytes: Buffer, filename: string, mimeType: string):
       text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       if (text.includes('\0')) throw new Error('binary');
     }
-  } catch { throw new PolicyError('extraction', 'Document extraction failed. Try a text-based PDF, DOCX or UTF-8 TXT, or paste the policy text.'); }
-  if (!text.trim() || text.length > MAX_CHARACTERS) throw new PolicyError('extraction', 'No readable text, or the document exceeds 600,000 characters. Split a larger document before submitting.');
+  } catch (err) {
+    // `extractPdf` throws its own limit errors, wrapped, and a bare catch here
+    // told a 400-page policy that its PDF might need OCR. Read the cause.
+    const chain: string[] = [];
+    for (let e: unknown = err, depth = 0; e && depth < 4; depth++) { chain.push(String((e as Error)?.message ?? e)); e = (e as { cause?: unknown }).cause; }
+    const reason = chain.join(' | ');
+    if (reason.includes('exceeds page limit')) throw new PolicyError('extraction', `This PDF has more than ${MAX_PAGES} pages, which is the limit for one submission. Submit it in parts; the cross-policy stage will compare them against each other.`);
+    if (reason.includes('exceeds extracted text limit')) throw new PolicyError('extraction', `This PDF holds more than ${MAX_CHARACTERS / 1000},000 characters of text, which is the limit for one submission. Submit it in parts; the cross-policy stage will compare them against each other.`);
+    throw new PolicyError('extraction', 'Document extraction failed. Try a text-based PDF, DOCX or UTF-8 TXT, or paste the policy text.');
+  }
+  // Two very different problems used to share one message, so a 300-page policy
+  // was told its PDF might need OCR.
+  if (!text.trim()) throw new PolicyError('extraction', 'No readable text was found. A scanned PDF needs OCR before submission, or paste the policy text instead.');
+  if (text.length > MAX_CHARACTERS) throw new PolicyError('extraction', `This document holds ${Math.round(text.length / 1000).toLocaleString()},000 characters of text and the limit is ${MAX_CHARACTERS / 1000},000 — roughly ${Math.round(MAX_CHARACTERS / 3000)} pages. Submit it in parts; the cross-policy stage will compare them against each other.`);
   if (!sections.length) sections = [{ text, page: null, section: 'Policy text' }];
   const hash = createHash('sha256').update(bytes).digest('hex');
   const artefacts: Artefact[] = []; let offset = 0;
@@ -94,7 +111,9 @@ export async function ingest(bytes: Buffer, filename: string, mimeType: string):
     for (let start = 0; start < s.text.length; start += 7000) {
       const passage = s.text.slice(start, start + 7000);
       if (!passage.trim()) continue;
-      const id = `passage_${artefacts.length + 1}`;
+      // Zero-padded: artefacts load back ordered by id, so `passage_10` must not
+      // sort between `passage_1` and `passage_2` and shuffle the document.
+      const id = `passage_${String(artefacts.length + 1).padStart(4, '0')}`;
       artefacts.push(artefact(id, 'passage', `${s.section} · passage ${artefacts.length + 1}`, passage, { documentHash: hash }, { origin: 'extracted_fact', confidence: 1, page: s.page, section: s.section, startOffset: offset + start, endOffset: offset + start + passage.length }));
     }
     offset += s.text.length + 2;

@@ -6953,6 +6953,8 @@ export const policyAnalyses = pgTable('policy_analyses', {
   jurisdiction: text('jurisdiction'),
   policyArea: text('policy_area'),
   context: text('context'),
+  // 'standard' or 'deep' — how many rounds of enquiry the reader asked for.
+  depth: text('depth').notNull().default('standard'),
   status: text('status').notNull().default('queued'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   error: text('error'),
@@ -7055,4 +7057,9 @@ export const policyModelCalls = pgTable('policy_model_calls', {
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   error: text('error'),
-}, (t) => [index('policy_model_calls_execution_idx').on(t.executionId)]);
+}, (t) => [
+  index('policy_model_calls_execution_idx').on(t.executionId),
+  // The reuse probe filters on the hash and the prompt version; without this it
+  // is a sequential scan of every model call the site has ever made.
+  index('policy_model_calls_hash_idx').on(t.inputHash, t.promptVersion),
+]);
