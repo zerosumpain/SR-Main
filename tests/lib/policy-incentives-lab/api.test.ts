@@ -33,3 +33,16 @@ it('ignores forged model approval fields on model edits', async () => {
   const payload = fixture.saveDraft.mock.calls[0][3];
   expect(payload.candidate.game.actors[0].approval_status.status).toBe('pending');
 });
+it('saves a first look on source load without silently creating or approving a model', async () => {
+  fixture.saveDraft.mockResolvedValue({});
+  expect((await POST(event('sources', { revision: 0, synthetic: true }))).status).toBe(200);
+  const payload = fixture.saveDraft.mock.calls[0][3];
+  expect(payload.first_look.status).toBe('unreviewed'); expect(payload.first_look.source_hash).toBe('test-hash');
+  expect(payload.candidate).toBeNull(); expect(fixture.saveRun).not.toHaveBeenCalled();
+});
+it('refreshes the first look without changing existing model approvals', async () => {
+  fixture.saveDraft.mockResolvedValue({});
+  await POST(event('first-look', { revision: 0 }));
+  const payload = fixture.saveDraft.mock.calls[0][3];
+  expect(payload.candidate).toEqual(syntheticCandidate()); expect(payload.first_look.status).toBe('unreviewed');
+});
