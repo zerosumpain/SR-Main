@@ -37,3 +37,5 @@ Nine named tasks cover objectives, mechanisms, actors, actor objectives/constrai
 The LLM may propose null numerical assumptions or retain values already supplied in the model; it cannot originate numeric assumptions. All proposal approvals are reset regardless of model output. Explanations use the saved run's source/model, not a possibly changed draft, and become separately linked annotated records. They never replace calculated values.
 
 D3 positions are presentational only. They never feed simulation calculations or result hashes.
+
+The first-look pass runs synchronously on source save using the existing proposal transport with a smaller token budget. Its source-bound report is an optional field in the existing draft payload; old drafts remain readable. Failure of a model response falls back to a labelled deterministic source scan, with raw attempts retained. The report does not populate the simulation model. A separate guided outline endpoint transforms reviewer input through the canonical candidate schema, with unknown numeric assumptions and pending approvals.

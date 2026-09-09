@@ -12,6 +12,10 @@ import { proposalTransport } from '$lib/policy-incentives-lab/server/provider';
 import { reportMarkdown } from '$lib/policy-incentives-lab/server/report';
 import { newDiskPath, saveBuffer } from '$lib/file-store/storage';
 
+import { guidedModel } from '$lib/policy-incentives-lab/guided-model';
+import { generateFirstLook } from '$lib/policy-incentives-lab/server/first-look';
+import { firstLookMarkdown } from '$lib/policy-incentives-lab/first-look';
+
 const uuid = z.uuid();
 const revisionSchema = z.number().int().min(0);
 const noCache = { 'cache-control': 'private, no-store', 'x-robots-tag': 'noindex, nofollow' };
@@ -54,6 +58,11 @@ async function handle(event: RequestEvent) {
     const draft = structuredClone(project.payload);
     if (event.request.method === 'GET') {
       if (resource === '') return json({ ...project, versions: await versions(owner, id), runs: await runs(owner, id) });
+      if (resource === 'first-look-report') {
+        if (!draft.first_look || !draft.source) error(404, 'No first look saved');
+        if (event.url.searchParams.get('format') === 'markdown') return new Response(firstLookMarkdown(project.title, draft.source.synthetic, draft.first_look), { headers: { ...noCache, 'content-type': 'text/markdown; charset=utf-8', 'content-disposition': 'attachment; filename=policy-first-look.md' } });
+        return json({ source: draft.source, first_look: draft.first_look });
+      }
       if (resource === 'versions') return json(await versions(owner, id));
       if (resource === 'runs' || resource === 'sensitivity') return json(await runs(owner, id));
       if (resource === 'validation') return json({ errors: draft.source && draft.candidate ? validateModel(draft.candidate.game, draft.candidate.evidence, draft.source) : ['Add a source and candidate model'] });
@@ -96,7 +105,18 @@ async function handle(event: RequestEvent) {
           source = makeSource(metadata, [{ id: 'section-1', location: 'Section 1', text }], Buffer.from(text));
         }
       }
-      draft.source = source; draft.candidate = null; draft.hypotheses = []; record('Source revised; draft model cleared');
+      draft.source = source; draft.candidate = null; draft.hypotheses = [];
+      const firstLook = await generateFirstLook(source, proposalTransport(true));
+      draft.first_look = firstLook.report; draft.attempts.push(...firstLook.attempts);
+      record('Source revised; draft model cleared; unreviewed first look saved');
+    } else if (resource === 'guided-model') {
+      if (!draft.source) throw new Error('Add a source first');
+      if (draft.candidate) throw new Error('An outline already exists; amend its items instead of replacing it');
+      draft.candidate = guidedModel(body.outline, owner); record('Reviewer created an unapproved qualitative outline; numerical values unknown');
+    } else if (resource === 'first-look') {
+      if (!draft.source) throw new Error('Add a source first');
+      const firstLook = await generateFirstLook(draft.source, proposalTransport(true));
+      draft.first_look = firstLook.report; draft.attempts.push(...firstLook.attempts); record('Unreviewed first look refreshed');
     } else if (resource === 'extraction-jobs') {
       if (!draft.source) throw new Error('Add a source first');
       const task = taskSchema.parse(body.task);

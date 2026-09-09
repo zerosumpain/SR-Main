@@ -2,7 +2,7 @@
   import ItemEditor from './ItemEditor.svelte';
   import type { EvidenceItem } from '$lib/policy-incentives-lab/schemas';
   import type { ReviewItem } from '$lib/policy-incentives-lab/validation';
-  let { items, evidence, busy, approve, edit }: { items: ReviewItem[]; evidence: EvidenceItem[]; busy: boolean; approve: (ids: string[]) => void; edit: (id: string, value: string) => void } = $props();
+  let { items, evidence, busy, approve, edit, allItems = items }: { items: ReviewItem[]; allItems?: ReviewItem[]; evidence: EvidenceItem[]; busy: boolean; approve: (ids: string[]) => void; edit: (id: string, value: string) => void } = $props();
   let selected = $state<string[]>([]);
   let drafts = $state<Record<string, string>>({});
   const title = (item: ReviewItem) => String(item.name ?? item.statement ?? item.rationale ?? item.dependency ?? item.id);
@@ -17,8 +17,8 @@
       {@const e = evidence.find(e => e.id === ref)}
       {#if e}<blockquote><a href={`?step=evidence#evidence-${e.id}`}>{e.location} · {e.explicit_or_inferred} · {e.confidence}</a><p>{e.quotation}</p></blockquote>{:else}<p class="error">Missing evidence: {String(ref)}</p>{/if}
     {/each}
-    {#if Array.isArray(item.assumption_refs) && item.assumption_refs.length}<p>Assumption references: {item.assumption_refs.join(', ')} — review in Game builder.</p>{/if}
-    <details><summary>Review and amend this item</summary><ItemEditor {item} {busy} save={edit} /></details>
+    {#if Array.isArray(item.assumption_refs) && item.assumption_refs.length}<p>Assumption references: {item.assumption_refs.join(', ')} — review in Choices and trade-offs.</p>{/if}
+    <details><summary>Review and amend this item</summary><ItemEditor {item} {busy} {allItems} {evidence} save={edit} /></details>
     <details><summary>Advanced: complete item structure</summary>
       <label>Item JSON <textarea rows="10" value={drafts[item.id] ?? JSON.stringify(item, null, 2)} oninput={e => drafts[item.id] = e.currentTarget.value}></textarea></label>
       <button disabled={busy} onclick={() => edit(item.id, drafts[item.id] ?? JSON.stringify(item))}>Save structured amendment</button>

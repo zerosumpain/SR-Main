@@ -8,6 +8,7 @@ import { canonical } from './engine';
 
 export interface ExtractionAttempt { task: string; prompt_version: string; model: string; response: string; error: string | null; timestamp: string }
 export interface Draft {
+  first_look?: import('../first-look').FirstLook;
   attachment_path?: string; source: PolicySource | null; candidate: Candidate | null; attempts: ExtractionAttempt[];
   activity: { at: string; action: string; item_ids: string[] }[];
   hypotheses: { statement: string; evidence_refs: string[]; assumption_refs: string[]; limitation: string }[];

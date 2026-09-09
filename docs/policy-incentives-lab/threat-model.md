@@ -18,3 +18,7 @@ Browser requests, policy files, source text, model proposals and client-side app
 ## Tests
 
 Adversarial tests cover source directives, malformed JSON with one retry, unsupported numeric proposals, missing evidence, unknown actors/payoffs, oversized/unsupported/binary files, stale revisions, cross-origin writes, forged approval fields and direct unapproved API runs. Auth tests reject anonymous and guest sessions even in development. Local browser tests exercise real persistence and export. Production routing and session behaviour must remain covered when auth conventions change.
+
+### Unreviewed first-look output
+
+The first look is bound to the current source hash and stored separately from the candidate model. Saving a new source replaces the first look; snapshot exports retain the report belonging to that saved version. Validate every proposed quotation and supplied location against the original source; reject directive-bearing passages and numerical hypotheses. Invalid model responses receive one corrective attempt, then an explicitly labelled local scan. Source load does not approve or simulate anything. The scan excludes directive-bearing lines, makes no completeness or likelihood claim, and reports uncertainty. Catalogue entries contain links/metadata only and introduce no server-side URL retrieval.
