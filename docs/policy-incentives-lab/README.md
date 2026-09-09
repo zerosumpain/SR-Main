@@ -48,10 +48,49 @@ Type-checking passed with no errors; the existing site warnings remain. Producti
 
 ## Policy examples and first look
 
-The home page includes a curated catalogue of GOV.UK publication titles, publishers, first-publication dates and links, verified on 9 September 2026. Historical policy papers are labelled; living guidance may change. Selecting an example creates an analysis and fills in publication metadata. It does not fetch the document or treat the catalogue's learning question as evidence. Paste or upload the relevant edition. Only metadata is committed; fixtures remain synthetic.
+The home page searches the live GOV.UK library and loads selected publication content as described below. The earlier four metadata examples remain available only as legacy query-prefill data; they no longer define library coverage.
 
 Saving a source automatically produces a separate, unreviewed first-look dashboard: possible groups, response avenues, consequences, safeguards and questions. `FIRST_LOOK_RUBRIC` and `FIRST_LOOK_VERSION` in `first-look.ts` are the executable skill contract, described in `data/skills/policy-incentives-lab/SKILL.md`. The small pass uses the existing provider with a bounded output and timeout, validates exact quotation/location links and retries once. With no provider, or invalid model output, a labelled basic keyword scan supplies source mentions and review questions. It never represents the scan as a full AI analysis. This pass cannot approve a model or calculate results. Refreshing it leaves existing draft approvals unchanged; changing the source clears the candidate model as before.
 
 First-look reports can be exported to Markdown/JSON before any model or run exists. Reports retain source hash, method, rubric version and timestamp; model attempts remain in the extraction audit. Full run exports also include the first look saved with their model snapshot. Existing projects without a first look can generate one with Refresh first look. This uses the existing draft JSON payload and needs no schema migration.
 
 Each workflow section explains its purpose, gives an ordinary-language example and describes the next step. Item editing uses named references and explained decision rules. The guided starter collects two groups and two choices in everyday words, labels the outline as reviewer assumptions, and leaves every numerical value unknown. Scenario and range controls use forms rather than requiring JSON. Advanced JSON editing remains available for larger structures.
+
+## Live policy library, illustrative setup and replay
+
+The library now queries GOV.UK's entire paginated policy-paper index, with wider
+consultation/guidance/regulation filters. Its scope is indexed GOV.UK material,
+not a definitive register of every UK policy currently in force. Search and
+content import require a network connection; the synthetic fixture and tests do
+not. Publication metadata, links, retrieval time, selected attachment and full
+extracted text are saved in the existing private project JSON. No real policy
+text is checked into this repository. A publication with multiple attachments
+exposes a document selector; only that document is loaded, never a landing-page
+summary standing in for the attachment. Unsupported/scanned/oversized documents
+remain visible with an explanation and manual-upload route. Limits remain 5 MiB,
+200 PDF pages and 250,000 text characters; imports are never silently truncated.
+
+In **Try a scenario**, **Preview automatic fixes** offers an optional illustrative
+setup. The existing gateway can propose missing qualitative structure; without
+it a clearly hypothetical two-group starter is available. Seeded deterministic
+code samples missing numbers, supplies missing choices/payoff rows/decision rules
+and selects a scenario. Existing numerical values remain. Integer bounds sample
+uniform integers; other bounds sample continuously. These distributions express
+no real-world probabilities. The preview shows changes, every assumption and the
+full item list. Explicit user acceptance records per-item approvals and seals an
+immutable snapshot, ready for the separate Run action. Unrepairable evidence or
+schema errors, stale previews and missing acceptance remain hard blocks. The
+setup version, seed, bounds, changes and acceptance identity/time travel with
+saved snapshots and exports. Engine behaviour/version is unchanged.
+
+Results now include saved-state replay: round controls and optional playback,
+actor choices and payoffs, the existing network graph, a Vega choice timeline,
+metric values and an accessible table. Reduced-motion users have manual controls.
+Normal-form/sequential terminal profiles are alternatives, never animated as a
+sequence of events. No equilibrium/unsupported results remain explicitly empty.
+
+Sources for the integration contract:
+- https://docs.publishing.service.gov.uk/repos/search-api/using-the-search-api.html
+- https://content-api.publishing.service.gov.uk/reference.html
+
+No additional dependency, service, migration, provider setting or setup command.

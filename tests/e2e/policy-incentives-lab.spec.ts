@@ -4,11 +4,16 @@ import { encode } from '@auth/core/jwt';
 const origin = process.env.POLICY_LAB_TEST_ORIGIN ?? 'http://127.0.0.1:5275';
 test.skip(!process.env.POLICY_LAB_LOCAL_TESTS, 'Explicit isolated local stack only');
 test.use({ baseURL: origin });
+// Browser suites never require a live GOV.UK connection. Server import is covered
+// separately with synthetic transport fixtures and a manual live smoke check.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/policy-incentives-lab/library**', route => route.fulfill({ json: { entries: [], total: 0, start: 0, count: 20, retrieved_at: '2026-01-01T00:00:00Z' } }));
+});
 
 test('private synthetic workflow: source, approvals, immutable run, reproducibility and reports', async ({ page, request }) => {
   test.setTimeout(180000);
   expect(['http://127.0.0.1:5275', 'http://192.168.0.77:5275']).toContain(origin);
-  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.fallback() : route.abort());
   const token = await encode({ secret: 'jkai-preview-local-only', salt: 'authjs.session-token', token: { email: 'preview@example.test', name: 'Synthetic local reviewer', sub: 'local-preview' } });
   await page.context().addCookies([{ name: 'authjs.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax' }]);
   const headers = { cookie: `authjs.session-token=${token}`, origin };
@@ -80,7 +85,7 @@ test('private synthetic workflow: source, approvals, immutable run, reproducibil
   await page.locator('.vega-embed').first().scrollIntoViewIfNeeded();
   await page.screenshot({ path: '/tmp/policy-lab-results-desktop.png', fullPage: false });
   await page.getByText('Distribution of calculated round/profile values', { exact: true }).click();
-  await expect(page.locator('.vega-embed')).toHaveCount(3);
+  await expect(page.locator('.vega-embed')).toHaveCount(4);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: '/tmp/policy-lab-results-mobile.png', fullPage: false });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -89,7 +94,7 @@ test('private synthetic workflow: source, approvals, immutable run, reproducibil
 
 test('the synthetic workflow can be completed through the interface', async ({ page }) => {
   test.setTimeout(180000);
-  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.fallback() : route.abort());
   const token = await encode({ secret: 'jkai-preview-local-only', salt: 'authjs.session-token', token: { email: 'preview@example.test', name: 'Synthetic reviewer', sub: 'local-preview' } });
   await page.context().addCookies([{ name: 'authjs.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax' }]);
   await page.goto('/policy-incentives-lab');
@@ -122,16 +127,15 @@ test('the synthetic workflow can be completed through the interface', async ({ p
 test('novice onboarding, publication catalogue and first look before any simulation', async ({ page, request }) => {
   test.setTimeout(180000);
   expect(['http://127.0.0.1:5275', 'http://192.168.0.77:5275']).toContain(origin);
-  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.fallback() : route.abort());
   const token = await encode({ secret: 'jkai-preview-local-only', salt: 'authjs.session-token', token: { email: 'preview@example.test', name: 'Synthetic local reviewer', sub: 'local-preview' } });
   await page.context().addCookies([{ name: 'authjs.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax' }]);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/policy-incentives-lab');
   await expect(page.getByRole('heading', { name: 'Start with a policy, not a maths problem' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Read on GOV.UK ↗' })).toHaveCount(4);
-  await page.screenshot({ path: '/tmp/policy-lab-catalogue-desktop.png', fullPage: true });
-  await page.getByRole('button', { name: 'Use these publication details' }).first().click();
-  await expect(page.getByLabel('Publication title', { exact: true })).toHaveValue('Soft Drinks Industry Levy');
+  await expect(page.getByRole('heading', { name: 'GOV.UK policy library', exact: true })).toBeVisible();
+  await page.getByLabel('Analysis title', { exact: true }).fill('SYNTHETIC novice onboarding');
+  await page.getByRole('button', { name: 'Create private analysis' }).click();
   await expect(page.getByLabel('Policy text', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Load synthetic Lantern example' }).click();
   await expect(page.getByRole('region', { name: 'First-look red-team dashboard' })).toBeVisible();
@@ -165,4 +169,76 @@ test('novice onboarding, publication catalogue and first look before any simulat
   await page.getByRole('link', { name: 'Try a scenario', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save approved model snapshot' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Run approved scenario', exact: true })).toBeDisabled();
+});
+
+
+test('optional illustrative completion, explicit approval and saved simulation replay', async ({ page, request }) => {
+  test.setTimeout(180000);
+  const token = await encode({ secret: 'jkai-preview-local-only', salt: 'authjs.session-token', token: { email: 'preview@example.test', sub: 'local-preview' } });
+  const headers = { cookie: `authjs.session-token=${token}`, origin };
+  await page.context().addCookies([{ name: 'authjs.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax' }]);
+  const create = await request.post('/api/policy-incentives-lab/projects', { headers, data: { title: 'SYNTHETIC automatic setup and visualisation' } });
+  const project = await create.json();
+  await request.post(`/api/policy-incentives-lab/projects/${project.id}/sources`, { headers, data: { revision: 0, synthetic: true } });
+  await page.goto(`/policy-incentives-lab/${project.id}?step=runner`);
+  await page.getByRole('button', { name: 'Preview automatic fixes' }).click();
+  await expect(page.getByRole('heading', { name: 'Review the proposed setup' })).toBeVisible();
+  const accept = page.getByRole('button', { name: 'Accept illustrative setup and prepare runner' });
+  await expect(accept).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Run approved scenario', exact: true })).toBeDisabled();
+  await page.getByLabel('I accept the displayed model items', { exact: false }).check();
+  await accept.click();
+  await expect(page.getByRole('button', { name: 'Run approved scenario', exact: true })).toBeEnabled();
+  await page.getByLabel('What would you like to explore?').selectOption('repeated');
+  await page.getByRole('button', { name: 'Run approved scenario', exact: true }).click();
+  const replay = page.getByRole('region', { name: 'Simulation visualisation' });
+  await expect(replay).toBeVisible();
+  await expect(page.getByText('ILLUSTRATIVE AUTO-RESOLVED SETUP', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next round', exact: true }).click();
+  await expect(page.getByRole('slider', { name: 'Replay round' })).toHaveValue('1');
+  await page.getByRole('button', { name: 'Play saved rounds' }).click();
+  await expect.poll(async () => Number(await page.getByRole('slider', { name: 'Replay round' }).inputValue())).toBeGreaterThan(1);
+  await page.getByRole('button', { name: 'Pause replay' }).click();
+  await expect(replay.locator('.vega-embed')).toBeVisible();
+  const host = await replay.locator('.graph-host').boundingBox(); const frameBox = await replay.locator('.network').boundingBox();
+  expect(host!.y + host!.height).toBeLessThanOrEqual(frameBox!.y + frameBox!.height + 1);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await replay.scrollIntoViewIfNeeded();
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); });
+  await page.screenshot({ path: '/tmp/policy-simulation-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await replay.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/policy-simulation-mobile.png' });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.getByRole('button', { name: 'Play saved rounds' })).toBeDisabled();
+});
+
+test('library searches, paginates and loads policy text before creating an analysis', async ({ page }) => {
+  const token = await encode({ secret: 'jkai-preview-local-only', salt: 'authjs.session-token', token: { email: 'preview@example.test', sub: 'local-preview' } });
+  await page.context().addCookies([{ name: 'authjs.session-token', value: token, url: origin, httpOnly: true, sameSite: 'Lax' }]);
+  const entry = { title: 'SYNTHETIC Lantern policy library entry', path: '/government/publications/synthetic-lantern', description: 'Fictional publication for offline UI checks.', publisher: 'Fictional council', updated: '2026-01-01', type: 'policy_paper' };
+  await page.route('**/api/policy-incentives-lab/library**', route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/content')) return route.fulfill({ json: { ...entry, publication_date: '2026-01-01', source_url: 'https://www.gov.uk' + entry.path, retrieved_at: '2026-01-01T00:00:00Z', withdrawn: false, documents: [{ title: 'SYNTHETIC operative rules', url: 'https://www.gov.uk' + entry.path + '/rules', format: 'html', supported: true }], selected: 0, sections: [{ id: 'one', location: 'SYNTHETIC rules', text: 'SYNTHETIC: Fictional workshops receive credits only after checking lantern repairs.' }], warnings: [] } });
+    return route.fulfill({ json: { entries: [entry], total: 41, start: Number(url.searchParams.get('start') ?? 0), count: 20, retrieved_at: '2026-01-01T00:00:00Z' } });
+  });
+  await page.goto('/policy-incentives-lab');
+  await page.getByLabel('Search policies', { exact: true }).fill('lantern');
+  await page.getByRole('button', { name: 'Search library', exact: true }).click();
+  await expect(page.getByText(/41 publications · showing 1–1/)).toBeVisible();
+  await page.getByRole('button', { name: 'Next publications' }).click();
+  await expect(page.getByText(/showing 21–21/)).toBeVisible();
+  await page.getByRole('button', { name: 'Load policy details and text' }).click();
+  const preview = page.getByRole('region', { name: 'Selected policy content' });
+  await expect(preview.getByText('SYNTHETIC: Fictional workshops receive credits only after checking lantern repairs.')).toBeVisible();
+  await expect(preview.getByRole('button', { name: 'Use this policy and its text' })).toBeEnabled();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await preview.scrollIntoViewIfNeeded();
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); });
+  await page.screenshot({ path: '/tmp/policy-library-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await preview.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/policy-library-mobile.png' });
 });

@@ -1,8 +1,10 @@
 <script lang="ts">
+  import PolicyLibrary from '$lib/components/policy-incentives-lab/PolicyLibrary.svelte';
+  import AutoResolve from '$lib/components/policy-incentives-lab/AutoResolve.svelte';
+  import SimulationReplay from '$lib/components/policy-incentives-lab/SimulationReplay.svelte';
   import { page } from '$app/state';
   import { POLICY_EXAMPLES, type PolicyExample } from '$lib/policy-incentives-lab/examples';
   import SectionGuide from '$lib/components/policy-incentives-lab/SectionGuide.svelte';
-  import PolicyExamples from '$lib/components/policy-incentives-lab/PolicyExamples.svelte';
   import FirstLookDashboard from '$lib/components/policy-incentives-lab/FirstLookDashboard.svelte';
   import { invalidateAll, goto } from '$app/navigation';
   import GuidedModel from '$lib/components/policy-incentives-lab/GuidedModel.svelte';
@@ -26,6 +28,8 @@
   let busy = $state(false); let message = $state(''); let success = $state('');
   let sourceTitle = $state(''); let publisher = $state(''); let publicationDate = $state(''); let sourceUrl = $state(''); let sourceText = $state(''); let publicMaterial = $state(false); let synthetic = $state(false); let upload = $state<HTMLInputElement>();
   function chooseExample(example: PolicyExample) { sourceTitle = example.title; publisher = example.publisher; publicationDate = example.publication_date; sourceUrl = example.source_url; synthetic = false; success = 'Publication details filled in. Paste or upload its text below; check that the edition matches.'; }
+  let populatedSource = $state('');
+  $effect(() => { const source = draft.source; if (source && populatedSource !== source.id) { populatedSource = source.id; sourceTitle = source.title; publisher = source.publisher; publicationDate = source.publication_date ?? ''; sourceUrl = source.source_url; sourceText = source.text_sections.map(s => s.text).join('\n\n'); synthetic = source.synthetic; } });
   let appliedExample = $state('');
   $effect(() => { const example = POLICY_EXAMPLES.find(e => e.id === page.url.searchParams.get('example')); if (example && appliedExample !== example.id) { appliedExample = example.id; chooseExample(example); } });
   let modelText = $state(''); let selectedActor = $state(''); let selectedVersion = $state(''); let selectedRun = $state('');
@@ -56,8 +60,14 @@
       const response = await fetch(`${base}/${resource}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, revision: project.revision }) });
       const value = await response.json();
       if (!response.ok) throw new Error(value.error + (value.errors ? '\n' + value.errors.join('\n') : ''));
-      success = ['sources', 'uploads'].includes(resource) ? 'Policy saved. Your unreviewed first look is ready.' : 'Saved.'; await invalidateAll(); if (resource === 'sources') await goto('?step=overview'); return value;
+      success = ['sources', 'uploads'].includes(resource) ? 'Policy saved. Your unreviewed first look is ready.' : 'Saved.'; await invalidateAll(); if (['sources', 'govuk-source'].includes(resource)) await goto('?step=overview'); return value;
     } catch (e) { message = (e as Error).message; await invalidateAll(); return null; } finally { busy = false; }
+  }
+  async function acceptSetup(proposal_hash: string, item_ids: string[]) {
+    const value = await action('accept-auto-resolve', { proposal_hash, item_ids, accept_illustrative: true });
+    if (!value) return;
+    const config = value.payload.illustrative_setup.config; simulationType = config.simulation_type; seed = config.seed; rounds = config.rounds; scenario = config.scenario; scenarioName = config.scenario_name; parameterText = '{}';
+    const version = await action('versions', {}); if (version) selectedVersion = version.id;
   }
   async function addSource() {
     const metadata = { title: sourceTitle, publisher, publication_date: publicationDate || null, source_url: sourceUrl, synthetic };
@@ -87,7 +97,7 @@
     try {
       const config = { simulation_type: simulationType, scenario, scenario_name: scenarioName, seed, rounds, parameters: JSON.parse(parameterText) };
       const value = await action(sweep ? 'sensitivity' : 'runs', { version_id: selectedVersion || data.versions[0]?.id, ...(sweep ? { sensitivity: { config, ranges: JSON.parse(sensitivityText) } } : { config }) });
-      if (value) selectedRun = value.id;
+      if (value) { selectedRun = value.id; await goto('?step=results'); }
     } catch (e) { message = (e as Error).message; }
   }
 </script>
@@ -106,12 +116,12 @@
   {#if draft.source}<button disabled={busy} onclick={() => action('first-look', {})}>Refresh first look</button>{/if}
 {:else if step === 'evidence'}
   <h2>Policy source</h2>
-  <details><summary>Choose a published GOV.UK example</summary><PolicyExamples {busy} choose={chooseExample} /></details>
+  <details><summary>Choose and import from the GOV.UK policy library</summary><PolicyLibrary {busy} choose={publication => { void action('govuk-source', { path: publication.path, document: publication.selected }); }} /></details>
   <button disabled={busy} onclick={() => action('sources', { synthetic: true })}>Load synthetic Lantern example</button>
   <details open={!draft.source}><summary>Paste or upload a public policy (replaces the draft source)</summary>
     <form onsubmit={e => { e.preventDefault(); void addSource(); }} class="nm-sec">
       <label>Publication title <input bind:value={sourceTitle} required /></label><label>Publisher <input bind:value={publisher} required /></label>
-      <label>Publication date (optional) <input type="date" bind:value={publicationDate} /></label><label>Source URL (metadata only; never fetched) <input type="url" bind:value={sourceUrl} /></label>
+      <label>Publication date (optional) <input type="date" bind:value={publicationDate} /></label><label>Source URL (for pasted/uploaded material) <input type="url" bind:value={sourceUrl} /></label>
       <label>Policy text <textarea rows="8" bind:value={sourceText} maxlength="250000"></textarea></label>
       <label>Or upload PDF, DOCX or UTF-8 TXT (5 MiB maximum) <input type="file" accept=".pdf,.docx,.txt" bind:this={upload} /></label>
       <label><input type="checkbox" bind:checked={synthetic} /> This source is synthetic</label>
@@ -121,6 +131,7 @@
   </details>
   {#if draft.source}
     <p><a href="?step=overview">Read the first-look dashboard →</a></p>
+    {#if draft.govuk_import}<p>Imported from <a href={draft.govuk_import.source_url}>GOV.UK</a> on {new Date(draft.govuk_import.retrieved_at).toLocaleString()}. Document: {draft.govuk_import.documents[draft.govuk_import.selected].title}.</p>{#each draft.govuk_import.warnings as warning}<p>{warning}</p>{/each}{/if}
     <p>{draft.source.title} · {draft.source.publisher} · {draft.source.publication_date ?? 'Publication date unknown'}</p>
     {#each draft.source.input_flags as flag}<p class="error">{flag}</p>{/each}
     <button disabled={busy} onclick={() => action('extraction-jobs', { task: 'extract-objectives' })}>Suggest a starting model</button>
@@ -159,6 +170,7 @@
   {#if draft.candidate}<ReviewList allItems={items} items={relevantItems} evidence={draft.candidate.evidence} {busy} approve={ids => action('approvals', { item_ids: ids })} edit={editItem} />{/if}
 {:else if step === 'runner'}
   <h2>Is everything ready?</h2>
+  <AutoResolve {draft} {busy} prepare={options => { void action('auto-resolve', { options }); }} accept={(hash, ids) => { void acceptSetup(hash, ids); }} />
   {#if errors.length}<details open><summary>{errors.length} blocking validation issues</summary><ul>{#each errors as issue}<li>{friendlyIssue(issue)}</li>{/each}</ul></details>{:else}<p>All draft items are approved and the payoff table is complete.</p>{/if}
   <button disabled={busy || errors.length > 0} onclick={() => action('versions', {})}>Save approved model snapshot</button>
   <h2>Scenario configuration</h2>
@@ -182,6 +194,8 @@
   {#if result && run}
     <p>Engine {result.engine_version} · {result.simulation_type} · result SHA-256 {payload?.result_hash}</p>
     {#each result.notices as notice}<p>{notice}</p>{/each}
+    {#if (data.versions.find(v => v.id === run.versionId)?.payload as Draft)?.illustrative_setup}<p class="synthetic"><strong>ILLUSTRATIVE AUTO-RESOLVED SETUP</strong> — includes randomly sampled assumptions explicitly accepted by the user; not policy-derived estimates.</p>{/if}
+    {#if savedModel}{#key run.id}<SimulationReplay game={savedModel} {result} />{/key}{/if}
     <h3>Intended behaviour</h3><ul>{#each savedModel?.intended_outcomes ?? [] as intended}<li>{intended.statement}</li>{/each}</ul><p>Compare the saved model’s intended outcomes in the audit export with the calculated profiles below. Approval is not evidence that actors will behave this way.</p>
     {#if chartRows.length}{#key run.id}<ChartArtifact artifact={chart} />{/key}
       <div class="table-wrap"><table><thead><tr><th>Round/profile</th><th>Metric</th><th>Calculated value</th></tr></thead><tbody>{#each chartRows as row}<tr><td>{row.step}</td><td>{row.metric}</td><td>{row.value}</td></tr>{/each}</tbody></table></div>

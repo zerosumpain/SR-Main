@@ -232,3 +232,11 @@ Canonical Zod contracts live in `src/lib/policy-incentives-lab/schemas.ts`. Nume
 See `docs/policy-incentives-lab/README.md` for local operation and tests. Preserve the cumulative local batch; no automatic PR, merge or production deployment.
 
 The Policy Lab first-look skill is a qualitative, unreviewed pass, separate from simulations. Keep its executable rubric/version and schema in `src/lib/policy-incentives-lab/first-look.ts`. GOV.UK examples contain verified publication metadata only, never committed real-policy text. Novice-facing forms must explain terms, use named references and leave unknown numerical assumptions unknown. Preserve server approval gates and distinguish basic offline scans from model-assisted hypotheses.
+
+The user-authorized policy library now imports selected official GOV.UK documents
+at runtime via the search/content APIs; keep real text out of committed fixtures.
+Preserve official-host redirect bounds and explicit attachment/error handling.
+Optional auto-resolve is an illustrative preview, followed by explicit acceptance
+of the complete displayed item list. It never silently approves unknown inputs.
+Keep setup RNG/version/provenance separate from engine results. Simulation replay
+must read the saved version/run only, including after later draft edits.

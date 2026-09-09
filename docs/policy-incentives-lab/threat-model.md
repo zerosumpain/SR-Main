@@ -21,4 +21,23 @@ Adversarial tests cover source directives, malformed JSON with one retry, unsupp
 
 ### Unreviewed first-look output
 
-The first look is bound to the current source hash and stored separately from the candidate model. Saving a new source replaces the first look; snapshot exports retain the report belonging to that saved version. Validate every proposed quotation and supplied location against the original source; reject directive-bearing passages and numerical hypotheses. Invalid model responses receive one corrective attempt, then an explicitly labelled local scan. Source load does not approve or simulate anything. The scan excludes directive-bearing lines, makes no completeness or likelihood claim, and reports uncertainty. Catalogue entries contain links/metadata only and introduce no server-side URL retrieval.
+The first look is bound to the current source hash and stored separately from the candidate model. Saving a new source replaces the first look; snapshot exports retain the report belonging to that saved version. Validate every proposed quotation and supplied location against the original source; reject directive-bearing passages and numerical hypotheses. Invalid model responses receive one corrective attempt, then an explicitly labelled local scan. Source load does not approve or simulate anything. The scan excludes directive-bearing lines, makes no completeness or likelihood claim, and reports uncertainty. Legacy examples contain metadata only; the explicitly selected live-library import is described below.
+
+### Explicitly requested GOV.UK imports and illustrative completion
+
+The owner-only library uses fixed HTTPS GOV.UK API origins. Attachment URLs and
+every redirect are restricted to `www.gov.uk` and `assets.publishing.service.gov.uk`,
+without credentials or nonstandard ports. Requests carry no session cookies or
+provider secrets. Response bodies, redirects and request time are bounded. HTML
+is parsed with the existing inert JSDOM dependency, never rendered or executed;
+source directives still pass through the existing flagging/neutralisation layer.
+Public text persists only in private project storage. There is no arbitrary URL
+proxy, third-party scraping or background crawl.
+
+Auto-resolve does not convert a model response into approval. Its server-stored
+preview is bound to the source/candidate hash and current revision. Acceptance
+must name the displayed proposal hash, every item ID and explicit illustrative
+consent. The server supplies the reviewer identity/time, validates completeness,
+and continues to enforce the existing run gate. Invalid source quotations are
+not erased to make the validator green. Preview responses and import APIs use
+private/no-store headers and the same owner checks as the rest of the module.
