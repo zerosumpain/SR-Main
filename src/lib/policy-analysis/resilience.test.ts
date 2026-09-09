@@ -318,3 +318,36 @@ describe('a verdict drawn from a fragment is not a verdict', () => {
       .rejects.toThrow('More of the policy graph was discarded than kept');
   });
 });
+
+describe('one malformed artefact costs one artefact', () => {
+  const source = passage('passage_0001');
+  const good = decomposition('s1_000_', source, 'what landlords achieve');
+
+  it('accepts an artefact that omits a field meaning nothing for its kind', () => {
+    // The exact shape that cost a live assessment a passage on 2026-09-09: an
+    // actor with no `toId` key at all, where absent and null mean the same thing.
+    const actor = { ...good.artefacts[2] } as Record<string, unknown>;
+    delete actor.toId;
+    delete actor.fromId;
+    delete actor.relation;
+    const triaged = triageOutput({ artefacts: [...good.artefacts.slice(0, 2), actor, good.artefacts[3]], warnings: [] }, 1, [source]);
+    expect(triaged.rejected).toEqual([]);
+    expect(triaged.artefacts).toHaveLength(4);
+    expect(triaged.artefacts.find((a) => a.kind === 'actor')!.toId).toBeNull();
+  });
+
+  it('drops only the artefact that is genuinely wrong, and names the field', () => {
+    const broken = { ...good.artefacts[0], page: 'page three' };
+    const triaged = triageOutput({ artefacts: [broken, ...good.artefacts.slice(1)], warnings: [] }, 1, [source]);
+    expect(triaged.artefacts.map((a) => a.kind).sort()).toEqual(['actor', 'assumption', 'mechanism']);
+    expect(triaged.rejected).toHaveLength(1);
+    expect(triaged.rejected[0]).toMatchObject({ id: 's1_000_claim', kind: 'claim', code: 'contract' });
+    expect(triaged.rejected[0].reason).toContain('page');
+    expect(triaged.warnings.join(' ')).toContain('s1_000_claim (claim)');
+  });
+
+  it('still refuses a response that is not an envelope at all', () => {
+    expect(() => triageOutput({ nonsense: true }, 1, [source])).toThrow('invalid structured');
+    expect(() => triageOutput('not json', 1, [source])).toThrow('invalid structured');
+  });
+});
