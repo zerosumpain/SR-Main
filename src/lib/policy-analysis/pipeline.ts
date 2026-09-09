@@ -30,11 +30,12 @@ const CONSECUTIVE_LIMIT = 3;
 const MAX_STAGE_ARTEFACTS = 4000;
 const MAX_REFS = 200;
 
-export async function executeStage(input: StageInput, deps: PipelineDeps): Promise<StageOutput> {
+export async function executeStage(input: StageInput, deps: PipelineDeps): Promise<StageOutput & { rejected: number }> {
   const { stage } = input;
   const limits = DEPTH_LIMITS[input.depth ?? 'standard'];
   const output: StageOutput = { artefacts: [], warnings: [] };
   let consecutive = 0;
+  let rejected = 0;
   // A holder, not a bare `let`: control-flow narrowing pins a `let` initialised
   // to null at `null` for the outer scope, so every read after the closure that
   // assigns it types as `never`.
@@ -52,6 +53,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     // Retrieved sources are minted by the retrieval adapter and nowhere else. The
     // kind is permitted at this stage so the server's own rows validate, which
     // would otherwise let a model hand back a source — and a URL — of its own.
+    rejected += result.rejected.length;
     const authored = result.artefacts.filter((a) => a.kind === 'research_source');
     if (authored.length) {
       result.artefacts = result.artefacts.filter((a) => a.kind !== 'research_source');
@@ -113,7 +115,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     }
     await attempt('main', inventory, 'Evidence drawn from the policy document itself');
   } else if (stage === 8) {
-    output.artefacts = runPolicyTests(input.artefacts);
+    output.artefacts = runPolicyTests(input.artefacts, input.graphLoss ?? 0);
   } else if (stage === 10) {
     // Every resolved actor with a profile is a candidate for the red team, and
     // `limits.actors` bounds how many get one. The most connected go first —
@@ -178,7 +180,13 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     const mentions = input.artefacts.filter((a) => a.kind === 'actor');
     if (!mentions.every((m) => output.artefacts.some((a) => a.kind === 'actor' && (a.data.mentions as string[]).includes(m.id)))) throw new PolicyError('coverage', 'Entity resolution omitted source mentions.');
   }
-  if (stage === 3 && kinds('node', 'edge').length) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');
+  if (stage === 3) {
+    if (kinds('node', 'edge').length) throw new PolicyError('coverage', 'The graph stage did not produce inspectable nodes and relationships.');
+    // "One node and one edge survived" is not a graph. Every later structural
+    // check reads this stage's output, so losing the majority of it here would be
+    // laundered into confident-looking verdicts drawn from almost nothing.
+    if (rejected > output.artefacts.length) throw new PolicyError('coverage', `More of the policy graph was discarded than kept (${rejected} discarded, ${output.artefacts.length} retained). The structural checks would have been drawn from a fragment.`);
+  }
   if (stage === 4 && !output.artefacts.some((a) => a.kind === 'profile')) throw new PolicyError(fault.last?.code ?? 'coverage', `No actor could be profiled, so there are no incentives to reason about.${fault.last ? ` Last reason: ${fault.last.message}` : ''}`);
   if (stage === 5) {
     const questions = output.artefacts.filter((a) => a.kind === 'research_question');
@@ -221,6 +229,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
   const discarded = output.warnings.filter((w) => w.includes('discarded and are not part of this assessment')).length;
   if (discarded) output.warnings.unshift(`${discarded} group${discarded === 1 ? '' : 's'} of model output were discarded in this stage. What follows is drawn from what survived; treat structural checks over this stage's relationships as a floor, not a verdict.`);
   const final = triageArtefacts(output, stage, input.artefacts);
+  rejected += final.rejected.length;
   // A single response is bounded by its envelope; the assembled stage was not,
   // and `policy_provenance` grows with the square of a runaway fan-out.
   const kept = final.artefacts.slice(0, MAX_STAGE_ARTEFACTS);
@@ -231,7 +240,7 @@ export async function executeStage(input: StageInput, deps: PipelineDeps): Promi
     warnings.push(`“${a.label}” cited ${a.refs.length} sources; only the first ${MAX_REFS} are recorded.`);
     a.refs = a.refs.slice(0, MAX_REFS);
   }
-  return { artefacts: kept, warnings: clampWarnings(warnings) };
+  return { artefacts: kept, warnings: clampWarnings(warnings), rejected };
 }
 
 /**

@@ -5,7 +5,7 @@ import { policyModelCalls, policyExecutions } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { executionContext, type LLMCallRecord } from '$lib/context/execution';
 import { resolveResearchDeepModel } from '$lib/server/models/workload-settings';
-import { coerceModelContext } from '$lib/constants/default-models';
+import { coerceModelContext, DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 import { PROMPT_VERSION, WORKFLOW_ID, type Artefact, type StageOutput } from '../contracts';
 import { fitToBudget } from '../budget';
 import { PolicyError, triageOutput, type Rejection } from '../validation';
@@ -76,7 +76,7 @@ export function modelCaller(executionId: string, runId: string, signal: AbortSig
       const llmCalls: LLMCallRecord[] = [];
       try {
         const result = await executionContext.run({ workflowId: WORKFLOW_ID, runId, nodeId: executionId, llmCalls }, () =>
-          client.chat.completions.create({ model, messages, response_format: { type: 'json_object' }, max_tokens: 14000 }, { signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]), maxRetries: 0 }),
+          client.chat.completions.create({ model, messages, response_format: { type: 'json_object' }, max_tokens: DEFAULT_NODE_MAX_TOKENS }, { signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]), maxRetries: 0 }),
         );
         const content = result.choices[0]?.message?.content ?? '';
         // A reply cut off at max_tokens is not malformed JSON, and saying so sends

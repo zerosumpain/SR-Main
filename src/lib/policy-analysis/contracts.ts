@@ -88,7 +88,7 @@ export const artefactSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 }).strict();
 export type Artefact = z.infer<typeof artefactSchema>;
-export type StageInput = { stage: number; title: string; depth?: Depth; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
+export type StageInput = { stage: number; title: string; depth?: Depth; graphLoss?: number; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
 export type StageOutput = { artefacts: Artefact[]; warnings: string[] };
 export const stageOutputSchema = z.object({ artefacts: z.array(artefactSchema).max(2000), warnings: z.array(z.string().max(1000)).max(100) }).strict();
 export const STAGE_KINDS: Kind[][] = [

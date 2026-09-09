@@ -15,7 +15,20 @@ export const POLICY_TESTS = [
   ['adaptability', 'Adaptability under changing conditions', 'delivers', 'can_adapt', 'Add review points, feedback and authority to adapt.'],
 ] as const;
 
-export function runPolicyTests(all: Artefact[]): Artefact[] {
+/**
+ * How much of the knowledge graph was thrown away before these checks ran.
+ *
+ * Triage keeps a run alive by quarantining faulty artefacts, and that is also how
+ * a check could hand back false reassurance: if 38 of 40 relationships were
+ * discarded, "all 2 extracted relationships have a corresponding counterpart"
+ * still renders as **low risk** in bold to someone deciding whether to publish.
+ * Above this share the checks refuse to reach a verdict at all, which is the same
+ * position they already take when there is no evidence either way.
+ */
+const GRAPH_LOSS_CEILING = 0.34;
+
+export function runPolicyTests(all: Artefact[], graphLoss = 0): Artefact[] {
+  const gutted = graphLoss > GRAPH_LOSS_CEILING;
   const edges = all.filter((a) => a.kind === 'edge');
   const assumptions = all.filter((a) => a.kind === 'assumption');
   const models = all.filter((a) => a.kind === 'model');
@@ -35,7 +48,7 @@ export function runPolicyTests(all: Artefact[]): Artefact[] {
     // 'high_risk' used to be unreachable: every shortfall, however total, read as
     // moderate. A check where EVERY relevant assertion lacks its counterpart, over
     // more than one assertion, is a different finding from one where some do.
-    const result = !relevant.length ? 'indeterminate'
+    const result = gutted || !relevant.length ? 'indeterminate'
       : !missing.length ? 'low_risk'
       : missing.length === relevant.length && relevant.length >= 2 ? 'high_risk'
       : 'moderate_risk';
@@ -48,7 +61,9 @@ export function runPolicyTests(all: Artefact[]): Artefact[] {
     const named = [...new Set(missing.map((e) => label(e.fromId)).filter((n): n is string => !!n))].slice(0, 6);
     const extra = testId === 'coordination'
       ? ` ${conflictingReportingLines(edges).length} actor(s) have multiple reporting targets; whether these conflict needs institutional interpretation.` : '';
-    const reasoning = !relevant.length
+    const reasoning = gutted
+      ? `${Math.round(graphLoss * 100)}% of the relationships this check reads were discarded before it ran, so no verdict is available. Evidence is insufficient; this is not a pass.`
+      : !relevant.length
       ? 'No applicable graph assertion was extracted. Evidence is insufficient; this is not a pass.'
       : missing.length
         ? `${missing.length} of ${relevant.length} relevant assertions have no documented matching ${counterpart} relationship. This is a structural review signal: missing evidence does not prove missing powers, resources or incentives.`

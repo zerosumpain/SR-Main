@@ -97,7 +97,14 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
       .innerJoin(policyStages, eq(policyStages.id, policyExecutions.stageId))
       .where(eq(policyStages.analysisId, analysisId));
     if (made >= MODEL_CALL_CEILING) throw new PolicyError('budget', `This assessment has made ${made.toLocaleString()} model calls, past the ${MODEL_CALL_CEILING.toLocaleString()} this implementation allows for one document. Completed stages are retained; submit a shorter document or split it.`);
-    const previousStages = await db.select({ warnings: policyStages.warnings }).from(policyStages).where(eq(policyStages.analysisId, analysisId));
+    const previousStages = await db.select({ ordinal: policyStages.ordinal, warnings: policyStages.warnings, output: policyStages.output }).from(policyStages).where(eq(policyStages.analysisId, analysisId));
+    // How much of the knowledge graph triage threw away. The deterministic checks
+    // read that stage's output, so a verdict drawn from a fragment must say so
+    // rather than reading as coverage.
+    const graph = previousStages.find((s) => s.ordinal === 3)?.output as { artefactIds?: string[]; rejected?: number } | null;
+    const kept = graph?.artefactIds?.length ?? 0;
+    const lost = graph?.rejected ?? 0;
+    const graphLoss = kept + lost > 0 ? lost / (kept + lost) : 0;
     // `content` is base64 of up to 10 MB and only stage 0 has any use for it.
     // Selecting the whole row on all thirteen stages moved ~13 MB through the
     // connection twelve times for nothing.
@@ -107,7 +114,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
           return ingest(Buffer.from(document.content, 'base64'), document.filename, document.mimeType);
         })()
       : null;
-    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', priorWarnings: previousStages.flatMap((s) => s.warnings), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
+    const output = extracted ?? await executeStage({ stage: started.stage.ordinal, title: started.analysis.title, jurisdiction: started.analysis.jurisdiction, policyArea: started.analysis.policyArea, context: started.analysis.context, depth: started.analysis.depth as 'standard' | 'deep', graphLoss, priorWarnings: previousStages.flatMap((s) => s.warnings), artefacts: all }, { model: modelCaller(started.execution.id, claimed.id, signal, all), research, signal, neighbours: () => neighbourSummaries(started.analysis.owner, analysisId) });
     signal.throwIfAborted();
     await db.transaction(async (tx) => {
       const locked = await lockLease(tx, analysisId, stageId, claimed.id, workerId);
@@ -115,7 +122,7 @@ export async function executePolicyRun(claimed: { id: string; input: Record<stri
       await persistArtefacts(tx, analysisId, started.stage.ordinal, output.artefacts);
       if (extracted) await tx.update(policyDocuments).set({ extractedText: extracted.text, metadata: extracted.metadata }).where(eq(policyDocuments.analysisId, analysisId));
       await tx.update(policyExecutions).set({ status: 'completed', completedAt: new Date() }).where(eq(policyExecutions.id, started.execution.id));
-      await tx.update(policyStages).set({ status: 'completed', completedAt: new Date(), warnings: output.warnings, output: { artefactIds: output.artefacts.map((a) => a.id), contractVersion: 1 } }).where(eq(policyStages.id, stageId));
+      await tx.update(policyStages).set({ status: 'completed', completedAt: new Date(), warnings: output.warnings, output: { artefactIds: output.artefacts.map((a) => a.id), contractVersion: 1, rejected: 'rejected' in output ? output.rejected : 0 } }).where(eq(policyStages.id, stageId));
       await tx.update(workflowRuns).set({ status: 'completed', completedAt: new Date() }).where(eq(workflowRuns.id, claimed.id));
       const [next] = await tx.select().from(policyStages).where(and(eq(policyStages.analysisId, analysisId), eq(policyStages.ordinal, started.stage.ordinal + 1)));
       if (next) {

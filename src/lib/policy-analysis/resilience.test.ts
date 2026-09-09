@@ -12,6 +12,7 @@ import { locateQuote } from './quotes';
 import { PolicyError, triageArtefacts, triageOutput, validateOutput } from './validation';
 import { encodedSize, fitToBudget } from './budget';
 import { bandOf, exposureOf, scoreExploits } from './exposure';
+import { runPolicyTests } from './tests';
 import { executeStage } from './pipeline';
 import { fixtureModel } from '../../../tests/fixtures/policy-analysis/model';
 import { ingest } from './server/ingest';
@@ -273,5 +274,46 @@ describe('ranking an exploitation play is reproducible arithmetic', () => {
     expect(a.data.exposure).toBeCloseTo(0.8, 3);
     expect(a.data.band).toBe('severe');
     expect(a.confidence).toBe(a.data.exposure);
+  });
+});
+
+describe('a verdict drawn from a fragment is not a verdict', () => {
+  const edge = (id: string, relation: Artefact['relation'], from = 'actor', to = 'mechanism') =>
+    artefact(id, 'edge', 'A relationship', 'x', { notes: 'n' }, { fromId: from, toId: to, relation, temporal: 'proposed', confidence: 0.8 });
+
+  it('reports coverage when the graph it read is intact', () => {
+    const checks = runPolicyTests([edge('e1', 'is_accountable_for'), edge('e2', 'has_authority_over')], 0);
+    expect(checks[0].data.result).toBe('low_risk');
+  });
+
+  it('refuses a verdict when most of the graph was discarded before it ran', () => {
+    // 38 of 40 relationships quarantined: "all 2 extracted relationships have a
+    // corresponding counterpart" would otherwise render as low risk, in bold, to
+    // someone deciding whether to publish.
+    const checks = runPolicyTests([edge('e1', 'is_accountable_for'), edge('e2', 'has_authority_over')], 38 / 40);
+    expect(checks.every((c) => c.data.result === 'indeterminate')).toBe(true);
+    expect(checks.every((c) => c.data.severity === 'unknown')).toBe(true);
+    expect(String(checks[0].statement)).toContain('95% of the relationships');
+    expect(String(checks[0].statement)).toContain('this is not a pass');
+  });
+
+  it('fails the graph stage outright when it lost the majority of its own output', async () => {
+    const source = passage('passage_0001');
+    const actor = artefact('s2_0_council', 'actor', 'Council', 'x', { entityType: 'local_authority', aliases: [], mentions: ['passage_0001'], ambiguity: 'n', dates: [], parent: null }, { refs: ['passage_0001'] });
+    const mechanism = artefact('s1_0_mechanism', 'mechanism', 'Duty', 'x', { intervention: 'i', implementation: 'p', notes: 'n' }, { refs: ['passage_0001'] });
+    const model = async (_stage: number, _key: string, raw: unknown) => {
+      const prefix = (raw as { idPrefix: string }).idPrefix;
+      return {
+        artefacts: [
+          artefact(`${prefix}node`, 'node', 'Council', 'x', { entityId: actor.id }, { refs: [actor.id] }),
+          artefact(`${prefix}edge`, 'edge', 'Accountability', 'x', { notes: 'n' }, { refs: [actor.id, mechanism.id], fromId: actor.id, toId: mechanism.id, relation: 'is_accountable_for', temporal: 'proposed' }),
+          // Three that cannot stand: endpoints that are not in the analysis.
+          ...['a', 'b', 'c'].map((k) => artefact(`${prefix}bad_${k}`, 'edge', 'Dangling', 'x', { notes: 'n' }, { refs: [actor.id], fromId: 'nope', toId: 'nowhere', relation: 'funds', temporal: 'proposed' })),
+        ],
+        warnings: [],
+      };
+    };
+    await expect(executeStage({ stage: 3, title: 'A policy', jurisdiction: null, policyArea: null, context: null, artefacts: [source, actor, mechanism] }, { model, research: async () => ({ artefacts: [], warnings: [] }), signal: new AbortController().signal }))
+      .rejects.toThrow('More of the policy graph was discarded than kept');
   });
 });
