@@ -147,7 +147,10 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 import { startRunWorker, stopRunWorker } from '$lib/workflows/run-worker';
 // Policy stages use the same durable workflow queue in the web service role.
-if (!building && process.env.POLICY_ANALYSIS_ENABLED !== '0' && (runsService('background') || process.env.POLICY_ANALYSIS_WORKER === '1')) startRunWorker({ policyOnly: true });
+if (!building && process.env.POLICY_ANALYSIS_ENABLED !== '0' && (runsService('background') || process.env.POLICY_ANALYSIS_WORKER === '1')) {
+  // Preserve the operator's existing full in-web worker when explicitly enabled.
+  startRunWorker({ policyOnly: !(process.env.JKAI_RUN_WORKER === '1' && process.env.JKAI_RUN_WORKER_IN_WEB === '1') });
+}
 if (runsService('background')) {
   startDatastoreReaper();
   startSelfImprovementSeeds();
