@@ -34,7 +34,7 @@ const text = z.string().min(1).max(12000);
 const strings = z.array(text).max(80);
 const ids = z.array(z.string().max(100)).max(10000);
 const unit = z.number().min(0).max(1);
-export const confidenceSchema = unit.nullable();
+export const confidenceSchema = unit.nullable().default(null);
 const field = z.object({ value: text, origin: z.enum(ORIGINS), confidence: confidenceSchema, refs: ids }).strict();
 export const PROFILE_FIELDS = ['formalRole', 'statedObjectives', 'operationalObjectives', 'accountableTo', 'successCriteria', 'timeHorizon', 'resources', 'constraints', 'legalPowers', 'informationPossessed', 'informationControlled', 'dependencies', 'costs', 'benefits', 'risks', 'outsideOption', 'gainFromFailure', 'reputationalIncentives', 'politicalIncentives', 'institutionalMotivations', 'strategies'] as const;
 const profileFields = Object.fromEntries(PROFILE_FIELDS.map((k) => [k, field])) as Record<(typeof PROFILE_FIELDS)[number], typeof field>;
@@ -77,16 +77,35 @@ export const dataSchemas = {
 export const REPORT_SECTIONS = ['executive_assessment', 'scope_methodology', 'objectives', 'actors', 'mechanisms', 'high_risk_assumptions', 'test_results', 'strategic_responses', 'scenarios', 'exploitation', 'cross_policy', 'evidence_gaps', 'confidence_uncertainty', 'distribution', 'unresolved_questions'] as const;
 export type Kind = keyof typeof dataSchemas;
 export const KINDS = Object.keys(dataSchemas) as [Kind, ...Kind[]];
+// Every nullable field also DEFAULTS to null. A model that omits `toId` on an
+// actor — where the field means nothing — is being reasonable, and on
+// 2026-09-09 one such omission in one of eighteen artefacts failed the whole
+// envelope and cost a passage of a live assessment. Absent and null mean the
+// same thing here, so they are treated the same.
 export const artefactSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), kind: z.enum(KINDS),
   label: z.string().min(1).max(300), statement: text, origin: z.enum(ORIGINS), confidence: confidenceSchema,
-  refs: ids, sourceId: z.string().nullable(), sourceQuote: z.string().max(12000).nullable(),
-  page: z.number().int().positive().nullable(), section: z.string().max(300).nullable(),
-  startOffset: z.number().int().nonnegative().nullable(), endOffset: z.number().int().nonnegative().nullable(),
-  url: z.string().nullable(), fromId: z.string().nullable(), toId: z.string().nullable(),
-  relation: z.enum(RELATIONS).nullable(), temporal: z.enum(['proposed', 'current', 'historical', 'inferred']).nullable(),
+  refs: ids.default([]), sourceId: z.string().nullable().default(null), sourceQuote: z.string().max(12000).nullable().default(null),
+  page: z.number().int().positive().nullable().default(null), section: z.string().max(300).nullable().default(null),
+  startOffset: z.number().int().nonnegative().nullable().default(null), endOffset: z.number().int().nonnegative().nullable().default(null),
+  url: z.string().nullable().default(null), fromId: z.string().nullable().default(null), toId: z.string().nullable().default(null),
+  relation: z.enum(RELATIONS).nullable().default(null), temporal: z.enum(['proposed', 'current', 'historical', 'inferred']).nullable().default(null),
   data: z.record(z.string(), z.unknown()),
 }).strict();
+
+/**
+ * The envelope, parsed WITHOUT its artefacts.
+ *
+ * `stageOutputSchema` types `artefacts` as an array of strict artefacts, so a
+ * single malformed member fails the whole parse — before per-artefact triage can
+ * quarantine it. That is precisely the all-or-nothing behaviour triage exists to
+ * end, one level up. The runtime path parses this and then checks each artefact
+ * on its own.
+ */
+export const looseOutputSchema = z.object({
+  artefacts: z.array(z.unknown()).max(4000),
+  warnings: z.array(z.unknown()).max(4000).optional(),
+});
 export type Artefact = z.infer<typeof artefactSchema>;
 export type StageInput = { stage: number; title: string; depth?: Depth; graphLoss?: number; jurisdiction: string | null; policyArea: string | null; context: string | null; priorWarnings?: string[]; artefacts: Artefact[] };
 export type StageOutput = { artefacts: Artefact[]; warnings: string[] };
