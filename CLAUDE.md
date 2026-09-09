@@ -222,21 +222,3 @@ First-class workflow channel with multi-account support.
 - `GMAIL_TOKEN_ENCRYPTION_KEY` — 32-byte hex — AES-256-GCM key for stored refresh tokens. If lost, all encrypted `gmail_accounts` rows become unrecoverable.
 
 **Google Cloud Console setup:** The OAuth client needs `https://strangeramblings.com/api/gmail/callback` and `http://localhost:5173/api/gmail/callback` in its authorized redirect URIs, plus the `gmail.modify`, `gmail.send`, and `gmail.labels` scopes enabled on the consent screen.
-
-## Policy Incentives Lab
-
-`/policy-incentives-lab` and `/api/policy-incentives-lab` are strictly owner-session-only, including in development. Do not register them as public/shareable projects, add public navigation links, or use the LAN preview's synthetic-session injection. Use the shared Auth.js owner allow-list on each server entry point.
-
-Canonical Zod contracts live in `src/lib/policy-incentives-lab/schemas.ts`. Numerical execution is deterministic TypeScript. All numerical assumptions and model items require server-recorded approval before sealing/running. Draft changes clear approvals; saved model versions and runs are immutable. Behavioural changes bump `ENGINE_VERSION`. Every LLM call uses `$lib/llm/client`, produces candidates only and is schema/evidence-validated. No source text or LLM output executes as code. Fixtures and sample reports must remain explicitly synthetic.
-
-See `docs/policy-incentives-lab/README.md` for local operation and tests. Preserve the cumulative local batch; no automatic PR, merge or production deployment.
-
-The Policy Lab first-look skill is a qualitative, unreviewed pass, separate from simulations. Keep its executable rubric/version and schema in `src/lib/policy-incentives-lab/first-look.ts`. GOV.UK examples contain verified publication metadata only, never committed real-policy text. Novice-facing forms must explain terms, use named references and leave unknown numerical assumptions unknown. Preserve server approval gates and distinguish basic offline scans from model-assisted hypotheses.
-
-The user-authorized policy library now imports selected official GOV.UK documents
-at runtime via the search/content APIs; keep real text out of committed fixtures.
-Preserve official-host redirect bounds and explicit attachment/error handling.
-Optional auto-resolve is an illustrative preview, followed by explicit acceptance
-of the complete displayed item list. It never silently approves unknown inputs.
-Keep setup RNG/version/provenance separate from engine results. Simulation replay
-must read the saved version/run only, including after later draft edits.

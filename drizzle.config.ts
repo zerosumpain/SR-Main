@@ -8,5 +8,8 @@ const url =
 export default defineConfig({
   dialect: 'postgresql',
   schema: './src/lib/db/schema.ts',
+  // Parked module data is retained in place, outside this application's schema.
+  // Do not remove these exclusions without an explicit data migration/deletion.
+  tablesFilter: ['!policy_lab_projects', '!policy_lab_versions', '!policy_lab_runs'],
   dbCredentials: { url },
 });
