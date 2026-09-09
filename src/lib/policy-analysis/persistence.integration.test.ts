@@ -23,7 +23,8 @@ const created: string[] = [];
 let retainedFixtureId: string | null = null;
 const owner = 'preview@example.test';
 const bytes = readFileSync('tests/fixtures/policy-analysis/policy.txt');
-const base = 'http://192.168.0.77:5275';
+// The LAN preview, named by env rather than written into a public repo.
+const base = process.env.POLICY_PREVIEW_ORIGIN ?? 'http://localhost:5275';
 async function create() {
   const a = await createAnalysis(owner, { title: 'Synthetic policy persistence fixture', jurisdiction: 'Synthetic jurisdiction', policyArea: 'Service access', context: null, depth: 'standard' as const, filename: 'policy.txt', mimeType: 'text/plain', bytes });
   created.push(a.id); return a;
