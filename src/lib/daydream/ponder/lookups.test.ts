@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DaydreamSnapshot } from '../snapshot-types';
 
 vi.mock('$lib/workflows/site-tools/registry', () => ({ executeTool: vi.fn() }));
+// Fault reporting is a separate database concern; settle its lazy import before teardown.
+vi.mock('../faults', () => ({ raiseFault: vi.fn().mockResolvedValue(undefined) }));
+afterEach(async () => { await vi.dynamicImportSettled(); });
 
 import { executeTool } from '$lib/workflows/site-tools/registry';
 import { runLookups, namedTerms, READ_PROBES, MAX_LOOKUPS_PER_CYCLE } from './lookups';

@@ -55,7 +55,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         const draft = readBriefFields(body);
         const message = text(body.message ?? '', 5000);
         const turns = delivery.state.grooming?.turns ?? [];
-        const proposal = await groomDevelopmentBrief({ ...draft, area: body.area }, message, await relevantLessons(body.area), turns);
+        const proposal = await groomDevelopmentBrief({ ...draft, area: body.area }, message, await relevantLessons(body.area), turns, await (await import('$lib/codegraph/development.server')).contextForBuild(id).then(r => r.block).catch(() => 'Code context unavailable; do not invent repository dependencies.'));
         await mutateDelivery(id, 'brief_groomed', (s) => ({ ...s, originalAsk: s.originalAsk ?? build.prompt, area: body.area,
           brief: { ...proposal.brief, revision: s.brief.revision + 1, acceptedAt: null },
           criteria: proposal.criteria.map((text, i) => ({ id: `criterion-${i + 1}`, text, verdict: 'unverified', evidence: '', revision: null })),
@@ -245,8 +245,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (!delivery.state.acceptedAt || !delivery.state.candidate) throw new Error('Repository lessons need an accepted, evidenced candidate.');
         const lesson = text(body.lesson); const evidence = text(body.evidence);
         if (!lesson || !evidence) throw new Error('Supply a lesson and its evidence.');
-        await db.insert(jkaiBuildLessons).values({ buildId: id, area: delivery.state.area, lesson, evidence,
-          revision: delivery.state.candidate, expiresAt: new Date(Date.now() + 90 * 86400000) });
+        const [savedLesson] = await db.insert(jkaiBuildLessons).values({ buildId: id, area: delivery.state.area, lesson, evidence,
+          revision: delivery.state.candidate, expiresAt: new Date(Date.now() + 90 * 86400000) }).returning();
+        await (await import('$lib/codegraph/development.server')).syncDevelopmentLesson(savedLesson.id);
         break;
       }
       default: throw new Error('Unknown action');

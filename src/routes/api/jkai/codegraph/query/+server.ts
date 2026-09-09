@@ -21,15 +21,16 @@
  * be distinguished from one that is quietly doing nothing.
  */
 import { json, error } from '@sveltejs/kit';
+import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { codegraphQueries } from '$lib/db/schema';
+import { codegraphQueries, jkaiIterations } from '$lib/db/schema';
 import {
   codegraphAuthFailure,
   codegraphBuildAuthorized,
   codegraphServiceAuthorized,
 } from '$lib/codegraph/auth';
 import { CgqlError, parseCgql } from '$lib/codegraph/query';
-import { buildContextBlock, runPlan } from '$lib/codegraph/retrieve';
+import { renderContext, runPlan } from '$lib/codegraph/retrieve';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -57,10 +58,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   // it override would let one build's queries be recorded against another's.
   const attributedBuildId = tokenBuildId ?? body?.buildId ?? null;
 
+  if (body?.query !== undefined && typeof body.query !== 'string') throw error(400, 'query must be text');
+  if (body?.iterationId) {
+    const [iteration] = await db.select({ id: jkaiIterations.id }).from(jkaiIterations).where(and(eq(jkaiIterations.id, body.iterationId), eq(jkaiIterations.buildId, attributedBuildId ?? '')));
+    if (!iteration) throw error(400, 'Iteration does not belong to the authenticated build');
+  }
   const queryText = (body?.query ?? '').trim();
   if (!queryText) throw error(400, 'missing query');
 
-  const channel = body?.channel === 'push' || body?.channel === 'pull' ? body.channel : 'chat';
+  const channel = tokenBuildId ? 'pull' : service && body?.channel === 'push' ? 'push' : 'chat';
   const started = Date.now();
 
   let plan;
@@ -82,7 +88,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   try {
     const result = await runPlan(plan, { repo: body?.repo });
-    const block = buildContextBlock(result);
+    const rendered = renderContext(result);
+    const block = rendered.block;
 
     await db.insert(codegraphQueries).values({
       channel,
@@ -90,8 +97,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       iterationId: body?.iterationId ?? null,
       query: queryText,
       outcome: result.outcome,
-      episodeIds: result.episodes.map((e) => e.id),
-      lessonIds: result.lessons.map((l) => l.id),
+      episodeIds: rendered.episodeIds,
+      lessonIds: rendered.lessonIds,
+      evidence: rendered,
       charsServed: block.length,
       durationMs: result.durationMs,
     }).catch(() => {});
@@ -100,8 +108,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       ok: true,
       outcome: result.outcome,
       block,
-      lessons: result.lessons,
-      episodes: result.episodes,
+      lessons: result.lessons.filter(l => rendered.lessonIds.includes(l.id)),
+      episodes: result.episodes.filter(e => rendered.episodeIds.includes(e.id)),
       nodes: result.nodes,
       durationMs: result.durationMs,
     });

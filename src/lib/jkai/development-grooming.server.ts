@@ -48,12 +48,14 @@ export async function groomDevelopmentBrief(
   draft: ReturnType<typeof readBriefFields> & { area: string }, message: string,
   lessons: Array<{ lesson: string; evidence: string }>,
   turns: Array<{ questions: string; answer: string }> = [],
+  codeContext = '',
 ) {
   const { client, model } = await getLLMClient(await resolveDefaultModel());
   const navigation = [...SITE_ITEMS, ...SECTIONS.flatMap(s => s.items)].map(({ label, href, ownerOnly }) => ({ label, href, ownerOnly }));
   const response = await withActivity('selfimprove', () => client.chat.completions.create({
     model, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify({
       earlierAnswers: turns.slice(-12).map(t => ({ questions: t.questions.slice(0, 3000), answer: t.answer.slice(0, 5000) })),
+      codeContext: codeContext.slice(0, 8000),
       draft, message: message || 'Propose a complete brief from this ask.', navigation,
       verifiedLessons: lessons.slice(0, 8).map(l => ({ lesson: l.lesson.slice(0, 2000), evidence: l.evidence.slice(0, 2000) })),
     }) }], max_tokens: 5000, temperature: 0.2,

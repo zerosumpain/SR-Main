@@ -26,10 +26,11 @@ import { createInterface } from 'node:readline';
 import { join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const SESSIONS_DIR = '/home/john/.claude/projects/-home-john';
-const MEMORY_DIR = '/home/john/.claude/projects/-home-john/memory';
-const REPO_ROOT = '/home/john/strange_rambling_svelte';
-const REPO = 'SR-Main';
+const option = (name, fallback) => { const i = process.argv.indexOf('--' + name); return i < 0 ? fallback : process.argv[i + 1]; };
+const SESSIONS_DIR = option('sessions-dir', '/home/john/.claude/projects/-home-john');
+const MEMORY_DIR = option('memory-dir', '/home/john/.claude/projects/-home-john/memory');
+const REPO_ROOT = option('root', '/home/john/strange_rambling_svelte');
+const REPO = option('repo', 'SR-Main');
 
 const URL_ = process.env.CODEGRAPH_URL || 'https://strangeramblings.com/api/jkai/codegraph/ingest';
 const TOKEN = process.env.CLAUDE_CHANGELOG_TOKEN || '';

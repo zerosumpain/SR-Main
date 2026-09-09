@@ -28,7 +28,7 @@ export interface NameLookup {
  * than fuzzy: `body.ts` must not match `rescue-body.ts`, or a query would be
  * seeded from a file nobody mentioned.
  */
-export async function lookupNamedFiles(names: string[], dirHints: string[]): Promise<NameLookup> {
+export async function lookupNamedFiles(names: string[], dirHints: string[], repo = 'SR-Main'): Promise<NameLookup> {
   if (!names.length) return { resolved: [], ambiguous: [] };
 
   try {
@@ -38,6 +38,7 @@ export async function lookupNamedFiles(names: string[], dirHints: string[]): Pro
       .where(
         and(
           eq(codegraphNodes.kind, 'file'),
+          eq(codegraphNodes.repo, repo),
           or(...names.map((n) => like(codegraphNodes.canonicalPath, `%/${n}`))),
         ),
       )
@@ -71,7 +72,7 @@ export async function lookupNamedFiles(names: string[], dirHints: string[]): Pro
  * Fails OPEN — on a query error it returns the paths unchanged, because losing
  * retrieval is better than losing the build.
  */
-export async function filterKnownPaths(paths: string[], repo = 'SR-Main'): Promise<string[]> {
+export async function filterKnownPaths(paths: string[], repo = 'SR-Main', candidatePaths?: ReadonlySet<string>): Promise<string[]> {
   const unique = [...new Set(paths.filter(Boolean))];
   if (!unique.length) return [];
   try {
@@ -81,13 +82,13 @@ export async function filterKnownPaths(paths: string[], repo = 'SR-Main'): Promi
       .where(
         and(
           eq(codegraphNodes.repo, repo),
-          eq(codegraphNodes.existsOnHead, true),
+          candidatePaths ? undefined : eq(codegraphNodes.existsOnHead, true),
           inArray(codegraphNodes.canonicalPath, unique.slice(0, 200)),
         ),
       );
     const known = new Set(rows.map((r) => r.path));
-    return unique.filter((p) => known.has(p));
-  } catch {
-    return unique;
+    return unique.filter((p) => known.has(p) && (!candidatePaths || candidatePaths.has(p)));
+  } catch (error) {
+    throw new Error(`CodeGraph path lookup failed: ${String(error)}`);
   }
 }

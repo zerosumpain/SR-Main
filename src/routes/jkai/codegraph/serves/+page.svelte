@@ -14,6 +14,8 @@
     proves nothing, so this page counts rows.
   </p>
 
+  <p>Historical before/after comparisons below are descriptive, not causal evidence. Model, task and workflow changes can explain differences.</p>
+  <form method="GET"><label>Filter recent retrievals by build <input name="build" value={data.buildFilter ?? ''} /></label><button>Filter</button></form>
   <h2>Last 30 days, by channel</h2>
   {#if !data.byChannel.length}
     <p class="alarm">
@@ -22,12 +24,12 @@
     </p>
   {:else}
     <table>
-      <thead><tr><th>Channel</th><th>Total</th><th>Served</th><th>Empty</th><th>Failed</th><th>Avg ms</th></tr></thead>
+      <thead><tr><th>Channel</th><th>Total</th><th>Served</th><th>Empty</th><th>Failed</th><th>Skipped</th><th>Avg ms</th></tr></thead>
       <tbody>
         {#each data.byChannel as r (r.channel)}
           <tr>
             <td>{r.channel}</td><td>{n(r.total)}</td><td>{n(r.served)}</td>
-            <td>{n(r.empty)}</td><td class:bad={Number(r.failed) > 0}>{n(r.failed)}</td><td>{n(r.avg_ms)}</td>
+            <td>{n(r.empty)}</td><td class:bad={Number(r.failed) > 0}>{n(r.failed)}</td><td>{n(r.skipped)}</td><td>{n(r.avg_ms)}</td>
           </tr>
         {/each}
       </tbody>

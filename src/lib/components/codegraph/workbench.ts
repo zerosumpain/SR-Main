@@ -34,6 +34,8 @@ export interface CodegraphSurface {
 }
 
 export const SURFACES: CodegraphSurface[] = [
+  { href: '/jkai/codegraph/improvement', label: 'Improvement', stage: '07 evaluate', question: 'Which evidence needs review and how do policies compare?', ratherThan: 'Review suggestions and measured policy observations.' },
+  { href: '/jkai/codegraph/sources', label: 'Sources', stage: '06 provenance', question: 'Which repositories and versioned references are available?', ratherThan: 'Manage source provenance and inspect indexed revisions.' },
   {
     href: '/jkai/codegraph',
     label: 'Map',

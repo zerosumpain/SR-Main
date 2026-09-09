@@ -27,7 +27,7 @@ export function isBridgeable(name: string): boolean {
   return getTool(name)?.destructive !== true;
 }
 
-export async function invokeTool(name: string, args: unknown, allowedTools?: string[]): Promise<unknown> {
+export async function invokeTool(name: string, args: unknown, allowedTools?: string[], attribution?: { buildId: string; iterationId?: string }): Promise<unknown> {
   if (!getTool(name)) throw new Error(`unknown tool: ${name}`);
   if (!isBridgeable(name)) {
     throw new Error(
@@ -36,7 +36,7 @@ export async function invokeTool(name: string, args: unknown, allowedTools?: str
         `## Evaluation instead.`,
     );
   }
-  const result = await executeTool(name, (args ?? {}) as Record<string, unknown>, { emit: () => {}, allowedTools });
+  const result = await executeTool(name, (args ?? {}) as Record<string, unknown>, { emit: () => {}, allowedTools, ...attribution });
   if (!result.success) {
     throw new Error(result.error ?? 'tool execution failed');
   }

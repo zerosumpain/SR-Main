@@ -11,10 +11,11 @@ import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ url }) => {
+  const buildFilter = url.searchParams.get('build');
   const recent = await db.execute(sql`
     SELECT channel, query, outcome, chars_served, duration_ms, build_id, error_message, created_at
-    FROM codegraph_queries ORDER BY created_at DESC LIMIT 50
+    FROM codegraph_queries WHERE (${buildFilter}::text IS NULL OR build_id = ${buildFilter}) ORDER BY created_at DESC LIMIT 50
   `).then((r) => r.rows as Array<Record<string, unknown>>);
 
   const byChannel = await db.execute(sql`
@@ -23,6 +24,7 @@ export const load: PageServerLoad = async () => {
            count(*) FILTER (WHERE outcome = 'served')::int AS served,
            count(*) FILTER (WHERE outcome = 'empty')::int  AS empty,
            count(*) FILTER (WHERE outcome = 'failed')::int AS failed,
+           count(*) FILTER (WHERE outcome = 'skipped')::int AS skipped,
            round(avg(duration_ms))::int AS avg_ms
     FROM codegraph_queries
     WHERE created_at > now() - interval '30 days'
@@ -151,5 +153,5 @@ export const load: PageServerLoad = async () => {
     ORDER BY p.served
   `).then((r) => r.rows as Array<Record<string, unknown>>);
 
-  return { recent, byChannel, iterations, perBuild, discovery, impact: impact ?? {}, resolution: resolution ?? {} };
+  return { buildFilter, recent, byChannel, iterations, perBuild, discovery, impact: impact ?? {}, resolution: resolution ?? {} };
 };

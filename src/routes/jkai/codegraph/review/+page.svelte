@@ -71,6 +71,7 @@
         {:else}
           <button type="button" class="ghost" onclick={() => (openId = l.id)}>Forget this…</button>
         {/if}
+        {#if l.supersededById}<p>Superseded by <a href="?id={l.supersededById}">{l.supersededById}</a></p>{:else if !l.retiredAt}<details><summary>Replace with a current lesson</summary><form method="POST" action="?/supersede" use:enhance><input type="hidden" name="id" value={l.id} /><label>Replacement lesson ID<input name="replacement" required /></label><label>Reason<input name="reason" required maxlength="2000" /></label><button>Supersede</button></form></details>{/if}
       </article>
     {/each}
   {:else}

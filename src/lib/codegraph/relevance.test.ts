@@ -75,7 +75,7 @@ describe('start biased to recency, then expand to outcome', () => {
     const provenOld = relevanceOf(ev({ observedAt: daysAgo(400), served: 30, helpful: 26, unhelpful: 4 }), NOW);
     const unprovenNew = relevanceOf(ev({ observedAt: daysAgo(1) }), NOW);
     expect(provenOld.score).toBeGreaterThan(unprovenNew.score);
-    expect(provenOld.because).toMatch(/helped 26 of 30/);
+    expect(provenOld.because).toMatch(/error absent after 26 of 30/);
   });
 
   it('reports which regime the ranking is currently in', () => {

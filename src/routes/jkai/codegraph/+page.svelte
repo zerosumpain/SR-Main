@@ -23,7 +23,7 @@
   /** 3D is the default, and the choice persists — same key idiom as intel so
    *  the two graphs do not disagree about what "the view" means. */
   const VIEW_KEY = 'codegraph:graph3d';
-  let view3d = $state(true);
+  let view3d = $state(false);
   let explode = $state(1);
   let focusCommunities = $state<number[]>([]);
 

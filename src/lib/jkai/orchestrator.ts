@@ -1508,6 +1508,10 @@ class Orchestrator {
               for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'passed', durationMs: Date.now() - started, detail: 'Repository and feature browser checks passed for this revision.' }, iteration.id);
               return result;
             } catch (error) {
+              if (developmentFailureKind(error) === 'feature') {
+                const revision = (await loadDelivery(buildId))?.state.candidate;
+                if (revision) await (await import('$lib/codegraph/development.server')).observeDevelopmentGate(buildId, revision, false, String(error)).catch(() => {});
+              }
               for (const phase of ['feedback_gate', 'release_candidate'] as const) await emitRepoVerification(buildId, { phase, label: 'Isolated repository verification', status: 'failed', durationMs: Date.now() - started, detail: error instanceof Error ? error.message : 'Verification failed.' }, iteration.id);
               throw error;
             }
@@ -1650,6 +1654,11 @@ class Orchestrator {
       // A paused attempt may finish its external gate, but cannot publish its
       // result or replace the state of a queued continuation.
       if (this.stopped || this.activeBuildId !== buildId) return;
+      if (build.gitTargetConfig) {
+        const { resolveBuildServes } = await import('$lib/codegraph/feedback');
+        await resolveBuildServes({ buildId, iterationId: iteration.id, nextGatePassed: testResult.passed,
+          nextEvaluation: testResult.diagnostics || testResult.output, gate: testResult.gateCommand }).catch(() => {});
+      }
       const testSummary = formatTestSummary(testResult, durationMs);
       // Show the human what the AGENT was shown, not the head of the transcript.
       // The stored log for every failed gate on change request #223 was 1,996

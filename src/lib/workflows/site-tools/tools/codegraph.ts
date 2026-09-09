@@ -23,6 +23,7 @@ register({
   description:
     'Ask the build-history graph what this codebase has already learned. Use it before answering any "how do I change X", "why does X work that way", or "has this broken before" question about the repo, and whenever a build or gate error needs precedent. ' +
     'Query language (CGQL): start with a seed — file:src/lib/a.ts (commas for several, * allowed), fingerprint:typecheck:TS2345 (an error class), gate:svelte-check, or topic:"free text" — then optionally pipe stages: | hops 1 | lessons limit=5 | episodes verdict=verified,landed limit=3 | budget 4000. ' +
+    'For directional dependencies use uses:src/lib/a.ts or used-by:src/lib/a.ts | nodes limit=10. ' +
     'Returns the rules that apply and what happened the last time those files changed, each with a verdict: verified (proved by a gate), landed (merged), repaired (later corrected), abandoned.',
   parameters: {
     type: 'object',
@@ -38,15 +39,16 @@ register({
   },
   category: 'Knowledge',
   toolset: 'codegraph',
-  handler: async (args) => {
+  handler: async (args, ctx) => {
     const query = String(args.query ?? '').trim();
     if (!query) return { success: false as const, error: 'codegraph_query needs a query.' };
 
     const { CgqlError } = await loadQuery();
-    const { runCgql, buildContextBlock } = await loadRetrieve();
+    const { runCgql, renderContext } = await loadRetrieve();
 
     try {
       const result = await runCgql(query, { repo: args.repo ? String(args.repo) : undefined });
+      const rendered = renderContext(result);
 
       // Log chat serves alongside build serves. One table answers "is this
       // being used at all", which is the question the tool bridge could not
@@ -54,12 +56,12 @@ register({
       const { db } = await import('$lib/db');
       const { codegraphQueries } = await import('$lib/db/schema');
       await db.insert(codegraphQueries).values({
-        channel: 'chat',
+        channel: ctx?.buildId ? 'pull' : 'chat', buildId: ctx?.buildId, iterationId: ctx?.iterationId,
         query,
         outcome: result.outcome,
-        episodeIds: result.episodes.map((e) => e.id),
-        lessonIds: result.lessons.map((l) => l.id),
-        charsServed: 0,
+        episodeIds: rendered.episodeIds,
+        lessonIds: rendered.lessonIds,
+        charsServed: rendered.block.length, evidence: rendered,
         durationMs: result.durationMs,
       }).catch(() => {});
 
@@ -82,9 +84,9 @@ register({
         success: true as const,
         data: {
           outcome: 'served',
-          block: buildContextBlock(result),
-          lessons: result.lessons.map((l) => ({ title: l.title, citedPaths: l.citedPaths, origin: l.origin })),
-          episodes: result.episodes.map((e) => ({
+          block: rendered.block,
+          lessons: result.lessons.filter(l => rendered.lessonIds.includes(l.id)).map((l) => ({ title: l.title, citedPaths: l.citedPaths, origin: l.origin })),
+          episodes: result.episodes.filter(e => rendered.episodeIds.includes(e.id)).map((e) => ({
             title: e.title, verdict: e.verdict, gate: e.gate, fingerprint: e.fingerprint,
             resolution: e.resolution, verification: e.verification,
             filesTouched: e.filesTouched, prNumber: e.prNumber,

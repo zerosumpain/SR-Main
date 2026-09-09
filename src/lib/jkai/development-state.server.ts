@@ -36,6 +36,9 @@ export async function deliveryEvents(buildId: string) {
   return db.select().from(jkaiBuildDeliveryEvents).where(eq(jkaiBuildDeliveryEvents.buildId, buildId)).orderBy(desc(jkaiBuildDeliveryEvents.id)).limit(80);
 }
 export async function relevantLessons(area: string) {
-  return db.select().from(jkaiBuildLessons).where(and(eq(jkaiBuildLessons.area, area), gt(jkaiBuildLessons.expiresAt, new Date())))
+  const rows = await db.select().from(jkaiBuildLessons).where(and(eq(jkaiBuildLessons.area, area), gt(jkaiBuildLessons.expiresAt, new Date())))
     .orderBy(desc(jkaiBuildLessons.createdAt)).limit(8);
+  const { syncDevelopmentLesson } = await import('$lib/codegraph/development.server');
+  for (const row of rows) await syncDevelopmentLesson(row.id).catch(() => {});
+  return rows;
 }

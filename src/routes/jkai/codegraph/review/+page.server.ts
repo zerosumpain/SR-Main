@@ -8,11 +8,12 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import { db } from '$lib/db';
-import { codegraphEpisodes, codegraphLessons } from '$lib/db/schema';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { codegraphEpisodes, codegraphLessons, codegraphAssessments } from '$lib/db/schema';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ url }) => {
   const tab = url.searchParams.get('tab') === 'episodes' ? 'episodes' : 'lessons';
+  const selectedId = url.searchParams.get('id');
   const showRetired = url.searchParams.get('retired') === '1';
 
   if (tab === 'episodes') {
@@ -26,13 +27,28 @@ export const load: PageServerLoad = async ({ url }) => {
   // Ordered by how often each has been SERVED, not by age: the thing the
   // builder actually reads is the thing worth checking is still true.
   const rows = await db.select().from(codegraphLessons)
-    .where(showRetired ? isNotNull(codegraphLessons.retiredAt) : isNull(codegraphLessons.retiredAt))
+    .where(selectedId ? eq(codegraphLessons.id, selectedId) : showRetired ? isNotNull(codegraphLessons.retiredAt) : and(isNull(codegraphLessons.retiredAt), isNull(codegraphLessons.supersededById)))
     .orderBy(desc(codegraphLessons.servedCount), desc(codegraphLessons.staleAt), desc(codegraphLessons.observedAt))
     .limit(60);
   return { tab, showRetired, lessons: rows, episodes: [] };
 };
 
 export const actions: Actions = {
+  supersede: async ({ request }) => {
+    const form = await request.formData();
+    const id = String(form.get('id') ?? ''); const replacement = String(form.get('replacement') ?? ''); const reason = String(form.get('reason') ?? '').trim();
+    if (!id || !replacement || id === replacement || !reason || reason.length > 2000) return fail(400, { message: 'Choose a different replacement lesson and give a reason.' });
+    try {
+      await db.transaction(async tx => {
+        const rows = await tx.select().from(codegraphLessons).where(inArray(codegraphLessons.id, [id, replacement])).orderBy(codegraphLessons.id).for('update');
+        const old = rows.find(l => l.id === id); const next = rows.find(l => l.id === replacement);
+        if (!old || !next || old.repo !== next.repo || next.retiredAt || next.supersededById || old.supersededById) throw new Error('Replacement must be a current lesson in the same repository; chains and cycles are not allowed.');
+        await tx.update(codegraphLessons).set({ supersededById: replacement, updatedAt: new Date() }).where(eq(codegraphLessons.id, id));
+        await tx.insert(codegraphAssessments).values({ id: crypto.randomUUID(), targetId: id, verdict: 'superseded', evidence: `${reason} Replacement: ${replacement}` });
+      });
+      return { ok: true };
+    } catch (e) { return fail(400, { message: e instanceof Error ? e.message : 'Unable to supersede lesson' }); }
+  },
   retire: async ({ request }) => {
     const form = await request.formData();
     const id = String(form.get('id') ?? '');

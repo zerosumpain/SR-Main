@@ -1,0 +1,13 @@
+{
+  "description": "Synthetic scoring-contract examples, not evidence of production savings.",
+  "retrieval": [
+    {"id":"new-route","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":["page","loader"],"retrieved":["page","loader"]},
+    {"id":"shared-component","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":["component","consumer","test"],"retrieved":["component","test"]},
+    {"id":"migration","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":["schema","migration"],"retrieved":["schema","migration"]},
+    {"id":"integration","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":["adapter","versioned-doc"],"retrieved":["adapter","old-doc"],"stale":["old-doc"]},
+    {"id":"unfamiliar-failure","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":[],"retrieved":[]},
+    {"id":"familiar-repair","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":["verified-episode"],"retrieved":["verified-episode"]},
+    {"id":"batch-overlap","policy":"context-v2","snapshotRevision":"synthetic-before-task","availableAt":"2026-09-08T00:00:00Z","taskAt":"2026-09-09T00:00:00Z","expected":["shared-contract","combined-check"],"retrieved":["shared-contract","combined-check"]}
+  ],
+  "builds": []
+}

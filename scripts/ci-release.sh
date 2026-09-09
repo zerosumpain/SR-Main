@@ -152,6 +152,8 @@ rsync -a scripts/studio-research.mjs "$VPS_DIR/scripts/"
 # reduce. Nothing else would report the absence.
 rsync -a scripts/codegraph-query.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/codegraph-tree-pass.mjs "$VPS_DIR/scripts/"
+mkdir -p "$VPS_DIR/scripts/lib"
+rsync -a scripts/lib/codegraph-snapshot.mjs scripts/lib/codegraph-scip.mjs "$VPS_DIR/scripts/lib/"
 
 # Production deps only when the lockfile actually changed. Measured: 26% of
 # commits change it. The hash is kept by us rather than read back out of

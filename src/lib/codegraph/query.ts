@@ -50,7 +50,8 @@ export type Seed =
    * different question: siblings are files of the same SHAPE, this is the one
    * file that is specifically paired with the target.
    */
-  | { type: 'tests'; path: string };
+  | { type: 'tests'; path: string }
+  | { type: 'uses' | 'used-by'; path: string };
 
 export interface Pick {
   kind: PickKind;
@@ -80,7 +81,7 @@ export class CgqlError extends Error {
 
 /** Verdict tiers, best first. Ranking multiplies by this order. */
 export const VERDICTS = ['verified', 'landed', 'unverified', 'repaired', 'abandoned'] as const;
-export const EDGE_KINDS = ['co_change', 'needs_context', 'gated_by', 'imports', 'fixed_by'] as const;
+export const EDGE_KINDS = ['co_change', 'needs_context', 'gated_by', 'imports', 'fixed_by', 'tests', 'references'] as const;
 const PICK_KINDS: PickKind[] = ['episodes', 'lessons', 'nodes'];
 
 /** Hard caps. A build's context budget is finite and a runaway walk is the
@@ -160,6 +161,11 @@ function parseSeed(text: string, pos: number): Seed {
     throw new CgqlError('topic: text must be quoted, e.g. topic:"the tool bridge"', pos);
   }
 
+  const direction = trimmed.match(/^(uses|used-by):\s*(.+)$/);
+  if (direction) {
+    if (direction[2].includes('*') || direction[2].includes(',')) throw new CgqlError('Directional queries require one exact file path', pos);
+    return { type: direction[1] as 'uses' | 'used-by', path: sanitisePath(direction[2], pos) };
+  }
   const tst = trimmed.match(/^tests:\s*(.+)$/s);
   if (tst) {
     const paths = tst[1].split(',').map((x) => x.trim()).filter(Boolean);
