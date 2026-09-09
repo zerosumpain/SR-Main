@@ -1,3 +1,4 @@
+import { snapshotTree } from './lib/codegraph-snapshot.mjs';
 /** Trusted local broker. Docker points exclusively at the isolated DinD daemon. */
 import http from 'node:http';
 import { previewPlan, readPreviewManifest } from './development-preview-check.mjs';
@@ -34,7 +35,7 @@ const command = async (file, args, options = {}) => {
 const git = (cwd, ...args) => command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', `safe.directory=${cwd}`, '-c', 'user.name=SR local builder', '-c', 'user.email=builder@example.test', '-C', cwd, ...args]);
 const docker = (...args) => command('docker', args);
 const validId = (id) => { if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid build id'); return id; };
-const excluded = ['.env', '.env.*', 'keys.json', 'node_modules', '.svelte-kit', '/build', '.git', '/data', '.pi', '/sessions'];
+const excluded = ['core', 'core.*', '.env', '.env.*', 'keys.json', 'node_modules', '.svelte-kit', '/build', '.git', '/data', '.pi', '/sessions'];
 async function copySource(from, to, removeMissing = false) {
   await mkdir(to, { recursive: true });
   await command('rsync', ['-a', '--safe-links', ...(removeMissing ? ['--delete'] : []), ...excluded.map((p) => `--exclude=${p}`), `${from}/`, `${to}/`]);
@@ -83,7 +84,7 @@ async function preflight(id) {
 }
 async function runtimeFingerprint() {
   const hash = createHash('sha256').update(activeBrokerHash);
-  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
+  for (const file of ['scripts/development-workspace-broker.mjs', 'scripts/lib/codegraph-snapshot.mjs', 'scripts/development-preview-check.mjs', 'scripts/development-seccomp.json', 'scripts/local-preview-proxy.mjs', 'scripts/local-preview-ingress.mjs', 'package-lock.json']) hash.update(await readFile(join(source, file)));
   hash.update(await docker('image', 'inspect', 'sr-development-preview:v4', 'pgvector/pgvector:pg16', '--format', '{{.Id}}'));
   return hash.digest('hex');
 }
@@ -160,7 +161,7 @@ async function snapshot(id) {
   const revision = await git(path, 'rev-parse', 'HEAD');
   const base = await readFile(join(trustedRoot, `${id}-base`), 'utf8').catch(() => git(path, 'rev-list', '--max-parents=0', 'HEAD'));
   if (!/^[a-f0-9]{40}$/.test(base.trim())) throw new Error('Invalid base revision');
-  return { revision, changes: { files: (await git(path, 'diff', '--name-only', base.trim(), revision, '--')).split('\n').filter(Boolean), patch: (await git(path, 'diff', '--no-ext-diff', '--no-textconv', base.trim(), revision, '--')).slice(0, 20000) } };
+  return { revision, codegraph: snapshotTree(path, revision), baseline: base.trim(), changes: { files: (await git(path, 'diff', '--name-only', base.trim(), revision, '--')).split('\n').filter(Boolean), patch: (await git(path, 'diff', '--no-ext-diff', '--no-textconv', base.trim(), revision, '--')).slice(0, 20000) } };
 }
 /**
  * Write the candidate's whole diff where the builder can read it.
@@ -235,6 +236,13 @@ async function assertCandidate(id, revision) {
     throw new Error('The workspace changed after verification; run the checks again.');
   }
   return path;
+}
+/** Read source only from the current saved candidate, never arbitrary host paths. */
+async function codeSource(id, revision, file) {
+  const path = await assertCandidate(id, revision);
+  if (typeof file !== 'string' || file.startsWith('/') || file.split('/').includes('..') || !/^(src|scripts|packages|docs|tests)\//.test(file) || file.length > 1000) throw new Error('Invalid source path');
+  const text = await git(path, 'show', `${revision}:${file}`);
+  return { revision, file, text: text.slice(0, 24000), truncated: text.length > 24000 };
 }
 /** Inspect the published revision without replacing its runtime or snapshot. */
 async function inspectPreview(id, revision) {
@@ -432,7 +440,7 @@ async function accept(id, revision, routes) {
     await git(trial, 'bundle', 'create', bundle, 'HEAD');
     await git(batch, 'fetch', bundle, 'HEAD');
     await git(batch, 'merge', '--ff-only', merged);
-    const receipt = { batch: merged, revision, url: tested.url };
+    const receipt = { batch: merged, revision, url: tested.url, codegraph: snapshotTree(batch, merged) };
     await writeFile(join(trustedRoot, 'batch-preview.json'), JSON.stringify({ ...tested, revision: merged }));
     await writeFile(acceptedFile, JSON.stringify(receipt));
     return receipt;
@@ -452,7 +460,7 @@ http.createServer(async (req, res) => {
     for await (const chunk of req) { raw += chunk; if (raw.length > 32000) throw new Error('Request too large'); }
     const body = JSON.parse(raw);
     const id = validId(body.buildId);
-    const methods = { '/inspect': () => inspectPreview(id, body.revision), '/patch': () => patch(id, body.revision), '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes), '/reset-batch': () => resetBatch() };
+    const methods = { '/code-source': () => codeSource(id, body.revision, body.file), '/inspect': () => inspectPreview(id, body.revision), '/patch': () => patch(id, body.revision), '/preflight': () => preflight(id), '/allocate': () => allocate(id), '/prepare': () => prepare(id), '/snapshot': () => snapshot(id), '/preview': () => preview(id, body.revision, { routes: body.routes, working: body.working }), '/verify': () => preview(id, body.revision, { routes: body.routes, verify: true }), '/close-preview': () => closePreview(body.batch === true ? `batch-${id}` : id), '/accept': () => accept(id, body.revision, body.routes), '/reset-batch': () => resetBatch() };
     if (req.method !== 'POST' || !Object.hasOwn(methods, req.url)) { respond(404, { error: 'Unknown operation' }); return; }
     const deadline = Math.min(Number.isFinite(body.deadline) ? body.deadline : Infinity, Date.now() + (['/inspect', '/patch'].includes(req.url) ? 120_000 : req.url === '/preflight' ? 110_000 : ['/accept', '/verify'].includes(req.url) ? 1_170_000 : 570_000));
     const timings = {};

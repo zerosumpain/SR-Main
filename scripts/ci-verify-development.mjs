@@ -45,6 +45,14 @@ assert.ok(Array.isArray(await api.json()));
 const anonymous = await fetch('http://127.0.0.1:4173/api/jkai/development', { headers: { host: 'strangeramblings.com', 'x-forwarded-proto': 'https' }, redirect: 'manual' });
 assert.ok([401, 403].includes(anonymous.status), 'Anonymous delivery API access must be denied');
 console.log('PASS: owner development page, delivery database/API and anonymous denial.');
+for (const [path, heading] of [['sources', 'Code sources'], ['improvement', 'Improve the evidence']]) {
+  const response = await fetch(`http://127.0.0.1:4173/jkai/codegraph/${path}`, { headers });
+  assert.equal(response.status, 200, `CodeGraph ${path} and its database queries must load`);
+  assert.ok((await response.text()).includes(heading), `CodeGraph ${path} must render its surface`);
+}
+const anonymousContext = await fetch('http://127.0.0.1:4173/api/jkai/development/release-smoke/context');
+assert.equal(anonymousContext.status, 401, 'Code context must remain owner-only');
+console.log('PASS: CodeGraph sources, improvement queries and anonymous context denial.');
 function capabilities() {
   return new Promise(resolve => {
     const req = request({ socketPath: '/run/jkai-builder/jkai-builder.sock', path: '/rpc', method: 'POST', headers: { 'content-type': 'application/json' }, timeout: 5000 }, res => {

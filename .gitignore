@@ -66,3 +66,7 @@ playwright-report/
 
 # Voice corpus exports — unpublished drafts + private chat turns. See docs/voice-corpus.md
 corpus.json
+
+# Runtime crash dumps must not enter source scans or candidate snapshots.
+core
+core.*

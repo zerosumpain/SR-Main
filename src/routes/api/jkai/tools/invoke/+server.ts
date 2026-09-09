@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { jkaiBuilds } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { json, error } from '@sveltejs/kit';
 import { verifyBridgeToken, invokeTool, definitionsForBuild } from '$lib/jkai/tool-bridge';
 import type { RequestHandler } from './$types';
@@ -16,7 +16,8 @@ export const POST: RequestHandler = async ({ request }) => {
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!build) throw new Error('build not found');
     const allowed = definitionsForBuild((build.enabledToolsets ?? ['all']) as string[]).map(d => d.function.name);
-    const result = await invokeTool(body.name, body.args, allowed);
+    const [iteration] = await db.select({ id: jkaiIterations.id }).from(jkaiIterations).where(eq(jkaiIterations.buildId, buildId)).orderBy(desc(jkaiIterations.createdAt)).limit(1);
+    const result = await invokeTool(body.name, body.args, allowed, { buildId, iterationId: iteration?.id });
     return json({ ok: true, result });
   } catch (e) {
     return json(

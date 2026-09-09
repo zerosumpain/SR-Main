@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
+  codegraphSnapshots,
   codegraphEdges,
   codegraphEpisodes,
   codegraphLessons,
@@ -81,6 +82,7 @@ async function ensureNodes(paths: string[], repo: string): Promise<Map<string, s
         // A gate path (`gate:vitest`) has no dot and would otherwise be filed
         // as a directory — which is how the `gate:` seed lane stayed empty.
         kind: isGatePath(p) ? 'gate' : p.includes('.') ? 'file' : 'dir',
+        existsOnHead: false,
         displayName: p.split('/').pop() ?? p,
         // Stamped HERE, never taken from the body. Family is a pure function of
         // the path, so the server can always compute it — and a caller that
@@ -102,14 +104,20 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!codegraphServiceAuthorized(request)) throw error(401, 'unauthorized');
 
   const body = (await request.json().catch(() => null)) as {
-    repo?: string; nodes?: NodeIn[]; edges?: EdgeIn[]; episodes?: EpisodeIn[]; lessons?: LessonIn[];
+    snapshot?: import('$lib/codegraph/snapshot').StructuralSnapshot; scope?: 'deployed' | 'owned'; repo?: string; nodes?: NodeIn[]; edges?: EdgeIn[]; episodes?: EpisodeIn[]; lessons?: LessonIn[];
     liveness?: { ref?: string; paths?: string[] };
   } | null;
   if (!body) throw error(400, 'invalid json');
+  if (body.snapshot) {
+    const { saveSnapshot } = await import('$lib/codegraph/snapshot.server');
+    try { return json({ ok: true, snapshotId: await saveSnapshot(body.snapshot, body.scope === 'owned' ? 'owned' : 'deployed') }); }
+    catch (e) { throw error(400, e instanceof Error ? e.message : 'Invalid snapshot'); }
+  }
 
   const repo = body.repo || 'SR-Main';
   const nodesIn = body.nodes ?? [];
-  const edgesIn = body.edges ?? [];
+  const [authoritative] = await db.select({ id: codegraphSnapshots.id }).from(codegraphSnapshots).where(and(eq(codegraphSnapshots.repo, repo), eq(codegraphSnapshots.active, true), inArray(codegraphSnapshots.scope, ['deployed', 'owned']))).limit(1);
+  const edgesIn = (body.edges ?? []).filter(e => !authoritative || !['imports', 'tests', 'references'].includes(e.kind));
   const episodesIn = body.episodes ?? [];
   const lessonsIn = body.lessons ?? [];
 
@@ -134,7 +142,7 @@ export const POST: RequestHandler = async ({ request }) => {
         displayName: n.displayName ?? n.canonicalPath.split('/').pop(),
         summary: n.summary ?? null,
         family: familyOf(n.canonicalPath),
-        existsOnHead: n.existsOnHead ?? true,
+        existsOnHead: authoritative ? false : n.existsOnHead ?? true,
         lastSeenAt: new Date(),
       }))).onConflictDoUpdate({
         target: [codegraphNodes.repo, codegraphNodes.canonicalPath],
@@ -170,7 +178,8 @@ export const POST: RequestHandler = async ({ request }) => {
    * of being wrong is asymmetric: a stale `true` is a precedent that no longer
    * compiles, a wrong `false` deletes the graph's memory of a live file.
    */
-  if (body.liveness?.paths?.length) {
+  if (authoritative && body.liveness) liveness = { skipped: 'An authoritative revision snapshot owns liveness; use complete snapshot ingestion.' };
+  if (!authoritative && body.liveness?.paths?.length) {
     const paths = body.liveness.paths.filter((p) => typeof p === 'string' && p);
     const MIN_TREE = 1000;
     if (paths.length < MIN_TREE) {

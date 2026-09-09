@@ -529,6 +529,15 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
   const started = Date.now();
   const repo = opts.repo ?? 'SR-Main';
 
+  if (plan.seed.type === 'uses' || plan.seed.type === 'used-by') {
+    const sourceColumn = plan.seed.type === 'uses' ? sql`e.source_id` : sql`e.target_id`;
+    const targetColumn = plan.seed.type === 'uses' ? sql`e.target_id` : sql`e.source_id`;
+    const rows = await db.select().from(codegraphNodes).where(and(eq(codegraphNodes.repo, repo), nodeVisible(), eq(codegraphNodes.existsOnHead, true),
+      sql`${codegraphNodes.id} IN (SELECT ${targetColumn} FROM codegraph_edges e JOIN codegraph_nodes n ON n.id = ${sourceColumn}
+        WHERE n.repo = ${repo} AND n.canonical_path = ${plan.seed.path} AND e.kind IN ('imports', 'references') AND e.suppressed = false)`))
+      .orderBy(codegraphNodes.canonicalPath).limit(plan.picks.find(p => p.kind === 'nodes')?.limit ?? 10);
+    return { plan, seedNodeIds: [], nodes: rows, lessons: [], episodes: [], outcome: rows.length ? 'served' : 'empty', durationMs: Date.now() - started };
+  }
   // The siblings seed answers with nodes and nothing else — no walk, no prose.
   // It is a different question from "what have we learned about this file", and
   // mixing them would make the caller's budget impossible to attribute.
@@ -642,8 +651,13 @@ function trim(s: string | null | undefined, n: number): string {
  * graph was consulted and had nothing, so it treats the ground as new instead
  * of inferring that the area is uncovered.
  */
-export function buildContextBlock(result: RetrievalResult): string {
+function renderBlock(result: RetrievalResult, included: { lessonIds: string[]; episodeIds: string[] }): string {
   const budget = result.plan.budgetChars;
+  if (result.plan.seed.type === 'uses' || result.plan.seed.type === 'used-by') {
+    return [`## ${result.plan.seed.type === 'uses' ? 'Dependencies' : 'Dependants'} of ${result.plan.seed.path}`,
+      ...result.nodes.map(n => `- ${n.canonicalPath}`),
+      'Static indexed relationships only; absent results do not establish safety or full coverage.'].join('\n');
+  }
 
   // A siblings query is answering a different question, so it gets its own
   // heading. The pull channel prints this; the push channel ignores it and
@@ -731,12 +745,12 @@ export function buildContextBlock(result: RetrievalResult): string {
   if (result.lessons.length) {
     lines.push('', '### Rules that apply here');
     const entries = result.lessons.map((l) => ({
-      item: `\n**${l.title}**\n${trim(l.body, 700)}`,
+      item: { id: l.id, text: `\n**${l.title}**\n${trim(l.body, 700)}` },
       score: l.relevance.score,
       cost: trim(l.body, 700).length + l.title.length + 6,
     }));
     const packed = packByRelevance(entries, Math.max(0, budget - used - reserved));
-    for (const e of packed.chosen) lines.push(e);
+    for (const e of packed.chosen) { lines.push(e.text); included.lessonIds.push(e.id); }
     used += packed.spent;
   }
 
@@ -754,6 +768,7 @@ export function buildContextBlock(result: RetrievalResult): string {
       const entry = bits.join('\n');
       if (used + entry.length > budget - reserved) break;
       lines.push(entry);
+      included.episodeIds.push(e.id);
       used += entry.length;
     }
   }
@@ -767,3 +782,26 @@ export function buildContextBlock(result: RetrievalResult): string {
   );
   return lines.join('\n');
 }
+
+/** Exact delivered evidence, shared by agents, audit and workspace UI. */
+export function renderContext(result: RetrievalResult) {
+  const included = { lessonIds: [] as string[], episodeIds: [] as string[] };
+  const working = { ...result, lessons: [...result.lessons], episodes: [...result.episodes], nodes: [...result.nodes] };
+  let block = '';
+  // Include section headings, separators and the footer in the actual budget.
+  for (;;) {
+    included.lessonIds = []; included.episodeIds = [];
+    block = renderBlock(working, included);
+    if (block.length <= result.plan.budgetChars) break;
+    if (working.episodes.length) working.episodes.pop();
+    else if (working.lessons.length) working.lessons.pop();
+    else if (working.nodes.length) working.nodes.pop();
+    else { block = block.slice(0, result.plan.budgetChars); break; }
+  }
+  return { block, ...included,
+    omittedLessonIds: result.lessons.filter(l => !included.lessonIds.includes(l.id)).map(l => l.id),
+    omittedEpisodeIds: result.episodes.filter(e => !included.episodeIds.includes(e.id)).map(e => e.id),
+    budgetChars: result.plan.budgetChars, policyVersion: 'context-v2',
+  };
+}
+export function buildContextBlock(result: RetrievalResult): string { return renderContext(result).block; }

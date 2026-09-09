@@ -3,8 +3,11 @@
   let { data }: { data: PageData } = $props();
   let q = $state(data.q);
 
+  const presets = [{ label: 'Implement a similar page', query: 'siblings:src/routes/jkai/develop/+page.svelte' }, { label: 'Investigate a failure', query: 'fingerprint:typecheck:TS2345 | episodes limit=3' }, { label: 'Find tests', query: 'tests:src/lib/jkai/development.ts' }, { label: 'Batch risks', query: 'file:src/lib/jkai/* | hops 1' }];
   const EXAMPLES = [
     'file:src/lib/jkai/executor.ts | hops 1',
+    'used-by:src/lib/jkai/development.ts | nodes limit=10',
+    'uses:src/lib/jkai/development.ts | nodes limit=10',
     'fingerprint:vitest:AssertionError | episodes limit=3',
     'topic:"ci-release allow-list rsync scripts" | lessons limit=3',
     'file:src/routes/api/* | lessons limit=5',
@@ -20,8 +23,9 @@
     handed — so what you tune here is what an iteration actually gets.
   </p>
 
+  <nav aria-label="Query presets">{#each presets as preset}<p><a href="?q={encodeURIComponent(preset.query)}">{preset.label}</a></p>{/each}</nav>
   <form method="GET">
-    <input name="q" bind:value={q} placeholder='file:src/lib/… | hops 1 | lessons | episodes' spellcheck="false" />
+    <input aria-label="CodeGraph query" name="q" bind:value={q} placeholder='file:src/lib/… | hops 1 | lessons | episodes' spellcheck="false" />
     <button type="submit">Run</button>
   </form>
 

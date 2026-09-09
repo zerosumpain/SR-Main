@@ -15,10 +15,18 @@ export async function workspaceBroker(action: string, buildId: string, extra: Re
   } as RequestInit & { dispatcher: Agent });
   const result = await response.json();
   if (!response.ok) throw new DevelopmentFailure(result.error ?? 'Workspace operation failed', ['feature', 'deadline'].includes(result.kind) ? result.kind : 'infrastructure');
-  return result as { revision: string; url: string; batch: string; complete?: boolean; evidence?: string[]; detail?: string; timings?: Record<string, number>; changes?: { files: string[]; patch: string } };
+  return result as { file?: string; text?: string; truncated?: boolean; codegraph?: import('$lib/codegraph/snapshot').StructuralSnapshot; baseline?: string; revision: string; url: string; batch: string; complete?: boolean; evidence?: string[]; detail?: string; timings?: Record<string, number>; changes?: { files: string[]; patch: string } };
 }
 export async function snapshotCandidate(buildId: string) {
-  return workspaceBroker('snapshot', buildId);
+  const result = await workspaceBroker('snapshot', buildId);
+  if (result.codegraph) {
+    const { saveSnapshot } = await import('$lib/codegraph/snapshot.server');
+    await saveSnapshot(result.codegraph, 'candidate', buildId, result.baseline).catch(async error => {
+      const { emitLog } = await import('./log-emitter');
+      await emitLog(buildId, 'error', `CodeGraph index unavailable: ${String(error)}. The source snapshot is retained.`);
+    });
+  }
+  return result;
 }
 /** Keep the last successful URL visible until its replacement has actually passed. */
 export async function prepareDevelopmentPreview(buildId: string, mode: 'inspection' | 'working' | 'release' = 'inspection'): Promise<boolean> {
@@ -60,6 +68,8 @@ export async function developmentCheckpoint(buildId: string, verify: (run: () =>
     if (s.candidate !== snapshot.revision) throw new Error('Candidate changed during isolated verification.');
     return { ...s, cycle: s.cycle ? { ...s.cycle, candidateAt: new Date().toISOString() } : undefined, stage: 'review', preview: { ...s.preview, kind: 'release' }, gate: { passed: true, revision: snapshot.revision, evidence: 'Isolated structural, type, repository test, production build, release sidecar and feature browser checks passed.' } };
   });
+  const { observeDevelopmentGate } = await import('$lib/codegraph/development.server');
+  await observeDevelopmentGate(buildId, snapshot.revision, true).catch(() => {});
   return true;
 }
 export async function acceptDevelopment(buildId: string, expectedRevision: number): Promise<void> {
@@ -79,4 +89,7 @@ export async function acceptDevelopment(buildId: string, expectedRevision: numbe
     if (s.candidate !== delivery.state.candidate || acceptanceBlocker(s)) throw new Error('Acceptance changed during batch integration; review again.');
     return { ...s, stage: 'accepted', batch: result.batch, preview: { ...s.preview, url: result.url, detail: 'Combined local batch preview; integration checks passed.' }, acceptedAt: new Date().toISOString() };
   });
+  if (result.codegraph) await (await import('$lib/codegraph/snapshot.server')).saveSnapshot(result.codegraph, 'batch', buildId);
+  const { observeDevelopmentAcceptance } = await import('$lib/codegraph/development.server');
+  await observeDevelopmentAcceptance(buildId).catch(() => {});
 }

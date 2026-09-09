@@ -285,28 +285,11 @@ export async function executeIteration(
   // logs three DISTINCT outcomes — served, empty, failed — and `empty` is a
   // real finding ("no precedent"), not a soft error. Timeboxed, because a slow
   // graph must cost the build nothing.
+  const graphDelivery = await (await import('./development-state.server')).loadDelivery(build.id);
   let codegraphBlock = '';
-  if (promptMode === 'repo' && process.env.CODEGRAPH_PUSH !== '0') {
+  if (promptMode === 'repo' && !graphDelivery && process.env.CODEGRAPH_PUSH !== '0') {
     try {
-      // Close the loop on the PREVIOUS iteration's serve first. This is the
-      // earliest moment the answer exists: the gate has now run and its
-      // diagnostics are in prevIteration.evaluation. Without this the evidence
-      // counters stay at zero forever and ranking never leaves its recency bias.
-      const { resolveBuildServes, recordServed } = await import('$lib/codegraph/feedback');
-      const resolution = await resolveBuildServes({
-        buildId: build.id,
-        nextEvaluation: prevIteration?.evaluation ?? null,
-        nextGatePassed: prevIteration ? /gate.{0,20}(passed|green)/i.test(prevIteration.evaluation ?? '') : null,
-      }).catch(() => null);
-      if (resolution && resolution.resolved > 0) {
-        await emitLog(
-          build.id,
-          'system',
-          `Codegraph feedback: ${resolution.resolved} serve(s) resolved as ${resolution.outcome} — ${resolution.lessons} lesson(s), ${resolution.episodes} episode(s) updated`,
-          iteration.id,
-        );
-      }
-
+      const { recordServed } = await import('$lib/codegraph/feedback');
       const {
         planBuildQuery,
         bareNamesInText,
@@ -355,18 +338,21 @@ export async function executeIteration(
         knownPaths,
       );
       if (!planned) {
-        await emitLog(build.id, 'system', 'Codegraph: nothing to query (no gate error, no file set)', iteration.id);
+        const { logContextAttempt } = await import('$lib/codegraph/audit.server');
+        await logContextAttempt({ buildId: build.id, iterationId: iteration.id, outcome: 'skipped', reason: 'No usable seed' });
+        await emitLog(build.id, 'system', 'Codegraph: nothing to query (no usable seed)', iteration.id);
       } else {
-        const { runCgql, buildContextBlock } = await import('$lib/codegraph/retrieve');
+        const { runCgql, renderContext } = await import('$lib/codegraph/retrieve');
         const { db: database } = await import('$lib/db');
         const { codegraphQueries } = await import('$lib/db/schema');
         const result = await Promise.race([
           runCgql(planned.query),
           new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
         ]);
-        codegraphBlock = buildContextBlock(result);
-        const servedLessonIds = result.lessons.map((l) => l.id);
-        const servedEpisodeIds = result.episodes.map((e) => e.id);
+        const rendered = renderContext(result);
+        codegraphBlock = rendered.block;
+        const servedLessonIds = rendered.lessonIds;
+        const servedEpisodeIds = rendered.episodeIds;
         await database.insert(codegraphQueries).values({
           channel: 'push',
           buildId: build.id,
@@ -378,6 +364,7 @@ export async function executeIteration(
           // The fingerprints that CAUSED this retrieval, kept so the next
           // iteration can tell whether what was served actually addressed them.
           servedFor: planned.fingerprints ?? [],
+          evidence: { ...rendered, reason: planned.reason },
           charsServed: codegraphBlock.length,
           durationMs: result.durationMs,
         }).catch(() => {});
@@ -395,6 +382,8 @@ export async function executeIteration(
       // Loud, and distinguishable from "nothing found". A retrieval that fails
       // quietly is the failure mode this whole system exists to stop repeating.
       codegraphBlock = '';
+      const { logContextAttempt } = await import('$lib/codegraph/audit.server');
+      await logContextAttempt({ buildId: build.id, iterationId: iteration.id, outcome: 'failed', reason: (err as Error).message }).catch(() => {});
       await emitLog(
         build.id,
         'error',
@@ -615,6 +604,18 @@ export async function executeIteration(
       delivery ? developmentFeedback(prevIteration?.evaluation) : prevIteration?.evaluation ?? '', prevIteration?.nextSteps ?? '', deliveriesBlock, precedentBlock, codegraphBlock].filter(Boolean).join('\n\n');
   }
   if (delivery) {
+    try {
+      const { snapshotCandidate } = await import('./development-workspace.server');
+      const { contextDeadline } = await import('$lib/codegraph/deadline');
+      const { contextForBuild } = await import('$lib/codegraph/development.server');
+      const contextStarted = Date.now();
+      const context = await contextDeadline(async signal => { await snapshotCandidate(build.id); signal.throwIfAborted(); return contextForBuild(build.id, iteration.id, prevIteration?.evaluation, signal, contextStarted); });
+      userPrompt += '\n\n' + context.block;
+    } catch (error) {
+      const { logContextAttempt } = await import('$lib/codegraph/audit.server');
+      await logContextAttempt({ buildId: build.id, iterationId: iteration.id, outcome: 'failed', reason: String(error) }).catch(() => {});
+      await emitLog(build.id, 'error', `Code context unavailable: ${String(error)}. Continuing with workspace inspection.`, iteration.id);
+    }
     const lessons = await relevantLessons(delivery.state.area);
     userPrompt = [deliveryPrompt(delivery.state), userPrompt,
       ...lessons.map((l) => `Repository note (recheck against current code; revision ${l.revision}): ${l.lesson}\nEvidence: ${l.evidence}`)].join('\n\n');

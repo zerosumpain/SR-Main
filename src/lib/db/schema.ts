@@ -5056,6 +5056,7 @@ export const codegraphQueries = pgTable(
     episodeIds: jsonb('episode_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     lessonIds: jsonb('lesson_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     charsServed: integer('chars_served').notNull().default(0),
+    evidence: jsonb('evidence').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     durationMs: integer('duration_ms'),
     errorMessage: text('error_message'),
     /**
@@ -6918,4 +6919,26 @@ export const intelResolutionLabels = pgTable('intel_resolution_labels', {
   decidedBy: text('decided_by').notNull(),
   features: jsonb('features').$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Immutable structural views: candidates never overwrite the deployed tree. */
+export const codegraphSnapshots = pgTable('codegraph_snapshots', {
+  id: text('id').primaryKey(), repo: text('repo').notNull(), revision: text('revision').notNull(),
+  active: boolean('active').notNull().default(false),
+  scope: text('scope').notNull(), buildId: text('build_id').references(() => jkaiBuilds.id, { onDelete: 'set null' }),
+  baseline: text('baseline'), payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('codegraph_snapshots_repo_idx').on(t.repo, t.scope, t.createdAt)]);
+export const codegraphSources = pgTable('codegraph_sources', {
+  id: text('id').primaryKey(), repo: text('repo').notNull(), kind: text('kind').notNull(),
+  title: text('title').notNull(), url: text('url'), revision: text('revision').notNull(),
+  license: text('license'), access: text('access').notNull().default('owner'),
+  status: text('status').notNull().default('reference'),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export const codegraphAssessments = pgTable('codegraph_assessments', {
+  id: text('id').primaryKey(), buildId: text('build_id').references(() => jkaiBuilds.id, { onDelete: 'set null' }),
+  targetId: text('target_id').notNull(), verdict: text('verdict').notNull(), evidence: text('evidence').notNull(),
+  revision: text('revision'), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

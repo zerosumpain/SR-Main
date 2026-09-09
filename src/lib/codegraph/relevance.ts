@@ -226,16 +226,16 @@ export function relevanceOf(e: Evidence, now = Date.now()): RelevanceParts {
         ? `served ${e.served}× but no outcome resolved yet — ranked on recency`
         : 'never served — ranked on recency alone';
   } else if (outcome > NEUTRAL_PRIOR) {
-    because = `helped ${e.helpful} of ${observations} builds it was served to`;
+    because = `error absent after ${e.helpful} of ${observations} observed checks`;
   } else if (e.helpful === 0) {
     because = `served ${observations}× and never once preceded an improvement — atrophying`;
   } else if (e.unhelpful === 0) {
     // A perfect record is not "mixed" — it is simply too small to trust yet,
     // which is a completely different thing to say and the honest one. Calling
     // 2-from-2 "mixed" would misreport the data to justify the ranking.
-    because = `helped all ${observations} so far — too few to rank on yet`;
+    because = `error absent after all ${observations} checks so far — too few to rank on yet`;
   } else {
-    because = `mixed: helped ${e.helpful} of ${observations}`;
+    because = `mixed: error absent after ${e.helpful} of ${observations} checks`;
   }
   if (e.stale) because += '; every file it names is gone';
 

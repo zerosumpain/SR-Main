@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DevelopmentCodeContext from './DevelopmentCodeContext.svelte';
   import DevelopmentModelSelect from './DevelopmentModelSelect.svelte';
   let modelId = $state('');
   // The Pi builder wrapper's workspace, wearing the /health editorial system.
@@ -252,6 +253,7 @@
     {#if !snapshot}
       <p class="wk-empty">{connection === 'Loading' ? 'Loading saved work…' : connection}</p>
     {:else if deliveryState}
+      {#if tab === 'Brief' || tab === 'Build'}<DevelopmentCodeContext {buildId} revision={deliveryState.candidate} />{/if}
       {#if tab === 'Brief'}
         <SectionHead
           kicker="01 / The brief"
